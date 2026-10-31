@@ -341,7 +341,13 @@ npm run fighter:gait -- loop-review <config.json> <loop-review.json>
   `verdict`(시각 판정 JSON: identity·anatomy·loop가 pass/fail, notes), `judge`(판정한 쪽), `stridePixels`(걷기만, 생성기가 발에서 잰 값).
 - 발 교대는 판정이 아니라 엔진 기록이다. `video-cycle-align`이 두 착지에 서로 다른 발 이름(`cycle_align.foot.feet`)을 붙여야 한다.
   같은 색 다리를 옆에서 본 고리는 시각 판정 모델이 교대를 가리지 못했다(엔진이 교대로 읽은 걷기를 같은 다리로 판정).
-- 기록은 최종 프레임과 시간에 묶인다(`sequenceSha256`). 엔진이 남긴 다시 찍기 사유가 하나라도 있거나, 발 이름이 없거나 같거나,
+- 예외 하나(2026-11-01): 옆모습에서 발 이름이 `low-margin`으로만 비었을 때다. 그늘 단서가 한 주기에 한 번 흔들리면(`rhythm` ≥ 0.25,
+  엔진이 차이보다 먼저 보는 조건) 두 착지는 두 다리다. 다만 착지 프레임의 그늘이 0.025보다 덜 달라 어느 발인지 이름을 못 붙인 것이다.
+  어느 발이 왼발인지는 킷·게임 어디서도 쓰지 않는다. 같은 다리를 두 번 딛는 고리는 그늘이 한 주기에 두 번 흔들려 `rhythm`에서 걸린다.
+  기록은 `engine.feet: null`, `feetBy: "low-margin"`, `feetRhythm`을 남기고 `scope`에 그 사실을 적는다. 호스팅 잡 다섯 개(10-30, 10-31)의
+  첫 테이크 깨끗한 컷 약 19개 중 14개가 이 이유 하나로 판정 전에 버려져 새 Grok 촬영이나 운영자 검토로 갔다. 생성기도 같은 규칙으로 컷을
+  판정에 보낸다(`host/generation-stages.mjs` `lowMarginFeet`, 테스트가 둘을 같게 묶는다).
+- 기록은 최종 프레임과 시간에 묶인다(`sequenceSha256`). 엔진이 남긴 다시 찍기 사유가 하나라도 있거나, 발 이름이 없거나(위 예외 밖) 같거나,
   판정 하나라도 fail이거나, 걷기 보폭이 없으면 `status: fail`이고 `fighter:pack`이 받지 않는다.
 - 같은 발 측정을 했다고 주장하지 않는다. `pack-report.json`의 `review`와 `motions.walk.stride.source`(`loop-review`)가 그 사실을 남긴다.
 - Dot 제작 경로는 그대로 `required`다(`creation:run`의 패키지 작업은 `required`가 아닌 정책을 거절한다).

@@ -428,9 +428,11 @@ export function gaitEvent(gait, loop) {
   while (JSON.stringify(event).length > GAIT_EVENT_BYTES && event.tried.length) { event.tried.shift(); event.more = (event.more ?? 0) + 1; }
   return event;
 }
-/** What a cut's alignment says about it, for `tried`: frames filmed and delivered, the beat's jolt, frames RIFE made. */
+/** What a cut's alignment says about it, for `tried`: frames filmed and delivered, the beat's jolt, frames RIFE made, and how its feet
+ * were read (the shade cue's margin and rhythm: a refusal for unnamed feet is told apart from one for a cue that does not follow the step). */
 const cutFacts = meta => { const a = meta?.cycle_align;
-  return a ? { from: a.from ?? null, frames: meta.frames ?? null, jolt: a.beat?.jolt ?? null, rife: a.made_by_rife ?? null } : {}; };
+  return a ? { from: a.from ?? null, frames: meta.frames ?? null, jolt: a.beat?.jolt ?? null, rife: a.made_by_rife ?? null,
+    feet: feetFact(a.foot), feetMargin: a.foot?.margin ?? null, feetRhythm: a.foot?.rhythm ?? null } : {}; };
 /**
  * A cut the engine took as two strides (2026-10-29): at its own length it is over the range (the 냥잽 cat's runs cut at 22, 26 and 27
  * frames, each two strides of 11 to 14), and it was refused, a take filmed again. Its frames hold one stride twice: aligned again with
@@ -537,7 +539,7 @@ export function gaitStillPrompt(brief) {
   ].join('\n');
 }
 
-/** The judge's verdicts (motions.py JUDGE_SCHEMA; the kit's LOOP_VISUAL). Alternation is the engine's foot naming (`namedFeet`). */
+/** The judge's verdicts (motions.py JUDGE_SCHEMA; the kit's LOOP_VISUAL). Alternation is the engine's (`feetAlternate`). */
 export const LOOP_VISUAL = Object.freeze(['identity', 'anatomy', 'loop']);
 /**
  * The judge's `loop` alone does not refuse a cut whose seam the engine measured inside its gate (2026-10-30, the first free fighter's test:
@@ -556,6 +558,22 @@ export const retakeReasons = strip => [strip.retake, strip.cycle_align?.retake].
 /** The alignment named a different own foot at its two strikes (the kit's loop review takes alternation from this). */
 export const namedFeet = strip => { const feet = strip.cycle_align?.foot?.feet;
   return Array.isArray(feet) && feet.length === 2 && feet.every(f => ['left', 'right'].includes(f)) && feet[0] !== feet[1]; };
+/**
+ * Side view, feet not named only for a low margin (2026-11-01): the far leg's shade swings once a cycle (sprite-gen align.py checks
+ * CUE_RHYTHM before the margin), so the two strikes are the two legs, but at the strike frames the shades are too alike to say which
+ * is which. Nothing downstream uses which foot is which; a same-leg cut swings twice a cycle and fails the rhythm instead. 14 of ~19
+ * clean first-take cuts of five hosted jobs (10-30, 10-31) were refused only for this, each a new Grok take or an operator review.
+ * The loop review takes it on the same rule (tools/ai-fighter/gait.mjs `lowMarginFeet`; pinned equal by a test).
+ */
+export const ENGINE_CUE_RHYTHM = 0.25;   // sprite-gen video/align.py CUE_RHYTHM
+export const lowMarginFeet = strip => { const foot = strip.cycle_align?.foot;
+  return foot?.feet == null && foot?.cue === 'shade' && typeof foot.why === 'string' && foot.why.startsWith('low-margin') &&
+    Number.isFinite(foot.rhythm) && foot.rhythm >= ENGINE_CUE_RHYTHM; };
+/** The two strikes are the two legs: named, or a lateral low margin whose cue follows the step. */
+export const feetAlternate = strip => namedFeet(strip) || lowMarginFeet(strip);
+/** How the engine left the feet, for `tried`: named, low-margin (taken), or why not (rhythm, other). */
+const feetFact = foot => !foot ? null : Array.isArray(foot.feet) ? 'named' : typeof foot.why !== 'string' ? 'other'
+  : foot.why.startsWith('low-margin') ? 'low-margin' : foot.why.includes('does not follow the step') ? 'rhythm' : 'other';
 
 /** A judge's answer, checked: its pass/fail verdicts and notes, or null. */
 export function checkedVerdict(value) {
@@ -579,11 +597,14 @@ export const extOf = type => ({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/
  * on the kit's sprite-gen venv (pixels only, no provider) and resolves `{ code }`. Calls may overlap: `og` waits for a free codex slot.
  */
 export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy = async () => ({ code: 127 }), gaitStaggerMs = GAIT_STAGGER_MS,
-  alignPauseMs = ALIGN_PAUSE_MS, earlyPollMs = EARLY_POLL_MS, earlyGraceMs = EARLY_GRACE_MS, signal = null,
+  alignPauseMs = ALIGN_PAUSE_MS, earlyPollMs = EARLY_POLL_MS, earlyGraceMs = EARLY_GRACE_MS, signal = null, lowMarginFeetTaken = true,
   styleAnchor = path.join(path.dirname(fileURLToPath(import.meta.url)), STYLE_ANCHOR_FILE) }) {
   // One loop alignment at a time on this worker: RIFE on the GPU takes about 4 GB, and a walk and a run aligning at once (or two jobs) ran
   // an 8 GB card out of memory (2026-10-28).
   let aligning = Promise.resolve();
+  // A low-margin cut goes to the judge only when the kit's loop review takes it too (`lowMarginFeetTaken`, the worker reads the kit tree):
+  // an og self-update without `og setup` would otherwise judge a cut whose loop review then fails.
+  const alternate = strip => namedFeet(strip) || (lowMarginFeetTaken && lowMarginFeet(strip));
   const align = command => { const run = aligning.then(() => og(command)); aligning = run.catch(() => {}); return run; };
   // A wait ends early when the stage is stopped: the next run is refused then, and the stage ends at once instead of after the wait.
   const pause = ms => new Promise(done => {
@@ -820,7 +841,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       if ((await align(sprite(...args))).code !== 0) await align(sprite(...args, '--multi-cycle', 'warn'));
     }
     const meta = await readJson(strip).catch(() => null);
-    if (!meta || meta.frames !== GAIT_FRAMES.run || retakeReasons(meta).length || !namedFeet(meta)) return null;
+    if (!meta || meta.frames !== GAIT_FRAMES.run || retakeReasons(meta).length || !alternate(meta)) return null;
     const judge = path.join(folder, 'judge');
     if ((await motionsPy(['judge-request', 'run', judge])).code !== 0 || (await motionsPy(['sheet', strip, path.join(judge, 'sheet.png')])).code !== 0)
       return null;
@@ -937,7 +958,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
           if (meta && !meta.cycle_align) { unaligned += 1; tried.push({ take, cut: path.basename(cut), reasons: ['not-aligned'] }); continue; }
           const refusals = meta => { const reasons = meta ? retakeReasons(meta) : ['unreadable'];
             if (meta && (range ? meta.frames < range.min || meta.frames > range.max : meta.frames !== GAIT_FRAMES[gait])) reasons.push(`frames-${meta.frames}`);
-            if (meta && !namedFeet(meta)) reasons.push('feet-unnamed');
+            if (meta && !alternate(meta)) reasons.push('feet-unnamed');
             return reasons; };
           let reasons = refusals(meta);
           // ONE_STRIDE: a cut of two strides, over the range at its own length, is aligned again as the one stride it holds.
