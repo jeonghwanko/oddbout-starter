@@ -35,36 +35,33 @@ ODDBOUT은 직접 만든 캐릭터로 플레이하는 대전 게임입니다. �
 | 길 | 하는 일 | 이럴 때 |
 | --- | --- | --- |
 | **ODDBOUT에 맡기기** | [내 선수](https://oddbout.com/creator.html?lang=ko)에서 만들고 싶은 선수를 한 줄로 적습니다(쓸 권리가 있는 그림은 선택). ODDBOUT이 외형과 움직임을 그리면 확인하고, 원하면 고칠 점을 말한 뒤 등록합니다. | 가장 빠른 시작. 계정당 한 명 무료입니다. 외형 그림이 나오면 무료권을 쓴 것으로 셉니다(우리 쪽 실패는 돌려줍니다). 하루 몫이 차면 신청은 차례를 기다립니다. |
-| **에이전트와 대화로** | [내 에이전트](https://oddbout.com/creator.html?lang=ko#view=agents)에서 Codex(ChatGPT · Dots·Codex CLI)·Grok·Claude(앱·Claude Code)·Gemini CLI를 ODDBOUT 클라우드 MCP에 연결하고([클라우드 연결](docs/CLOUD-MCP.md)), 대화에서 `@ODDBOUT`에게 말합니다. | 대화로 만들고 고치기. 그림 첨부는 ChatGPT에서만 됩니다. |
+| **에이전트와 대화로** | 각 에이전트의 연결 설정에서 ODDBOUT 클라우드 MCP를 연결하고 대화에서 선택합니다([연결 안내](docs/CLOUD-MCP.md)). ChatGPT/Dots는 아래 별도 설정을 따릅니다. | 대화로 만들고 고치기. 그림 첨부는 ChatGPT에서만 됩니다. |
 | **내 PC로** | 내 에이전트 → 내 PC에서 호스트를 만들고, 내 ChatGPT·SuperGrok 구독이 있는 Linux PC에서 나온 세 줄 명령을 실행합니다([생성 호스트 안내](docs/GENERATION-HOST.md)). | 내 구독으로 더 만들기. 승인이 필요 없고 한 명 제한도 없습니다. |
 | **직접 만들기** | 로컬 도구를 쓸 수 있는 AI와 이 키트를 돌려 원화와 동작을 하나하나 고릅니다([아래](#로컬-키트로-캐릭터-만들기)). | 프레임마다 직접 정하고 싶을 때. |
 
 ## PC 없이 Dots에서 등록하기
 
-**Dots 저장 VM 제작 경로 (0.6.0 후보)**: 환경 준비자는 [설치 절차](deploy/dots-environment/README.md)를
+**Dots 저장 VM 제작 경로**: 환경 준비자는 [설치 절차](deploy/dots-environment/README.md)를
 한 번 실행하고, 이후 사용자는 Git 주소와 제작 요청을 전달합니다. Dots가 `node dots.mjs --install`로
 고정 버전을 준비한 뒤 `node dots.mjs`로 같은 작업을 재개합니다. 생성은 본인의 Grok 구독을 사용합니다.
 [시작 지침](docs/DOTS-START.md)과 [비공개 원본 전달](docs/DOTS-PRIVATE-SOURCES.md)을 따릅니다.
 아직 실제 저장 VM의 생성·미리보기 전달까지 승인된 릴리스는 아닙니다. 설치·단위 테스트 통과와 구분합니다.
 
-**ODDBOUT** 클라우드 MCP를 연결하고 Google로 로그인한 뒤 Dots 대화에서 `@ODDBOUT`을 선택하세요.
-ODDBOUT 플러그인 소스 0.6.0 이상에는 MCP 구성이 들어 있지만, ZIP 공개가 ChatGPT/Dots 계정의 플러그인 설치·갱신을 뜻하지는 않습니다.
-현재 플러그인을 설치하고 대상 대화에서 선택한 뒤 native `get_profile`이 응답하는지 확인합니다. 작동하는 플러그인 연결이 없다면
-ChatGPT 플러그인의 사용자 지정 MCP 설정을 사용합니다. 대체 연결을 검증하기 전에는 기존 연결을 보존합니다.
-Grok과 Claude는 각자의 커넥터 설정에서 같은 서버에 연결하고,
-[내 에이전트](https://oddbout.com/creator.html?lang=ko#view=agents)에서 모든 연결을 보고 끊을 수 있습니다. 계정 확인·파일 전달·등록은 클라우드 연결이
-처리합니다. 로컬 MCP 설치, API 키 입력, 로그인 콜백 복사는 필요하지 않습니다.
+ChatGPT/Dots에서 계정 도구를 쓰려면 지원되는 사용자 지정 MCP OAuth 설정으로 ODDBOUT 클라우드 앱을 연결합니다. 원격 HTTPS MCP를 선언한
+가져온 플러그인도 desktop-only로 표시될 수 있으며 `.app.json` 참조만으로 표시가 바뀌지 않습니다
+([공식 플러그인 관리 안내](https://learn.chatgpt.com/docs/enterprise/plugin-management#desktop-only-plugins)). 제작 스킬도 필요하면 Plugin Creator로
+같은 앱 기반 플러그인에 추가하고 앱 정보와 OAuth 설정을 보존합니다. 별도 wrapper 플러그인의 `mcp.json`은 앱 연결이 아닙니다.
+키트 ZIP은 소스 파일이며 앱을 연결하거나 플러그인을 설치하지 않습니다. Dots에서는 계정 도구를 쓰기 전에 대상 대화에서 `get_profile`로 계정을 확인하고,
+확인 전까지 기존 연결을 유지합니다. Grok, Claude 등 다른 지원 클라이언트는 각자의 연결 설정을 사용합니다. 클라우드 도구는 계정 확인·파일 전달·등록을,
+로컬 도구는 작업 공간의 제작과 검사를 담당합니다.
 서버 주소와 최초 연결 순서는 [클라우드 연결 안내](docs/CLOUD-MCP.md)에 있습니다.
 이미지 생성·미리보기·최종 검토는 선택한 실행 환경과 본인의 생성 계정을 사용합니다.
 아래 설치 과정은 제작 키트를 작업 공간에서 실행할 때의 안내이며 클라우드 로그인에는 필요하지 않습니다.
 
 ## 로컬 키트로 캐릭터 만들기
 
-**ODDBOUT 플러그인 하나로 제작·검토·등록을 진행합니다.** 사용자 PC 또는 지원되는 Dots 작업 공간에서
-제작하고 같은 연결 계정으로 등록합니다. 별도 AI Fighter Creator 플러그인은 필요하지 않습니다.
-계정 작업에는 ODDBOUT 클라우드 MCP 하나를, 로컬 제작·세션·작업·검사에는 `creation:tool` CLI를 사용합니다.
-기존 `ai-fighter`와 `ai-fighter-creator` 연결을 정리하기 전에 [통합 플러그인 설치·전환 안내](docs/ODDBOUT-PLUGIN.md)에 따라
-클라우드 계정과 로컬 도구를 확인하세요.
+로컬 키트는 ChatGPT 앱 설정 없이도 지원되는 로컬 도구와 사용할 수 있습니다. ChatGPT/Dots에서는 계정 작업에 호스팅 MCP 앱을,
+로컬 제작·세션·작업·검사에 `creation:tool` CLI를 씁니다. [통합 플러그인 설치·전환 안내](docs/ODDBOUT-PLUGIN.md)를 따르세요.
 
 creator-kit ZIP에는 한국어·영어 README와 제작·연결·MCP 전환 안내가 포함됩니다. 문서 지도에 함께 실린 저장소 전용 운영·연구 문서와
 게임 영상은 이 저장소에서 확인할 수 있습니다.
@@ -140,7 +137,7 @@ npm run sprite:setup
 
 ## 등록하고 플레이하기
 
-최종 결과를 선택하고 등록을 요청하면 AI가 패키지를 검사하고 연결된 ODDBOUT 계정으로 등록합니다. ODDBOUT 플러그인이나 내 에이전트에서 연결한 에이전트가 본인 Google 계정으로 로그인합니다. 직접 서버를 만들거나 서비스 API 키를 발급받을 필요는 없습니다. 그 연결이 없는 예전 로컬 도구는 `npm run login`으로 로그인합니다.
+최종 결과를 선택하고 등록을 요청하면 AI가 패키지를 검사한 뒤 확인된 본인 ODDBOUT 계정으로 등록합니다. 클라우드 연결은 현재 대화에서 `get_profile`로 계정을 확인합니다. 예전 로컬 도구는 연결 준비 상태를 확인하고 필요하면 `npm run login`으로 로그인합니다. 직접 서버를 만들거나 서비스 API 키를 발급받을 필요는 없습니다.
 
 서버가 업로드된 파일을 검사해 선수를 **제작 중**으로 등록합니다. 이때는 아레나에서 연습할 수 있고, 다른 사람의 컵·랭크 대결·공개 목록에는 나오지 않습니다. AI가 처리 결과까지 확인해 실제로 등록됐는지 알려줍니다. 대기열 상황에 따라 시간이 걸릴 수 있습니다. 다른 사람들이 컵과 랭크 대결에서 겨룰 수 있게 하려면 선수 페이지의 **모든 동작**에서 필수 동작 11개를 확인하고 **출전하기**를 누르세요.
 

@@ -38,7 +38,7 @@ walks through each.
 | Way | What you do | Good for |
 | --- | --- | --- |
 | **Leave it to ODDBOUT** | On [My fighters](https://oddbout.com/creator.html?lang=en), say in one line what fighter you want (pictures you may use are optional). ODDBOUT draws the look and the motions; you check them, ask for a change if you like, and register. | The quickest start. One fighter per account is free; it is used once its looks are drawn (our own failures give it back). On a full day your request waits its turn. |
-| **Talk to your agent** | On [My agents](https://oddbout.com/creator.html?lang=en#view=agents), connect Codex (ChatGPT · Dots · Codex CLI), Grok, Claude (apps · Claude Code) or Gemini CLI to the hosted ODDBOUT MCP ([cloud connection](docs/CLOUD-MCP.md)), then ask `@ODDBOUT` in your chat. | Making and editing fighters from a conversation. Pictures can be attached from ChatGPT only. |
+| **Talk to your agent** | Connect the hosted ODDBOUT MCP in your agent's connector settings ([cloud connection guide](docs/CLOUD-MCP.md)), then select it in your conversation. ChatGPT/Dots users should follow the separate app setup below. | Making and editing fighters from a conversation. Pictures can be attached from ChatGPT only. |
 | **Your own PC** | On My agents → My PC, create a host and run the three-line command it gives on a Linux PC with your ChatGPT and SuperGrok subscriptions ([generation host guide](docs/GENERATION-HOST.md)). | More fighters on your own subscriptions: no approval and no limit of one. |
 | **Make it yourself** | Run this kit with an assistant that can use local tools, and choose every concept and motion ([below](#create-with-the-local-kit)). | Full control over each frame. |
 
@@ -48,16 +48,16 @@ For **creation in a saved Dots VM**, use [the Dots VM entry point](docs/DOTS-STA
 The intended flow is one repository URL plus your creation request, using your own Grok subscription.
 The environment preparer runs [the install recipe](deploy/dots-environment/README.md) once; Dots then runs
 `node dots.mjs --install` once and `node dots.mjs` to resume the same pinned workspace. The source and
-preview-delivery checks remain distinct from login. This **0.6.0 candidate** still requires actual saved-VM
-creation acceptance; unit tests or a parent-container run do not certify it.
+preview-delivery checks remain distinct from login. Saved-VM creation and delivery remain separate acceptance checks;
+unit tests or a parent-container run do not certify them.
 
-Connect the hosted **ODDBOUT** MCP, sign in with Google, then select `@ODDBOUT` in your Dots conversation.
-The ODDBOUT plugin source from 0.6.0 includes the MCP configuration. Publishing its ZIP does not install or update the plugin in your ChatGPT/Dots account.
-Verify the current plugin is installed and selected in the intended conversation, and that its native `get_profile` works.
-If no working plugin supplies the connection, use the supported custom MCP setup in ChatGPT Plugins. Preserve an existing connection until its replacement is verified.
-Grok and Claude connect the same server from their connector settings, and
-[My agents](https://oddbout.com/creator.html?lang=en#view=agents) shows and disconnects every connection. The cloud connector handles account checks,
-file transfer and registration; no local MCP installation, API key or callback copying is needed.
+For ChatGPT/Dots account operations, use the supported custom MCP OAuth setup to connect the hosted ODDBOUT app. An imported plugin that declares
+a remote MCP, including HTTPS, may be desktop-only; adding an `.app.json` reference alone does not change that ([official plugin management guidance](https://learn.chatgpt.com/docs/enterprise/plugin-management#desktop-only-plugins)).
+If you also need the creation skill, use Plugin Creator to add it to that same app-backed plugin, preserving its identity and OAuth settings.
+Do not treat a second wrapper plugin's `mcp.json` as the app connection. A ZIP packages source; it does not connect the app or install a plugin.
+In Dots, verify the account with native `get_profile` in the intended conversation before using account tools. Preserve existing connections until verified.
+Grok, Claude and other supported clients use their own connector setup. Once connected, cloud tools handle account checks, file transfer and registration;
+local CLI tools remain available for workspace creation and validation.
 See [cloud connection instructions](docs/CLOUD-MCP.md) for each host's endpoint and first-time setup.
 When the hosted generation tools are available, ODDBOUT can make the fighter on its worker at your request.
 Save the verified account ID, request key and job ID; after a timeout or disconnect, follow [hosted job recovery](docs/CLOUD-MCP.md#호스팅-작업의-중단과-미리보기-복구)
@@ -67,12 +67,8 @@ The setup below is for running the creation kit in a workspace; it is not requir
 
 ## Create with the local kit
 
-Use the **ODDBOUT** plugin for creation, review and registration from a PC or a supported Dots workspace.
-The same connected ODDBOUT account registers the result in either environment. Use one hosted ODDBOUT MCP
-connection for account operations and the `creation:tool` CLI for local creation, saved sessions, jobs and validation.
-The CLI uses the existing workspace tools without adding another MCP connection. A second AI Fighter Creator
-plugin is no longer required. To replace the older `ai-fighter` and `ai-fighter-creator` connections, follow
-[the unified plugin and migration guide](docs/ODDBOUT-PLUGIN.md) and verify the cloud account and local tools first.
+The local kit works with supported local tools and does not require ChatGPT's app setup. For ChatGPT/Dots, cloud account operations use the hosted MCP app;
+local creation, saved sessions, jobs and validation use the `creation:tool` CLI. See [the unified plugin and migration guide](docs/ODDBOUT-PLUGIN.md).
 
 Send the [repository URL](https://github.com/jeonghwanko/oddbout-starter) to your assistant in the prepared workspace. Add an idea or a reference image. For example:
 
@@ -149,7 +145,7 @@ The [unified plugin guide](docs/ODDBOUT-PLUGIN.md) covers the portable source pa
 
 ## Register and play
 
-When you choose the final result and ask to register it, your assistant checks the package and registers it through your connected ODDBOUT account: the ODDBOUT plugin, or an agent connected on My agents, signed in with your Google account. You do not need to set up a backend or get service API keys. Older local tools without that connection sign in with `npm run login`.
+When you choose the final result and ask to register it, your assistant checks the package and uses your verified ODDBOUT account. For a cloud connection, verify it with `get_profile` in the active conversation. Older local tools use their connection readiness check and `npm run login` when needed. You do not need to set up a backend or get service API keys.
 
 The server checks your uploaded files and registers your fighter in production: you can watch it and practise in the arena. Your assistant checks the result to confirm the registration. The queue can take time to process. To let other people play against your fighter in cups and ranked duels, open **All motions** on its page, check each of the 11 required motions and press **Enter ODDBOUT**.
 

@@ -5,14 +5,17 @@
 
 | 사용 경로 | 연결과 첫 확인 | 중단 후 재개 |
 | --- | --- | --- |
-| Dots/Grok의 호스팅 ODDBOUT MCP (`mcp/cloud.mjs`) | [CLOUD-MCP.md](CLOUD-MCP.md)의 호스트별 주소로 OAuth 연결 → Google 로그인·승인 → `get_profile`과 클라우드 `check_creation_readiness(purpose: "connection")` | 같은 계정의 `get_hosted_fighter`로 저장된 작업 조회. 아래 클라우드 절과 [호스팅 복구](CLOUD-MCP.md#호스팅-작업의-중단과-미리보기-복구) 참고 |
+| Dots/Grok의 호스팅 ODDBOUT MCP (`mcp/cloud.mjs`) | [CLOUD-MCP.md](CLOUD-MCP.md)의 호스트별 흐름으로 연결 → Google OAuth 승인 → 대상 대화에서 `get_profile`과 cloud `check_creation_readiness(purpose: "connection")` | 같은 계정의 `get_hosted_fighter`로 저장된 작업 조회. 아래 클라우드 절과 [호스팅 복구](CLOUD-MCP.md#호스팅-작업의-중단과-미리보기-복구) 참고 |
 | PC 또는 준비된 VM의 로컬 stdio MCP (`mcp/stdio.mjs`) | 로컬 `check_creation_readiness` → **ODDBOUT 연결** → 본인 Google 로그인·공개 기기 코드 확인·승인 | 기존 기기 요청과 로컬 제작 세션·작업 조회. 아래 로컬 절 참고 |
 
 클라우드 연결에 `connect_oddbout`, 로컬 로그인, PC 설치를 요구하지 않는다. 로컬 연결에서도 등록 계정, 생성 접근과
 결과 전달은 서로 다른 상태다. VM 설치와 네트워크 준비는 초기 환경 준비자가 처리하고 준비된 작업 공간을 재사용한다.
 
-연결 확인은 **현재 대상 Dots 대화**에서 호스트의 도구 검색/카탈로그에 계정 도구가 있는지 보고, native `get_profile`이 의도한 등록 계정을
-반환하는지 확인하는 일이다. `mcp.json`, ZIP, 앱 목록, 공개 `/spec`, 다른 대화의 로그인은 이 확인을 대신하지 않는다.
+ChatGPT/Dots에서 가져온 플러그인의 `mcp.json`은 클라우드 앱 연결과 다르다. 원격 HTTPS MCP가 있는 플러그인도 데스크톱 전용일 수 있으며
+`.app.json` 참조만으로 이 제한은 사라지지 않는다 ([공식 안내](https://learn.chatgpt.com/docs/enterprise/plugin-management#desktop-only-plugins)).
+제작 스킬도 필요하면 연결한 앱의 플러그인에 Plugin Creator로 추가하고 기존 앱 정보와 OAuth 설정을 유지한다.
+연결은 **대상 Dots 대화**에서 계정 도구가 표시되고 `get_profile`이 의도한 등록 계정을 반환할 때 확인된다.
+`mcp.json`, ZIP, 플러그인 목록, 공개 `/spec`, 다른 대화의 로그인은 이를 대신하지 않는다.
 `purpose: "connection"` 확인은 연결 전용이며 생성·업로드·등록을 실행하거나 생성 구독을 요구하지 않는다.
 `get_profile`이 없거나 빈 도구 목록, 404 또는 `not-found`가 나오면 상태는 미확인이다. 이는 플러그인의 삭제·교체나
 서버 장애를 입증하지 않는다. 기존 OAuth 연결, 세션, 승인 대기와 작업 기록을 보존하고 로컬 CLI 로그인으로 대체하지 않는다.
