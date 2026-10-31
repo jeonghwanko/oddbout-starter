@@ -5,10 +5,10 @@ description: Create, revise, resume, validate or register an ODDBOUT fighter in 
 
 # ODDBOUT
 
-One workflow covers creation, review and registration. The connected ODDBOUT tools own the registration
+One workflow covers creation, review and registration. When exposed in this conversation, the connected ODDBOUT tools own the registration
 account; the workspace kit owns files, version selections and generation jobs. Do not ask the user to
 install AI Fighter Creator as a second plugin or choose between two product names.
-For registered-fighter lookup or status, use the connected ODDBOUT tools directly; no workspace setup is needed.
+For registered-fighter lookup or status, first check that the connected ODDBOUT tools are available here; no workspace setup is needed.
 For creation, read [workspace routing](references/workspace.md). Use the same project tools through
 `creation:tool` in the user's PC or the Dots workspace. Do not move work to a PC when the user chose Dots.
 For Dots initialization/resume, also follow the kit's `docs/DOTS-START.md`: offline doctor, recovery inventory,
@@ -17,6 +17,23 @@ protected Codex sessions or start a second generation because the original exec 
 Workspace generation uses the installed creator kit's sprite-gen and the user's account.
 For supported direct conversation appearance generation/display, check that route first under `docs/DELIVERY.md`;
 do not require a PC or leave the user's chosen VM scope. Packaging still uses the creator kit.
+
+## Connection-only checks and missing tools
+
+A connection/status request does not authorize starting or resuming creation. Inspect this conversation's actual
+ODDBOUT tools, call native `get_profile` when available, and use `check_creation_readiness` with `purpose: connection`.
+Keep server discovery, account plugin import/update, installation and selection in this conversation, tool exposure,
+and the returned account identity separate. A released ZIP, local Codex connection or successful public MCP tool listing
+does not establish any Dots-native account connection.
+
+If `get_profile` is absent, report tool exposure as unverified; do not start local login, device pairing or generation
+to replace the missing cloud connection. Resolve the current plugin through the host's supported discovery and settings.
+Use only a returned current plugin URL/ID, never a historical private link or an invented replacement. A missing ID or
+empty search does not prove deletion, replacement or a server outage. Prefer refreshing/selecting an existing verified
+plugin. Preserve OAuth grants, workspaces, pending requests and jobs. Remove an old connection only within an explicit
+user request after the replacement succeeds in this same conversation and its account matches the intended account.
+If a native call returns an authentication error, follow that error's supported connection action; missing tools alone
+are not evidence that the token expired.
 
 ## Hosted route
 
@@ -62,10 +79,11 @@ Another person's host (`list_generation_hosts`) takes none of their tokens and n
 5. Use `check_creation_readiness` and `docs/CONNECTION-READINESS.md` for the ODDBOUT connection action.
    Set `purpose: connection` for sign-in checks and `purpose: registration` for an existing final package;
    only `purpose: generation` prepares the generation engine or asks about generation access.
-   Use `connect_oddbout(action: start)` within a connection/registration request; show its public link/code,
+   For an explicitly selected local stdio connection, use `connect_oddbout(action: start)` within a connection/registration request; show its public link/code,
    then `action: wait` after the user approves. Repeated start returns the same pending link. Respect
    retryAfterSeconds. Current runtimes adopt login without an MCP restart. If these tools are absent,
-   run `npm run creation:check -- connection` in the kit and follow its supported CLI route.
+   use `npm run creation:check -- connection` only to inspect that explicitly selected local route. Missing cloud tools
+   must follow the connection-only checks above, not this local CLI fallback.
    Keep authenticated registration API access, generation access and parent delivery separate. A saved session
    is unverified until GET /me succeeds. Environment-preparer actions (VM host allowlist/Republish) are initial
    workspace setup, not repeated creator steps; the kit cannot perform those settings changes.

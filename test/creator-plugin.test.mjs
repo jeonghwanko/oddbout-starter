@@ -467,16 +467,35 @@ test('a version whose copy was interrupted can be recorded again instead of fail
 // An engine stub that runs until the runner's signal stops it, as executeEngine reports a stop.
 const untilStopped = (started = () => {}) => async (_root, _engine, argv, { signal } = {}) => {
   if (argv[0] === 'workflow') return { code: 0 };
+  if (signal.aborted) return { code: null, notStarted: true, stopped: signal.reason };
   started();
   return new Promise(resolve => signal.addEventListener('abort', () => resolve({ code: null, signal: 'SIGTERM', stopped: signal.reason }), { once: true }));
 };
 
-test('a running job stops at its time limit and is left unknown, never as a confirmed non-run', async t => {
+test('a running job stops at its time limit and records whether generation started', { timeout: 10_000 }, async t => {
   const f = await fixture(t), jobId = randomUUID();
   await f.jobs.prepare(sessionId, 1, jobId, plan({ timeoutMinutes: 30 }));
-  const result = await runCreationJob(f.store, sessionId, jobId, { execute: untilStopped(), timeoutMs: 50 });
-  assert.deepEqual([result.status, result.reason, result.stage], ['unknown', 'runner-timeout', 'execute']);
-  await assert.rejects(f.jobs.prepare(sessionId, 1, randomUUID(), plan()), /needs-inspection/);
+  let started = false;
+  const result = await runCreationJob(f.store, sessionId, jobId, { execute: untilStopped(() => { started = true; }), timeoutMs: 50 });
+  assert.deepEqual([result.status, result.reason, result.stage], [started ? 'unknown' : 'failed', 'runner-timeout', 'execute']);
+  if (started) await assert.rejects(f.jobs.prepare(sessionId, 1, randomUUID(), plan()), /needs-inspection/);
+});
+
+test('an expired signal prevents engine dispatch during the pre-execution state read', { timeout: 10_000 }, async t => {
+  const f = await fixture(t), jobId = randomUUID();
+  await f.jobs.prepare(sessionId, 1, jobId, plan());
+  let preflight = false, generationCalls = 0;
+  const read = f.store.read.bind(f.store);
+  f.store.read = async (...args) => { if (preflight) await new Promise(resolve => setTimeout(resolve, 40)); return read(...args); };
+  const result = await runCreationJob(f.store, sessionId, jobId, { timeoutMs: 5, execute: async (_root, _engine, argv) => {
+    if (argv[0] === 'workflow') { preflight = true; return { code: 0 }; }
+    generationCalls++; return { code: 0 };
+  } });
+  assert.equal(generationCalls, 0);
+  assert.deepEqual([result.status, result.reason, result.stage], ['failed', 'runner-timeout', 'execute']);
+  const controller = new AbortController(); controller.abort('runner-timeout');
+  assert.deepEqual(await executeEngine(f.root, 'sprite', ['gen'], { signal: controller.signal }),
+    { code: null, notStarted: true, stopped: 'runner-timeout' });
 });
 
 test('cancelling a running job stops its engine and leaves the generation unknown', async t => {
@@ -556,7 +575,7 @@ test('an earlier run\'s report, or none, leaves a failed generation unknown', as
   assert.deepEqual([result.status, result.outcome.charge, result.outcome.next], ['unknown', 'unknown', 'inspect']);
 });
 
-test('a stopped step that generates nothing (extract, packing) ends failed', async t => {
+test('a stopped step that generates nothing (extract, packing) ends failed', { timeout: 10_000 }, async t => {
   const f = await fixture(t), extractId = randomUUID();
   await f.jobs.prepare(sessionId, 1, extractId, plan({ args: ['extract'], workflowArgs: undefined, outputs: [`output/${sessionId}-work/artifacts/idle/v1/frames.png`] }));
   const extracted = await runCreationJob(f.store, sessionId, extractId, { execute: untilStopped(), timeoutMs: 50 });

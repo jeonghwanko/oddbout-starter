@@ -52,8 +52,10 @@ preview-delivery checks remain distinct from login. This **0.6.0 candidate** sti
 creation acceptance; unit tests or a parent-container run do not certify it.
 
 Connect the hosted **ODDBOUT** MCP, sign in with Google, then select `@ODDBOUT` in your Dots conversation.
-The ODDBOUT plugin 0.6.0 or later already carries this connection; without the plugin, add it in ChatGPT Plugins as a custom
-MCP server (adding both shows ODDBOUT twice). Grok and Claude connect the same server from their connector settings, and
+The ODDBOUT plugin source from 0.6.0 includes the MCP configuration. Publishing its ZIP does not install or update the plugin in your ChatGPT/Dots account.
+Verify the current plugin is installed and selected in the intended conversation, and that its native `get_profile` works.
+If no working plugin supplies the connection, use the supported custom MCP setup in ChatGPT Plugins. Preserve an existing connection until its replacement is verified.
+Grok and Claude connect the same server from their connector settings, and
 [My agents](https://oddbout.com/creator.html?lang=en#view=agents) shows and disconnects every connection. The cloud connector handles account checks,
 file transfer and registration; no local MCP installation, API key or callback copying is needed.
 See [cloud connection instructions](docs/CLOUD-MCP.md) for each host's endpoint and first-time setup.

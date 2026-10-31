@@ -16,6 +16,7 @@ const sha = value => createHash('sha256').update(value).digest('hex');
 const runtimeFiles = [
   'LICENSE', 'AGENTS.md', 'README.md', 'README.ko.md', 'package-lock.json', 'api/client.mjs', 'api/connection-errors.mjs', 'api/runtime-fetch.mjs', 'server/ai-fighter-package.mjs',
   'deploy/creation-context-source.json', 'deploy/creator-site.json',
+  'scripts/check-cloud-discovery.mjs', 'plugins/ai-fighter/mcp.json',
   'deploy/creation-environments.json', 'deploy/creation-environment-trust.json', 'scripts/connect-generation.mjs', 'docs/ENVIRONMENT-ONBOARDING.md',
   'scripts/sprite-gen.mjs', 'scripts/pack-fighter.mjs', 'scripts/run-creation-job.mjs', 'scripts/creation-tool.mjs',
   'scripts/sprite-tools.mjs',
@@ -37,7 +38,7 @@ const edgeOnlyFiles = ['mcp/cloud.mjs', 'mcp/file-input-probe.mjs', 'mcp/creator
 const edgeOnly = file => edgeOnlyFiles.includes(file) || file.startsWith('mcp/cloud/');
 const runtimeScripts = ['start', 'login', 'logout', 'sprite:setup', 'sprite:status', 'sprite',
   'fighter:pack', 'fighter:gait', 'fighter:contact', 'validate', 'creation:context', 'creation:delivery', 'creation:check', 'creation:run', 'creation:tool',
-  'dots:doctor', 'dots:bootstrap', 'dots:resume', 'dots:start', 'dots:source'];
+  'dots:doctor', 'dots:bootstrap', 'dots:resume', 'dots:start', 'dots:source', 'mcp:check'];
 
 // Presentation media in the upstream documentation is not runtime/package data.
 // Keep all source, package assets, workflow text and licenses.

@@ -247,6 +247,7 @@ function stopTree(child) {
  * @returns {Promise<EngineResult>}
  */
 export function executeEngine(root, engine, argv, { signal } = {}) {
+  if (signal?.aborted) return Promise.resolve({ code: null, notStarted: true, stopped: signal.reason ?? 'stopped' });
   const entry = fileURLToPath(new URL(engine === 'sprite' ? '../scripts/sprite-gen.mjs' : '../scripts/pack-fighter.mjs', import.meta.url));
   return new Promise(resolve => {
     // Its own process group off Windows, so a stop reaches the engine's children too.
@@ -300,9 +301,13 @@ export async function runCreationJob(store, id, jobId, { execute = executeEngine
   const timer = setTimeout(() => control.abort('runner-timeout'), timeoutMs ?? (job.plan.timeoutMinutes ?? DEFAULT_TIMEOUT_MINUTES) * 60_000);
   const poll = setInterval(() => lstat(stopPath).then(() => control.abort('stopped-by-request'), () => {}), STOP_POLL_MS);
   const options = { signal: control.signal };
+  /** @type {typeof executeEngine} */
+  const dispatch = (root, engine, argv, options) => control.signal.aborted
+    ? Promise.resolve({ code: null, notStarted: true, stopped: control.signal.reason ?? 'stopped' })
+    : execute(root, engine, argv, options);
   try {
     if (job.plan.workflowArgs) {
-      stage = 'preflight'; result = await execute(store.root, 'sprite', job.plan.workflowArgs, options);
+      stage = 'preflight'; result = await dispatch(store.root, 'sprite', job.plan.workflowArgs, options);
       // A stopped preflight generated nothing: it failed, it is not a choice waiting for the user.
       if (result.code !== 0) job.status = result.notStarted || result.stopped ? 'failed' : 'needs-input';
     }
@@ -316,7 +321,7 @@ export async function runCreationJob(store, id, jobId, { execute = executeEngine
     if (job.status === 'running') {
       stage = 'execute';
       const since = Date.now();
-      result = await execute(store.root, job.plan.engine, job.plan.args, options);
+      result = await dispatch(store.root, job.plan.engine, job.plan.args, options);
       const spending = job.plan.engine === 'sprite' && spends(job.plan.args);
       job.status = result.notStarted ? 'failed' : result.code === 75 ? 'needs-input'
         : result.code === 0 ? 'succeeded' : spending ? 'unknown' : 'failed';

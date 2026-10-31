@@ -1,15 +1,15 @@
-# ODDBOUT 통합 플러그인 (0.6.1)
+# ODDBOUT 통합 플러그인 (0.6.2)
 
-사용자는 ODDBOUT 하나에서 제작·묶음 검토·등록을 진행한다. PC와 Dots의 사용자별 작업 공간은
-같은 제작 도구와 파일 규격을 사용하며, 등록은 현재 대화에 연결된 ODDBOUT Google 계정으로 한다.
-AI Fighter Creator라는 두 번째 플러그인 설치나 작업 공간의 별도 등록 로그인을 요구하지 않는다.
+이 저장소의 0.6.2 키트 소스는 제작·검토를 위한 로컬 CLI와 호스팅 ODDBOUT MCP 구성을 한 제작 흐름으로
+묶는다. ZIP 생성·공개 배포, 계정의 플러그인 가져오기/갱신, 앱에서 설치·선택, Dots 대화의 MCP 도구 노출,
+OAuth 계정 확인은 서로 별도 단계다. 한 단계의 성공만으로 나머지도 완료됐다고 말하지 않는다.
 
 ## 구성
 
 - `plugins/ai-fighter/plugin.json`: 호환을 위해 소스 폴더는 유지하지만 플러그인 이름은 `oddbout`이다.
-- `mcp.json`: 운영 MCP(`https://mcp.oddbout.com/mcp`, Google 로그인)를 플러그인 안에 둔다(0.6.0). 예전에는 `.app.json`으로 따로 추가한
-  ODDBOUT 연결(사용자 지정 MCP 커넥터)을 참조해서, 플러그인 목록에 ODDBOUT이 둘 보였다. 이제 하나다. 계정·토큰은 넣지 않는다.
-  로컬 명령 서버는 넣지 않는다(`streamable-http`만). 공개 디렉터리 심사는 같은 MCP를 쓰는 `plugins/oddbout-cloud`로 따로 진행 중이다.
+- `mcp.json`: 키트 소스에서 호스팅 MCP(`https://mcp.oddbout.com/mcp`, Google OAuth)를 구성한다. 이 파일이나 ZIP은
+  계정에 플러그인을 가져오거나 설치하지 않고, Dots에서 도구가 노출되는지 증명하지 않는다. 로컬 명령 서버는 넣지 않는다
+  (`streamable-http`만). 공개 디렉터리의 등록·심사 상태는 별도로 실제 현재 상태를 확인한다.
 - `skills/create-fighter`: PC/Dots 실행 환경, 사용자 피드백, 패키지 검증, 공통 클라우드 등록을 안내한다.
 - 새 launcher의 `--status`: 소스·기존 runtime 해시를 검증하고 경로만 보고한다. 파일을 만들지 않는다.
 - `launcher.mjs --install --manifest-sha256 <검토된-runtime-manifest-SHA256>`: 명시적으로 사용자 runtime에 복사한다.
@@ -25,30 +25,38 @@ AI Fighter Creator라는 두 번째 플러그인 설치나 작업 공간의 별�
 ## 빌드와 전환
 
 ```sh
-npm run plugin:build -- output/oddbout-development-0.6.1
-npm run plugin:bundle -- output/oddbout-0.6.1
+npm run plugin:build -- output/oddbout-development-0.6.2
+npm run plugin:bundle -- output/oddbout-0.6.2
 ```
 
 첫 명령은 이 사용자의 체크아웃/작업 공간을 가리키는 개발용 빌드다. 다른 기기 배포에는 두 번째 명령의
-`oddbout-0.6.1.zip`을 사용한다. ZIP은 한국어·영어 README, 제작 시작 안내·문서 지도·MCP 전환 안내,
+`oddbout-0.6.2.zip`을 사용한다. ZIP은 한국어·영어 README, 제작 시작 안내·문서 지도·MCP 전환 안내,
 원본 소스와 고정된 sprite-gen-agent(`vendor/sprite-gen`), 그 LICENSE/NOTICE를 포함하며
 OS별 node_modules·venv·로그인·사용자 결과물은 제외한다. 의존성은 추출한 런타임에서 잠금 파일로 설치한다.
 
-**0.6.1로 옮기기(ChatGPT 개인 플러그인)**: 새 ZIP을 올려 설치하고 Google로 한 번 로그인한다. 그다음 예전 ODDBOUT 플러그인과
-따로 추가했던 ODDBOUT 연결(사용자 지정 MCP 커넥터)을 지운다. 작업 폴더·원본·작업 기록은 그대로다.
+**0.6.2 키트 전환**: ZIP은 키트 배포 파일이지 개인 플러그인 생성·가져오기 또는 Dots 배포 완료 증거가 아니다.
+먼저 서버 배포와 ZIP 공개 배포를 각각 확인하고, 공식 앱에서 플러그인을 가져오거나 갱신했는지 확인한 다음,
+대상 Dots 대화에서 해당 플러그인을 선택하고 호스트의 도구 검색/카탈로그에서 `get_profile`을 찾아 직접 호출한다.
+`get_profile`이 의도한 등록 계정을 반환하기 전에는 연결 완료라고 하지 않는다. 서버가 `get_profile`을 제공하지 않거나
+`tools/list`가 비어 있거나 404/not-found가 나오면 원인을 미확인으로 두고 기존 OAuth 연결·세션·작업을 보존한다.
+로컬 CLI 로그인으로 클라우드 계정 연결을 대신하지 않는다.
 
-기존 `ai-fighter-local` 마켓플레이스의 소스를 새 디렉터리로 전환하고 `oddbout@ai-fighter-local`을 설치한다.
-새 설치와 계정 연결을 확인한 뒤 이전 `ai-fighter-creator@ai-fighter-local` 설치를 제거한다.
-기존 ODDBOUT 클라우드 계정 연결은 유지한다. 플러그인 캐시 외부의 작업 폴더·원본·선택·작업 기록은 옮기거나
-삭제하지 않는다. 새 대화에서 갱신된 스킬을 확인한다. 클라우드 개인/워크스페이스 플러그인 적용은 별도
-지원 UI의 가져오기/갱신 단계이며, 로컬 설치만으로 Dots에 배포됐다고 주장하지 않는다.
+기존 플러그인이나 사용자 지정 MCP 연결을 제거하려면 사용자가 그 특정 항목을 제거해 달라고 명시적으로 요청해야 한다.
+그 전에 같은 Dots 대화에서 새 연결의 `get_profile`이 성공하고 기존과 같은 의도된 계정임을 확인한다. 기본 동작은
+삭제하지 않는 것이다. 빈 플러그인 목록, 404 또는 `not-found`는 기존 플러그인의 삭제·교체나 서버 장애를 증명하지 않는다.
+
+로컬 개발 설치는 기존 `ai-fighter-local` 마켓플레이스의 소스를 새 디렉터리로 전환하고
+`oddbout@ai-fighter-local`을 설치하는 별도 절차다. 이 명령의 성공은 ChatGPT 개인 플러그인 가져오기나
+Dots 대화에서의 MCP 연결을 뜻하지 않는다. 새 대화에서 현재 스킬을 확인한다. 캐시 밖의 작업 폴더·원본·선택·작업
+기록은 보존한다. 별도 클라우드 개인/워크스페이스 플러그인 가져오기·갱신은 해당 지원 UI에서 확인한다.
 
 **Codex MCP 전환**: 플러그인이 이미 운영 ODDBOUT MCP를 제공하면 별도 ODDBOUT MCP 항목을 추가하지 않는다.
-기존 인증 URL과 연결 계정을 유지한다. 이전 `ai-fighter`와 `ai-fighter-creator` 항목은 다음을 모두 확인한 뒤에만
-제거한다: 클라우드 `get_profile`이 기존 등록 계정으로 응답하고, 로컬 `creation:tool list`가 도구 목록을 반환하며,
-`npm run validate -- examples/sparring-bot/fighter.json`이 fixture를 검증한다. 로컬 CLI는 사용자의 선택한 생성 계정을
-사용하며 등록 계정을 제공하지 않는다. 마지막 명령은 형식 fixture만 검사해 실제 생성이나 등록 권한을 증명하지 않는다.
-실패하거나 결과가 불명확하면 이전 항목을 유지하고 원인을 확인한다. 제거해도 플러그인 캐시 밖의 작업 폴더·원본·선택·작업 기록은 옮기거나 삭제하지 않는다.
+기존 인증 URL과 연결 계정을 유지한다. 이전 `ai-fighter`와 `ai-fighter-creator` 항목 제거는 사용자의 명시적인
+삭제 요청이 있어야 한다. 제거 전 실제 대상 대화(Codex 또는 Dots)에서 대체 MCP의 도구 목록과 native `get_profile`을 확인하고,
+`get_profile`이 의도한 기존 등록 계정으로 응답해야 한다. 로컬 `creation:tool list`와
+`npm run validate -- examples/sparring-bot/fighter.json`은 로컬 도구·fixture 형식만 확인하며 계정이나 등록 권한을
+증명하지 않는다. 로컬 CLI는 사용자가 선택한 생성 계정을 쓰며 등록 계정을 제공하지 않는다. 도구가 없거나 결과가
+불명확하면 현재 OAuth 연결·세션·작업을 보존하고 제거하지 않는다. 작업 폴더·원본·선택·작업 기록도 옮기거나 삭제하지 않는다.
 
 소스의 클라우드 도구에는 `prepare_fighter_registration`의 선택 인자 `fighterId`가 있어 기존 소유 선수의 패키지 갱신을
 지정할 수 있고, 생략하면 새 선수를 준비한다. `open_creator_homepage`는 고정된 공개 사이트 URL을 돌려준다.
@@ -81,20 +89,21 @@ CLI 오류는 0이 아닌 종료 코드로 전달한다. 계정 연결과 실제
 
 ## 검증 범위
 
-아래는 0.4.0의 설치 기록이다. 0.6.1 ZIP의 ChatGPT 업로드·설치는 아직 확인하지 않았다.
+아래는 2026-10-26에 기록된 0.4.0 개인용 ChatGPT 관찰의 역사적 기록이다. 0.6.2 ZIP이 개인 플러그인을
+생성·가져오기·설치했다는 증거는 없으며, 현재 해당 플러그인 ID/URL은 확인되지 않는다. 이 기록을 현재 연결로
+사용하거나 재사용하지 않는다.
 0.5.0은 `tools/ai-fighter/projected-ground.mjs`가 빠져 `fighter:pack`·`fighter:gait`가 시작되지 않으므로 설치하지 않는다.
 
-2026-10-26 개인용 ChatGPT에 0.4.0 ZIP을 업로드하고 설치했다.
-[통합 ODDBOUT](https://chatgpt.com/plugins/Plugin_4f7c4614845481918f2b208db68cd2b2)에서
-앱 1개·스킬 1개·버전 0.4.0·기존 Google 계정 연결을 확인했다. `get_profile`과
-연결 목적의 `check_creation_readiness`는 정상 응답했고 등록 접근은 `ready`였다.
-이 결과는 생성이나 캐릭터 등록을 실행했다는 뜻이 아니다.
+2026-10-26의 기록은 개인용 ChatGPT에서 0.4.0 ZIP 업로드 후 당시 보인 플러그인 메타데이터와 기존 Google 계정 연결,
+`get_profile`, 연결 목적의 `check_creation_readiness`를 보고했다. 2026-11-01 점검에서 이전 private ID는 not-found였고
+owned personal plugins 목록도 비어 있었다. 따라서 당시 기록은 그 날짜의 관찰만 뒷받침하며 현재 플러그인 존재나
+연결 가능성을 뒷받침하지 않는다. 당시 등록 접근은 `ready`로 기록됐지만 생성이나 캐릭터 등록을 실행했다는 뜻은 아니다.
 
-개인용 목록에는 통합 플러그인과 그 플러그인이 참조하는 기존 ODDBOUT 앱이 각각 표시된다.
-기존 앱 설정에도 통합 플러그인이 해당 앱을 사용한다고 표시된다. 등록 연결을 유지하기 위해
-기존 앱은 제거하지 않았다. 따라서 기능 묶음은 통합됐지만 목록을 한 항목으로 줄인 상태는 아니다.
-로컬 개발 설치도 유지된다. 업로드 ZIP과 검증 기록은 `output/oddbout-unified-0.4.0/`에 있다.
+당시 기록에는 개인용 목록에서 통합 플러그인과 참조된 기존 ODDBOUT 앱이 각각 보였고, 앱 설정에도 해당 참조가
+표시됐다고 적혀 있다. 기존 앱은 등록 연결을 유지하기 위해 제거하지 않았다고 기록됐다. 이는 당시 기능 묶음에 대한
+기록이며 현재 플러그인 목록이나 연결 상태를 증명하지 않는다. 로컬 개발 설치와 그때의 ZIP 검증 기록도 개인 플러그인
+생성·현재 계정 import 상태와는 별개다.
 
-관련 테스트는 작업 기록 재개, 스키마·경로 제한, 클라우드 모드의 로컬 로그인 분리, 패키지 파일 검증과
-소스 번들 추출을 확인한다. 생성·유료 호출·캐릭터 등록·CI는 수행하지 않는다.
+자동화 테스트는 작업 기록 재개, 스키마·경로 제한, 클라우드 모드의 로컬 로그인 분리, 패키지 파일 검증과
+소스 번들 추출을 확인한다. 그 결과는 실제 생성·유료 호출·캐릭터 등록이나 호스트 설치 성공을 증명하지 않는다.
 Dots의 실제 생성·표시·파일 전달과 최종 등록은 해당 호스트에서 실제 사용자가 제작할 때 확인해야 한다.
