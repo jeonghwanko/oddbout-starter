@@ -119,9 +119,9 @@ GPT만 사용 가능하면 둘 다 GPT로 제안한다. 사용자가 지정한 �
 클라우드 등록에 작업 공간 CLI 로그인을 요구하지 않는다. 기존 독립 CLI만 `deploy/creator-site.json`으로 로그인한다.
 최종 결과 선택과 파일 검사가 끝난 뒤 제출한다. 같은 패키지 재시도에는 같은 idempotencyKey를 쓴다.
 `registered`, `fighterId`, 이용 가능 상태를 실제 응답으로 확인해 이 대화에 알려준다.
-`prepare_fighter_registration`의 실제 클라우드 `tools/list`가 선택 인자 `fighterId`를 표시하면,
-생략 시 새 등록을 준비하고 지정 시 기존 소유 선수의 패키지 갱신을 준비한다. 실제 `tools/list`에 `open_creator_homepage`가
+실제 클라우드 도구 목록에서 `prepare_fighter_registration`의 선택 인자 `fighterId`가 보이면,
+생략 시 새 등록을 준비하고 지정 시 기존 소유 선수의 패키지 갱신을 준비한다. 도구 목록에 `open_creator_homepage`가
 있으면 반환된 공개 홈페이지 링크를 안내한다. 사이트 로그인은 별도이며 사용자가 MCP와 같은 계정으로 로그인했는지 확인한다.
-새 도구나 인자를 서버의 `tools/list`에서 확인하기 전에는 배포되어 있다고 안내하지 않는다. 전체 절차는
+새 도구나 인자를 서버 도구 목록에서 확인하기 전에는 배포되어 있다고 안내하지 않는다. 전체 절차는
 [클라우드 MCP 안내](CLOUD-MCP.md)와
 [가입 후 등록 안내](OPEN-REGISTRATION.md)를 따른다.
