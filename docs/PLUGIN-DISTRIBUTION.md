@@ -1,8 +1,21 @@
 # ODDBOUT distribution
 
-**Candidate 0.6.3: planned, unpublished.** The source kit clarifies that its ZIP supplies desktop MCP client configuration and the creation skill/runtime. ChatGPT and Dots use the connected ODDBOUT App; adding the skill to that same App is a separate update and must be verified in the target host. No release artifact or publication is claimed yet.
+**Current release: 0.6.3** (2026-11-01: distinguish desktop MCP configuration from the ChatGPT/Dots cloud App connection, preserve other clients' setup, and add the creation skill to the same connected App).
+Published at
+`https://oddbout.com/creator-kit/0.6.3/a228c3b3d1c04f934b92647e9dda4beab5ebf08b4582f7f696ca681645fa1361/release.json`
+(manifest SHA-256 `720e4cf0fb12dd69a1a8b29ae6565c963ea99bbd6cfdae41e8453a8c4084dbe6`, helper `fetch-creator-kit.py`
+`b66c31ff833816dfa74c90d9155359d3fdd484dff8c12759e48addde01707592`, ZIP `ea511c1646e1a561e2966624b61ed1fbc83045b4324d74e096eb2b9eda447d72`,
+4,176,688 bytes; Pages commit `d510f27bc2692c4f92ab1665acb5c6990dbd658d`, live-verified).
+Built from `1b2ee05e082ee9223de0c97d163ddcb2449aca12`; its tree matches PR #225's merge commit `aca67bda6c6055d64726cf0866e7d4b9a339d5ed` (CI passed).
+The trusted helper inspected and extracted the actual ZIP. All 22 bundled README/docs and 88 tracked non-vendor runtime files matched the source commit byte-for-byte;
+the runtime manifest verified the remaining bundled files, and the extracted launcher's read-only status passed. Publication added only three release files,
+preserved all 5,837 existing files, and verified public bytes and unchanged site entry documents.
 
-**Current release: 0.6.2** (2026-11-01: distinguish Dots installation/account verification from public discovery; preserve existing connections; prevent an already-cancelled job from starting its engine).
+The separate connected App received the skill and runtime as version 1.0.1 through a guarded update. Its existing App binding and complete presentation were
+read back unchanged; no root MCP declaration was added. This App version is independent of the source kit version. Account verification and actual generation/delivery
+remain separate checks; publishing this ZIP does not create or connect an App for another user.
+
+Previous release: 0.6.2 (2026-11-01: distinguish Dots installation/account verification from public discovery; preserve existing connections; prevent an already-cancelled job from starting its engine).
 Published at
 `https://oddbout.com/creator-kit/0.6.2/b23c8ebc112649b33c946eac4a16aeb75c723739b201c470aed03defca1703af/release.json`
 (manifest SHA-256 `67e2d19f26613a69d58dda9b42de7b9f24d2b87c2b228eeee9dece0273512bb6`, helper `fetch-creator-kit.py`
@@ -16,11 +29,11 @@ preserved all 5,834 existing files, and verified public bytes and unchanged site
 
 A private account plugin was created from this exact ZIP with version 0.6.2; its stored MCP URL, OAuth configuration, skill and cancellation guards
 were read back. The ZIP import exposed a desktop MCP connection, not a connected ChatGPT/Dots App. A plugin-list screenshot and public discovery did not establish native Dots tool exposure.
-A separate connected ODDBOUT App subsequently returned native `get_profile` in the intended Dots conversation; the creation skill on that App remains a separate update and verification.
+A separate connected ODDBOUT App subsequently returned native `get_profile` in the intended Dots conversation. The source ZIP and that App are distinct installation paths.
 Private account IDs/links are not portable distribution identifiers and are not published here. Saved-Dots-VM creation remains a separate acceptance check,
 and `deploy/dots-release.json` remains independently pinned.
 
-Previous release: 0.6.1 (2026-11-01: both READMEs, the document index, starting guide and current MCP connection/migration guides now ship in the ZIP).
+Earlier release: 0.6.1 (2026-11-01: both READMEs, the document index, starting guide and current MCP connection/migration guides now ship in the ZIP).
 Published at
 `https://oddbout.com/creator-kit/0.6.1/1032b5d1c84c95599922d511f6f3fb172b3d003e22582c0228893f537befe5e1/release.json`
 (manifest SHA-256 `f5d8996fb93e1f5a3427de66da96318acba6a6d574cf7540e98783f0008be0db`, helper `fetch-creator-kit.py`
