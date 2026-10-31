@@ -214,6 +214,14 @@ export const LOOP_VISUAL = ['identity', 'anatomy', 'loop'];
 // to the first"; the judge sees still frames, where a fast stride's seam reads as a jump like any other step). Identity and anatomy the
 // engine cannot see: those still refuse. The creator sees the loop in the preview and may ask for it again.
 export const ENGINE_SEAM_MAX = 2;   // sprite-gen video/loop.py SEAM_RATIO_MAX: the loop seam over the cycle's mean step
+// Feet not named only for a low margin on a side view (2026-11-01): the shade cue swings once a cycle (sprite-gen align.py checks its
+// rhythm first), so the strikes are the two legs, only too alike at the strike frames to say which is which; nothing downstream uses
+// which. A same-leg cut swings twice a cycle and fails the rhythm. The generator takes such a cut on the same rule (host/generation-stages
+// `lowMarginFeet`; pinned equal by a test).
+export const ENGINE_CUE_RHYTHM = 0.25;   // sprite-gen video/align.py CUE_RHYTHM
+export const lowMarginFeet = foot => foot?.feet == null && foot?.cue === 'shade' && typeof foot.why === 'string' &&
+  foot.why.startsWith('low-margin') && Number.isFinite(foot.rhythm) && foot.rhythm >= ENGINE_CUE_RHYTHM;
+const namedFeet = feet => Array.isArray(feet) && feet.length === 2 && new Set(feet).size === 2 && feet.every(f => ['left', 'right'].includes(f));
 export const seamMeasured = seam => typeof seam === 'number' && Number.isFinite(seam) && seam <= ENGINE_SEAM_MAX;
 /** The verdicts a cut is taken on: identity and anatomy from the judge, the seam from the judge or, when it refused, the engine. */
 export const visualTaken = (visual, seam) => ['identity', 'anatomy'].every(key => visual?.[key] === 'pass') &&
@@ -232,9 +240,9 @@ export function loopReview({ motion, sequence, strip, visual, judge, stridePixel
   if (new Set(sequence.frames.map(f => digest(f.data))).size !== sequence.frames.length) errors.push({ code: 'DUPLICATE_FRAME' });
   const retake = [...retakeReasons(strip?.retake), ...retakeReasons(strip?.cycle_align?.retake)];
   if (retake.length) errors.push({ code: 'ENGINE_RETAKE', reasons: retake });
-  const feet = strip?.cycle_align?.foot?.feet ?? null;
-  if (!Array.isArray(feet) || feet.length !== 2 || new Set(feet).size !== 2 || !feet.every(f => ['left', 'right'].includes(f)))
-    errors.push({ code: 'ENGINE_FEET_UNNAMED', feet });
+  const foot = strip?.cycle_align?.foot, feet = foot?.feet ?? null;
+  const feetBy = namedFeet(feet) ? 'named' : lowMarginFeet(foot) ? 'low-margin' : null;
+  if (!feetBy) errors.push({ code: 'ENGINE_FEET_UNNAMED', feet });
   const seam = strip?.cycle_align?.seam_ratio ?? null;
   for (const item of LOOP_VISUAL)
     if (visual?.[item] !== 'pass' && !(item === 'loop' && seamMeasured(seam))) errors.push({ code: 'VISUAL_' + item.toUpperCase(), verdict: visual?.[item] ?? null });
@@ -245,11 +253,12 @@ export function loopReview({ motion, sequence, strip, visual, judge, stridePixel
     durationSeconds: sequence.durations.reduce((sum, ms) => sum + ms, 0) / 1000, errors,
     engine: { kind: strip?.kind ?? null, cutFrames: strip?.cycle_align?.from ?? null, seam,
       beatJolt: strip?.cycle_align?.beat?.jolt ?? null, retake, strikes: strip?.cycle_align?.strikes ?? null, feet,
-      feetMargin: strip?.cycle_align?.foot?.margin ?? null },
+      feetMargin: foot?.margin ?? null, ...(feetBy === 'low-margin' ? { feetBy, feetRhythm: foot.rhythm } : {}) },
     visual: visual ? Object.fromEntries([...LOOP_VISUAL, 'notes'].map(key => [key, visual[key] ?? null])) : null, judge: judge ?? null,
     ...(visual && visual.loop !== 'pass' && seamMeasured(seam) ? { loopBy: 'engine-seam' } : {}),
     stridePixels: motion === 'walk' && positive(stridePixels) ? round(stridePixels) : null,
-    scope: 'Engine loop checks and foot naming, a vision judge and a measured stride; no same-foot stance measurement (hosted generation).' };
+    scope: 'Engine loop checks and foot naming, a vision judge and a measured stride; no same-foot stance measurement (hosted generation).' +
+      (feetBy === 'low-margin' ? ' Feet alternate by the rhythm of the shade cue; which foot is which is not named (low margin).' : '') };
 }
 
 export function requireLoopReview(review, sequence, motion) {
@@ -257,7 +266,9 @@ export function requireLoopReview(review, sequence, motion) {
       review.errors?.length !== 0) throw Error('LOOP_REVIEW_REQUIRED: ' + motion);
   if (review.sequenceSha256 !== sequenceHash(sequence)) throw Error('LOOP_REVIEW_STALE: ' + motion);
   if (!visualTaken(review.visual, review.engine?.seam) || !review.visual?.notes?.trim() || !review.judge?.trim() ||
-      !Array.isArray(review.engine?.retake) || review.engine.retake.length || new Set(review.engine.feet ?? []).size !== 2 ||
+      !Array.isArray(review.engine?.retake) || review.engine.retake.length ||
+      !(new Set(review.engine.feet ?? []).size === 2 || (review.engine.feetBy === 'low-margin' && review.engine.feet === null &&
+        Number.isFinite(review.engine.feetRhythm) && review.engine.feetRhythm >= ENGINE_CUE_RHYTHM)) ||
       (motion === 'walk' && !positive(review.stridePixels)))
     throw Error('LOOP_REVIEW_INCOMPLETE: ' + motion);
   return review;
