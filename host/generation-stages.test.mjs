@@ -187,6 +187,8 @@ test('a gait whose cuts never align stops for an operator without filming anothe
   assert.match(done.result.code, /^(walk|run)-align$/);
   // One clip per gait, no retake filmed and no relaxed still drawn.
   assert.deepEqual(calls.filter(a => a.includes('video-set')).map(a => path.basename(flag(a, '--out-dir'))).sort(), ['video-run-0', 'video-walk-0']);
+  // video-set's own cut stays the plain one; the motion-auto cut is the kit's fallback (cut-auto), not a second default cut.
+  assert.ok(calls.filter(a => a.includes('video-set')).every(a => flag(a, '--anchor') === 'none'));
   assert.ok(!calls.some(a => a.includes('gen')));
   // Each gait's cut was aligned in two passes (each a try and a --multi-cycle warn try) before the stage stopped.
   const aligns = gait => calls.filter(a => a.includes('video-cycle-align') && flag(a, '--loop-dir').includes(`video-${gait}-0`)).length;

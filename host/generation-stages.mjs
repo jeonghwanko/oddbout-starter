@@ -850,10 +850,11 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       const input = await stills(take);
       if (input.retry || input.review) return input;
       const motion = ['--motion', `${gait}=${words}`];
-      // A finished clip is kept (no --force): a stage run again reuses it.
+      // A finished clip is kept (no --force): a stage run again reuses it. `--anchor none` keeps video-set's own cut as it was before
+      // sprite-gen's gait witness (2026-11-01), where a walk/run cut defaults to motion-auto — the cut cutsOf() makes only as a fallback.
       const since = Date.now();
       const { code } = await og(sprite('video-set', '--base', `side@right=${input.still}`, '--facing', 'right', '--states', gait, '--key', input.key,
-        '--out-dir', clip, '--character', character, '--concurrency', '1', ...motion));
+        '--anchor', 'none', '--out-dir', clip, '--character', character, '--concurrency', '1', ...motion));
       if (code === 75) return ASKED;
       // No clip at all (a limit, an outage): try the stage later rather than film again with other words, unless the set report
       // says a request xAI took is unfinished (resume it), its outcome cannot be told, or the same run would fail again.
