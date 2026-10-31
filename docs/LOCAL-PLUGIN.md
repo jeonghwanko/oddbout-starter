@@ -1,9 +1,10 @@
 # ODDBOUT plugin and workspace tools
 
-**0.4.0 uses one ODDBOUT plugin for PC and supported Dots workspaces.** Follow
+**The current plugin provides one cloud MCP connection for PC and supported Dots workspaces.** Follow
 [ODDBOUT-PLUGIN.md](ODDBOUT-PLUGIN.md) for installation and migration. Registration uses the existing
-connected ODDBOUT account. The project tool APIs below are also available through `creation:tool`;
-they do not require a second local MCP plugin. The old stdio integration remains for compatibility.
+connected ODDBOUT account. Local creation tools are available through the `creation:tool` CLI; that CLI is
+not a second MCP server. Local filesystem and workspace tools run through that CLI; cloud account operations
+use the single connected MCP.
 
 For the source ZIP and distribution boundaries, see [ODDBOUT-PLUGIN.md](ODDBOUT-PLUGIN.md).
 
@@ -12,9 +13,11 @@ immutable version snapshots, group gates, and a managed CLI job ledger. Generati
 and packaging continue to use the pinned sprite-gen and existing fighter tools. Credentials are not
 included in the plugin; each creator uses their own accounts.
 
-This is a desktop stdio plugin. Installing or refreshing it does not connect it to a Dots cloud chat.
-The repository does not currently provide a hosted HTTPS MCP endpoint. See
-[the cloud connection prerequisites](CONNECTION-READINESS.md#dots-클라우드의-mcp-연결-조건) before advising a cloud user to refresh or reconnect.
+The plugin's MCP uses the hosted HTTPS endpoint configured in its `mcp.json`; it is not the legacy desktop
+stdio server. Installing or refreshing this local plugin does not by itself deploy it to a Dots cloud chat.
+Keep an already authenticated ODDBOUT MCP URL/account when migrating. Do not add a duplicate MCP entry if
+the plugin already provides the cloud connection. The legacy stdio server remains for older clients, but its
+full-session handoff across the permission boundary is intentionally not part of the unified route.
 
 ## Install on this computer
 
@@ -38,9 +41,13 @@ publish the generated directory as a standalone distributable. The builder does 
 
 For updates, build into a fresh directory (`npm run plugin:build -- output/ai-fighter-marketplace-v2`),
 register that source and refresh/reinstall the plugin. Existing build output is never overwritten.
-After changing a plugin, open a new chat for its updated skill. An existing manual AI Fighter MCP connection
-may remain for compatibility. Use the workspace CLI for unified creation and the connected ODDBOUT tools
-for registration; do not select a different saved account. Locks protect writers across connections.
+After changing a plugin, open a new chat for its updated skill. Use the workspace CLI for local creation and
+the connected ODDBOUT MCP for cloud operations. Verify cloud `get_profile` matches the intended registration
+account; generation uses the user's own explicitly chosen generation account. Before removing the
+legacy `ai-fighter` and `ai-fighter-creator` MCP entries, verify cloud `get_profile`, run `creation:tool list`
+for the local workspace, and validate the geometric fixture with `npm run validate -- examples/sparring-bot/fighter.json`.
+These checks cover connection, CLI discovery and fixture format; they do not verify a generated fighter or registration.
+Locks protect local writers across connections.
 
 Generation runtime setup is separate: `npm run sprite:setup` needs Python 3.11+ and installs the pinned
 source in its venv. `npm run sprite:status` reports installation, not login or quota. Public plugin

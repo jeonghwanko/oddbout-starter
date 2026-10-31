@@ -18,7 +18,7 @@ test('MCP discovery, file schemas, profile identity and HTTP auth challenge inte
   const init=await (await handle(request('initialize',{protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'test',version:'1'}}))).json();
   assert.equal(init.result.serverInfo.name,'oddbout-cloud');
   const list=await (await handle(request('tools/list'))).json();
-  assert.equal(list.result.tools.length,19);
+  assert.equal(list.result.tools.length,20);
   for(const name of ['prepare_fighter_registration','upload_fighter_asset','store_creator_source','prepare_profile_set','upload_profile_set_asset']) {
     const t=list.result.tools.find(t=>t.name===name), f=t.inputSchema.properties[t._meta['openai/fileParams'][0]];
     assert.deepEqual(new Set(f.required),new Set(['download_url','file_id']));
@@ -191,6 +191,48 @@ test('manifest registration binds owner/idempotency and does not report queued a
   assert.equal(rpcCalls.find(([n])=>n==='af_create_submission')[1].p_owner,owner);assert.equal(rpcCalls.find(([n])=>n==='af_create_submission')[1].p_key,key);
   const status=await call(handle,'get_fighter_submission',{submissionId:id});
   assert.equal(status.structuredContent.stage,'queued');assert.equal(status.structuredContent.fighterId,null);
+});
+test('registration update forwards only a valid optional fighter ID and preserves API refusals', async () => {
+  const calls = [], id = crypto.randomUUID(), fighter = crypto.randomUUID(), key = crypto.randomUUID(), updateKey = crypto.randomUUID();
+  let refusal = null, downloads = 0;
+  const query = { select(){return this}, eq(){return this}, async single(){return {data:{manifest:example}}} };
+  const db = {...dbFor(), from:()=>query, rpc:async(name,args)=>{
+    if (name === 'af_create_submission') { calls.push(args); return refusal ? {error:{message:refusal}} : {data:{id,status:'uploading',manifest_sha:args.p_sha}}; }
+    return {data:true};
+  }};
+  const handle = createCloudHandler({db,fetcher:async()=>{downloads++;return new Response(JSON.stringify(example))}});
+  const args = {manifest:{download_url:'https://files.oaiusercontent.com/f.json',file_id:'file_json'},idempotencyKey:key};
+  const tools = (await (await handle(request('tools/list'))).json()).result.tools;
+  const schema = tools.find(t=>t.name==='prepare_fighter_registration').inputSchema;
+  assert.ok(schema.properties.fighterId); assert.ok(!schema.required.includes('fighterId'));
+  assert.equal((await call(handle,'prepare_fighter_registration',args)).structuredContent.stage,'uploading');
+  assert.equal(calls.at(-1).p_fighter,null);
+  const update = {...args,idempotencyKey:updateKey,fighterId:fighter};
+  assert.equal((await call(handle,'prepare_fighter_registration',update)).structuredContent.stage,'uploading');
+  assert.equal(calls.at(-1).p_fighter,fighter); assert.equal(calls.at(-1).p_owner,owner); assert.equal(calls.at(-1).p_key,updateKey);
+  assert.equal((await call(handle,'prepare_fighter_registration',update)).structuredContent.stage,'uploading');
+  assert.equal(calls.at(-1).p_key,updateKey); assert.equal(calls.at(-1).p_sha,calls.at(-2).p_sha);
+  const before = [downloads,calls.length];
+  assert.equal((await call(handle,'prepare_fighter_registration',{...args,fighterId:'not-a-uuid'})).isError,true);
+  assert.deepEqual([downloads,calls.length],before);
+  for (const code of ['fighter-not-found','idempotency-conflict']) {
+    refusal = code;
+    assert.equal((await call(handle,'prepare_fighter_registration',update)).structuredContent.code,code);
+  }
+});
+test('creator homepage is an authenticated fixed navigation URL without account handoff', async () => {
+  let unexpected = 0;
+  const db = {...dbFor(),from:()=>{unexpected++;throw Error('unexpected database call')}};
+  const handle = createCloudHandler({db,fetcher:async()=>{unexpected++;throw Error('unexpected fetch')}});
+  const tool = (await (await handle(request('tools/list'))).json()).result.tools.find(t=>t.name==='open_creator_homepage');
+  assert.deepEqual(Object.keys(tool.inputSchema.properties),[]);
+  assert.equal(tool.securitySchemes[0].type,'oauth2');
+  assert.equal(tool.annotations.readOnlyHint,true); assert.equal(tool.annotations.idempotentHint,true);
+  assert.equal((await handle(request('tools/call',{name:'open_creator_homepage',arguments:{}}))).status,401);
+  const result = (await call(handle,'open_creator_homepage')).structuredContent;
+  assert.equal(result.url,'https://oddbout.com/creator.html');
+  assert.match(result.signIn,/normally.*same account as get_profile/);
+  assert.equal(unexpected,0);
 });
 test('native OAuth hook isolates connector tokens and live-session checks enforce owner/client/scope/revocation',async()=>{
   const db=await migratedDatabase();

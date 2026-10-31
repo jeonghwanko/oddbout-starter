@@ -53,6 +53,9 @@ export function registerRegistrationTools({ register, db, identity, invoke, fetc
   register('get_profile', 'ODDBOUT 연결 계정', 'Read the connected ODDBOUT account. Its opaque ID is stable across reconnections and email changes. '
     + 'No creation or publication.', {},
     async () => ({ id: /** @type {Identity} */ (identity).owner, ...(/** @type {Identity} */ (identity).email ? { email: /** @type {Identity} */ (identity).email } : {}), nickname: 'ODDBOUT' }), { profile: true });
+  register('open_creator_homepage', '제작자 홈페이지', 'Get the creator website address. Sign in normally on the website and ensure its account matches get_profile; '
+    + 'the cloud connection does not sign in to the website.', {},
+    async () => ({ url: 'https://oddbout.com/creator.html', signIn: 'Sign in normally on the website with the same account as get_profile.' }));
   register('check_creation_readiness', '클라우드 제작·등록 연결 점검', 'Use before first generation, after a workspace restart and before registration. '
     + 'Checks this cloud account’s registration access without a PC or CLI login. '
     + 'Generation, conversation display and package review remain unverified until actual evidence exists; '
@@ -106,11 +109,12 @@ export function registerRegistrationTools({ register, db, identity, invoke, fetc
     }, { write: true, publish: true, openWorld: true, idempotent: true });
   register('prepare_fighter_registration', '캐릭터 등록 준비', 'After the user requests registration and approves the final package, '
     + 'create/resume a private upload from the actual fighter.json file. '
+    + 'For an explicit update to your existing fighter, provide fighterId to keep its ID and history; a new package returns it to production for review. '
     + 'Use a new UUID for changed package bytes and the same UUID for immutable retries. This does not publish. '
     + 'Return pending asset IDs for upload_fighter_asset.',
-    { manifest: FILE, idempotencyKey: UUID_ARG() }, async ({ manifest, idempotencyKey }) => {
+    { manifest: FILE, idempotencyKey: UUID_ARG(), fighterId: UUID_ARG().optional() }, async ({ manifest, idempotencyKey, fighterId }) => {
       const bytes = await downloadHostFile(manifest, spec.limits.jsonBytes, fetcher);
-      const result = await invoke('submissions', 'POST', bytes, { 'content-type': 'application/json', 'idempotency-key': idempotencyKey });
+      const result = await invoke(fighterId ? `submissions?fighter=${encodeURIComponent(fighterId)}` : 'submissions', 'POST', bytes, { 'content-type': 'application/json', 'idempotency-key': idempotencyKey });
       if (result.ok) await recordAgent(result.submissionId);
       if (!result.ok || result.stage !== 'uploading') return result;
       const { data, error } = await db.from('af_submissions').select('manifest').eq('id', result.submissionId).eq('owner_id', /** @type {Identity} */ (identity).owner).single();
