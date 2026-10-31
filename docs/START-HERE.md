@@ -23,8 +23,13 @@ VM 도메인 허용·Republish는 초기 환경 준비자의 단계이며 캐릭
 ### 첫 응답
 
 - 이 시작 링크만 온 경우에도 시작 요청은 이미 받았다. “시작할까요?”를 추가하지 않고 바로 캐릭터 설명·참조 이미지를 받는다.
-- 먼저 [게임이 제공하는 구조 데이터](https://raw.githubusercontent.com/jeonghwanko/oddbout-starter/refs/heads/codex/game-context/creation-context.json)를 읽는다.
-  MCP에서는 `get_fighter_spec(section: "context")`다. 모션·프레임·조작·경직·묶음 구성은 이 응답을 기준으로 한다.
+- 먼저 게임이 제공하는 구조 데이터를 읽는다. 연결된 클라우드 MCP의 `get_fighter_spec`에서는 지원 스키마에 따라
+  `overview`, `creation`, `schema` 섹션을 사용한다. 클라우드 MCP의 `context`·`guide` 지원을 가정하지 않는다.
+  모션·프레임·조작·경직·묶음 구성인 `context`는 체크아웃에서 `npm run creation:context`로 가져온다.
+  로컬 작업 공간의 도구가 필요하면 `npm run creation:tool -- call "<absolute-workspace>" get_fighter_spec "<arguments.json>"`
+  을 사용하고 arguments 파일에 `{"section":"context"}` 또는 `{"section":"guide"}`를 둔다.
+  게임 저장소의 [시작 문서](https://github.com/jeonghwanko/oddbout-starter/blob/codex/game-context/START-HERE.md)와
+  [구조 데이터](https://raw.githubusercontent.com/jeonghwanko/oddbout-starter/refs/heads/codex/game-context/creation-context.json)는 권위 있는 대안이다.
   [구조 데이터와 진행 상태](GAME-CREATION-CONTEXT.md)에 따라 현재 묶음에 필요한 부분만 사용한다.
 - 먼저 사용자가 실제 캐릭터 제작을 원하는지, 제작 과정·가이드의 설계나 평가를 원하는지 읽는다.
   과정 개선 요청에는 과정과 평가를 작성한다. 다른 채팅의 테스트 설정이나 문서의 예시를 사용자의 실제 캐릭터로 삼지 않는다.
@@ -93,7 +98,8 @@ GPT만 사용 가능하면 둘 다 GPT로 제안한다. 사용자가 지정한 �
 3. 로컬 경로는 `npm ci --ignore-scripts`, `npm run sprite:setup`으로 이 저장소의 고정된 sprite-gen을 준비한다.
    `vendor/sprite-gen/SKILL.md`와 참조 문서, `npm run sprite -- workflow --kind sprite`의 안내를 따른다.
    이미 준비된 환경은 다시 설치하지 않는다. 생성 계정·구독·API 과금 선택은 본인 것만 사용한다.
-4. AI Fighter MCP가 연결되어 있으면 `get_fighter_spec`의 `overview`, `creation`, `guide`, 필요한 `schema`를 읽는다.
+4. ODDBOUT 클라우드 MCP가 연결되어 있으면 `get_fighter_spec`의 `overview`, `creation`, 필요한 `schema`를 읽는다.
+   `guide`는 위의 로컬 `creation:tool` 경로로 읽는다.
    연결 전에는 저장소에 포함된 `contracts/ai-fighter/v1/`의 계약으로 로컬 제작을 시작할 수 있다.
    홈페이지 방문이나 MCP 연결 완료를 원화 상담의 선행 조건으로 두지 않는다. 실제 패키지 제작 전에는 라이브 규격도 확인한다.
 5. 제작·패키징·검수는 [전체 제작 안내](DOT-CREATION.md)를 따른다. 사용자 피드백과 현재 묶음은 작업 폴더의
@@ -107,9 +113,15 @@ GPT만 사용 가능하면 둘 다 GPT로 제안한다. 사용자가 지정한 �
 
 ### 등록
 
-사용자가 등록을 요청하면 ODDBOUT 통합 플러그인의 연결 계정을 `get_profile`과 클라우드
-`check_creation_readiness`로 확인한다. PC와 Dots 모두 같은 prepare/upload/submit/status 도구를 사용한다.
+사용자가 등록을 요청하면 단일 ODDBOUT 클라우드 MCP의 `get_profile`과 `check_creation_readiness`로
+기존 등록 계정을 확인한다. PC와 Dots 모두 같은 prepare/upload/submit/status 경로를 사용하며,
+로컬 생성 CLI에는 등록 계정이 없다. 사용자는 생성에 본인이 선택한 생성 계정을 계속 사용한다.
 클라우드 등록에 작업 공간 CLI 로그인을 요구하지 않는다. 기존 독립 CLI만 `deploy/creator-site.json`으로 로그인한다.
 최종 결과 선택과 파일 검사가 끝난 뒤 제출한다. 같은 패키지 재시도에는 같은 idempotencyKey를 쓴다.
 `registered`, `fighterId`, 이용 가능 상태를 실제 응답으로 확인해 이 대화에 알려준다.
-홈페이지는 사용자가 원할 때 열 수 있다. 가입·등록 방법은 [이용 안내](OPEN-REGISTRATION.md)를 따른다.
+`prepare_fighter_registration`의 실제 클라우드 `tools/list`가 선택 인자 `fighterId`를 표시하면,
+생략 시 새 등록을 준비하고 지정 시 기존 소유 선수의 패키지 갱신을 준비한다. 실제 `tools/list`에 `open_creator_homepage`가
+있으면 반환된 공개 홈페이지 링크를 안내한다. 사이트 로그인은 별도이며 사용자가 MCP와 같은 계정으로 로그인했는지 확인한다.
+새 도구나 인자를 서버의 `tools/list`에서 확인하기 전에는 배포되어 있다고 안내하지 않는다. 전체 절차는
+[클라우드 MCP 안내](CLOUD-MCP.md)와
+[가입 후 등록 안내](OPEN-REGISTRATION.md)를 따른다.

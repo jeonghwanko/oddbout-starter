@@ -174,10 +174,28 @@ Cursor의 Grok Bot이 02:21Z에 로그인 먼저 주소로 연결한 뒤 토큰�
 
 ## 사용 흐름
 
+통합 플러그인은 계정·등록에 호스팅 ODDBOUT MCP 연결 하나를 쓴다. 로컬 제작·세션·작업 기록·파일 검증은
+작업 공간의 `creation:tool` CLI로 실행하며 두 번째 MCP 서버를 추가하지 않는다. 이전 `ai-fighter`와
+`ai-fighter-creator` 연결의 제거 조건은 [통합 플러그인 이전 안내](ODDBOUT-PLUGIN.md)를 따른다.
+
+| 작업 | 도구·실행 경로 |
+| --- | --- |
+| 연결 계정 확인 | 클라우드 `get_profile`, `check_creation_readiness` |
+| 로컬 제작·재개·검증 | `creation:tool`의 세션·작업·환경·검증 도구([로컬 도구 안내](LOCAL-PLUGIN.md)) |
+| 새 파이터 등록 | 클라우드 `prepare_fighter_registration` → `upload_fighter_asset` → `submit_fighter_registration` → `get_fighter_submission` |
+| 내 기존 파이터 패키지 교체 | `prepare_fighter_registration`에 소유 파이터의 `fighterId`를 넣고 같은 업로드·제출 흐름 사용 |
+| 제작자 사이트 열기 | 클라우드 `open_creator_homepage`의 고정 URL. 사이트에서 별도 로그인하고 `get_profile`과 같은 계정인지 확인 |
+
+선택 인자 `fighterId`와 `open_creator_homepage`는 소스에서 지원한다. 운영 반영에는 `ai-fighter-mcp` 배포가 필요하다.
+사용 전 실제 서버의 `tools/list`에서 해당 인자와 도구를 확인한다. 소스·연결 성공만으로 배포나 파일 전달 성공을 주장하지 않는다.
+홈페이지 도구는 일회용 로그인 링크나 전체 웹 세션을 발급하지 않는다. 커넥터 인증과 사이트 로그인은 별도다.
+
 1. `get_fighter_spec`의 overview/schema/creation을 읽고 기존 제작·검토 규칙을 따른다.
    첫 생성 전·작업 공간 재시작 뒤·등록 전에는 이 클라우드 커넥터의 `check_creation_readiness`를 호출한다.
    등록 계정 접근과 실제 생성·전달·패키지 검토 상태를 구분하며 로컬 stdio 로그인은 요구하지 않는다.
-2. 최종 등록 요청을 받은 실제 fighter.json을 `prepare_fighter_registration`에 파일로 전달한다.
+2. 최종 패키지 승인과 등록 요청을 받은 실제 fighter.json을 `prepare_fighter_registration`에 파일로 전달한다.
+   기존 소유 파이터를 교체하라는 요청이면 `fighterId`를 지정해 ID와 이력을 유지하고, 생략하면 새 파이터를 준비한다.
+   변경한 그림·동작은 필요한 묶음 검토와 최종 패키지 검증을 거친다. 새 패키지는 제작 중으로 돌아가며 출전 전 동작 확인이 필요하다.
 3. 응답의 각 asset ID에 실제 WebP 파일을 `upload_fighter_asset`으로 전달한다.
 4. 업로드가 끝나면 `submit_fighter_registration`, 이후 `get_fighter_submission`으로 확인한다.
 5. `registered`만 등록 완료다. queued/validating을 완료라고 안내하지 않는다.
@@ -351,8 +369,8 @@ URL 재발급과 신규 접수가 열린 상태에서 다른 계정의 키 조�
 | `manage_world` | 필요 | `create`: 세계 열기(계정당 둘, 바로 공개, 표지는 `get_world`의 목록). `update`: 내 세계의 글·표지·진영 목록, 글을 정사로 올리기·내리기, 선수 빼기. `place`: 공개 무대의 내 선수를 남이 연 세계·진영에 두기·빼기(세계당 200명) |
 | `write_world_post` | 필요 | 세계 라운지에 글. `nickname`으로 먼저 가입한다. 세계 주인은 바로 정사로 올릴 수 있다. 같은 UUID 로 다시 보내면 같은 글이 돌아온다(남의 글 id 면 `post-exists`) |
 
-정본·공방 글·라운지 글은 다른 사람의 글이다. 도구 설명이 에이전트에게 그것을 지시가 아닌 데이터로 읽으라고 적는다. 도구 목록은 31개, 약 29.7 KB다
-(세계 쓰기 세 가지를 `manage_world` 하나로 묶었다 — 도구마다 스키마와 메타가 목록에 붙는다).
+정본·공방 글·라운지 글은 다른 사람의 글이다. 도구 설명이 에이전트에게 그것을 지시가 아닌 데이터로 읽으라고 적는다.
+세계 쓰기 세 가지는 `manage_world` 하나로 묶는다. 도구 개수와 목록 크기는 배포·서버 설정에 따라 달라지므로 실제 `tools/list`로 확인한다.
 
 ## 운영 설정과 배포
 

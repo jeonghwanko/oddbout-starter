@@ -18,14 +18,14 @@
 
 | 문서 | 다루는 것 |
 | --- | --- |
-| [START-HERE](START-HERE.md) | Dot과 대화하며 내 캐릭터 만들기: 처음 보낼 주소와 진행 순서 |
+| [START-HERE](START-HERE.md) | Dot과 대화하며 내 캐릭터 만들기: 클라우드 규격, 로컬 맥락·가이드, 검토 묶음과 등록 |
 | [DOT-CREATION](DOT-CREATION.md) | 외형을 실제로 보여 준 뒤 그 원화로 애니메이션을 만드는 흐름(sprite-gen) |
 | [AUTHORING](AUTHORING.md) | 새 선수의 애셋과 `fighter.json` 규격 |
 | [CREATION-UX](CREATION-UX.md) | 사용자와 대화하는 제작 에이전트의 행동 규격 |
 | [DELIVERY](DELIVERY.md) | 외형 생성 전, 현재 대화에 그림을 실제로 보여 줄 수 있는지 확인 |
 | [GAME-CREATION-CONTEXT](GAME-CREATION-CONTEXT.md) | 게임이 제공하는 모션·프레임·조작 정의로 대화하기 |
 | [CONNECTION-READINESS](CONNECTION-READINESS.md) | ODDBOUT 연결과 제작 준비 상태 확인 |
-| [OPEN-REGISTRATION](OPEN-REGISTRATION.md) | 가입 후 바로 쓰기: 로그인 → 제작 → 업로드 → 검사 → 등록 |
+| [OPEN-REGISTRATION](OPEN-REGISTRATION.md) | 가입 후 제작·검토·업로드·검사·등록: 연결된 클라우드 계정 사용 |
 | [DOT-DIALOGUE-ONLY](DOT-DIALOGUE-ONLY.md) | 생성 없이 실제 Dot에서 대화 흐름만 시험하기 |
 | [LOCAL-VOICE](LOCAL-VOICE.md) | 사용자 PC의 VoiceStudio로 음성 만들기 |
 
@@ -33,8 +33,8 @@
 
 | 문서 | 다루는 것 |
 | --- | --- |
-| [ODDBOUT-PLUGIN](ODDBOUT-PLUGIN.md) | 통합 플러그인 하나로 제작·검토·등록하기(설치·이전) |
-| [LOCAL-PLUGIN](LOCAL-PLUGIN.md) | 플러그인 안의 작업 공간 도구(`creation:tool`)와 예전 stdio 연결 |
+| [ODDBOUT-PLUGIN](ODDBOUT-PLUGIN.md) | 단일 호스팅 MCP와 로컬 생성 CLI로 전환하기; 등록은 연결된 계정 사용 |
+| [LOCAL-PLUGIN](LOCAL-PLUGIN.md) | 로컬 파일·작업 공간은 `creation:tool` CLI, 클라우드 작업은 단일 MCP; stdio는 호환용 |
 | [PLUGIN-DISTRIBUTION](PLUGIN-DISTRIBUTION.md) | 배포판(현재 판)과 설치 파일 풀기 |
 | [EXECUTION-HOST](EXECUTION-HOST.md) | 에이전트가 쓰는 작업 공간의 준비·계정·격리·보존·보안 기준 |
 | [ENVIRONMENT-ONBOARDING](ENVIRONMENT-ONBOARDING.md) | Dots 제작 환경의 계정 연결 |
@@ -58,7 +58,7 @@
 | 문서 | 다루는 것 |
 | --- | --- |
 | [CREATOR-HOSTING](CREATOR-HOSTING.md) | ODDBOUT 사이트·API·검증 작업자의 호스팅 구성 |
-| [CLOUD-MCP](CLOUD-MCP.md) | 클라우드 MCP(`mcp.oddbout.com`) 연결: PC나 API 키 없이 등록하기 |
+| [CLOUD-MCP](CLOUD-MCP.md) | 단일 호스팅 MCP(`mcp.oddbout.com`) 연결과 계정 확인을 통한 등록 |
 | [GENERATION-HOST](GENERATION-HOST.md) | 호스팅 생성 신청을 실제로 그리는 생성 PC 되기 |
 | [SINGLE-SUBSCRIPTION-HOSTS](SINGLE-SUBSCRIPTION-HOSTS.md) | 구독이 하나뿐인 호스트를 받을 수 있는지와 그 설계(구현 전) |
 | [MEASUREMENT](MEASUREMENT.md) | 호스팅 생성이 나아졌는지 보는 측정과 export |

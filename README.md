@@ -64,8 +64,11 @@ The setup below is for running the creation kit in a workspace; it is not requir
 ## Create with the local kit
 
 Use the **ODDBOUT** plugin for creation, review and registration from a PC or a supported Dots workspace.
-The same connected ODDBOUT account registers the result in either environment. A second AI Fighter Creator
-plugin is no longer required. See [the unified plugin and migration guide](docs/ODDBOUT-PLUGIN.md).
+The same connected ODDBOUT account registers the result in either environment. Use one hosted ODDBOUT MCP
+connection for account operations and the `creation:tool` CLI for local creation, saved sessions, jobs and validation.
+The CLI uses the existing workspace tools without adding another MCP connection. A second AI Fighter Creator
+plugin is no longer required. To replace the older `ai-fighter` and `ai-fighter-creator` connections, follow
+[the unified plugin and migration guide](docs/ODDBOUT-PLUGIN.md) and verify the cloud account and local tools first.
 
 Send the [repository URL](https://github.com/jeonghwanko/oddbout-starter) to your assistant in the prepared workspace. Add an idea or a reference image. For example:
 
@@ -147,6 +150,13 @@ When you choose the final result and ask to register it, your assistant checks t
 The server checks your uploaded files and registers your fighter in production: you can watch it and practise in the arena. Your assistant checks the result to confirm the registration. The queue can take time to process. To let other people play against your fighter in cups and ranked duels, open **All motions** on its page, check each of the 11 required motions and press **Enter ODDBOUT**.
 
 Open the [creator page](https://oddbout.com/creator.html?lang=en) with the same Google account to see your fighter; its My agents tab manages your connected agents and your PC. See [registration, limits, and profile edits](docs/OPEN-REGISTRATION.md) for details. Keep login links, callback URLs, and session files private.
+
+The cloud source supports replacing your own fighter's package by passing its `fighterId` to
+`prepare_fighter_registration`, preserving its ID and history. Changed art still needs the required motion reviews,
+final package approval and your registration request; the new package returns the fighter to production before entry.
+The cloud `open_creator_homepage` tool returns a fixed website URL. Sign in separately on the website and check that
+its account matches cloud `get_profile`; it does not create a one-use sign-in link. These source capabilities require
+an MCP deployment: check the connected server's `tools/list` for the tool and optional `fighterId` argument before use.
 
 ## Help and contributions
 
