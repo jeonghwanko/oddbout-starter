@@ -1,6 +1,17 @@
 # ODDBOUT distribution
 
-**Current release: 0.6.0** (2026-10-28: one plugin — the hosted ODDBOUT MCP is inside it, no separately added connector; hosted generation,
+**Current release: 0.6.1** (2026-11-01: both READMEs, the document index, starting guide and current MCP connection/migration guides now ship in the ZIP).
+Published at
+`https://oddbout.com/creator-kit/0.6.1/1032b5d1c84c95599922d511f6f3fb172b3d003e22582c0228893f537befe5e1/release.json`
+(manifest SHA-256 `f5d8996fb93e1f5a3427de66da96318acba6a6d574cf7540e98783f0008be0db`, helper `fetch-creator-kit.py`
+`b66c31ff833816dfa74c90d9155359d3fdd484dff8c12759e48addde01707592`, ZIP `b21017f1e622ebbbd998ff31188790cd2787b8a55ec71dd2051fa0777b03ceb5`,
+4,050,942 bytes; Pages commit `db0056bebba4bb9ddce5321ae5ed7431f6edd440`, live-verified).
+Built from `0c6f04a3233f2cd92bb7e16842c4b9d9379b1d28` (merged in PR #213 after CI passed). The trusted helper inspected and extracted the actual ZIP,
+all 22 bundled README/docs files matched that commit byte-for-byte, and the extracted launcher's read-only status check passed.
+Publication added only the ZIP, manifest and helper, preserved all 5,831 existing files, and verified public bytes and unchanged site entry documents.
+These checks do not certify ChatGPT ZIP import or saved-Dots-VM creation. The separate Dots source candidate in `deploy/dots-release.json` remains pinned independently.
+
+Previous release: 0.6.0 (2026-10-28: one plugin — the hosted ODDBOUT MCP is inside it, no separately added connector; hosted generation,
 community hosts and registration from the same plugin). Published at
 `https://oddbout.com/creator-kit/0.6.0/a6f8a9cea1654b3ec27e5ea8b803fb04271fd2e13a62e41ff6805c7b6ea11fe3/release.json`
 (manifest SHA-256 `32f59f872444d491080fc55b02a8c242dddfb181ae89a0edf101390bfd723a76`, helper `fetch-creator-kit.py`
