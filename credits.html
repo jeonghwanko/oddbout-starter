@@ -8,18 +8,35 @@
   <meta name="description" content="The original works behind ODDBOUT's fighters, the attribution their terms ask for, and the third-party notices.">
   <title>Credits · ODDBOUT</title>
   <link rel="icon" href="/favicon.ico" sizes="32x32"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
-  <script type="module" crossorigin src="/assets/credits-DyhGYSx9.js"></script>
+  <script>
+    // The page's language before the module boots — the same order as platform/localePreference (?lang, the saved pick, the browser,
+    // English). test/locale-boot-scripts.test.ts runs this against resolveLocale.
+    const bootLocale = (() => {
+      const known = value => ["ko", "en", "ja"].includes(value) ? value : null;
+      let saved = null;
+      try { saved = localStorage.getItem("ai-fighter.creator.locale.v1"); } catch { /* the URL and the browser still decide */ }
+      const browser = (navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language]).map(tag => known(String(tag).split("-")[0].toLowerCase())).find(Boolean);
+      const requested = new URLSearchParams(location.search).get("lang");
+      if (requested === "qps") return "en"; // the development build's pseudo language reads English
+      return known(requested) || known(saved) || browser || "en";
+    })();
+    document.documentElement.lang = bootLocale;
+  </script>
+  <script type="module" crossorigin src="/assets/credits-CxHdcH4J.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/_oddbout-analytics-CVdYY990.js">
-  <link rel="modulepreload" crossorigin href="/assets/fighterCreatorLocale-Bh29uOe8.js">
-  <link rel="modulepreload" crossorigin href="/assets/fighterApiBase-CeB_1v89.js">
-  <link rel="modulepreload" crossorigin href="/assets/storageKeys-FEKJ8fro.js">
+  <link rel="modulepreload" crossorigin href="/assets/pseudo-B3ZLOM_E.js">
+  <link rel="modulepreload" crossorigin href="/assets/Locale-B1I3z1uL.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-DsSJR24-.js">
+  <link rel="modulepreload" crossorigin href="/assets/localeLoader-BEubZ7zo.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-Czpn1I53.js">
-  <link rel="modulepreload" crossorigin href="/assets/oddboutSession-C5oDAHSQ.js">
-  <link rel="modulepreload" crossorigin href="/assets/accountControl-CEqXGbjQ.js">
+  <link rel="modulepreload" crossorigin href="/assets/storageKeys-BwSYBIxL.js">
+  <link rel="modulepreload" crossorigin href="/assets/fighterApiBase-CeB_1v89.js">
+  <link rel="modulepreload" crossorigin href="/assets/oddboutSession-DsQmbIif.js">
+  <link rel="modulepreload" crossorigin href="/assets/accountControl-Cj5sQFSZ.js">
   <link rel="modulepreload" crossorigin href="/assets/OddboutCommunity-CLWy8SdF.js">
-  <link rel="modulepreload" crossorigin href="/assets/siteChrome-C5Egduzf.js">
-  <link rel="modulepreload" crossorigin href="/assets/leagueContent-CpUf9a0k.js">
-  <link rel="stylesheet" crossorigin href="/assets/accountControl-D5JpnyPN.css">
+  <link rel="modulepreload" crossorigin href="/assets/siteChrome-uAXE96ce.js">
+  <link rel="modulepreload" crossorigin href="/assets/leagueContent-DvLGVNqh.js">
+  <link rel="stylesheet" crossorigin href="/assets/accountControl-DJTesTWn.css">
   <link rel="stylesheet" crossorigin href="/assets/siteChrome-Acd4B7yJ.css">
   <link rel="stylesheet" crossorigin href="/assets/credits-oJe0-k8a.css">
 </head>
@@ -37,5 +54,6 @@
     </article>
   </main>
   <footer data-club-footer></footer>
+  <script>(()=>{const p={"en":["assets/en-BToi-7W8.js","assets/en-DrtQW3Bk.js"],"ko":["assets/ko-9sAxzAyB.js","assets/ko-DRWoosMM.js"],"ja":["assets/ja-C32uBRec.js","assets/ja-DWlEY41p.js"]}[document.documentElement.lang];if(!p)return;for(const f of p){const l=document.createElement("link");l.rel="modulepreload";l.crossOrigin="";l.href="./"+f;document.head.append(l)}})()</script>
 </body>
 </html>

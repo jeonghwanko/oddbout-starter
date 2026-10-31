@@ -18,40 +18,50 @@
   <link rel="icon" href="/favicon.ico" sizes="32x32"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <title>선수들 · ODDBOUT</title>
   <script>
-    // New visitors start in English (fighterCreatorLocale.ts). Hide the Korean source copy until league.ts replaces it.
-    try {
-      const requested = new URLSearchParams(location.search).get("lang"), saved = localStorage.getItem("ai-fighter.creator.locale.v1");
-      const valid = value => value === "en" || value === "ko";
-      if ((valid(requested) ? requested : valid(saved) ? saved : "en") === "en") {
-        document.documentElement.classList.add("translating");
-        setTimeout(() => document.documentElement.classList.remove("translating"), 3000);
-      }
-    } catch {}
+    // The HTML is the Korean copy; every other language hides it until fighters.ts puts its copy in.
+    // The page's language before the module boots — the same order as platform/localePreference (?lang, the saved pick, the browser,
+    // English). test/locale-boot-scripts.test.ts runs this against resolveLocale.
+    const bootLocale = (() => {
+      const known = value => ["ko", "en", "ja"].includes(value) ? value : null;
+      let saved = null;
+      try { saved = localStorage.getItem("ai-fighter.creator.locale.v1"); } catch { /* the URL and the browser still decide */ }
+      const browser = (navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language]).map(tag => known(String(tag).split("-")[0].toLowerCase())).find(Boolean);
+      const requested = new URLSearchParams(location.search).get("lang");
+      if (requested === "qps") return "en"; // the development build's pseudo language reads English
+      return known(requested) || known(saved) || browser || "en";
+    })();
+    document.documentElement.lang = bootLocale;
+    if (bootLocale !== "ko") {
+      document.documentElement.classList.add("translating");
+      setTimeout(() => document.documentElement.classList.remove("translating"), 3000);
+    }
   </script>
-  <script type="module" crossorigin src="/assets/fighters-D5xEE59q.js"></script>
+  <script type="module" crossorigin src="/assets/fighters-C5ZKbmbj.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/_oddbout-analytics-CVdYY990.js">
-  <link rel="modulepreload" crossorigin href="/assets/fighterCreatorLocale-Bh29uOe8.js">
-  <link rel="modulepreload" crossorigin href="/assets/Locale-BoqNfY5_.js">
+  <link rel="modulepreload" crossorigin href="/assets/pseudo-B3ZLOM_E.js">
+  <link rel="modulepreload" crossorigin href="/assets/Locale-B1I3z1uL.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-DsSJR24-.js">
+  <link rel="modulepreload" crossorigin href="/assets/localeLoader-BEubZ7zo.js">
+  <link rel="modulepreload" crossorigin href="/assets/preload-helper-Czpn1I53.js">
+  <link rel="modulepreload" crossorigin href="/assets/storageKeys-BwSYBIxL.js">
+  <link rel="modulepreload" crossorigin href="/assets/fighterApiBase-CeB_1v89.js">
+  <link rel="modulepreload" crossorigin href="/assets/oddboutSession-DsQmbIif.js">
+  <link rel="modulepreload" crossorigin href="/assets/accountControl-Cj5sQFSZ.js">
   <link rel="modulepreload" crossorigin href="/assets/dist-CuSK8MRy.js">
   <link rel="modulepreload" crossorigin href="/assets/fighterLines-DQuiabXv.js">
-  <link rel="modulepreload" crossorigin href="/assets/fighterApiBase-CeB_1v89.js">
-  <link rel="modulepreload" crossorigin href="/assets/storageKeys-FEKJ8fro.js">
-  <link rel="modulepreload" crossorigin href="/assets/preload-helper-Czpn1I53.js">
-  <link rel="modulepreload" crossorigin href="/assets/oddboutSession-C5oDAHSQ.js">
-  <link rel="modulepreload" crossorigin href="/assets/registeredFighters-B_seG9fN.js">
+  <link rel="modulepreload" crossorigin href="/assets/registeredFighters--Sk3wnuh.js">
   <link rel="modulepreload" crossorigin href="/assets/spec-BqXtC0f1.js">
-  <link rel="modulepreload" crossorigin href="/assets/fighterCreator-DUMoXJvo.js">
-  <link rel="modulepreload" crossorigin href="/assets/leagueContent-CpUf9a0k.js">
-  <link rel="modulepreload" crossorigin href="/assets/arenaRankings-DxtoNk_l.js">
+  <link rel="modulepreload" crossorigin href="/assets/fighterCreator-ByoxSpQo.js">
+  <link rel="modulepreload" crossorigin href="/assets/leagueContent-DvLGVNqh.js">
+  <link rel="modulepreload" crossorigin href="/assets/arenaRankings-Xx2TsLx-.js">
   <link rel="modulepreload" crossorigin href="/assets/ArenaBoutLink-CHN2seHZ.js">
   <link rel="modulepreload" crossorigin href="/assets/city-tournament-CKjhhZ9k.js">
   <link rel="modulepreload" crossorigin href="/assets/UtcTime-BFPbMiHs.js">
-  <link rel="modulepreload" crossorigin href="/assets/fighterProfile-DYC5KwK8.js">
-  <link rel="modulepreload" crossorigin href="/assets/accountControl-CEqXGbjQ.js">
+  <link rel="modulepreload" crossorigin href="/assets/fighterProfile-C7FPIpRH.js">
   <link rel="modulepreload" crossorigin href="/assets/OddboutCommunity-CLWy8SdF.js">
-  <link rel="modulepreload" crossorigin href="/assets/siteChrome-C5Egduzf.js">
-  <link rel="stylesheet" crossorigin href="/assets/fighterProfile-0pLU9UnX.css">
-  <link rel="stylesheet" crossorigin href="/assets/accountControl-D5JpnyPN.css">
+  <link rel="modulepreload" crossorigin href="/assets/siteChrome-uAXE96ce.js">
+  <link rel="stylesheet" crossorigin href="/assets/accountControl-DJTesTWn.css">
+  <link rel="stylesheet" crossorigin href="/assets/fighterProfile-m1WfKzSU.css">
   <link rel="stylesheet" crossorigin href="/assets/siteChrome-Acd4B7yJ.css">
   <link rel="stylesheet" crossorigin href="/assets/fighters-C44s4ueZ.css">
   <link rel="stylesheet" crossorigin href="/assets/league-DysZ4K0S.css">
@@ -105,4 +115,5 @@
   </main>
   <footer class="club-footer" data-club-footer><a class="club-brand" href="./?lang=en"><img src="/art/ui/oddbout-logo.webp" alt="ODDBOUT Fight Club" width="376" height="76"></a><nav aria-label="Footer"><a href="./about.html?lang=en">About</a><a href="./docs.html?lang=en">Docs</a><a href="mailto:turbo08@gmail.com">Contact</a><a href="./privacy.html?lang=en">Privacy</a><a href="./credits.html?lang=en">Credits</a></nav></footer>
   <!-- A card opens the shared profile dialog (src/creator/fighterProfile.ts builds it; every site page can open it). -->
+  <script>(()=>{const p={"en":["assets/en-BToi-7W8.js","assets/en-DrtQW3Bk.js","assets/en-Dykp92Nu.js"],"ko":["assets/ko-9sAxzAyB.js","assets/ko-C-OltLUa.js","assets/ko-DRWoosMM.js"],"ja":["assets/ja-C32uBRec.js","assets/ja-CfazvGZv.js","assets/ja-DWlEY41p.js"]}[document.documentElement.lang];if(!p)return;for(const f of p){const l=document.createElement("link");l.rel="modulepreload";l.crossOrigin="";l.href="./"+f;document.head.append(l)}})()</script>
 </body></html>

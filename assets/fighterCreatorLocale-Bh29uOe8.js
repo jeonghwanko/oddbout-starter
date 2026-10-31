@@ -1,1 +1,0 @@
-var e=`ai-fighter.creator.locale.v1`,t=e=>e===`en`||e===`ko`;function n(e,n){let r=new URLSearchParams(e).get(`lang`);return t(r)?r:t(n)?n:`en`}function r(t=location.search){let r=null;try{r=localStorage.getItem(e)}catch{}return n(t,r)}function i(t){try{localStorage.setItem(e,t)}catch{}}export{i as n,r as t};

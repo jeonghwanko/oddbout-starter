@@ -1,1 +1,0 @@
-Object.freeze([`ko`,`en`]);function e(e){return e===`en`?`en`:`ko`}function t(e,t,n){return e===`en`?n:t}function n(e,t){let n=new URL(e);return n.searchParams.set(`lang`,t),n.toString()}export{t as n,e as r,n as t};
