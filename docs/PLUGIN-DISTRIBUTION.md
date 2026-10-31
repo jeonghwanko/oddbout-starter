@@ -1,6 +1,24 @@
 # ODDBOUT distribution
 
-**Current release: 0.6.1** (2026-11-01: both READMEs, the document index, starting guide and current MCP connection/migration guides now ship in the ZIP).
+**Current release: 0.6.2** (2026-11-01: distinguish Dots installation/account verification from public discovery; preserve existing connections; prevent an already-cancelled job from starting its engine).
+Published at
+`https://oddbout.com/creator-kit/0.6.2/b23c8ebc112649b33c946eac4a16aeb75c723739b201c470aed03defca1703af/release.json`
+(manifest SHA-256 `67e2d19f26613a69d58dda9b42de7b9f24d2b87c2b228eeee9dece0273512bb6`, helper `fetch-creator-kit.py`
+`b66c31ff833816dfa74c90d9155359d3fdd484dff8c12759e48addde01707592`, ZIP `41bb12e41be285fbd452c6fa15b1041e52f39571d38d02369a7fc1983de5660b`,
+4,057,211 bytes; Pages commit `3359f0f047fed168e210f2287676acefe66468cd`, live-verified).
+Built from `a07ab17c37e768d565b4306da26645cd0589487a` (PR #219, merged after CI passed). All kit inputs match the merge commit;
+the concurrent `host/og` pin change is not a kit input. The trusted helper inspected and extracted the actual ZIP,
+all 22 bundled README/docs and all 88 tracked runtime source files (excluding the generated package manifest) matched the source commit byte-for-byte,
+and the extracted launcher's read-only status and offline/public discovery checks passed. Publication added only the three release files,
+preserved all 5,834 existing files, and verified public bytes and unchanged site entry documents.
+
+A private account plugin was created from this exact ZIP with version 0.6.2; its stored MCP URL, OAuth configuration, skill and cancellation guards
+were read back. The user also supplied a screenshot showing ODDBOUT in the host's plugin list. That observation does not require another installation.
+Native `get_profile` in the intended Dots conversation remains unverified; neither public discovery nor another Codex connection establishes it.
+Private account IDs/links are not portable distribution identifiers and are not published here. Saved-Dots-VM creation remains a separate acceptance check,
+and `deploy/dots-release.json` remains independently pinned.
+
+Previous release: 0.6.1 (2026-11-01: both READMEs, the document index, starting guide and current MCP connection/migration guides now ship in the ZIP).
 Published at
 `https://oddbout.com/creator-kit/0.6.1/1032b5d1c84c95599922d511f6f3fb172b3d003e22582c0228893f537befe5e1/release.json`
 (manifest SHA-256 `f5d8996fb93e1f5a3427de66da96318acba6a6d574cf7540e98783f0008be0db`, helper `fetch-creator-kit.py`
@@ -11,7 +29,7 @@ all 22 bundled README/docs files matched that commit byte-for-byte, and the extr
 Publication added only the ZIP, manifest and helper, preserved all 5,831 existing files, and verified public bytes and unchanged site entry documents.
 These checks do not certify ChatGPT ZIP import or saved-Dots-VM creation. The separate Dots source candidate in `deploy/dots-release.json` remains pinned independently.
 
-Previous release: 0.6.0 (2026-10-28: one plugin — the hosted ODDBOUT MCP is inside it, no separately added connector; hosted generation,
+Earlier release: 0.6.0 (2026-10-28: one plugin — the hosted ODDBOUT MCP is inside it, no separately added connector; hosted generation,
 community hosts and registration from the same plugin). Published at
 `https://oddbout.com/creator-kit/0.6.0/a6f8a9cea1654b3ec27e5ea8b803fb04271fd2e13a62e41ff6805c7b6ea11fe3/release.json`
 (manifest SHA-256 `32f59f872444d491080fc55b02a8c242dddfb181ae89a0edf101390bfd723a76`, helper `fetch-creator-kit.py`
