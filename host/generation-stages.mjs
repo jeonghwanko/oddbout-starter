@@ -860,20 +860,25 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       if (code !== 0 && !existsSync(path.join(item, 'frames', 'keyed')) && !existsSync(path.join(item, 'loop')))
         return failedRun('video', code, path.join(clip, 'set.report.json'), since, GROK_LIMITED);
       const keyed = path.join(item, 'frames', 'keyed'), auto = path.join(clip, 'cut-auto');
-      const cutsOf = async () => {
-        const cuts = [];
-        if (existsSync(path.join(item, 'loop', `side-${gait}.strip.json`))) cuts.push(path.join(item, 'loop'));
-        if (existsSync(keyed)) {
-          if (!existsSync(path.join(auto, `side-${gait}.strip.json`))) {
-            // A refusal an earlier cut wrote never speaks for this one: a cut that stops now (no report) must not read as refused.
-            await rm(path.join(auto, `side-${gait}.loop.report.json`), { force: true });
-            const fps = (await readJson(path.join(item, 'frames.report.json')).catch(() => ({}))).fps ?? 24;
-            await og(sprite('video-loop', '--frames-dir', keyed, '--out-dir', auto, '--fps', String(fps), '--state', gait,
-              '--anchor', 'motion-auto', '--facing', 'right', '--name', `side-${gait}`));
-          }
-          if (existsSync(path.join(auto, `side-${gait}.strip.json`))) cuts.push(auto);
+      const autoCut = async () => {
+        if (!existsSync(keyed)) return null;
+        if (!existsSync(path.join(auto, `side-${gait}.strip.json`))) {
+          // A refusal an earlier cut wrote never speaks for this one: a cut that stops now (no report) must not read as refused.
+          await rm(path.join(auto, `side-${gait}.loop.report.json`), { force: true });
+          const fps = (await readJson(path.join(item, 'frames.report.json')).catch(() => ({}))).fps ?? 24;
+          await og(sprite('video-loop', '--frames-dir', keyed, '--out-dir', auto, '--fps', String(fps), '--state', gait,
+            '--anchor', 'motion-auto', '--facing', 'right', '--name', `side-${gait}`));
         }
-        return cuts;
+        return existsSync(path.join(auto, `side-${gait}.strip.json`)) ? auto : null;
+      };
+      // video-set's own cut comes first; the motion-auto cut of the same keyed frames is made only when there is no such cut or it
+      // did not reach the judge (2026-11-01: it was made on every take, a full video-loop on the GPU, and read only when the first failed).
+      let autoTried = false;
+      const cutsOf = async () => {
+        if (existsSync(path.join(item, 'loop', `side-${gait}.strip.json`))) return [path.join(item, 'loop')];
+        autoTried = true;
+        const cut = await autoCut();
+        return cut ? [cut] : [];
       };
       let cuts = await cutsOf();
       const seen = tried.length;
@@ -899,7 +904,15 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       if (cuts.length) await showTake?.(take, path.join(cuts[0], `side-${gait}.strip.json`));
       for (let pass = 0; ; pass++) {
         let unaligned = 0;
-        for (const cut of cuts) {
+        for (let next = 0; ; next++) {
+          if (next === cuts.length) {
+            if (autoTried) break;
+            autoTried = true;
+            const cut = await autoCut();
+            if (!cut) break;
+            cuts.push(cut);
+          }
+          const cut = cuts[next];
           // The contract's frame count, starting as a foot lands; a cut the engine reads as two cycles is aligned as it is (the judge sees it).
           // A cut aligned by an earlier run of this stage is kept (the cut never changes: its clip and frames are kept too).
           // At its own length (GAIT_OWN_FEATURE) the alignment only turns the cut to start as a foot lands: no --length, nothing resampled.

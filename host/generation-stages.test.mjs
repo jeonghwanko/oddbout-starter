@@ -364,6 +364,8 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
   // The walk: one clip, its plain cut refused for the engine's reason, the motion-auto cut taken. The run: filmed again with new words.
   const videos = tools.filter(a => a.includes('video-set'));
   assert.deepEqual(videos.map(a => flag(a, '--states')), ['walk', 'run', 'run']);
+  // The motion-auto cut is made only where video-set's own cut did not reach the judge: the walk's broke its beat, both run takes were judged.
+  assert.deepEqual(tools.filter(a => a.includes('video-loop')).map(a => flag(a, '--state')), ['walk']);
   // Every take says what the arms do and that nothing strikes (a boxer's run that punched never repeated, 2026-10-28); a retake changes the words.
   assert.ok(flag(videos[1], '--motion').startsWith('run=It runs naturally in place') && flag(videos[2], '--motion').startsWith('run=It runs in place with long'));
   assert.ok(videos.every(a => flag(a, '--motion').includes('It throws no punches, kicks or strikes')));

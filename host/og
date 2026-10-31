@@ -52,7 +52,7 @@ PINS=$G/accounts.json
 # video-follow-inspect are 3.4's old names of the Sway layer, which moves pixels only.
 LOCAL_TOOLS=" defaults workflow prepare gait-motion extract unpack-atlas slice-sheet ui-kit cutout anchor game-pack compose-atlas
   compose-cycle compose-gif export-pngs export-aseprite background-tile shadow recolor recolor-palette breathe rife gait-guide
-  scene-render scene-inspect inspect-motion preview handed-check inspect score curation compose video-canvas video-prompt
+  scene-render scene-inspect inspect-motion preview handed-check inspect score scale-check curation compose video-canvas video-prompt
   video-frames video-loop video-loop-compare video-source-manifest video-loop-repair video-cycle-align video-sway
   video-sway-inspect video-follow video-follow-inspect video-set-sheet video-stop video-face face-bake migrate-breathe migrate-request "
 LOCAL_TOOLS=" $(echo $LOCAL_TOOLS) "
