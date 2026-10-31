@@ -247,9 +247,11 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
     calls.push({ args, stdin });
     const tool = args[0] === 'npm' ? (args[2] === 'sprite' ? args[4] : args[2]) : args[0];
     if (tool === 'video-cycle-align') timeline.push(`align ${path.basename(flag(args, '--loop-dir'))}`);
-    if (tool === 'video-cycle-align') mostAligning = Math.max(mostAligning, ++aligning);
+    // RIFE on the GPU: the alignments and a motion-auto cut's jump repair, one at a time.
+    const gpu = tool === 'video-cycle-align' || tool === 'video-loop';
+    if (gpu) mostAligning = Math.max(mostAligning, ++aligning);
     most = Math.max(most, ++live); await new Promise(done => setTimeout(done, 5)); live -= 1;
-    if (tool === 'video-cycle-align') aligning -= 1;
+    if (gpu) aligning -= 1;
     if (tool === 'gen') await writeFile(flag(args, '--out'), 'relaxed');
     if (failShow && tool === 'gen-set' && flag(args, '--run-dir').endsWith('show-rows')) return { code: 1 };
     if (tool === 'prepare') { await mkdir(flag(args, '--out-dir'), { recursive: true });
@@ -780,6 +782,29 @@ test('the motion-auto cut stopped by the GPU after the first cut\'s alignment di
   const walk = events.find(e => e.kind === 'gait' && e.gait === 'walk');
   assert.deepEqual(walk.tried.map(t => [t.cut, t.reasons ?? (t.passed ? 'passed' : t.judge)]),
     [['loop', ['not-aligned']], ['loop', ['broken-beat']], ['cut-auto', 'passed']]);
+});
+
+test('a motion-auto cut takes its turn on the GPU with the alignments, never beside one', async () => {
+  // The run's own cut breaks its beat, so its motion-auto cut is made while the walk may still be aligning: RIFE runs in both.
+  const flag = (args, name) => args[args.indexOf(name) + 1];
+  let gpu = 0, most = 0;
+  const { done, calls } = await scaleStage({ scaleFit: fitAll, brokenRun: true, hooks: { og: async (args, flag, tool) => {
+    if (tool === 'video-set' && flag(args, '--states') === 'run') {
+      await mkdir(path.join(flag(args, '--out-dir'), 'side-run', 'frames', 'keyed'), { recursive: true });
+      return null;
+    }
+    // The walk films longer: the run aligns first, and its motion-auto cut is due while the walk aligns.
+    if (tool === 'video-set' && flag(args, '--states') === 'walk') { await new Promise(resolve => setTimeout(resolve, 45)); return null; }
+    if (tool !== 'video-cycle-align' && tool !== 'video-loop') return null;
+    most = Math.max(most, ++gpu); await new Promise(resolve => setTimeout(resolve, 30)); gpu -= 1;
+    if (tool !== 'video-loop') return null;
+    await mkdir(flag(args, '--out-dir'), { recursive: true });
+    await writeFile(path.join(flag(args, '--out-dir'), 'side-run.strip.json'), '{"frames":27}');
+    return { code: 0 };
+  } } });
+  assert.equal(done.outcome, 'ok', JSON.stringify(done));
+  assert.ok(calls.some(a => a.includes('video-loop') && flag(a, '--state') === 'run'), 'the run had a motion-auto cut');
+  assert.equal(most, 1);
 });
 
 test('a cut refused for this PC (a tool missing) goes to an operator: another take would be refused the same way', async () => {

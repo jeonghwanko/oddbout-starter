@@ -913,7 +913,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
             if (!cut) {
               // Stopped with no word (out of memory right after the first cut's alignment stopped the same way, a crash): the next pass,
               // ALIGN_PAUSE_MS later, cuts it again, as it aligned the cut made before the alignments. Refused: the clip has no other cut.
-              if ((await readJson(path.join(auto, `side-${gait}.loop.report.json`)).catch(() => null))?.status !== 'failed') autoTried = false;
+              if (existsSync(keyed) && (await readJson(path.join(auto, `side-${gait}.loop.report.json`)).catch(() => null))?.status !== 'failed') autoTried = false;
               break;
             }
             cuts.push(cut);
