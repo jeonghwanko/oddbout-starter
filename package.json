@@ -1,6 +1,6 @@
 {
   "name": "oddbout-starter",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Local Dot/Codex MCP starter for AI Fighter authoring and package validation",
   "private": true,
   "type": "module",
@@ -54,7 +54,8 @@
     "host:start": "node scripts/host.mjs start",
     "test:live": "node scripts/live-registration-test.mjs",
     "dots:start": "node scripts/dots-start.mjs",
-    "dots:source": "node scripts/dots-source.mjs"
+    "dots:source": "node scripts/dots-source.mjs",
+    "mcp:check": "node scripts/check-cloud-discovery.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.1",

@@ -1,23 +1,48 @@
 # Dots 클라우드 등록 연결
 
-사용자는 PC, 로컬 MCP, API 키 또는 터널을 설정할 필요가 없다.
-Dots의 플러그인에서 ODDBOUT을 연결하고 Google 로그인과 연결 승인을 마치면,
-대화의 실제 파일을 클라우드 서버가 받아 기존 등록 검증 파이프라인에 제출한다.
+클라우드 등록을 위해 사용자는 PC, 로컬 MCP, API 키 또는 터널을 설정할 필요가 없다.
+단, 이 안내만으로 현재 Dots 대화에 플러그인이나 계정 도구가 설치·선택·노출됐다고 볼 수 없다.
+실제 대화에서 MCP 도구가 노출되고 등록할 계정이 검증된 뒤에만 대화의 실제 파일을 클라우드 서버로 보낸다.
 
 공개 서버 URL: `https://mcp.oddbout.com/mcp`
 
-기존 개발 연결의 Supabase 함수 URL도 호환용으로 유지한다. 공개 심사에 제출한 주소는
-위 ODDBOUT 도메인이며, 현재 심사 중이다.
+기존 개발 연결의 Supabase 함수 URL도 호환용으로 유지한다. 공개 심사 제출·검토·등록 상태는
+서버 주소나 저장소 소스로 판단할 수 없으며, 현재 공식 목록이나 심사 도구에서 별도로 확인한다.
 
-ODDBOUT 플러그인 0.6.0 이상을 쓰면 이 연결이 플러그인 안에 있다(`plugins/ai-fighter/mcp.json`, [ODDBOUT-PLUGIN.md](ODDBOUT-PLUGIN.md)).
-Google로 한 번 로그인하면 끝이다. 아래 사용자 지정 MCP 서버를 함께 더하면 플러그인 목록에 ODDBOUT이 둘 보이니 더하지 않는다.
-사이트의 내 에이전트(Codex 카드)도 이 순서로 안내한다.
+0.6.0 이상 키트 소스의 `plugins/ai-fighter/mcp.json`은 이 HTTPS MCP를 설정한다
+([키트 전환 안내](ODDBOUT-PLUGIN.md)). ZIP이 계정에 가져와졌거나 앱에 설치됐다는 뜻은 아니다.
+각 단계는 따로 확인한다: 서버/ZIP 공개 여부, 계정의 플러그인 가져오기·갱신, 앱 설치 및 대상 Dots 대화에서 선택,
+실제 MCP `tools/list` 노출, 그리고 native `get_profile` 응답. `get_profile`의 계정이 의도한 등록 계정과 일치해야
+연결이 확인된 것이다. 이미 선택한 플러그인이 이 MCP와 `get_profile`을 제공할 때만 사용자 지정 MCP를 중복 추가하지 않는다.
+빈 목록, 404, `not-found`는 플러그인 삭제·교체 또는 서버 장애를 증명하지 않는다. OAuth 연결과 기존 세션/작업을 보존한다.
+사이트 로그인은 별도다. 로컬 CLI 로그인을 클라우드 MCP 로그인 대용으로 사용하지 않는다.
 
-플러그인 없이 연결: ChatGPT → 플러그인 → 추가(+) → 사용자 지정 MCP 서버 추가.
+플러그인에서 실제 계정 도구를 쓸 수 없고 사용자가 직접 연결하기로 한 경우: ChatGPT → 플러그인 → 추가(+) → 사용자 지정 MCP 서버 추가.
 이름 `ODDBOUT`, 위 서버 URL, 인증 `OAuth`를 선택한다. 클라이언트 ID/Secret은
 직접 넣지 않는다. 서버가 동적 클라이언트 등록과 PKCE를 지원한다.
 Google로 로그인한 뒤 `연결 승인하고 Dots로 돌아가기`를 누른다.
-공개 플러그인 디렉터리 등록은 별도의 OpenAI 심사 절차이며 서버 배포와 다르다.
+같은 Dots 대화에서 실제 `tools/list`를 확인한 뒤 `get_profile`로 의도한 계정인지 확인한다.
+연결만 확인하는 절차는 생성이나 등록을 실행하지 않는다. 공개 플러그인 디렉터리 등록은 별도의 절차이며 서버·ZIP 배포와 다르다.
+
+## 도구가 보이지 않을 때의 진단
+
+서버의 프로토콜 메서드 `tools/list`와 대화 모델이 사용할 수 있는 도구 목록은 별개다. 호스트가 도구 검색/카탈로그를
+제공하면 거기서 `get_profile`을 찾는다. 모델에 `tools/list`라는 도구가 있다고 가정하거나 새 도구 이름을 만들지 않는다.
+공개 서버는 비로그인 상태에도 `get_profile`을 목록에 알리고, 실제 계정 조회 호출에서 OAuth 인증을 검사한다.
+따라서 계정 도구 자체가 없다면 설치·선택·호스트 도구 노출을 먼저 확인한다. 인증 만료는 실제 호출의 오류로 구분한다.
+
+키트나 저장소에서 서버 설정만 점검하려면 다음 명령을 쓴다. 첫 명령은 파일만 읽고, `--probe`를 붙여야 공개 서버의
+초기화와 도구 목록을 읽는다. 토큰·쿠키·로컬 로그인 파일을 사용하지 않고 계정 조회·로그인·생성·등록을 실행하지 않는다.
+
+```sh
+npm run mcp:check
+npm run mcp:check -- --probe
+```
+
+`server: discovered`여도 `hostPlugin`, `conversationTools`, `account`는 모두 `unverified`다. 이 결과를 Dots 연결 완료로
+바꾸어 보고하지 않는다. 공개 탐색의 401도 사용자의 실제 로그인 상태를 증명하지 않는다. 현재 플러그인의 ID·범위·버전을
+확인하고 해당 대화에서 native `get_profile`이 성공해야 계정 연결이 확인된다. 이전 private 링크가 없으면 현재 상세 링크를
+추정하지 말고 호스트의 실제 항목이나 사용자에게 확인한다. 도구 갱신·선택에 대한 [공식 안내](https://developers.openai.com/api/docs/guides/custom-mcp-server#how-to-use)를 따른다.
 
 Grok 연결(2026-10-27, 주소 2026-10-28·11-01): grok.com → 커넥터(`https://grok.com/connectors`) → New Connector → Custom. Cursor의 Grok Bot도 같다. 서버 URL은
 우리 도메인의 **로그인 먼저 주소** `https://mcp.oddbout.com/signin`이다(`PUBLIC_SIGN_IN_RESOURCE`). Claude·터미널 에이전트가 쓰는 Supabase 주소
@@ -25,7 +50,9 @@ Grok 연결(2026-10-27, 주소 2026-10-28·11-01): grok.com → 커넥터(`https
 [우리 도메인의 로그인 먼저 주소](#우리-도메인의-로그인-먼저-주소-2026-11-01)에 있다. Grok의 커스텀 커넥터에는
 인증을 고르는 칸이 없고, 첫 요청의 답으로 로그인이 필요한지 정한다. 위 공개 주소는 공개 도구를 로그인 없이 답하므로 Grok이 계정 없이 붙어 버렸다(2026-10-28 실제 시도).
 로그인 먼저 주소는 같은 서버이고 모든 요청에 401과 `WWW-Authenticate`(`…/signin/.well-known/oauth-protected-resource`)로 로그인을 먼저 요구한다.
-이미 공개 주소로 추가했다면 지우고 이 주소로 다시 추가한다. 연결하면 oddbout.com 동의 화면에서 Google로 로그인해 승인한다.
+이미 공개 주소로 설정한 경우 기존 연결을 자동 삭제하지 않는다. 사용자가 연결 수정을 요청했고 호스트가 편집을 지원하면
+로그인 먼저 주소로 변경한 뒤 새 OAuth 연결과 `get_profile`을 확인한다. 편집이 안 되면 기존 상태를 보존하고 사용자에게
+다음 조치를 안내한다. 연결하면 oddbout.com 동의 화면에서 Google로 로그인해 승인한다.
 동의 화면(`web/cloud-connect/connect.mjs`의 `agentOf`)은 에이전트가 돌아갈 주소로 요청한 쪽을 가린다. ChatGPT(Dots)는 두 호스트 어디로든,
 Grok은 `https://grok.com/connectors-oauth-exchange-code/`, Cursor의 Grok Bot(웹)은 `https://www.cursor.com/agents/mcp/oauth/callback`·
 `https://www.cursor.com/bot/mcp/oauth/callback`로만 돌아간다. 데스크톱 클라이언트의 loopback·앱 스킴 주소는 받지 않는다. 화면의 문구와
@@ -42,8 +69,9 @@ MCP 함수의 Origin 허용 목록에 `claude.ai`·`claude.com`이 있다. 2026-
 
 - 팀·엔터프라이즈 조직에서는 소유자만 커스텀 커넥터를 추가한다(조직 설정 → 커넥터, `https://claude.ai/admin-settings/connectors`). 구성원 화면의
   "커스텀 커넥터 추가"는 회색이다. 소유자가 추가하면 구성원은 자기 커넥터 목록에서 연결을 누른다.
-- 인증은 **지금 로그인**을 고른다. 이 서버는 공개 도구를 로그인 없이 답하므로 Claude가 "로그인 없음"으로 자동 감지한다. 그대로 두면 계정이 필요한
-  도구(선수 만들기·등록·내 선수)를 쓸 수 없다. 인증 방식은 추가한 뒤 바꿀 수 없으니 지우고 다시 추가한다.
+- 인증은 **지금 로그인**을 고른다. 이 서버는 공개 도구를 로그인 없이 답하므로 Claude가 "로그인 없음"으로 자동 감지할 수 있다. 그대로 두면 계정이 필요한
+  도구(선수 만들기·등록·내 선수)를 쓸 수 없다. 인증 방식이 잘못 선택돼도 기존 연결을 자동으로 지우지 않는다. 사용자가 연결 교체를 명시적으로 요청하면
+  기존 OAuth 연결과 세션을 보존한 채 지원되는 대체 연결을 먼저 설정하고, 실제 `tools/list`와 같은 계정의 `get_profile`을 확인한 뒤에만 기존 항목을 제거한다.
 - OAuth 클라이언트는 **자동으로 등록**(DCR)을 고른다. 추천으로 표시되는 "Claude의 게시된 ID"(CIMD)는 Supabase Auth가 지원하지 않는다.
   클라이언트 ID·시크릿은 비워 둔다.
 - 추가할 때 "서버를 확인할 수 없습니다"가 나오면 `mcp.oddbout.com`의 Render 무료 서버가 잠들어 있던 것일 수 있다. 잠시 뒤 다시 시도한다
@@ -160,7 +188,9 @@ Cursor의 Grok Bot이 02:21Z에 로그인 먼저 주소로 연결한 뒤 토큰�
   `mcp.oddbout.com`의 `/.well-known/oauth-authorization-server/signin`·`/.well-known/openid-configuration/signin`은 404다. 다른 issuer의 메타데이터를
   우리 주소에서 답하면 RFC 8414의 issuer 검사에 걸린다. 보호 자원 메타데이터를 찾은 클라이언트는 거기 적힌 인가 서버로 간다.
 - 토큰 대상(`aud`)은 토큰 훅(`af_mcp_access_token_hook`)이 요청한 resource와 상관없이 세 값으로 정한다. 그래서 DB 변경이 없다.
-- Supabase 주소는 계속 받는다. 이미 그 주소로 추가한 커넥터는 그대로 동작한다. 새 주소의 효과를 보려면 커넥터를 지우고 새 주소로 다시 추가해야 한다.
+- Supabase 주소는 계속 받는다. 이미 그 주소로 추가한 커넥터는 그대로 동작한다. 사용자가 새 주소로 전환해 달라고 요청하면, 호스트의 공식 편집 기능을 우선 사용한다.
+  편집이 불가능하면 기존 OAuth 연결을 보존하고 사용자에게 대체 연결을 먼저 만들지, 이후 기존 항목을 제거할지 선택받는다. 새 주소의 `tools/list`와
+  `get_profile`이 의도한 계정으로 성공하고 사용자가 기존 항목 제거도 명시적으로 요청한 경우에만 기존 커넥터를 제거한다.
 - 요청이 Render를 한 번 더 거친다. `mcp.oddbout.com`은 Render 무료 서버라 잠들 수 있다. 운영자 PC가 14분마다 깨운다. 본문 한도(64 KiB)는 함수와 같다.
   게이트웨이는 응답 헤더를 30초, 스트림 전체를 160초까지 기다린다.
 - 사이트는 Grok 카드와 안내에서만 새 주소를 준다(게임 `ODDBOUT_MCP_GROK_SIGN_IN_URL`). grok.com과 Cursor의 Grok Bot이 이 카드를 쓴다. Claude·Codex·Gemini는
@@ -169,14 +199,15 @@ Cursor의 Grok Bot이 02:21Z에 로그인 먼저 주소로 연결한 뒤 토큰�
 - 배포 순서는 함수(`fighter:mcp`) → Render → 사이트다. Render가 먼저 올라가면 옛 함수가 헤더를 모른다. 그러면 Supabase 주소를 광고하고, SDK의 resource 검사와
   Gemini의 출처 검사가 이를 거절한다. 사이트가 먼저면 `/signin`이 404다. 단계마다 운영에서 확인한 뒤 다음으로 간다.
 - 게이트웨이는 클라이언트의 `user-agent`도 넘긴다. 그래서 함수 로그에서 어느 클라이언트인지 보인다. 발신 IP는 Render의 것이 된다.
-- 새 주소로 실제 클라이언트가 연결한 것은 아직 확인하지 않았다. 처음 확인하는 대상은 Grok Bot이다. 이미 Supabase 주소로 추가한 Grok Bot은 커넥터를 지우고
-  이 주소로 다시 추가해야 한다.
+- 새 주소 전환은 클라이언트별로 따로 확인한다. 기존 Supabase 주소의 Grok Bot 연결은 사용자가 명시적으로 전환을 원한다고 하지 않는 한 그대로 둔다.
+  전환 요청이 있으면 대상 클라이언트에서 새 연결을 추가·확인하고, `get_profile`이 같은 계정을 반환한 뒤에만 사용자 요청에 따라 예전 항목을 제거한다.
 
 ## 사용 흐름
 
-통합 플러그인은 계정·등록에 호스팅 ODDBOUT MCP 연결 하나를 쓴다. 로컬 제작·세션·작업 기록·파일 검증은
-작업 공간의 `creation:tool` CLI로 실행하며 두 번째 MCP 서버를 추가하지 않는다. 이전 `ai-fighter`와
-`ai-fighter-creator` 연결의 제거 조건은 [통합 플러그인 이전 안내](ODDBOUT-PLUGIN.md)를 따른다.
+0.6.2 키트 소스는 계정·등록에 호스팅 ODDBOUT MCP 하나를 쓰도록 구성한다. 실제 대화에서 노출되는 도구는
+호스트의 도구 검색/카탈로그로 확인하고 native `get_profile`로 계정을 검증한다. 로컬 제작·세션·작업 기록·파일 검증은 작업 공간의
+`creation:tool` CLI로 실행한다. 기존 `ai-fighter`/`ai-fighter-creator` MCP 연결 제거는 사용자의 명시적 요청이 있고,
+선택된 대체 MCP의 `get_profile`이 같은 의도된 계정으로 성공한 뒤에만 한다([이전 안내](ODDBOUT-PLUGIN.md)).
 
 | 작업 | 도구·실행 경로 |
 | --- | --- |

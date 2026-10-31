@@ -22,7 +22,8 @@ after(async () => { await rm(temporary, { recursive: true, force: true }); });
 test('the runtime file list is closed over imports and keeps the Edge-only cloud MCP out', async () => {
   const files = await runtimeFileList();
   for (const required of ['tools/ai-fighter/projected-ground.mjs', 'tools/ai-fighter/gait.mjs', 'scripts/pack-fighter.mjs',
-    'mcp/stdio.mjs', 'mcp/server.mjs', 'contracts/ai-fighter/v1/spec.json', 'server/ai-fighter-package.mjs', ...shippedDocs])
+    'mcp/stdio.mjs', 'mcp/server.mjs', 'contracts/ai-fighter/v1/spec.json', 'server/ai-fighter-package.mjs',
+    'scripts/check-cloud-discovery.mjs', 'plugins/ai-fighter/mcp.json', ...shippedDocs])
     assert.ok(files.includes(required), required);
   for (const serverOnly of ['mcp/cloud.mjs', 'mcp/cloud/common.mjs', 'mcp/cloud/hosted-tools.mjs', 'mcp/file-input-probe.mjs', 'mcp/creator-sources.mjs', 'api/handler.mjs', 'api/http.mjs'])
     assert.ok(!files.includes(serverOnly), `${serverOnly} stays out of the local kit`);
