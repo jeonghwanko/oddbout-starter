@@ -140,6 +140,22 @@ test('a loop review fails on an engine retake reason, unnamed feet, a failing ve
   for (const foot of [undefined, { feet: [null, null] }, { feet: ['left', 'left'] }])
     assert.deepEqual(loopReview({ motion: 'run', sequence: { ...seq, frames: seq.frames.slice(0, 12), durations: seq.durations.slice(0, 12) },
       strip: { cycle_align: { ...aligned, foot } }, visual: verdicts, judge: 'test' }).errors.map(e => e.code), ['ENGINE_FEET_UNNAMED']);
+  // A side view whose shade follows the step but whose strikes are too alike to name (2026-11-01): taken, and the review says how.
+  const low = { cue: 'shade', feet: null, margin: 0.0174, rhythm: 0.278, why: 'low-margin: the two strikes differ by 0.0174 in shade, under the 0.025 it takes to name a foot' };
+  const lowTaken = loopReview({ motion: 'walk', sequence: seq, strip: { cycle_align: { ...aligned, foot: low } }, visual: verdicts, judge: 'test', stridePixels: 90 });
+  assert.equal(lowTaken.status, 'pass', JSON.stringify(lowTaken.errors));
+  assert.deepEqual([lowTaken.engine.feet, lowTaken.engine.feetBy, lowTaken.engine.feetRhythm], [null, 'low-margin', 0.278]);
+  assert.match(lowTaken.scope, /which foot is which is not named/);
+  assert.equal(requireLoopReview(lowTaken, seq, 'walk'), lowTaken);
+  assert.equal(pass.engine.feetBy, undefined);
+  // Not taken: a cue that does not follow the step, a rhythm under the engine's, the depth cue (front/back views), no reason given.
+  for (const foot of [{ ...low, why: 'the shade does not follow the step (rhythm 0.12)', rhythm: 0.12 }, { ...low, rhythm: 0.2 },
+    { ...low, cue: 'depth' }, { ...low, why: undefined }, { ...low, rhythm: undefined }])
+    assert.deepEqual(loopReview({ motion: 'walk', sequence: seq, strip: { cycle_align: { ...aligned, foot } }, visual: verdicts, judge: 'test',
+      stridePixels: 90 }).errors.map(e => e.code), ['ENGINE_FEET_UNNAMED'], JSON.stringify(foot));
+  // fighter:pack re-checks the record it is given: a low-margin claim without the rhythm that earns it is refused.
+  for (const engine of [{ ...lowTaken.engine, feetRhythm: 0.1 }, { ...lowTaken.engine, feetBy: undefined }, { ...lowTaken.engine, feet: ['left'] }])
+    assert.throws(() => requireLoopReview({ ...lowTaken, engine }, seq, 'walk'), /LOOP_REVIEW_INCOMPLETE/);
   const judged = loopReview({ motion: 'walk', sequence: seq, strip: { cycle_align: aligned }, visual: { ...verdicts, anatomy: 'fail' }, judge: 'test' });
   assert.deepEqual(judged.errors.map(e => e.code), ['VISUAL_ANATOMY', 'STRIDE_UNMEASURED']);
   assert.throws(() => requireLoopReview(judged, seq, 'walk'), /LOOP_REVIEW_REQUIRED/);

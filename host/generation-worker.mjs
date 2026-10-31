@@ -275,13 +275,16 @@ export async function main({ once = false } = {}) {
     const renew = setInterval(() => {
       api.progress(job, undefined).then(reply => { if (!reply.ok && reply.code === 'lease-lost') controller.abort(); }).catch(() => {});
     }, TIMING.renewMs);
+    // The kit tree's loop review takes a low-margin cut (tools/ai-fighter/gait.mjs `lowMarginFeet`, 2026-11-01): read per job, as `og setup` moves it.
+    const lowMarginFeetTaken = await readFile(path.join(kit, 'tools', 'ai-fighter', 'gait.mjs'), 'utf8')
+      .then(text => text.includes('export const lowMarginFeet'), () => false);
     const stages = createStages({
       og: (args, { stdin } = {}) => unlessStopped(controller.signal, () => {
         const started = Date.now();
         return run(og, ['run', ogId, '--', ...args], { cwd: kit, log, stdin, signal: controller.signal })
           .then(code => { tally.add(args, code, Date.now() - started); return { code }; });
       }),
-      api, signal: controller.signal,
+      api, signal: controller.signal, lowMarginFeetTaken,
       fetchBytes: async url => { const r = await fetch(url, { signal: AbortSignal.timeout(60_000) }); if (!r.ok) throw new Error(`download ${r.status}`); return new Uint8Array(await r.arrayBuffer()); },
       motionsPy: args => unlessStopped(controller.signal, () => run(python, ['-I', path.join(ROOT, 'bin', 'motions.py'), ...args], { cwd: kit, log, signal: controller.signal })
         .then(code => ({ code }))),

@@ -7,10 +7,10 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { ALIGN_AGAIN, BEAT_LIMIT, GROK_LIMITED, BRIEF_SCHEMA, ONE_STRIDE_OF, GAIT_EVENT_BYTES, GAIT_OWN_FEATURE, gaitEvent, gaitRanges, GAIT_RETAKES, CODEX_TOOLS_OFF, EVEN_BEAT, PREVIEW_CLIPS, RUN_FROM_WALK, RUN_FROM_WALK_PACE, SCALE_ROUNDS, SCALE_WIDE, appearancePrompt, briefCommand, briefPrompt, characterPhrase, checkedBrief, checkedVerdict, createStages, lookPick, namedFeet, ogJobId, retakeReasons,
+import { ALIGN_AGAIN, BEAT_LIMIT, GROK_LIMITED, BRIEF_SCHEMA, ONE_STRIDE_OF, GAIT_EVENT_BYTES, GAIT_OWN_FEATURE, gaitEvent, gaitRanges, GAIT_RETAKES, CODEX_TOOLS_OFF, EVEN_BEAT, PREVIEW_CLIPS, RUN_FROM_WALK, RUN_FROM_WALK_PACE, SCALE_ROUNDS, SCALE_WIDE, appearancePrompt, briefCommand, briefPrompt, characterPhrase, checkedBrief, checkedVerdict, createStages, lookPick, namedFeet, feetAlternate, lowMarginFeet, ENGINE_CUE_RHYTHM, ogJobId, retakeReasons,
   submissionOutcome, withProfile, EXTRACT_REDRAWS, extractFailedRows, ENGINE_SEAM_MAX, loopTaken, HOUSE_COLOURING, LOOK_CHECKS, SIDE_CHECKS, SIDE_COLOURING, SIDE_TAKES,
   lookJudgePrompt, sideJudgePrompt, sidePrompt } from './generation-stages.mjs';
-import { ENGINE_SEAM_MAX as REVIEW_SEAM_MAX } from '../tools/ai-fighter/gait.mjs';
+import { ENGINE_SEAM_MAX as REVIEW_SEAM_MAX, ENGINE_CUE_RHYTHM as REVIEW_CUE_RHYTHM, lowMarginFeet as reviewLowMarginFeet } from '../tools/ai-fighter/gait.mjs';
 import { parseEnv, parseHealth } from './generation-worker.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -187,6 +187,8 @@ test('a gait whose cuts never align stops for an operator without filming anothe
   assert.match(done.result.code, /^(walk|run)-align$/);
   // One clip per gait, no retake filmed and no relaxed still drawn.
   assert.deepEqual(calls.filter(a => a.includes('video-set')).map(a => path.basename(flag(a, '--out-dir'))).sort(), ['video-run-0', 'video-walk-0']);
+  // video-set's own cut stays the plain one; the motion-auto cut is the kit's fallback (cut-auto), not a second default cut.
+  assert.ok(calls.filter(a => a.includes('video-set')).every(a => flag(a, '--anchor') === 'none'));
   assert.ok(!calls.some(a => a.includes('gen')));
   // Each gait's cut was aligned in two passes (each a try and a --multi-cycle warn try) before the stage stopped.
   const aligns = gait => calls.filter(a => a.includes('video-cycle-align') && flag(a, '--loop-dir').includes(`video-${gait}-0`)).length;
@@ -430,6 +432,16 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
   assert.equal(checkedVerdict({ identity: 'pass', anatomy: 'maybe', loop: 'pass', notes: 'x' }), null);
   assert.equal(namedFeet({ cycle_align: { foot: { feet: ['left', 'right'] } } }), true);
   assert.equal(namedFeet({ cycle_align: { foot: { feet: [null, null] } } }), false);
+  // Feet taken unnamed only for a side view's low margin with the cue following the step, as the loop review takes them (pinned equal).
+  const low = { cue: 'shade', feet: null, margin: 0.0174, rhythm: 0.278, why: 'low-margin: the two strikes differ by 0.0174 in shade' };
+  const feetCases = [low, { ...low, rhythm: 0.25 }, { ...low, rhythm: 0.249 }, { ...low, why: 'the shade does not follow the step (rhythm 0.12)' },
+    { ...low, cue: 'depth' }, { ...low, why: null }, { ...low, rhythm: Number.NaN }, { ...low, feet: ['left', 'right'] }, null];
+  assert.deepEqual(feetCases.map(foot => lowMarginFeet({ cycle_align: { foot } })), [true, true, false, false, false, false, false, false, false]);
+  for (const foot of feetCases) assert.equal(lowMarginFeet({ cycle_align: { foot } }), reviewLowMarginFeet(foot), JSON.stringify(foot));
+  assert.equal(ENGINE_CUE_RHYTHM, REVIEW_CUE_RHYTHM);
+  assert.equal(feetAlternate({ cycle_align: { foot: { feet: ['left', 'right'] } } }), true);
+  assert.equal(feetAlternate({ cycle_align: { foot: low } }), true);
+  assert.equal(feetAlternate({ cycle_align: { foot: { ...low, rhythm: 0.1 } } }), false);
   // A show row that fails never stops the stage: the fighter is assembled without the entrance and victory.
   await rm(path.join(dir, 'motion', 'show-rows'), { recursive: true, force: true });
   await rm(path.join(dir, 'package'), { recursive: true, force: true });
@@ -451,7 +463,7 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
 // `showGenSet()`: the show row's gen-set exit (no report), or null for no show row.
 async function scaleStage({ scaleCheck = () => 0, scaleFit, brokenRun = false, alignFails = {}, job: change = {}, spec = null, ownFrames = { walk: 24, run: 14 },
   uncut = {}, showGenSet = null, stop = null, alignPauseMs = 0, before = null, specDelayMs = 0, videoReport = null,
-  rowStates = null, earlyPollMs, hooks = {}, onArtifact = null }) {
+  rowStates = null, earlyPollMs, hooks = {}, onArtifact = null, lowMarginFeetTaken = true }) {
   const dir = await mkdtemp(path.join(tmpdir(), 'gen-scale-')), calls = [], events = [];
   await before?.(dir);
   await mkdir(path.join(dir, 'looks'), { recursive: true });
@@ -530,7 +542,7 @@ async function scaleStage({ scaleCheck = () => 0, scaleFit, brokenRun = false, a
   const api = { artifact: async (j, name) => { onArtifact?.(name); return { ok: true }; },
     progress: async (j, value, event) => { if (event) events.push(structuredClone(event)); return { ok: true }; },
     ...(spec || specDelayMs ? { spec: async () => { await new Promise(done => setTimeout(done, specDelayMs)); return spec; } } : {}) };
-  const stages = createStages({ og, api, motionsPy, fetchBytes: async () => new Uint8Array(), toWebp: async () => {}, gaitStaggerMs: 0, alignPauseMs,
+  const stages = createStages({ og, api, motionsPy, fetchBytes: async () => new Uint8Array(), toWebp: async () => {}, gaitStaggerMs: 0, alignPauseMs, lowMarginFeetTaken,
     ...(earlyPollMs ? { earlyPollMs } : {}), signal: stop?.signal ?? null });
   const job = { id: '0123abcd-0000', language: 'ko', brief, choice: 'a', appearanceRound: 0, candidates: [], motionNote: null, motionRound: 0, ...change };
   const done = await stages.motions(job, dir);
@@ -805,6 +817,32 @@ test('a motion-auto cut takes its turn on the GPU with the alignments, never bes
   assert.equal(done.outcome, 'ok', JSON.stringify(done));
   assert.ok(calls.some(a => a.includes('video-loop') && flag(a, '--state') === 'run'), 'the run had a motion-auto cut');
   assert.equal(most, 1);
+});
+
+test('a walk cut whose feet are unnamed only for a low shade margin is judged; one whose shade does not follow the step is refused', async () => {
+  // The 2026-10-31 job (d242bcce): a clean walk, beat on time, no ghosts, refused before the judge for a shade margin of 0.0174 (rhythm 0.278).
+  const flag = (args, name) => args[args.indexOf(name) + 1];
+  const run = (why, lowMarginFeetTaken = true) => scaleStage({ scaleFit: fitAll, lowMarginFeetTaken, hooks: { og: async (args, flag, tool) => {
+    if (tool !== 'video-cycle-align' || !flag(args, '--loop-dir').includes('video-walk')) return null;
+    const dirOf = flag(args, '--loop-dir'), to = Number(flag(args, '--length'));
+    await writeFile(path.join(dirOf, 'side-walk.strip.json'), JSON.stringify({ frames: to, cycle_align: { to, seam_ratio: 0.83,
+      foot: { cue: 'shade', feet: null, margin: 0.0174, rhythm: why === 'rhythm' ? 0.12 : 0.278,
+        why: why === 'rhythm' ? 'the shade does not follow the step (rhythm 0.12)' : 'low-margin: the two strikes differ by 0.0174 in shade' } } }));
+    return { code: 0 };
+  } } });
+  const taken = await run('low-margin');
+  assert.equal(taken.done.outcome, 'ok', JSON.stringify(taken.done));
+  assert.equal(taken.calls.filter(a => a.includes('video-set') && flag(a, '--states') === 'walk').length, 1, 'no second walk clip bought');
+  const walk = taken.events.find(e => e.kind === 'gait' && e.gait === 'walk');
+  assert.deepEqual(walk.tried.map(t => [t.cut, t.passed ?? t.reasons, t.feet, t.feetMargin, t.feetRhythm]), [['loop', true, 'low-margin', 0.0174, 0.278]]);
+  const refused = await run('rhythm');
+  const walkRefused = refused.events.find(e => e.kind === 'gait' && e.gait === 'walk');
+  assert.deepEqual(walkRefused.tried[0].reasons, ['feet-unnamed']);
+  assert.equal(walkRefused.tried[0].feet, 'rhythm');
+  assert.ok(refused.calls.filter(a => a.includes('video-set') && flag(a, '--states') === 'walk').length > 1, 'refused: another take filmed');
+  // A kit tree whose loop review does not take it yet (og self-updated without og setup): refused as before.
+  const older = await run('low-margin', false);
+  assert.deepEqual(older.events.find(e => e.kind === 'gait' && e.gait === 'walk').tried[0].reasons, ['feet-unnamed']);
 });
 
 test('a cut refused for this PC (a tool missing) goes to an operator: another take would be refused the same way', async () => {
