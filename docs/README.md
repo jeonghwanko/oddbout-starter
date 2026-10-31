@@ -3,6 +3,9 @@
 이 폴더의 문서를 어떤 순서로 읽으면 되는지 안내한다. 각 문서가 무엇을 다루는지는 한 줄씩만 적는다.
 규칙과 세부 내용은 각 문서에 있다.
 
+creator-kit ZIP에는 제작·연결 안내와 이 문서 지도가 들어 있다. 지도에 있는 저장소 전용 운영·연구 문서는 ZIP에 없을 수 있으므로
+[저장소의 문서 폴더](https://github.com/jeonghwanko/oddbout-starter/tree/main/docs)에서 확인한다.
+
 ## 처음이라면
 
 - **선수를 만들려는 사용자·제작 에이전트**: [START-HERE](START-HERE.md) → [DOT-CREATION](DOT-CREATION.md) →

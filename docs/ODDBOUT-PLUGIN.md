@@ -1,4 +1,4 @@
-# ODDBOUT 통합 플러그인 (0.6.0)
+# ODDBOUT 통합 플러그인 (0.6.1)
 
 사용자는 ODDBOUT 하나에서 제작·묶음 검토·등록을 진행한다. PC와 Dots의 사용자별 작업 공간은
 같은 제작 도구와 파일 규격을 사용하며, 등록은 현재 대화에 연결된 ODDBOUT Google 계정으로 한다.
@@ -25,15 +25,16 @@ AI Fighter Creator라는 두 번째 플러그인 설치나 작업 공간의 별�
 ## 빌드와 전환
 
 ```sh
-npm run plugin:build -- output/oddbout-development-0.6.0
-npm run plugin:bundle -- output/oddbout-0.6.0
+npm run plugin:build -- output/oddbout-development-0.6.1
+npm run plugin:bundle -- output/oddbout-0.6.1
 ```
 
 첫 명령은 이 사용자의 체크아웃/작업 공간을 가리키는 개발용 빌드다. 다른 기기 배포에는 두 번째 명령의
-`oddbout-0.6.0.zip`을 사용한다. ZIP은 원본 소스와 고정된 sprite-gen-agent(`vendor/sprite-gen`), 그 LICENSE/NOTICE를 포함하며
+`oddbout-0.6.1.zip`을 사용한다. ZIP은 한국어·영어 README, 제작 시작 안내·문서 지도·MCP 전환 안내,
+원본 소스와 고정된 sprite-gen-agent(`vendor/sprite-gen`), 그 LICENSE/NOTICE를 포함하며
 OS별 node_modules·venv·로그인·사용자 결과물은 제외한다. 의존성은 추출한 런타임에서 잠금 파일로 설치한다.
 
-**0.6.0으로 옮기기(ChatGPT 개인 플러그인)**: 새 ZIP을 올려 설치하고 Google로 한 번 로그인한다. 그다음 예전 ODDBOUT 플러그인과
+**0.6.1로 옮기기(ChatGPT 개인 플러그인)**: 새 ZIP을 올려 설치하고 Google로 한 번 로그인한다. 그다음 예전 ODDBOUT 플러그인과
 따로 추가했던 ODDBOUT 연결(사용자 지정 MCP 커넥터)을 지운다. 작업 폴더·원본·작업 기록은 그대로다.
 
 기존 `ai-fighter-local` 마켓플레이스의 소스를 새 디렉터리로 전환하고 `oddbout@ai-fighter-local`을 설치한다.
@@ -80,7 +81,7 @@ CLI 오류는 0이 아닌 종료 코드로 전달한다. 계정 연결과 실제
 
 ## 검증 범위
 
-아래는 0.4.0의 설치 기록이다. 0.5.4 ZIP의 ChatGPT 업로드·설치는 아직 확인하지 않았다.
+아래는 0.4.0의 설치 기록이다. 0.6.1 ZIP의 ChatGPT 업로드·설치는 아직 확인하지 않았다.
 0.5.0은 `tools/ai-fighter/projected-ground.mjs`가 빠져 `fighter:pack`·`fighter:gait`가 시작되지 않으므로 설치하지 않는다.
 
 2026-10-26 개인용 ChatGPT에 0.4.0 ZIP을 업로드하고 설치했다.

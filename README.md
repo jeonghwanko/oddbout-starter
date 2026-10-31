@@ -25,6 +25,8 @@ Existing ODDBOUT gameplay. The subscription-based character creation workflow is
 
 The kit includes sprite-gen, creation workflows, validation tools, and an MCP server for connecting your assistant to the game. The game engine is maintained separately.
 
+The creator-kit ZIP includes both READMEs and the creation, connection and MCP migration guides. The document index also lists repository-only operations and research docs; those and the gameplay media remain available in this repository.
+
 In this kit, "sprite-gen" means the sprite-gen engine and CLI pinned at `vendor/sprite-gen`, which comes from [sprite-gen-agent](https://github.com/jeonghwanko/sprite-gen-agent), our fork of Alex Kim's [sprite-gen](https://github.com/aldegad/sprite-gen). Commands, paths and the Python package keep the name `sprite-gen`.
 
 ## Ways to make a fighter

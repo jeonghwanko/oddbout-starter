@@ -14,7 +14,7 @@ const sha = value => createHash('sha256').update(value).digest('hex');
 // Entry points, data and docs. Modules they import are added from the import graph (`runtimeFileList`),
 // so a new relative import cannot be left out of the kit (0.5.0 shipped without tools/ai-fighter/projected-ground.mjs).
 const runtimeFiles = [
-  'LICENSE', 'AGENTS.md', 'package-lock.json', 'api/client.mjs', 'api/connection-errors.mjs', 'api/runtime-fetch.mjs', 'server/ai-fighter-package.mjs',
+  'LICENSE', 'AGENTS.md', 'README.md', 'README.ko.md', 'package-lock.json', 'api/client.mjs', 'api/connection-errors.mjs', 'api/runtime-fetch.mjs', 'server/ai-fighter-package.mjs',
   'deploy/creation-context-source.json', 'deploy/creator-site.json',
   'deploy/creation-environments.json', 'deploy/creation-environment-trust.json', 'scripts/connect-generation.mjs', 'docs/ENVIRONMENT-ONBOARDING.md',
   'scripts/sprite-gen.mjs', 'scripts/pack-fighter.mjs', 'scripts/run-creation-job.mjs', 'scripts/creation-tool.mjs',
@@ -27,6 +27,7 @@ const runtimeFiles = [
   'docs/DOT-CREATION.md', 'docs/AUTHORING.md', 'docs/CREATION-UX.md', 'docs/GAIT-REVIEW.md',
   'docs/FOOT-EVIDENCE.md', 'docs/LOCAL-PLUGIN.md', 'docs/GAME-CREATION-CONTEXT.md', 'docs/OPEN-REGISTRATION.md',
   'docs/EXECUTION-HOST.md', 'docs/CONNECTION-READINESS.md', 'docs/ODDBOUT-PLUGIN.md',
+  'docs/README.md', 'docs/START-HERE.md', 'docs/CLOUD-MCP.md',
 ];
 const runtimeDirectories = ['mcp', 'contracts/ai-fighter'];
 // The cloud MCP (with its tool families in mcp/cloud/) and its file-input probe run only in the Edge function
