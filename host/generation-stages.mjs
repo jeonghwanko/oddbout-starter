@@ -866,7 +866,8 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
           // A refusal an earlier cut wrote never speaks for this one: a cut that stops now (no report) must not read as refused.
           await rm(path.join(auto, `side-${gait}.loop.report.json`), { force: true });
           const fps = (await readJson(path.join(item, 'frames.report.json')).catch(() => ({}))).fps ?? 24;
-          await og(sprite('video-loop', '--frames-dir', keyed, '--out-dir', auto, '--fps', String(fps), '--state', gait,
+          // In line with the alignments: the cut repairs a walk's or run's jumps with RIFE on the GPU too.
+          await align(sprite('video-loop', '--frames-dir', keyed, '--out-dir', auto, '--fps', String(fps), '--state', gait,
             '--anchor', 'motion-auto', '--facing', 'right', '--name', `side-${gait}`));
         }
         return existsSync(path.join(auto, `side-${gait}.strip.json`)) ? auto : null;
@@ -909,7 +910,12 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
             if (autoTried) break;
             autoTried = true;
             const cut = await autoCut();
-            if (!cut) break;
+            if (!cut) {
+              // Stopped with no word (out of memory right after the first cut's alignment stopped the same way, a crash): the next pass,
+              // ALIGN_PAUSE_MS later, cuts it again, as it aligned the cut made before the alignments. Refused: the clip has no other cut.
+              if ((await readJson(path.join(auto, `side-${gait}.loop.report.json`)).catch(() => null))?.status !== 'failed') autoTried = false;
+              break;
+            }
             cuts.push(cut);
           }
           const cut = cuts[next];
