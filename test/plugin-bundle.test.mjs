@@ -13,6 +13,8 @@ const entries = ['scripts/pack-fighter.mjs', 'scripts/gait.mjs', 'scripts/sprite
   'scripts/dots-workspace.mjs', 'scripts/dots-start.mjs', 'scripts/dots-source.mjs',
   'scripts/creation-tool.mjs', 'scripts/check-connection.mjs', 'scripts/check-creation-delivery.mjs', 'scripts/connect-generation.mjs',
   'tools/ai-fighter/gait.mjs', 'server/ai-fighter-package.mjs', 'mcp/server.mjs'];
+const shippedDocs = ['README.md', 'README.ko.md', 'docs/README.md', 'docs/START-HERE.md', 'docs/CLOUD-MCP.md',
+  'docs/LOCAL-PLUGIN.md', 'docs/ODDBOUT-PLUGIN.md'];
 let temporary;
 before(async () => { temporary = await mkdtemp(path.join(tmpdir(), 'fighter-bundle-')); });
 after(async () => { await rm(temporary, { recursive: true, force: true }); });
@@ -20,7 +22,7 @@ after(async () => { await rm(temporary, { recursive: true, force: true }); });
 test('the runtime file list is closed over imports and keeps the Edge-only cloud MCP out', async () => {
   const files = await runtimeFileList();
   for (const required of ['tools/ai-fighter/projected-ground.mjs', 'tools/ai-fighter/gait.mjs', 'scripts/pack-fighter.mjs',
-    'mcp/stdio.mjs', 'mcp/server.mjs', 'contracts/ai-fighter/v1/spec.json', 'server/ai-fighter-package.mjs'])
+    'mcp/stdio.mjs', 'mcp/server.mjs', 'contracts/ai-fighter/v1/spec.json', 'server/ai-fighter-package.mjs', ...shippedDocs])
     assert.ok(files.includes(required), required);
   for (const serverOnly of ['mcp/cloud.mjs', 'mcp/cloud/common.mjs', 'mcp/cloud/hosted-tools.mjs', 'mcp/file-input-probe.mjs', 'mcp/creator-sources.mjs', 'api/handler.mjs', 'api/http.mjs'])
     assert.ok(!files.includes(serverOnly), `${serverOnly} stays out of the local kit`);

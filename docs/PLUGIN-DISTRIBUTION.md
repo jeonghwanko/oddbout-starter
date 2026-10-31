@@ -13,7 +13,9 @@ The 0.2.x Windows bundle details below are historical and do not describe the cu
 
 ## Current source distribution and VM delivery
 
-The source bundle omits only `vendor/sprite-gen/docs/assets/` documentation demonstration media.
+The source bundle includes both READMEs, the document index, starting guide and creation/connection guides, including the unified MCP migration instructions.
+Repository-only operations and research docs and gameplay media remain in the repository; the bundled index links to them.
+From the pinned vendor tree, the source bundle omits only `vendor/sprite-gen/docs/assets/` documentation demonstration media.
 The pinned upstream source, package assets, workflow text and Apache-2.0 LICENSE/NOTICE remain included.
 Upstream Markdown image links into the omitted directory are not offline previews; use the upstream
 repository at the pinned revision if those examples are needed. The builder records every omission,

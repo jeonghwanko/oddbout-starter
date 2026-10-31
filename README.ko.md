@@ -60,7 +60,12 @@ ODDBOUT 플러그인 0.6.0 이상에는 이 연결이 이미 들어 있습니다
 
 **ODDBOUT 플러그인 하나로 제작·검토·등록을 진행합니다.** 사용자 PC 또는 지원되는 Dots 작업 공간에서
 제작하고 같은 연결 계정으로 등록합니다. 별도 AI Fighter Creator 플러그인은 필요하지 않습니다.
-[통합 플러그인 설치·전환 안내](docs/ODDBOUT-PLUGIN.md)를 참고하세요.
+계정 작업에는 ODDBOUT 클라우드 MCP 하나를, 로컬 제작·세션·작업·검사에는 `creation:tool` CLI를 사용합니다.
+기존 `ai-fighter`와 `ai-fighter-creator` 연결을 정리하기 전에 [통합 플러그인 설치·전환 안내](docs/ODDBOUT-PLUGIN.md)에 따라
+클라우드 계정과 로컬 도구를 확인하세요.
+
+creator-kit ZIP에는 한국어·영어 README와 제작·연결·MCP 전환 안내가 포함됩니다. 문서 지도에 함께 실린 저장소 전용 운영·연구 문서와
+게임 영상은 이 저장소에서 확인할 수 있습니다.
 
 내 PC나 작업 환경에서 명령을 실행하고 파일을 읽을 수 있는 Dot·Codex·Claude 등의 새 대화에 [시작 링크](https://github.com/jeonghwanko/oddbout-starter/blob/codex/game-context/START-HERE.md)를 보내세요. 원하는 캐릭터 설명이나 참고 이미지를 함께 보내면 됩니다. 예를 들면:
 
