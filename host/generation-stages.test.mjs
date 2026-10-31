@@ -749,6 +749,39 @@ test('a filmed clip the engine stopped cutting is cut again, then an operator; o
   assert.equal(stale.calls.filter(a => a.includes('video-set') && flag(a, '--states') === 'walk').length, 1);
 });
 
+test('the motion-auto cut stopped by the GPU after the first cut\'s alignment did is cut again on the next pass, not a new take', async () => {
+  // Pass 0: video-set's cut stops aligning (out of memory) and so does the motion-auto cut made right after it. Pass 1: the first cut
+  // aligns with a broken beat; the motion-auto cut, made again, aligns clean and is judged. Before 2026-11-01 (review of #211) it was
+  // never made again, and a second walk clip was filmed.
+  const flag = (args, name) => args[args.indexOf(name) + 1];
+  let loopRuns = 0, firstAligns = 0;
+  const { done, calls, events } = await scaleStage({ scaleFit: fitAll, alignPauseMs: 1, hooks: { og: async (args, flag, tool) => {
+    if (tool === 'video-loop' && flag(args, '--state') === 'walk') {
+      if (++loopRuns === 1) return { code: 137 };
+      await mkdir(flag(args, '--out-dir'), { recursive: true });
+      await writeFile(path.join(flag(args, '--out-dir'), 'side-walk.strip.json'), '{"frames":27}');
+      return { code: 0 };
+    }
+    // The walk's clip keyed as video-set keys it (the motion-auto cut is made of these frames); the fake goes on to write the cut.
+    if (tool === 'video-set' && flag(args, '--states') === 'walk') {
+      await mkdir(path.join(flag(args, '--out-dir'), 'side-walk', 'frames', 'keyed'), { recursive: true });
+      return null;
+    }
+    if (tool !== 'video-cycle-align' || !flag(args, '--loop-dir').includes(path.join('video-walk-0', 'side-walk', 'loop'))) return null;
+    if (++firstAligns <= 2) return { code: 1 };   // the try and its --multi-cycle warn
+    const dirOf = flag(args, '--loop-dir'), to = Number(flag(args, '--length'));
+    await writeFile(path.join(dirOf, 'side-walk.strip.json'), JSON.stringify({ frames: to,
+      cycle_align: { to, foot: { feet: ['left', 'right'] }, retake: { reason: 'broken-beat', reasons: ['broken-beat'] } } }));
+    return { code: 0 };
+  } } });
+  assert.equal(done.outcome, 'ok', JSON.stringify(done));
+  assert.equal(calls.filter(a => a.includes('video-set') && flag(a, '--states') === 'walk').length, 1, 'no second walk clip bought');
+  assert.equal(loopRuns, 2);
+  const walk = events.find(e => e.kind === 'gait' && e.gait === 'walk');
+  assert.deepEqual(walk.tried.map(t => [t.cut, t.reasons ?? (t.passed ? 'passed' : t.judge)]),
+    [['loop', ['not-aligned']], ['loop', ['broken-beat']], ['cut-auto', 'passed']]);
+});
+
 test('a cut refused for this PC (a tool missing) goes to an operator: another take would be refused the same way', async () => {
   const flag = (args, name) => args[args.indexOf(name) + 1];
   const { done, calls, events } = await scaleStage({ scaleFit: fitAll, uncut: { walk: 'tool' } });
