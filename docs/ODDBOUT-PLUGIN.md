@@ -1,15 +1,19 @@
-# ODDBOUT 통합 플러그인 (0.6.2)
+# ODDBOUT 통합 플러그인 (0.6.3)
 
-이 저장소의 0.6.2 키트 소스는 제작·검토를 위한 로컬 CLI와 호스팅 ODDBOUT MCP 구성을 한 제작 흐름으로
-묶는다. ZIP 생성·공개 배포, 계정의 플러그인 가져오기/갱신, 앱에서 설치·선택, Dots 대화의 MCP 도구 노출,
-OAuth 계정 확인은 서로 별도 단계다. 한 단계의 성공만으로 나머지도 완료됐다고 말하지 않는다.
+이 저장소의 0.6.3 키트 소스는 제작·검토용 로컬 CLI와 호스팅 MCP 클라이언트 설정을 제공한다. ChatGPT/Dots에서는 가져온 플러그인의
+`mcp.json` 실행과 클라우드 앱 연결이 별개다. 클라우드 앱을 먼저 연결한 뒤 Plugin Creator로 제작 스킬을 같은 앱에 추가한다.
+기존 앱 ID, OAuth 설정과 앱 정보를 유지하며, 별도 플러그인을 만들어 앱 연결이라고 여기지 않는다.
+
+ZIP 생성·공개 배포, 앱/커넥터 연결 배포, 개인 계정으로의 가져오기·갱신, 앱 설치·대화 선택, native 도구 노출,
+OAuth 계정 검증은 서로 다른 단계다. 한 단계의 성공으로 나머지를 완료했다고 말하지 않는다.
 
 ## 구성
 
 - `plugins/ai-fighter/plugin.json`: 호환을 위해 소스 폴더는 유지하지만 플러그인 이름은 `oddbout`이다.
-- `mcp.json`: 키트 소스에서 호스팅 MCP(`https://mcp.oddbout.com/mcp`, Google OAuth)를 구성한다. 이 파일이나 ZIP은
-  계정에 플러그인을 가져오거나 설치하지 않고, Dots에서 도구가 노출되는지 증명하지 않는다. 로컬 명령 서버는 넣지 않는다
-  (`streamable-http`만). 공개 디렉터리의 등록·심사 상태는 별도로 실제 현재 상태를 확인한다.
+- `mcp.json`: 키트 소스에서 호스팅 MCP(`https://mcp.oddbout.com/mcp`, Google OAuth)를 가져온 플러그인 안에서 실행한다.
+  ChatGPT 공식 안내에 따르면 원격 HTTPS MCP가 있는 플러그인도 데스크톱 전용일 수 있고 `.app.json` 참조만으로 이 제한이 사라지지 않는다
+  ([플러그인 관리 안내](https://learn.chatgpt.com/docs/enterprise/plugin-management#desktop-only-plugins)). Dots에서는 클라우드 앱을 연결한 뒤 제작 스킬을 같은 앱에 추가한다.
+  공개 디렉터리 상태는 별도로 확인한다.
 - `skills/create-fighter`: PC/Dots 실행 환경, 사용자 피드백, 패키지 검증, 공통 클라우드 등록을 안내한다.
 - 새 launcher의 `--status`: 소스·기존 runtime 해시를 검증하고 경로만 보고한다. 파일을 만들지 않는다.
 - `launcher.mjs --install --manifest-sha256 <검토된-runtime-manifest-SHA256>`: 명시적으로 사용자 runtime에 복사한다.
@@ -25,25 +29,25 @@ OAuth 계정 확인은 서로 별도 단계다. 한 단계의 성공만으로 �
 ## 빌드와 전환
 
 ```sh
-npm run plugin:build -- output/oddbout-development-0.6.2
-npm run plugin:bundle -- output/oddbout-0.6.2
+npm run plugin:build -- output/oddbout-development-0.6.3
+npm run plugin:bundle -- output/oddbout-0.6.3
 ```
 
 첫 명령은 이 사용자의 체크아웃/작업 공간을 가리키는 개발용 빌드다. 다른 기기 배포에는 두 번째 명령의
-`oddbout-0.6.2.zip`을 사용한다. ZIP은 한국어·영어 README, 제작 시작 안내·문서 지도·MCP 전환 안내,
+`oddbout-0.6.3.zip`을 사용한다. ZIP은 한국어·영어 README, 제작 시작 안내·문서 지도·MCP 전환 안내,
 원본 소스와 고정된 sprite-gen-agent(`vendor/sprite-gen`), 그 LICENSE/NOTICE를 포함하며
 OS별 node_modules·venv·로그인·사용자 결과물은 제외한다. 의존성은 추출한 런타임에서 잠금 파일로 설치한다.
 
-**0.6.2 키트 전환**: ZIP은 키트 배포 파일이지 개인 플러그인 생성·가져오기 또는 Dots 배포 완료 증거가 아니다.
-먼저 서버 배포와 ZIP 공개 배포를 각각 확인하고, 공식 앱에서 플러그인을 가져오거나 갱신했는지 확인한 다음,
-대상 Dots 대화에서 해당 플러그인을 선택하고 호스트의 도구 검색/카탈로그에서 `get_profile`을 찾아 직접 호출한다.
-`get_profile`이 의도한 등록 계정을 반환하기 전에는 연결 완료라고 하지 않는다. 서버가 `get_profile`을 제공하지 않거나
-`tools/list`가 비어 있거나 404/not-found가 나오면 원인을 미확인으로 두고 기존 OAuth 연결·세션·작업을 보존한다.
-로컬 CLI 로그인으로 클라우드 계정 연결을 대신하지 않는다.
+**Dots 연결 및 스킬 추가**: [클라우드 연결 안내](CLOUD-MCP.md)의 사용자 지정 MCP OAuth 절차를 마치고 앱 설정에서 연결을 확인한다.
+Plugin Creator로 `create-fighter` 스킬을 같은 앱에 추가한다. 기존 앱 ID, OAuth 설정과 앱 정보를 유지한다. 같은 앱에 스킬을 추가하는 기능이
+없으면 새 플러그인이나 앱 ID를 만들지 말고 한계를 보고한다.
 
-기존 플러그인이나 사용자 지정 MCP 연결을 제거하려면 사용자가 그 특정 항목을 제거해 달라고 명시적으로 요청해야 한다.
-그 전에 같은 Dots 대화에서 새 연결의 `get_profile`이 성공하고 기존과 같은 의도된 계정임을 확인한다. 기본 동작은
-삭제하지 않는 것이다. 빈 플러그인 목록, 404 또는 `not-found`는 기존 플러그인의 삭제·교체나 서버 장애를 증명하지 않는다.
+대상 Dots 대화에서 플러그인을 선택하고 계정 도구가 표시되는지 확인한다. `get_profile`이 의도한 등록 계정을 반환해야 연결이 검증된 것이다.
+서버 배포, ZIP 공개, 플러그인 갱신, 대화에서 선택, 도구 표시, 계정 확인은 각각 별도 단계다. 기존 연결은 대체 연결의 `get_profile`이
+같은 계정을 확인할 때까지 유지한다. 빈 목록, 404, `not-found`만으로는 삭제·교체·서버 장애를 단정하지 않는다. 사이트 로그인은 별도이며,
+로컬 CLI 로그인은 클라우드 계정 연결을 대신하지 않는다.
+
+기존 플러그인이나 사용자 지정 MCP 연결을 제거하려면 사용자가 그 항목을 제거해 달라고 명시적으로 요청해야 한다. 그 전에 같은 Dots 대화에서 대체 연결의 `get_profile`이 성공하고 의도한 기존 계정과 일치하는지 확인한다. 기본 동작은 제거하지 않는 것이다. 빈 목록, 404 또는 `not-found`는 플러그인 삭제·교체나 서버 장애를 증명하지 않는다.
 
 로컬 개발 설치는 기존 `ai-fighter-local` 마켓플레이스의 소스를 새 디렉터리로 전환하고
 `oddbout@ai-fighter-local`을 설치하는 별도 절차다. 이 명령의 성공은 ChatGPT 개인 플러그인 가져오기나

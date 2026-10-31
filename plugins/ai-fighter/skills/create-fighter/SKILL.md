@@ -26,6 +26,11 @@ Keep server discovery, account plugin import/update, installation and selection 
 and the returned account identity separate. A released ZIP, local Codex connection or successful public MCP tool listing
 does not establish any Dots-native account connection.
 
+In ChatGPT/Dots, an imported plugin's root `mcp.json`, even with an HTTPS server, may be desktop-only.
+Use the host's supported cloud MCP app connection and finish its OAuth sign-in; importing the kit ZIP does not do this.
+If the creation skill is needed, add it to the existing app-backed plugin through Plugin Creator, preserving the app
+binding and presentation. Do not copy the kit's root MCP declaration into that app-backed plugin.
+
 If `get_profile` is absent, report tool exposure as unverified; do not start local login, device pairing or generation
 to replace the missing cloud connection. Resolve the current plugin through the host's supported discovery and settings.
 Use only a returned current plugin URL/ID, never a historical private link or an invented replacement. A missing ID or
