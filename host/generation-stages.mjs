@@ -597,11 +597,14 @@ export const extOf = type => ({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/
  * on the kit's sprite-gen venv (pixels only, no provider) and resolves `{ code }`. Calls may overlap: `og` waits for a free codex slot.
  */
 export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy = async () => ({ code: 127 }), gaitStaggerMs = GAIT_STAGGER_MS,
-  alignPauseMs = ALIGN_PAUSE_MS, earlyPollMs = EARLY_POLL_MS, earlyGraceMs = EARLY_GRACE_MS, signal = null,
+  alignPauseMs = ALIGN_PAUSE_MS, earlyPollMs = EARLY_POLL_MS, earlyGraceMs = EARLY_GRACE_MS, signal = null, lowMarginFeetTaken = true,
   styleAnchor = path.join(path.dirname(fileURLToPath(import.meta.url)), STYLE_ANCHOR_FILE) }) {
   // One loop alignment at a time on this worker: RIFE on the GPU takes about 4 GB, and a walk and a run aligning at once (or two jobs) ran
   // an 8 GB card out of memory (2026-10-28).
   let aligning = Promise.resolve();
+  // A low-margin cut goes to the judge only when the kit's loop review takes it too (`lowMarginFeetTaken`, the worker reads the kit tree):
+  // an og self-update without `og setup` would otherwise judge a cut whose loop review then fails.
+  const alternate = strip => namedFeet(strip) || (lowMarginFeetTaken && lowMarginFeet(strip));
   const align = command => { const run = aligning.then(() => og(command)); aligning = run.catch(() => {}); return run; };
   // A wait ends early when the stage is stopped: the next run is refused then, and the stage ends at once instead of after the wait.
   const pause = ms => new Promise(done => {
@@ -838,7 +841,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       if ((await align(sprite(...args))).code !== 0) await align(sprite(...args, '--multi-cycle', 'warn'));
     }
     const meta = await readJson(strip).catch(() => null);
-    if (!meta || meta.frames !== GAIT_FRAMES.run || retakeReasons(meta).length || !feetAlternate(meta)) return null;
+    if (!meta || meta.frames !== GAIT_FRAMES.run || retakeReasons(meta).length || !alternate(meta)) return null;
     const judge = path.join(folder, 'judge');
     if ((await motionsPy(['judge-request', 'run', judge])).code !== 0 || (await motionsPy(['sheet', strip, path.join(judge, 'sheet.png')])).code !== 0)
       return null;
@@ -954,7 +957,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
           if (meta && !meta.cycle_align) { unaligned += 1; tried.push({ take, cut: path.basename(cut), reasons: ['not-aligned'] }); continue; }
           const refusals = meta => { const reasons = meta ? retakeReasons(meta) : ['unreadable'];
             if (meta && (range ? meta.frames < range.min || meta.frames > range.max : meta.frames !== GAIT_FRAMES[gait])) reasons.push(`frames-${meta.frames}`);
-            if (meta && !feetAlternate(meta)) reasons.push('feet-unnamed');
+            if (meta && !alternate(meta)) reasons.push('feet-unnamed');
             return reasons; };
           let reasons = refusals(meta);
           // ONE_STRIDE: a cut of two strides, over the range at its own length, is aligned again as the one stride it holds.

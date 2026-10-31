@@ -461,7 +461,7 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
 // `showGenSet()`: the show row's gen-set exit (no report), or null for no show row.
 async function scaleStage({ scaleCheck = () => 0, scaleFit, brokenRun = false, alignFails = {}, job: change = {}, spec = null, ownFrames = { walk: 24, run: 14 },
   uncut = {}, showGenSet = null, stop = null, alignPauseMs = 0, before = null, specDelayMs = 0, videoReport = null,
-  rowStates = null, earlyPollMs, hooks = {}, onArtifact = null }) {
+  rowStates = null, earlyPollMs, hooks = {}, onArtifact = null, lowMarginFeetTaken = true }) {
   const dir = await mkdtemp(path.join(tmpdir(), 'gen-scale-')), calls = [], events = [];
   await before?.(dir);
   await mkdir(path.join(dir, 'looks'), { recursive: true });
@@ -540,7 +540,7 @@ async function scaleStage({ scaleCheck = () => 0, scaleFit, brokenRun = false, a
   const api = { artifact: async (j, name) => { onArtifact?.(name); return { ok: true }; },
     progress: async (j, value, event) => { if (event) events.push(structuredClone(event)); return { ok: true }; },
     ...(spec || specDelayMs ? { spec: async () => { await new Promise(done => setTimeout(done, specDelayMs)); return spec; } } : {}) };
-  const stages = createStages({ og, api, motionsPy, fetchBytes: async () => new Uint8Array(), toWebp: async () => {}, gaitStaggerMs: 0, alignPauseMs,
+  const stages = createStages({ og, api, motionsPy, fetchBytes: async () => new Uint8Array(), toWebp: async () => {}, gaitStaggerMs: 0, alignPauseMs, lowMarginFeetTaken,
     ...(earlyPollMs ? { earlyPollMs } : {}), signal: stop?.signal ?? null });
   const job = { id: '0123abcd-0000', language: 'ko', brief, choice: 'a', appearanceRound: 0, candidates: [], motionNote: null, motionRound: 0, ...change };
   const done = await stages.motions(job, dir);
@@ -820,7 +820,7 @@ test('a motion-auto cut takes its turn on the GPU with the alignments, never bes
 test('a walk cut whose feet are unnamed only for a low shade margin is judged; one whose shade does not follow the step is refused', async () => {
   // The 2026-10-31 job (d242bcce): a clean walk, beat on time, no ghosts, refused before the judge for a shade margin of 0.0174 (rhythm 0.278).
   const flag = (args, name) => args[args.indexOf(name) + 1];
-  const run = why => scaleStage({ scaleFit: fitAll, hooks: { og: async (args, flag, tool) => {
+  const run = (why, lowMarginFeetTaken = true) => scaleStage({ scaleFit: fitAll, lowMarginFeetTaken, hooks: { og: async (args, flag, tool) => {
     if (tool !== 'video-cycle-align' || !flag(args, '--loop-dir').includes('video-walk')) return null;
     const dirOf = flag(args, '--loop-dir'), to = Number(flag(args, '--length'));
     await writeFile(path.join(dirOf, 'side-walk.strip.json'), JSON.stringify({ frames: to, cycle_align: { to, seam_ratio: 0.83,
@@ -838,6 +838,9 @@ test('a walk cut whose feet are unnamed only for a low shade margin is judged; o
   assert.deepEqual(walkRefused.tried[0].reasons, ['feet-unnamed']);
   assert.equal(walkRefused.tried[0].feet, 'rhythm');
   assert.ok(refused.calls.filter(a => a.includes('video-set') && flag(a, '--states') === 'walk').length > 1, 'refused: another take filmed');
+  // A kit tree whose loop review does not take it yet (og self-updated without og setup): refused as before.
+  const older = await run('low-margin', false);
+  assert.deepEqual(older.events.find(e => e.kind === 'gait' && e.gait === 'walk').tried[0].reasons, ['feet-unnamed']);
 });
 
 test('a cut refused for this PC (a tool missing) goes to an operator: another take would be refused the same way', async () => {
