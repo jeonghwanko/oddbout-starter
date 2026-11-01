@@ -83,6 +83,22 @@ A configured `AI_FIGHTER_ROOT` enables these local tools:
 | `get_creation_job` | Read one job or list jobs; never execute or retry |
 | `cancel_creation_job` | Discard an unstarted reservation |
 | `resolve_creation_job` | Record evidence resolving an unknown outcome |
+| `inspect_fighter_packaging` | Measure/encode existing game-pack inputs without writing; return layout blockers and supported fits |
+| `pack_fighter_package` | Build a new artifact package with all required file checks; never generate or register |
+
+For packaging recovery in Dots, first call the cloud MCP's `prepare_fighter_packaging`. It checks the deployed
+contract and returns structured invocations for these two workspace MCP tools. The cloud server cannot open a VM
+path: the agent runs the returned `creation:tool` invocation through the host's execution tool, using the supplied
+JSON arguments file. This is an agent task, not a request for the user to relay errors or patch the kit manually.
+The kit and existing workspace may be separate directories; install locked Node dependencies in the reviewed kit.
+
+Both tools take workspace-relative `planPath` and optional `outputPath`; output must be a new
+`output/<session>-work/artifacts/<name>` directory. `fitSheets: true` permits bounded resampling after normalizing
+body size, keeping every original frame identity, playback order, timing and contact step. It writes the contract's
+`pixelScale` so game size stays consistent. Use it only when the user permits resolution optimization and the live
+server advertises `texture-resolution-1`. Default false preserves resolution. Neither mode overwrites original
+assets, selected versions or an existing package; quality diagnostics stay deferred. Inspect output after a timeout.
+An inspection result is not full file validation; a successful build is not server registration.
 
 State lives at `output/<sessionId>-work/creation-session.json`; IDs are lowercase slugs. Each update
 supplies `expectedRevision`. On conflict, read again and reconcile the actual feedback. An exclusive

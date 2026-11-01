@@ -243,6 +243,15 @@ An attachment ID string, child-only preview or queued message is insufficient. S
 
 ## File-only packaging repair (0.6.8)
 
+With 0.6.9 and the server's `texture-resolution-1` capability, use native MCP `prepare_fighter_packaging` for
+packaging recovery. It returns structured `inspect_fighter_packaging` and `pack_fighter_package` invocations
+for the host's ordinary execution tool. Run them yourself against the preserved workspace; do not ask the user
+to relay diagnostics or hand-edit the packer. The cloud preparation response is not execution evidence.
+For an oversized sheet, `fitSheets: true` resamples only motions that exceed the sheet layout, preserves frame
+count and timing, and records the density used by the game to preserve apparent body size. It requires the user's
+resolution-optimization scope; it does not preserve pixel identity. All original files remain unchanged.
+Never submit density metadata to a server that does not advertise the capability. Final file/byte limits remain.
+
 0.6.8 removes numerical and visual quality gates from packaging and session progress. It accepts the
 existing `required`/`engine-loop` plan names without requiring another approval or rewriting diagnostics.
 A direct `requireReview` exception is a diagnostic result, not a full packer or registration result.

@@ -8,6 +8,7 @@ import { registerFileInputProbe } from './file-input-probe.mjs';
 import { registerCreatorSources } from './creator-sources.mjs';
 import { AUTH, FILE, READ, downloadHostFile, output } from './cloud/common.mjs';
 import { registerRegistrationTools } from './cloud/registration-tools.mjs';
+import { registerPackagingPreparation } from './cloud/packaging-tools.mjs';
 import { registerAgentTools } from './cloud/agent-tools.mjs';
 import { registerProfileSetTools } from './cloud/profile-set-tools.mjs';
 import { registerWorkshopTools } from './cloud/workshop-tools.mjs';
@@ -66,7 +67,7 @@ export const ARENA_URL = 'https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/
  * while the arena key is configured (`ODDBOUT_ARENA_AGENT_KEY`), so a release of this code alone does not change the published tool list.
  */
 export const PUBLIC_TOOLS = new Set(['get_fighter_spec', 'get_style_guide', 'list_fighters', 'get_rankings', 'get_fighter_record', 'get_cup', 'read_bout',
-  'get_fighter_story', 'get_world', 'list_generation_hosts']);
+  'get_fighter_story', 'get_world', 'list_generation_hosts', 'prepare_fighter_packaging']);
 /** Public tools that spend an arena budget: a signed-in caller's call counts on his owner (MCP 점검, 2026-10-27). */
 export const OWNER_BUDGET_TOOLS = new Set(['read_bout']);
 /**
@@ -229,6 +230,7 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
     if (directoryTitle) registerTool(name, directoryTitle, DIRECTORY_DESCRIPTIONS.get(name) ?? description, inputSchema, run, options);
   } : registerTool;
   registerRegistrationTools({ register, db, identity, invoke, fetcher, recordAgent });
+  registerPackagingPreparation({ register, invoke });
   registerProfileSetTools({ register, db, identity, invoke, fetcher });
   // 에이전트 도구 (3단계, 2026-10-27): read ODDBOUT's records, spar, enter cups and tune the fighting style. Listed only with the arena key.
   if (arena?.url && arena?.key) {

@@ -20,7 +20,7 @@ import { cleanupPublicFiles } from '../../api/profile-sets.mjs';
  * @param {{ register: Register, db: any, identity: Identity | null, invoke: Invoke, fetcher: typeof fetch, recordAgent: RecordAgent }} options
  */
 export function registerRegistrationTools({ register, db, identity, invoke, fetcher, recordAgent }) {
-  register('get_fighter_spec', '캐릭터 등록 규격', 'Read the fighter contract before authoring. All 11 motions and actual visual review are required. '
+  register('get_fighter_spec', '캐릭터 등록 규격', 'Read the fighter contract before authoring. All 11 motions and required file checks are required; quality diagnostics are deferred. '
     + 'This does not generate or register.',
     { section: z.enum(['overview', 'schema', 'creation']).default('overview') }, async ({ section }) => {
       if (section === 'overview') {
@@ -37,7 +37,7 @@ export function registerRegistrationTools({ register, db, identity, invoke, fetc
           'upload_fighter_asset for each pending asset', 'submit_fighter_registration', 'get_fighter_submission',
           'prepare_profile_set, upload_profile_set_asset, submit_profile_set with the front painting the user chose (overview: profileSet)'],
         delivery: 'Use the current conversation’s actual image previews and approved files. A file path or a readiness flag is not a preview.',
-        package: 'Produce fighter.json and assets/<id>.webp with the kit game-pack/pack commands, then pass actual host file attachments. '
+        package: 'Use prepare_fighter_packaging to inspect and build fighter.json and assets/<id>.webp from existing workspace files, then pass actual host file attachments. '
           + 'For an existing approved package, preserve the original bytes and verify them; '
           + 'do not regenerate or rebuild unchanged art. Never invent measurements or hashes.',
         files: 'If the host exposes a file input as an absolute path, supply the existing workspace file. '
@@ -134,7 +134,7 @@ export function registerRegistrationTools({ register, db, identity, invoke, fetc
       return invoke(`submissions/${submissionId}/assets/${assetId}`, 'PUT', bytes, { 'content-type': 'image/webp' });
     }, { write: true, openWorld: true, idempotent: true, files: ['file'] });
   register('submit_fighter_registration', '캐릭터 등록', 'Register the user-approved uploaded package after authoritative validation. '
-    + 'Requires the user’s explicit registration request. All asset uploads and visual reviews must be complete. '
+    + 'Requires the user’s explicit registration request and selected final package. All asset uploads and required file checks must be complete; quality diagnostics are deferred. '
     + 'A registered fighter starts in production; other people meet him after his owner enters him. '
     + 'Queued/validating is not registered; follow get_fighter_submission until final.',
     { submissionId: UUID_ARG() }, ({ submissionId }) => invoke(`submissions/${submissionId}/submit`, 'POST'), { write: true, publish: true, openWorld: true, idempotent: true });

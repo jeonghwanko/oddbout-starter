@@ -134,6 +134,11 @@
       "purpose": "이긴 뒤 승리 자세 반복."
     }
   },
+  "textureResolution": {
+    "minScale": 0.25,
+    "maxScale": 1,
+    "defaultScale": 1
+  },
   "features": [
     "profile-extras-1",
     "combat-stats-1",
@@ -141,7 +146,8 @@
     "combat-style-1",
     "extra-clips-1",
     "profile-lines-1",
-    "gait-frames-1"
+    "gait-frames-1",
+    "texture-resolution-1"
   ],
   "gaitFrames": {
     "walk": {

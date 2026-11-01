@@ -92,6 +92,8 @@ export const combatStats = Object.freeze({ keys: Object.freeze(['power', 'toughn
 
 export const limits = Object.freeze({ jsonBytes: 262144, assetBytes: 4000000, packageAssetBytes: 10000000,
   assetCount: 16, imageDimension: 4096, imagePixels: 16777216, packagePixels: 33554432, clipDurationMs: 10000 });
+// Storage density, not character size: the runtime divides by the same scale when drawing a clip.
+export const textureResolution = Object.freeze({ minScale: 0.25, maxScale: 1, defaultScale: 1 });
 
 /** @type {Record<string, Record<string, unknown>>} */
 const landmarks = {
@@ -121,7 +123,8 @@ function clipSchema(name, motion) {
     if (name === 'skill') fields.skill = optionalObject({ kind: { enum: combatStyle.skillKinds }, windupTo: step, recoverFrom: step,
       run: pair, launch: step, struck: step, windowFrom: step, windowTo: step, strikeFrom: step, strikeTo: step }, ['kind']);
   }
-  return { ...object(fields), description: motion.purpose };
+  return { ...optionalObject({ ...fields, pixelScale: number(textureResolution.minScale, textureResolution.maxScale) }, Object.keys(fields)),
+    description: motion.purpose };
 }
 
 /** @param {readonly string[]} keys */
@@ -176,9 +179,9 @@ export const spec = {
     imageEncoding: 'static-webp-with-alpha', frameIndex: 'zero-based-row-major', originUnit: 'frame-local-pixels',
     durationUnit: 'milliseconds', frames: 'contiguous-zero-based', landmarks: 'sequence-step-indices-except-borrowed-frame',
     mirror: 'right-source-left-runtime-flip', bodyHeight: 400, cameraElevationDegrees: 16 },
-  limits, motions, optionalClips,
+  limits, motions, optionalClips, textureResolution,
   // A reader that predates a feature rejects manifests using it (additionalProperties: false): writers emit it only when listed here.
-  features: ['profile-extras-1', 'combat-stats-1', 'profile-names-1', 'combat-style-1', 'extra-clips-1', 'profile-lines-1', 'gait-frames-1'],
+  features: ['profile-extras-1', 'combat-stats-1', 'profile-names-1', 'combat-style-1', 'extra-clips-1', 'profile-lines-1', 'gait-frames-1', 'texture-resolution-1'],
   gaitFrames: { ...gaitFrames, note: '걷기·달리기는 찍거나 그린 한 주기의 칸 수 그대로 낸다(이 범위 안). frames 는 마을 표준(걷기 16·달리기 12)이다. 칸마다 같은 durationMs 로 재생하고, 한 주기 시간이 걸음 속도를 정한다.' },
   profileExtras: { languages: ['ko', 'en'], conceptMaxLength: 800, namedMoves, moveNameMaxLength: 24, moveDescriptionMaxLength: 160, nameMaxLength: 40,
     names: '선택. profile.names.ko·en 은 그 언어 화면에 띄울 이름(각 40자). 없는 언어는 profile.name 을 띄운다.',

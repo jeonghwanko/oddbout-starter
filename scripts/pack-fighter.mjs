@@ -13,6 +13,7 @@ import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { validateFighter } from '../contracts/ai-fighter/validate.mjs';
 import { validateFighterPackage } from '../server/ai-fighter-package.mjs';
 import { requireLoopReview, requireReview } from '../tools/ai-fighter/gait.mjs';
+import { sheetLayout } from '../tools/ai-fighter/sheet-layout.mjs';
 
 /**
  * @typedef {{ width: number, height: number, data: Buffer }} Frame
@@ -30,7 +31,7 @@ import { requireLoopReview, requireReview } from '../tools/ai-fighter/gait.mjs';
  * @typedef {{ frame: number, durationMs: number }} Step
  * @typedef {{ assetId: string, frameWidth: number, frameHeight: number, columns: number, rows: number, frames: number[],
  *   origins: { originX: number, originY: number, groundContacts: Contact[] }[], loop: boolean, durationMs?: number, stridePixels?: number,
- *   sequence?: Step[], hitSequenceIndices?: number[], landmarks?: Record<string, unknown>, skill?: Record<string, unknown> }} Clip
+ *   sequence?: Step[], hitSequenceIndices?: number[], landmarks?: Record<string, unknown>, skill?: Record<string, unknown>, pixelScale?: number }} Clip
  */
 
 const BODY = spec.input.bodyHeight;
@@ -77,6 +78,7 @@ const planSchema = z.strictObject({
   encoding: z.enum(['lossless', 'lossy']).default('lossless'),
   quality: z.number().int().min(1).max(100).default(92),
   resample: z.enum(['lanczos3', 'nearest']).default('lanczos3'),
+  fitSheets: z.boolean().default(false),
   // Legacy policy names remain readable, but no quality report blocks file packaging.
   reviewPolicy: z.enum(['files-only', 'required', 'engine-loop', 'format-only']).default('files-only'),
   motions: /** @type {z.ZodType<Record<string, MotionPlan>>} */ (z.strictObject({ ...Object.fromEntries(MOTIONS.map(name => [name, motionPlan])),
@@ -85,11 +87,11 @@ const planSchema = z.strictObject({
 /** @typedef {z.infer<typeof motionPlan>} MotionPlan @typedef {z.infer<typeof planSchema>} Plan */
 
 class PackError extends Error {
-  /** @param {string} code @param {string} detail */
-  constructor(code, detail) { super(code); this.detail = detail; }
+  /** @param {string} code @param {string} detail @param {unknown} [data] */
+  constructor(code, detail, data) { super(code); this.detail = detail; this.data = data; }
 }
-/** @type {(code: string, detail: string) => never} */
-const fail = (code, detail) => { throw new PackError(code, detail); };
+/** @type {(code: string, detail: string, data?: unknown) => never} */
+const fail = (code, detail, data) => { throw new PackError(code, detail, data); };
 
 /** An RGBA frame. @type {(width: number, height: number, data?: Buffer) => Frame} */
 const frameOf = (width, height, data = Buffer.alloc(width * height * 4)) => ({ width, height, data });
@@ -296,23 +298,39 @@ async function packMotion(name, motion, animation, plan) {
       fail('GAIT_FRAMES', `${name}: needs ${fewest === most ? fewest : `${fewest} to ${most}`} distinct frames played once in order; found ${unique.length} distinct in ${steps.length} steps`);
     if (new Set(steps.map(step => step.durationMs)).size !== 1) fail('GAIT_TIMING', `${name}: every gait frame needs the same duration`);
   }
-  let groundY = 0, union = null;
-  for (const { frame } of unique) {
-    const solid = bounds(frame, ALPHA), any = /** @type {Bounds} */ (bounds(frame, 1)); // not null when solid is not
-    if (!solid) fail('EMPTY_FRAME', `${name}: a frame has no visible pixels`);
-    groundY = Math.max(groundY, solid.bottom);
-    union = union ? { left: Math.min(union.left, any.left), top: Math.min(union.top, any.top), right: Math.max(union.right, any.right), bottom: Math.max(union.bottom, any.bottom) } : any;
-  }
-  const origin = { x: motion.origin?.x ?? animation.anchor.x, y: animation.gaitReview?.geometry.groundY ?? motion.origin?.y ?? groundY };
-  const { width: canvasWidth, height: canvasHeight } = unique[0].frame;
+  /** @param {typeof unique} cells */
+  const geometry = cells => {
+    let groundY = 0, union = null;
+    for (const { frame } of cells) {
+      const solid = bounds(frame, ALPHA), any = /** @type {Bounds} */ (bounds(frame, 1)); // not null when solid is not
+      if (!solid) fail('EMPTY_FRAME', `${name}: a frame has no visible pixels`);
+      groundY = Math.max(groundY, solid.bottom);
+      union = union ? { left: Math.min(union.left, any.left), top: Math.min(union.top, any.top), right: Math.max(union.right, any.right), bottom: Math.max(union.bottom, any.bottom) } : any;
+    }
+    return { groundY, union: /** @type {Bounds} */ (union) };
+  };
+  const measured = geometry(unique);
+  let origin = { x: motion.origin?.x ?? animation.anchor.x, y: animation.gaitReview?.geometry.groundY ?? motion.origin?.y ?? measured.groundY };
   // The box may extend past the source canvas: feet drawn on its bottom edge still get room for contact ellipses.
   // union: set above, as unique is never empty
-  const box = { left: Math.min(/** @type {Bounds} */ (union).left, Math.floor(origin.x)) - MARGIN, top: /** @type {Bounds} */ (union).top - MARGIN,
-    right: Math.max(/** @type {Bounds} */ (union).right, Math.ceil(origin.x)) + MARGIN, bottom: Math.max(/** @type {Bounds} */ (union).bottom, Math.ceil(origin.y)) + MARGIN };
+  /** @param {Bounds} union */
+  const cropBox = union => ({ left: Math.min(union.left, Math.floor(origin.x)) - MARGIN, top: union.top - MARGIN,
+    right: Math.max(union.right, Math.ceil(origin.x)) + MARGIN, bottom: Math.max(union.bottom, Math.ceil(origin.y)) + MARGIN });
+  let box = cropBox(measured.union), pixelScale = 1;
+  const layoutLimits = { dimension: MAX_SHEET, grid: MAX_COLUMNS, frame: MAX_FRAME, margin: MARGIN, minScale: spec.textureResolution.minScale };
+  const originalLayout = sheetLayout(unique.length, box.right - box.left, box.bottom - box.top, layoutLimits);
+  if (!originalLayout.fits && plan.fitSheets && originalLayout.repair) {
+    pixelScale = originalLayout.repair.scale;
+    origin = { x: origin.x * pixelScale, y: origin.y * pixelScale };
+    // Keep original frame identities and playback steps. Never deduplicate again after resampling.
+    for (const item of unique) item.frame = await resize(item.frame, pixelScale, plan.resample);
+    box = cropBox(geometry(unique).union);
+  }
   const frameWidth = box.right - box.left, frameHeight = box.bottom - box.top;
-  if (frameWidth > MAX_FRAME || frameHeight > MAX_FRAME) fail('FRAME_TOO_LARGE', `${name}: ${frameWidth}x${frameHeight} exceeds ${MAX_FRAME}`);
-  const columns = Math.min(MAX_COLUMNS, unique.length, Math.floor(MAX_SHEET / frameWidth)), rows = Math.ceil(unique.length / columns);
-  if (rows > MAX_COLUMNS || rows * frameHeight > MAX_SHEET) fail('SHEET_TOO_LARGE', `${name}: ${unique.length} frames of ${frameWidth}x${frameHeight} do not fit ${MAX_SHEET}px in ${MAX_COLUMNS} rows`);
+  const layout = sheetLayout(unique.length, frameWidth, frameHeight, layoutLimits);
+  if (!layout.fits) fail(frameWidth > MAX_FRAME || frameHeight > MAX_FRAME ? 'FRAME_TOO_LARGE' : 'SHEET_TOO_LARGE', `${name}: ${unique.length} frames of ${frameWidth}x${frameHeight} exceed the supported sheet layout`,
+    { motion: name, ...layout, requiredFeature: 'texture-resolution-1', next: layout.repair ? 'fit-sheets' : 'contract-limit' });
+  const { columns, rows } = layout, { width: canvasWidth, height: canvasHeight } = unique[0].frame;
   const sheet = frameOf(columns * frameWidth, rows * frameHeight), contacts = /** @type {Contact[][]} */ ([]);
   unique.forEach(({ frame }, index) => {
     const left = index % columns * frameWidth, top = Math.floor(index / columns) * frameHeight;
@@ -334,11 +352,13 @@ async function packMotion(name, motion, animation, plan) {
     bytes: bytes.length, width: sheet.width, height: sheet.height };
   /** @type {Clip} */
   const clip = { assetId: id, frameWidth, frameHeight, columns, rows, frames: unique.map((_, i) => i), origins, loop: motionSpec.loop };
+  if (pixelScale !== 1) clip.pixelScale = pixelScale;
   if (motionSpec.kind === 'gait') {
     clip.durationMs = steps[0].durationMs;
     if (name === 'walk') {
       const measured = /** @type {number} */ (measureStride(contacts)); // null (unmeasured) fails measured >= 1
-      clip.stridePixels = animation.gaitReview?.stridePixels ?? animation.loopReview?.stridePixels ?? motion.stridePixels ?? (measured >= 1 ? measured : fail('WALK_TRAVEL_REQUIRED', 'walk: set stridePixels (1–1600) as nominal game travel; no gait review or regeneration is required'));
+      const supplied = animation.gaitReview?.stridePixels ?? animation.loopReview?.stridePixels ?? motion.stridePixels;
+      clip.stridePixels = supplied === undefined ? (measured >= 1 ? measured : fail('WALK_TRAVEL_REQUIRED', 'walk: set stridePixels (1–1600) as nominal game travel; no gait review or regeneration is required')) : supplied * pixelScale;
     }
   } else {
     clip.sequence = steps;
@@ -349,6 +369,8 @@ async function packMotion(name, motion, animation, plan) {
     if (motion.skill) clip.skill = structuredClone(motion.skill);
   }
   const report = { animation: motion.animation, playbackSteps: steps.length, distinctFrames: unique.length, frameSize: [frameWidth, frameHeight],
+    resolution: { pixelScale, sourceFrameSize: [originalLayout.frameWidth, originalLayout.frameHeight],
+      resampled: pixelScale === 1 ? false : plan.resample, apparentBodyHeight: BODY, frameCountPreserved: true, timingPreserved: true },
     origin: { x: round(origin.x), y: round(origin.y), source: motion.origin ? 'plan' : 'anchor-x, measured ground line' },
     contactsPerFrame: contacts.map(list => list.length), frameKeys: unique.map(u => u.key), events: animation.events,
     ...(animation.loop !== undefined && animation.loop !== motionSpec.loop ? { loopOverridden: { gamePack: animation.loop, contract: motionSpec.loop } } : {}),
@@ -379,17 +401,20 @@ function profileCrops(plan, idle) {
   return { portrait: { x, y, width: size, height: size }, preview };
 }
 
-/** Returns { ok, stage, out?, errors?, report? }. @param {string} planFile */
-export async function packFighter(planFile) {
+/** Returns { ok, stage, out?, errors?, report? }.
+ * @param {string} planFile @param {{ inspectOnly?: boolean, fitSheets?: boolean, out?: string }} [options] */
+export async function packFighter(planFile, options = {}) {
   let plan;
   try {
     const parsed = planSchema.safeParse(JSON.parse(await readFile(planFile, 'utf8')));
     if (!parsed.success) return { ok: false, stage: 'plan', errors: parsed.error.issues.map(i => ({ code: 'PLAN_SCHEMA', path: `/${i.path.join('/')}`, message: i.message })) };
     plan = parsed.data;
+    if (options.fitSheets !== undefined) plan.fitSheets = options.fitSheets;
+    if (options.out !== undefined) plan.out = options.out;
   } catch { return { ok: false, stage: 'plan', errors: [{ code: 'PLAN_UNREADABLE', path: '' }] }; }
   const base = path.dirname(path.resolve(planFile)), out = path.resolve(base, plan.out), gamePack = path.resolve(base, plan.gamePack);
   try {
-    if (await lstat(out).then(() => true, () => false)) fail('OUT_EXISTS', `${out} exists; choose a new folder`);
+    if (!options.inspectOnly && await lstat(out).then(() => true, () => false)) fail('OUT_EXISTS', `${out} exists; choose a new folder`);
     for (const [name, motion] of Object.entries(plan.motions)) checkPlanFields(name, motion);
     const clips = [...MOTIONS, ...OPTIONAL_CLIPS.filter(name => plan.motions[name])];
     const source = await loadPack(gamePack);
@@ -456,6 +481,10 @@ export async function packFighter(planFile) {
     // Clips pack independently, and most of the time is libvips WebP encoding off the main thread: run a few at once.
     // Every clip finishes before the first failure in clip order is thrown, so the reported error stays the same.
     const settled = await mapLimited(clips, PACK_CONCURRENCY, name => packMotion(name, plan.motions[name], animations[name], plan));
+    if (options.inspectOnly && settled.some(item => item.status === 'rejected')) return { ok: false, stage: 'pack-inspection',
+      errors: settled.flatMap((item, index) => item.status === 'rejected' ? [{ code: item.reason instanceof PackError ? item.reason.message : 'PACK_FAILED',
+        path: `/motions/${clips[index]}`, ...(item.reason instanceof PackError ? { detail: item.reason.detail, data: item.reason.data } : {}) }] : []),
+      motions: Object.fromEntries(settled.flatMap((item, index) => item.status === 'fulfilled' ? [[clips[index], item.value.report]] : [])) };
     const failed = settled.find(result => result.status === 'rejected');
     if (failed) throw failed.reason;
     const packed = Object.fromEntries(clips.map((name, index) => [name, /** @type {PromiseFulfilledResult<Awaited<ReturnType<typeof packMotion>>>} */ (settled[index]).value])); // none rejected
@@ -493,6 +522,8 @@ export async function packFighter(planFile) {
       qualityReview: 'deferred',
       review: 'Required file and contract checks only. Animation quality is deferred; optional gait/loop reports are diagnostics, not packaging or registration gates. Usable measurements do not certify visual quality.' };
     if (!contract.ok) return { ok: false, stage: contract.stage, errors: contract.errors, report };
+    if (options.inspectOnly) return { ok: true, stage: 'pack-inspection', report,
+      pending: ['full-file-validation', 'server-registration'], data: { assetBytes: fighter.assets.reduce((sum, asset) => sum + asset.bytes, 0) } };
     // Stage beside the target, validate the staged files (decoded pixels, crops, alpha), then publish with one rename.
     // A failing package never reaches `out`, so a corrected plan can retry into the same folder.
     const staging = path.join(path.dirname(out), `.${path.basename(out)}.pack-${process.pid}`);
@@ -510,7 +541,7 @@ export async function packFighter(planFile) {
     } catch (error) { await rm(staging, { recursive: true, force: true }); throw error; }
     return { ...checked, out, report: path.join(out, 'pack-report.json') };
   } catch (error) {
-    if (error instanceof PackError) return { ok: false, stage: 'pack', errors: [{ code: error.message, path: '', detail: error.detail }] };
+    if (error instanceof PackError) return { ok: false, stage: 'pack', errors: [{ code: error.message, path: '', detail: error.detail, ...(error.data ? { data: error.data } : {}) }] };
     throw error;
   }
 }

@@ -9,6 +9,8 @@ import example from '../contracts/ai-fighter/v1/example.fighter.json' with { typ
 import { toDuelStyle } from '../contracts/ai-fighter/validate.mjs';
 import { packFighter } from '../scripts/pack-fighter.mjs';
 import { loadSequence, loopReview, sequenceHash } from '../tools/ai-fighter/gait.mjs';
+import { creationTool } from '../scripts/creation-tool.mjs';
+import { toSidePreviewPack } from '../contracts/ai-fighter/validate.mjs';
 
 const fixture = fileURLToPath(new URL('../examples/sparring-bot/', import.meta.url));
 let temporary;
@@ -75,6 +77,53 @@ async function run(directory, value) {
   await writeFile(file, JSON.stringify(value));
   return packFighter(file);
 }
+
+test('workspace MCP repairs 57 large skill frames without changing playback or other motions', async () => {
+  const directory = await gamePack('large-skill');
+  const baselineResult = await run(directory, plan(directory, 'baseline'));
+  assert.equal(baselineResult.ok, true, JSON.stringify(baselineResult));
+  const baseline = JSON.parse(await readFile(path.join(directory, 'baseline/fighter.json')));
+  const packFile = path.join(directory, 'game-pack.json'), pack = JSON.parse(await readFile(packFile)), keys = [];
+  for (let start = 0; start < 57; start += 35) {
+    const count = Math.min(35, 57 - start), columns = 7, rows = Math.ceil(count / columns), frames = {}, tiles = [];
+    for (let i = 0; i < count; i++) {
+      const key = `skill/${start + i}`, rect = { x: i % columns * 534, y: Math.floor(i / columns) * 683, w: 534, h: 683 };
+      const input = await sharp({ create: { width: 534, height: 683, channels: 4,
+        background: { r: 80 + start + i, g: 100, b: 170, alpha: 1 } } }).png().toBuffer();
+      tiles.push({ input, left: rect.x, top: rect.y }); frames[key] = { frame: rect }; keys.push(key);
+    }
+    const image = `skill-${start}.png`;
+    await sharp({ create: { width: columns * 534, height: rows * 683, channels: 4, background: '#0000' } })
+      .composite(tiles).png().toFile(path.join(directory, image));
+    pack.textures.push({ image, frames });
+  }
+  pack.animations['bot/skill'] = { frames: keys, durations_ms: keys.map(() => 90), anchor: [267, 683], loop: false };
+  await writeFile(packFile, JSON.stringify(pack));
+  const originalPack = await readFile(packFile), originalImage = await readFile(path.join(directory, 'skill-0.png'));
+  const value = plan(directory, 'unused', p => { p.motions.skill = { animation: 'bot/skill', hitSequenceIndices: [28], skill: { kind: 'pincer' } }; });
+  await writeFile(path.join(directory, 'plan.json'), JSON.stringify(value));
+  const args = { planPath: 'large-skill/plan.json', outputPath: 'output/velora-work/artifacts/fitted' };
+  const blocked = await creationTool({ workspace: temporary, name: 'inspect_fighter_packaging', args });
+  assert.equal(blocked.structuredContent.ok, false);
+  const error = blocked.structuredContent.errors.find(error => error.code === 'SHEET_TOO_LARGE');
+  assert.equal(error.data.frameWidth, 550); assert.equal(error.data.frameHeight, 699); assert.equal(error.data.frames, 57);
+  assert.ok(error.data.repair.scale > .70 && error.data.repair.scale < .74);
+  assert.equal(await stat(path.join(temporary, args.outputPath)).then(() => true, () => false), false);
+  const repaired = await creationTool({ workspace: temporary, name: 'pack_fighter_package', args: { ...args, fitSheets: true } });
+  assert.equal(repaired.structuredContent.ok, true, JSON.stringify(repaired));
+  const output = path.join(temporary, args.outputPath), fighter = JSON.parse(await readFile(path.join(output, 'fighter.json')));
+  assert.equal(fighter.clips.skill.frames.length, 57);
+  assert.deepEqual(fighter.clips.skill.sequence, keys.map((_, frame) => ({ frame, durationMs: 90 })));
+  assert.deepEqual(fighter.clips.skill.hitSequenceIndices, [28]);
+  assert.ok(fighter.clips.skill.pixelScale > .70 && fighter.clips.skill.pixelScale < .74);
+  assert.ok(fighter.assets.find(asset => asset.id === 'skill').height <= 4096);
+  assert.equal(toSidePreviewPack(fighter).directions.side.skill.bodyHeight, 400 * fighter.clips.skill.pixelScale);
+  for (const asset of baseline.assets) assert.equal(fighter.assets.find(item => item.id === asset.id).sha256, asset.sha256);
+  assert.deepEqual(await readFile(packFile), originalPack);
+  assert.deepEqual(await readFile(path.join(directory, 'skill-0.png')), originalImage);
+  const retry = await creationTool({ workspace: temporary, name: 'pack_fighter_package', args: { ...args, fitSheets: true } });
+  assert.equal(retry.structuredContent.errors[0].code, 'OUT_EXISTS');
+});
 
 // Only a format fixture: a lying hold, repeated recovery cell, then standing.
 // Real characters must supply their own separate, visually reviewed get_up art.

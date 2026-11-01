@@ -485,6 +485,11 @@
               "type": "number",
               "minimum": 1,
               "maximum": 2000
+            },
+            "pixelScale": {
+              "type": "number",
+              "minimum": 0.25,
+              "maximum": 1
             }
           },
           "description": "정지 전신. 모든 동작과 같은 정체성."
@@ -560,6 +565,11 @@
               "type": "number",
               "minimum": 1,
               "maximum": 1600
+            },
+            "pixelScale": {
+              "type": "number",
+              "minimum": 0.25,
+              "maximum": 1
             }
           },
           "description": "걷기 한 주기. 양발 교대, 같은 접지 기준."
@@ -629,6 +639,11 @@
               "type": "number",
               "minimum": 1,
               "maximum": 2000
+            },
+            "pixelScale": {
+              "type": "number",
+              "minimum": 0.25,
+              "maximum": 1
             }
           },
           "description": "달리기 한 주기. 양발 교대."
@@ -730,6 +745,11 @@
               "minItems": 0,
               "maxItems": 0,
               "uniqueItems": true
+            },
+            "pixelScale": {
+              "type": "number",
+              "minimum": 0.25,
+              "maximum": 1
             }
           },
           "description": "전투 준비 자세 반복."
@@ -846,6 +866,11 @@
                   "maximum": 127
                 }
               }
+            },
+            "pixelScale": {
+              "type": "number",
+              "minimum": 0.25,
+              "maximum": 1
             }
           },
           "description": "3개 구간으로 나누어 재생할 연타. 접촉 시점 최소 3개."
@@ -947,6 +972,11 @@
               "minItems": 1,
               "maxItems": 1,
               "uniqueItems": true
+            },
+            "pixelScale": {
+              "type": "number",
+              "minimum": 0.25,
+              "maximum": 1
             }
           },
           "description": "강타의 준비·접촉·회수."
@@ -1113,6 +1143,11 @@
                   }
                 }
               }
+            },
+            "pixelScale": {
+              "type": "number",
+              "minimum": 0.25,
+              "maximum": 1
             }
           },
           "description": "돌진. 준비와 회수는 같은 선수의 명시한 프레임 사용."
@@ -1214,6 +1249,11 @@
               "minItems": 1,
               "maxItems": 1,
               "uniqueItems": true
+            },
+            "pixelScale": {
+              "type": "number",
+              "minimum": 0.25,
+              "maximum": 1
             }
           },
           "description": "가드와 막기. 접촉 직전 단계가 유지 자세."
@@ -1352,6 +1392,11 @@
                   "maxItems": 2
                 }
               }
+            },
+            "pixelScale": {
+              "type": "number",
+              "minimum": 0.25,
+              "maximum": 1
             }
           },
           "description": "피격·뒤로 젖힘·비틀거림·복귀."
@@ -1453,6 +1498,11 @@
               "minItems": 0,
               "maxItems": 0,
               "uniqueItems": true
+            },
+            "pixelScale": {
+              "type": "number",
+              "minimum": 0.25,
+              "maximum": 1
             }
           },
           "description": "기절/흔들림 반복."
@@ -1608,6 +1658,11 @@
                   "maxItems": 8
                 }
               }
+            },
+            "pixelScale": {
+              "type": "number",
+              "minimum": 0.25,
+              "maximum": 1
             }
           },
           "description": "넘어짐·착지·누움. 일어서기 프레임도 명시."
@@ -1780,6 +1835,11 @@
                   "maximum": 127
                 }
               }
+            },
+            "pixelScale": {
+              "type": "number",
+              "minimum": 0.25,
+              "maximum": 1
             }
           },
           "description": "고유 기술 한 동작: 예고·접촉(또는 돌진, 자세 창)·회수. 종류는 skill.kind."
@@ -1881,6 +1941,11 @@
               "minItems": 0,
               "maxItems": 0,
               "uniqueItems": true
+            },
+            "pixelScale": {
+              "type": "number",
+              "minimum": 0.25,
+              "maximum": 1
             }
           },
           "description": "경기 시작 전 제자리 등장 동작."
@@ -1982,6 +2047,11 @@
               "minItems": 0,
               "maxItems": 0,
               "uniqueItems": true
+            },
+            "pixelScale": {
+              "type": "number",
+              "minimum": 0.25,
+              "maximum": 1
             }
           },
           "description": "이긴 뒤 승리 자세 반복."
