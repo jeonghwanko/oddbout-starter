@@ -40,6 +40,11 @@ remain available. The active Dots runtime, sessions, jobs, selected versions and
 by this release; no generation, login or registration was run. The connected cloud App, `deploy/dots-release.json`
 and sprite-gen pin were not updated, and no service redeployment was needed. Keep in-progress creation on its current
 runtime; install the new kit separately for a new environment or review an update after that work finishes.
+That Dots pin is still 0.6.0 (`c102167`), whose context fetch uses plain `fetch`: `node dots.mjs --install` does not
+deliver this fix until the pin moves.
+
+Erratum (found after publication): the ZIP's `docs/ODDBOUT-PLUGIN.md` still names kit 0.6.4 and `oddbout-0.6.4.zip`.
+The immutable ZIP keeps that text; `main` corrects it, and the bundle test now checks it against the kit version.
 
 **Previous source-kit release: 0.6.4** (2026-11-01: use the existing cloud App; keep optional workspace tooling separate).
 Ordinary ChatGPT/Dots use starts with the existing available ODDBOUT cloud App, which carries account tools and the creation skill together.
