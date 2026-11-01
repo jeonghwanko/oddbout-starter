@@ -74,6 +74,26 @@ ffmpeg/ffprobe belong in the prepared environment image; bootstrap never uses su
 RIFE remains optional and is never a generation gate.
 Installation success is separate from tool, auth, generation and delivery readiness.
 
+### Node child-process output on managed hosts
+
+Some Dots hosts deny the socket metadata calls Node uses to classify inherited
+stdout/stderr. A child can then exit normally while its `console.log` output is
+empty. An empty result is not valid JSON, a completed installation, or a generation
+failure. Preserve the original command and records before considering another run.
+
+The front-door `dots.mjs` writes its JSON to the inherited file descriptors
+directly, preserving UTF-8 bytes, partial writes, stderr and failure exit codes.
+This change does not replace process-global streams, relax host policy, or update
+the runtime bound to an existing workspace. Other Node programs that rely on
+socket-backed streams are outside this fix.
+
+For relevant repository tests in an affected prepared VM, Node 22.22.2 supports
+`node --test --experimental-test-isolation=none test/cli-fd-output.test.mjs test/dots-start.test.mjs`.
+This avoids the test runner's extra file-level subprocess transport; the tests
+still execute their real CLI children and assertions. Keep ordinary CI invocation
+unchanged. Inspect actual test counts and exit status; never convert empty output
+or a failed test into a pass.
+
 ## Verified immutable bundle
 
 Use a reviewed release's immutable URL and **independently reviewed** helper/manifest hashes with
