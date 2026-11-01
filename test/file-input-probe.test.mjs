@@ -16,7 +16,7 @@ const args = { file, expectedBytes: png.length, expectedSha256: digest(png) };
 function runtime({ tokenClaims = claims, active = true, fetcher = async () => new Response(png) } = {}) {
   const calls = [];
   const db = { auth: { getClaims: async () => ({ data: { claims: tokenClaims }, error: null }) },
-    rpc: async name => { assert.equal(name, 'af_mcp_session_active'); return { data: active, error: null }; },
+    rpc: async name => { assert.equal(name, 'af_mcp_session_state'); return { data: active ? 'usable' : 'ended', error: null }; },
     from: () => { throw new Error('Probe must not access registration or persistence tables'); },
     storage: new Proxy({}, { get: () => { throw new Error('Probe must not persist file bytes'); } }) };
   const handler = createCloudHandler({ db, fetcher: async (url, options) => { calls.push({ url, options }); return fetcher(url, options); } });

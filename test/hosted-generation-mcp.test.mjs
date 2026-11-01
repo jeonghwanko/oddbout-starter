@@ -12,7 +12,7 @@ async function connector(g, hosted, fetcher = async () => new Response(png(512, 
     af_mcp: 'registration-v1', is_anonymous: false, exp: Math.floor(Date.now() / 1000) + 600 };
   const downloads = [];
   const db = { ...g.db, auth: { getClaims: async () => ({ data: { claims } }) },
-    rpc: (name, args) => name === 'af_mcp_session_active' ? { data: true } : g.db.rpc(name, args) };
+    rpc: (name, args) => name === 'af_mcp_session_state' ? { data: 'usable' } : g.db.rpc(name, args) };
   const handle = createCloudHandler({ db, hosted, fetcher: async (...args) => { downloads.push(args[0]); return fetcher(...args); } });
   let loseResponse = false;
   const rpc = async (method, params) => {
