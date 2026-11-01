@@ -6,7 +6,7 @@ ChatGPT/Dots에서는 현재 계정이나 워크스페이스에 제공된 **ODDB
 앱이 없거나 스킬이 빠졌다면 [클라우드 연결 안내](CLOUD-MCP.md)의 최초 연결·관리자 절차를 따른다.
 다른 사람의 비공개 플러그인 링크를 공용 설치 링크로 안내하지 않는다.
 
-이 저장소의 **0.6.9 제작 키트**는 직접 작업 공간에서 제작할 때 쓰는 소스·로컬 CLI와 데스크톱 MCP 클라이언트 설정이다.
+이 저장소의 **0.6.10 제작 키트**는 직접 작업 공간에서 제작할 때 쓰는 소스·로컬 CLI와 데스크톱 MCP 클라이언트 설정이다.
 키트 버전과 클라우드 앱 버전은 별개이며, 키트 배포로 앱이 설치·갱신·연결되지는 않는다.
 
 ZIP 생성·공개 배포, 앱/커넥터 연결 배포, 개인 계정으로의 가져오기·갱신, 앱 설치·대화 선택, native 도구 노출,
@@ -35,12 +35,12 @@ ODDBOUT에 맡기는 제작은 호스팅 작업자에서 실행된다. 사용자
 ## 빌드와 전환
 
 ```sh
-npm run plugin:build -- output/oddbout-development-0.6.9
-npm run plugin:bundle -- output/oddbout-0.6.9
+npm run plugin:build -- output/oddbout-development-0.6.10
+npm run plugin:bundle -- output/oddbout-0.6.10
 ```
 
 첫 명령은 이 사용자의 체크아웃/작업 공간을 가리키는 개발용 빌드다. 다른 기기 배포에는 두 번째 명령의
-`oddbout-0.6.9.zip`을 사용한다. 이는 검토된 작업 공간용 소스 전달이며 ChatGPT/Dots 앱 설치 절차가 아니다.
+`oddbout-0.6.10.zip`을 사용한다. 이는 검토된 작업 공간용 소스 전달이며 ChatGPT/Dots 앱 설치 절차가 아니다.
 ZIP은 한국어·영어 README, 제작 시작 안내·문서 지도·MCP 전환 안내,
 원본 소스와 고정된 sprite-gen-agent(`vendor/sprite-gen`), 그 LICENSE/NOTICE를 포함하며
 OS별 node_modules·venv·로그인·사용자 결과물은 제외한다. 의존성은 추출한 런타임에서 잠금 파일로 설치한다.
