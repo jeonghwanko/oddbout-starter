@@ -1,5 +1,11 @@
 # Dots saved environment Start instructions
 
+Use these instructions only after the user chooses generation in a saved VM. For cloud connection or account lookup,
+reuse the existing ODDBOUT App, verify native `get_profile` and use `check_creation_readiness(purpose: "connection")`.
+Find `create-fighter` in the host's actual skill list and read that same App's skill or linked support document before considering repairs;
+metadata alone does not verify skill access. Preserve the App's identity, OAuth connection and workspace bindings.
+Connection checks do not authorize generation or require VM setup, a generation subscription or installation of a separately reviewed creator-kit.
+
 The saved VM product path is **Dots + this user's Grok subscription**. Read
 [DOTS-VM-ARCHITECTURE.md](DOTS-VM-ARCHITECTURE.md) and
 [the environment preparation recipe](../deploy/dots-environment/README.md).

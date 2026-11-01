@@ -1,7 +1,10 @@
 # ODDBOUT plugin and workspace tools
 
-**The 0.6.3 desktop plugin source has an `mcp.json` client for the hosted MCP.** In ChatGPT/Dots, this is separate from
-the cloud app connection and does not establish that the plugin was imported, installed or selected in a chat. Follow
+**Reuse the existing available ODDBOUT cloud App in ChatGPT/Dots.** Select it in the intended chat and verify native `get_profile`.
+Find `create-fighter` in the host's actual skill list and read that same App's skill or linked support document; metadata alone does not verify skill access.
+This does not establish public availability; private App links are not public distribution links.
+The separately reviewed creator-kit provides optional local tooling and an `mcp.json` client for the hosted MCP;
+its build or ZIP does not establish cloud App installation or connection. Follow
 [ODDBOUT-PLUGIN.md](ODDBOUT-PLUGIN.md) for installation and migration. Registration uses the existing
 connected ODDBOUT account only after native `get_profile` verifies the intended account in the current conversation.
 Local filesystem and workspace tools run through the `creation:tool` CLI; cloud account operations use the hosted MCP
@@ -16,13 +19,18 @@ included in the plugin; each creator uses their own accounts.
 
 The kit source's `mcp.json` runs the hosted HTTPS endpoint from an imported desktop plugin. It does not create or connect a cloud app in Dots.
 The official [plugin management guidance](https://learn.chatgpt.com/docs/enterprise/plugin-management#desktop-only-plugins) says imported plugins
-declaring remote HTTPS MCP may be desktop-only; an `.app.json` reference alone does not change that. Connect the cloud app first, then use Plugin Creator
-to add this skill to the same app while preserving its identity and OAuth settings. Do not create a second wrapper plugin. Server deployment, ZIP release,
+declaring remote HTTPS MCP may be desktop-only; an `.app.json` reference alone does not change that. Check the existing App and its skill first.
+Only if the skill is actually missing may a maintainer add it through supported Plugin Creator functionality, preserving the same App's identity and OAuth settings.
+Custom MCP OAuth provisioning is for first-time setup or maintainer repair when no existing App is available, not routine repeat setup.
+Do not create a second wrapper plugin. Server deployment, ZIP release,
 plugin import/update, selection in a conversation, tool exposure and account verification are separate steps. Preserve existing OAuth connections and sessions
 during migration. The legacy stdio server remains for older clients, but its full-session handoff across the permission boundary is not part of this route.
 Missing tools, an empty listing, 404 or `not-found` is inconclusive; do not switch to local CLI login for cloud registration.
 
-## Install on this computer
+## Optional local development installation on this computer
+
+These steps are for an explicitly chosen local checkout workflow. Cloud account lookup and hosted creation do not require this installation.
+Verify the existing App's skill before considering local installation; do not add this local package merely to reconnect the App.
 
 From a checkout with Node 22.12+ and `npm ci --ignore-scripts` completed:
 

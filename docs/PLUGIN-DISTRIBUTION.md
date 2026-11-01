@@ -1,6 +1,16 @@
 # ODDBOUT distribution
 
-**Current release: 0.6.3** (2026-11-01: distinguish desktop MCP configuration from the ChatGPT/Dots cloud App connection, preserve other clients' setup, and add the creation skill to the same connected App).
+**Next source-kit release: 0.6.4** (prepared from this change; publication is verified separately below).
+Ordinary ChatGPT/Dots use starts with the existing available ODDBOUT cloud App, which carries account tools and the creation skill together.
+Do not import this source ZIP as a second cloud plugin. The ZIP is reviewed runtime/source delivery for an explicitly chosen workspace,
+or a desktop-client package; its version is independent of the connected App. Private App IDs and links are not public distribution links.
+
+The 2026-11-01 connection cleanup removed the old private 0.6.2 ZIP plugin after explicit approval of permanent deletion.
+The same Dots conversation then verified the existing account through native `get_profile`, read the new App's skill and support document,
+and listed only that App's creation skill across all pages. The connected App remained version 1.0.1. This is account-specific evidence,
+not proof of public availability or generation. Published old kit paths remain immutable release history, not cloud App installation instructions.
+
+**Latest published source-kit release: 0.6.3** (2026-11-01: distinguish desktop MCP configuration from the ChatGPT/Dots cloud App connection, preserve other clients' setup, and add the creation skill to the same connected App).
 Published at
 `https://oddbout.com/creator-kit/0.6.3/a228c3b3d1c04f934b92647e9dda4beab5ebf08b4582f7f696ca681645fa1361/release.json`
 (manifest SHA-256 `720e4cf0fb12dd69a1a8b29ae6565c963ea99bbd6cfdae41e8453a8c4084dbe6`, helper `fetch-creator-kit.py`
