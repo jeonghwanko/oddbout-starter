@@ -171,6 +171,15 @@ record their actual outputs as versions/evidence; do not claim they received man
 
 ## Final files and registration
 
+Use native cloud `prepare_fighter_packaging` for packaging failures. It returns exact invocations of the
+workspace MCP tools `inspect_fighter_packaging` and `pack_fighter_package`; execute them through the host's
+ordinary terminal tool using the returned JSON arguments, rather than asking the user to relay errors or
+hand-patch the kit. Cloud preparation does not read VM files and is not a successful package. A new reviewed
+kit can run separately against the existing workspace; keep the active runtime and selected originals.
+When the user permits resolution optimization and the live contract lists `texture-resolution-1`, use
+`fitSheets: true`: it keeps frames/timing and preserves game size with `pixelScale`. Never silently shrink
+only a motion's character or remove frames. Required file, contract and upload limits still apply.
+
 Quality diagnosis in `docs/GAIT-REVIEW.md` is optional later work. Preserve selected files and actual previews;
 no same-foot stance, visual verdict or numerical pass is required for packaging or registration.
 For GPT walk/run, use the kit CLI and the pinned sprite-gen-agent motion engine. Generate diagnostic key poses first;

@@ -1,5 +1,9 @@
 # ODDBOUT distribution
 
+0.6.9 candidate adds cloud MCP packaging preparation and workspace inspection/build tools. Oversized motions can
+use the `texture-resolution-1` contract to reduce storage resolution while preserving frames, timing and game size.
+Publish the matching contract and consumers before advertising the capability. Verified release details follow publication.
+
 **Current source-kit release: 0.6.8** (2026-11-01: file-only packaging and lossless large-animation recovery).
 
 Packaging and session progress now require file and contract checks; numerical and visual quality reports are

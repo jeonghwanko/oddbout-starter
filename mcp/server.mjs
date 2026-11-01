@@ -16,6 +16,7 @@ import { registerConnectionTool } from './connect-oddbout.mjs';
 import { identifier } from './creation-store.mjs';
 import { accountChoice, registerEnvironmentTools } from './creation-environment.mjs';
 import { errorCode } from './error-code.mjs';
+import { registerPackagingTools } from './packaging-tools.mjs';
 
 const annotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 // The required motions, then the optional clips (skill, entrance, victory) a package may add.
@@ -63,7 +64,7 @@ export function createServer({ root, remote, creatorPage, contextRequest, connec
       'Skip review only for explicitly delegated groups, after any earlier non-delegated group is accepted. A create/register request alone does not waive group feedback. Revise affected assets only and preserve selected versions; ask for feedback after showing the revision.',
       'Honor explicit reference roles and requested changes before asking about unresolved conflicts. Reuse confirmed choices. Distinguish image access from video access, and prepare only the access needed for the current stage.',
       'Use bundled vendor/sprite-gen with the current user\'s own generation account. Follow the confirmed unavailable-provider policy; never infer permission to switch provider or paid API. For an unknown timeout result, check the existing request before any new generation.',
-      'Validate actual motion as well as JSON and files. Decoder success does not override failed gait or ground-contact review. The geometric example bot is a format fixture, never a generated character deliverable.',
+      'Package with inspect_fighter_packaging and pack_fighter_package. Required file and contract checks block; numerical and visual quality diagnostics are deferred. Never regenerate to repair packaging. The geometric example bot is a format fixture, never a generated character deliverable.',
       'Follow creation guide group definitions and work notes to resume without repeating choices. A changed visual package needs current validation and selection; do not transfer an earlier version\'s registration authorization automatically.',
       registrationMode === 'cloud' ? 'After workspace validation and review, use the connected ODDBOUT prepare_fighter_registration, upload_fighter_asset, submit_fighter_registration and get_fighter_submission tools. Keep the returned submission ID and reuse the key for identical bytes. Never claim registration from local validation.'
         : 'With the current user signed in, submit_fighter_package uploads and queues server validation for the selected, validated package within the registration request. Do not ask for the same registration permission again. Preserve registered immutable files, reuse the idempotency key for identical-package retries, and use a new key for a changed package. Poll status and report only actual results.',
@@ -121,6 +122,7 @@ export function createServer({ root, remote, creatorPage, contextRequest, connec
   });
   // One validator for all file tools, so validate and submit share the single serial decoder.
   const validatePackage = root ? makePackageValidator(root) : undefined;
+  if (root) registerPackagingTools(server, { root, respond });
   const records = root ? registerCreatorTools(server, { root, contextRequest, respond, outputSchema, validatePackage }) : {};
   const environment = root ? registerEnvironmentTools(server, { root, respond, outputSchema }) : undefined;
   if (registrationMode !== 'cloud') registerConnectionTool(server, { remote, page: creatorPage, ...connectionOptions, respond, outputSchema });

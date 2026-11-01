@@ -1,0 +1,42 @@
+// @ts-check
+// The cloud connector cannot open a Dots VM path. It returns structured invocations for the local MCP executor.
+import { z } from 'zod';
+
+const absolute = z.string().min(1).max(512).refine(value => !/[\x00-\x1f]/.test(value)
+  && (/^\//.test(value) || /^[A-Za-z]:[\\/]/.test(value)), 'existing absolute workspace path required');
+const relative = z.string().min(1).max(512).refine(value => !/[\\:\x00-\x1f]/.test(value) && !value.startsWith('/')
+  && value.split('/').every(part => part && part !== '.' && part !== '..'), 'workspace-relative path required');
+/** @param {{ register: import('./common.mjs').Register, invoke: import('./common.mjs').Invoke }} options */
+export function registerPackagingPreparation({ register, invoke }) {
+  register('prepare_fighter_packaging', '기존 파일 포장·복구',
+    'Prepare inspection and packaging of existing fighter files in a Dots/PC workspace. Use for SHEET_TOO_LARGE or packaging recovery. '
+    + 'Returns exact local MCP/CLI invocations, not an executed package: this cloud server cannot read VM paths. '
+    + 'Run them through the host execution tool, inspect actual results, then continue the existing registration request. '
+    + 'Never regenerate or ask the user to relay packaging errors. fitSheets permits resolution reduction only within the user’s requested optimization; '
+    + 'all frame identities, playback timing, game size and required file checks remain. No generation account or new registration login is needed.',
+    { workspacePath: absolute, kitPath: absolute, planPath: relative, outputPath: relative, fitSheets: z.boolean().default(false) },
+    async ({ workspacePath, kitPath, planPath, outputPath, fitSheets }) => {
+      const result = await invoke('spec');
+      if (!result.ok) return result;
+      const features = result.data?.features ?? [];
+      if (fitSheets && !features.includes('texture-resolution-1')) return { ok: false, code: 'server-feature-missing',
+        feature: 'texture-resolution-1', next: 'Keep original files. Resolution fitting is not yet supported by the deployed contract.' };
+      const root = kitPath.replace(/\\/g, '/').replace(/\/$/, '');
+      const args = { planPath, outputPath, fitSheets };
+      return { ok: true, stage: 'workspace-execution-required', minimumKitVersion: '0.6.9',
+        kitRelease: 'https://github.com/jeonghwanko/oddbout-starter/blob/main/docs/PLUGIN-DISTRIBUTION.md',
+        contract: { features, limits: result.data?.limits, textureResolution: result.data?.textureResolution },
+        prerequisites: ['Use the reviewed kit in a separate directory; preserve the active workspace runtime and selected versions.',
+          'Install its locked Node dependencies if missing. Existing game-pack input needs no Python engine or generation login.'],
+        operations: ['inspect_fighter_packaging', 'pack_fighter_package'].map(tool => ({ tool, arguments: args,
+          execution: { command: 'node', args: [`${root}/scripts/creation-tool.mjs`, 'call', workspacePath, tool, '<arguments-json-file>'],
+            argumentsFileContents: args } })),
+        recovery: { intermediateTooLarge: 'Use the same game-pack request with --image-format webp and a new output directory; '
+          + 'only if needed, --max-bytes 200000000. The final upload limits still apply.',
+          sheetTooLarge: fitSheets ? 'The packer fits bounded texture resolution and records pixelScale; keep every frame and timing.'
+            : 'Inspect the returned layout. Preserve pixels unless the user requested resolution optimization.',
+          qualityDiagnostics: 'Deferred; never require a passing gait report or another quality approval to package.' },
+        next: 'Run inspection, then build into the new output path if supported. Read actual validation results. '
+          + 'Use the connected registration tools within the existing user request; never claim registration from local packaging.' };
+    }, { publicTool: true });
+}

@@ -223,6 +223,13 @@ Both routes:
 
 ### Packaging and registration
 
+- For workspace packaging recovery, use cloud `prepare_fighter_packaging` and execute its returned workspace MCP
+  `inspect_fighter_packaging` / `pack_fighter_package` calls through the host's normal execution tool. Do not make
+  the user relay errors or patch the kit. Cloud preparation is not evidence of file access or a completed package.
+- When resolution optimization is within the user's request and the live contract advertises `texture-resolution-1`,
+  `fitSheets: true` may reduce an oversized motion's storage resolution. Preserve original files, frame identities,
+  timing and marks; `pixelScale` preserves its apparent game size. File/byte limits stay required. Never regenerate.
+
 - `examples/sparring-bot` and `npm run example` are geometric test fixtures. They do not satisfy a request for a
   generated character; do not rename or restyle that fixture and call it sprite-gen output.
 - Build the package with `npm run sprite -- game-pack`, then `npm run fighter:pack -- <plan.json>` (see

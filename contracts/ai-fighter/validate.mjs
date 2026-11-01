@@ -195,13 +195,13 @@ export function toSidePreviewPack(data) {
   if (!result.ok) throw new Error('Invalid AI Fighter authoring data');
   const assets = new Map(data.assets.map((/** @type {any} */ asset) => [asset.id, asset]));
   const side = Object.fromEntries(Object.entries(data.clips).map(([name, clip]) => {
-    const { assetId, loop, landmarks, skill, ...fields } = clip;
+    const { assetId, loop, landmarks, skill, pixelScale = 1, ...fields } = clip;
     const asset = assets.get(assetId);
     // The skill clip's own marks become the runtime keys the engine times it by (`keys.skill` names the rule).
     const keys = name === 'dash' ? { standIns: landmarks }
       : name === 'fall' ? { getUp: landmarks.getUp } : name === 'skill' ? (({ kind, ...marks }) => ({ ...marks, skill: kind }))(skill) : landmarks;
     return [name, { ...fields, key: `ai-fighter-preview-${data.localId}-${name}-${asset.sha256}-${clip.frameWidth}x${clip.frameHeight}`, path: asset.path,
-      bodyHeight: data.appearance.bodyHeight, oneShot: !loop, durationMs: clip.durationMs ?? null,
+      bodyHeight: data.appearance.bodyHeight * pixelScale, oneShot: !loop, durationMs: clip.durationMs ?? null,
       ...(keys ? { keys } : {}), ...(name === 'fall' ? { lieSequenceIndex: landmarks.lieSequenceIndex } : {}),
       ...(name === 'slam' ? { impactSequenceIndex: clip.hitSequenceIndices[0] } : {}) }];
   }));

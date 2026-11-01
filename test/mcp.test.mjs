@@ -28,6 +28,7 @@ test('real stdio initialize, tools/list and tools/call cover authoring end to en
     assert.deepEqual(catalog.tools.map(t => t.name).sort(), ['get_fighter_spec', 'review_creation_progress', 'validate_fighter_manifest', 'validate_fighter_package',
       'list_creation_sessions', 'create_creation_session', 'get_creation_session', 'update_creation_session',
       'prepare_creation_job', 'get_creation_job', 'cancel_creation_job', 'resolve_creation_job', 'check_creation_readiness', 'connect_oddbout',
+      'inspect_fighter_packaging', 'pack_fighter_package',
       'submit_fighter_package', 'update_fighter_profile', 'open_creator_homepage', 'get_fighter_submission', 'get_registered_fighter',
       'get_creation_environment', 'update_creation_environment', 'prepare_generation_login'].sort());
     assert.ok(catalog.tools.every(t => t.outputSchema));

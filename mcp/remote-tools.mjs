@@ -81,6 +81,7 @@ export function registerRemoteTools(server, { remote, validatePackage, root, res
         ...('lines' in profile ? ['profile-lines-1'] : []),
         ...('stats' in combat ? ['combat-stats-1'] : []), ...('style' in combat ? ['combat-style-1'] : []),
         ...(Object.keys(spec.optionalClips).some(key => key in clips) ? ['extra-clips-1'] : [])];
+      if (Object.values(clips).some(clip => clip.pixelScale !== undefined)) used.push('texture-resolution-1');
       if (used.length) {
         const features = (await remote.request('spec'))?.data?.features ?? [];
         const missing = used.filter(feature => !features.includes(feature));

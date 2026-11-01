@@ -3,6 +3,9 @@
 Dot은 외형을 실제로 보여준 뒤 선택된 원화로 애니메이션을 만든다. 로컬 제작에는 이 저장소의 **sprite-gen**을 사용한다.
 이 문서에서 "sprite-gen"은 `vendor/sprite-gen`에 고정된 sprite-gen 엔진·CLI를 말하며, Alex Kim의 [sprite-gen](https://github.com/aldegad/sprite-gen)을 포크한 [sprite-gen-agent](https://github.com/jeonghwanko/sprite-gen-agent)에서 가져온다. 명령·경로·Python 패키지 이름은 그대로 `sprite-gen`이다.
 사용자는 만들고 싶은 캐릭터를 설명한다. Dot은 제작 도구 실행, AI Fighter 패키징, 검사와 요청받은 등록을 맡는다.
+포장 오류는 MCP `prepare_fighter_packaging`으로 진단·복구 경로를 받고, Dots가 반환된 작업 공간 도구를 직접 실행한다.
+사용자에게 오류를 전달시키거나 수동 패치를 요청하지 않는다. 시트가 너무 크면 서버의 `texture-resolution-1` 지원과
+사용자의 해상도 최적화 범위 안에서 `fitSheets`를 쓴다. 프레임·시간은 유지하며 `pixelScale`로 게임 내 크기를 보존한다.
 본인의 생성 계정과 선택한 실행 환경을 사용한다. 지원되는 직접 표시 외형 시안에는 PC가 필수가 아니다. 제작자의 로그인·토큰·서비스 키를 배포하지 않는다.
 
 ## 0. 대화하며 한 단계씩 만들기

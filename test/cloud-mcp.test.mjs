@@ -19,7 +19,7 @@ test('MCP discovery, file schemas, profile identity and HTTP auth challenge inte
   const init=await (await handle(request('initialize',{protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'test',version:'1'}}))).json();
   assert.equal(init.result.serverInfo.name,'oddbout-cloud');
   const list=await (await handle(request('tools/list'))).json();
-  assert.equal(list.result.tools.length,20);
+  assert.equal(list.result.tools.length,21);
   for(const name of ['prepare_fighter_registration','upload_fighter_asset','store_creator_source','prepare_profile_set','upload_profile_set_asset']) {
     const t=list.result.tools.find(t=>t.name===name), f=t.inputSchema.properties[t._meta['openai/fileParams'][0]];
     assert.deepEqual(new Set(f.required),new Set(['download_url','file_id']));
@@ -571,7 +571,7 @@ test('the directory edition lists only its tools, in English, with every hint; t
   const hello = { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'claude', version: '1' } };
   const [tools, full] = [await toolsAt(DIRECTORY_RESOURCE), await toolsAt(CLOUD_RESOURCE)];
   // /mcp keeps all its tools: ChatGPT's submitted plugin is pinned to its list.
-  assert.deepEqual([tools.length, full.length], [27, 48]);
+  assert.deepEqual([tools.length, full.length], [27, 49]);
   assert.deepEqual(tools.map(t => t.name).sort(), [...DIRECTORY_TITLES.keys()].sort());
   const dropped = full.map(t => t.name).filter(name => !DIRECTORY_TITLES.has(name));
   for (const name of ['request_hosted_fighter', 'list_generation_hosts', 'prepare_fighter_registration', 'submit_profile_set', 'store_creator_source',
