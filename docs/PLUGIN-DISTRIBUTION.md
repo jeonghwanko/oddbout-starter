@@ -1,6 +1,6 @@
 # ODDBOUT distribution
 
-**Source-kit candidate: 0.6.7** (publication verification is recorded after release).
+**Current source-kit release: 0.6.7** (2026-11-01: explicit public context file handoff).
 
 Adds an explicit per-invocation public game-context file and receipt to the context and workspace-tool CLIs.
 The receipt checks the configured source, raw-byte SHA-256 and Git blob identity, and a 15-minute retrieval window.
@@ -14,7 +14,42 @@ The guides distinguish Grok device login from the host's per-command execution a
 credential migration, automatic permission escalation or security-policy change is part of this release.
 `deploy/dots-release.json` and active Dots workspace bindings stay unchanged; publication does not update them.
 
-**Latest published source-kit release: 0.6.6** (2026-11-01: variable-frame Dots gait review; the Dots pin moves to this release).
+- [Download the 0.6.7 ZIP](https://oddbout.com/creator-kit/0.6.7/9094ac2c755abb0fad0f3edf51875dd3b335d1c06f7fd17099100adab814a6aa/oddbout-0.6.7.zip)
+- [Release manifest](https://oddbout.com/creator-kit/0.6.7/9094ac2c755abb0fad0f3edf51875dd3b335d1c06f7fd17099100adab814a6aa/release.json)
+- [Download helper](https://oddbout.com/creator-kit/0.6.7/9094ac2c755abb0fad0f3edf51875dd3b335d1c06f7fd17099100adab814a6aa/fetch-creator-kit.py)
+
+| Verified item | Value |
+| --- | --- |
+| ZIP size | 4,192,281 bytes |
+| ZIP SHA-256 | `22992a2a8354b088f6d9f4c64a880eb92be02d6cde3ad62027bc3921e486181c` |
+| Release manifest SHA-256 | `f5e49d4da32536efb60cdd8d993fc373311cc7963c1714169d2c21961974f4a2` |
+| Runtime manifest SHA-256 | `8fa8f4520cb156f84e85e6acbd897a8c5f79243d79ba676a31e2b561cc73bb7d` |
+| Helper SHA-256 | `b66c31ff833816dfa74c90d9155359d3fdd484dff8c12759e48addde01707592` (unchanged) |
+| Build source | `7ded1965102e6f9c386fe50a5b142d06fe25071d` ([PR #240](https://github.com/jeonghwanko/oddbout-starter/pull/240)) |
+| Main merge | `dbcb3d06614c29d5018f37260557faa36053c810` |
+| Pages publication | `2a53b5b8d2bc54564718823c8d54a50bc17e674f` |
+
+The PR's complete CI passed before merge, including the full test suite, sprite-gen setup and Edge type checks.
+Local validation passed 59 focused tests and strict typechecking; independent source review found no actionable defect.
+A separate Dots scratch checkout of the exact build commit installed locked dependencies and passed three focused
+test files. Ten actual CLI calls under default restricted execution loaded the public context through file input,
+retained missing-motion, failed-quality and changed-revision blockers, and rejected malformed or expired receipts.
+The 20,932-byte context matched a fresh full connected-GitHub retrieval; no production module was rewritten for the test.
+
+The trusted helper re-downloaded the public manifest and ZIP over HTTPS, verified both archive and runtime manifest,
+and extracted 738 files. The built archive's 729 runtime source files matched the checkout byte for byte; the generated
+package manifest reported 0.6.7. The downloaded transport, both CLIs, fd writer, READMEs and affected bundled guides
+matched those sources. The downloaded launcher's read-only status reported `installed: false`.
+Publication added only the ZIP, manifest and helper, preserving all 6,423 previous site/release files with no changes
+or deletions. Public checks returned HTTP 200 and matching bytes for all three release files and 12 existing site files.
+
+A separate credential-free network diagnostic also distinguished execution permissions: normal host-approved
+per-command execution reached the public context (HTTP 200) and Grok's proxy root (HEAD HTTP 404), preserving the
+configured proxy, destination rules and TLS. That approval runs a command outside its default sandbox; it is not a
+network-only grant. These responses establish reachability, not authenticated generation. Neither this diagnostic
+nor the kit verification logged in, generated, changed active workspace bindings, or republished a saved environment.
+
+**Previous source-kit release: 0.6.6** (2026-11-01: variable-frame Dots gait review; the Dots pin moves to this release).
 
 The Dots gait review accepts the contract's walk 12–32 and run 10–16 frame cycles (#236) instead of requiring 16/12, so a
 valid cycle is not resampled to fit. Every actual frame still needs its own phase; contact measurements, visual review and
