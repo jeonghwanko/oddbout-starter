@@ -12,6 +12,10 @@
 - MCP: `get_fighter_spec`의 `section: "context"`. `group`을 주면 해당 묶음의 모션 규격만 받는다.
 - CLI: `npm run creation:context`. 로그인·생성 계정 접근 없이 읽는다.
 
+Node CLI는 호스트에서 물려받은 HTTP(S) 프록시·`NO_PROXY`·CA 설정을 사용한다. 프록시 실패 시 직접 연결로 재시도하지 않는다.
+샌드박스의 `EPERM` 같은 연결 차단은 키트가 해제할 수 없으므로, 호스트가 제공하는 정상 네트워크 실행 승인 절차로 확인한다.
+코드는 승인 요청이나 권한을 높인 재실행을 자동으로 하지 않는다.
+
 이 공개 주소는 게임의 `tools/ai-fighter/publish-creation-context.mjs`가 갱신하는 배포 채널이다.
 제작 저장소에서 수치를 수동으로 작성하거나 고정 사본을 규칙 원본으로 쓰지 않는다.
 게임 빌드는 같은 생성기로 `ai-fighter/creation-context.json`도 제공한다. 개발 규격 채널은 배포된

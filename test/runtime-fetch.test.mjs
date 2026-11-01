@@ -5,11 +5,12 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const exec = promisify(execFile);
-const modules = Object.fromEntries(['api/client.mjs', 'api/runtime-fetch.mjs', 'mcp/connection-readiness.mjs', 'scripts/sprite-tools.mjs']
+const modules = Object.fromEntries(['api/client.mjs', 'api/runtime-fetch.mjs', 'mcp/connection-readiness.mjs', 'mcp/creation-context.mjs', 'scripts/sprite-tools.mjs']
   .map(file => [file, new URL(`../${file}`, import.meta.url).href]));
 const imports = `import { apiRequest, createRemoteClient } from ${JSON.stringify(modules['api/client.mjs'])};
 import { runtimeFetch } from ${JSON.stringify(modules['api/runtime-fetch.mjs'])};
-import { probePublic } from ${JSON.stringify(modules['mcp/connection-readiness.mjs'])};`;
+import { probePublic } from ${JSON.stringify(modules['mcp/connection-readiness.mjs'])};
+import { fetchCreationContext } from ${JSON.stringify(modules['mcp/creation-context.mjs'])};`;
 
 // Each child gets a loopback-only test proxy configuration. No real service or user session is used.
 async function child(code, env = {}) {
@@ -82,6 +83,20 @@ test('HTTPS proxy denial remains a network blocker through probes, API and real 
   assert.equal(value.refreshError, 'network-connect-forbidden');
   assert.ok(tunnels.length >= 3); assert.ok(tunnels.every(host => host === 'aaaaaaaaaaaaaaaaaaaa.supabase.co:443'));
   assert.doesNotMatch(stderr, /fixture-token|fixture-refresh|fixture-public-key/);
+});
+
+test('creation context uses the inherited HTTPS proxy and preserves a sanitized denial', async t => {
+  const tunnels = [], proxy = await server(t);
+  proxy.instance.on('connect', (request, socket) => {
+    tunnels.push(request.url); socket.end('HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n');
+  });
+  const { value, stderr } = await child(`
+    try { await fetchCreationContext(); }
+    catch (error) { console.log(JSON.stringify({ code: error.code, message: error.message })); }`,
+  { HTTPS_PROXY: proxy.url });
+  assert.deepEqual(value, { code: 'network-connect-forbidden', message: 'network-connect-forbidden' });
+  assert.ok(tunnels.length > 0); assert.ok(tunnels.every(host => host === 'raw.githubusercontent.com:443'));
+  assert.doesNotMatch(stderr, /fixture-secret|fixture-user/);
 });
 
 test('the host NO_PROXY rule and a host without proxies both preserve local access', async t => {
