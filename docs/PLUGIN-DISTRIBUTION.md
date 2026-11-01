@@ -1,6 +1,46 @@
 # ODDBOUT distribution
 
-**Current source-kit release: 0.6.5** (2026-11-01: use the host proxy for game-context fetches).
+**Current source-kit release: 0.6.6** (2026-11-01: variable-frame Dots gait review; the Dots pin moves to this release).
+
+The Dots gait review accepts the contract's walk 12–32 and run 10–16 frame cycles (#236) instead of requiring 16/12, so a
+valid cycle is not resampled to fit. Every actual frame still needs its own phase; contact measurements, visual review and
+evidence bound to the final pixels and timing remain required. The kit guide names the current version (#235). 0.6.6 also
+carries 0.6.5's proxy-aware context fetch.
+
+- [Download the 0.6.6 ZIP](https://oddbout.com/creator-kit/0.6.6/7d75ec86c87a2b2e3e6f8aeacc90702987022d0b698211b8f8b35d9d5c48c02d/oddbout-0.6.6.zip)
+- [Release manifest](https://oddbout.com/creator-kit/0.6.6/7d75ec86c87a2b2e3e6f8aeacc90702987022d0b698211b8f8b35d9d5c48c02d/release.json)
+- [Download helper](https://oddbout.com/creator-kit/0.6.6/7d75ec86c87a2b2e3e6f8aeacc90702987022d0b698211b8f8b35d9d5c48c02d/fetch-creator-kit.py)
+
+| Verified item | Value |
+| --- | --- |
+| ZIP size | 4,166,083 bytes |
+| ZIP SHA-256 | `1cb68930132e9e8fff4d03c86c26bbfdf6d597212feb5fc72c902417df859af4` |
+| Release manifest SHA-256 | `18e2349bc4e958b60ec8f8a9fd6a85d7ebc71e7473a38f097e83b180ce20b180` |
+| Runtime manifest SHA-256 | `7f615b1c983cc6ee4a424bb41a37b550036f70cbc2337223c49736bf3a351c05` |
+| Helper SHA-256 | `b66c31ff833816dfa74c90d9155359d3fdd484dff8c12759e48addde01707592` (unchanged from 0.6.5) |
+| Build source | `0a692cf886e7a51ecc90db781b331057080b59cb` (merge of [PR #237](https://github.com/jeonghwanko/oddbout-starter/pull/237)) |
+| Pages publication | `695e86cf9118bd0a46573d6b3de790251bea80c9` |
+
+The build source's tree equals PR #237's head `50bfb86`, whose CI passed before the merge. The trusted helper downloaded
+the public manifest and ZIP over HTTPS into a fresh directory, verified the archive and runtime manifest, and extracted
+736 files. The 89 tracked runtime source files matched the build source byte for byte; `package.json` differs only by the
+bundler's removal of repository-only scripts. The extracted `tools/ai-fighter/gait.mjs` reads the contract's frame range,
+`docs/ODDBOUT-PLUGIN.md` names 0.6.6, and `mcp/creation-context.mjs` defaults to `runtimeFetch`. The extracted launcher's
+read-only `--status` reported `installed: false` and created no files.
+
+Publication added only the ZIP, manifest and helper, preserved all 6,420 existing site/release files (none modified or
+deleted), and verified HTTP 200 and exact bytes for the three public files plus unchanged site entry documents. The 0.6.5
+ZIP and manifest still serve their recorded hashes. No generation, login or registration was run.
+
+`deploy/dots-release.json` now pins `0a692cf` (0.6.6), still `candidate` with `savedVmAcceptance: pending`. A real
+`node dots.mjs --install` from this change into a fresh scratch runtime home and workspace cloned that commit, ran the
+npm and sprite setup steps (both exit 0; the engine imports), bound 0.6.6/`0a692cf` with a clean tree and matching vendor
+pin, and stopped at Grok sign-in, which was not performed. Generation stayed unverified and was not dispatched. This
+does not republish the saved Dots environment: its new tasks keep the front-door checkout it was prepared with until the
+preparer reruns `deploy/dots-environment/install.sh` and republishes. Existing Dots tasks keep their workspace binding;
+no active Dots conversation, runtime, session or generated result was changed.
+
+**Previous source-kit release: 0.6.5** (2026-11-01: use the host proxy for game-context fetches).
 
 The CLI and workspace session/job context lookups now default to `runtimeFetch`, preserving the host's HTTP(S) proxy,
 `NO_PROXY` and CA settings. Host execution permission remains separate: this fix does not grant network access, retry
@@ -40,13 +80,13 @@ remain available. The active Dots runtime, sessions, jobs, selected versions and
 by this release; no generation, login or registration was run. The connected cloud App, `deploy/dots-release.json`
 and sprite-gen pin were not updated, and no service redeployment was needed. Keep in-progress creation on its current
 runtime; install the new kit separately for a new environment or review an update after that work finishes.
-That Dots pin is still 0.6.0 (`c102167`), whose context fetch uses plain `fetch`: `node dots.mjs --install` does not
-deliver this fix until the pin moves.
+At publication that Dots pin was still 0.6.0 (`c102167`), whose context fetch uses plain `fetch`, so
+`node dots.mjs --install` did not deliver this fix; 0.6.6 moved the pin.
 
 Erratum (found after publication): the ZIP's `docs/ODDBOUT-PLUGIN.md` still names kit 0.6.4 and `oddbout-0.6.4.zip`.
 The immutable ZIP keeps that text; `main` corrects it, and the bundle test now checks it against the kit version.
 
-**Previous source-kit release: 0.6.4** (2026-11-01: use the existing cloud App; keep optional workspace tooling separate).
+**Earlier source-kit release: 0.6.4** (2026-11-01: use the existing cloud App; keep optional workspace tooling separate).
 Ordinary ChatGPT/Dots use starts with the existing available ODDBOUT cloud App, which carries account tools and the creation skill together.
 Do not import this source ZIP as a second cloud plugin. The ZIP is reviewed runtime/source delivery for an explicitly chosen workspace,
 or a desktop-client package; its version is independent of the connected App. Private App IDs and links are not public distribution links.
