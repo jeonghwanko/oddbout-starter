@@ -1,5 +1,7 @@
 // Small, dependency-free front door. main can carry this without copying the service runtime.
 import { execFile } from 'node:child_process';
+import { writeSync } from 'node:fs';
+import { setTimeout as delay } from 'node:timers/promises';
 import { mkdir, lstat, readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
@@ -62,11 +64,34 @@ export async function launch(argv, { run = exec, loadRuntime = url => import(url
   if (typeof entry.start !== 'function') throw Error('runtime-start-contract-missing');
   return entry.start({ runtime, workspace, install: Boolean(options.install) });
 }
+// Write this CLI's JSON through its inherited fd. Some managed hosts classify
+// Node's socket-backed stdout/stderr as UNKNOWN and silently discard stream writes.
+// Keep byte offsets across short writes; do not replace process-global streams.
+export async function writeCliJson(fd, value, { write = writeSync, wait = () => delay(1), timeout = 15000 } = {}) {
+  const bytes = Buffer.from(JSON.stringify(value, null, 2) + '\n');
+  const deadline = performance.now() + timeout;
+  for (let offset = 0; offset < bytes.length;) {
+    if (performance.now() >= deadline) throw Error('front-door-output-timeout');
+    let count;
+    try { count = write(fd, bytes, offset, bytes.length - offset); }
+    catch (error) {
+      if (error.code === 'EINTR') continue;
+      if (error.code === 'EAGAIN' || error.code === 'EWOULDBLOCK') { await wait(); continue; }
+      throw error;
+    }
+    if (!Number.isInteger(count) || count <= 0 || count > bytes.length - offset) throw Error('front-door-output-write-failed');
+    offset += count;
+  }
+}
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   try {
     const result = await launch(process.argv.slice(2));
-    console.log(JSON.stringify(result, null, 2));
+    await writeCliJson(1, result);
     if (result.ok === false || result.nextAction?.action === 'repair-installation') process.exitCode = 1;
   }
-  catch (e) { console.error(JSON.stringify({ ok: false, code: /^[a-z][a-z-]+$/.test(e.message) ? e.message : 'front-door-failed-inspect-existing-runtime' })); process.exitCode = 1; }
+  catch (e) {
+    process.exitCode = 1;
+    try { await writeCliJson(2, { ok: false, code: /^[a-z][a-z-]+$/.test(e.message) ? e.message : 'front-door-failed-inspect-existing-runtime' }); }
+    catch { /* A broken stderr cannot deliver an error; preserve failure exit. */ }
+  }
 }
