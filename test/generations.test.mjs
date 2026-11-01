@@ -670,11 +670,13 @@ test('a picture ticket: two pictures from the site or a terminal, its owner\'s o
   const { sql, owner, call, healthy, objects } = await generation();
   try {
     await healthy();
-    const made = await call('POST', 'generations/upload-tickets');
+    // The site's link needs no secret: none is shown unless the agent will run the terminal command.
+    const linkOnly = (await call('POST', 'generations/upload-tickets')).body.ticket;
+    assert.deepEqual([linkOnly.secret, linkOnly.open, linkOnly.closed, linkOnly.uploads], [undefined, true, null, []]);
+    const made = await call('POST', 'generations/upload-tickets', { terminal: true });
     assert.equal(made.status, 200, JSON.stringify(made.body));
     const { id: ticket, secret } = made.body.ticket;
     assert.match(secret, /^afu_[a-f0-9]{64}$/);
-    assert.deepEqual([made.body.ticket.open, made.body.ticket.uploads], [true, []]);
     // The database keeps the secret's hash only.
     assert.equal((await sql.query('select count(*)::int as n from public.af_generation_upload_tickets where secret_hash = $1',
       [await sha256(new TextEncoder().encode(secret))])).rows[0].n, 1);
@@ -691,27 +693,71 @@ test('a picture ticket: two pictures from the site or a terminal, its owner\'s o
     const stored = objects.size;
     assert.deepEqual([(await terminal(png(512, 512), secret)).status, (await terminal(png(512, 512), secret)).body.code], [409, 'ticket-full']);
     assert.equal(objects.size, stored, 'a full ticket stores nothing');
+    // The agent sees what went in (an address for ten minutes) before the user confirms his rights to it.
     const read = (await call('GET', `generations/upload-tickets/${ticket}`)).body.ticket;
     assert.equal(read.secret, undefined);
-    assert.deepEqual([read.open, read.uploads.map(u => [u.id, u.width, u.used])],
-      [false, [[first.body.upload.id, 512, false], [second.body.upload.id, 300, false]]]);
+    assert.deepEqual([read.open, read.closed], [false, 'full']);
+    assert.deepEqual(read.uploads.map(u => [u.id, u.width, u.bytes, u.contentType, u.used, u.usable, /^https:\/\/storage\.test\/af-generation\/refs\//.test(u.url)]),
+      [[first.body.upload.id, 512, 64, 'image/png', false, true, true], [second.body.upload.id, 300, 64, 'image/png', false, true, true]]);
     assert.equal((await call('GET', `generations/upload-tickets/${ticket}`, undefined, 'other-token-0123456789')).body.code, 'not-found');
     // The request names them as it names any upload of his.
     const job = await call('POST', 'generations', { description: '빨간 글러브를 낀 고양이 복서, 귀가 크다', language: 'ko',
       refs: [first.body.upload.id, second.body.upload.id], rightsConfirmed: true }, undefined, { 'idempotency-key': crypto.randomUUID() });
     assert.equal(job.status, 200, JSON.stringify(job.body));
-    assert.deepEqual((await call('GET', `generations/upload-tickets/${ticket}`)).body.ticket.uploads.map(u => u.used), [true, true]);
+    assert.deepEqual((await call('GET', `generations/upload-tickets/${ticket}`)).body.ticket.uploads.map(u => [u.used, u.usable]), [[true, false], [true, false]]);
     // Past its thirty minutes: refused on both ways, before anything is stored.
-    const late = (await call('POST', 'generations/upload-tickets')).body.ticket;
+    const late = (await call('POST', 'generations/upload-tickets', { terminal: true })).body.ticket;
     await sql.query("update public.af_generation_upload_tickets set expires_at = now() - interval '1 second' where id = $1", [late.id]);
+    assert.equal((await call('GET', `generations/upload-tickets/${late.id}`)).body.ticket.closed, 'expired');
     assert.deepEqual([(await terminal(png(512, 512), late.secret)).status, (await terminal(png(512, 512), late.secret)).body.code], [410, 'ticket-expired']);
     assert.equal((await call('POST', `generations/uploads?ticket=${late.id}`, png(512, 512))).body.code, 'ticket-expired');
     assert.equal(objects.size, stored);
     // The database decides on its own too (two uploads racing past the API's check).
     await assert.rejects(sql.query('select public.af_generation_ticket_upload($1,$2,$3,$4,$5,$6,$7,$8)',
       [owner, ticket, crypto.randomUUID(), `refs/${owner}/${crypto.randomUUID()}.png`, 'image/png', 64, 512, 512]), /ticket-full/);
-    // Twelve tickets a day.
-    for (let i = 2; i < 12; i++) assert.equal((await call('POST', 'generations/upload-tickets')).status, 200);
+    await assert.rejects(sql.query('select public.af_generation_ticket_upload($1,$2,$3,$4,$5,$6,$7,$8)',
+      [owner, late.id, crypto.randomUUID(), `refs/${owner}/${crypto.randomUUID()}.png`, 'image/png', 64, 512, 512]), /ticket-expired/);
+    // Twelve tickets in 24 hours.
+    for (let i = 3; i < 12; i++) assert.equal((await call('POST', 'generations/upload-tickets')).status, 200);
     assert.deepEqual([(await call('POST', 'generations/upload-tickets')).status, (await call('POST', 'generations/upload-tickets')).body.code], [429, 'rate-limit']);
+    // A ticket's own lock: not af_generation_create's, which holds it while it takes the service's capacity lock.
+    const definition = (await sql.query("select pg_get_functiondef('public.af_generation_upload_ticket'::regproc) as d")).rows[0].d;
+    assert.match(definition, /74280505/); assert.doesNotMatch(definition, /74280502/);
+  } finally { await sql.close(); }
+});
+
+test('a ticket takes nothing once his twelve uploads of 24 hours are used, and is not given then', async () => {
+  const { sql, call, objects } = await generation();
+  try {
+    const ticket = (await call('POST', 'generations/upload-tickets', { terminal: true })).body.ticket;
+    for (let i = 0; i < 12; i++) assert.equal((await call('POST', 'generations/uploads', png(512, 512))).status, 200);
+    assert.equal((await call('GET', `generations/upload-tickets/${ticket.id}`)).body.ticket.closed, 'day-limit');
+    const stored = objects.size;
+    const refused = await call('POST', 'generations/ticket-uploads', png(512, 512), null, { 'x-oddbout-upload-ticket': ticket.secret });
+    assert.deepEqual([refused.status, refused.body.code, objects.size], [429, 'rate-limit', stored]);
+    assert.deepEqual([(await call('POST', 'generations/upload-tickets')).status, (await call('POST', 'generations/upload-tickets')).body.code], [429, 'rate-limit']);
+    // Tickets a week past their time go when he takes a new one; their pictures stay.
+    await sql.query("update public.af_generation_uploads set created_at = now() - interval '2 days'");
+    await sql.query("update public.af_generation_upload_tickets set expires_at = now() - interval '8 days', created_at = now() - interval '8 days'");
+    assert.equal((await call('POST', 'generations/upload-tickets')).status, 200);
+    assert.equal((await sql.query('select count(*)::int as n from public.af_generation_upload_tickets')).rows[0].n, 1);
+    assert.equal((await sql.query('select count(*)::int as n from public.af_generation_uploads')).rows[0].n, 12);
+  } finally { await sql.close(); }
+});
+
+test('a request\'s check refuses refs it could not take: another account\'s, used, older than a day or named twice', async () => {
+  const { sql, call, healthy } = await generation();
+  try {
+    await healthy();
+    const upload = async (token = 'owner-token-0123456789') => (await call('POST', 'generations/uploads', png(512, 512), token)).body.upload.id;
+    const ask = { description: '빨간 글러브를 낀 고양이 복서, 귀가 크다', language: 'ko' };
+    const check = refs => call('POST', 'generations/check', { ...ask, refs });
+    const mine = await upload(), others = await upload('other-token-0123456789'), old = await upload();
+    await sql.query("update public.af_generation_uploads set created_at = now() - interval '25 hours' where id = $1", [old]);
+    assert.deepEqual((await check([mine])).body, { ok: true });
+    for (const refs of [[others], [old], [mine, mine], [crypto.randomUUID()]]) assert.equal((await check(refs)).body.code, 'invalid-refs', JSON.stringify(refs));
+    const made = await call('POST', 'generations', { ...ask, refs: [mine], rightsConfirmed: true }, undefined, { 'idempotency-key': crypto.randomUUID() });
+    assert.equal(made.status, 200, JSON.stringify(made.body));
+    assert.equal((await check([mine])).body.code, 'invalid-refs');
   } finally { await sql.close(); }
 });

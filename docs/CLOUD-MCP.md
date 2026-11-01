@@ -335,34 +335,53 @@ ODDBOUT의 생성 워커가 사용자의 말(과 그림 1~2장)로 선수를 만
 | `revise_hosted_motion` | 동작 하나를 한 문장으로 다시. 나머지 동작은 그대로 |
 | `register_hosted_fighter` | 사용자가 동작을 승인한 뒤 등록. 프로필은 워커 초안 위에 사용자가 바꾼 칸만 얹는다(언어별 이름·대사는 칸별로). 다른 선수와 같은 서버 검사를 거친다 |
 | `cancel_hosted_fighter` | 신청 취소. 이미 쓴 토큰은 돌아오지 않는다(보유 토큰, 2026-10-31) |
-| `start_picture_upload` | 그림 올리기 표(30분, 그림 둘). 사이트 링크(`page`)와 터미널 명령(`command`)을 준다. 아래 |
-| `get_picture_upload` | 표가 받은 그림(`uploads`의 id·크기·쓰였는지)과 열림 여부 |
+| `start_picture_upload` | 그림 올리기 표(30분, 그림 둘). 사이트 링크(`page`)를 주고, `terminal: true`면 터미널 명령(`command`)도 준다. 아래 |
+| `get_picture_upload` | 표가 받은 그림(`uploads`: id·크기·`url` 10분·`used`·`usable`)과 닫힌 까닭(`closed`) |
 | `report_picture_link` | 진단: 에이전트가 가진 그림 주소의 종류·호스트만 서버 로그에 남긴다. 가져오지도 보관하지도 않는다. 아래 |
 
 ### 그림 올리기 표 (2026-11-01)
 
-사용자: "이미지 생성할 수 있는 모델은 다 지원하는게 맞지 않어? grok, gemini도 이미지 생성해서 붙일 수 있어야지."
-신청의 그림은 ChatGPT의 파일 인자(`fileParams`)로만 들어왔다. 서버는 그 파일을 OpenAI 파일 호스트에서만 내려받는다. 그래서 Grok·Claude·Gemini CLI·
-Cursor의 Grok Bot은 대화에서 만든 그림도, 사용자가 그린 그림도 붙일 수 없었다. 추천 조합(GPT 원화 + Grok 영상)은 그대로다. 그림은 원화의 참고일 뿐이다.
+ChatGPT 밖의 에이전트(Grok·Claude·Gemini CLI·Codex CLI·Cursor의 Grok Bot)는 파일 인자가 없다. 그래서 대화에서 만든 그림이나 사용자가 그린 그림을
+표로 보낸다. 그림은 원화의 참고다. 추천 조합(GPT 원화 + Grok 영상)은 그대로다.
 
-- `start_picture_upload`가 표를 만든다(`af_generation_upload_tickets`, 마이그레이션 `20261101100000`). 30분 동안 그림 둘을 받고, 계정당 하루 열두 장이다.
-- 사이트: `page`(`https://oddbout.com/creator.html#view=upload&ticket=<id>`)를 사용자에게 준다. 같은 계정으로 로그인한 사이트에서 그림을 고르면
-  `POST generations/uploads?ticket=<id>`로 올라간다. 링크에는 비밀이 없다. 다른 계정의 세션으로는 `not-found`다.
-- 터미널: `command`는 `curl -sS -H "x-oddbout-upload-ticket: afu_…" --data-binary "@<file>" …/functions/v1/ai-fighter/generations/ticket-uploads`이다.
-  비밀은 이때 한 번만 보이고 DB에는 해시만 남는다. 주소는 API 함수 자신이다. mcp.oddbout.com 게이트웨이는 본문을 64KB까지만 받는다.
-- 어느 쪽이든 그림은 보통 업로드와 같다(PNG·JPEG·WebP, 4MB, 한 변 64~4096px, `af_generation_upload`의 하루 열두 장). 찬 표는 `ticket-full`(409),
-  지난 표는 `ticket-expired`(410)이고 저장 전에 거절한다. DB 함수 `af_generation_ticket_upload`가 표의 행을 잠그고 한 번 더 판단한다.
-- `get_picture_upload`의 `uploads` id를 `request_hosted_fighter`의 `pictureUploads`로 넘긴다. 권리 확인은 다른 그림과 같다. 시간이 지난 표의 그림도 쓸 수 있다.
+- `start_picture_upload`가 표를 만든다(`af_generation_upload_tickets`, 마이그레이션 `20261101100000`). 표 하나는 30분 동안 그림 둘을 받는다.
+  계정당 24시간에 표 열두 개다. 같은 24시간의 업로드 열두 장을 다 쓴 계정에는 표를 주지 않는다. 시간이 지나고 일주일 된 표는 새 표를 만들 때 지운다.
+  그림은 남는다.
+- 사이트: `page`(`https://oddbout.com/creator.html#view=upload&ticket=<id>`)를 사용자에게 링크로 준다. 에이전트에 연결한 계정으로 로그인한 사이트에서
+  그림을 고르면 `POST generations/uploads?ticket=<id>`로 올라간다. 링크에는 비밀이 없다. 다른 계정의 세션으로는 `not-found`다.
+- 터미널: `terminal: true`일 때만 `command`를 준다. 그림 파일이 있는 PC에서 명령을 실행하는 에이전트만 쓴다. 명령은
+  `curl -sS -H "x-oddbout-upload-ticket: afu_…" --data-binary "@<file>" …/functions/v1/ai-fighter/generations/ticket-uploads`이다.
+  비밀은 이때 한 번만 보이고 DB에는 해시만 남는다. 링크만 쓰는 표의 비밀은 만들어도 보이지 않으므로, 터미널이 없는 대화에는 올릴 수 있는 값이 남지 않는다.
+  주소는 API 함수 자신이다(`apikey` 없이 받는다). mcp.oddbout.com 게이트웨이는 본문을 64KB까지만 받는다.
+- 어느 쪽이든 그림은 보통 업로드와 같다(PNG·JPEG·WebP, 4MB, 한 변 64~4096px, 24시간에 열두 장). 표가 못 받는 까닭은 본문을 읽기 전에 거절한다.
+  지난 표는 `ticket-expired`(410), 찬 표는 `ticket-full`(409), 열두 장을 다 쓴 계정은 `rate-limit`(429)이다. DB 함수 `af_generation_ticket_upload`가
+  표의 행을 잠그고 한 번 더 판단한다. 표의 잠금 키는 자기 것이다(`74280505`). `af_generation_create`의 `74280502`와 겹치지 않는다.
+- `get_picture_upload`는 `closed`(`expired`·`full`·`day-limit`, 열려 있으면 null)와 그림마다 `url`(10분), `bytes`, `used`, `usable`을 준다.
+  `usable`은 신청이 아직 받는 그림이다. 쓰이지 않았고 올린 지 하루가 안 됐다. 에이전트는 그림을 사용자에게 보여 주고 권리를 확인한 뒤
+  `usable` id를 `request_hosted_fighter`의 `pictureUploads`로 넘긴다.
+- 첨부 파일과 `pictureUploads`를 함께 넘기면 `generations/check`가 그 id들을 먼저 본다(계정의 것, 안 쓰임, 하루 안, 중복 없음).
+  거절이면 첨부 파일은 내려받지 않는다.
 
 **Grok 대화에서 바로 붙이기는 아직 꺼져 있다.** Grok이 만든 그림을 도구에 넘길 때 어떤 주소를 주는지, 그 호스트가 어디인지 아직 아무도 보지 못했다.
-호스트를 추측해 허용 목록에 넣지 않는다(AGENTS.md 규칙 1). `report_picture_link`는 사용자가 시험을 부탁할 때만 쓴다. 넘긴 값의 종류(url·data-url·
-url 아님), URL이면 프로토콜·호스트·포트·경로 깊이·확장자, 쿼리·조각의 유무만 기록한다. 경로·쿼리 자체는 남기지 않는다. 기록은 함수 로그의 한 줄
-`{"event":"picture-link-probe",…}`(클라이언트 id, `madeBy`)이고 그림을 가져오지 않는다. 시험 순서:
+호스트를 추측해 허용 목록에 넣지 않는다(AGENTS.md 규칙 1). `report_picture_link`는 사용자가 시험을 부탁할 때만 쓴다. 그림을 가져오지 않고, 함수 로그에
+`{"event":"picture-link-probe","client":…,"madeBy":…,…}` 한 줄만 남긴다. 값마다 남는 칸은 다음과 같다.
+
+| `kind` | 남는 칸 |
+| --- | --- |
+| `url` (http·https) | `protocol`·`hostname`·`port`·`hasUserInfo`·`hasQuery`·`hasFragment`·`pathSegments`·`extension`·`length`. 경로·쿼리 자체는 남기지 않는다 |
+| `blob-url` | 그 blob을 만든 http(s) `origin`, `length` |
+| `other-scheme` | `scheme`, `length`. `file-service://file-…` 같은 값의 뒤쪽은 호스트가 아니라 파일 이름일 수 있어 남기지 않는다 |
+| `data-url` | `mediaType`, `length` |
+| `not-a-url` | `length`, 앞 40자의 모양 `shape`. 어느 문자의 글자든 `a`, 숫자는 `9`로 바꾼다 |
+
+8,000자보다 긴 값(data: 주소)은 에이전트가 앞 200자와 전체 길이(`fullLength`)만 넘긴다. 시험 순서는 다음과 같다.
 
 1. Grok(grok.com, Cursor의 Grok Bot)에서 그림을 하나 만들게 한다.
 2. "방금 만든 그림 주소를 report_picture_link로 보내 줘"라고 한다.
 3. 운영자가 로그에서 그 줄을 읽는다. 그 호스트의 그림을 서버가 로그인 없이 받을 수 있는지 따로 확인한다.
 4. 받을 수 있으면 그 호스트만 허용하는 주소 인자를 더한다. 따로 정한다.
+
+배포 순서: 마이그레이션 → `ai-fighter` → Render → 사이트(게임 저장소의 그림 보내기 화면) → `ai-fighter-mcp`. 도구가 주는 링크는 사이트가 먼저 있어야 열린다.
 
 성공한 작업 응답에는 `next`(`hostedNext`)가 있다(목록은 각 `jobs[].next`): 사용자에게 무엇을 보이고 물을지, 또는 얼마나 기다릴지.
 한 선수는 대략 신청 → 외형 두 장(몇 분) → 고르기 → 동작 11개(15~30분) → 확인 → 등록이다.

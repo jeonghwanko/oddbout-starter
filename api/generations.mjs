@@ -49,6 +49,8 @@ export const JOIN_CODE = /^ohj_[a-f0-9]{40}$/;
  */
 export const UPLOAD_TICKET = /^afu_[a-f0-9]{64}$/;
 export const UPLOAD_TICKET_HEADER = 'x-oddbout-upload-ticket';
+/** Uploads an account keeps in 24 hours (af_generation_upload), and how long one stays for a request (af_generation_create). */
+const UPLOADS_A_DAY = 12, DAY_MS = 86_400_000;
 /** @type {(bytes: Uint8Array) => string} */
 const hex = bytes => Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
 const workerToken = () => `afw_${hex(crypto.getRandomValues(new Uint8Array(32)))}`;
@@ -322,30 +324,58 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     billing: row.billing, dailyLimit: row.daily_limit });
 
   /**
-   * A ticket of the owner's and the pictures it took (그림 올리기 표): open while it has room and time.
-   * @param {string} owner @param {string} ticketId
+   * The owner's uploads a request may still name: his, unused, from the last day, each once (af_generation_create's rule, asked before a
+   * connector moves an attached picture — 리뷰 2026-11-01: a picture was kept, then the request refused a ticket's id).
+   * @param {string} owner @param {string[]} refs
    */
-  async function ticketView(owner, ticketId) {
+  async function usableRefs(owner, refs) {
+    if (new Set(refs).size !== refs.length) throw new Problem(422, 'invalid-refs');
+    const { data, error } = await db.from('af_generation_uploads').select('id,job_id,created_at').eq('owner_id', owner).in('id', refs);
+    if (error) throw new Problem(503, 'database-unavailable');
+    /** @type {{ job_id: string | null, created_at: string }[]} */
+    const found = data ?? [];
+    if (found.length !== refs.length || !found.every(upload => upload.job_id === null && Date.parse(upload.created_at) > Date.now() - DAY_MS))
+      throw new Problem(422, 'invalid-refs');
+  }
+  /**
+   * A ticket of the owner's and the pictures it took (그림 올리기 표). `closed` says why it takes no more: `expired` (its thirty minutes),
+   * `full` (two), `day-limit` (his twelve uploads of 24 hours). Each picture comes with its address for ten minutes, so the agent shows the
+   * user what went in before he confirms his rights to it, and `usable`: a request may still name it (unused, from the last day).
+   * @param {string} owner @param {string} ticketId @param {boolean} [addresses]  false: without the pictures' addresses (an upload's own check)
+   */
+  async function ticketView(owner, ticketId, addresses = true) {
     const { data: ticket, error } = await db.from('af_generation_upload_tickets').select('id,expires_at').eq('id', id(ticketId)).eq('owner_id', owner).maybeSingle();
     if (error) throw new Problem(503, 'database-unavailable');
     if (!ticket) throw new Problem(404, 'not-found');
-    const { data, error: uploadError } = await db.from('af_generation_uploads').select('id,width,height,job_id,created_at').eq('ticket_id', ticket.id).order('created_at');
+    const { data, error: uploadError } = await db.from('af_generation_uploads').select('id,path,content_type,bytes,width,height,job_id,created_at')
+      .eq('ticket_id', ticket.id).order('created_at');
     if (uploadError) throw new Problem(503, 'database-unavailable');
-    /** @type {{ id: string, width: number, height: number, job_id: string | null }[]} */
+    /** @type {{ id: string, path: string, content_type: string, bytes: number, width: number, height: number, job_id: string | null, created_at: string }[]} */
     const uploads = data ?? [];
-    const expired = !(Date.parse(ticket.expires_at) > Date.now());
-    return { id: ticket.id, expiresAt: ticket.expires_at, open: !expired && uploads.length < GENERATION_LIMITS.refs, expired,
-      uploads: uploads.map(upload => ({ id: upload.id, width: upload.width, height: upload.height, used: upload.job_id !== null })) };
+    let closed = !(Date.parse(ticket.expires_at) > Date.now()) ? 'expired' : uploads.length >= GENERATION_LIMITS.refs ? 'full' : null;
+    if (!closed) {
+      const { data: day, error: dayError } = await db.from('af_generation_uploads').select('id').eq('owner_id', owner)
+        .gt('created_at', new Date(Date.now() - DAY_MS).toISOString());
+      if (dayError) throw new Problem(503, 'database-unavailable');
+      if ((day ?? []).length >= UPLOADS_A_DAY) closed = 'day-limit';
+    }
+    const urls = addresses ? await signed(uploads.map(upload => upload.path)) : new Map();
+    return { id: ticket.id, expiresAt: ticket.expires_at, open: !closed, closed,
+      uploads: uploads.map(upload => ({ id: upload.id, contentType: upload.content_type, bytes: upload.bytes, width: upload.width, height: upload.height,
+        used: upload.job_id !== null, usable: upload.job_id === null && Date.parse(upload.created_at) > Date.now() - DAY_MS,
+        url: urls.get(upload.path) ?? null })) };
   }
   /**
-   * A reference picture kept privately for its owner: a known kind within the sizes, twelve a day; under a ticket, two while it is open.
+   * A reference picture kept privately for its owner: a known kind within the sizes, twelve in 24 hours; under a ticket, two while it is open.
    * @param {Request} request @param {string} owner @param {string | null} ticket
    */
   async function keepPicture(request, owner, ticket) {
-    // A ticket that cannot take it says so before the picture is stored (the database decides again when it is).
+    // A ticket that cannot take it says so before the picture is read or stored (the database decides again when it is).
     if (ticket) {
-      const view = await ticketView(owner, ticket);
-      if (!view.open) throw new Problem(view.expired ? 410 : 409, view.expired ? 'ticket-expired' : 'ticket-full');
+      const { closed } = await ticketView(owner, ticket, false);
+      if (closed === 'expired') throw new Problem(410, 'ticket-expired');
+      if (closed === 'full') throw new Problem(409, 'ticket-full');
+      if (closed === 'day-limit') throw new Problem(429, 'rate-limit');
     }
     const bytes = await readBody(request, GENERATION_LIMITS.refBytes), image = probeImage(bytes), [min, max] = GENERATION_LIMITS.refSide;
     if (!image) throw new Problem(415, 'image-required');
@@ -443,15 +473,20 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       return { ok: true, upload: await keepPicture(request, owner, ticket === null ? null : id(ticket)) };
     }
     if (method === 'POST' && route === 'generations/upload-tickets') {
+      // The secret goes only to an agent that will run the terminal command (`terminal`); for the site's link it is made and never shown,
+      // so a chat with no terminal holds nothing that uploads (리뷰 2026-11-01).
+      const body = request.body ? fields(await readJson(request, 200), ['terminal']) : {};
+      if (body.terminal !== undefined && typeof body.terminal !== 'boolean') throw new Problem(422, 'invalid-body');
       const secret = `afu_${hex(crypto.getRandomValues(new Uint8Array(32)))}`;
       const made = await call('af_generation_upload_ticket', { p_owner: owner, p_id: crypto.randomUUID(), p_secret_hash: await sha256(new TextEncoder().encode(secret)) });
-      return { ok: true, ticket: { ...await ticketView(owner, made.id), secret } };
+      return { ok: true, ticket: { ...await ticketView(owner, made.id), ...(body.terminal ? { secret } : {}) } };
     }
     if (method === 'GET' && parts.length === 3 && parts[1] === 'upload-tickets') return { ok: true, ticket: await ticketView(owner, parts[2]) };
     // The checks of a request without making it (MCP 점검 2026-10-29): the connector asks before it uploads the user's pictures, so a
     // refused request keeps none of them. Nothing is made or kept.
     if (method === 'POST' && route === 'generations/check') {
-      const { target } = await requested(request, owner);
+      const { target, refs } = await requested(request, owner);
+      if (refs.length) await usableRefs(owner, refs);
       await call('af_generation_check', { p_owner: owner, ...target });
       return { ok: true };
     }

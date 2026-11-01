@@ -2,8 +2,8 @@
 -- A request's pictures came only from ChatGPT's file attachments (the connector downloads them from OpenAI's file hosts). An agent with no
 -- such attachment (Grok, Claude, Gemini CLI, Cursor's Grok Bot) asks for a ticket: up to two pictures for the same account within 30
 -- minutes, put in on the site by the signed-in owner (the ticket's id in its link) or from a terminal with the ticket's secret (its hash
--- here, shown once). Each picture is an ordinary upload (af_generation_upload's kinds, sizes and twelve a day) that the request then names
--- in its refs; a ticket that ran out keeps the pictures it took.
+-- here, shown once, and only to an agent that asked for the terminal way). Each picture is an ordinary upload (af_generation_upload's
+-- kinds, sizes and twelve in 24 hours) that the request then names in its refs within a day, as any upload.
 create table public.af_generation_upload_tickets (
   id uuid primary key,
   owner_id uuid not null references public.af_creators(owner_id),
@@ -19,15 +19,19 @@ grant select, insert, update, delete on table public.af_generation_upload_ticket
 alter table public.af_generation_uploads add column ticket_id uuid references public.af_generation_upload_tickets(id) on delete set null;
 create index af_generation_uploads_ticket on public.af_generation_uploads(ticket_id) where ticket_id is not null;
 
--- A ticket for the owner (`p_secret_hash`: the hash of the secret the API shows once). Twelve a day, as many as the day's uploads.
+-- A ticket for the owner (`p_secret_hash`: the hash of the secret the API shows once, or of one it never shows). Twelve in 24 hours, as
+-- many as the uploads; none while those twelve uploads are used up (it could take nothing). Its own lock: af_generation_create holds
+-- 74280502 while it takes the service's capacity lock. A week after it ran out a ticket goes (its pictures keep, without it).
 create function public.af_generation_upload_ticket(p_owner uuid, p_id uuid, p_secret_hash text) returns jsonb
 language plpgsql security invoker set search_path = '' as $$
 declare expires timestamptz := now() + interval '30 minutes';
 begin
   perform public.af_authorize(p_owner);
-  perform pg_advisory_xact_lock(hashtextextended(p_owner::text, 74280502));
+  perform pg_advisory_xact_lock(hashtextextended(p_owner::text, 74280505));
   if (select count(*) from public.af_generation_upload_tickets where owner_id = p_owner and created_at > now() - interval '1 day') >= 12
+    or (select count(*) from public.af_generation_uploads where owner_id = p_owner and created_at > now() - interval '1 day') >= 12
     then raise exception 'rate-limit'; end if;
+  delete from public.af_generation_upload_tickets where owner_id = p_owner and expires_at < now() - interval '7 days';
   insert into public.af_generation_upload_tickets(id, owner_id, secret_hash, expires_at) values (p_id, p_owner, p_secret_hash, expires);
   return jsonb_build_object('id', p_id, 'expiresAt', expires);
 end $$;
