@@ -560,6 +560,7 @@ test('the sign-in-first address asks every request for a sign-in; mcp.oddbout.co
 
 // Claude's directory (2026-11-01) takes no AI image generation and Claude has no OpenAI file host: the same server at `<function>/claude`
 // lists only the tools a directory reviewer can run there.
+const HANGUL = /[ᄀ-ᇿ㄰-㆏가-힯]/;
 test('the directory edition lists only its tools, in English, with every hint; the other addresses keep theirs', async () => {
   const arena = { url: 'https://arena.test/oddbout-arena', key: 'k'.repeat(64), fetcher: async () => Response.json({ ok: true, fighters: [] }) };
   const handle = createCloudHandler({ db: dbFor(), arena, hosted: {} });
@@ -569,7 +570,8 @@ test('the directory edition lists only its tools, in English, with every hint; t
   const toolsAt = async (url, headers) => (await (await post(url, 'tools/list', {}, false, headers)).json()).result.tools;
   const hello = { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'claude', version: '1' } };
   const [tools, full] = [await toolsAt(DIRECTORY_RESOURCE), await toolsAt(CLOUD_RESOURCE)];
-  assert.equal(tools.length, 27);
+  // /mcp keeps all its tools: ChatGPT's submitted plugin is pinned to its list.
+  assert.deepEqual([tools.length, full.length], [27, 48]);
   assert.deepEqual(tools.map(t => t.name).sort(), [...DIRECTORY_TITLES.keys()].sort());
   const dropped = full.map(t => t.name).filter(name => !DIRECTORY_TITLES.has(name));
   for (const name of ['request_hosted_fighter', 'list_generation_hosts', 'prepare_fighter_registration', 'submit_profile_set', 'store_creator_source',
@@ -577,22 +579,39 @@ test('the directory edition lists only its tools, in English, with every hint; t
   for (const tool of tools) {
     const same = full.find(t => t.name === tool.name);
     assert.equal(tool.title, DIRECTORY_TITLES.get(tool.name)); assert.match(tool.title, /^[\x20-\x7e]+$/, tool.name);
+    // The listing is worldwide: no Korean anywhere in what Claude reads of a tool (ODDBOUT's own state names included).
+    assert.doesNotMatch(JSON.stringify(tool), HANGUL, tool.name);
     for (const hint of ['readOnlyHint', 'destructiveHint', 'openWorldHint', 'idempotentHint']) assert.equal(typeof tool.annotations[hint], 'boolean', `${tool.name} ${hint}`);
-    assert.deepEqual([tool.annotations, tool.inputSchema, tool.securitySchemes], [same.annotations, same.inputSchema, same.securitySchemes], tool.name);
+    // The title is repeated among the annotations here only; /mcp's annotations stay as they were.
+    assert.deepEqual([tool.annotations, tool.inputSchema, tool.securitySchemes], [{ title: tool.title, ...same.annotations }, same.inputSchema, same.securitySchemes], tool.name);
+    assert.equal(same.annotations.title, undefined, tool.name);
     // No tool sends the agent to one this edition does not have.
     for (const name of dropped) assert.equal(JSON.stringify(tool).includes(name), false, `${tool.name} names ${name}`);
   }
   assert.match(tools.find(t => t.name === 'enter_fighter').description, /creator website \(open_creator_homepage\)/);
+  // A fighter without its profile set is told where one comes from: this connector takes no files.
+  assert.match(tools.find(t => t.name === 'enter_fighter').description, /made on the ODDBOUT website gets it at registration/);
   assert.match(full.find(t => t.name === 'enter_fighter').description, /submit_profile_set/);
   assert.equal(full.find(t => t.name === 'get_profile').title, 'ODDBOUT 연결 계정');
   const instructions = async url => (await (await post(url, 'initialize', hello)).json()).result.instructions;
   assert.equal(await instructions(DIRECTORY_RESOURCE), DIRECTORY_INSTRUCTIONS);
+  // How to make a fighter, answered without a sign-in: the website's address is in the instructions.
+  assert.match(DIRECTORY_INSTRUCTIONS, /https:\/\/oddbout\.com\/creator\.html/); assert.doesNotMatch(DIRECTORY_INSTRUCTIONS, HANGUL);
   assert.match(await instructions(CLOUD_RESOURCE), /check_creation_readiness/);
   // Signed out like the public address: its public tools answer, an account tool asks for a sign-in at the edition's own metadata.
   assert.equal((await (await post(DIRECTORY_RESOURCE, 'tools/call', { name: 'get_style_guide', arguments: {} })).json()).result.structuredContent.ok, true);
   const signIn = (resource = DIRECTORY_RESOURCE) => `Bearer resource_metadata="${resource}/.well-known/oauth-protected-resource", scope="openid email profile"`;
   const denied = await post(DIRECTORY_RESOURCE, 'tools/call', { name: 'get_profile', arguments: {} });
   assert.equal(denied.status, 401); assert.equal(denied.headers.get('www-authenticate'), signIn());
+  // A tool it does not list is unknown signed out too: no sign-in is started to reach a "not found".
+  for (const name of ['request_hosted_fighter', 'prepare_fighter_registration']) {
+    const missing = await post(DIRECTORY_RESOURCE, 'tools/call', { name, arguments: {} });
+    assert.notEqual(missing.status, 401, name);
+    const answer = await missing.json();
+    assert.ok(answer.error || answer.result?.isError === true, `${name}: ${JSON.stringify(answer)}`);
+  }
+  // At /mcp the same signed-out call still asks for the sign-in.
+  assert.equal((await post(CLOUD_RESOURCE, 'tools/call', { name: 'prepare_fighter_registration', arguments: {} })).status, 401);
   const own = await post(DIRECTORY_RESOURCE, 'tools/call', { name: 'get_profile', arguments: {} }, false, { 'x-oddbout-public-resource': PUBLIC_DIRECTORY_RESOURCE });
   assert.equal(own.headers.get('www-authenticate'), signIn(PUBLIC_DIRECTORY_RESOURCE));
   // Signed in, the account tools run; a tool the edition does not list is unknown to it, never run.

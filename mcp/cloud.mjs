@@ -206,7 +206,8 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
     // Register types each tool's args; the SDK parses them with inputSchema before run sees them.
     server.registerTool(name, { title, description, inputSchema: /** @type {z.ZodRawShape} */ (inputSchema),
       ...(profile ? { outputSchema: z.object({ id: z.string().min(1), email: z.string().optional(), nickname: z.string().optional() }).strict() } : {}),
-      annotations: { ...READ, readOnlyHint: !write, openWorldHint: openWorld, destructiveHint: publish, idempotentHint: idempotent },
+      // The directory edition repeats the title among the annotations, where Anthropic's tool checklist looks for it with the hints.
+      annotations: { ...(directory ? { title } : {}), ...READ, readOnlyHint: !write, openWorldHint: openWorld, destructiveHint: publish, idempotentHint: idempotent },
       _meta: { securitySchemes: publicTool ? [{ type: 'noauth' }] : AUTH,
         ...(files.length ? { 'openai/fileParams': files } : {}), ...(profile ? { 'openai/profile': true } : {}) } }, async (/** @type {Record<string, unknown>} */ args) => {
       if (!publicTool && !identity) return { ...output({ ok: false, code: 'authentication-required' }),
@@ -269,12 +270,14 @@ const signInOf = (db, request) => authenticateCloud(db, request).catch(() => ({ 
 /**
  * The verified identity a call runs as: needed at the sign-in-first address and for account tools (with the problem when there is none),
  * tried for a public tool whose budget is the caller's (a valid token counts it on its owner, anything else on every signed-out agent),
- * else none.
- * @param {any} db @param {Request} request @param {any} body @param {boolean} signInFirst
+ * else none — and none for a tool the directory edition does not have.
+ * @param {any} db @param {Request} request @param {any} body @param {boolean} signInFirst @param {'full' | 'directory'} edition
  * @returns {Promise<SignIn | { identity: Identity | null, problem?: undefined }>}
  */
-async function identityFor(db, request, body, signInFirst) {
+async function identityFor(db, request, body, signInFirst, edition) {
   const tool = body.method === 'tools/call' ? body.params?.name : null;
+  // A tool the directory edition does not list is unknown there, signed in or not: no sign-in to reach a "not found".
+  if (edition === 'directory' && tool !== null && !DIRECTORY_TITLES.has(tool)) return { identity: null };
   if (signInFirst || (tool !== null && !PUBLIC_TOOLS.has(tool))) return signInOf(db, request);
   if (OWNER_BUDGET_TOOLS.has(tool) && request.headers.has('authorization')) return { identity: (await signInOf(db, request)).identity };
   return { identity: null };
@@ -355,7 +358,7 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted =
     try { body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, 65536))); }
     catch { return json({ error: 'invalid_request' }, 400); }
     if (!body || Array.isArray(body) || typeof body.method !== 'string') return json({ error: 'invalid_request' }, 400);
-    const { identity, problem } = await identityFor(db, request, body, signInFirst);
+    const { identity, problem } = await identityFor(db, request, body, signInFirst, edition);
     if (problem) return signInProblem(problem);
     // A server per request on purpose: its tools close over this request's verified identity, so no state can carry one
     // user's identity into another's call. Measured 2026-10-28: building it with all tools and answering tools/list
