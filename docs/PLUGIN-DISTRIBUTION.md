@@ -1,6 +1,47 @@
 # ODDBOUT distribution
 
-**Current source-kit release: 0.6.4** (2026-11-01: use the existing cloud App; keep optional workspace tooling separate).
+**Current source-kit release: 0.6.5** (2026-11-01: use the host proxy for game-context fetches).
+
+The CLI and workspace session/job context lookups now default to `runtimeFetch`, preserving the host's HTTP(S) proxy,
+`NO_PROXY` and CA settings. Host execution permission remains separate: this fix does not grant network access, retry
+through a direct connection or bypass an `EPERM` denial. Both READMEs, the context/network guide, Dots quickstart and
+document index were updated. The ZIP also includes the Codex Git plugin installation guide added since 0.6.4.
+
+- [Download the 0.6.5 ZIP](https://oddbout.com/creator-kit/0.6.5/a7148fe349f737cfda5a64e277edfe8f81b6826e098dde63d736af4525b8c33d/oddbout-0.6.5.zip)
+- [Release manifest](https://oddbout.com/creator-kit/0.6.5/a7148fe349f737cfda5a64e277edfe8f81b6826e098dde63d736af4525b8c33d/release.json)
+- [Download helper](https://oddbout.com/creator-kit/0.6.5/a7148fe349f737cfda5a64e277edfe8f81b6826e098dde63d736af4525b8c33d/fetch-creator-kit.py)
+
+| Verified item | Value |
+| --- | --- |
+| ZIP size | 4,183,015 bytes |
+| ZIP SHA-256 | `2de2c6bd05e4e915d9cffc7c4b5d5932c67be2d51c36c24ebc3e5b32bd04aa53` |
+| Release manifest SHA-256 | `c3a6cb8cbee8b8c2a545800b0ea5c6a89c1ecb533068752e0b4b78d3046609b4` |
+| Runtime manifest SHA-256 | `7201a309e1015f1b684d591a4132ef35573c036c11fd0f94339a11af1256b7c6` |
+| Helper SHA-256 | `b66c31ff833816dfa74c90d9155359d3fdd484dff8c12759e48addde01707592` |
+| Build source | `e001103ebf590b4cca37f85b5f1ef609821dce36` |
+| Pages publication | `2a10a36067b553746611f82139254d2de89973ad` |
+
+The source tree matches [PR #233](https://github.com/jeonghwanko/oddbout-starter/pull/233)'s merge commit
+`68051eb47f67054c1538ce886f5b6f59fcc10d15`; CI passed before publication. Twenty focused context/proxy/bundle/release
+tests, strict typechecking and the Codex skill synchronization check also passed locally.
+
+The trusted helper downloaded the public manifest and ZIP over HTTPS into a fresh local verification directory,
+verified the complete archive and runtime manifest, and extracted 736 files. All 89 tracked runtime source files,
+including both READMEs and bundled docs, and all seven plugin source files matched the build source byte-for-byte.
+The downloaded `mcp/creation-context.mjs` imports `runtimeFetch` and uses it as the default request function;
+`api/runtime-fetch.mjs` is present. A loopback-only proxy test of that extracted module observed its CONNECT request
+for `raw.githubusercontent.com:443` and the expected sanitized denial without forwarding traffic. This proves the
+packaged proxy route, not permission in every Dots host. The locally extracted launcher's read-only status check
+also passed without installing a runtime or creating a workspace.
+
+Publication added only the ZIP, manifest and helper, preserved all 6,417 existing site/release files, and verified
+HTTP 200 and exact bytes for all three public files plus unchanged site entry documents. Existing immutable releases
+remain available. The active Dots runtime, sessions, jobs, selected versions and generated results were not modified
+by this release; no generation, login or registration was run. The connected cloud App, `deploy/dots-release.json`
+and sprite-gen pin were not updated, and no service redeployment was needed. Keep in-progress creation on its current
+runtime; install the new kit separately for a new environment or review an update after that work finishes.
+
+**Previous source-kit release: 0.6.4** (2026-11-01: use the existing cloud App; keep optional workspace tooling separate).
 Ordinary ChatGPT/Dots use starts with the existing available ODDBOUT cloud App, which carries account tools and the creation skill together.
 Do not import this source ZIP as a second cloud plugin. The ZIP is reviewed runtime/source delivery for an explicitly chosen workspace,
 or a desktop-client package; its version is independent of the connected App. Private App IDs and links are not public distribution links.
@@ -22,7 +63,7 @@ the extracted launcher's read-only status passed without installation or generat
 Publication added only three release files, preserved all 6,414 existing files, and verified public bytes and unchanged site entry documents.
 This release updates the source kit and its documentation; it does not update the connected App's saved package, OAuth grants or version.
 
-**Previous source-kit release: 0.6.3** (2026-11-01: distinguish desktop MCP configuration from the ChatGPT/Dots cloud App connection, preserve other clients' setup, and add the creation skill to the same connected App).
+**Earlier source-kit release: 0.6.3** (2026-11-01: distinguish desktop MCP configuration from the ChatGPT/Dots cloud App connection, preserve other clients' setup, and add the creation skill to the same connected App).
 Published at
 `https://oddbout.com/creator-kit/0.6.3/a228c3b3d1c04f934b92647e9dda4beab5ebf08b4582f7f696ca681645fa1361/release.json`
 (manifest SHA-256 `720e4cf0fb12dd69a1a8b29ae6565c963ea99bbd6cfdae41e8453a8c4084dbe6`, helper `fetch-creator-kit.py`
