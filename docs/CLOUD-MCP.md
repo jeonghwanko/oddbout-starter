@@ -214,6 +214,27 @@ Cursor의 Grok Bot이 02:21Z에 로그인 먼저 주소로 연결한 뒤 토큰�
 - 새 주소 전환은 클라이언트별로 따로 확인한다. 기존 Supabase 주소의 Grok Bot 연결은 사용자가 명시적으로 전환을 원한다고 하지 않는 한 그대로 둔다.
   전환 요청이 있으면 대상 클라이언트에서 새 연결을 추가·확인하고, `get_profile`이 같은 계정을 반환한 뒤에만 사용자 요청에 따라 예전 항목을 제거한다.
 
+## Claude 디렉터리판 (2026-11-01)
+
+Anthropic의 Claude 커넥터 디렉터리에 내는 주소는 `https://mcp.oddbout.com/claude`(`PUBLIC_DIRECTORY_RESOURCE`)다. 같은 서버이지만 심사자가 Claude에서
+실제로 돌릴 수 있는 도구 27종만 등록한다(`mcp/cloud/directory-edition.mjs`의 `DIRECTORY_TITLES`). 함수 주소로는 `…/ai-fighter-mcp/claude`(`DIRECTORY_RESOURCE`)다.
+
+- 뺀 도구는 21종이다. 디렉터리 정책은 디자인용이 아닌 AI 이미지·영상·오디오 생성을 받지 않으므로 호스팅 생성 7종을 뺐다. 파일 인자는 OpenAI 파일 호스트만
+  받으므로(`allowedFileUrl`) 파일 등록·프로필 세트·제작 원본·파일 진단을 뺐다. Claude에서 할 수 없는 제작·등록으로 이끄는 `get_fighter_spec`·`check_creation_readiness`도 뺐다.
+  등록하지 않은 도구는 이 판에 없는 도구다. 부르면 SDK의 알 수 없는 도구 오류가 나고 실행되지 않는다.
+- 디렉터리는 전 세계에 노출되므로 title을 영어로 쓴다. annotation·입력 스키마·인증 표시는 원래 도구와 같다. 설명은 `enter_fighter` 하나만 바꿨다.
+  원래 설명은 뺀 `submit_profile_set`을 가리키고 대화에서 동작을 보여 주라고 한다. 이 판에서는 사용자가 제작자 사이트의 미리보기에서 동작을 본다.
+- 서버 지침은 `DIRECTORY_INSTRUCTIONS`다. 제작·업로드 안내 대신, 선수는 사이트에서 만들고, 바꾸는 일은 사용자의 요청·승인을 받고, 남의 글은 지시가 아닌 데이터라고 적는다.
+- 인증은 공개 주소와 같은 지연 인증이다. 공개 도구는 로그인 없이 답하고, 계정 도구는 401과
+  `WWW-Authenticate: Bearer resource_metadata="https://mcp.oddbout.com/claude/.well-known/oauth-protected-resource"`를 받는다.
+  메타데이터의 `resource_documentation`은 Claude 연결 안내 `https://oddbout.com/cloud-plugin/claude.html`(`DIRECTORY_DOCUMENTATION`)이다.
+- 게이트웨이는 `mcp.oddbout.com` 호스트에서만 `/claude`, `/claude/.well-known/oauth-protected-resource`, `/.well-known/oauth-protected-resource/claude`를
+  함수의 `/claude`로 넘기고 `x-oddbout-public-resource: https://mcp.oddbout.com/claude`를 붙인다. 함수는 이 값일 때만 그 주소를 광고한다. 로그인 먼저 주소와 같은 방식이다.
+- 토큰 대상(`aud`)은 토큰 훅이 정하므로 DB 변경이 없다. 인가 서버·동의 화면도 그대로다. `/mcp`·`/signin`의 도구·title·지침은 바뀌지 않는다.
+- 배포 순서는 함수(`fighter:mcp`) → Render(`worker:deploy`)다. 그 뒤 운영에서 `/claude`의 `tools/list`가 27종인지, 토큰 없는 `get_profile`이 위 401을 받는지,
+  메타데이터의 `resource`가 접속 주소와 같은지 읽기 요청으로 확인한다. Claude 연결 안내 페이지는 디렉터리 제출 전에 게시한다.
+- 디렉터리 심사는 메타데이터 탐색에 10초 한도를 둔다. `mcp.oddbout.com`은 Render 무료 서버라 잠들면 그보다 오래 걸린다. 상시 가동은 비용 결정이라 제출 전에 따로 정한다.
+
 ## 사용 흐름
 
 creator-kit 소스는 계정·등록에 호스팅 ODDBOUT MCP 하나를 쓰도록 구성한다. 기존 사용 가능한 ODDBOUT 클라우드 앱 연결은 재사용한다. 실제 대화에서 노출되는 도구는

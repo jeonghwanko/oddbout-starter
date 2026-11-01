@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createServer,request} from 'node:http';
-import {cloudGateway,PUBLIC_RESOURCE,PUBLIC_SIGN_IN_RESOURCE,LEGACY_PUBLIC_RESOURCE,DOMAIN_CHALLENGE,BRANDED_DOMAIN_CHALLENGE} from '../worker/cloud-gateway.mjs';
+import {cloudGateway,PUBLIC_RESOURCE,PUBLIC_SIGN_IN_RESOURCE,PUBLIC_DIRECTORY_RESOURCE,LEGACY_PUBLIC_RESOURCE,DOMAIN_CHALLENGE,BRANDED_DOMAIN_CHALLENGE} from '../worker/cloud-gateway.mjs';
 import {createCloudHandler} from '../mcp/cloud.mjs';
 async function serverFor(fetcher,run) {
   const server=createServer(async(req,res)=>{if(!await cloudGateway(req,res,fetcher)){res.writeHead(404);res.end();}});
@@ -75,6 +75,42 @@ test('through the gateway the function names mcp.oddbout.com/signin at both meta
     }
     // The client's user-agent reaches the function's logs, not the gateway's own.
     assert.deepEqual([...new Set(agents)],['Cursor/1.0.0']);
+  });
+});
+test('mcp.oddbout.com/claude is the Claude directory edition, its metadata also at the host root, only at our host (2026-11-01)',async()=>{
+  const calls=[];
+  await serverFor(async(url,options)=>{calls.push({url,options});return new Response('{}',{headers:{'content-type':'application/json'}})},async base=>{
+    const at=(path,method='GET',host='mcp.oddbout.com')=>new Promise((resolve,reject)=>{
+      const req=request(base+path,{method,headers:{host}},res=>{res.resume();res.on('end',()=>resolve(res))});
+      req.on('error',reject);req.end();
+    });
+    const metadata='/claude/.well-known/oauth-protected-resource';
+    for (const [path,method,upstream] of [['/claude','POST','/claude'],['/claude','OPTIONS','/claude'],[metadata,'GET',metadata],['/.well-known/oauth-protected-resource/claude','GET',metadata]]) {
+      assert.equal((await at(path,method)).statusCode,200,path);
+      assert.equal(calls.at(-1).url,'https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter-mcp'+upstream);assert.equal(calls.at(-1).options.method,method);
+      assert.equal(calls.at(-1).options.headers.get('x-oddbout-public-resource'),PUBLIC_DIRECTORY_RESOURCE);
+    }
+    assert.equal((await at('/claude','POST','ai-fighter-validator.onrender.com')).statusCode,404);
+    assert.equal((await at('/.well-known/oauth-protected-resource/claude','GET','ai-fighter-validator.onrender.com')).statusCode,404);
+    assert.equal((await at('/claude/elsewhere','POST')).statusCode,404);
+    assert.equal(calls.length,4);
+  });
+});
+test('through the gateway the directory edition names mcp.oddbout.com/claude at both metadata addresses and in its sign-in challenge',async()=>{
+  const handle=createCloudHandler({db:{}});
+  await serverFor(async(url,options)=>handle(new Request(url,options)),async base=>{
+    const at=(path,method='GET',body)=>new Promise((resolve,reject)=>{
+      const req=request(base+path,{method,headers:{host:'mcp.oddbout.com','content-type':'application/json',accept:'application/json, text/event-stream'}},
+        res=>{let text='';res.on('data',part=>text+=part);res.on('end',()=>resolve({status:res.statusCode,headers:res.headers,text}))});
+      req.on('error',reject);req.end(body);
+    });
+    for (const path of ['/.well-known/oauth-protected-resource/claude','/claude/.well-known/oauth-protected-resource']) {
+      const metadata=await at(path);
+      assert.equal(metadata.status,200,path);assert.equal(JSON.parse(metadata.text).resource,PUBLIC_DIRECTORY_RESOURCE,path);
+    }
+    const denied=await at('/claude','POST',JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'get_profile',arguments:{}}}));
+    assert.equal(denied.status,401);
+    assert.equal(denied.headers['www-authenticate'],`Bearer resource_metadata="${PUBLIC_DIRECTORY_RESOURCE}/.well-known/oauth-protected-resource", scope="openid email profile"`);
   });
 });
 test('oversized requests and upstream failures do not leak OAuth tokens or return success',async()=>{
