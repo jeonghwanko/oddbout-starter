@@ -1,5 +1,6 @@
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -123,6 +124,87 @@ test('workspace MCP repairs 57 large skill frames without changing playback or o
   assert.deepEqual(await readFile(path.join(directory, 'skill-0.png')), originalImage);
   const retry = await creationTool({ workspace: temporary, name: 'pack_fighter_package', args: { ...args, fitSheets: true } });
   assert.equal(retry.structuredContent.errors[0].code, 'OUT_EXISTS');
+});
+
+test('workspace fitting measures and satisfies total byte/pixel and per-asset budgets without dropping frames', async () => {
+  const directory = await gamePack('package-budget');
+  assert.equal((await run(directory, plan(directory, 'baseline'))).ok, true);
+  const baseline = JSON.parse(await readFile(path.join(directory, 'baseline/fighter.json')));
+  const packFile = path.join(directory, 'game-pack.json'), pack = JSON.parse(await readFile(packFile)), keys = [];
+  let seed = 127;
+  // Deterministic synthetic texture noise: enough incompressible pixels to exercise actual byte limits too.
+  for (let start = 0; start < 57; start += 35) {
+    const count = Math.min(35, 57 - start), columns = 7, rows = Math.ceil(count / columns), frames = {}, tiles = [];
+    for (let i = 0; i < count; i++) {
+      const key = `budget/${start + i}`, rect = { x: i % columns * 534, y: Math.floor(i / columns) * 683, w: 534, h: 683 };
+      const data = Buffer.alloc(534 * 683 * 4);
+      for (let pixel = 0; pixel < 534 * 683; pixel++) {
+        seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5;
+        data[pixel * 4] = seed & 255; data[pixel * 4 + 1] = 100; data[pixel * 4 + 2] = 170; data[pixel * 4 + 3] = 255;
+      }
+      const input = await sharp(data, { raw: { width: 534, height: 683, channels: 4 } }).png().toBuffer();
+      tiles.push({ input, left: rect.x, top: rect.y }); frames[key] = { frame: rect }; keys.push(key);
+    }
+    const image = `budget-${start}.png`;
+    await sharp({ create: { width: columns * 534, height: rows * 683, channels: 4, background: '#0000' } })
+      .composite(tiles).png().toFile(path.join(directory, image));
+    pack.textures.push({ image, frames });
+  }
+  for (const name of ['skill', 'entrance', 'victory']) pack.animations[`bot/${name}`] = {
+    frames: keys, durations_ms: keys.map(() => 90), anchor: [267, 683], loop: name === 'victory' };
+  await writeFile(packFile, JSON.stringify(pack));
+  const value = plan(directory, 'unused', p => {
+    p.motions.skill = { animation: 'bot/skill', hitSequenceIndices: [28], skill: { kind: 'pincer' } };
+    for (const name of ['entrance', 'victory']) p.motions[name] = { animation: `bot/${name}` };
+    p.profile.portraitCrop = baseline.profile.portrait.crop;
+    p.profile.previewCrop = baseline.profile.preview.crop;
+  });
+  await writeFile(path.join(directory, 'plan.json'), JSON.stringify(value));
+  const sources = [packFile, ...pack.textures.map(t => path.join(directory, t.image))];
+  const hashes = async () => Promise.all(sources.map(async file => createHash('sha256').update(await readFile(file)).digest('hex')));
+  const before = await hashes();
+  const result = await creationTool({ workspace: temporary, name: 'pack_fighter_package', args: {
+    planPath: 'package-budget/plan.json', outputPath: 'output/budget-work/artifacts/fitted', fitSheets: true } });
+  assert.equal(result.structuredContent.ok, true, JSON.stringify(result));
+  const out = path.join(temporary, 'output/budget-work/artifacts/fitted');
+  const fighter = JSON.parse(await readFile(path.join(out, 'fighter.json')));
+  const report = JSON.parse(await readFile(path.join(out, 'pack-report.json')));
+  assert.ok(report.budget.attempts.length > 1);
+  assert.ok(report.budget.attempts[0].bytes > 10_000_000);
+  assert.ok(report.budget.attempts[0].pixels > 33_554_432);
+  assert.ok(report.budget.attempts[0].assets.some(asset => asset.bytes > 4_000_000));
+  assert.equal(report.budget.encoding, 'lossless');
+  assert.ok(report.budget.result.bytes <= 10_000_000);
+  assert.ok(report.budget.result.pixels <= 33_554_432);
+  assert.ok(fighter.assets.every(asset => asset.bytes <= 4_000_000));
+  const density = report.budget.outputScale;
+  assert.ok(density >= .25 && density < .7);
+  for (const [name, clip] of Object.entries(fighter.clips)) {
+    assert.equal(clip.pixelScale, density, name);
+    assert.equal(toSidePreviewPack(fighter).directions.side[name].bodyHeight, 400 * density);
+    if (baseline.clips[name]?.sequence) assert.deepEqual(clip.sequence, baseline.clips[name].sequence);
+    if (baseline.clips[name]?.durationMs) assert.equal(clip.durationMs, baseline.clips[name].durationMs);
+  }
+  for (const name of ['skill', 'entrance', 'victory']) {
+    assert.equal(fighter.clips[name].frames.length, 57);
+    assert.deepEqual(fighter.clips[name].sequence, keys.map((_, frame) => ({ frame, durationMs: 90 })));
+  }
+  assert.deepEqual(fighter.clips.skill.hitSequenceIndices, [28]);
+  assert.equal(fighter.clips.walk.stridePixels, 90 * density);
+  assert.deepEqual(await hashes(), before);
+});
+
+test('explicit outputScale acts after 400px normalization and rejects values below the contract floor', async () => {
+  const directory = await gamePack('explicit-density', { scale: .5 });
+  await writeFile(path.join(directory, 'plan.json'), JSON.stringify(plan(directory, 'unused')));
+  const result = await creationTool({ workspace: temporary, name: 'pack_fighter_package', args: {
+    planPath: 'explicit-density/plan.json', outputPath: 'output/density-work/artifacts/half', outputScale: .5 } });
+  assert.equal(result.structuredContent.ok, true, JSON.stringify(result));
+  const fighter = JSON.parse(await readFile(path.join(temporary, 'output/density-work/artifacts/half/fighter.json')));
+  assert.equal(fighter.appearance.bodyHeight, 400);
+  for (const clip of Object.values(fighter.clips)) assert.equal(clip.pixelScale, .5);
+  const invalid = await run(directory, plan(directory, 'invalid', p => { p.outputScale = .1; }));
+  assert.equal(invalid.ok, false); assert.equal(invalid.errors[0].code, 'PLAN_SCHEMA');
 });
 
 // Only a format fixture: a lying hold, repeated recovery cell, then standing.

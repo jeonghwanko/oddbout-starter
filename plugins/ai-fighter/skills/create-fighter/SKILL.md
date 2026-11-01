@@ -179,7 +179,11 @@ ordinary terminal tool using the returned JSON arguments, rather than asking the
 hand-patch the kit. Cloud preparation does not read VM files and is not a successful package. A new reviewed
 kit can run separately against the existing workspace; keep the active runtime and selected originals.
 When the user permits resolution optimization and the live contract lists `texture-resolution-1`, use
-`fitSheets: true`: it keeps frames/timing and preserves game size with `pixelScale`. Never silently shrink
+`fitSheets: true` with kit 0.6.10+: it fits sheet dimensions and total/per-asset byte/pixel budgets using actual
+measurements, keeps frames/timing and preserves game size with `pixelScale`. It uniformly reduces density across
+normalized motions when totals need it, preserving the chosen encoding and originals. Read `report.budget`;
+the optional `outputScale` caps post-normalization density. A bounded worker may take up to ten minutes: resume
+the same host execution after its initial 30-second wait. Never silently shrink
 only a motion's character or remove frames. Required file, contract and upload limits still apply.
 
 Quality diagnosis in `docs/GAIT-REVIEW.md` is optional later work. Preserve selected files and actual previews;
