@@ -30,7 +30,9 @@ test('native cloud preparation is public, names actual workspace execution, and 
   assert.match(result.runtime.manifestSha256, /^[a-f0-9]{64}$/);
   assert.match(result.runtime.manifestUrl, /^https:\/\/oddbout.com\/creator-kit\/0\.6\.9\/.*\/release.json$/);
   assert.deepEqual(result.operations.map(operation => operation.tool), ['inspect_fighter_packaging', 'pack_fighter_package']);
-  assert.equal(result.operations[1].execution.args[0], '/kit/scripts/creation-tool.mjs');
+  assert.equal(result.runtimeDirectory, '/kit/runtime');
+  assert.deepEqual(result.dependencyInstall, { command: 'npm', args: ['ci', '--ignore-scripts'], cwd: '/kit/runtime' });
+  assert.equal(result.operations[1].execution.args[0], '/kit/runtime/scripts/creation-tool.mjs');
   assert.equal(result.operations[1].execution.argumentsFileContents.fitSheets, true);
   assert.equal(result.fighterId, undefined);
 });

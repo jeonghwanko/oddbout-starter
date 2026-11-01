@@ -15,7 +15,8 @@ export function registerPackagingPreparation({ register, invoke }) {
     + 'Run them through the host execution tool, inspect actual results, then continue the existing registration request. '
     + 'Never regenerate or ask the user to relay packaging errors. fitSheets permits resolution reduction only within the user’s requested optimization; '
     + 'all frame identities, playback timing, game size and required file checks remain. No generation account or new registration login is needed.',
-    { workspacePath: absolute, kitPath: absolute, planPath: relative, outputPath: relative, fitSheets: z.boolean().default(false) },
+    { workspacePath: absolute, kitPath: absolute.describe('Absolute extracted plugin directory, containing runtime/ and launcher.mjs.'),
+      planPath: relative, outputPath: relative, fitSheets: z.boolean().default(false) },
     async ({ workspacePath, kitPath, planPath, outputPath, fitSheets }) => {
       const result = await invoke('spec');
       if (!result.ok) return result;
@@ -23,15 +24,18 @@ export function registerPackagingPreparation({ register, invoke }) {
       if (fitSheets && !features.includes('texture-resolution-1')) return { ok: false, code: 'server-feature-missing',
         feature: 'texture-resolution-1', next: 'Keep original files. Resolution fitting is not yet supported by the deployed contract.' };
       const root = kitPath.replace(/\\/g, '/').replace(/\/$/, '');
+      const runtimeDirectory = `${root}/runtime`;
       const args = { planPath, outputPath, fitSheets };
       return { ok: true, stage: 'workspace-execution-required', minimumKitVersion: runtime.version, runtime,
         contract: { features, limits: result.data?.limits, textureResolution: result.data?.textureResolution },
+        runtimeDirectory,
+        dependencyInstall: { command: 'npm', args: ['ci', '--ignore-scripts'], cwd: runtimeDirectory },
         prerequisites: ['Use the reviewed kit in a separate directory; preserve the active workspace runtime and selected versions.',
           'Verify the download helper with helperSha256 before running it; pass manifestUrl and manifestSha256 to its download command. '
           + 'The new destination contains plugin/. kitPath must name that extracted plugin root.',
-          'Install its locked Node dependencies if missing. Existing game-pack input needs no Python engine or generation login.'],
+          'Install locked Node dependencies in runtimeDirectory if missing, using dependencyInstall. Existing game-pack input needs no Python engine or generation login.'],
         operations: ['inspect_fighter_packaging', 'pack_fighter_package'].map(tool => ({ tool, arguments: args,
-          execution: { command: 'node', args: [`${root}/scripts/creation-tool.mjs`, 'call', workspacePath, tool, '<arguments-json-file>'],
+          execution: { command: 'node', args: [`${runtimeDirectory}/scripts/creation-tool.mjs`, 'call', workspacePath, tool, '<arguments-json-file>'],
             argumentsFileContents: args } })),
         recovery: { intermediateTooLarge: 'Use the same game-pack request with --image-format webp and a new output directory; '
           + 'only if needed, --max-bytes 200000000. The final upload limits still apply.',
