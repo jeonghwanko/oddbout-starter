@@ -8,6 +8,10 @@ ODDBOUT은 직접 만든 캐릭터로 플레이하는 대전 게임입니다. �
 
 [게임하기](https://oddbout.com/fighter.html) · [내 선수 관리](https://oddbout.com/creator.html?lang=ko) · [사이트 가이드](https://oddbout.com/docs.html?lang=ko) · [제작 시작 안내](docs/START-HERE.md) · [문제 제보](https://github.com/jeonghwanko/oddbout-starter/issues)
 
+## Codex 플러그인 설치
+
+이 Git 저장소에서 로컬 커스텀 플러그인을 설치할 수 있습니다: [설치 안내](docs/CODEX-PLUGIN.md). 제작 스킬을 추가하고 기존 ODDBOUT MCP를 재사용합니다. 공개 디렉터리 심사나 creator-kit ZIP은 필요하지 않으며 로그인은 사용자가 별도로 진행합니다.
+
 ## 플레이 미리보기
 
 [![ODDBOUT 대전 플레이: 경기장의 두 캐릭터](docs/media/oddbout-gameplay.gif)](docs/media/oddbout-gameplay.mp4)

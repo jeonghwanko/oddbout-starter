@@ -1,5 +1,7 @@
 # ODDBOUT plugin and workspace tools
 
+For the Git-installable Codex skill that reuses an existing MCP without adding a server, follow [CODEX-PLUGIN.md](CODEX-PLUGIN.md). The full developer kit below is a separate optional workflow.
+
 **Reuse the existing available ODDBOUT cloud App in ChatGPT/Dots.** Select it in the intended chat and verify native `get_profile`.
 Find `create-fighter` in the host's actual skill list and read that same App's skill or linked support document; metadata alone does not verify skill access.
 This does not establish public availability; private App links are not public distribution links.

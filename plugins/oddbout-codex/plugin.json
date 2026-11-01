@@ -1,0 +1,21 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "oddbout",
+  "version": "0.1.0",
+  "description": "ODDBOUT creation and review skills for Codex. Reuses your existing ODDBOUT MCP connection; does not register a second server or sign you in.",
+  "license": "MIT",
+  "repository": "https://github.com/jeonghwanko/oddbout-starter",
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "ODDBOUT",
+        "shortDescription": "Create and review fighters",
+        "longDescription": "Create, review and register fighters using your existing ODDBOUT MCP connection. This local Codex package installs the create-fighter skill. MCP setup and your own Google sign-in are separate. It does not install a Dots cloud App, start generation or include a local generation runtime.",
+        "category": "Creativity",
+        "capabilities": ["Fighter creation workflow", "Animation review", "Resume and registration guidance"],
+        "logo": "./assets/icon.svg",
+        "composerIcon": "./assets/icon.svg"
+      }
+    }
+  }
+}
