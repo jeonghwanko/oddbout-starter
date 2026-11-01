@@ -571,11 +571,13 @@ test('the directory edition lists only its tools, in English, with every hint; t
   const hello = { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'claude', version: '1' } };
   const [tools, full] = [await toolsAt(DIRECTORY_RESOURCE), await toolsAt(CLOUD_RESOURCE)];
   // /mcp keeps all its tools: ChatGPT's submitted plugin is pinned to its list.
-  assert.deepEqual([tools.length, full.length], [27, 48]);
+  assert.deepEqual([tools.length, full.length], [27, 51]);
   assert.deepEqual(tools.map(t => t.name).sort(), [...DIRECTORY_TITLES.keys()].sort());
   const dropped = full.map(t => t.name).filter(name => !DIRECTORY_TITLES.has(name));
   for (const name of ['request_hosted_fighter', 'list_generation_hosts', 'prepare_fighter_registration', 'submit_profile_set', 'store_creator_source',
-    'verify_creator_file_input', 'get_fighter_spec', 'check_creation_readiness']) assert.ok(dropped.includes(name), name);
+    'verify_creator_file_input', 'get_fighter_spec', 'check_creation_readiness',
+    // 그림 올리기 표 (2026-11-01): pictures for a hosted fighter, which the directory does not take.
+    'start_picture_upload', 'get_picture_upload', 'report_picture_link']) assert.ok(dropped.includes(name), name);
   for (const tool of tools) {
     const same = full.find(t => t.name === tool.name);
     assert.equal(tool.title, DIRECTORY_TITLES.get(tool.name)); assert.match(tool.title, /^[\x20-\x7e]+$/, tool.name);

@@ -235,7 +235,7 @@ Anthropic의 Claude 커넥터 디렉터리에 내는 주소는 `https://mcp.oddb
   메타데이터의 `resource_documentation`은 Claude 연결 안내 `https://oddbout.com/cloud-plugin/claude.html`(`DIRECTORY_DOCUMENTATION`)이다.
 - 게이트웨이는 `mcp.oddbout.com` 호스트에서만 `/claude`, `/claude/.well-known/oauth-protected-resource`, `/.well-known/oauth-protected-resource/claude`를
   함수의 `/claude`로 넘기고 `x-oddbout-public-resource: https://mcp.oddbout.com/claude`를 붙인다. 함수는 이 값일 때만 그 주소를 광고한다. 로그인 먼저 주소와 같은 방식이다.
-- 토큰 대상(`aud`)은 토큰 훅이 정하므로 DB 변경이 없다. 인가 서버·동의 화면도 그대로다. `/mcp`·`/signin`의 도구·title·지침은 바뀌지 않는다(시험이 `/mcp` 48종을 센다).
+- 토큰 대상(`aud`)은 토큰 훅이 정하므로 DB 변경이 없다. 인가 서버·동의 화면도 그대로다. `/mcp`·`/signin`의 도구·title·지침은 바뀌지 않는다(시험이 `/mcp` 51종을 센다 — 그림 올리기 표 셋을 더해).
   훅은 요청한 `resource`와 상관없이 같은 `aud` 세 값을 넣는다. 그래서 `/claude`로 받은 토큰은 같은 사용자·동의로 `/mcp`에서도 통한다. 심사에서 RFC 8707 대상 검증을
   물으면 "자원 서버 하나에 대상 하나"라고 답한다. 디렉터리 주소를 `aud`에 넣는다면 `validCloudAudience`(배열 길이를 정확히 본다)를 먼저 고친다.
 - 27종 중 21종은 대결장 키(`ODDBOUT_ARENA_AGENT_KEY`)가 있을 때만 등록된다. 키가 빠지면 이 판은 6종만 보인다. 배포 확인의 "27종"이 이것을 잡는다.
@@ -373,7 +373,7 @@ ODDBOUT의 생성 워커가 사용자의 말(과 그림 1~2장)로 선수를 만
 ### 그림 올리기 표 (2026-11-01)
 
 ChatGPT 밖의 에이전트(Grok·Claude·Gemini CLI·Codex CLI·Cursor의 Grok Bot)는 파일 인자가 없다. 그래서 대화에서 만든 그림이나 사용자가 그린 그림을
-표로 보낸다. 그림은 원화의 참고다. 추천 조합(GPT 원화 + Grok 영상)은 그대로다.
+표로 보낸다. 그림은 원화의 참고다. 추천 조합(GPT 원화 + Grok 영상)은 그대로다. 호스팅 생성에 딸린 도구라 Claude 디렉터리판(`/claude`)에는 없다.
 
 - `start_picture_upload`가 표를 만든다(`af_generation_upload_tickets`, 마이그레이션 `20261101100000`). 표 하나는 30분 동안 그림 둘을 받는다.
   표를 주기 전에 신청의 검사를 먼저 한다(3차 리뷰 2026-11-01): MCP가 서비스 스위치(`generations/capabilities`)를 보고, API가 에이전트가 넘긴
