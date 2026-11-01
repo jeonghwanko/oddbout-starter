@@ -22,6 +22,13 @@ These new commands require the Dots runtime contract in this change. They do not
 The implementation is local until merged/published; the base service commit alone does not contain
 these commands. Select a reviewed revision carrying them before following the commands below.
 
+Creator-kit 0.6.5 includes the game-context fetch fix: it uses the host's inherited HTTP(S) proxy,
+`NO_PROXY` and CA settings. It does not grant network permission or change an existing task.
+For DNS or pre-HTTP connection failures, follow [the context network guide](GAME-CREATION-CONTEXT.md#network-errors-and-existing-workspaces).
+Keep an active fighter on its recorded runtime; do not pull, replace it or rerun generation to test a release.
+Retain sessions, jobs, selected versions and original outputs. Review the new kit separately for a new environment
+or an update after the current creation work finishes.
+
 In the official saved environment setup, install common tools and locked dependencies, review the report,
 then Publish. Set [DOTS-START.md](DOTS-START.md) as the Start skill/instructions. Republish updates the
 prepared filesystem for **new tasks**; existing tasks keep their own files and installed tools. Continue a
