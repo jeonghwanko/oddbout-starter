@@ -31,10 +31,13 @@ The kit includes sprite-gen, creation workflows, validation tools, and an MCP se
 
 The creator-kit ZIP includes both READMEs and the creation, connection and MCP migration guides. The document index also lists repository-only operations and research docs; those and the gameplay media remain available in this repository.
 
-**Creator-kit 0.6.5** makes game-context requests use the host's existing HTTP(S) proxy, `NO_PROXY` and CA settings.
+Game-context requests use the host's existing HTTP(S) proxy, `NO_PROXY` and CA settings.
+When VM networking is unavailable, a fresh complete public response obtained through an allowed connected tool can use
+the [explicit file handoff](docs/GAME-CREATION-CONTEXT.md#explicit-public-context-file-handoff), with integrity and freshness checks.
 See the [release files and verification record](https://github.com/jeonghwanko/oddbout-starter/blob/main/docs/PLUGIN-DISTRIBUTION.md)
 and [network troubleshooting](docs/GAME-CREATION-CONTEXT.md#network-errors-and-existing-workspaces).
-Host network permission is still required. Keep an in-progress fighter on its current runtime and preserve its sessions, jobs and results;
+Grok account login and host network permission are separate; this file route supplies public rules only.
+Keep an in-progress fighter on its current runtime and preserve its sessions, jobs and results;
 publishing a ZIP does not upgrade an existing Dots task or the connected cloud App.
 
 In this kit, "sprite-gen" means the sprite-gen engine and CLI pinned at `vendor/sprite-gen`, which comes from [sprite-gen-agent](https://github.com/jeonghwanko/sprite-gen-agent), our fork of Alex Kim's [sprite-gen](https://github.com/aldegad/sprite-gen). Commands, paths and the Python package keep the name `sprite-gen`.
