@@ -48,7 +48,10 @@ test('get-up, profile and validation are required; final acceptance never author
 });
 test('fetch refreshes, scopes only motions, and fails closed on invalid or oversized payload', async () => {
   const revisions = []; const request = async (_url, options) => {
-    assert.equal(options.cache, 'no-store'); revisions.push(context.revision); return new Response(JSON.stringify(context));
+    assert.equal(_url, 'https://raw.githubusercontent.com/jeonghwanko/oddbout-starter/refs/heads/codex/game-context/creation-context.json');
+    assert.equal(options.cache, 'no-store'); assert.equal(options.redirect, 'error');
+    assert.ok(options.signal instanceof AbortSignal);
+    revisions.push(context.revision); return new Response(JSON.stringify(context));
   };
   const result = await fetchCreationContext({ request, group: 'attacks' });
   assert.deepEqual(Object.keys(result.contract.motions), ['combo', 'slam', 'dash']);
