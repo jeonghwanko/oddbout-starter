@@ -75,7 +75,7 @@ Claude 연결(2026-10-28, 주소 2026-10-29): claude.ai → 사용자 지정 →
 추가한 뒤 연결을 누르고 Google로 로그인해 승인한다. 동의 화면은 Anthropic의 MCP 콜백 `https://claude.ai/api/mcp/auth_callback`·
 `https://claude.com/api/mcp/auth_callback`으로만 돌아간다. Claude 웹·데스크톱·모바일과 Claude Code는 이 커넥터 하나를 함께 쓴다.
 Claude Code는 이 커넥터를 쓰거나, 아래 [터미널·편집기 에이전트](#터미널편집기-에이전트-2026-10-29)처럼 직접 연결한다. 그림을 받는 도구(`prepare_fighter_registration`의 파일,
-`upload_fighter_asset`, `request_hosted_fighter`의 그림)는 OpenAI 파일 호스트만 받으므로 Claude에서는 글로만 만든다.
+`upload_fighter_asset`)는 OpenAI 파일 호스트만 받는다. Claude에서 선수를 맡길 때의 그림은 [그림 올리기 표](#그림-올리기-표-2026-11-01)로 보낸다.
 MCP 함수의 Origin 허용 목록에 `claude.ai`·`claude.com`이 있다. 2026-10-28 실제 연결로 확인했다: Claude가 이름 `Claude`, 돌아갈 주소
 `https://claude.ai/api/mcp/auth_callback`으로 클라이언트를 자동 등록했다. 그때 겪은 것:
 
@@ -119,7 +119,7 @@ gemini mcp add --transport http --scope user oddbout https://ztfxxhtmtrvxvuxlqmg
 
 로그인은 같은 PC의 브라우저가 loopback 콜백에 닿아야 한다. SSH로 접속한 원격 PC·컨테이너에서는 브라우저가 그 PC의 loopback에 닿지 않는다.
 사이트의 내 에이전트는 등록 이름으로 칸을 고른다: `Codex` → Codex, `Claude Code` → Claude, `Gemini CLI MCP Client` → Gemini.
-그림을 받는 도구는 OpenAI 파일 호스트만 받으므로 이 에이전트들은 글로 만든다.
+이 에이전트들은 그림 파일을 [그림 올리기 표](#그림-올리기-표-2026-11-01)의 명령 한 줄로 보낸다.
 
 사이트에서 보기(2026-10-28): oddbout.com 제작자 페이지의 My agents(`creator.html#view=agents`)가 Codex(ChatGPT·Dots)·Grok·Claude 카드에 연결을 보이고,
 연결을 끊는다(Supabase Auth의 `auth.oauth.listGrants`·`revokeGrant`). 카드 목록은 `af_account_agents`가 계정에 둔다.
@@ -235,7 +235,7 @@ Anthropic의 Claude 커넥터 디렉터리에 내는 주소는 `https://mcp.oddb
   메타데이터의 `resource_documentation`은 Claude 연결 안내 `https://oddbout.com/cloud-plugin/claude.html`(`DIRECTORY_DOCUMENTATION`)이다.
 - 게이트웨이는 `mcp.oddbout.com` 호스트에서만 `/claude`, `/claude/.well-known/oauth-protected-resource`, `/.well-known/oauth-protected-resource/claude`를
   함수의 `/claude`로 넘기고 `x-oddbout-public-resource: https://mcp.oddbout.com/claude`를 붙인다. 함수는 이 값일 때만 그 주소를 광고한다. 로그인 먼저 주소와 같은 방식이다.
-- 토큰 대상(`aud`)은 토큰 훅이 정하므로 DB 변경이 없다. 인가 서버·동의 화면도 그대로다. `/mcp`·`/signin`의 도구·title·지침은 바뀌지 않는다(시험이 `/mcp` 48종을 센다).
+- 토큰 대상(`aud`)은 토큰 훅이 정하므로 DB 변경이 없다. 인가 서버·동의 화면도 그대로다. `/mcp`·`/signin`의 도구·title·지침은 바뀌지 않는다(시험이 `/mcp` 51종을 센다 — 그림 올리기 표 셋을 더해).
   훅은 요청한 `resource`와 상관없이 같은 `aud` 세 값을 넣는다. 그래서 `/claude`로 받은 토큰은 같은 사용자·동의로 `/mcp`에서도 통한다. 심사에서 RFC 8707 대상 검증을
   물으면 "자원 서버 하나에 대상 하나"라고 답한다. 디렉터리 주소를 `aud`에 넣는다면 `validCloudAudience`(배열 길이를 정확히 본다)를 먼저 고친다.
 - 27종 중 21종은 대결장 키(`ODDBOUT_ARENA_AGENT_KEY`)가 있을 때만 등록된다. 키가 빠지면 이 판은 6종만 보인다. 배포 확인의 "27종"이 이것을 잡는다.
@@ -360,12 +360,70 @@ ODDBOUT의 생성 워커가 사용자의 말(과 그림 1~2장)로 선수를 만
 
 | 도구 | 하는 일 |
 | --- | --- |
-| `request_hosted_fighter` | 설명·언어와 선택 그림 둘(`picture`·`secondPicture`, 파일 인자, 권리 확인 `rightsConfirmed`)로 신청. `delegate: true`는 맡기기다(아래). 같은 계정·`idempotencyKey`로 **이미 저장된 작업**이 있으면 그림을 다시 올리지 않고 반환한다. 결과가 불명확할 때는 조회 도구로 복구한다 |
+| `request_hosted_fighter` | 설명·언어와 선택 그림 둘(`picture`·`secondPicture` 파일 인자, 또는 올리기 표로 넣은 `pictureUploads`, 합쳐 둘까지. 권리 확인 `rightsConfirmed`)로 신청. `delegate: true`는 맡기기다(아래). 같은 계정·`idempotencyKey`로 **이미 저장된 작업**이 있으면 그림을 다시 올리지 않고 반환한다. 결과가 불명확할 때는 조회 도구로 복구한다 |
 | `get_hosted_fighter` | 작업 상태, 외형 후보 둘·동작 미리보기의 서명 URL(10분), 프로필 초안, `next`. `jobId` 또는 원래 `idempotencyKey` 하나로 조회하며 둘 다 없으면 최근 다섯 신청, 열림 여부, 보유 토큰(`tokens`: granted·spent·balance). 각 작업은 그 작업이 쓴 토큰(`job.tokens`)을 보인다. 키 조회는 새 신청·업로드를 하지 않는다. `waitSeconds`(25초까지)는 찾은 작업의 상태를 기다린다 |
 | `choose_hosted_look` | 후보 `a`·`b` 고르기, 또는 한 문장 수정(두 장을 다시 그린다) |
 | `revise_hosted_motion` | 동작 하나를 한 문장으로 다시. 나머지 동작은 그대로 |
 | `register_hosted_fighter` | 사용자가 동작을 승인한 뒤 등록. 프로필은 워커 초안 위에 사용자가 바꾼 칸만 얹는다(언어별 이름·대사는 칸별로). 다른 선수와 같은 서버 검사를 거친다 |
 | `cancel_hosted_fighter` | 신청 취소. 이미 쓴 토큰은 돌아오지 않는다(보유 토큰, 2026-10-31) |
+| `start_picture_upload` | 그림 올리기 표(30분, 그림 둘). 사이트 링크(`page`)를 주고, `terminal: true`면 터미널 명령(`command`)도 준다. 아래 |
+| `get_picture_upload` | 표가 받은 그림(`uploads`: id·크기·`url` 10분·`used`·`usable`)과 닫힌 까닭(`closed`) |
+| `report_picture_link` | 진단: 에이전트가 가진 그림 주소의 종류·호스트만 서버 로그에 남긴다. 가져오지도 보관하지도 않는다. 아래 |
+
+### 그림 올리기 표 (2026-11-01)
+
+ChatGPT 밖의 에이전트(Grok·Claude·Gemini CLI·Codex CLI·Cursor의 Grok Bot)는 파일 인자가 없다. 그래서 대화에서 만든 그림이나 사용자가 그린 그림을
+표로 보낸다. 그림은 원화의 참고다. 추천 조합(GPT 원화 + Grok 영상)은 그대로다. 호스팅 생성에 딸린 도구라 Claude 디렉터리판(`/claude`)에는 없다.
+
+- `start_picture_upload`가 표를 만든다(`af_generation_upload_tickets`, 마이그레이션 `20261101100000`). 표 하나는 30분 동안 그림 둘을 받는다.
+  표를 주기 전에 신청의 검사를 먼저 한다(3차 리뷰 2026-11-01): MCP가 서비스 스위치(`generations/capabilities`)를 보고, API가 에이전트가 넘긴
+  `host`·`hostConsent`로 `af_generation_check`(동의, 한 번에 하나, 하루 한도, 호스트)를 돌린다. 거절이면 표가 없어서, 신청이 받지 않을 그림이
+  저장되거나 하루 업로드를 쓰지 않는다.
+  계정당 24시간에 표 열두 개다. 같은 24시간의 업로드 열두 장을 다 쓴 계정에는 표를 주지 않는다. 시간이 지나고 일주일 된 표는 새 표를 만들 때 지운다.
+  그림은 남는다.
+- 사이트: `page`(`https://oddbout.com/creator.html#view=upload&ticket=<id>`)를 사용자에게 링크로 준다. 에이전트에 연결한 계정으로 로그인한 사이트에서
+  그림을 고르면 `POST generations/uploads?ticket=<id>`로 올라간다. 링크에는 비밀이 없다. 다른 계정의 세션으로는 `not-found`다.
+- 터미널: `terminal: true`일 때만 `command`를 준다. 그림 파일이 있는 PC에서 명령을 실행하는 에이전트만 쓴다. 명령은
+  `curl -sS -H "x-oddbout-upload-ticket: afu_…" --data-binary "@<file>" …/functions/v1/ai-fighter/generations/ticket-uploads`이다.
+  비밀은 이때 한 번만 보이고 DB에는 해시만 남는다. 링크만 쓰는 표의 비밀은 만들어도 보이지 않으므로, 터미널이 없는 대화에는 올릴 수 있는 값이 남지 않는다.
+  주소는 API 함수 자신이다(`apikey` 없이 받는다). mcp.oddbout.com 게이트웨이는 본문을 64KB까지만 받는다. 응답이 없던 명령은 그림이 들어갔을 수 있어서,
+  다시 실행하기 전에 `get_picture_upload`로 본다(도구 설명과 `next`). 5xx 응답도 같다. 비밀은 명령 줄에 들어가서 터미널 에이전트의 화면과 그 PC의
+  프로세스 목록에는 보인다. 대화 답장에 넣거나 사용자에게 붙여 넣게 하지 않는다. 사이트 화면도 결과를 모르는 올리기 뒤와 누를 때마다 표를 읽고, 이번 방문이
+  올리지 않은 같은 바이트 수의 그림이 있으면 다시 보내지 않는다.
+- 어느 쪽이든 그림은 보통 업로드와 같다(PNG·JPEG·WebP, 4MB, 한 변 64~4096px, 24시간에 열두 장). 표가 못 받는 까닭은 본문을 읽기 전에 거절한다.
+  지난 표는 `ticket-expired`(410), 찬 표는 `ticket-full`(409), 열두 장을 다 쓴 계정은 `rate-limit`(429)이다. DB 함수 `af_generation_ticket_upload`가
+  표의 행을 잠그고 한 번 더 판단한다. 표의 잠금 키는 자기 것이다(`74280505`). `af_generation_create`의 `74280502`와 겹치지 않는다.
+  DB가 답한 거절(PostgREST 오류에 코드가 있다)이면 저장한 그림을 지운다. 답이 없는 실패(연결, 게이트웨이 시간 초과 — supabase-js의 코드 없는 오류)에는
+  지우지 않는다: DB가 행을 넣었다면 그 id가 그림 없이 남는다(2·3차 리뷰 2026-11-01). 쓰지 않은 그림을 지우는 정리는 아직 없다(이 표 이전부터).
+- `get_picture_upload`는 `closed`(`full`·`expired`·`day-limit` 순, 열려 있으면 null)와 그림마다 `url`(10분), `bytes`, `used`, `usable`, 그리고
+  `next`를 준다. 두 장이 다 찬 표는 시간이 지나도 `full`이다. `ticketId` 없이 부르면 하루 안의 표 목록을 주소 없이 준다(`GET generations/upload-tickets`):
+  맥락을 잃은 대화가 새 표를 만들기 전에 찾는다(AGENTS.md 규칙 2).
+  `usable`은 신청이 아직 받는 그림이다. 쓰이지 않았고 올린 지 하루가 안 됐다. 에이전트는 그림을 사용자에게 보여 주고 권리를 확인한 뒤
+  `usable` id를 `request_hosted_fighter`의 `pictureUploads`로 넘긴다.
+- 첨부 파일과 `pictureUploads`를 함께 넘기면 `generations/check`가 그 id들을 먼저 본다(계정의 것, 안 쓰임, 하루 안, 중복 없음).
+  거절이면 첨부 파일은 내려받지 않는다.
+
+**Grok 대화에서 바로 붙이기는 아직 꺼져 있다.** Grok이 만든 그림을 도구에 넘길 때 어떤 주소를 주는지, 그 호스트가 어디인지 아직 아무도 보지 못했다.
+호스트를 추측해 허용 목록에 넣지 않는다(AGENTS.md 규칙 1). `report_picture_link`는 사용자가 시험을 부탁할 때만 쓴다. 그림을 가져오지 않고, 함수 로그에
+`{"event":"picture-link-probe","client":…,"madeBy":…,…}` 한 줄만 남긴다. `madeBy`는 `grok`·`gemini`·`chatgpt`·`claude`·`other` 중 하나다
+(자유 글은 받지 않는다). 값마다 남는 칸은 다음과 같다.
+
+| `kind` | 남는 칸 |
+| --- | --- |
+| `url` (http·https) | `protocol`·`hostname`·`port`·`hasUserInfo`·`hasQuery`·`hasFragment`·`pathSegments`·`extension`·`length`. 경로·쿼리 자체는 남기지 않는다 |
+| `blob-url` | 그 blob을 만든 http(s) `origin`, `length` |
+| `other-scheme` | `scheme`, `length`. 파일 스킴(`file:`·`sandbox:`·`attachment:`·`content:`·`cid:`·`file-service:`·`ftp:`)만 이름을 남기고 나머지는 `other`다. 콜론 앞의 아무 낱말이나 스킴으로 읽혀서(`password:…`) 그렇다. `file-service://file-…` 같은 값의 뒤쪽은 파일 이름일 수 있어 남기지 않는다 |
+| `data-url` | `mediaType`(`image/…`만, 다른 형식은 `other`, 모양이 아니면 null), `length` |
+| `not-a-url` | `length`, 앞 40자의 모양 `shape`. 어느 문자의 글자든 `a`, 숫자는 `9`로 바꾼다 |
+
+8,000자보다 긴 값(data: 주소)은 에이전트가 앞 200자와 전체 길이(`fullLength`)만 넘긴다. 시험 순서는 다음과 같다.
+
+1. Grok(grok.com, Cursor의 Grok Bot)에서 그림을 하나 만들게 한다.
+2. "방금 만든 그림 주소를 report_picture_link로 보내 줘"라고 한다.
+3. 운영자가 로그에서 그 줄을 읽는다. 그 호스트의 그림을 서버가 로그인 없이 받을 수 있는지 따로 확인한다.
+4. 받을 수 있으면 그 호스트만 허용하는 주소 인자를 더한다. 따로 정한다.
+
+배포 순서: 마이그레이션 → `ai-fighter` → Render → 사이트(게임 저장소의 그림 보내기 화면) → `ai-fighter-mcp`. 도구가 주는 링크는 사이트가 먼저 있어야 열린다.
 
 성공한 작업 응답에는 `next`(`hostedNext`)가 있다(목록은 각 `jobs[].next`): 사용자에게 무엇을 보이고 물을지, 또는 얼마나 기다릴지.
 한 선수는 대략 신청 → 외형 두 장(몇 분) → 고르기 → 동작 11개(15~30분) → 확인 → 등록이다.
