@@ -141,7 +141,7 @@ Setup also fetches the outside tools sprite-gen needs, without sudo: `img2webp` 
 
 To connect the tools, follow the [local Codex plugin guide](docs/LOCAL-PLUGIN.md): `npm run plugin:build`, then the printed `codex plugin marketplace add …` and `codex plugin add oddbout@ai-fighter-local`. The older manual MCP connection (`node scripts/print-install.mjs`) remains for compatibility. Other local hosts can connect `mcp/stdio.mjs` with `AI_FIGHTER_ROOT` set to the checkout.
 
-The [unified plugin guide](docs/ODDBOUT-PLUGIN.md) and [distribution record](docs/PLUGIN-DISTRIBUTION.md) cover the reviewed portable source kit. A local plugin installation does not mean the cloud App is connected in Dots or that the kit is listed in a public directory.
+The [unified plugin guide](docs/ODDBOUT-PLUGIN.md) and [distribution record](https://github.com/jeonghwanko/oddbout-starter/blob/main/docs/PLUGIN-DISTRIBUTION.md) cover the reviewed portable source kit. A local plugin installation does not mean the cloud App is connected in Dots or that the kit is listed in a public directory.
 
 ## Register and play
 

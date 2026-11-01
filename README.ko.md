@@ -133,7 +133,7 @@ npm run sprite:setup
 
 도구 연결은 [Codex 로컬 플러그인 안내](docs/LOCAL-PLUGIN.md)를 따릅니다: `npm run plugin:build` 뒤 출력된 `codex plugin marketplace add …`와 `codex plugin add oddbout@ai-fighter-local`. 예전 MCP 직접 연결(`node scripts/print-install.mjs`)은 호환용으로 남아 있습니다. 다른 로컬 호스트는 `AI_FIGHTER_ROOT`를 이 저장소 경로로 지정하고 `mcp/stdio.mjs`를 연결합니다.
 
-검토된 소스 키트의 구성과 배포 기록은 [배포 안내](docs/PLUGIN-DISTRIBUTION.md)를 참고하세요. 로컬 플러그인 설치와 클라우드 앱 연결은 별개입니다.
+검토된 소스 키트의 구성과 배포 기록은 [배포 안내](https://github.com/jeonghwanko/oddbout-starter/blob/main/docs/PLUGIN-DISTRIBUTION.md)를 참고하세요. 로컬 플러그인 설치와 클라우드 앱 연결은 별개입니다.
 
 ## 등록하고 플레이하기
 
