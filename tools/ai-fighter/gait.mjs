@@ -80,8 +80,12 @@ export function walkPlan() {
 }
 export function validatePlan(plan, sequence) {
   if (plan.version !== 1 || !['walk', 'run'].includes(plan.motion) || !['right', 'left'].includes(plan.facing)) throw Error('Invalid gait plan');
-  const count = spec.motions[plan.motion].frames;
-  if (!Array.isArray(plan.phases) || plan.phases.length !== count || plan.phases.some((p, i) =>
+  const { frames: standard, minFrames = standard, maxFrames = standard } = spec.motions[plan.motion];
+  const count = plan.phases?.length;
+  if (!Array.isArray(plan.phases) || count < minFrames || count > maxFrames) throw Error('Invalid gait frame count');
+  // Every source frame needs its own phase; a shorter plan must not leave the tail's contacts unchecked.
+  if (sequence && sequence.frames.length !== count) throw Error('Gait phase count does not match sequence frames');
+  if (plan.phases.some((p, i) => !p ||
     p.index !== i || p.phase !== i / count || !Array.isArray(p.support) || new Set(p.support).size !== p.support.length ||
     p.support.some(f => !['near', 'far'].includes(f)) || (plan.motion === 'walk' && !p.support.length))) throw Error('Invalid gait phases');
   if (!['near', 'far'].every(foot => plan.phases.some(p => p.support.length === 1 && p.support[0] === foot))) throw Error('Plan must alternate support between both feet');
@@ -94,8 +98,7 @@ export function validatePlan(plan, sequence) {
 export function inspectGeometry(sequence, plan) {
   validatePlan(plan, sequence);
   const errors = [], warnings = [], frames = sequence.frames.map((frame, index) => ({ index, bounds: alphaBounds(frame), sha256: digest(frame.data) }));
-  const expected = spec.motions[plan.motion].frames;
-  if (frames.length !== expected) errors.push({ code: 'FRAME_COUNT', actual: frames.length, expected });
+  // validatePlan checks the contract range and exact phase coverage without resampling the sequence.
   if (new Set(frames.map(f => f.sha256)).size !== frames.length) errors.push({ code: 'DUPLICATE_FRAME' });
   for (const frame of frames) {
     if (!frame.bounds) { errors.push({ code: 'EMPTY_FRAME', frame: frame.index }); continue; }

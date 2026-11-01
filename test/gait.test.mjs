@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
-import { alphaBounds, walkPlan, sequenceHash, inspectGeometry, combineReview, requireReview, commonGameRequest, loadSequence, loopReview, requireLoopReview, ENGINE_SEAM_MAX, scaleCheckRuns, scaleCheckEntries, scaleCheckConfigErrors, scalePer } from '../tools/ai-fighter/gait.mjs';
+import { alphaBounds, walkPlan, sequenceHash, validatePlan, inspectGeometry, combineReview, requireReview, commonGameRequest, loadSequence, loopReview, requireLoopReview, ENGINE_SEAM_MAX, scaleCheckRuns, scaleCheckEntries, scaleCheckConfigErrors, scalePer } from '../tools/ai-fighter/gait.mjs';
 import { preview } from '../scripts/gait.mjs';
 
 function frame(bottom = 70, mark = 0, height = 80) {
@@ -15,18 +17,82 @@ function frame(bottom = 70, mark = 0, height = 80) {
   }
   return { width, height, data };
 }
-function sequence() {
-  const value = { frames: Array.from({ length: 16 }, (_, i) => frame(70, i)), durations: Array(16).fill(100) };
+function sequence(count = 16) {
+  const value = { frames: Array.from({ length: count }, (_, i) => frame(70, i)), durations: Array(count).fill(100) };
   value.sha256 = sequenceHash(value); return value;
 }
 function plan() {
   const value = walkPlan(); value.geometry = { width: 64, height: 80, groundY: 70, groundTolerance: 2 }; return value;
 }
+// Synthetic review fixtures only: these support labels/measurements are not observations of generated artwork.
+function countedPlan(motion, count) {
+  const value = plan(); value.motion = motion;
+  value.phases = Array.from({ length: count }, (_, i) => ({ index: i, phase: i / count,
+    pose: 'fixture stance', support: [i < Math.floor(count / 2) ? 'near' : 'far'] }));
+  return value;
+}
 function annotations(seq) {
+  const far = Math.floor(seq.frames.length / 2) + 1;
   return { sequenceSha256: seq.sha256, visual: { identity: 'pass', anatomy: 'pass', alternation: 'pass', loop: 'pass' },
-    stances: [{ foot: 'near', start: 1, end: 3, box: [10, 60, 40, 10] }, { foot: 'far', start: 9, end: 11, box: [10, 60, 40, 10] }] };
+    stances: [{ foot: 'near', start: 1, end: 3, box: [10, 60, 40, 10] }, { foot: 'far', start: far, end: far + 2, box: [10, 60, 40, 10] }] };
 }
 const reports = () => [0, 1].map(() => ({ stride_verified: true, foot_velocity_px_per_second: -10 }));
+
+test('required gait review accepts every contract count, preserving pixels, timing and measured stride', () => {
+  for (const [motion, min, max] of [['walk', 12, 32], ['run', 10, 16]]) for (let count = min; count <= max; count++) {
+    const seq = sequence(count), before = sequenceHash(seq);
+    const report = combineReview(seq, countedPlan(motion, count), annotations(seq), reports());
+    assert.equal(report.status, 'pass', `${motion} ${count}: ${JSON.stringify(report)}`);
+    assert.equal(report.frames.length, count);
+    assert.equal(report.durationSeconds, count / 10);
+    assert.equal(report.stridePixels, count);
+    assert.equal(requireReview(report, seq, motion), report);
+    assert.equal(sequenceHash(seq), before, 'review must not alter pixels or timing');
+  }
+});
+
+test('gait plans reject out-of-range counts and must cover the exact sequence with ordered phases', () => {
+  for (const [motion, count] of [['walk', 11], ['walk', 33], ['run', 9], ['run', 17]])
+    assert.throws(() => validatePlan(countedPlan(motion, count)), /Invalid gait frame count/, `${motion} ${count}`);
+  for (const [motion, count] of [['walk', 25], ['run', 11]]) {
+    const seq = sequence(count), p = countedPlan(motion, count);
+    for (const planned of [count - 1, count + 1])
+      assert.throws(() => combineReview(seq, countedPlan(motion, planned), annotations(seq), reports()), /phase count does not match/);
+    for (const change of [v => { v.phases.at(-1).index = 0; }, v => { v.phases.at(-1).phase = 1; },
+      v => { v.phases[count - 1] = null; }, v => { v.phases[0].support = ['near', 'near']; },
+      v => { v.phases.forEach(f => { f.support = ['near']; }); }]) {
+      const malformed = structuredClone(p); change(malformed);
+      assert.throws(() => validatePlan(malformed, seq), /Invalid gait phases|alternate support/);
+    }
+  }
+});
+
+test('variable counts retain contact, visual, duplicate and stale-evidence gates', () => {
+  for (const [motion, count] of [['walk', 25], ['run', 11]]) {
+    const seq = sequence(count), p = countedPlan(motion, count), a = annotations(seq);
+    assert.equal(combineReview(seq, p, null).status, 'unverified');
+    assert.equal(combineReview(seq, p, a).status, 'unverified');
+    for (const key of ['identity', 'anatomy', 'alternation', 'loop']) {
+      const fail = structuredClone(a); fail.visual[key] = 'fail';
+      assert.equal(combineReview(seq, p, fail, reports()).status, 'fail');
+      fail.visual[key] = 'unverified';
+      assert.equal(combineReview(seq, p, fail, reports()).status, 'unverified');
+    }
+    const incomplete = reports(); incomplete[1].stride_verified = false;
+    assert.equal(combineReview(seq, p, a, incomplete).status, 'unverified');
+    const wrongStance = structuredClone(a); wrongStance.stances[0].start = count - 3; wrongStance.stances[0].end = count - 1;
+    assert.ok(combineReview(seq, p, wrongStance, reports()).errors.some(e => e.code === 'STANCE_PLAN_MISMATCH'));
+    const pass = combineReview(seq, p, a, reports());
+    seq.durations[count - 1] += 0.2;
+    assert.throws(() => requireReview(pass, seq, motion), /STALE/);
+    seq.durations[count - 1] -= 0.2;
+    seq.frames[count - 1] = frame(53, count - 1);
+    assert.throws(() => requireReview(pass, seq, motion), /STALE/);
+    assert.ok(inspectGeometry(seq, p).errors.some(e => e.code === 'GROUND_OFFSET' && e.frame === count - 1));
+    seq.frames[count - 1] = seq.frames[0];
+    assert.ok(inspectGeometry(seq, p).errors.some(e => e.code === 'DUPLICATE_FRAME'));
+  }
+});
 
 test('the alternating 17 px baseline regression is caught before packaging', () => {
   const seq = sequence(); seq.frames[1] = frame(53, 1); seq.sha256 = sequenceHash(seq);
@@ -84,6 +150,42 @@ async function manifest(dir, name, value) {
   await writeFile(path.join(dir, name + '.json'), JSON.stringify(data));
   return { file: name + '.json', state: 'idle' };
 }
+
+test('the review CLI inspects variable source cycles without generation, resampling or approving missing evidence', async () => temporary(async dir => {
+  const cli = fileURLToPath(new URL('../scripts/gait.mjs', import.meta.url));
+  for (const [motion, count] of [['walk', 25], ['run', 11]]) {
+    const seq = sequence(count), p = countedPlan(motion, count), tiles = [], cells = [];
+    for (const [i, f] of seq.frames.entries()) {
+      tiles.push({ input: await sharp(f.data, { raw: { width: f.width, height: f.height, channels: 4 } }).png().toBuffer(), left: i * 64, top: 0 });
+      cells.push({ x: i * 64, y: 0, w: 64, h: 80 });
+    }
+    const sheet = path.join(dir, `${motion}.png`), metadata = path.join(dir, `${motion}.json`);
+    await sharp({ create: { width: count * 64, height: 80, channels: 4, background: '#0000' } }).composite(tiles).png().toFile(sheet);
+    await writeFile(metadata, JSON.stringify({ sprite_sheet_alpha: `${motion}.png`, frame_layout: { rows: { [motion]: cells } },
+      animation: { rows: { [motion]: { durations_ms: Array(count).fill(1000 / 24) } } } }));
+    p.source = { file: `${motion}.json`, state: motion };
+    const planFile = path.join(dir, `${motion}-plan.json`), out = path.join(dir, `${motion}-review`);
+    await writeFile(planFile, JSON.stringify(p));
+    const before = await Promise.all([readFile(sheet), readFile(metadata), readFile(planFile)]);
+    // No annotations => no contact engine invocation; missing evidence must remain unverified.
+    const result = spawnSync(process.execPath, [cli, 'review', planFile, out], { encoding: 'utf8', windowsHide: true, timeout: 30_000 });
+    assert.equal(result.status, 2, result.stdout + result.stderr);
+    const report = JSON.parse(await readFile(path.join(out, 'review.json'), 'utf8'));
+    assert.equal(report.status, 'unverified');
+    assert.equal(report.frames.length, count);
+    assert.deepEqual(report.errors, []);
+    const descriptor = JSON.parse(await readFile(path.join(out, 'measurement/sequence.json'), 'utf8'));
+    assert.equal(descriptor.frames.length, count);
+    assert.ok(descriptor.frames.every(f => f.duration === (1000 / 24) / 1000));
+    for (const [i, f] of seq.frames.entries()) {
+      const pixels = await sharp(path.join(out, 'measurement', `${i}.png`)).ensureAlpha().raw().toBuffer();
+      assert.ok(pixels.equals(f.data), `${motion} frame ${i} changed`);
+    }
+    const after = await Promise.all([readFile(sheet), readFile(metadata), readFile(planFile)]);
+    after.forEach((bytes, i) => assert.ok(bytes.equals(before[i]), 'source file changed'));
+  }
+}));
+
 test('a crouched pose uses the neutral reference scale instead of being inflated to standing height', async () => temporary(async dir => {
   const reference = await manifest(dir, 'standing', frame(70)), crouch = await manifest(dir, 'crouch', frame(40));
   const value = await commonGameRequest({ reference, assets: [{ id: 'idle', source: reference }, { id: 'crouch', source: crouch }] }, dir);

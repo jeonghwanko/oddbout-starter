@@ -159,7 +159,11 @@ generation and the live AI Fighter spec before creating a package, and use the b
 
 ### Motion quality
 
-- The v1 contract requires all 11 motions, including 16 walk frames and 12 run frames. Validate actual motion,
+- The v1 contract requires all 11 motions. With `gait-frames-1`, preserve the filmed/drawn cycle's distinct frames:
+  walk 12–32, run 10–16, with equal per-frame durations. The spec's `frames` (16/12) are authoring defaults, not fixed
+  acceptance counts. Do not drop, duplicate or interpolate frames merely to reach those defaults. The review plan
+  must cover every actual frame (`index: i`, `phase: i / frameCount`) with its support state; plans are not observations.
+  Dots keeps `reviewPolicy: required`, both same-foot stance measurements and visual review. Validate actual motion,
   identity, foot alternation and ground contact; schema/decoder success alone is not visual approval.
 - Follow `docs/GAIT-REVIEW.md`: keep one coordinate/scale reference, write the phase plan before generation, run
   `fighter:gait review` with both same-foot stance ROIs, and show its preview before registration. Missing or
@@ -185,8 +189,8 @@ GPT locomotion uses the motion engine in the pinned sprite-gen-agent; run it thr
 When the user chooses authored joint pose guidance, use the v5 measured `gen-motion` route documented in
 `docs/GAIT-REVIEW.md` and `vendor/sprite-gen/docs/pose-motion.md`:
 
-- One whole-body pose per call: target guide + immutable appearance-only identity + reviewed anchors, 16/12-frame
-  plans, then pose and cycle review.
+- One whole-body pose per call: target guide + immutable appearance-only identity + reviewed anchors, the authored
+  pose route's 16/12-frame plans, then pose and cycle review. These route defaults do not require resampling video cycles.
 - Review the actual prepared original/guide pairing in `input-review.json` before generation; a coordinate plan is not
   proof of anatomical fit. Inspect `image_tool_trace` for actual dispatch evidence.
 - Structural canvas errors and unknown timeout outcomes must not consume another generation; reconcile existing results.
