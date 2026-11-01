@@ -1,5 +1,9 @@
 # ODDBOUT distribution
 
+0.6.10 candidate extends `fitSheets` to measured total/per-asset byte and pixel budgets after body normalization.
+It adds a bounded `outputScale` input and records each fitting trial without changing encoding, frames or timing.
+The existing texture-resolution contract and validators remain unchanged. Release verification follows publication.
+
 **Current source-kit release: 0.6.9** (2026-11-02 KST: MCP packaging recovery and bounded sheet fitting).
 
 Cloud `prepare_fighter_packaging` supplies the reviewed runtime and structured workspace calls to

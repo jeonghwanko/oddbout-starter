@@ -11,21 +11,21 @@ const relative = z.string().min(1).max(512).refine(value => !/[\\:\x00-\x1f]/.te
 export function registerPackagingPreparation({ register, invoke }) {
   register('prepare_fighter_packaging', '기존 파일 포장·복구',
     'Prepare inspection and packaging of existing fighter files in a Dots/PC workspace. Use for SHEET_TOO_LARGE or packaging recovery. '
-    + 'Returns exact local MCP/CLI invocations, not an executed package: this cloud server cannot read VM paths. '
+    + 'Handles sheet dimensions and total/per-asset byte and pixel limits. Returns exact local MCP/CLI invocations, not an executed package: this cloud server cannot read VM paths. '
     + 'Run them through the host execution tool, inspect actual results, then continue the existing registration request. '
     + 'Never regenerate or ask the user to relay packaging errors. fitSheets permits resolution reduction only within the user’s requested optimization; '
     + 'all frame identities, playback timing, game size and required file checks remain. No generation account or new registration login is needed.',
     { workspacePath: absolute, kitPath: absolute.describe('Absolute extracted plugin directory, containing runtime/ and launcher.mjs.'),
-      planPath: relative, outputPath: relative, fitSheets: z.boolean().default(false) },
-    async ({ workspacePath, kitPath, planPath, outputPath, fitSheets }) => {
+      planPath: relative, outputPath: relative, fitSheets: z.boolean().default(false), outputScale: z.number().min(.25).max(1).optional() },
+    async ({ workspacePath, kitPath, planPath, outputPath, fitSheets, outputScale }) => {
       const result = await invoke('spec');
       if (!result.ok) return result;
       const features = result.data?.features ?? [];
-      if (fitSheets && !features.includes('texture-resolution-1')) return { ok: false, code: 'server-feature-missing',
+      if ((fitSheets || outputScale !== undefined && outputScale < 1) && !features.includes('texture-resolution-1')) return { ok: false, code: 'server-feature-missing',
         feature: 'texture-resolution-1', next: 'Keep original files. Resolution fitting is not yet supported by the deployed contract.' };
       const root = kitPath.replace(/\\/g, '/').replace(/\/$/, '');
       const runtimeDirectory = `${root}/runtime`;
-      const args = { planPath, outputPath, fitSheets };
+      const args = { planPath, outputPath, fitSheets, ...(outputScale === undefined ? {} : { outputScale }) };
       return { ok: true, stage: 'workspace-execution-required', minimumKitVersion: runtime.version, runtime,
         contract: { features, limits: result.data?.limits, textureResolution: result.data?.textureResolution },
         runtimeDirectory,
@@ -39,7 +39,12 @@ export function registerPackagingPreparation({ register, invoke }) {
             argumentsFileContents: args } })),
         recovery: { intermediateTooLarge: 'Use the same game-pack request with --image-format webp and a new output directory; '
           + 'only if needed, --max-bytes 200000000. The final upload limits still apply.',
-          sheetTooLarge: fitSheets ? 'The packer fits bounded texture resolution and records pixelScale; keep every frame and timing.'
+          packageBudget: 'With fitSheets enabled, reduce density across all normalized motions as needed and measure actual encoded bytes and full sheet pixels on every trial. '
+            + 'Keep encoding unchanged, all original frame identities and durations, and compensate game size with pixelScale. '
+            + 'Read report.budget for measured totals, per-asset usage, scale attempts and exhaustion. No server limits are bypassed. '
+            + 'The optional outputScale caps the post-normalization density; never pre-shrink inputs to evade body normalization. '
+            + 'Budget fitting has at most eight trials and a ten-minute workspace-worker deadline; resume the same host execution rather than dispatching duplicates.',
+          sheetTooLarge: fitSheets ? 'The packer fits sheet and package budgets and records pixelScale; keep every frame and timing.'
             : 'Inspect the returned layout. Preserve pixels unless the user requested resolution optimization.',
           qualityDiagnostics: 'Deferred; never require a passing gait report or another quality approval to package.' },
         next: 'Run inspection, then build into the new output path if supported. Read actual validation results. '

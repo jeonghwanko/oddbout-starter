@@ -94,7 +94,12 @@ The kit and existing workspace may be separate directories; install locked Node 
 
 Both tools take workspace-relative `planPath` and optional `outputPath`; output must be a new
 `output/<session>-work/artifacts/<name>` directory. `fitSheets: true` permits bounded resampling after normalizing
-body size, keeping every original frame identity, playback order, timing and contact step. It writes the contract's
+body size, keeping every original frame identity, playback order, timing and contact step. From 0.6.10 it also
+fits total/per-asset byte and pixel budgets with at most eight measured trials, retaining the plan's encoding.
+Each trial starts from normalized originals; neither repeated resampling nor automatic lossy encoding is used.
+`outputScale` optionally caps output density (.25–1) after normalization. `report.budget` records measured
+per-asset usage, totals, limits, scales and exhaustion. The fitting worker's deadline is ten minutes; resume the
+same host execution while it runs. It writes the contract's
 `pixelScale` so game size stays consistent. Use it only when the user permits resolution optimization and the live
 server advertises `texture-resolution-1`. Default false preserves resolution. Neither mode overwrites original
 assets, selected versions or an existing package; quality diagnostics stay deferred. Inspect output after a timeout.

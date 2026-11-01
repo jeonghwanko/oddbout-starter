@@ -14,7 +14,7 @@ async function confined(root, file) {
 }
 
 /** Inspect every path the packer can read before starting the child; inputs remain in a trusted local workspace.
- * @param {string} root @param {{ planPath: string, outputPath?: string, fitSheets?: boolean }} args */
+ * @param {string} root @param {{ planPath: string, outputPath?: string, fitSheets?: boolean, outputScale?: number }} args */
 export async function packagingInputs(root, args) {
   root = await realpath(root);
   const planFile = await localPath(root, args.planPath), plan = await readJson(planFile), base = path.dirname(planFile);
@@ -56,9 +56,9 @@ export async function packagingInputs(root, args) {
 }
 
 /** @param {string} root @param {{ timeoutMs?: number }} [options] */
-export function makePackagingRunner(root, { timeoutMs = 120_000 } = {}) {
+export function makePackagingRunner(root, { timeoutMs } = {}) {
   let busy = false;
-  /** @param {{ planPath: string, outputPath?: string, fitSheets?: boolean }} args @param {boolean} inspectOnly */
+  /** @param {{ planPath: string, outputPath?: string, fitSheets?: boolean, outputScale?: number }} args @param {boolean} inspectOnly */
   return async (args, inspectOnly) => {
     if (busy) return { ok: false, stage: 'packaging', code: 'packaging-busy' };
     busy = true;
@@ -66,13 +66,13 @@ export function makePackagingRunner(root, { timeoutMs = 120_000 } = {}) {
       const input = await packagingInputs(root, args);
       return await new Promise(resolve => {
         const child = fork(fileURLToPath(new URL('./packaging-worker.mjs', import.meta.url)),
-          [input.planFile, JSON.stringify({ inspectOnly, fitSheets: args.fitSheets ?? false, out: input.out })],
+          [input.planFile, JSON.stringify({ inspectOnly, fitSheets: args.fitSheets ?? false, outputScale: args.outputScale, out: input.out })],
           { stdio: ['ignore', 'ignore', 'ignore', 'ipc'], execArgv: ['--max-old-space-size=256'],
             env: { ...process.env, VIPS_CONCURRENCY: '1' } });
         /** @type {any} */
         let result;
         let timedOut = false;
-        const timer = setTimeout(() => { timedOut = true; child.kill(); }, timeoutMs);
+        const timer = setTimeout(() => { timedOut = true; child.kill(); }, timeoutMs ?? (args.fitSheets ? 600_000 : 120_000));
         child.on('message', message => { if (!timedOut) result ??= message; });
         child.once('error', () => { clearTimeout(timer); resolve({ ok: false, stage: 'packaging', code: 'packaging-worker-start-failed' }); });
         child.once('exit', () => { clearTimeout(timer); resolve(result ?? { ok: false, stage: 'packaging',
@@ -90,13 +90,13 @@ export function makePackagingRunner(root, { timeoutMs = 120_000 } = {}) {
 export function registerPackagingTools(server, { root, respond }) {
   const run = makePackagingRunner(root);
   const inputSchema = { planPath: z.string().min(1).max(512), outputPath: z.string().min(1).max(512).optional(),
-    fitSheets: z.boolean().default(false) };
+    fitSheets: z.boolean().default(false), outputScale: z.number().min(.25).max(1).optional() };
   for (const inspectOnly of [true, false]) {
     const name = inspectOnly ? 'inspect_fighter_packaging' : 'pack_fighter_package';
     server.registerTool(name, {
       description: inspectOnly
-        ? 'Measure and encode the existing game-pack and plan without writing files. Return all sheet blockers and supported fixes; never generate. fitSheets previews bounded resolution reduction while preserving all frames, timing and game size.'
-        : 'Build and fully validate a new package from the existing game-pack and plan. Never generate, overwrite selected originals, register or request quality approval. fitSheets permits bounded resolution reduction for sheet limits using texture-resolution-1; use only after the live server advertises it. Keep frame count, timing and apparent game size. Output must be a new output/<session>-work/artifacts/ directory.',
+        ? 'Measure and encode existing game-pack inputs without writing files. Return sheet, byte and pixel budgets. fitSheets also fits total package and per-asset budgets using measured bounded trials; outputScale sets an optional maximum density after body normalization. Preserve all frames, timing and game size; never generate.'
+        : 'Build and fully validate a new package from existing files. fitSheets fits sheet dimensions AND total/per-asset byte and pixel budgets without changing encoding or removing frames. Optional outputScale (.25–1) caps density after normalization. Requires texture-resolution-1; preserves game size and originals. Never generate, register or request quality approval. Output must be a new output/<session>-work/artifacts/ directory.',
       inputSchema, outputSchema: { ok: z.boolean(), stage: z.string() },
       annotations: { readOnlyHint: inspectOnly, destructiveHint: false, idempotentHint: inspectOnly, openWorldHint: false },
     }, async args => respond(/** @type {import('./server.mjs').ToolResult} */ (await run(args, inspectOnly))));

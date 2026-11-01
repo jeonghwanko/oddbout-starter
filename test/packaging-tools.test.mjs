@@ -6,7 +6,22 @@ import path from 'node:path';
 import { packagingInputs } from '../mcp/packaging-tools.mjs';
 import { registerPackagingPreparation } from '../mcp/cloud/packaging-tools.mjs';
 import { sheetLayout } from '../tools/ai-fighter/sheet-layout.mjs';
+import { packageBudget, nextPackageScale } from '../tools/ai-fighter/package-budget.mjs';
 import { createCloudHandler, CLOUD_RESOURCE } from '../mcp/cloud.mjs';
+
+test('the reported Velora totals require package-wide reduction and the search respects its floor', () => {
+  const limits = { assetBytes: 4_000_000, packageAssetBytes: 10_000_000, imagePixels: 16_777_216, packagePixels: 33_554_432 };
+  const budget = packageBudget(Array.from({ length: 6 }, (_, index) => ({ id: `sheet-${index}`, bytes: 4_550_646 + (index === 5 ? 4 : 0),
+    width: 2048, height: 4096 })), limits);
+  // Separate package totals reported by Dots from this synthetic sheet layout.
+  const pressure = Math.max(27_303_880 / limits.packageAssetBytes, 84_983_946 / limits.packagePixels);
+  assert.equal(budget.fits, false);
+  assert.ok(budget.assets.every(asset => asset.pixels === asset.width * asset.height));
+  assert.ok(nextPackageScale(1, pressure, .25) < Math.sqrt(33_554_432 / 84_983_946));
+  assert.equal(nextPackageScale(.26, 50, .25), .25);
+  assert.equal(nextPackageScale(.25, 2, .25), null);
+  assert.equal(nextPackageScale(.5, 1, .25), null);
+});
 
 test('the 57-frame blocker needs resolution fitting, not byte compression or a different grid', () => {
   const result = sheetLayout(57, 550, 699, { dimension: 4096, grid: 8, frame: 1024, margin: 8, minScale: .25 });
@@ -21,19 +36,21 @@ test('native cloud preparation is public, names actual workspace execution, and 
     headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'prepare_fighter_packaging',
       arguments: { workspacePath: '/workspace', kitPath: '/kit', planPath: 'plan.json',
-        outputPath: 'output/velora-work/artifacts/fit', fitSheets: true } } }) }));
+        outputPath: 'output/velora-work/artifacts/fit', fitSheets: true, outputScale: .9 } } }) }));
   assert.equal(response.status, 200);
   const result = (await response.json()).result.structuredContent;
   assert.equal(result.ok, true, JSON.stringify(result));
   assert.equal(result.stage, 'workspace-execution-required');
   assert.equal(result.minimumKitVersion, result.runtime.version);
   assert.match(result.runtime.manifestSha256, /^[a-f0-9]{64}$/);
-  assert.match(result.runtime.manifestUrl, /^https:\/\/oddbout.com\/creator-kit\/0\.6\.9\/.*\/release.json$/);
+  assert.ok(result.runtime.manifestUrl.startsWith(`https://oddbout.com/creator-kit/${result.minimumKitVersion}/`));
   assert.deepEqual(result.operations.map(operation => operation.tool), ['inspect_fighter_packaging', 'pack_fighter_package']);
   assert.equal(result.runtimeDirectory, '/kit/runtime');
   assert.deepEqual(result.dependencyInstall, { command: 'npm', args: ['ci', '--ignore-scripts'], cwd: '/kit/runtime' });
   assert.equal(result.operations[1].execution.args[0], '/kit/runtime/scripts/creation-tool.mjs');
   assert.equal(result.operations[1].execution.argumentsFileContents.fitSheets, true);
+  assert.equal(result.operations[1].execution.argumentsFileContents.outputScale, .9);
+  assert.match(result.recovery.packageBudget, /actual encoded bytes/);
   assert.equal(result.fighterId, undefined);
 });
 
