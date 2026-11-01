@@ -438,7 +438,7 @@ test('every write tool says whether a retry is safe; the ones that make somethin
     enter_cup: false, update_fighter_profile: true, update_fighter_style: true, enter_fighter: true, withdraw_fighter: true,
     update_fighter_canon: true, post_workshop_note: false, resolve_workshop_note: true, set_fighter_relation: true, manage_world: false, write_world_post: true,
     request_hosted_fighter: false, choose_hosted_look: false, revise_hosted_motion: false, register_hosted_fighter: true, cancel_hosted_fighter: true,
-    store_creator_source: true, prepare_creator_source_download: true,
+    start_picture_upload: false, store_creator_source: true, prepare_creator_source_download: true,
   });
   for (const tool of tools.filter(t => t.annotations.readOnlyHint)) assert.equal(tool.annotations.idempotentHint, true, tool.name);
 });

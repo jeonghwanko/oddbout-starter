@@ -51,7 +51,8 @@ are not evidence that the token expired.
 When the connected ODDBOUT tools list `request_hosted_fighter`, ODDBOUT can make the fighter on its own worker:
 no workspace, kit or generation account of the user's is needed. Offer it first when the user wants ODDBOUT to make
 the fighter or has no generation setup; the workspace route below stays the user's choice. Pass the user's words (and
-their own pictures with their confirmation of rights), then follow each result's `next`: show both looks (front views; the pick
+their own pictures with their confirmation of rights: attached files where the host attaches them, else `start_picture_upload`,
+whose link the user opens or whose command sends a picture file you have), then follow each result's `next`: show both looks (front views; the pick
 is also the fighter's profile picture) and pass the user's pick or one change, show the motion previews (made from a side view
 ODDBOUT draws from the pick) and pass their approval or one motion change, register on their request.
 If the user leaves the choices to ODDBOUT ("just make it"), pass `delegate: true`: ODDBOUT picks the look and the user answers once, at the motions.

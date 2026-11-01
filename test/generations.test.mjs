@@ -663,3 +663,55 @@ test('three requests a day count his own: not one that failed on our side or tha
     assert.equal((await ask()).status, 200);
   } finally { await sql.close(); }
 });
+
+// 그림 올리기 표 (2026-11-01): an agent with no ChatGPT attachment gets a ticket; the owner adds pictures on the site with its id, a
+// terminal with its secret; two at most, for thirty minutes; each an ordinary upload the request then names.
+test('a picture ticket: two pictures from the site or a terminal, its owner\'s only, refused once full or past its time', async () => {
+  const { sql, owner, call, healthy, objects } = await generation();
+  try {
+    await healthy();
+    const made = await call('POST', 'generations/upload-tickets');
+    assert.equal(made.status, 200, JSON.stringify(made.body));
+    const { id: ticket, secret } = made.body.ticket;
+    assert.match(secret, /^afu_[a-f0-9]{64}$/);
+    assert.deepEqual([made.body.ticket.open, made.body.ticket.uploads], [true, []]);
+    // The database keeps the secret's hash only.
+    assert.equal((await sql.query('select count(*)::int as n from public.af_generation_upload_tickets where secret_hash = $1',
+      [await sha256(new TextEncoder().encode(secret))])).rows[0].n, 1);
+    const terminal = (body, header) => call('POST', 'generations/ticket-uploads', body, null, header === undefined ? {} : { 'x-oddbout-upload-ticket': header });
+    assert.deepEqual([(await terminal(png(512, 512))).status, (await terminal(png(512, 512))).body.code], [403, 'invalid-ticket']);
+    assert.equal((await terminal(png(512, 512), `afu_${'0'.repeat(64)}`)).body.code, 'invalid-ticket');
+    assert.equal((await terminal(new TextEncoder().encode('plain words, no picture'), secret)).status, 415);
+    const first = await terminal(png(512, 512), secret);
+    assert.equal(first.status, 200, JSON.stringify(first.body));
+    // Another account cannot put pictures under it; its owner can, on the site.
+    assert.equal((await call('POST', `generations/uploads?ticket=${ticket}`, png(300, 400), 'other-token-0123456789')).body.code, 'not-found');
+    const second = await call('POST', `generations/uploads?ticket=${ticket}`, png(300, 400));
+    assert.equal(second.status, 200, JSON.stringify(second.body));
+    const stored = objects.size;
+    assert.deepEqual([(await terminal(png(512, 512), secret)).status, (await terminal(png(512, 512), secret)).body.code], [409, 'ticket-full']);
+    assert.equal(objects.size, stored, 'a full ticket stores nothing');
+    const read = (await call('GET', `generations/upload-tickets/${ticket}`)).body.ticket;
+    assert.equal(read.secret, undefined);
+    assert.deepEqual([read.open, read.uploads.map(u => [u.id, u.width, u.used])],
+      [false, [[first.body.upload.id, 512, false], [second.body.upload.id, 300, false]]]);
+    assert.equal((await call('GET', `generations/upload-tickets/${ticket}`, undefined, 'other-token-0123456789')).body.code, 'not-found');
+    // The request names them as it names any upload of his.
+    const job = await call('POST', 'generations', { description: '빨간 글러브를 낀 고양이 복서, 귀가 크다', language: 'ko',
+      refs: [first.body.upload.id, second.body.upload.id], rightsConfirmed: true }, undefined, { 'idempotency-key': crypto.randomUUID() });
+    assert.equal(job.status, 200, JSON.stringify(job.body));
+    assert.deepEqual((await call('GET', `generations/upload-tickets/${ticket}`)).body.ticket.uploads.map(u => u.used), [true, true]);
+    // Past its thirty minutes: refused on both ways, before anything is stored.
+    const late = (await call('POST', 'generations/upload-tickets')).body.ticket;
+    await sql.query("update public.af_generation_upload_tickets set expires_at = now() - interval '1 second' where id = $1", [late.id]);
+    assert.deepEqual([(await terminal(png(512, 512), late.secret)).status, (await terminal(png(512, 512), late.secret)).body.code], [410, 'ticket-expired']);
+    assert.equal((await call('POST', `generations/uploads?ticket=${late.id}`, png(512, 512))).body.code, 'ticket-expired');
+    assert.equal(objects.size, stored);
+    // The database decides on its own too (two uploads racing past the API's check).
+    await assert.rejects(sql.query('select public.af_generation_ticket_upload($1,$2,$3,$4,$5,$6,$7,$8)',
+      [owner, ticket, crypto.randomUUID(), `refs/${owner}/${crypto.randomUUID()}.png`, 'image/png', 64, 512, 512]), /ticket-full/);
+    // Twelve tickets a day.
+    for (let i = 2; i < 12; i++) assert.equal((await call('POST', 'generations/upload-tickets')).status, 200);
+    assert.deepEqual([(await call('POST', 'generations/upload-tickets')).status, (await call('POST', 'generations/upload-tickets')).body.code], [429, 'rate-limit']);
+  } finally { await sql.close(); }
+});

@@ -1,7 +1,7 @@
 // @ts-check
 // 호스팅 생성 도구 (2026-10-28): ODDBOUT's generation worker makes the fighter; the agent carries the user's answers.
 import { z } from 'zod';
-import { GENERATION_LIMITS } from '../../api/generations.mjs';
+import { GENERATION_LIMITS, UPLOAD_TICKET_HEADER } from '../../api/generations.mjs';
 import { Problem } from '../../api/http.mjs';
 import spec from '../../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { profileLimits } from '../../contracts/ai-fighter/profile-limits.mjs';
@@ -117,6 +117,30 @@ export function hostedNext(job) {
 const withNext = result => result?.ok && result.job ? { ...result, next: hostedNext(result.job) } : result;
 
 /**
+ * 그림 올리기 표 (2026-11-01, 사용자: "grok, gemini도 이미지 생성해서 붙일 수 있어야지"): where a ticket's pictures go in. The page is the
+ * site's, for the signed-in owner (the ticket's id); the terminal route is the API's own address, not mcp.oddbout.com, whose gateway takes
+ * 64 KB bodies (`worker/cloud-gateway.mjs`).
+ */
+export const PICTURE_PAGE = 'https://oddbout.com/creator.html#view=upload&ticket=';
+export const TICKET_UPLOAD_URL = 'https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter/generations/ticket-uploads';
+/**
+ * What an agent passed as a picture's address, without the address (Grok 그림 주소 관찰, 2026-11-01): which host its pictures come from
+ * decides whether ODDBOUT can take them straight from the chat, and nobody has seen it yet (AGENTS.md: never invent origins). Its path,
+ * query and fragment stay out; a value that is no URL shows only its shape (letters a, digits 9).
+ * @param {string} value
+ */
+export function pictureLinkShape(value) {
+  const shape = value.slice(0, 40).replace(/[A-Za-z]/g, 'a').replace(/[0-9]/g, '9');
+  if (/^data:/i.test(value)) return { kind: 'data-url', mediaType: /^data:([\w.+-]+\/[\w.+-]+)/i.exec(value)?.[1]?.toLowerCase() ?? null, length: value.length };
+  try {
+    const url = new URL(value), last = url.pathname.split('/').at(-1) ?? '';
+    return { kind: 'url', protocol: url.protocol, hostname: url.hostname, port: url.port, hasUserInfo: Boolean(url.username || url.password),
+      hasQuery: Boolean(url.search), hasFragment: Boolean(url.hash), pathSegments: url.pathname.split('/').filter(Boolean).length,
+      extension: /\.([a-z0-9]{2,5})$/i.exec(last)?.[1]?.toLowerCase() ?? null };
+  } catch { return { kind: 'not-a-url', length: value.length, shape }; }
+}
+
+/**
  * `identity` is null only on a signed-out call, which register lets reach the public tools alone: the account tools cast it.
  * @param {{ register: Register, db: any, identity: Identity | null, invoke: Invoke, fetcher: typeof fetch, hosted: Hosted }} options
  */
@@ -139,7 +163,8 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
     + 'no consent to give, approval not needed), any (any approved community host) or a host id from list_generation_hosts; '
     + 'any or another person\'s host sends his words and pictures to that host\'s PC, so ask him first and pass hostConsent: '
     + 'true. Pass his words (what the fighter is and looks like) and, if he gave them, '
-    + 'up to two of his own pictures with his confirmation that he has the rights to them. '
+    + 'up to two of his own pictures with his confirmation that he has the rights to them: attached files (picture, secondPicture) where '
+    + 'this host attaches files, else pictureUploads from start_picture_upload. '
     + 'Each account holds tokens (500,000 at sign-up). What ODDBOUT\'s own worker makes for him (host oddbout, or any when ODDBOUT\'s worker '
     + 'takes it) takes off every token it spends, whatever the outcome; a request his own PC or another person\'s host makes takes none. '
     + 'Unless it is on his own PC, a request is refused (generation-quota) once his balance is at or below zero; get_hosted_fighter '
@@ -150,9 +175,10 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
     + 'do not replay this creation call while its outcome is unknown. '
     + 'A confirmed safe retry keeps the original key and arguments. Returns the job; follow its next.',
     { description: z.string().min(GENERATION_LIMITS.descriptionMin).max(GENERATION_LIMITS.description), language: z.enum(['ko', 'en']),
-      picture: FILE.optional(), secondPicture: FILE.optional(), rightsConfirmed: z.boolean().optional(), delegate: z.boolean().optional(),
+      picture: FILE.optional(), secondPicture: FILE.optional(), pictureUploads: z.array(UUID_ARG()).max(GENERATION_LIMITS.refs).optional(),
+      rightsConfirmed: z.boolean().optional(), delegate: z.boolean().optional(),
       host: z.union([z.enum(['oddbout', 'any', 'mine']), UUID_ARG()]).optional(), hostConsent: z.boolean().optional(), idempotencyKey: UUID_ARG() },
-    async ({ description, language, picture, secondPicture, rightsConfirmed, delegate, host, hostConsent, idempotencyKey }) => {
+    async ({ description, language, picture, secondPicture, pictureUploads = [], rightsConfirmed, delegate, host, hostConsent, idempotencyKey }) => {
       // Once saved, the same key returns its job without re-uploading pictures. Before that, use read-only recovery.
       const existingId = await jobIdForKey(idempotencyKey);
       if (existingId) return withNext(await invoke(`generations/${existingId}`));
@@ -161,7 +187,9 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
       if (!service.ok) return service;
       if (!service.capabilities?.hosted) return { ok: false, code: 'generation-unavailable', reason: service.capabilities?.reason ?? null };
       const pictures = /** @type {HostFile[]} */ ([picture, secondPicture].filter(Boolean));
-      if (pictures.length && rightsConfirmed !== true) return { ok: false, code: 'rights-required' };
+      // Pictures already in (a ticket's) count with the attached ones: two in all, refused before an attached one moves.
+      if (pictures.length + pictureUploads.length > GENERATION_LIMITS.refs) return { ok: false, code: 'invalid-refs' };
+      if ((pictures.length || pictureUploads.length) && rightsConfirmed !== true) return { ok: false, code: 'rights-required' };
       const ask = { description, language, ...(delegate ? { delegate: true } : {}), ...(host && host !== 'oddbout' ? { host, hostConsent: hostConsent === true } : {}) };
       // The request's own checks (consent, one at a time, the day's limits, the host) before a picture moves: each kept picture spends one
       // of the day's uploads and stays in storage (MCP 점검 2026-10-29). A request without pictures is checked where it is made.
@@ -169,7 +197,7 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
         const checked = await post('generations/check', ask);
         if (!checked.ok) return checked;
       }
-      const refs = [];
+      const refs = [...pictureUploads];
       for (const file of pictures) {
         const uploaded = await invoke('generations/uploads', 'POST', await downloadHostFile(file, GENERATION_LIMITS.refBytes, fetcher, LIBRARY_FILE_HOSTS),
           { 'content-type': 'application/octet-stream' });
@@ -178,6 +206,36 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
       }
       return withNext(await post('generations', { ...ask, ...(refs.length ? { refs, rightsConfirmed: true } : {}) }, { 'idempotency-key': idempotencyKey }));
     }, { write: true, openWorld: true, idempotent: false, files: ['picture', 'secondPicture'] });
+  // 그림 올리기 표: ChatGPT attaches files to the request; the other agents send the pictures through a ticket (`api/generations.mjs`).
+  register('start_picture_upload', '그림 올리기', 'For up to two of the user\'s own pictures (one he drew, or one an image model made for him '
+    + 'in this chat) where this host cannot attach files to request_hosted_fighter (Grok, Claude, Gemini CLI, Cursor). Gives a ticket for 30 '
+    + 'minutes: page, a link the user opens to add the pictures on oddbout.com signed in with this same account (give it to him as a link), '
+    + 'and command, for an agent that has a picture as a file on this computer (run it once per file with <file> replaced by its path; '
+    + 'curl.exe on Windows). Never ask him to paste the command into the chat. Then get_picture_upload, and pass its uploads as '
+    + 'request_hosted_fighter pictureUploads with his confirmation of rights.',
+    {}, async () => {
+      const made = await invoke('generations/upload-tickets', 'POST');
+      if (!made.ok) return made;
+      const { secret, ...ticket } = made.ticket;
+      return { ok: true, ticket, page: `${PICTURE_PAGE}${ticket.id}`,
+        command: `curl -sS -H "${UPLOAD_TICKET_HEADER}: ${secret}" --data-binary "@<file>" ${TICKET_UPLOAD_URL}`,
+        next: 'Give the user the page link (PNG, JPEG or WebP, up to 4 MB, 64 to 4096 pixels a side), or run the command with the file. '
+          + 'When he says the pictures are in, get_picture_upload with ticket.id.' };
+    }, { write: true, idempotent: false });
+  register('get_picture_upload', '올린 그림 확인', 'The pictures a start_picture_upload ticket took (at most two) and whether it is still open. '
+    + 'Pass the ids of the uploads not yet used as request_hosted_fighter pictureUploads.',
+    { ticketId: UUID_ARG() }, async ({ ticketId }) => invoke(`generations/upload-tickets/${ticketId}`));
+  // Grok 그림 주소 관찰: one call when the user tests it; the server log keeps the shape (pictureLinkShape), nothing is fetched or kept.
+  register('report_picture_link', '그림 주소 확인', 'Diagnostic, only when the user asks to test it: pass the address you hold for a '
+    + 'picture made or shown in this chat, exactly as you have it, and which tool or model made it. ODDBOUT notes only its kind and host: '
+    + 'it does not fetch the picture, keep it or use it for a fighter. Never invent or rewrite an address; if you hold none, say so.',
+    { url: z.string().min(1).max(8192), madeBy: z.string().max(60).optional() }, async ({ url, madeBy }) => {
+      const observed = pictureLinkShape(url);
+      console.log(JSON.stringify({ event: 'picture-link-probe', client: /** @type {Identity} */ (identity).claims.client_id,
+        madeBy: madeBy ?? null, ...observed }));
+      return { ok: true, observed, fetched: false, kept: false,
+        next: 'Tell the user what was noted. Pictures from this chat go in through start_picture_upload until ODDBOUT takes this host.' };
+    }, { diagnostic: true });
   register('list_generation_hosts', '선수 만드는 호스트', 'List who can make a fighter: ODDBOUT itself and the community hosts the operator approved (creators who run the '
     + 'generation worker on their own PC and subscription). For each: '
     + 'id, name, whether it is on now, whether it takes requests that name no host, and how many it can still take today. '
