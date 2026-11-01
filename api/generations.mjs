@@ -8,7 +8,7 @@ import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { profileLimits } from '../contracts/ai-fighter/profile-limits.mjs';
 import { text } from './canon.mjs';
 import { probeImage } from './image-probe.mjs';
-import { Problem, UUID, jsonResponse, readBody, rpcCaller, sha256 } from './http.mjs';
+import { Problem, UUID, jsonResponse, readBody, rpcCaller, rpcProblem, sha256 } from './http.mjs';
 import { SUBMISSION_STATUS, checkedManifest, storeAsset } from './submissions.mjs';
 import { DECISIONS, reviewEvidence } from './decisions-review.mjs';
 import { benchmarkReview } from './decisions-benchmark.mjs';
@@ -43,6 +43,14 @@ const DRAFT_EVENTS_READ = 5;
 const CORS = { methods: 'GET, POST, PATCH, DELETE, OPTIONS', headers: 'Authorization, Content-Type, Idempotency-Key' };
 // A join code (내 PC 붙이기): made by the site for a signed-in host, copied into his PC's terminal once; 160 bits, so nobody guesses one.
 export const JOIN_CODE = /^ohj_[a-f0-9]{40}$/;
+/**
+ * 그림 올리기 표 (2026-11-01): an agent with no file attachment of ChatGPT's asks for one; a terminal sends a picture with its secret in this
+ * header (`generations/ticket-uploads`), the signed-in owner on the site with its id (`generations/uploads?ticket=`). 256 bits, shown once.
+ */
+export const UPLOAD_TICKET = /^afu_[a-f0-9]{64}$/;
+export const UPLOAD_TICKET_HEADER = 'x-oddbout-upload-ticket';
+/** Uploads an account keeps in 24 hours (af_generation_upload), and how long one stays for a request (af_generation_create). */
+const UPLOADS_A_DAY = 12, DAY_MS = 86_400_000;
 /** @type {(bytes: Uint8Array) => string} */
 const hex = bytes => Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
 const workerToken = () => `afw_${hex(crypto.getRandomValues(new Uint8Array(32)))}`;
@@ -54,6 +62,8 @@ const STATUS = { 'generation-unavailable': 409, 'generation-quota': 409, 'genera
   'invalid-host': 422, 'host-consent-required': 422, 'host-offline': 409, 'host-capacity': 409, 'host-terms-required': 422,
   'host-not-approved': 403, 'host-key-limit': 409, 'host-not-found': 404, 'join-code-invalid': 410, 'invalid-join-code': 400, 'host-busy': 409,
   'upload-closed': 409,
+  // 그림 올리기 표 (2026-11-01).
+  'invalid-ticket': 403, 'ticket-expired': 410, 'ticket-full': 409,
   // The submission path's own refusals (`af_create_submission`, `af_submit`), with the statuses the creator's routes give them.
   ...SUBMISSION_STATUS };
 /** Stats the contract takes: 1-5 each, summing to 9 (`contracts/ai-fighter/validate.mjs`). */
@@ -93,10 +103,12 @@ const fields = (body, allowed) => {
   if (!isObject(body) || Object.keys(body).some(key => !allowed.includes(key))) throw new Problem(422, 'invalid-body');
   return body;
 };
-/** @param {Request} request @param {number} limit */
-async function readJson(request, limit) {
-  try { return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, limit))); }
-  catch (error) { if (error instanceof Problem) throw error; throw new Problem(400, 'invalid-body'); }
+/** @param {Request} request @param {number} limit @param {unknown} [empty] what an empty body reads as (left out: refused) */
+async function readJson(request, limit, empty) {
+  try {
+    const bytes = await readBody(request, limit);
+    return !bytes.length && empty !== undefined ? empty : JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+  } catch (error) { if (error instanceof Problem) throw error; throw new Problem(400, 'invalid-body'); }
 }
 /** @type {(job: string, name: string) => string} */
 export const artifactPath = (job, name) => `jobs/${job}/${name}.webp`;
@@ -314,6 +326,79 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     billing: row.billing, dailyLimit: row.daily_limit });
 
   /**
+   * The owner's uploads a request may still name: his, unused, from the last day, each once (af_generation_create's rule, asked before a
+   * connector moves an attached picture — 리뷰 2026-11-01: a picture was kept, then the request refused a ticket's id).
+   * @param {string} owner @param {string[]} refs
+   */
+  async function usableRefs(owner, refs) {
+    if (new Set(refs).size !== refs.length) throw new Problem(422, 'invalid-refs');
+    const { data, error } = await db.from('af_generation_uploads').select('id,job_id,created_at').eq('owner_id', owner).in('id', refs);
+    if (error) throw new Problem(503, 'database-unavailable');
+    /** @type {{ job_id: string | null, created_at: string }[]} */
+    const found = data ?? [];
+    if (found.length !== refs.length || !found.every(upload => upload.job_id === null && Date.parse(upload.created_at) > Date.now() - DAY_MS))
+      throw new Problem(422, 'invalid-refs');
+  }
+  /**
+   * A ticket of the owner's and the pictures it took (그림 올리기 표). `closed` says why it takes no more: `expired` (its thirty minutes),
+   * `full` (two), `day-limit` (his twelve uploads of 24 hours). Each picture comes with its address for ten minutes, so the agent shows the
+   * user what went in before he confirms his rights to it, and `usable`: a request may still name it (unused, from the last day).
+   * @param {string} owner @param {string} ticketId @param {boolean} [addresses]  false: without the pictures' addresses (an upload's own check)
+   */
+  async function ticketView(owner, ticketId, addresses = true) {
+    const { data: ticket, error } = await db.from('af_generation_upload_tickets').select('id,expires_at').eq('id', id(ticketId)).eq('owner_id', owner).maybeSingle();
+    if (error) throw new Problem(503, 'database-unavailable');
+    if (!ticket) throw new Problem(404, 'not-found');
+    const { data, error: uploadError } = await db.from('af_generation_uploads').select('id,path,content_type,bytes,width,height,job_id,created_at')
+      .eq('ticket_id', ticket.id).order('created_at');
+    if (uploadError) throw new Problem(503, 'database-unavailable');
+    /** @type {{ id: string, path: string, content_type: string, bytes: number, width: number, height: number, job_id: string | null, created_at: string }[]} */
+    const uploads = data ?? [];
+    // Both pictures in says more than its time running out (3차 리뷰 2026-11-01: a ticket filled at minute 29 read as expired).
+    let closed = uploads.length >= GENERATION_LIMITS.refs ? 'full' : !(Date.parse(ticket.expires_at) > Date.now()) ? 'expired' : null;
+    if (!closed) {
+      const { data: day, error: dayError } = await db.from('af_generation_uploads').select('id').eq('owner_id', owner)
+        .gt('created_at', new Date(Date.now() - DAY_MS).toISOString());
+      if (dayError) throw new Problem(503, 'database-unavailable');
+      if ((day ?? []).length >= UPLOADS_A_DAY) closed = 'day-limit';
+    }
+    const urls = addresses ? await signed(uploads.map(upload => upload.path)) : new Map();
+    return { id: ticket.id, expiresAt: ticket.expires_at, open: !closed, closed,
+      uploads: uploads.map(upload => ({ id: upload.id, contentType: upload.content_type, bytes: upload.bytes, width: upload.width, height: upload.height,
+        used: upload.job_id !== null, usable: upload.job_id === null && Date.parse(upload.created_at) > Date.now() - DAY_MS,
+        url: urls.get(upload.path) ?? null })) };
+  }
+  /**
+   * A reference picture kept privately for its owner: a known kind within the sizes, twelve in 24 hours; under a ticket, two while it is open.
+   * @param {Request} request @param {string} owner @param {string | null} ticket
+   */
+  async function keepPicture(request, owner, ticket) {
+    // A ticket that cannot take it says so before the picture is read or stored (the database decides again when it is).
+    if (ticket) {
+      const { closed } = await ticketView(owner, ticket, false);
+      if (closed === 'expired') throw new Problem(410, 'ticket-expired');
+      if (closed === 'full') throw new Problem(409, 'ticket-full');
+      if (closed === 'day-limit') throw new Problem(429, 'rate-limit');
+    }
+    const bytes = await readBody(request, GENERATION_LIMITS.refBytes), image = probeImage(bytes), [min, max] = GENERATION_LIMITS.refSide;
+    if (!image) throw new Problem(415, 'image-required');
+    if (image.width < min || image.height < min || image.width > max || image.height > max) throw new Problem(422, 'image-size');
+    const upload = crypto.randomUUID(), path = `refs/${owner}/${upload}.${image.ext}`;
+    const { error } = await bucket().upload(path, bytes, { contentType: image.type, upsert: false });
+    if (error) throw new Problem(503, 'storage-unavailable');
+    const kept = { p_owner: owner, p_id: upload, p_path: path, p_type: image.type, p_bytes: bytes.length, p_width: image.width, p_height: image.height };
+    // What the database answered (its refusal carries a code) keeps nothing. A call with no answer (the connection, a gateway's timeout)
+    // keeps the picture, which a row the database did commit points to (2차 리뷰 2026-11-01: removing it left a usable id with no picture;
+    // 3차: telling them apart by the code, not by the mapped name, which an unknown refusal shares with no answer).
+    const { error: refused } = await db.rpc(ticket ? 'af_generation_ticket_upload' : 'af_generation_upload', ticket ? { ...kept, p_ticket: ticket } : kept);
+    if (refused) {
+      if (refused.code) await bucket().remove([path]).catch(() => {});
+      throw rpcProblem(refused, STATUS, { contains: true });
+    }
+    return { id: upload, width: image.width, height: image.height };
+  }
+
+  /**
    * A request's body, read the same way for its check and for the request itself.
    * @param {Request} request @param {string} owner
    */
@@ -321,6 +406,16 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     const body = fields(await readJson(request, 8000), ['description', 'language', 'refs', 'rightsConfirmed', 'delegate', 'host', 'hostConsent']);
     if (!['ko', 'en'].includes(body.language)) throw new Problem(422, 'invalid-language');
     if (body.delegate !== undefined && typeof body.delegate !== 'boolean') throw new Problem(422, 'invalid-body');
+    const target = await targetOf(owner, body);
+    if (body.refs !== undefined && (!Array.isArray(body.refs) || body.refs.length > GENERATION_LIMITS.refs)) throw new Problem(422, 'invalid-refs');
+    return { body, target, refs: (body.refs ?? []).map(id),
+      description: text(body.description, GENERATION_LIMITS.description, '/description', { min: GENERATION_LIMITS.descriptionMin, lines: true, code: 'invalid-description' }) };
+  }
+  /**
+   * The database's arguments for where a request goes, from its `host` and `hostConsent` (a request, its check, a picture ticket's).
+   * @param {string} owner @param {Record<string, any>} body
+   */
+  async function targetOf(owner, body) {
     // Where it goes (커뮤니티 호스트): ODDBOUT's own worker by default, any approved host, one host by id, or `mine` — his own host,
     // approved or not, with no consent to give (내 선수는 내 PC로, 2026-10-28).
     let host = body.host ?? 'oddbout';
@@ -331,11 +426,8 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       host = own.id;
     }
     if (!['oddbout', 'any'].includes(host) && !UUID.test(host)) throw new Problem(422, 'invalid-host');
-    const target = host === 'oddbout' ? {} : { p_host_choice: UUID.test(host) ? 'host' : 'any', ...(UUID.test(host) ? { p_host: host.toLowerCase() } : {}),
+    return host === 'oddbout' ? {} : { p_host_choice: UUID.test(host) ? 'host' : 'any', ...(UUID.test(host) ? { p_host: host.toLowerCase() } : {}),
       p_host_consent: body.hostConsent === true };
-    if (body.refs !== undefined && (!Array.isArray(body.refs) || body.refs.length > GENERATION_LIMITS.refs)) throw new Problem(422, 'invalid-refs');
-    return { body, target, refs: (body.refs ?? []).map(id),
-      description: text(body.description, GENERATION_LIMITS.description, '/description', { min: GENERATION_LIMITS.descriptionMin, lines: true, code: 'invalid-description' }) };
   }
 
   /** @param {Request} request @param {string[]} parts @param {string} owner */
@@ -392,21 +484,36 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
         capabilities: await call('af_generation_capabilities', {}) };
     }
     if (method === 'POST' && route === 'generations/uploads') {
-      const bytes = await readBody(request, GENERATION_LIMITS.refBytes), image = probeImage(bytes), [min, max] = GENERATION_LIMITS.refSide;
-      if (!image) throw new Problem(415, 'image-required');
-      if (image.width < min || image.height < min || image.width > max || image.height > max) throw new Problem(422, 'image-size');
-      const upload = crypto.randomUUID(), path = `refs/${owner}/${upload}.${image.ext}`;
-      const { error } = await bucket().upload(path, bytes, { contentType: image.type, upsert: false });
-      if (error) throw new Problem(503, 'storage-unavailable');
-      try {
-        await call('af_generation_upload', { p_owner: owner, p_id: upload, p_path: path, p_type: image.type, p_bytes: bytes.length, p_width: image.width, p_height: image.height });
-      } catch (problem) { await bucket().remove([path]).catch(() => {}); throw problem; }
-      return { ok: true, upload: { id: upload, width: image.width, height: image.height } };
+      // On the site under a ticket of his (the link an agent gave him), or on its own (the site's request form, ChatGPT's attachments).
+      const ticket = new URL(request.url).searchParams.get('ticket');
+      return { ok: true, upload: await keepPicture(request, owner, ticket === null ? null : id(ticket)) };
+    }
+    if (method === 'POST' && route === 'generations/upload-tickets') {
+      // The secret goes only to an agent that will run the terminal command (`terminal`); for the site's link it is made and never shown,
+      // so a chat with no terminal holds nothing that uploads (리뷰 2026-11-01).
+      const body = fields(await readJson(request, 400, {}), ['terminal', 'host', 'hostConsent']);
+      if (body.terminal !== undefined && typeof body.terminal !== 'boolean') throw new Problem(422, 'invalid-body');
+      // The request's own checks (consent, one at a time, the day's limits, the host) before a picture can be kept for it (3차 리뷰
+      // 2026-11-01: a ticket's pictures were stored, and a day's uploads spent, for a request that was then refused).
+      await call('af_generation_check', { p_owner: owner, ...await targetOf(owner, body) });
+      const secret = `afu_${hex(crypto.getRandomValues(new Uint8Array(32)))}`;
+      const made = await call('af_generation_upload_ticket', { p_owner: owner, p_id: crypto.randomUUID(), p_secret_hash: await sha256(new TextEncoder().encode(secret)) });
+      return { ok: true, ticket: { ...await ticketView(owner, made.id), ...(body.terminal ? { secret } : {}) } };
+    }
+    if (method === 'GET' && parts.length === 3 && parts[1] === 'upload-tickets') return { ok: true, ticket: await ticketView(owner, parts[2]) };
+    // His tickets of the last day, newest first, without the pictures' addresses: a conversation that lost its ticket finds it again
+    // before it starts another (AGENTS.md rule 2, 3차 리뷰 2026-11-01).
+    if (method === 'GET' && route === 'generations/upload-tickets') {
+      const { data, error } = await db.from('af_generation_upload_tickets').select('id').eq('owner_id', owner)
+        .gt('created_at', new Date(Date.now() - DAY_MS).toISOString()).order('created_at', { ascending: false }).limit(UPLOADS_A_DAY);
+      if (error) throw new Problem(503, 'database-unavailable');
+      return { ok: true, tickets: await Promise.all((data ?? []).map((/** @type {{ id: string }} */ row) => ticketView(owner, row.id, false))) };
     }
     // The checks of a request without making it (MCP 점검 2026-10-29): the connector asks before it uploads the user's pictures, so a
     // refused request keeps none of them. Nothing is made or kept.
     if (method === 'POST' && route === 'generations/check') {
-      const { target } = await requested(request, owner);
+      const { target, refs } = await requested(request, owner);
+      if (refs.length) await usableRefs(owner, refs);
       await call('af_generation_check', { p_owner: owner, ...target });
       return { ok: true };
     }
@@ -600,6 +707,16 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
         const joined = await call('af_generation_host_join', { p_code_hash: await sha256(new TextEncoder().encode(body.code)),
           p_key_hash: await sha256(new TextEncoder().encode(token)), p_label: `host-join-${new Date().toISOString().slice(0, 10)}` });
         return json({ ok: true, key: token, host: joined.host, name: joined.name, approved: joined.approved, expiresAt: joined.expiresAt });
+      }
+      // A terminal agent's picture (그림 올리기 표): the ticket's secret names the owner and the ticket, no account session on that PC.
+      if (!isWorker && request.method === 'POST' && parts.join('/') === 'generations/ticket-uploads') {
+        const secret = request.headers.get(UPLOAD_TICKET_HEADER) ?? '';
+        if (!UPLOAD_TICKET.test(secret)) throw new Problem(403, 'invalid-ticket');
+        const { data: ticket, error } = await db.from('af_generation_upload_tickets').select('id,owner_id')
+          .eq('secret_hash', await sha256(new TextEncoder().encode(secret))).maybeSingle();
+        if (error) throw new Problem(503, 'database-unavailable');
+        if (!ticket) throw new Problem(403, 'invalid-ticket');
+        return json({ ok: true, upload: await keepPicture(request, ticket.owner_id, ticket.id) });
       }
       // The key names the worker's host; the stages it may take are his (the official host's when the key names none).
       if (isWorker) return json(await worker(request, parts, await authenticate(request, 'generation')));

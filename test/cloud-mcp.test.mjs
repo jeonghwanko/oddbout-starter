@@ -459,7 +459,7 @@ test('every write tool says whether a retry is safe; the ones that make somethin
     enter_cup: false, update_fighter_profile: true, update_fighter_style: true, enter_fighter: true, withdraw_fighter: true,
     update_fighter_canon: true, post_workshop_note: false, resolve_workshop_note: true, set_fighter_relation: true, manage_world: false, write_world_post: true,
     request_hosted_fighter: false, choose_hosted_look: false, revise_hosted_motion: false, register_hosted_fighter: true, cancel_hosted_fighter: true,
-    store_creator_source: true, prepare_creator_source_download: true,
+    start_picture_upload: false, store_creator_source: true, prepare_creator_source_download: true,
   });
   for (const tool of tools.filter(t => t.annotations.readOnlyHint)) assert.equal(tool.annotations.idempotentHint, true, tool.name);
 });
@@ -593,11 +593,13 @@ test('the directory edition lists only its tools, in English, with every hint; t
   // /mcp keeps all its tools: ChatGPT's submitted plugin is pinned to its list. Here set_fighter_relation and manage_world split by kind of write.
   const split = ['propose_fighter_relation', 'answer_fighter_relation', 'end_fighter_relation', 'create_world', 'update_world', 'remove_world_fighter',
     'set_fighter_world'];
-  assert.deepEqual([tools.length, full.length], [32, 48]);
+  assert.deepEqual([tools.length, full.length], [32, 51]);
   assert.deepEqual(tools.map(t => t.name).sort(), [...DIRECTORY_TITLES.keys()].sort());
   const dropped = full.map(t => t.name).filter(name => !DIRECTORY_TITLES.has(name));
   for (const name of ['request_hosted_fighter', 'list_generation_hosts', 'prepare_fighter_registration', 'submit_profile_set', 'store_creator_source',
-    'verify_creator_file_input', 'get_fighter_spec', 'check_creation_readiness', 'set_fighter_relation', 'manage_world']) assert.ok(dropped.includes(name), name);
+    'verify_creator_file_input', 'get_fighter_spec', 'check_creation_readiness', 'set_fighter_relation', 'manage_world',
+    // 그림 올리기 표 (2026-11-01): pictures for a hosted fighter, which the directory does not take.
+    'start_picture_upload', 'get_picture_upload', 'report_picture_link']) assert.ok(dropped.includes(name), name);
   for (const tool of tools) {
     const same = full.find(t => t.name === tool.name);
     assert.equal(same === undefined, split.includes(tool.name), tool.name);
