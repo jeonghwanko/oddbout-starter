@@ -24,6 +24,8 @@ these commands. Select a reviewed revision carrying them before following the co
 
 Creator-kit 0.6.5 includes the game-context fetch fix: it uses the host's inherited HTTP(S) proxy,
 `NO_PROXY` and CA settings. It does not grant network permission or change an existing task.
+A new workspace from `node dots.mjs --install` gets the commit pinned in `deploy/dots-release.json`,
+so it has this fix only when that pin names 0.6.5 or later.
 For DNS or pre-HTTP connection failures, follow [the context network guide](GAME-CREATION-CONTEXT.md#network-errors-and-existing-workspaces).
 Keep an active fighter on its recorded runtime; do not pull, replace it or rerun generation to test a release.
 Retain sessions, jobs, selected versions and original outputs. Review the new kit separately for a new environment

@@ -79,4 +79,9 @@ test('the repository package version is the kit version', async () => {
   const pkg = JSON.parse(await readFile(path.join(repository, 'package.json'), 'utf8'));
   const plugin = JSON.parse(await readFile(path.join(repository, 'plugins/ai-fighter/plugin.json'), 'utf8'));
   assert.equal(pkg.version, plugin.version, 'bump package.json together with plugins/ai-fighter/plugin.json');
+  // The guide ships in the ZIP, so a stale version here is frozen into the release (0.6.5 shipped saying 0.6.4).
+  const guide = await readFile(path.join(repository, 'docs/ODDBOUT-PLUGIN.md'), 'utf8');
+  const named = [...guide.matchAll(/\*\*(\d+\.\d+\.\d+) 제작 키트\*\*|oddbout(?:-development)?-(\d+\.\d+\.\d+)/g)].map(m => m[1] ?? m[2]);
+  assert.ok(named.length >= 4, 'docs/ODDBOUT-PLUGIN.md names the kit version and its build outputs');
+  for (const version of named) assert.equal(version, plugin.version, 'bump docs/ODDBOUT-PLUGIN.md together with the kit version');
 });
