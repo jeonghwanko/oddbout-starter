@@ -8,7 +8,7 @@ import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { profileLimits } from '../contracts/ai-fighter/profile-limits.mjs';
 import { text } from './canon.mjs';
 import { probeImage } from './image-probe.mjs';
-import { Problem, UUID, jsonResponse, readBody, rpcCaller, sha256 } from './http.mjs';
+import { Problem, UUID, jsonResponse, readBody, rpcCaller, rpcProblem, sha256 } from './http.mjs';
 import { SUBMISSION_STATUS, checkedManifest, storeAsset } from './submissions.mjs';
 import { DECISIONS, reviewEvidence } from './decisions-review.mjs';
 import { benchmarkReview } from './decisions-benchmark.mjs';
@@ -354,7 +354,8 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     if (uploadError) throw new Problem(503, 'database-unavailable');
     /** @type {{ id: string, path: string, content_type: string, bytes: number, width: number, height: number, job_id: string | null, created_at: string }[]} */
     const uploads = data ?? [];
-    let closed = !(Date.parse(ticket.expires_at) > Date.now()) ? 'expired' : uploads.length >= GENERATION_LIMITS.refs ? 'full' : null;
+    // Both pictures in says more than its time running out (3차 리뷰 2026-11-01: a ticket filled at minute 29 read as expired).
+    let closed = uploads.length >= GENERATION_LIMITS.refs ? 'full' : !(Date.parse(ticket.expires_at) > Date.now()) ? 'expired' : null;
     if (!closed) {
       const { data: day, error: dayError } = await db.from('af_generation_uploads').select('id').eq('owner_id', owner)
         .gt('created_at', new Date(Date.now() - DAY_MS).toISOString());
@@ -386,12 +387,13 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     const { error } = await bucket().upload(path, bytes, { contentType: image.type, upsert: false });
     if (error) throw new Problem(503, 'storage-unavailable');
     const kept = { p_owner: owner, p_id: upload, p_path: path, p_type: image.type, p_bytes: bytes.length, p_width: image.width, p_height: image.height };
-    // A refusal keeps nothing; a call whose outcome is unknown keeps the picture, which a row the database did commit points to (2차 리뷰
-    // 2026-11-01: removing it left a usable id with no picture).
-    try { await call(ticket ? 'af_generation_ticket_upload' : 'af_generation_upload', ticket ? { ...kept, p_ticket: ticket } : kept); }
-    catch (problem) {
-      if (problem instanceof Problem && problem.message !== 'database-unavailable') await bucket().remove([path]).catch(() => {});
-      throw problem;
+    // What the database answered (its refusal carries a code) keeps nothing. A call with no answer (the connection, a gateway's timeout)
+    // keeps the picture, which a row the database did commit points to (2차 리뷰 2026-11-01: removing it left a usable id with no picture;
+    // 3차: telling them apart by the code, not by the mapped name, which an unknown refusal shares with no answer).
+    const { error: refused } = await db.rpc(ticket ? 'af_generation_ticket_upload' : 'af_generation_upload', ticket ? { ...kept, p_ticket: ticket } : kept);
+    if (refused) {
+      if (refused.code) await bucket().remove([path]).catch(() => {});
+      throw rpcProblem(refused, STATUS, { contains: true });
     }
     return { id: upload, width: image.width, height: image.height };
   }
@@ -404,6 +406,16 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     const body = fields(await readJson(request, 8000), ['description', 'language', 'refs', 'rightsConfirmed', 'delegate', 'host', 'hostConsent']);
     if (!['ko', 'en'].includes(body.language)) throw new Problem(422, 'invalid-language');
     if (body.delegate !== undefined && typeof body.delegate !== 'boolean') throw new Problem(422, 'invalid-body');
+    const target = await targetOf(owner, body);
+    if (body.refs !== undefined && (!Array.isArray(body.refs) || body.refs.length > GENERATION_LIMITS.refs)) throw new Problem(422, 'invalid-refs');
+    return { body, target, refs: (body.refs ?? []).map(id),
+      description: text(body.description, GENERATION_LIMITS.description, '/description', { min: GENERATION_LIMITS.descriptionMin, lines: true, code: 'invalid-description' }) };
+  }
+  /**
+   * The database's arguments for where a request goes, from its `host` and `hostConsent` (a request, its check, a picture ticket's).
+   * @param {string} owner @param {Record<string, any>} body
+   */
+  async function targetOf(owner, body) {
     // Where it goes (커뮤니티 호스트): ODDBOUT's own worker by default, any approved host, one host by id, or `mine` — his own host,
     // approved or not, with no consent to give (내 선수는 내 PC로, 2026-10-28).
     let host = body.host ?? 'oddbout';
@@ -414,11 +426,8 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       host = own.id;
     }
     if (!['oddbout', 'any'].includes(host) && !UUID.test(host)) throw new Problem(422, 'invalid-host');
-    const target = host === 'oddbout' ? {} : { p_host_choice: UUID.test(host) ? 'host' : 'any', ...(UUID.test(host) ? { p_host: host.toLowerCase() } : {}),
+    return host === 'oddbout' ? {} : { p_host_choice: UUID.test(host) ? 'host' : 'any', ...(UUID.test(host) ? { p_host: host.toLowerCase() } : {}),
       p_host_consent: body.hostConsent === true };
-    if (body.refs !== undefined && (!Array.isArray(body.refs) || body.refs.length > GENERATION_LIMITS.refs)) throw new Problem(422, 'invalid-refs');
-    return { body, target, refs: (body.refs ?? []).map(id),
-      description: text(body.description, GENERATION_LIMITS.description, '/description', { min: GENERATION_LIMITS.descriptionMin, lines: true, code: 'invalid-description' }) };
   }
 
   /** @param {Request} request @param {string[]} parts @param {string} owner */
@@ -482,13 +491,24 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     if (method === 'POST' && route === 'generations/upload-tickets') {
       // The secret goes only to an agent that will run the terminal command (`terminal`); for the site's link it is made and never shown,
       // so a chat with no terminal holds nothing that uploads (리뷰 2026-11-01).
-      const body = fields(await readJson(request, 200, {}), ['terminal']);
+      const body = fields(await readJson(request, 400, {}), ['terminal', 'host', 'hostConsent']);
       if (body.terminal !== undefined && typeof body.terminal !== 'boolean') throw new Problem(422, 'invalid-body');
+      // The request's own checks (consent, one at a time, the day's limits, the host) before a picture can be kept for it (3차 리뷰
+      // 2026-11-01: a ticket's pictures were stored, and a day's uploads spent, for a request that was then refused).
+      await call('af_generation_check', { p_owner: owner, ...await targetOf(owner, body) });
       const secret = `afu_${hex(crypto.getRandomValues(new Uint8Array(32)))}`;
       const made = await call('af_generation_upload_ticket', { p_owner: owner, p_id: crypto.randomUUID(), p_secret_hash: await sha256(new TextEncoder().encode(secret)) });
       return { ok: true, ticket: { ...await ticketView(owner, made.id), ...(body.terminal ? { secret } : {}) } };
     }
     if (method === 'GET' && parts.length === 3 && parts[1] === 'upload-tickets') return { ok: true, ticket: await ticketView(owner, parts[2]) };
+    // His tickets of the last day, newest first, without the pictures' addresses: a conversation that lost its ticket finds it again
+    // before it starts another (AGENTS.md rule 2, 3차 리뷰 2026-11-01).
+    if (method === 'GET' && route === 'generations/upload-tickets') {
+      const { data, error } = await db.from('af_generation_upload_tickets').select('id').eq('owner_id', owner)
+        .gt('created_at', new Date(Date.now() - DAY_MS).toISOString()).order('created_at', { ascending: false }).limit(UPLOADS_A_DAY);
+      if (error) throw new Problem(503, 'database-unavailable');
+      return { ok: true, tickets: await Promise.all((data ?? []).map((/** @type {{ id: string }} */ row) => ticketView(owner, row.id, false))) };
+    }
     // The checks of a request without making it (MCP 점검 2026-10-29): the connector asks before it uploads the user's pictures, so a
     // refused request keeps none of them. Nothing is made or kept.
     if (method === 'POST' && route === 'generations/check') {

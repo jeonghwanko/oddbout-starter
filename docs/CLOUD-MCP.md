@@ -345,6 +345,9 @@ ChatGPT 밖의 에이전트(Grok·Claude·Gemini CLI·Codex CLI·Cursor의 Grok 
 표로 보낸다. 그림은 원화의 참고다. 추천 조합(GPT 원화 + Grok 영상)은 그대로다.
 
 - `start_picture_upload`가 표를 만든다(`af_generation_upload_tickets`, 마이그레이션 `20261101100000`). 표 하나는 30분 동안 그림 둘을 받는다.
+  표를 주기 전에 신청의 검사를 먼저 한다(3차 리뷰 2026-11-01): MCP가 서비스 스위치(`generations/capabilities`)를 보고, API가 에이전트가 넘긴
+  `host`·`hostConsent`로 `af_generation_check`(동의, 한 번에 하나, 하루 한도, 호스트)를 돌린다. 거절이면 표가 없어서, 신청이 받지 않을 그림이
+  저장되거나 하루 업로드를 쓰지 않는다.
   계정당 24시간에 표 열두 개다. 같은 24시간의 업로드 열두 장을 다 쓴 계정에는 표를 주지 않는다. 시간이 지나고 일주일 된 표는 새 표를 만들 때 지운다.
   그림은 남는다.
 - 사이트: `page`(`https://oddbout.com/creator.html#view=upload&ticket=<id>`)를 사용자에게 링크로 준다. 에이전트에 연결한 계정으로 로그인한 사이트에서
@@ -353,14 +356,17 @@ ChatGPT 밖의 에이전트(Grok·Claude·Gemini CLI·Codex CLI·Cursor의 Grok 
   `curl -sS -H "x-oddbout-upload-ticket: afu_…" --data-binary "@<file>" …/functions/v1/ai-fighter/generations/ticket-uploads`이다.
   비밀은 이때 한 번만 보이고 DB에는 해시만 남는다. 링크만 쓰는 표의 비밀은 만들어도 보이지 않으므로, 터미널이 없는 대화에는 올릴 수 있는 값이 남지 않는다.
   주소는 API 함수 자신이다(`apikey` 없이 받는다). mcp.oddbout.com 게이트웨이는 본문을 64KB까지만 받는다. 응답이 없던 명령은 그림이 들어갔을 수 있어서,
-  다시 실행하기 전에 `get_picture_upload`로 본다(도구 설명과 `next`). 사이트 화면도 결과를 모르는 올리기 뒤와 누를 때마다 표를 읽고, 이번 방문이
+  다시 실행하기 전에 `get_picture_upload`로 본다(도구 설명과 `next`). 5xx 응답도 같다. 비밀은 명령 줄에 들어가서 터미널 에이전트의 화면과 그 PC의
+  프로세스 목록에는 보인다. 대화 답장에 넣거나 사용자에게 붙여 넣게 하지 않는다. 사이트 화면도 결과를 모르는 올리기 뒤와 누를 때마다 표를 읽고, 이번 방문이
   올리지 않은 같은 바이트 수의 그림이 있으면 다시 보내지 않는다.
 - 어느 쪽이든 그림은 보통 업로드와 같다(PNG·JPEG·WebP, 4MB, 한 변 64~4096px, 24시간에 열두 장). 표가 못 받는 까닭은 본문을 읽기 전에 거절한다.
   지난 표는 `ticket-expired`(410), 찬 표는 `ticket-full`(409), 열두 장을 다 쓴 계정은 `rate-limit`(429)이다. DB 함수 `af_generation_ticket_upload`가
   표의 행을 잠그고 한 번 더 판단한다. 표의 잠금 키는 자기 것이다(`74280505`). `af_generation_create`의 `74280502`와 겹치지 않는다.
-  DB가 거절하면 저장한 그림을 지운다. 결과를 모르는 실패(`database-unavailable`)에는 지우지 않는다: DB가 행을 넣었다면 그 id가 그림 없이 남는다
-  (2차 리뷰 2026-11-01). 쓰지 않은 그림을 지우는 정리는 아직 없다(이 표 이전부터).
-- `get_picture_upload`는 `closed`(`expired`·`full`·`day-limit`, 열려 있으면 null)와 그림마다 `url`(10분), `bytes`, `used`, `usable`을 준다.
+  DB가 답한 거절(PostgREST 오류에 코드가 있다)이면 저장한 그림을 지운다. 답이 없는 실패(연결, 게이트웨이 시간 초과 — supabase-js의 코드 없는 오류)에는
+  지우지 않는다: DB가 행을 넣었다면 그 id가 그림 없이 남는다(2·3차 리뷰 2026-11-01). 쓰지 않은 그림을 지우는 정리는 아직 없다(이 표 이전부터).
+- `get_picture_upload`는 `closed`(`full`·`expired`·`day-limit` 순, 열려 있으면 null)와 그림마다 `url`(10분), `bytes`, `used`, `usable`, 그리고
+  `next`를 준다. 두 장이 다 찬 표는 시간이 지나도 `full`이다. `ticketId` 없이 부르면 하루 안의 표 목록을 주소 없이 준다(`GET generations/upload-tickets`):
+  맥락을 잃은 대화가 새 표를 만들기 전에 찾는다(AGENTS.md 규칙 2).
   `usable`은 신청이 아직 받는 그림이다. 쓰이지 않았고 올린 지 하루가 안 됐다. 에이전트는 그림을 사용자에게 보여 주고 권리를 확인한 뒤
   `usable` id를 `request_hosted_fighter`의 `pictureUploads`로 넘긴다.
 - 첨부 파일과 `pictureUploads`를 함께 넘기면 `generations/check`가 그 id들을 먼저 본다(계정의 것, 안 쓰임, 하루 안, 중복 없음).
@@ -376,7 +382,7 @@ ChatGPT 밖의 에이전트(Grok·Claude·Gemini CLI·Codex CLI·Cursor의 Grok 
 | `url` (http·https) | `protocol`·`hostname`·`port`·`hasUserInfo`·`hasQuery`·`hasFragment`·`pathSegments`·`extension`·`length`. 경로·쿼리 자체는 남기지 않는다 |
 | `blob-url` | 그 blob을 만든 http(s) `origin`, `length` |
 | `other-scheme` | `scheme`, `length`. 파일 스킴(`file:`·`sandbox:`·`attachment:`·`content:`·`cid:`·`file-service:`·`ftp:`)만 이름을 남기고 나머지는 `other`다. 콜론 앞의 아무 낱말이나 스킴으로 읽혀서(`password:…`) 그렇다. `file-service://file-…` 같은 값의 뒤쪽은 파일 이름일 수 있어 남기지 않는다 |
-| `data-url` | `mediaType`, `length` |
+| `data-url` | `mediaType`(`image/…`만, 다른 형식은 `other`, 모양이 아니면 null), `length` |
 | `not-a-url` | `length`, 앞 40자의 모양 `shape`. 어느 문자의 글자든 `a`, 숫자는 `9`로 바꾼다 |
 
 8,000자보다 긴 값(data: 주소)은 에이전트가 앞 200자와 전체 길이(`fullLength`)만 넘긴다. 시험 순서는 다음과 같다.

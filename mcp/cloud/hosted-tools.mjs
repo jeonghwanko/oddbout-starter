@@ -139,7 +139,11 @@ export const PICTURE_MAKERS = /** @type {const} */ (['grok', 'gemini', 'chatgpt'
  */
 export function pictureLinkShape(value, fullLength = value.length) {
   const length = Math.max(fullLength, value.length);
-  if (/^data:/i.test(value)) return { kind: 'data-url', mediaType: /^data:([\w.+-]+\/[\w.+-]+)/i.exec(value)?.[1]?.toLowerCase() ?? null, length };
+  // A picture's media type only: any word/word parses as one (3차 리뷰 2026-11-01: `data:name-phone+password/x` logged as it was).
+  if (/^data:/i.test(value)) {
+    const type = /^data:([a-z]+\/[a-z0-9.+-]{1,24})[;,]/i.exec(value)?.[1]?.toLowerCase() ?? null;
+    return { kind: 'data-url', mediaType: type === null ? null : type.startsWith('image/') ? type : 'other', length };
+  }
   let url;
   try { url = new URL(value); }
   catch { return { kind: 'not-a-url', length, shape: value.slice(0, 40).replace(/\p{L}/gu, 'a').replace(/\p{N}/gu, '9') }; }
@@ -220,25 +224,49 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
     }, { write: true, openWorld: true, idempotent: false, files: ['picture', 'secondPicture'] });
   // 그림 올리기 표: ChatGPT attaches files to the request; the other agents send the pictures through a ticket (`api/generations.mjs`).
   register('start_picture_upload', '그림 올리기', 'For up to two of the user\'s own pictures (one he drew, or one an image model made for him '
-    + 'in this chat) where this host does not attach files to request_hosted_fighter (only ChatGPT does). Gives a ticket for 30 minutes and '
-    + 'page, a link the user opens to add the pictures on oddbout.com signed in with this same account: give it to him as a link. '
+    + 'in this chat) where this host does not attach files to request_hosted_fighter (only ChatGPT does). First the request\'s own checks: '
+    + 'pass the host and hostConsent you will pass to request_hosted_fighter; a refusal (generation-unavailable, generation-quota, '
+    + 'host-consent-required…) gives no ticket. Then a ticket for 30 minutes and page, a link the user opens to add the pictures on '
+    + 'oddbout.com signed in with this same account: give it to him as a link. '
     + 'terminal: true only when you run commands on the computer that holds the picture file: then also command, which you run once per '
-    + 'file with <file> replaced by its path (curl.exe on Windows); it carries a secret, so never show it to him or ask him to paste it. '
-    + 'A command with no answer may still have put the picture in: get_picture_upload before running it again. An account gets twelve '
-    + 'pictures and twelve tickets a day: reuse an open ticket rather than starting another. Then get_picture_upload.',
-    { terminal: z.boolean().optional() }, async ({ terminal }) => {
-      const made = await invoke('generations/upload-tickets', 'POST', JSON.stringify({ terminal: terminal === true }), { 'content-type': 'application/json' });
-      if (!made.ok) return made;
+    + 'file with <file> replaced by its path (curl.exe on Windows); it carries a secret, so do not put it in your reply or ask him to paste it. '
+    + 'A command that got no answer or a 5xx may still have put the picture in: get_picture_upload before running it again. An account gets '
+    + 'twelve pictures and twelve tickets a day: get_picture_upload with no ticketId lists the open ones to reuse. Then get_picture_upload.',
+    { terminal: z.boolean().optional(), host: z.union([z.enum(['oddbout', 'any', 'mine']), UUID_ARG()]).optional(), hostConsent: z.boolean().optional() },
+    async ({ terminal, host, hostConsent }) => {
+      // Off (the service switch, the worker away or unwell): no ticket, as request_hosted_fighter keeps no picture then.
+      const service = await invoke('generations/capabilities');
+      if (!service.ok) return service;
+      if (!service.capabilities?.hosted) return { ok: false, code: 'generation-unavailable', reason: service.capabilities?.reason ?? null };
+      const made = await invoke('generations/upload-tickets', 'POST', JSON.stringify({ terminal: terminal === true,
+        ...(host && host !== 'oddbout' ? { host, hostConsent: hostConsent === true } : {}) }), { 'content-type': 'application/json' });
+      if (!made.ok) {
+        return made.code === 'rate-limit' ? { ...made, next: 'The account\'s twelve tickets or twelve pictures of the last 24 hours may be used, '
+          + 'or too many calls came this minute: get_picture_upload with no ticketId lists the tickets to reuse; else wait.' } : made;
+      }
       const { secret, ...ticket } = made.ticket;
       return { ok: true, ticket, page: `${PICTURE_PAGE}${ticket.id}`,
         ...(secret ? { command: `curl -sS -H "${UPLOAD_TICKET_HEADER}: ${secret}" --data-binary "@<file>" ${TICKET_UPLOAD_URL}` } : {}),
         next: `Give the user the page link (PNG, JPEG or WebP, up to 4 MB, 64 to 4096 pixels a side)${secret ? ', or run the command with the file '
-          + '(one with no answer: get_picture_upload before running it again)' : ''}. When he says the pictures are in, get_picture_upload with ticket.id.` };
+          + '(one with no answer or a 5xx: get_picture_upload before running it again)' : ''}. When he says the pictures are in, get_picture_upload with ticket.id.` };
     }, { write: true, idempotent: false });
   register('get_picture_upload', '올린 그림 확인', 'The pictures a start_picture_upload ticket took (at most two), each with its address for ten '
-    + 'minutes, and why it takes no more (closed: expired, full, day-limit). Show the user the pictures and ask that they are his to use; '
-    + 'then pass the ids with usable true as request_hosted_fighter pictureUploads with rightsConfirmed.',
-    { ticketId: UUID_ARG() }, async ({ ticketId }) => invoke(`generations/upload-tickets/${ticketId}`));
+    + 'minutes, and why it takes no more (closed: full, expired, day-limit). Show the user the pictures and ask that they are his to use; '
+    + 'then pass the ids with usable true as request_hosted_fighter pictureUploads with rightsConfirmed. With no ticketId: his tickets of the '
+    + 'last day, newest first, without the addresses (to find one again before starting another).',
+    { ticketId: UUID_ARG().optional() }, async ({ ticketId }) => {
+      if (!ticketId) {
+        const listed = await invoke('generations/upload-tickets');
+        return listed.ok ? { ...listed, next: 'Reuse an open one, or read one by its ticketId to show its pictures.' } : listed;
+      }
+      const read = await invoke(`generations/upload-tickets/${ticketId}`);
+      if (!read.ok) return read;
+      const usable = read.ticket.uploads.filter((/** @type {{ usable: boolean }} */ upload) => upload.usable).length;
+      return { ...read, next: usable ? 'Show him the pictures (url, ten minutes) and ask that they are his to use; then request_hosted_fighter '
+        + 'with the usable ids as pictureUploads and rightsConfirmed.'
+        : read.ticket.open ? 'Nothing in yet: give him the page link again, or wait until he says the pictures are in.'
+          : 'This ticket takes no more and holds no usable picture: start_picture_upload for a new one.' };
+    });
   // Grok 그림 주소 관찰: one call when the user tests it; the server log keeps the shape (pictureLinkShape), nothing is fetched or kept.
   register('report_picture_link', '그림 주소 확인', 'Diagnostic, only when the user asks to test it: pass the address you hold for a '
     + 'picture made or shown in this chat, exactly as you have it, and which tool or model made it. One longer than 8,000 characters (a data: '

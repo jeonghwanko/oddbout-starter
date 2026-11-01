@@ -702,13 +702,23 @@ test('a picture ticket: two pictures from the site or a terminal, its owner\'s o
     assert.deepEqual(read.uploads.map(u => [u.id, u.width, u.bytes, u.contentType, u.used, u.usable, /^https:\/\/storage\.test\/af-generation\/refs\//.test(u.url)]),
       [[first.body.upload.id, 512, 64, 'image/png', false, true, true], [second.body.upload.id, 300, 64, 'image/png', false, true, true]]);
     assert.equal((await call('GET', `generations/upload-tickets/${ticket}`, undefined, 'other-token-0123456789')).body.code, 'not-found');
+    // A ticket made while he may still request (made later, it is refused below: one request at a time).
+    const late = (await call('POST', 'generations/upload-tickets', { terminal: true })).body.ticket;
+    // His tickets of the last day, newest first, without the addresses: a conversation that lost its ticket finds it again.
+    const listed = (await call('GET', 'generations/upload-tickets')).body.tickets;
+    assert.deepEqual([listed.length, listed[0].id, listed[1].id, listed.at(-1).id], [4, late.id, ticket, linkOnly.id]);
+    assert.ok(listed.every(t => t.uploads.every(u => u.url === null)));
+    assert.deepEqual((await call('GET', 'generations/upload-tickets', undefined, 'other-token-0123456789')).body.tickets, []);
     // The request names them as it names any upload of his.
     const job = await call('POST', 'generations', { description: '빨간 글러브를 낀 고양이 복서, 귀가 크다', language: 'ko',
       refs: [first.body.upload.id, second.body.upload.id], rightsConfirmed: true }, undefined, { 'idempotency-key': crypto.randomUUID() });
     assert.equal(job.status, 200, JSON.stringify(job.body));
     assert.deepEqual((await call('GET', `generations/upload-tickets/${ticket}`)).body.ticket.uploads.map(u => [u.used, u.usable]), [[true, false], [true, false]]);
+    // No ticket while his request is under way: the request's own checks come first (3차 리뷰 2026-11-01).
+    const refusedTicket = await call('POST', 'generations/upload-tickets', { terminal: true });
+    assert.equal(refusedTicket.status >= 400, true, JSON.stringify(refusedTicket.body));
+    assert.equal(refusedTicket.body.ticket, undefined);
     // Past its thirty minutes: refused on both ways, before anything is stored.
-    const late = (await call('POST', 'generations/upload-tickets', { terminal: true })).body.ticket;
     await sql.query("update public.af_generation_upload_tickets set expires_at = now() - interval '1 second' where id = $1", [late.id]);
     assert.equal((await call('GET', `generations/upload-tickets/${late.id}`)).body.ticket.closed, 'expired');
     assert.deepEqual([(await terminal(png(512, 512), late.secret)).status, (await terminal(png(512, 512), late.secret)).body.code], [410, 'ticket-expired']);
@@ -719,24 +729,44 @@ test('a picture ticket: two pictures from the site or a terminal, its owner\'s o
       [owner, ticket, crypto.randomUUID(), `refs/${owner}/${crypto.randomUUID()}.png`, 'image/png', 64, 512, 512]), /ticket-full/);
     await assert.rejects(sql.query('select public.af_generation_ticket_upload($1,$2,$3,$4,$5,$6,$7,$8)',
       [owner, late.id, crypto.randomUUID(), `refs/${owner}/${crypto.randomUUID()}.png`, 'image/png', 64, 512, 512]), /ticket-expired/);
-    // Twelve tickets in 24 hours.
-    for (let i = 4; i < 12; i++) assert.equal((await call('POST', 'generations/upload-tickets')).status, 200);
-    assert.deepEqual([(await call('POST', 'generations/upload-tickets')).status, (await call('POST', 'generations/upload-tickets')).body.code], [429, 'rate-limit']);
     // A ticket's own lock: not af_generation_create's, which holds it while it takes the service's capacity lock.
     const definition = (await sql.query("select pg_get_functiondef('public.af_generation_upload_ticket'::regproc) as d")).rows[0].d;
     assert.match(definition, /74280505/); assert.doesNotMatch(definition, /74280502/);
   } finally { await sql.close(); }
 });
 
+test('twelve tickets in 24 hours, each only while he may request (the service on)', async () => {
+  const { sql, call, healthy } = await generation();
+  try {
+    assert.equal((await call('POST', 'generations/upload-tickets')).body.ticket, undefined); // no healthy worker: the request's check refuses
+    await healthy();
+    for (let i = 0; i < 12; i++) assert.equal((await call('POST', 'generations/upload-tickets')).status, 200);
+    assert.deepEqual([(await call('POST', 'generations/upload-tickets')).status, (await call('POST', 'generations/upload-tickets')).body.code], [429, 'rate-limit']);
+  } finally { await sql.close(); }
+});
+
 test('a picture whose keeping has an unknown outcome stays stored; a refusal keeps nothing', async () => {
-  // 2차 리뷰 2026-11-01: removing it on an unknown outcome could leave a row the database did commit pointing to no picture.
-  const unknown = await generation({ failing: ['af_generation_upload'] });
+  // 2차 리뷰 2026-11-01: removing it on an unknown outcome could leave a row the database did commit pointing to no picture. 3차: told
+  // apart by the database's code, so a refusal the API has no name for (a missing function) keeps nothing either.
+  const unknown = await generation({ unanswered: ['af_generation_upload', 'af_generation_ticket_upload'] });
   try {
     await unknown.healthy();
     const before = unknown.objects.size, sent = await unknown.call('POST', 'generations/uploads', png(512, 512));
     assert.deepEqual([sent.status, sent.body.code], [503, 'database-unavailable']);
     assert.equal(unknown.objects.size, before + 1);
+    // The row did commit: its picture is there for it.
+    assert.equal((await unknown.sql.query('select count(*)::int as n from public.af_generation_uploads')).rows[0].n, 1);
+    const ticket = (await unknown.call('POST', 'generations/upload-tickets')).body.ticket;
+    assert.equal((await unknown.call('POST', `generations/uploads?ticket=${ticket.id}`, png(512, 512))).status, 503);
+    assert.equal(unknown.objects.size, before + 2);
   } finally { await unknown.sql.close(); }
+  const missing = await generation({ failing: ['af_generation_ticket_upload'] });
+  try {
+    await missing.healthy();
+    const ticket = (await missing.call('POST', 'generations/upload-tickets')).body.ticket, before = missing.objects.size;
+    assert.equal((await missing.call('POST', `generations/uploads?ticket=${ticket.id}`, png(512, 512))).status, 503);
+    assert.equal(missing.objects.size, before);
+  } finally { await missing.sql.close(); }
   const { sql, call, healthy, objects } = await generation();
   try {
     await healthy();
@@ -748,8 +778,9 @@ test('a picture whose keeping has an unknown outcome stays stored; a refusal kee
 });
 
 test('a ticket takes nothing once his twelve uploads of 24 hours are used, and is not given then', async () => {
-  const { sql, call, objects } = await generation();
+  const { sql, call, objects, healthy } = await generation();
   try {
+    await healthy();
     const ticket = (await call('POST', 'generations/upload-tickets', { terminal: true })).body.ticket;
     for (let i = 0; i < 12; i++) assert.equal((await call('POST', 'generations/uploads', png(512, 512))).status, 200);
     assert.equal((await call('GET', `generations/upload-tickets/${ticket.id}`)).body.ticket.closed, 'day-limit');
