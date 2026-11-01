@@ -122,7 +122,7 @@ export function createJobStore(store) {
     if (plan.engine === 'fighter-pack') {
       const planPath = await localPath(store.root, plan.args[0]);
       const packPlan = await readJson(planPath);
-      if (packPlan.reviewPolicy && packPlan.reviewPolicy !== 'required') fail('format-fixture-not-creation');
+      if (packPlan.reviewPolicy && !['files-only', 'required', 'engine-loop'].includes(packPlan.reviewPolicy)) fail('format-fixture-not-creation');
       const out = path.relative(store.root, path.resolve(path.dirname(planPath), packPlan.out)).split(path.sep).join('/');
       if (!out.startsWith(`${store.prefix(state.sessionId)}/artifacts/`)) fail('engine-output-outside-session');
       await localPath(store.root, out);

@@ -315,7 +315,7 @@ test('final package tracks every asset and metadata-only edits preserve animatio
   assert.equal((await f.store.inspect(sessionId)).decision.canAdvance, true);
   await f.change({ type: 'profile', name: 'Renamed', description, ...extras, feedback: 'Change only the name' });
   let inspected = await f.store.inspect(sessionId);
-  assert.ok(inspected.decision.blockers.includes('package-unchecked'));
+  assert.ok(inspected.decision.blockers.includes('package-files-unchecked'));
   assert.ok(Object.values(inspected.effectiveItems).every(item => item.selectedVersion === 'v1'));
   await assert.rejects(f.change({ type: 'package', files: [manifestPath], note: 'Old name' }), /profile-mismatch/);
 });
@@ -367,10 +367,10 @@ test('the optional style group can be skipped; a packaged optional clip must be 
   // The same package with an entrance clip (the guard sheet replayed once) needs that item tracked and accepted.
   manifest.clips.entrance = { ...structuredClone(manifest.clips.fightIdle), loop: false };
   await writeFile(path.join(f.root, manifestPath), JSON.stringify(manifest));
-  await assert.rejects(f.change({ type: 'package', files: [manifestPath], note: 'Untracked entrance' }), /package-optional-clip-unreviewed/);
+  await assert.rejects(f.change({ type: 'package', files: [manifestPath], note: 'Untracked entrance' }), /package-optional-clip-unselected-or-invalid/);
   await f.record('entrance');
   assert.equal((await f.store.read(sessionId)).groupId, 'style');
-  await assert.rejects(f.change({ type: 'package', files: [manifestPath], note: 'Unreviewed entrance' }), /package-optional-clip-unreviewed/);
+  await assert.rejects(f.change({ type: 'package', files: [manifestPath], note: 'Unreviewed entrance' }), /package-optional-clip-unselected-or-invalid/);
   await f.review('entrance');
   assert.deepEqual((await f.store.inspect(sessionId)).decision.optionalPending, ['unselected:entrance']);
   await f.select('entrance'); await f.change({ type: 'advance' });
@@ -607,4 +607,43 @@ test('gen-motion runs as a managed job: a pose preflight for --frame, local acti
   const unknown = await runCreationJob(h.store, sessionId, unknownId, { execute: async (_r, _e, argv) => ({ code: argv[0] === 'workflow' ? 0 : 1 }) });
   assert.equal(unknown.status, 'unknown');
   assert.match((await h.jobs.inspect(sessionId, unknownId)).nextAction, /--reconcile/);
+});
+
+
+test('selected files reach final without quality approvals; changed package bytes still block', async t => {
+  const f = await fixture(t);
+  for (const group of context.workflow.groups.slice(0, -1)) {
+    for (const item of [...group.motions, ...(group.auxiliaries ?? [])]) { await f.record(item); await f.select(item); }
+    await f.change({ type: 'advance' });
+  }
+  const dir = `output/${sessionId}-work/artifacts/final/file-checks`;
+  await cp(path.join(kitRoot, 'examples', 'sparring-bot'), path.join(f.root, dir), { recursive: true });
+  const manifestPath = `${dir}/fighter.json`, manifest = JSON.parse(await readFile(path.join(f.root, manifestPath), 'utf8'));
+  const { name, description, language, concept, moves } = manifest.profile;
+  await f.change({ type: 'profile', name, description, language, concept, moves, stats: manifest.combat.stats, feedback: 'Fixture selection' });
+  assert.ok((await f.store.inspect(sessionId)).decision.blockers.includes('package-files-unchecked'));
+  await f.change({ type: 'package', files: [manifestPath], note: 'File validation only; no visual approval claimed' });
+  let result = await f.store.inspect(sessionId);
+  assert.equal(result.decision.canAdvance, true); assert.equal(result.decision.registrationAuthorized, false);
+  assert.equal(result.effectiveItems.walk.review, 'unverified');
+  const evidence = await f.put('quality-diagnostic.txt', 'Unverified motion; deferred quality work');
+  await f.change({ type: 'package-review', verdict: 'failed', evidence: [evidence], feedback: 'Deferred quality diagnostic' });
+  assert.equal((await f.store.inspect(sessionId)).decision.canAdvance, true);
+  await f.put(`${dir}/${manifest.assets[0].path}`, 'damaged file');
+  assert.ok((await f.store.inspect(sessionId)).decision.blockers.includes('package-files-unchecked'));
+});
+
+test('recorded pack jobs accept file checks and legacy policy names without enabling format fixtures', async t => {
+  const f = await fixture(t);
+  for (const group of context.workflow.groups.slice(0, -1)) {
+    for (const item of [...group.motions, ...(group.auxiliaries ?? [])]) { await f.record(item); await f.select(item); }
+    await f.change({ type: 'advance' });
+  }
+  for (const policy of ['files-only', 'required', 'engine-loop', 'format-only']) {
+    const file = await f.put(`pack-${policy}.json`, JSON.stringify({ reviewPolicy: policy, out: `output/${sessionId}-work/artifacts/pack-${policy}` }));
+    const p = plan({ engine: 'fighter-pack', args: [file], groupId: 'final', workflowArgs: undefined });
+    const check = f.jobs.gate(await f.store.read(sessionId), p);
+    if (policy === 'format-only') await assert.rejects(check, /format-fixture-not-creation/);
+    else await check;
+  }
 });

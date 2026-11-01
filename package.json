@@ -1,6 +1,6 @@
 {
   "name": "oddbout-starter",
-  "version": "0.6.7",
+  "version": "0.6.8",
   "description": "Local Dot/Codex MCP starter for AI Fighter authoring and package validation",
   "private": true,
   "type": "module",

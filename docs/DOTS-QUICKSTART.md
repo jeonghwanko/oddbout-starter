@@ -239,3 +239,32 @@ Actual byte receipt, MIME/decode, Library storage, native parent attachment and 
 separate observations. Doctor verifies only the declared file bytes; decode/display stay unverified.
 The delivery workflow must inspect actual media and target-conversation display before asking for feedback.
 An attachment ID string, child-only preview or queued message is insufficient. See [DELIVERY.md](DELIVERY.md).
+
+
+## File-only packaging repair (0.6.8)
+
+0.6.8 removes numerical and visual quality gates from packaging and session progress. It accepts the
+existing `required`/`engine-loop` plan names without requiring another approval or rewriting diagnostics.
+A direct `requireReview` exception is a diagnostic result, not a full packer or registration result.
+Do not run it as a prerequisite, mark missing observations as passed, or generate another animation.
+
+For an explicitly requested packaging repair, obtain the reviewed 0.6.8 kit into a **separate directory**
+and install only its locked Node dependencies (`npm ci --ignore-scripts`). Run its
+`scripts/pack-fighter.mjs` with the absolute path to the existing plan, using a new output directory.
+It resolves game-pack and diagnostic paths relative to that plan. No sprite setup, generation account,
+Python measurement run, new workspace binding or replacement of the active runtime is needed.
+Use the same selected files and session; preserve the existing runtime, sessions, jobs and outputs.
+When recording the new package, the repaired `creation:tool --workspace <existing-workspace>` can
+update that session with the actual file-validation result. Quality records may remain unverified/failed.
+Registration is a separate action within the user's request; report the actual server response.
+
+
+If the intermediate `game-pack` itself hit 50 MB, it does not exist yet; `GAME_PACK_UNREADABLE` is
+then a downstream missing-file error, not a gait rejection. With this kit's pinned engine, run the
+existing request into a new directory using `npm run sprite -- game-pack --request <existing-request>
+--out-dir <new-output> --image-format webp`. This writes lossless WebP only and retains every RGBA
+pixel, frame, timing and anchor. When the actual single-format intermediate still exceeds 50 MB,
+`--max-bytes 200000000` explicitly permits up to 200 MB of intermediate files. The final fighter's
+file/size limits do not change. Never trim approved frames, resize artwork or regenerate to fit.
+This intermediate-repack step needs the new kit's pinned Python engine installed in its own venv;
+it does not need a generation login or a provider call. Preserve the original runtime and source files.

@@ -18,12 +18,12 @@ import { profileLimits } from '../contracts/ai-fighter/profile-limits.mjs';
  * @typedef {{ path: string, bytes: number, sha256: string }} FileRecord
  * @typedef {{ files: (FileRecord & { sourcePath: string })[], basis: Record<string, string | null>, note: string, createdAt: string, feedback?: string,
  *   review?: { verdict: 'passed' | 'failed' | 'hypothetical', evidence: FileRecord[], note: string, contextRevision: string, source: string } }} ItemVersion
- * @typedef {{ version: string, selectedVersion: string | null, versions: Record<string, ItemVersion>, review?: string }} SessionItem
+ * @typedef {{ version: string, selectedVersion: string | null, versions: Record<string, ItemVersion>, review?: string, filesValid?: boolean }} SessionItem
  * @typedef {{ files: FileRecord[], basisHash: string, contextRevision: string, fileValidation: { stage: string, pending?: string[] },
  *   review?: { verdict: 'passed' | 'failed', evidence: FileRecord[], feedback: string, source: string } }} PackageRecord
  * @typedef {{ storeVersion: 1, sessionId: string, revision: number, brief: string, mode: 'creation' | 'dialogue-only', contextRevision: string,
  *   context: CreationContext, groupId: string, items: Record<string, SessionItem>, pendingEdits: string[], delegatedGroups: string[],
- *   profile: { selected?: boolean, [key: string]: unknown }, package?: PackageRecord, history: object[], updatedAt?: string, packageReview?: string }} Session
+ *   profile: { selected?: boolean, [key: string]: unknown }, package?: PackageRecord, history: object[], updatedAt?: string, packageReview?: string, packageFilesValid?: boolean }} Session
  */
 
 export const identifier = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/);
@@ -207,12 +207,15 @@ export function createCreationStore(root, { contextRequest, validatePackage = ma
       const basisValid = Object.entries(version.basis).every(([key, value]) => currentBasis[key] === value &&
         !problems.some(p => p.item === key && p.reason !== 'review-stale'));
       const valid = basisValid && await unchanged(root, version.files);
+      item.filesValid = valid;
       const reviewed = version.review?.contextRevision === state.contextRevision && await unchanged(root, version.review?.evidence);
       item.review = valid && reviewed ? version.review?.verdict ?? 'unverified' : 'unverified';
       if (!valid) { item.selectedVersion = null; problems.push({ item: id, reason: basisValid ? 'files-changed-or-missing' : 'basis-changed' }); }
       if (version.review && !reviewed) problems.push({ item: id, reason: 'review-stale' });
     }
     view.profile = { ...state.profile, selected: Boolean(state.profile?.selected) };
+    view.packageFilesValid = Boolean(state.package?.fileValidation && state.package.contextRevision === state.contextRevision &&
+      state.package.basisHash === packageBasis(state) && await unchanged(root, state.package.files));
     view.packageReview = state.package?.review?.verdict === 'passed' &&
       state.package.contextRevision === state.contextRevision &&
       state.package.basisHash === packageBasis(state) &&
@@ -229,7 +232,7 @@ export function createCreationStore(root, { contextRequest, validatePackage = ma
     try { decision = reviewCreationProgress(await latestContext(), view); }
     catch (error) { contextError = errorCode(error, 'creation-context-unavailable', { prefix: 'creation-context-' }); }
     return { state, effectiveItems: Object.fromEntries(Object.entries(view.items).map(([k, v]) => [k,
-      { version: v.version, selectedVersion: v.selectedVersion, review: v.review }])), problems,
+      { version: v.version, selectedVersion: v.selectedVersion, review: v.review, filesValid: v.filesValid }])), problems,
       decision: decision ?? { canAdvance: false, blockers: [contextError], nextGroup: null, registrationAuthorized: false } };
   }
   /** @param {{ sessionId: string, brief: string, mode?: 'creation' | 'dialogue-only' }} options */
@@ -353,7 +356,7 @@ export function createCreationStore(root, { contextRequest, validatePackage = ma
           const { view } = await effective(state);
           for (const id of Object.keys(spec.optionalClips).filter(id => Object.hasOwn(manifest.clips, id))) {
             const group = state.context.workflow.groups.find(g => g.motions.includes(id));
-            if (!group || itemBlockers(view, group, id).length) fail('package-optional-clip-unreviewed');
+            if (!group || itemBlockers(view, group, id).length) fail('package-optional-clip-unselected-or-invalid');
           }
           const base = path.posix.dirname(manifests[0]);
           const allFiles = [...event.files, ...manifest.assets.map(asset => `${base}/${asset.path}`)];

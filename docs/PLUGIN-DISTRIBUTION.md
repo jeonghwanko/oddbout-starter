@@ -1,5 +1,10 @@
 # ODDBOUT distribution
 
+0.6.8 source candidate: packaging/session progress use file and contract checks only; numerical and visual
+quality reports are deferred diagnostics. Its pinned engine adds lossless WebP-only intermediate packs and
+explicit intermediate budgets up to 200 MB. Existing frames, timings, selections and final upload limits remain.
+Publication details will be recorded after the immutable ZIP and public files are verified.
+
 **Current source-kit release: 0.6.7** (2026-11-01: explicit public context file handoff; the Dots pin moves to this release).
 
 Adds an explicit per-invocation public game-context file and receipt to the context and workspace-tool CLIs.
