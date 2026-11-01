@@ -70,6 +70,12 @@ Grok, Claude 등 지원되는 다른 클라이언트는 각자의 커넥터 설�
 creator-kit ZIP에는 한국어·영어 README와 제작·연결·MCP 전환 안내가 포함됩니다. 문서 지도에 함께 실린 저장소 전용 운영·연구 문서와
 게임 영상은 이 저장소에서 확인할 수 있습니다.
 
+**Creator-kit 0.6.5**는 게임 제작 데이터 조회에 호스트의 기존 HTTP(S) 프록시·`NO_PROXY`·CA 설정을 사용합니다.
+[릴리스 파일과 검증 기록](https://github.com/jeonghwanko/oddbout-starter/blob/main/docs/PLUGIN-DISTRIBUTION.md)과
+[네트워크 오류 안내](docs/GAME-CREATION-CONTEXT.md#network-errors-and-existing-workspaces)를 확인하세요.
+호스트의 네트워크 실행 권한은 별도로 필요합니다. 제작 중인 선수는 현재 런타임에서 이어가고 세션·작업·생성 결과를 보존하세요.
+ZIP 공개만으로 기존 Dots 작업이나 연결된 클라우드 앱이 갱신되지는 않습니다.
+
 내 PC나 작업 환경에서 명령을 실행하고 파일을 읽을 수 있는 Dot·Codex·Claude 등의 새 대화에 [시작 링크](https://github.com/jeonghwanko/oddbout-starter/blob/codex/game-context/START-HERE.md)를 보내세요. 원하는 캐릭터 설명이나 참고 이미지를 함께 보내면 됩니다. 예를 들면:
 
 > 이 키트로 ODDBOUT에 쓸 파란 갑옷의 고양이 복서를 만들어줘.
