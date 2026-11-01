@@ -214,7 +214,7 @@ walk 16/run 12개 프레임과 최종 시퀀스 검수 후 `asset.json`을 만�
   [sprite-gen 동작 검수](../vendor/sprite-gen/docs/qa-motion.md)로 발 교대·루프·몸통 고정·접지·공격 준비/접촉/회수를 확인한다.
   실패한 걷기를 정지 프레임 복제나 시간 조절로 통과시키지 않는다.
 - [보행 설계·검수 흐름](GAIT-REVIEW.md)을 따른다. 공통 좌표와 배율을 고정하고 프레임별 지지발을 계획한 뒤,
-  실제 양발의 접지 구간을 `fighter:gait review`로 검사한다. 미검증 상태에서도 등록 전 미리보기를 먼저 보여준다.
+  실제 미리보기를 보여준다. `fighter:gait review`의 접지·품질 진단은 나중에 요청할 때 수행하며 제작·등록을 막지 않는다.
 - **호스팅 제작의 Decisions 검수는 [서버 검수 경로](SERVER-DECISIONS-REVIEW.md)를 쓴다.** 서버가 비교 모드를 켜면
   호스트가 기존 작업 인증으로 증거만 전달한다. OpenAI 키는 서버 Secrets에만 관리하고 사용자 PC나 생성 호스트에 설정하지 않는다.
 - 독립 연구 환경의 선택형 [Decisions 보조 검수](../vendor/sprite-gen/docs/decisions-review.md)는
@@ -272,7 +272,11 @@ npm run sprite -- game-pack --request game.json --out-dir pack
 }
 ```
 
-3. 최종 game-pack의 walk/run을 `fighter:gait review`로 검수하고 실제 미리보기를 보여준다.
+중간 `game-pack`이 50MB를 넘으면 같은 요청에 `--image-format webp`를 써 무손실 WebP만 저장한다.
+필요한 경우 `--max-bytes 200000000`으로 중간 팩만 200MB까지 허용할 수 있다. 프레임·픽셀·시간·해상도를
+바꾸지 않으며 최종 제출 파일의 용량 제한은 그대로다. [Dots 복구 안내](DOTS-QUICKSTART.md#file-only-packaging-repair-068)를 따른다.
+
+3. 선택된 최종 game-pack으로 필수 파일·계약 검사와 패키징을 진행한다. 보행·시각 품질 진단은 선택적 후속 작업이다.
    `npm run fighter:pack -- plan.json`을 실행한다. 경로는 계획 파일 기준이다. 출력 폴더가 이미 있으면 거절한다.
 
 #### 별도 기상 애니메이션을 fall 시트에 보관하기
@@ -334,9 +338,10 @@ npm run sprite -- game-pack --request game.json --out-dir pack
   반복 칸이 있으면 채워 넣지 않고 거절한다.
 - **기준점·접지.** 동작마다 지면선은 그 동작에서 가장 낮은 발바닥이다. 기준점은 game-pack anchor의 x와 그 지면선이다.
   접지는 지면선 바로 위의 불투명 열 묶음(최대 2개)이다. 계획의 `origin`으로 덮어쓸 수 있다.
-- **보행 근거.** 기본 `reviewPolicy: required`는 양발 측정과 시각 검수가 통과한 결과를 요구한다. 그림이나 시간이 바뀐 근거는 거절한다.
-- **보폭.** 검수된 같은 발의 후방 이동 속도 × 주기 시간을 사용한다. `stridePixels` 수기 덮어쓰기는 거절한다.
-  형식 fixture용 `format-only`에서는 기존 바닥 실루엣 추정을 쓸 수 있으나 발 정체성을 보장하지 않는 추정치로 보고한다.
+- **보행 근거.** 기본 `reviewPolicy: files-only`는 보행·시각 품질 보고서를 요구하지 않는다. 이전 `required`·`engine-loop` 계획도 파일 검사만 한다.
+  지정된 보고서는 원래 상태 그대로 진단 기록에 보관하고, 실패·누락·만료로 패키징을 막지 않는다.
+- **보폭.** 계획의 `stridePixels` 게임 이동량을 보존한다. 없으면 사용 가능한 최신 측정값이나 실루엣 추정을 사용한다.
+  추정 불가 시 게임 이동량(1~1600)을 설정하면 되며 새 보행 검수·시각 승인·재생성은 요구하지 않는다.
 - **초상·미리보기.** idle 몸 윗부분의 정사각형과 idle 전체 칸. `profile.portraitCrop`·`previewCrop`으로 바꿀 수 있다.
 
 계약 검사를 통과하지 못하면 아무것도 쓰지 않고 오류를 JSON Pointer로 알린다. 통과하면 폴더를 한 번에 만들고

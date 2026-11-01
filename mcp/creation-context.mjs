@@ -12,9 +12,9 @@ import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
  */
 /**
  * A session's effective view, or a state the agent supplies: checked here, never trusted.
- * @typedef {{ version?: string, selectedVersion?: string | null, review?: string }} ProgressItem
+ * @typedef {{ version?: string, selectedVersion?: string | null, review?: string, filesValid?: boolean }} ProgressItem
  * @typedef {{ mode: string, contextRevision?: string, groupId?: string, items?: Record<string, ProgressItem>, delegatedGroups?: string[],
- *   pendingEdits?: string[], profile?: { selected?: boolean }, packageReview?: string }} ProgressState
+ *   pendingEdits?: string[], profile?: { selected?: boolean }, packageReview?: string, packageFilesValid?: boolean }} ProgressState
  */
 
 const groups = ['appearance', 'locomotion', 'attacks', 'defense', 'final'];
@@ -63,7 +63,7 @@ export async function fetchCreationContext({ request = runtimeFetch, group } = {
 }
 
 /**
- * Why one tracked item is not accepted yet: missing, unselected (unless its group was delegated), unchecked or pending an edit.
+ * Missing/changed files, user selection and pending edits still gate progress. Quality reviews are deferred.
  * @param {ProgressState} state @param {WorkflowGroup} group @param {string} id
  */
 export function itemBlockers(state, group, id) {
@@ -71,9 +71,7 @@ export function itemBlockers(state, group, id) {
   if (!item || typeof item.version !== 'string' || !item.version) return [`missing:${id}`];
   const blockers = [];
   if (item.selectedVersion !== item.version && !(state.delegatedGroups ?? []).includes(group.id)) blockers.push(`unselected:${id}`);
-  /** @type {(string | undefined)[]} */
-  const acceptedReview = state.mode === 'dialogue-only' ? ['hypothetical'] : ['passed'];
-  if (!acceptedReview.includes(item.review)) blockers.push(`unchecked:${id}`);
+  if (item.filesValid === false) blockers.push(`files-changed-or-missing:${id}`);
   if ((state.pendingEdits ?? []).includes(id)) blockers.push(`pending-edit:${id}`);
   return blockers;
 }
@@ -81,7 +79,7 @@ export function itemBlockers(state, group, id) {
 /**
  * Pure boundary check. Feedback interpretation is the agent's job; this never invents user acceptance.
  * An optional group never blocks: the items the user took are reported in optionalPending, and the package
- * check (creation-store) requires review of each one the package actually carries.
+ * check (creation-store) requires valid, selected files for each one the package actually carries.
  * @param {CreationContext} context @param {ProgressState} state
  */
 export function reviewCreationProgress(context, state) {
@@ -101,7 +99,7 @@ export function reviewCreationProgress(context, state) {
   for (const id of state.pendingEdits ?? []) if (!allowed.has(id)) blockers.push(`unknown-edit:${id}`);
   if (state.groupId === 'final') {
     if (!state.profile?.selected) blockers.push('profile-unselected');
-    if (state.mode === 'creation' && state.packageReview !== 'passed') blockers.push('package-unchecked');
+    if (state.mode === 'creation' && state.packageFilesValid !== true) blockers.push('package-files-unchecked');
   }
   return { canAdvance: blockers.length === 0, blockers, nextGroup: blockers.length ? null : sequence[index + 1]?.id ?? null,
     optionalPending, registrationAuthorized: false, mode: state.mode, contextRevision: context.revision };

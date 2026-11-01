@@ -29,12 +29,14 @@ test('partial praise, later delegation, revision and stale context cannot skip p
   state.contextRevision = 'b'.repeat(64);
   assert.ok(reviewCreationProgress(context, state).blockers.includes('context-changed'));
 });
-test('substituted motions and hypothetical approvals never satisfy real creation', () => {
+test('substituted motions stay blocked while quality verdicts do not gate creation', () => {
   const state = session(); state.groupId = 'attacks'; state.items.ultimate = item();
   assert.ok(reviewCreationProgress(context, state).blockers.includes('unknown-item:ultimate'));
   assert.ok(reviewCreationProgress(context, state).blockers.includes('missing:dash'));
   state.mode = 'creation';
-  assert.ok(reviewCreationProgress(context, state).blockers.includes('unchecked:idle'));
+  assert.ok(!reviewCreationProgress(context, state).blockers.includes('unchecked:idle'));
+  state.items.idle.filesValid = false; state.delegatedGroups = ['appearance'];
+  assert.ok(reviewCreationProgress(context, state).blockers.includes('files-changed-or-missing:idle'));
 });
 test('get-up, profile and validation are required; final acceptance never authorizes registration', () => {
   const state = session(); state.groupId = 'final';
@@ -86,7 +88,7 @@ test('the game context with the optional style group validates; the group never 
   // Taken: tracked and reported, still not a blocker; final needs only its own profile.
   state.items.skill = item(false); state.items.victory = { ...item(), review: 'pending' }; state.pendingEdits = ['victory'];
   const taken = reviewCreationProgress(gameContext, state);
-  assert.equal(taken.canAdvance, true); assert.deepEqual(taken.optionalPending, ['unselected:skill', 'unchecked:victory', 'pending-edit:victory']);
+  assert.equal(taken.canAdvance, true); assert.deepEqual(taken.optionalPending, ['unselected:skill', 'pending-edit:victory']);
   state.groupId = 'final'; state.pendingEdits = [];
   assert.deepEqual(reviewCreationProgress(gameContext, state).blockers, ['profile-unselected']);
   // A required motion still blocks, also after the optional group.

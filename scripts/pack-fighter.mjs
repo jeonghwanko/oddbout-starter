@@ -26,7 +26,7 @@ import { requireLoopReview, requireReview } from '../tools/ai-fighter/gait.mjs';
  * @typedef {{ geometry: { groundY: number }, stridePixels: number, sequenceSha256: string }} GaitReview  As requireReview passed it.
  * @typedef {{ stridePixels: number | null, sequenceSha256: string, engine: unknown, judge: string }} LoopReview  As requireLoopReview passed it.
  * @typedef {{ keys: string[], frames: Frame[], durations: number[], sourceDurations: number[], anchor: { x: number, y: number }, loop?: boolean,
- *   events: unknown[], getUp?: Animation, gaitReview?: GaitReview, loopReview?: LoopReview }} Animation
+ *   events: unknown[], getUp?: Animation, gaitReview?: GaitReview, loopReview?: LoopReview, reviewDiagnostics?: object[] }} Animation
  * @typedef {{ frame: number, durationMs: number }} Step
  * @typedef {{ assetId: string, frameWidth: number, frameHeight: number, columns: number, rows: number, frames: number[],
  *   origins: { originX: number, originY: number, groundContacts: Contact[] }[], loop: boolean, durationMs?: number, stridePixels?: number,
@@ -77,8 +77,8 @@ const planSchema = z.strictObject({
   encoding: z.enum(['lossless', 'lossy']).default('lossless'),
   quality: z.number().int().min(1).max(100).default(92),
   resample: z.enum(['lanczos3', 'nearest']).default('lanczos3'),
-  // required: same-foot gait reviews (authoring); engine-loop: loop reviews (hosted generation, video loops); format-only: fixtures.
-  reviewPolicy: z.enum(['required', 'engine-loop', 'format-only']).default('required'),
+  // Legacy policy names remain readable, but no quality report blocks file packaging.
+  reviewPolicy: z.enum(['files-only', 'required', 'engine-loop', 'format-only']).default('files-only'),
   motions: /** @type {z.ZodType<Record<string, MotionPlan>>} */ (z.strictObject({ ...Object.fromEntries(MOTIONS.map(name => [name, motionPlan])),
     ...Object.fromEntries(OPTIONAL_CLIPS.map(name => [name, motionPlan.optional()])) })),
 });
@@ -338,7 +338,7 @@ async function packMotion(name, motion, animation, plan) {
     clip.durationMs = steps[0].durationMs;
     if (name === 'walk') {
       const measured = /** @type {number} */ (measureStride(contacts)); // null (unmeasured) fails measured >= 1
-      clip.stridePixels = animation.gaitReview?.stridePixels ?? animation.loopReview?.stridePixels ?? motion.stridePixels ?? (measured >= 1 ? measured : fail('STRIDE_UNMEASURED', 'walk: no verified stride; review actual same-foot stances'));
+      clip.stridePixels = animation.gaitReview?.stridePixels ?? animation.loopReview?.stridePixels ?? motion.stridePixels ?? (measured >= 1 ? measured : fail('WALK_TRAVEL_REQUIRED', 'walk: set stridePixels (1–1600) as nominal game travel; no gait review or regeneration is required'));
     }
   } else {
     clip.sequence = steps;
@@ -352,6 +352,7 @@ async function packMotion(name, motion, animation, plan) {
     origin: { x: round(origin.x), y: round(origin.y), source: motion.origin ? 'plan' : 'anchor-x, measured ground line' },
     contactsPerFrame: contacts.map(list => list.length), frameKeys: unique.map(u => u.key), events: animation.events,
     ...(animation.loop !== undefined && animation.loop !== motionSpec.loop ? { loopOverridden: { gamePack: animation.loop, contract: motionSpec.loop } } : {}),
+    ...(animation.reviewDiagnostics?.length ? { qualityDiagnostics: animation.reviewDiagnostics } : {}),
     ...(animation.gaitReview ? { gaitReview: { status: 'pass', sequenceSha256: animation.gaitReview.sequenceSha256 } } : {}),
     ...(animation.loopReview ? { loopReview: { status: 'pass', sequenceSha256: animation.loopReview.sequenceSha256, engine: animation.loopReview.engine,
       judge: animation.loopReview.judge } } : {}),
@@ -408,30 +409,28 @@ export async function packFighter(planFile) {
     }
     source.release();
     for (const name of ['walk', 'run']) {
-      const motion = plan.motions[name];
-      if (plan.reviewPolicy === 'engine-loop') {
-        if (motion.gaitReview) fail('PLAN_FIELD', `${name}: reviewPolicy engine-loop takes loopReview, not gaitReview`);
-        if (!motion.loopReview) fail('LOOP_REVIEW_REQUIRED', `${name}: run fighter:gait loop-review on the final game-pack animation first`);
-        let review;
+      const motion = plan.motions[name], animation = animations[name];
+      animation.reviewDiagnostics = [];
+      // Reviews are optional diagnostics. Only fresh, passing evidence may supply measured geometry/stride.
+      // Missing, failed or stale quality evidence is kept in the report and never requests another generation.
+      for (const kind of /** @type {const} */ (['gaitReview', 'loopReview'])) {
+        const filename = motion[kind];
+        if (!filename) continue;
+        let evidence;
         try {
-          review = requireLoopReview(JSON.parse(await readFile(path.resolve(base, motion.loopReview), 'utf8')),
-            { frames: animations[name].frames, durations: animations[name].sourceDurations }, name);
-        } catch (/** @type {any} */ error) { fail(error.message.startsWith('LOOP_') ? error.message.split(':')[0] : 'LOOP_REVIEW_UNREADABLE', `${name}: ${error.message}`); }
-        if (motion.stridePixels !== undefined) fail('GAIT_STRIDE_OVERRIDE', `${name}: remove stridePixels; the loop review supplies it`);
-        animations[name].loopReview = structuredClone(review);
-        continue;
-      }
-      if (motion.loopReview) fail('PLAN_FIELD', `${name}: loopReview needs reviewPolicy engine-loop`);
-      if (plan.reviewPolicy === 'required' || motion.gaitReview) {
-        if (!motion.gaitReview) fail('GAIT_REVIEW_REQUIRED', `${name}: run fighter:gait review on the final game-pack animation first`);
-        let review;
-        try {
-          review = requireReview(JSON.parse(await readFile(path.resolve(base, motion.gaitReview), 'utf8')),
-            { frames: animations[name].frames, durations: animations[name].sourceDurations }, name);
-        } catch (/** @type {any} */ error) { fail(error.message.startsWith('GAIT_') ? error.message.split(':')[0] : 'GAIT_REVIEW_UNREADABLE', `${name}: ${error.message}`); }
-        if (motion.stridePixels !== undefined) fail('GAIT_STRIDE_OVERRIDE', `${name}: remove stridePixels; the verified report supplies it`);
-        if (motion.origin && motion.origin.y !== review.geometry.groundY) fail('GAIT_ORIGIN_MISMATCH', `${name}: origin must use the reviewed ground line`);
-        animations[name].gaitReview = structuredClone(review);
+          evidence = JSON.parse(await readFile(path.resolve(base, filename), 'utf8'));
+          const sequence = { frames: animation.frames, durations: animation.sourceDurations };
+          const checked = kind === 'gaitReview' ? requireReview(evidence, sequence, name) : requireLoopReview(evidence, sequence, name);
+          if (motion.stridePixels !== undefined || (kind === 'gaitReview' && motion.origin && motion.origin.y !== checked.geometry.groundY)) {
+            animation.reviewDiagnostics.push({ kind, file: filename, status: 'deferred', code: 'PLAN_VALUES_PRESERVED', report: evidence });
+            continue;
+          }
+          animation[kind] = structuredClone(checked);
+          animation.reviewDiagnostics.push({ kind, file: filename, status: 'usable-measurement', report: evidence });
+        } catch (/** @type {any} */ error) {
+          animation.reviewDiagnostics.push({ kind, file: filename, status: 'deferred',
+            code: String(error.message).split(':')[0], ...(evidence === undefined ? {} : { report: evidence }) });
+        }
       }
     }
     // One scale for every motion, from the idle body: the game draws a sprite at actor height / bodyHeight.
@@ -490,10 +489,9 @@ export async function packFighter(planFile) {
     const report = { generator: 'oddbout-starter pack-fighter', gamePackSha256: createHash('sha256').update(await readFile(gamePack)).digest('hex'),
       scale: { measuredBodyHeight: measured, targetBodyHeight: BODY, ratio: round(ratio), resampled: resized ? plan.resample : false },
       motions: Object.fromEntries(clips.map(name => [name, packed[name].report])),
-      reviewPolicy: plan.reviewPolicy,
-      review: plan.reviewPolicy === 'format-only' ? 'FORMAT ONLY: gait quality is unverified. This mode is for format fixtures; it is not visual approval.'
-        : plan.reviewPolicy === 'engine-loop' ? 'Walk/run passed the engine loop checks and a vision judge, bound to these pixels and durations, with a measured stride. No same-foot stance was measured.'
-        : 'Walk/run evidence matches input pixels and durations. All actions still need visual review; file validation is not universal animation approval.' };
+      reviewPolicy: 'files-only', requestedReviewPolicy: plan.reviewPolicy,
+      qualityReview: 'deferred',
+      review: 'Required file and contract checks only. Animation quality is deferred; optional gait/loop reports are diagnostics, not packaging or registration gates. Usable measurements do not certify visual quality.' };
     if (!contract.ok) return { ok: false, stage: contract.stage, errors: contract.errors, report };
     // Stage beside the target, validate the staged files (decoded pixels, crops, alpha), then publish with one rename.
     // A failing package never reaches `out`, so a corrected plan can retry into the same folder.
