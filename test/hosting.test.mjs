@@ -18,13 +18,18 @@ test('published policies have effective dates and working local links, while pre
     for (const file of policyFiles.filter(file => file.endsWith('.html'))) {
       const html = await readFile(join(root, file), 'utf8');
       assert.match(html, /Lucas Foundation/);
-      assert.match(html, /Effective: 27 October 2026|시행일: 2026-10-27/);
+      assert.match(html, /Effective: 2 November 2026|시행일: 2026-11-02/);
       assert.match(html, /rel="canonical"/);
       assert.doesNotMatch(html, /POLICY PREVIEW|publication pending|공개 준비본|name="robots" content="noindex"|Supervillain Labs/);
+      assert.doesNotMatch(html, /일체의? 책임|any responsibility at all|under no circumstances/i, file);
       for (const match of html.matchAll(/(?:href|src)="\.\/([^"#]+)(?:#[^"]*)?"/g)) {
         await readFile(join(destination, match[1]));
       }
     }
+    // Who runs it and what it answers for (2026-11-02), with the carve-out that keeps the exclusions valid (약관규제법 제7조 1호).
+    const terms = await readFile(join(destination, 'terms.html'), 'utf8'), termsKo = await readFile(join(destination, 'terms.ko.html'), 'utf8');
+    assert.match(terms, /small independent team of individuals/); assert.match(terms, /Unless caused by our intent or gross negligence/);
+    assert.match(termsKo, /운영자의 고의 또는 중대한 과실로 인한 경우가 아니면/);
     const source = '<section id="scope"><p>The service is operated by Supervillain Labs.</p></section><section id="data">Preserve data practices</section>';
     const updated = sitePrivacyNotice(source);
     assert.match(updated, /operated by Lucas Foundation/);
