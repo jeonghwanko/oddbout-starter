@@ -2,7 +2,7 @@
   "upstream": "Wonder Lupin game repository (private), kaito_web/",
   "rule": "Byte copies. Change them only by copying the game's files, then run npm run contract:vendored -- --pin and update verifiedAgainst.",
   "verifiedAgainst": {
-    "commit": "f3105c651dd18363581779682b9e37788998e079",
+    "commit": "5b7de698bf8cc8385ccbf5e835a284f39408d068",
     "date": "2026-11-01"
   },
   "files": {
