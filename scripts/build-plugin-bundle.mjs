@@ -26,7 +26,7 @@ const runtimeFiles = [
   'scripts/check-creation-delivery.mjs', 'scripts/check-connection.mjs', 'docs/DELIVERY.md',
   'tools/ai-fighter/gait.mjs', 'tools/ai-fighter/contact_evidence.py', 'tools/ai-fighter/validate-package.mjs',
   'docs/DOT-CREATION.md', 'docs/AUTHORING.md', 'docs/CREATION-UX.md', 'docs/GAIT-REVIEW.md',
-  'docs/FOOT-EVIDENCE.md', 'docs/LOCAL-PLUGIN.md', 'docs/GAME-CREATION-CONTEXT.md', 'docs/OPEN-REGISTRATION.md',
+  'docs/FOOT-EVIDENCE.md', 'docs/LOCAL-PLUGIN.md', 'docs/CODEX-PLUGIN.md', 'docs/GAME-CREATION-CONTEXT.md', 'docs/OPEN-REGISTRATION.md',
   'docs/EXECUTION-HOST.md', 'docs/CONNECTION-READINESS.md', 'docs/ODDBOUT-PLUGIN.md',
   'docs/README.md', 'docs/START-HERE.md', 'docs/CLOUD-MCP.md',
 ];

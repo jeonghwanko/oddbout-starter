@@ -1,0 +1,10 @@
+{
+  "name": "oddbout",
+  "interface": { "displayName": "ODDBOUT" },
+  "plugins": [{
+    "name": "oddbout",
+    "source": { "source": "local", "path": "./plugins/oddbout-codex" },
+    "policy": { "installation": "AVAILABLE", "authentication": "ON_USE" },
+    "category": "Creativity"
+  }]
+}

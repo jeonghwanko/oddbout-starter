@@ -39,6 +39,7 @@ creator-kit ZIP에는 제작·연결 안내와 이 문서 지도가 들어 있�
 | 문서 | 다루는 것 |
 | --- | --- |
 | [ODDBOUT-PLUGIN](ODDBOUT-PLUGIN.md) | 단일 호스팅 MCP와 로컬 생성 CLI로 전환하기; 등록은 연결된 계정 사용 |
+| [CODEX-PLUGIN](CODEX-PLUGIN.md) | Codex 로컬 커스텀 플러그인 Git 설치; 기존 MCP 재사용, 로그인 별도 |
 | [LOCAL-PLUGIN](LOCAL-PLUGIN.md) | 로컬 파일·작업 공간은 `creation:tool` CLI, 클라우드 작업은 단일 MCP; stdio는 호환용 |
 | [PLUGIN-DISTRIBUTION](PLUGIN-DISTRIBUTION.md) | 배포판(현재 판)과 설치 파일 풀기 |
 | [EXECUTION-HOST](EXECUTION-HOST.md) | 에이전트가 쓰는 작업 공간의 준비·계정·격리·보존·보안 기준 |
