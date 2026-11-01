@@ -1,10 +1,55 @@
 # ODDBOUT distribution
 
-0.6.10 candidate extends `fitSheets` to measured total/per-asset byte and pixel budgets after body normalization.
-It adds a bounded `outputScale` input and records each fitting trial without changing encoding, frames or timing.
-The existing texture-resolution contract and validators remain unchanged. Release verification follows publication.
+**Current source-kit release: 0.6.10** (2026-11-02 KST: measured package-wide byte and pixel fitting).
 
-**Current source-kit release: 0.6.9** (2026-11-02 KST: MCP packaging recovery and bounded sheet fitting).
+The 0.6.9 sheet fitting could retain a package above the server's total limits. With 0.6.10, existing
+`fitSheets: true` requests also fit total and per-asset budgets after body normalization. Every bounded
+trial measures actual encoded bytes and full sheet pixels, including padding and unused cells. An optional
+`outputScale` (.25–1) caps the density; `report.budget` records each trial and actual final usage.
+Encoding stays as selected, and the original files, frame identities, order and timing are preserved.
+Coordinates and profile crops follow the reduction; `pixelScale` retains apparent game size. Required
+file/contract validators and their limits remain unchanged. Reaching the scale floor is not a validation pass.
+
+Cloud `prepare_fighter_packaging` points to the reviewed 0.6.10 runtime and supplies workspace execution
+instructions; the cloud cannot read Dots files. Install locked Node dependencies in the extracted
+`plugin/runtime/`, then use its `inspect_fighter_packaging` and `pack_fighter_package` tools on the
+existing plan. There is no new generation or generation login. The eight-trial worker deadline is ten minutes;
+resume the same host execution rather than dispatching duplicates.
+
+- [Download the 0.6.10 ZIP](https://oddbout.com/creator-kit/0.6.10/3d3e06be6d639a2d62f007b58304683076e483350b74fa89a6eea5b76e39c111/oddbout-0.6.10.zip)
+- [Release manifest](https://oddbout.com/creator-kit/0.6.10/3d3e06be6d639a2d62f007b58304683076e483350b74fa89a6eea5b76e39c111/release.json)
+- [Download helper](https://oddbout.com/creator-kit/0.6.10/3d3e06be6d639a2d62f007b58304683076e483350b74fa89a6eea5b76e39c111/fetch-creator-kit.py)
+
+| Verified item | Value |
+| --- | --- |
+| ZIP size | 4,210,680 bytes |
+| ZIP SHA-256 | `52658138857b5352537c880fa789193b54d3169b17c01d2715ea7bbaf0e608ef` |
+| Release manifest SHA-256 | `da9ef9e1510ef45763c06dd698590ed6855f2fc3079641203ccaf663206b13b7` |
+| Runtime manifest SHA-256 | `10bfb8b974008e0f4d1dede129ce85aa5029e7986991231b967c0329f9b5669a` |
+| Helper SHA-256 | `b66c31ff833816dfa74c90d9155359d3fdd484dff8c12759e48addde01707592` (unchanged) |
+| Archive build source | `01927bf67b868446ed8bc9a9cb43466efe8112f4` |
+| Tested PR head | `ed221654365b7e9afce438a6db8bf488e13c179c` ([PR #252](https://github.com/jeonghwanko/oddbout-starter/pull/252)) |
+| Main merge | `c0f86355b93b0963c81780784a6df6022a028839` |
+| sprite-gen pin | `704cb9e5a34f16a0340e7fc6e46709a047ab02d4` (unchanged) |
+| Kit Pages publication | `da6679d860d3d2600c44e35b870bb6838d4d7a1d` |
+
+Full PR CI passed. The actual workspace-child regression starts above both total budgets and per-asset
+byte limits, fits lossless sheets, and verifies 57-frame optional clips, timing/events, coordinates, unchanged
+source hashes and full file validation. Explicit output scaling is tested after body normalization.
+The trusted helper verified and extracted all 742 archive files; locked Node dependencies installed,
+and both workspace tools exposed the output-scale input from the extracted runtime. No Python engine ran.
+The final cloud-only runtime pointer is not an archive input.
+
+Publication added only three release files, preserved 6,434 existing files without changes or deletions,
+and verified HTTP 200 and exact release bytes plus 12 unchanged site files at 2026-11-01T15:59:55.827Z.
+The existing texture-resolution contract and game engine suffice; this release requires no game/API/site build.
+
+The Dots source pin is `33b3f3218145466156f55a8ff6e59bf07b4a53b3` (0.6.10), still a candidate with
+saved-VM acceptance pending. Use the separately reviewed runtime without replacing the active workspace.
+Velora's actual files remain in Dots: her final package and registration were not executed here. No animation
+was generated and no registration was submitted during this release verification.
+
+**Previous source-kit release: 0.6.9** (2026-11-02 KST: MCP packaging recovery and bounded sheet fitting).
 
 Cloud `prepare_fighter_packaging` supplies the reviewed runtime and structured workspace calls to
 `inspect_fighter_packaging` and `pack_fighter_package`. Dots executes these against the existing local files;
