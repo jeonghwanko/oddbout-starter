@@ -11,7 +11,9 @@ const owner = crypto.randomUUID(), session = crypto.randomUUID(), client = crypt
 const token = 'signed-connector-token-for-test';
 const claims = () => ({ sub: owner, client_id: client, session_id: session, iss: CLOUD_ISSUER, aud: CLOUD_RESOURCE,
   role: 'af_mcp', af_mcp: 'registration-v1', is_anonymous: false, exp: Math.floor(Date.now()/1000)+600, email: 'test@example.com' });
-const dbFor = (c=claims(), active=true) => ({ auth: { getClaims: async () => ({ data: { claims:c } }) }, rpc: async () => ({data:active}) });
+// af_mcp_session_state's answer for a live (true) or ended (false) connection, or the answer itself.
+const dbFor = (c=claims(), active=true) => ({ auth: { getClaims: async () => ({ data: { claims:c } }) },
+  rpc: async () => ({data:active===true?'usable':active===false?'ended':active}) });
 const request = (method,params={}, auth=false) => new Request(CLOUD_RESOURCE,{ method:'POST', headers:{'content-type':'application/json',accept:'application/json, text/event-stream',...(auth?{authorization:`Bearer ${token}`}:{})}, body:JSON.stringify({jsonrpc:'2.0',id:1,method,params}) });
 const call = async (handle,name,args={}) => (await (await handle(request('tools/call',{name,arguments:args},true))).json()).result;
 test('MCP discovery, file schemas, profile identity and HTTP auth challenge interoperate', async () => {
@@ -77,16 +79,22 @@ test('an expired connector token works while it is its live session\'s newest, t
   const hour=3600, now=Math.floor(Date.now()/1000), seen=[];
   const dbAt=(exp,{state='usable',active=true,iat=exp-hour,rpc=null}={})=>({
     auth:{getClaims:async(_,options)=>{seen.push(options);return{data:{claims:{...claims(),iat,exp}}}}},
-    rpc:async(name,args)=>{seen.push([name,args]);return rpc?rpc():{data:name==='af_mcp_expired_token_state'?state:active}}});
+    rpc:async(name,args)=>{seen.push([name,args]);return rpc?rpc():{data:args.p_issued_at!==undefined?state:active?'usable':'ended'}}});
   const req=new Request(SIGN_IN_RESOURCE,{headers:{authorization:`Bearer ${token}`}});
   const expired=now-6*hour;
   assert.equal((await authenticateCloud(dbAt(expired),req)).identity.owner,owner);
-  assert.deepEqual(seen,[{allowExpired:true},['af_mcp_expired_token_state',{p_owner:owner,p_session:session,p_client:client,p_issued_at:expired-hour}]]);
+  assert.deepEqual(seen,[{allowExpired:true},['af_mcp_session_state',{p_owner:owner,p_session:session,p_client:client,p_edition:'full',p_issued_at:expired-hour}]]);
   seen.length=0;
   assert.equal((await authenticateCloud(dbAt(now+hour),req)).identity.owner,owner);
-  assert.deepEqual(seen,[{allowExpired:true},['af_mcp_session_active',{p_owner:owner,p_session:session,p_client:client}]]);
-  // Other clients keep the plain expiry; a client that refreshed holds a newer token; a revoked or signed-out connection ends every token.
-  for(const [state,problem] of [['strict','token-expired'],['refreshed','token-superseded'],['ended','connection-ended'],[null,'connection-ended']])
+  assert.deepEqual(seen,[{allowExpired:true},['af_mcp_session_state',{p_owner:owner,p_session:session,p_client:client,p_edition:'full'}]]);
+  // The edition the call came to goes with it (2026-11-01): the database binds the session to its first.
+  seen.length=0;
+  assert.equal((await authenticateCloud(dbAt(now+hour),req,Date.now,'directory')).identity.owner,owner);
+  assert.equal(seen[1][1].p_edition,'directory');
+  // Other clients keep the plain expiry; a client that refreshed holds a newer token; a revoked or signed-out connection ends every token;
+  // a session bound to the other edition is refused there.
+  for(const [state,problem] of [['strict','token-expired'],['refreshed','token-superseded'],['ended','connection-ended'],[null,'connection-ended'],
+    ['other-edition','other-address']])
     assert.deepEqual(await authenticateCloud(dbAt(expired,{state}),req),{identity:null,problem},state);
   // Past the grace, or without an issue time to compare, the database is not asked.
   for(const db of [dbAt(now-EXPIRED_TOKEN_GRACE_MS/1000),dbAt(expired,{iat:null})]){
@@ -102,7 +110,7 @@ test('an expired connector token works while it is its live session\'s newest, t
   // The challenge keeps its earlier start and adds the reason after it.
   const metadata=`Bearer resource_metadata="${SIGN_IN_RESOURCE}/.well-known/oauth-protected-resource", scope="openid email profile"`;
   for(const [db,problem] of [[dbAt(now-8*24*hour),'token-expired'],[dbAt(expired,{state:'strict'}),'token-expired'],[dbAt(expired,{state:'refreshed'}),'token-superseded'],
-    [dbAt(now+hour,{active:false}),'connection-ended'],[{auth:{getClaims:async()=>({data:null,error:{name:'AuthInvalidJwtError',status:400}})}},'invalid-token'],
+    [dbAt(now+hour,{active:false}),'connection-ended'],[dbAt(expired,{state:'other-edition'}),'other-address'],[{auth:{getClaims:async()=>({data:null,error:{name:'AuthInvalidJwtError',status:400}})}},'invalid-token'],
     [{auth:{getClaims:async()=>{throw new TypeError('Invalid UTF-8 sequence')}}},'invalid-token']]){
     const refused=await post(db);
     assert.equal(refused.status,401,problem);
@@ -158,7 +166,7 @@ test('with the real auth-js an expired token passes only with a valid signature,
   assert.equal(await check(uncached), 'sign-in-check-unavailable');
 });
 test('cloud readiness never turns account access into generation, display or package approval',async()=>{
-  const db={...dbFor(),rpc:async name=>({data:name==='af_account'?{invited:true,accessMode:'open',canSubmit:true}:true})};
+  const db={...dbFor(),rpc:async name=>({data:name==='af_account'?{invited:true,accessMode:'open',canSubmit:true}:name==='af_mcp_session_state'?'usable':true})};
   const ready=(await call(createCloudHandler({db}),'check_creation_readiness',{purpose:'registration'})).structuredContent;
   assert.equal(ready.registration.status,'ready');assert.equal(ready.registration.requiresPc,false);
   for(const key of ['generation','delivery','package'])assert.equal(ready[key].status,'unverified');
@@ -185,7 +193,7 @@ test('foreign submissions and mismatched bytes do not upload; errors never echo 
 test('manifest registration binds owner/idempotency and does not report queued as registered',async()=>{
   const rpcCalls=[],id=crypto.randomUUID(),key=crypto.randomUUID();
   const query={select(){return this},eq(){return this},async single(){return{data:{manifest:example}}},async maybeSingle(){return{data:{id,status:'queued',manifest_sha:'a'.repeat(64)}}}};
-  const db={...dbFor(),from:()=>query,rpc:async(name,args)=>{rpcCalls.push([name,args]);return{data:name==='af_create_submission'?{id,status:'uploading',manifest_sha:args.p_sha}:true}}};
+  const db={...dbFor(),from:()=>query,rpc:async(name,args)=>{rpcCalls.push([name,args]);return{data:name==='af_create_submission'?{id,status:'uploading',manifest_sha:args.p_sha}:name==='af_mcp_session_state'?'usable':true}}};
   const handle=createCloudHandler({db,fetcher:async()=>new Response(JSON.stringify(example))});
   const prepared=await call(handle,'prepare_fighter_registration',{manifest:{download_url:'https://files.oaiusercontent.com/f.json',file_id:'file_json'},idempotencyKey:key});
   assert.equal(prepared.structuredContent.stage,'uploading');assert.equal(prepared.structuredContent.assets.length,example.assets.length);
@@ -199,7 +207,7 @@ test('registration update forwards only a valid optional fighter ID and preserve
   const query = { select(){return this}, eq(){return this}, async single(){return {data:{manifest:example}}} };
   const db = {...dbFor(), from:()=>query, rpc:async(name,args)=>{
     if (name === 'af_create_submission') { calls.push(args); return refusal ? {error:{message:refusal}} : {data:{id,status:'uploading',manifest_sha:args.p_sha}}; }
-    return {data:true};
+    return {data:name === 'af_mcp_session_state' ? 'usable' : true};
   }};
   const handle = createCloudHandler({db,fetcher:async()=>{downloads++;return new Response(JSON.stringify(example))}});
   const args = {manifest:{download_url:'https://files.oaiusercontent.com/f.json',file_id:'file_json'},idempotencyKey:key};
@@ -272,10 +280,22 @@ test('native OAuth hook isolates connector tokens and live-session checks enforc
     await refreshedAt(issued+5);assert.equal(await state(),'refreshed');
     await refreshedAt(issued+3600);assert.equal(await state(),'refreshed');assert.equal(await state(issued+3600),'usable');
     await db.exec("set timezone='Asia/Seoul'");assert.equal(await state(),'refreshed');assert.equal(await state(issued+3600),'usable');
+    // The edition (2026-11-01): a session's first signed-in call binds it to that edition and the other edition refuses its tokens; the
+    // connection's own answer comes first, and a call that is refused binds nothing.
+    const edition=(e,iat=null,s=session)=>db.query('select public.af_mcp_session_state($1,$2,$3,$4,$5) value',[owner,s,client,e,iat]).then(r=>r.rows[0].value);
+    const other=crypto.randomUUID(), bound=()=>db.query('select session_id,edition from public.af_mcp_session_editions order by edition').then(r=>r.rows);
+    assert.equal(await edition('directory',issued),'refreshed');assert.equal(await edition('full',null,other),'ended');assert.deepEqual(await bound(),[]);
+    assert.equal(await edition('directory'),'usable');assert.equal(await edition('directory',issued+3600),'usable');
+    assert.equal(await edition('full'),'other-edition');assert.equal(await edition('full',issued+3600),'other-edition');
+    await db.query('insert into auth.sessions(id,user_id,oauth_client_id,scopes) values($1,$2,$3,$4)',[other,owner,client,'openid email profile']);
+    assert.equal(await edition('full',null,other),'usable');assert.equal(await edition('directory',null,other),'other-edition');
+    assert.deepEqual(await bound(),[{session_id:session,edition:'directory'},{session_id:other,edition:'full'}]);
+    await assert.rejects(edition('admin'),/invalid-edition/);await assert.rejects(edition(null),/invalid-edition/);
     await db.exec("update auth.sessions set scopes='openid'");assert.equal(await active(),false);assert.equal(await state(issued+3600),'ended');
     await db.exec("update auth.sessions set scopes='openid email profile';update auth.oauth_consents set revoked_at=now()");assert.equal(await active(),false);
     assert.equal(await state(issued+3600),'ended');
     await db.exec('set role authenticated');await assert.rejects(active(),/permission denied/);await assert.rejects(state(),/permission denied/);
+    await assert.rejects(edition('full'),/permission denied/);await assert.rejects(bound(),/permission denied/);
   }finally{await db.close()}
 });
 test('consent never redirects to a supplied third-party origin and preserves only a valid authorization ID',()=>{
@@ -287,7 +307,7 @@ test('consent never redirects to a supplied third-party origin and preserves onl
 test('deletion tools require explicit confirmation and bind every call to verified owner, session and client',async()=>{
   const calls=[],fighter=crypto.randomUUID(),confirmation=crypto.randomUUID();
   const db={...dbFor(),rpc:async(name,args)=>{
-    calls.push([name,args]); return {data:name==='af_mcp_session_active'?true:{ok:true,stage:'confirmation-required'}};
+    calls.push([name,args]); return {data:name==='af_mcp_session_state'?'usable':{ok:true,stage:'confirmation-required'}};
   }};
   const handle=createCloudHandler({db});
   const list=(await (await handle(request('tools/list'))).json()).result.tools;
@@ -303,7 +323,7 @@ test('deletion tools require explicit confirmation and bind every call to verifi
   await call(handle,'delete_fighter',{...args,confirm:true});
   assert.deepEqual(calls.find(([n])=>n==='af_delete_owned_fighter')[1],{
     p_owner:owner,p_session:session,p_client:client,p_fighter:fighter,p_token:confirmation,p_confirm_name:'Exact name'});
-  db.rpc=async name=>name==='af_mcp_session_active'?{data:true}:{error:{message:'private database details'}};
+  db.rpc=async name=>name==='af_mcp_session_state'?{data:'usable'}:{error:{message:'private database details'}};
   const failed=await call(handle,'delete_fighter',{...args,confirm:true});
   assert.equal(failed.structuredContent.code,'database-unavailable');
   assert.ok(!JSON.stringify(failed).includes('private database'));
@@ -412,7 +432,7 @@ test('an edit retried with its key after a lost response returns that edit, not 
   try {
     const fighter = (await f.register()).fighter_id;
     const db = { ...f.db, auth: { getClaims: async () => ({ data: { claims: { ...claims(), sub: f.owner } } }) },
-      rpc: (name, args) => name === 'af_mcp_session_active' ? { data: true } : f.db.rpc(name, args) };
+      rpc: (name, args) => name === 'af_mcp_session_state' ? { data: 'usable' } : f.db.rpc(name, args) };
     const handle = createCloudHandler({ db, arena: { url: 'https://arena.test/oddbout-arena', key: 'k'.repeat(64), fetcher: async () => Response.json({ ok: true }) } });
     for (const [tool, change, other] of [['update_fighter_style', { style: { distance: 2 } }, { style: { distance: 4 } }],
       ['update_fighter_profile', { profile: { name: 'Retried fighter' } }, { profile: { name: 'Another name' } }]]) {
@@ -570,23 +590,33 @@ test('the directory edition lists only its tools, in English, with every hint; t
   const toolsAt = async (url, headers) => (await (await post(url, 'tools/list', {}, false, headers)).json()).result.tools;
   const hello = { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'claude', version: '1' } };
   const [tools, full] = [await toolsAt(DIRECTORY_RESOURCE), await toolsAt(CLOUD_RESOURCE)];
-  // /mcp keeps all its tools: ChatGPT's submitted plugin is pinned to its list.
-  assert.deepEqual([tools.length, full.length], [27, 51]);
+  // /mcp keeps all its tools: ChatGPT's submitted plugin is pinned to its list. Here set_fighter_relation and manage_world split by kind of write.
+  const split = ['propose_fighter_relation', 'answer_fighter_relation', 'end_fighter_relation', 'create_world', 'update_world', 'remove_world_fighter',
+    'set_fighter_world'];
+  assert.deepEqual([tools.length, full.length], [32, 51]);
   assert.deepEqual(tools.map(t => t.name).sort(), [...DIRECTORY_TITLES.keys()].sort());
   const dropped = full.map(t => t.name).filter(name => !DIRECTORY_TITLES.has(name));
   for (const name of ['request_hosted_fighter', 'list_generation_hosts', 'prepare_fighter_registration', 'submit_profile_set', 'store_creator_source',
-    'verify_creator_file_input', 'get_fighter_spec', 'check_creation_readiness',
+    'verify_creator_file_input', 'get_fighter_spec', 'check_creation_readiness', 'set_fighter_relation', 'manage_world',
     // 그림 올리기 표 (2026-11-01): pictures for a hosted fighter, which the directory does not take.
     'start_picture_upload', 'get_picture_upload', 'report_picture_link']) assert.ok(dropped.includes(name), name);
   for (const tool of tools) {
     const same = full.find(t => t.name === tool.name);
+    assert.equal(same === undefined, split.includes(tool.name), tool.name);
     assert.equal(tool.title, DIRECTORY_TITLES.get(tool.name)); assert.match(tool.title, /^[\x20-\x7e]+$/, tool.name);
     // The listing is worldwide: no Korean anywhere in what Claude reads of a tool (ODDBOUT's own state names included).
     assert.doesNotMatch(JSON.stringify(tool), HANGUL, tool.name);
     for (const hint of ['readOnlyHint', 'destructiveHint', 'openWorldHint', 'idempotentHint']) assert.equal(typeof tool.annotations[hint], 'boolean', `${tool.name} ${hint}`);
     // The title is repeated among the annotations here only; /mcp's annotations stay as they were.
-    assert.deepEqual([tool.annotations, tool.inputSchema, tool.securitySchemes], [{ title: tool.title, ...same.annotations }, same.inputSchema, same.securitySchemes], tool.name);
-    assert.equal(same.annotations.title, undefined, tool.name);
+    if (same) {
+      assert.deepEqual([tool.annotations, tool.inputSchema, tool.securitySchemes], [{ title: tool.title, ...same.annotations }, same.inputSchema, same.securitySchemes], tool.name);
+      assert.equal(same.annotations.title, undefined, tool.name);
+    } else {
+      // A split write is public and may change the public name (nickname) or remove something; only opening a world makes a new one each time.
+      assert.deepEqual(tool.annotations, { title: tool.title, readOnlyHint: false, destructiveHint: true, openWorldHint: true, idempotentHint: tool.name !== 'create_world' }, tool.name);
+      assert.deepEqual(tool.securitySchemes, full.find(t => t.name === 'manage_world').securitySchemes, tool.name);
+      assert.equal('action' in tool.inputSchema.properties, false, tool.name);
+    }
     // No tool sends the agent to one this edition does not have.
     for (const name of dropped) assert.equal(JSON.stringify(tool).includes(name), false, `${tool.name} names ${name}`);
   }
@@ -641,7 +671,7 @@ test('an agent enters his fighter on the watched package and withdraws him; list
   try {
     const registered = await f.register(), fighter = registered.fighter_id;
     const db = { ...f.db, auth: { getClaims: async () => ({ data: { claims: { ...claims(), sub: f.owner } } }) },
-      rpc: (name, args) => name === 'af_mcp_session_active' ? { data: true } : f.db.rpc(name, args) };
+      rpc: (name, args) => name === 'af_mcp_session_state' ? { data: 'usable' } : f.db.rpc(name, args) };
     const arena = { url: 'https://arena.test/oddbout-arena', key: 'k'.repeat(64), fetcher: async () => Response.json({ ok: true, fighters: [] }) };
     const handle = createCloudHandler({ db, arena });
     const listed = async () => (await call(handle, 'list_fighters')).structuredContent.registered.some(row => row.id === fighter);

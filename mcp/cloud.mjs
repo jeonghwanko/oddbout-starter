@@ -105,21 +105,23 @@ export const SIGN_IN_PROBLEMS = Object.freeze({
   'token-superseded': 'This ODDBOUT sign-in was replaced by a newer one. Use the newer sign-in or reconnect ODDBOUT in the connector settings.',
   'connection-ended': 'This ODDBOUT connection was signed out or disconnected (My agents). Reconnect ODDBOUT in the connector settings.',
   'invalid-token': 'This is not an ODDBOUT connector sign-in. Reconnect ODDBOUT in the connector settings.',
+  'other-address': 'This ODDBOUT sign-in was made for another ODDBOUT connector address. Reconnect ODDBOUT in the connector settings.',
   'sign-in-check-unavailable': 'ODDBOUT could not check the sign-in just now (a temporary server problem). Retry in a minute.',
 });
 /** auth-js errors that mean the check could not run (network, a 5xx, a body that is not JSON), not that the token is bad. */
 const UNAVAILABLE_AUTH_ERRORS = new Set(['AuthRetryableFetchError', 'AuthUnknownError']);
-/** What af_mcp_expired_token_state's answers mean for the caller ('usable' lets the call through). */
-const EXPIRED_TOKEN_PROBLEMS = Object.freeze({ strict: 'token-expired', refreshed: 'token-superseded', ended: 'connection-ended' });
+/** What af_mcp_session_state's answers mean for the caller ('usable' lets the call through). */
+const SESSION_STATE_PROBLEMS = Object.freeze({ strict: 'token-expired', refreshed: 'token-superseded', ended: 'connection-ended',
+  'other-edition': 'other-address' });
 /** @typedef {{ identity: Identity, problem?: undefined } | { identity: null, problem: keyof typeof SIGN_IN_PROBLEMS }} SignIn */
 
 /**
  * The verified connector identity of a request, or why there is none. A signed OAuth token is still insufficient without the
- * dedicated audience, role and server-managed permission.
- * @param {any} db @param {Request} request @param {() => number} [now]
+ * dedicated audience, role and server-managed permission, and at the edition its session is bound to (`edition`: where the call came).
+ * @param {any} db @param {Request} request @param {() => number} [now] @param {'full' | 'directory'} [edition]
  * @returns {Promise<SignIn>}
  */
-export async function authenticateCloud(db, request, now = Date.now) {
+export async function authenticateCloud(db, request, now = Date.now, edition = 'full') {
   const token = bearerToken(request);
   if (!token) return { identity: null, problem: 'authentication-required' };
   // The signature is verified either way; the expiry, with its grace, is checked below. auth-js throws, rather than returns, for some
@@ -141,15 +143,15 @@ export async function authenticateCloud(db, request, now = Date.now) {
   }
   const expired = c.exp * 1000 <= now();
   if (expired && (c.exp * 1000 + EXPIRED_TOKEN_GRACE_MS <= now() || !Number.isFinite(c.iat))) return { identity: null, problem: 'token-expired' };
-  // Revoked OAuth grants and signed-out sessions stop writes immediately, not merely when the JWT expires. af_mcp_session_active answers
-  // true or false; for an expired token af_mcp_expired_token_state answers 'usable' or why not (EXPIRED_TOKEN_PROBLEMS).
-  const session = { p_owner: c.sub, p_session: c.session_id, p_client: c.client_id };
-  const { data: live, error: checkError } = expired
-    ? await db.rpc('af_mcp_expired_token_state', { ...session, p_issued_at: Math.floor(c.iat) })
-    : await db.rpc('af_mcp_session_active', session);
+  // Revoked OAuth grants and signed-out sessions stop writes immediately, not merely when the JWT expires. af_mcp_session_state answers
+  // 'usable' or why not (SESSION_STATE_PROBLEMS), in one call: the connection (for an expired token, with its grace) and the edition its
+  // session is bound to. The token says nothing of the address it was made for (Supabase Auth keeps no RFC 8707 resource), so the first
+  // signed-in call binds the session to its edition and the other edition refuses it (2026-11-01).
+  const { data: live, error: checkError } = await db.rpc('af_mcp_session_state', { p_owner: c.sub, p_session: c.session_id, p_client: c.client_id,
+    p_edition: edition, ...(expired ? { p_issued_at: Math.floor(c.iat) } : {}) });
   if (checkError) return { identity: null, problem: 'sign-in-check-unavailable' };
-  if (live === true || live === 'usable') return { identity: { owner: c.sub, email: c.email ?? '', claims: c } };
-  const problem = Object.hasOwn(EXPIRED_TOKEN_PROBLEMS, live) ? EXPIRED_TOKEN_PROBLEMS[/** @type {keyof typeof EXPIRED_TOKEN_PROBLEMS} */ (live)] : null;
+  if (live === 'usable') return { identity: { owner: c.sub, email: c.email ?? '', claims: c } };
+  const problem = Object.hasOwn(SESSION_STATE_PROBLEMS, live) ? SESSION_STATE_PROBLEMS[/** @type {keyof typeof SESSION_STATE_PROBLEMS} */ (live)] : null;
   return { identity: null, problem: problem ?? 'connection-ended' };
 }
 
@@ -231,7 +233,7 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
   // 에이전트 도구 (3단계, 2026-10-27): read ODDBOUT's records, spar, enter cups and tune the fighting style. Listed only with the arena key.
   if (arena?.url && arena?.key) {
     registerAgentTools({ register, arena, db, identity, invoke, recordAgent, caller: host.caller ?? null });
-    registerWorkshopTools({ register, arena, invoke });
+    registerWorkshopTools({ register, arena, invoke, separateWrites: directory });
   }
   if (hosted && !directory) registerHostedTools({ register, db, identity, invoke, fetcher, hosted });
   registerFileInputProbe({ register, fileSchema: FILE, identity, downloadFile: downloadHostFile, fetcher });
@@ -261,11 +263,12 @@ function routeOf(request) {
 }
 
 /**
- * A request's sign-in; a check that throws is a server fault, not a refused token.
- * @param {any} db @param {Request} request
+ * A request's sign-in at its edition; a check that throws is a server fault, not a refused token.
+ * @param {any} db @param {Request} request @param {'full' | 'directory'} edition
  * @returns {Promise<SignIn>}
  */
-const signInOf = (db, request) => authenticateCloud(db, request).catch(() => ({ identity: null, problem: 'sign-in-check-unavailable' }));
+const signInOf = (db, request, edition) => authenticateCloud(db, request, Date.now, edition)
+  .catch(() => ({ identity: null, problem: 'sign-in-check-unavailable' }));
 
 /**
  * The verified identity a call runs as: needed at the sign-in-first address and for account tools (with the problem when there is none),
@@ -278,8 +281,8 @@ async function identityFor(db, request, body, signInFirst, edition) {
   const tool = body.method === 'tools/call' ? body.params?.name : null;
   // A tool the directory edition does not list is unknown there, signed in or not: no sign-in to reach a "not found".
   if (edition === 'directory' && tool !== null && !DIRECTORY_TITLES.has(tool)) return { identity: null };
-  if (signInFirst || (tool !== null && !PUBLIC_TOOLS.has(tool))) return signInOf(db, request);
-  if (OWNER_BUDGET_TOOLS.has(tool) && request.headers.has('authorization')) return { identity: (await signInOf(db, request)).identity };
+  if (signInFirst || (tool !== null && !PUBLIC_TOOLS.has(tool))) return signInOf(db, request, edition);
+  if (OWNER_BUDGET_TOOLS.has(tool) && request.headers.has('authorization')) return { identity: (await signInOf(db, request, edition)).identity };
   return { identity: null };
 }
 
@@ -349,7 +352,7 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted =
     if (request.method !== 'POST') {
       // A client that probes the sign-in-first address with GET, or HEAD as Gemini CLI does first (2026-10-29), learns there that it needs a sign-in.
       if (signInFirst && ['GET', 'HEAD'].includes(request.method)) {
-        const { problem } = await signInOf(db, request);
+        const { problem } = await signInOf(db, request, edition);
         if (problem) return signInProblem(problem);
       }
       return json({ error: 'method_not_allowed' }, 405, { allow: 'POST, OPTIONS' });

@@ -31,9 +31,15 @@ export const DIRECTORY_TITLES = new Map([
   ['post_workshop_note', 'Write a workshop note'],
   ['get_workshop_inbox', 'My workshop inbox'],
   ['resolve_workshop_note', 'Accept or decline a proposal'],
-  ['set_fighter_relation', 'Set a fighter relation'],
+  // set_fighter_relation and manage_world split by kind of write here (cloud/workshop-tools.mjs `separateWrites`).
+  ['propose_fighter_relation', 'Propose a fighter relation'],
+  ['answer_fighter_relation', 'Answer a relation proposal'],
+  ['end_fighter_relation', 'End a fighter relation'],
   ['get_world', 'Worlds'],
-  ['manage_world', 'Open or edit a world'],
+  ['create_world', 'Open a world'],
+  ['update_world', 'Edit my world'],
+  ['remove_world_fighter', 'Remove a fighter from my world'],
+  ['set_fighter_world', 'Place my fighter in a world'],
   ['write_world_post', 'Post in a world'],
 ]);
 

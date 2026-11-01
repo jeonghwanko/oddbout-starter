@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createCloudHandler, CLOUD_ISSUER, CLOUD_RESOURCE, PUBLIC_TOOLS } from '../mcp/cloud.mjs';
+import { createCloudHandler, CLOUD_ISSUER, CLOUD_RESOURCE, DIRECTORY_RESOURCE, PUBLIC_TOOLS } from '../mcp/cloud.mjs';
 import { profileFixture } from './helpers/profile-api-fixture.mjs';
 
 // The cloud MCP on a real (PGlite) database: its in-process API writes as the verified owner and labels his client's name.
@@ -12,7 +12,7 @@ test('workshop tools: story from the API and the arena, a named note made with t
     const claims = { sub: f.owner, client_id: client, session_id: session, iss: CLOUD_ISSUER, aud: CLOUD_RESOURCE, role: 'af_mcp', af_mcp: 'registration-v1',
       is_anonymous: false, exp: Math.floor(Date.now() / 1000) + 600 };
     const db = { ...f.db, auth: { getClaims: async () => ({ data: { claims } }) },
-      rpc: (name, args) => name === 'af_mcp_session_active' ? { data: true } : f.db.rpc(name, args) };
+      rpc: (name, args) => name === 'af_mcp_session_state' ? { data: 'usable' } : f.db.rpc(name, args) };
     const arenaCalls = [];
     const arena = { url: 'https://arena.test/oddbout-arena', key: 'k'.repeat(64), fetcher: async url => {
       arenaCalls.push(url);
@@ -70,5 +70,40 @@ test('workshop tools: story from the API and the arena, a named note made with t
     const denied = await handle(new Request(CLOUD_RESOURCE, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'manage_world', arguments: { action: 'create', name: '익명', nickname: '누구' } } }) }));
     assert.equal(denied.status, 401);
+  } finally { await f.sql.close(); }
+});
+
+// The Claude directory edition (2026-11-01) has no `action` writes: each kind of relation and world write is its own tool, on the same API.
+test('directory edition: relation and world writes are separate tools that reach the same API', async () => {
+  const f = await profileFixture(), client = crypto.randomUUID(), session = crypto.randomUUID();
+  try {
+    await f.sql.query('insert into auth.oauth_clients(id,client_name,deleted_at) values($1,$2,null)', [client, 'Claude']);
+    const fighter = (await f.register()).fighter_id;
+    const claims = { sub: f.owner, client_id: client, session_id: session, iss: CLOUD_ISSUER, aud: CLOUD_RESOURCE, role: 'af_mcp', af_mcp: 'registration-v1',
+      is_anonymous: false, exp: Math.floor(Date.now() / 1000) + 600 };
+    const db = { ...f.db, auth: { getClaims: async () => ({ data: { claims } }) },
+      rpc: (name, args) => name === 'af_mcp_session_state' ? { data: 'usable' } : f.db.rpc(name, args) };
+    const arena = { url: 'https://arena.test/oddbout-arena', key: 'k'.repeat(64), fetcher: async () => Response.json({ ok: true, bouts: [] }) };
+    const handle = createCloudHandler({ db, arena });
+    const call = async (name, args) => (await (await handle(new Request(DIRECTORY_RESOURCE, { method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: 'Bearer signed-connector-token-for-test' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }) }))).json()).result;
+    const content = async (name, args) => (await call(name, args)).structuredContent;
+    // Relations: a proposal sets the public name before the API looks at the other fighter; an answer and an end reach their own routes.
+    assert.equal((await content('propose_fighter_relation', { fighterId: fighter, otherId: crypto.randomUUID(), kind: 'rival', nickname: '감독' })).code,
+      'fighter-not-found');
+    assert.equal((await content('get_workshop_inbox', {})).nickname, '감독');
+    for (const [name, args] of [['answer_fighter_relation', { relationId: crypto.randomUUID(), accept: false }], ['end_fighter_relation', { relationId: crypto.randomUUID() }]])
+      assert.equal((await content(name, args)).ok, false, name);
+    // Each takes only its own fields: a proposal without the other fighter is refused before anything runs.
+    assert.equal((await call('propose_fighter_relation', { fighterId: fighter, kind: 'rival' })).isError, true);
+    // Worlds: open one, edit it, place the fighter, take it out as the world's owner, and put it in no world.
+    const world = (await content('create_world', { name: '별의 정거장', nickname: '정거장장', cover: 'star-station' })).world.id;
+    assert.equal((await content('update_world', { worldId: world, factions: [{ id: 'crew', name: '승무원' }] })).world.factions[0].id, 'crew');
+    assert.equal((await content('set_fighter_world', { fighterId: fighter, worldId: world, faction: 'crew' })).faction, 'crew');
+    assert.equal((await content('get_world', { worldId: world })).fighters.length, 1);
+    assert.equal((await content('remove_world_fighter', { worldId: world, fighterId: fighter })).ok, true);
+    assert.deepEqual((await content('get_world', { worldId: world })).fighters, []);
+    assert.equal((await content('set_fighter_world', { fighterId: fighter, worldId: null })).ok, true);
   } finally { await f.sql.close(); }
 });

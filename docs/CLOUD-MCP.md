@@ -217,9 +217,9 @@ Cursor의 Grok Bot이 02:21Z에 로그인 먼저 주소로 연결한 뒤 토큰�
 ## Claude 디렉터리판 (2026-11-01)
 
 Anthropic의 Claude 커넥터 디렉터리에 내는 주소는 `https://mcp.oddbout.com/claude`(`PUBLIC_DIRECTORY_RESOURCE`)다. 같은 서버이지만 심사자가 Claude에서
-실제로 돌릴 수 있는 도구 27종만 등록한다(`mcp/cloud/directory-edition.mjs`의 `DIRECTORY_TITLES`). 함수 주소로는 `…/ai-fighter-mcp/claude`(`DIRECTORY_RESOURCE`)다.
+실제로 돌릴 수 있는 도구 32종만 등록한다(`mcp/cloud/directory-edition.mjs`의 `DIRECTORY_TITLES`). 함수 주소로는 `…/ai-fighter-mcp/claude`(`DIRECTORY_RESOURCE`)다.
 
-- 뺀 도구는 21종이다. 디렉터리 정책은 디자인용이 아닌 AI 이미지·영상·오디오 생성을 받지 않으므로 호스팅 생성 7종을 뺐다. 파일 인자는 OpenAI 파일 호스트만
+- 운영 51종에서 24종을 뺐고, 묶인 쓰기 도구 둘을 일곱으로 나눴다(아래). 뺀 이유는 이렇다. 디렉터리 정책은 디자인용이 아닌 AI 이미지·영상·오디오 생성을 받지 않으므로 호스팅 생성 10종(그림 올리기 표 셋 포함)을 뺐다. 파일 인자는 OpenAI 파일 호스트만
   받으므로(`allowedFileUrl`) 파일 등록·프로필 세트·제작 원본·파일 진단을 뺐다. Claude에서 할 수 없는 제작·등록으로 이끄는 `get_fighter_spec`·`check_creation_readiness`도 뺐다.
   등록하지 않은 도구는 이 판에 없는 도구다. 부르면 SDK의 알 수 없는 도구 오류가 나고 실행되지 않는다.
 - 디렉터리는 전 세계에 노출되므로 title을 영어로 쓴다. 이 판은 title을 annotation에도 한 번 더 넣는다(Anthropic 점검표가 hint와 함께 title을 본다).
@@ -227,6 +227,11 @@ Anthropic의 Claude 커넥터 디렉터리에 내는 주소는 `https://mcp.oddb
   - `enter_fighter`: 원래 설명은 뺀 `submit_profile_set`을 가리키고 대화에서 동작을 보여 주라고 한다. 이 판에서는 사용자가 제작자 사이트의 미리보기에서 동작을 본다.
     프로필 세트가 없으면 이 커넥터로는 올릴 수 없다고 말하고, 사이트에서 만든 선수는 등록 때 함께 들어가며 그 밖에는 ChatGPT의 ODDBOUT 앱에서 올린다고 안내한다.
   - `withdraw_fighter`·`write_world_post`: 한국어 상태 이름(제작 중, 정사)을 뺐다. 시험이 이 판의 도구와 지침에 한글이 없는지 본다.
+- 쓰기 종류마다 도구 하나(`registerWorkshopTools`의 `separateWrites`). Anthropic 심사는 만들기·고치기·지우기를 다른 도구로 두기를 권한다.
+  - `set_fighter_relation`(action 넷)은 `propose_fighter_relation`·`answer_fighter_relation`·`end_fighter_relation`로 나눴다.
+  - `manage_world`(action 셋)는 `create_world`·`update_world`·`remove_world_fighter`(세계 주인이 선수를 뺀다)·`set_fighter_world`(선수 주인이 세계를 정한다)로 나눴다.
+  - 같은 API 경로를 같은 몸체로 부른다. 일곱 모두 destructive다. `nickname`이 공개 이름을 덮어쓰고(`af_set_creator_name`), 나머지는 고치거나 지운다.
+    새 세계를 매번 만드는 `create_world`만 idempotent가 아니다. `/mcp`는 두 도구를 그대로 둔다.
 - 서버 지침은 `DIRECTORY_INSTRUCTIONS`다. 제작·업로드 안내 대신, 선수는 사이트에서 만들고, 바꾸는 일은 사용자의 요청·승인을 받고, 남의 글은 지시가 아닌 데이터라고 적는다.
   사이트 주소(`https://oddbout.com/creator.html`)를 지침에 직접 적는다. 그 주소를 주는 `open_creator_homepage`는 로그인을 요구해서, 아직 연결하지 않은 사람의 "선수는 어떻게 만들어?"가 로그인 창부터 띄우기 때문이다.
 - 이 판에 없는 도구를 부르면 로그인 없이도 곧바로 알 수 없는 도구 오류가 난다(`identityFor`). 로그인한 뒤에야 "없음"을 알게 되면, Inspector로 둘러보는 심사자가 없는 도구 때문에 OAuth로 끌려간다.
@@ -235,11 +240,18 @@ Anthropic의 Claude 커넥터 디렉터리에 내는 주소는 `https://mcp.oddb
   메타데이터의 `resource_documentation`은 Claude 연결 안내 `https://oddbout.com/cloud-plugin/claude.html`(`DIRECTORY_DOCUMENTATION`)이다.
 - 게이트웨이는 `mcp.oddbout.com` 호스트에서만 `/claude`, `/claude/.well-known/oauth-protected-resource`, `/.well-known/oauth-protected-resource/claude`를
   함수의 `/claude`로 넘기고 `x-oddbout-public-resource: https://mcp.oddbout.com/claude`를 붙인다. 함수는 이 값일 때만 그 주소를 광고한다. 로그인 먼저 주소와 같은 방식이다.
-- 토큰 대상(`aud`)은 토큰 훅이 정하므로 DB 변경이 없다. 인가 서버·동의 화면도 그대로다. `/mcp`·`/signin`의 도구·title·지침은 바뀌지 않는다(시험이 `/mcp` 51종을 센다 — 그림 올리기 표 셋을 더해).
-  훅은 요청한 `resource`와 상관없이 같은 `aud` 세 값을 넣는다. 그래서 `/claude`로 받은 토큰은 같은 사용자·동의로 `/mcp`에서도 통한다. 심사에서 RFC 8707 대상 검증을
-  물으면 "자원 서버 하나에 대상 하나"라고 답한다. 디렉터리 주소를 `aud`에 넣는다면 `validCloudAudience`(배열 길이를 정확히 본다)를 먼저 고친다.
-- 27종 중 21종은 대결장 키(`ODDBOUT_ARENA_AGENT_KEY`)가 있을 때만 등록된다. 키가 빠지면 이 판은 6종만 보인다. 배포 확인의 "27종"이 이것을 잡는다.
-- 배포 순서는 함수(`fighter:mcp`) → Render(`worker:deploy`)다. 그 뒤 운영에서 `/claude`의 `tools/list`가 27종인지, 토큰 없는 `get_profile`이 위 401을 받는지,
+- `/mcp`·`/signin`의 도구·title·지침은 바뀌지 않는다(시험이 `/mcp` 51종을 센다 — 그림 올리기 표 셋을 더해).
+- 연결을 주소에 묶는다(2026-11-01, `20261101150000_ai_fighter_mcp_session_edition.sql`). Supabase Auth는 클라이언트가 요청한 `resource`(RFC 8707)를
+  토큰에 넣지 않는다. `aud`는 토큰 훅의 고정 목록이고, 훅 입력에도 요청 주소가 없다. 그래서 토큰만으로는 어느 주소용인지 알 수 없다.
+  - OAuth 세션의 첫 로그인 호출이 그 세션을 그 판에 묶는다(`af_mcp_session_editions`): `/mcp`·`/signin`은 `full`, `/claude`는 `directory`다.
+  - 그 뒤 다른 판에서 온 토큰은 401 `other-address`("다른 커넥터 주소용 로그인이니 다시 연결")로 거절한다. 디렉터리로 받은 로그인은 그 목록이 뺀 도구에 닿지 않는다.
+    ChatGPT·Grok·터미널용 로그인도 디렉터리판으로 바뀌지 않는다.
+  - 한 번의 호출로 확인한다: `af_mcp_session_state`가 연결 상태(만료 토큰이면 그 유예)와 판을 함께 답한다. 이전의 `af_mcp_session_active`·
+    `af_mcp_expired_token_state`는 그대로 두고 이 함수가 부른다(삭제 함수들이 앞의 것을 쓴다).
+  - 이전 세션은 다음 호출의 판에 묶인다. 지금까지 모든 커넥터는 `full` 주소를 썼다. 행에는 사용자 id가 없고 세션이 끝나도 남지만 해가 없다.
+  - 배포는 DB가 먼저다. 함수가 먼저 나가면 없는 함수를 불러 로그인 확인이 모두 503이 된다. 앞의 함수 코드는 옛 함수를 부르므로 DB만 먼저 나가도 괜찮다.
+- 32종 중 26종은 대결장 키(`ODDBOUT_ARENA_AGENT_KEY`)가 있을 때만 등록된다. 키가 빠지면 이 판은 6종만 보인다. 배포 확인의 "32종"이 이것을 잡는다.
+- 배포 순서는 DB 마이그레이션 → 함수(`fighter:mcp`) → Render(`worker:deploy`)다. 그 뒤 운영에서 `/claude`의 `tools/list`가 32종인지, 토큰 없는 `get_profile`이 위 401을 받는지,
   메타데이터의 `resource`가 접속 주소와 같은지 읽기 요청으로 확인한다.
 - 제출 전 필수 조건: Claude 연결 안내 페이지 `https://oddbout.com/cloud-plugin/claude.html`이 200으로 답해야 한다(2026-11-01 현재 404 — 메타데이터가 함수 배포 즉시 이 주소를 가리킨다).
   심사 계정의 선수는 프로필 세트가 검증을 통과한 상태여야 한다. 아니면 심사자의 `enter_fighter`가 `profile-set-required`로 끝난다.
