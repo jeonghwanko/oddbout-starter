@@ -103,10 +103,12 @@ const fields = (body, allowed) => {
   if (!isObject(body) || Object.keys(body).some(key => !allowed.includes(key))) throw new Problem(422, 'invalid-body');
   return body;
 };
-/** @param {Request} request @param {number} limit */
-async function readJson(request, limit) {
-  try { return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, limit))); }
-  catch (error) { if (error instanceof Problem) throw error; throw new Problem(400, 'invalid-body'); }
+/** @param {Request} request @param {number} limit @param {unknown} [empty] what an empty body reads as (left out: refused) */
+async function readJson(request, limit, empty) {
+  try {
+    const bytes = await readBody(request, limit);
+    return !bytes.length && empty !== undefined ? empty : JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+  } catch (error) { if (error instanceof Problem) throw error; throw new Problem(400, 'invalid-body'); }
 }
 /** @type {(job: string, name: string) => string} */
 export const artifactPath = (job, name) => `jobs/${job}/${name}.webp`;
@@ -384,8 +386,13 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     const { error } = await bucket().upload(path, bytes, { contentType: image.type, upsert: false });
     if (error) throw new Problem(503, 'storage-unavailable');
     const kept = { p_owner: owner, p_id: upload, p_path: path, p_type: image.type, p_bytes: bytes.length, p_width: image.width, p_height: image.height };
+    // A refusal keeps nothing; a call whose outcome is unknown keeps the picture, which a row the database did commit points to (2차 리뷰
+    // 2026-11-01: removing it left a usable id with no picture).
     try { await call(ticket ? 'af_generation_ticket_upload' : 'af_generation_upload', ticket ? { ...kept, p_ticket: ticket } : kept); }
-    catch (problem) { await bucket().remove([path]).catch(() => {}); throw problem; }
+    catch (problem) {
+      if (problem instanceof Problem && problem.message !== 'database-unavailable') await bucket().remove([path]).catch(() => {});
+      throw problem;
+    }
     return { id: upload, width: image.width, height: image.height };
   }
 
@@ -475,7 +482,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     if (method === 'POST' && route === 'generations/upload-tickets') {
       // The secret goes only to an agent that will run the terminal command (`terminal`); for the site's link it is made and never shown,
       // so a chat with no terminal holds nothing that uploads (리뷰 2026-11-01).
-      const body = request.body ? fields(await readJson(request, 200), ['terminal']) : {};
+      const body = fields(await readJson(request, 200, {}), ['terminal']);
       if (body.terminal !== undefined && typeof body.terminal !== 'boolean') throw new Problem(422, 'invalid-body');
       const secret = `afu_${hex(crypto.getRandomValues(new Uint8Array(32)))}`;
       const made = await call('af_generation_upload_ticket', { p_owner: owner, p_id: crypto.randomUUID(), p_secret_hash: await sha256(new TextEncoder().encode(secret)) });

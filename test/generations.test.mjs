@@ -673,6 +673,8 @@ test('a picture ticket: two pictures from the site or a terminal, its owner\'s o
     // The site's link needs no secret: none is shown unless the agent will run the terminal command.
     const linkOnly = (await call('POST', 'generations/upload-tickets')).body.ticket;
     assert.deepEqual([linkOnly.secret, linkOnly.open, linkOnly.closed, linkOnly.uploads], [undefined, true, null, []]);
+    // An empty body (a stream of no bytes) is the same as none.
+    assert.equal((await call('POST', 'generations/upload-tickets', new Uint8Array(0))).status, 200);
     const made = await call('POST', 'generations/upload-tickets', { terminal: true });
     assert.equal(made.status, 200, JSON.stringify(made.body));
     const { id: ticket, secret } = made.body.ticket;
@@ -718,11 +720,30 @@ test('a picture ticket: two pictures from the site or a terminal, its owner\'s o
     await assert.rejects(sql.query('select public.af_generation_ticket_upload($1,$2,$3,$4,$5,$6,$7,$8)',
       [owner, late.id, crypto.randomUUID(), `refs/${owner}/${crypto.randomUUID()}.png`, 'image/png', 64, 512, 512]), /ticket-expired/);
     // Twelve tickets in 24 hours.
-    for (let i = 3; i < 12; i++) assert.equal((await call('POST', 'generations/upload-tickets')).status, 200);
+    for (let i = 4; i < 12; i++) assert.equal((await call('POST', 'generations/upload-tickets')).status, 200);
     assert.deepEqual([(await call('POST', 'generations/upload-tickets')).status, (await call('POST', 'generations/upload-tickets')).body.code], [429, 'rate-limit']);
     // A ticket's own lock: not af_generation_create's, which holds it while it takes the service's capacity lock.
     const definition = (await sql.query("select pg_get_functiondef('public.af_generation_upload_ticket'::regproc) as d")).rows[0].d;
     assert.match(definition, /74280505/); assert.doesNotMatch(definition, /74280502/);
+  } finally { await sql.close(); }
+});
+
+test('a picture whose keeping has an unknown outcome stays stored; a refusal keeps nothing', async () => {
+  // 2차 리뷰 2026-11-01: removing it on an unknown outcome could leave a row the database did commit pointing to no picture.
+  const unknown = await generation({ failing: ['af_generation_upload'] });
+  try {
+    await unknown.healthy();
+    const before = unknown.objects.size, sent = await unknown.call('POST', 'generations/uploads', png(512, 512));
+    assert.deepEqual([sent.status, sent.body.code], [503, 'database-unavailable']);
+    assert.equal(unknown.objects.size, before + 1);
+  } finally { await unknown.sql.close(); }
+  const { sql, call, healthy, objects } = await generation();
+  try {
+    await healthy();
+    for (let i = 0; i < 12; i++) assert.equal((await call('POST', 'generations/uploads', png(512, 512))).status, 200);
+    const before = objects.size, refused = await call('POST', 'generations/uploads', png(512, 512));
+    assert.deepEqual([refused.status, refused.body.code], [429, 'rate-limit']);
+    assert.equal(objects.size, before);
   } finally { await sql.close(); }
 });
 

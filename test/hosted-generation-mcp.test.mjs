@@ -395,15 +395,22 @@ test('a picture address an agent reports is noted by its kind (and an http host)
   assert.deepEqual(pictureLinkShape('홍길동 010-1234-5678'), { kind: 'not-a-url', length: 17, shape: 'aaa 999-9999-9999' });
   assert.deepEqual(pictureLinkShape('file-service://file-AbC123xyz'), { kind: 'other-scheme', scheme: 'file-service:', length: 29 });
   assert.deepEqual(pictureLinkShape('attachment://홍길동_여권.png'), { kind: 'other-scheme', scheme: 'attachment:', length: 23 });
+  // Any word before a colon parses as a scheme: only a file scheme is named (2차 리뷰 2026-11-01).
+  for (const text of ['password:hunter2', 'JohnSmith1984:my cat', 'sk-proj-abc123:xyz'])
+    assert.deepEqual(pictureLinkShape(text), { kind: 'other-scheme', scheme: 'other', length: text.length });
   assert.deepEqual(pictureLinkShape('blob:https://grok.example.test/9f8e-11'), { kind: 'blob-url', origin: 'https://grok.example.test', length: 38 });
   const g = await generation();
   try {
     const logged = t.mock.method(console, 'log', () => {});
     const { call, downloads } = await connector(g, {});
-    const noted = await call('report_picture_link', { url: 'https://images.example.test/u/1234/gen/abc.png?sig=secret', madeBy: 'Grok Imagine' });
+    const noted = await call('report_picture_link', { url: 'https://images.example.test/u/1234/gen/abc.png?sig=secret', madeBy: 'grok' });
     assert.deepEqual([noted.ok, noted.fetched, noted.kept, noted.observed.hostname], [true, false, false, 'images.example.test']);
     assert.equal(downloads.length, 0);
     const line = logged.mock.calls.map(c => String(c.arguments[0])).find(text => text.includes('picture-link-probe'));
-    assert.ok(line && line.includes('"madeBy":"Grok Imagine"') && !line.includes('secret') && !line.includes('1234'), line);
+    assert.ok(line && line.includes('"madeBy":"grok"') && !line.includes('secret') && !line.includes('1234'), line);
+    // The maker is one of a few words, never free text.
+    const probes = () => logged.mock.calls.filter(c => String(c.arguments[0]).includes('picture-link-probe')).length, seen = probes();
+    assert.equal(await call('report_picture_link', { url: 'https://images.example.test/a.png', madeBy: 'Kim Minsu' }), undefined);
+    assert.equal(probes(), seen);
   } finally { await g.sql.close(); }
 });

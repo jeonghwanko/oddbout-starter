@@ -123,13 +123,18 @@ const withNext = result => result?.ok && result.job ? { ...result, next: hostedN
  */
 export const PICTURE_PAGE = 'https://oddbout.com/creator.html#view=upload&ticket=';
 export const TICKET_UPLOAD_URL = 'https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter/generations/ticket-uploads';
+/** The schemes an agent's file addresses use, named in the log; any other is `other`. */
+const FILE_SCHEMES = new Set(['file:', 'sandbox:', 'attachment:', 'content:', 'cid:', 'file-service:', 'ftp:']);
+/** Who made the picture, as the agent names it: one of these words, so the log keeps no free text. */
+export const PICTURE_MAKERS = /** @type {const} */ (['grok', 'gemini', 'chatgpt', 'claude', 'other']);
 /**
  * What an agent passed as a picture's address, without the address (Grok 그림 주소 관찰, 2026-11-01): which host its pictures come from
  * decides whether ODDBOUT can take them straight from the chat, and nobody has seen it yet (AGENTS.md: never invent origins). Only an http(s)
  * address names its host (its path, query and fragment stay out); a `blob:` one names the origin that made it; another scheme only itself
- * (`file-service://file-…` would put a file's id where a host goes). A value that is no URL shows only its shape, every letter of any
- * script an a and every digit a 9 (리뷰 2026-11-01: Korean text went into the log as it was). `length` is the whole value's, which the agent
- * gives for one too long to send (a data: address).
+ * (`file-service://file-…` would put a file's id where a host goes), and only a scheme known for files: any word before a colon parses as
+ * one (`password:…`, 2차 리뷰 2026-11-01). A value that is no URL shows only its shape, every letter of any script an a and every digit a 9
+ * (리뷰 2026-11-01: Korean text went into the log as it was). `length` is the whole value's, which the agent gives for one too long to send
+ * (a data: address).
  * @param {string} value @param {number} [fullLength]
  */
 export function pictureLinkShape(value, fullLength = value.length) {
@@ -139,7 +144,7 @@ export function pictureLinkShape(value, fullLength = value.length) {
   try { url = new URL(value); }
   catch { return { kind: 'not-a-url', length, shape: value.slice(0, 40).replace(/\p{L}/gu, 'a').replace(/\p{N}/gu, '9') }; }
   if (url.protocol === 'blob:') return { kind: 'blob-url', origin: /^https?:\/\//.test(url.origin) ? url.origin : null, length };
-  if (url.protocol !== 'https:' && url.protocol !== 'http:') return { kind: 'other-scheme', scheme: url.protocol, length };
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') return { kind: 'other-scheme', scheme: FILE_SCHEMES.has(url.protocol) ? url.protocol : 'other', length };
   const last = url.pathname.split('/').at(-1) ?? '';
   return { kind: 'url', protocol: url.protocol, hostname: url.hostname, port: url.port, hasUserInfo: Boolean(url.username || url.password),
     hasQuery: Boolean(url.search), hasFragment: Boolean(url.hash), pathSegments: url.pathname.split('/').filter(Boolean).length,
@@ -219,15 +224,16 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
     + 'page, a link the user opens to add the pictures on oddbout.com signed in with this same account: give it to him as a link. '
     + 'terminal: true only when you run commands on the computer that holds the picture file: then also command, which you run once per '
     + 'file with <file> replaced by its path (curl.exe on Windows); it carries a secret, so never show it to him or ask him to paste it. '
-    + 'Then get_picture_upload.',
+    + 'A command with no answer may still have put the picture in: get_picture_upload before running it again. An account gets twelve '
+    + 'pictures and twelve tickets a day: reuse an open ticket rather than starting another. Then get_picture_upload.',
     { terminal: z.boolean().optional() }, async ({ terminal }) => {
       const made = await invoke('generations/upload-tickets', 'POST', JSON.stringify({ terminal: terminal === true }), { 'content-type': 'application/json' });
       if (!made.ok) return made;
       const { secret, ...ticket } = made.ticket;
       return { ok: true, ticket, page: `${PICTURE_PAGE}${ticket.id}`,
         ...(secret ? { command: `curl -sS -H "${UPLOAD_TICKET_HEADER}: ${secret}" --data-binary "@<file>" ${TICKET_UPLOAD_URL}` } : {}),
-        next: `Give the user the page link (PNG, JPEG or WebP, up to 4 MB, 64 to 4096 pixels a side)${secret ? ', or run the command with the file' : ''}. `
-          + 'When he says the pictures are in, get_picture_upload with ticket.id.' };
+        next: `Give the user the page link (PNG, JPEG or WebP, up to 4 MB, 64 to 4096 pixels a side)${secret ? ', or run the command with the file '
+          + '(one with no answer: get_picture_upload before running it again)' : ''}. When he says the pictures are in, get_picture_upload with ticket.id.` };
     }, { write: true, idempotent: false });
   register('get_picture_upload', '올린 그림 확인', 'The pictures a start_picture_upload ticket took (at most two), each with its address for ten '
     + 'minutes, and why it takes no more (closed: expired, full, day-limit). Show the user the pictures and ask that they are his to use; '
@@ -236,9 +242,11 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
   // Grok 그림 주소 관찰: one call when the user tests it; the server log keeps the shape (pictureLinkShape), nothing is fetched or kept.
   register('report_picture_link', '그림 주소 확인', 'Diagnostic, only when the user asks to test it: pass the address you hold for a '
     + 'picture made or shown in this chat, exactly as you have it, and which tool or model made it. One longer than 8,000 characters (a data: '
-    + 'address): pass its first 200 characters and its whole length as fullLength. ODDBOUT notes only its kind and host (for http and https): '
-    + 'it does not fetch the picture, keep it or use it for a fighter. Never invent or rewrite an address; if you hold none, say so.',
-    { url: z.string().min(1).max(8192), fullLength: z.number().int().min(1).max(1e9).optional(), madeBy: z.string().max(60).optional() },
+    + 'address): pass its first 200 characters and its whole length as fullLength. ODDBOUT notes the maker you name and the address\'s shape, '
+    + 'never the address: its kind and length; for http and https its host, port, extension, path depth and whether it has a query, fragment '
+    + 'or user info; for a file scheme its name; for text that is no address, its letters as a and digits as 9. It does not fetch the picture, '
+    + 'keep it or use it for a fighter. Never invent or rewrite an address; if you hold none, say so.',
+    { url: z.string().min(1).max(8192), fullLength: z.number().int().min(1).max(1e9).optional(), madeBy: z.enum(PICTURE_MAKERS).optional() },
     async ({ url, fullLength, madeBy }) => {
       const observed = pictureLinkShape(url, fullLength);
       console.log(JSON.stringify({ event: 'picture-link-probe', client: /** @type {Identity} */ (identity).claims.client_id,

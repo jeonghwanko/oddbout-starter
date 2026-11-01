@@ -352,10 +352,14 @@ ChatGPT 밖의 에이전트(Grok·Claude·Gemini CLI·Codex CLI·Cursor의 Grok 
 - 터미널: `terminal: true`일 때만 `command`를 준다. 그림 파일이 있는 PC에서 명령을 실행하는 에이전트만 쓴다. 명령은
   `curl -sS -H "x-oddbout-upload-ticket: afu_…" --data-binary "@<file>" …/functions/v1/ai-fighter/generations/ticket-uploads`이다.
   비밀은 이때 한 번만 보이고 DB에는 해시만 남는다. 링크만 쓰는 표의 비밀은 만들어도 보이지 않으므로, 터미널이 없는 대화에는 올릴 수 있는 값이 남지 않는다.
-  주소는 API 함수 자신이다(`apikey` 없이 받는다). mcp.oddbout.com 게이트웨이는 본문을 64KB까지만 받는다.
+  주소는 API 함수 자신이다(`apikey` 없이 받는다). mcp.oddbout.com 게이트웨이는 본문을 64KB까지만 받는다. 응답이 없던 명령은 그림이 들어갔을 수 있어서,
+  다시 실행하기 전에 `get_picture_upload`로 본다(도구 설명과 `next`). 사이트 화면도 결과를 모르는 올리기 뒤와 누를 때마다 표를 읽고, 이번 방문이
+  올리지 않은 같은 바이트 수의 그림이 있으면 다시 보내지 않는다.
 - 어느 쪽이든 그림은 보통 업로드와 같다(PNG·JPEG·WebP, 4MB, 한 변 64~4096px, 24시간에 열두 장). 표가 못 받는 까닭은 본문을 읽기 전에 거절한다.
   지난 표는 `ticket-expired`(410), 찬 표는 `ticket-full`(409), 열두 장을 다 쓴 계정은 `rate-limit`(429)이다. DB 함수 `af_generation_ticket_upload`가
   표의 행을 잠그고 한 번 더 판단한다. 표의 잠금 키는 자기 것이다(`74280505`). `af_generation_create`의 `74280502`와 겹치지 않는다.
+  DB가 거절하면 저장한 그림을 지운다. 결과를 모르는 실패(`database-unavailable`)에는 지우지 않는다: DB가 행을 넣었다면 그 id가 그림 없이 남는다
+  (2차 리뷰 2026-11-01). 쓰지 않은 그림을 지우는 정리는 아직 없다(이 표 이전부터).
 - `get_picture_upload`는 `closed`(`expired`·`full`·`day-limit`, 열려 있으면 null)와 그림마다 `url`(10분), `bytes`, `used`, `usable`을 준다.
   `usable`은 신청이 아직 받는 그림이다. 쓰이지 않았고 올린 지 하루가 안 됐다. 에이전트는 그림을 사용자에게 보여 주고 권리를 확인한 뒤
   `usable` id를 `request_hosted_fighter`의 `pictureUploads`로 넘긴다.
@@ -364,13 +368,14 @@ ChatGPT 밖의 에이전트(Grok·Claude·Gemini CLI·Codex CLI·Cursor의 Grok 
 
 **Grok 대화에서 바로 붙이기는 아직 꺼져 있다.** Grok이 만든 그림을 도구에 넘길 때 어떤 주소를 주는지, 그 호스트가 어디인지 아직 아무도 보지 못했다.
 호스트를 추측해 허용 목록에 넣지 않는다(AGENTS.md 규칙 1). `report_picture_link`는 사용자가 시험을 부탁할 때만 쓴다. 그림을 가져오지 않고, 함수 로그에
-`{"event":"picture-link-probe","client":…,"madeBy":…,…}` 한 줄만 남긴다. 값마다 남는 칸은 다음과 같다.
+`{"event":"picture-link-probe","client":…,"madeBy":…,…}` 한 줄만 남긴다. `madeBy`는 `grok`·`gemini`·`chatgpt`·`claude`·`other` 중 하나다
+(자유 글은 받지 않는다). 값마다 남는 칸은 다음과 같다.
 
 | `kind` | 남는 칸 |
 | --- | --- |
 | `url` (http·https) | `protocol`·`hostname`·`port`·`hasUserInfo`·`hasQuery`·`hasFragment`·`pathSegments`·`extension`·`length`. 경로·쿼리 자체는 남기지 않는다 |
 | `blob-url` | 그 blob을 만든 http(s) `origin`, `length` |
-| `other-scheme` | `scheme`, `length`. `file-service://file-…` 같은 값의 뒤쪽은 호스트가 아니라 파일 이름일 수 있어 남기지 않는다 |
+| `other-scheme` | `scheme`, `length`. 파일 스킴(`file:`·`sandbox:`·`attachment:`·`content:`·`cid:`·`file-service:`·`ftp:`)만 이름을 남기고 나머지는 `other`다. 콜론 앞의 아무 낱말이나 스킴으로 읽혀서(`password:…`) 그렇다. `file-service://file-…` 같은 값의 뒤쪽은 파일 이름일 수 있어 남기지 않는다 |
 | `data-url` | `mediaType`, `length` |
 | `not-a-url` | `length`, 앞 40자의 모양 `shape`. 어느 문자의 글자든 `a`, 숫자는 `9`로 바꾼다 |
 
