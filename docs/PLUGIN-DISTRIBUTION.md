@@ -1,10 +1,49 @@
 # ODDBOUT distribution
 
-0.6.9 candidate adds cloud MCP packaging preparation and workspace inspection/build tools. Oversized motions can
-use the `texture-resolution-1` contract to reduce storage resolution while preserving frames, timing and game size.
-Publish the matching contract and consumers before advertising the capability. Verified release details follow publication.
+**Current source-kit release: 0.6.9** (2026-11-02 KST: MCP packaging recovery and bounded sheet fitting).
 
-**Current source-kit release: 0.6.8** (2026-11-01: file-only packaging and lossless large-animation recovery).
+Cloud `prepare_fighter_packaging` supplies the reviewed runtime and structured workspace calls to
+`inspect_fighter_packaging` and `pack_fighter_package`. Dots executes these against the existing local files;
+the cloud server does not access VM paths. The extracted plugin's tools live under `runtime/`.
+Opt-in `fitSheets` lowers only oversized motions' texture resolution. The `texture-resolution-1` contract's
+`pixelScale` preserves game display size, frames and timing. Original/selected assets stay intact, required
+file checks remain, and quality diagnostics remain deferred. No animation regeneration or generation login is needed.
+
+- [Download the 0.6.9 ZIP](https://oddbout.com/creator-kit/0.6.9/789cd3debb1db2e620171cc59a075d85e1812b1ecf44b80de2c63ce9ab917d18/oddbout-0.6.9.zip)
+- [Release manifest](https://oddbout.com/creator-kit/0.6.9/789cd3debb1db2e620171cc59a075d85e1812b1ecf44b80de2c63ce9ab917d18/release.json)
+- [Download helper](https://oddbout.com/creator-kit/0.6.9/789cd3debb1db2e620171cc59a075d85e1812b1ecf44b80de2c63ce9ab917d18/fetch-creator-kit.py)
+
+| Verified item | Value |
+| --- | --- |
+| ZIP size | 4,207,657 bytes |
+| ZIP SHA-256 | `7e2047cd7bb64b493a38b7619887b5d6cab388e8b569c7d32f1c129064299234` |
+| Release manifest SHA-256 | `31ebc8184550672ea1e6d706fd7547cd0f41cb7a547c74673d2f302defc2d32f` |
+| Runtime manifest SHA-256 | `8f3eceda37386fe671ec51c5efd1135c5f313a87f0fd696f0d012f824c6657d3` |
+| Helper SHA-256 | `b66c31ff833816dfa74c90d9155359d3fdd484dff8c12759e48addde01707592` (unchanged) |
+| Archive build source | `3ccc775e7fe275c9a110603cf02a786086e3a7a4` |
+| Tested PR head | `8ac4616a43b2ef296e425818af4472493e859ac2` ([PR #248](https://github.com/jeonghwanko/oddbout-starter/pull/248)) |
+| Main merge | `b34b8fbaaff4f9e54adaf40e9326584c7d599227` |
+| Game source | `d9ff3bece680691c126894fb9bc60cbbdd32db90` |
+| sprite-gen pin | `704cb9e5a34f16a0340e7fc6e46709a047ab02d4` (unchanged) |
+| Kit Pages publication | `7ac361bed5c2762ffa0277dc93dfcf77d74f6efd` |
+
+Full PR CI and the game's full publication gate passed. The 57-frame workspace-tool regression verifies
+bounded fitting, retained frames/timings/contact steps, unchanged unrelated assets, complete file validation
+and refusal to overwrite output. Consumer tests verify unchanged game size. The trusted helper verified and
+extracted all 741 archive files; locked Node dependencies installed and both workspace tools were discovered
+from that extracted runtime. No Python engine or generation was run for this recovery check.
+
+Publication added only the three release files, preserved 6,429 existing files with no changes/deletions,
+and verified HTTP 200 plus exact bytes for the release and 12 unchanged site files at 2026-11-01 15:09:42 UTC.
+The site and API support the matching contract. The source-kit archive was built before the final cloud-only
+execution-path fix and catalog-test update; neither is an archive input.
+
+The Dots pin is `dbaf2d4f67029034bd9767720ce8e9c0588a5d1c` (0.6.9), still a candidate with saved-VM acceptance
+pending. Publication does not replace an active runtime or republish a saved VM. Use the separate reviewed
+runtime against existing files. Actual Velora assets were unavailable here: her final packaging and registration
+remain unverified. No generation or registration was performed.
+
+**Previous source-kit release: 0.6.8** (2026-11-01: file-only packaging and lossless large-animation recovery).
 
 Packaging and session progress now require file and contract checks; numerical and visual quality reports are
 deferred diagnostics. Existing `required`/`engine-loop` plans work without another quality approval. Missing,
