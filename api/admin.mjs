@@ -2,6 +2,7 @@
 import { Problem, UUID, jsonResponse, readBody, rpcCaller, verifiedUserId } from './http.mjs';
 import { cleanupPublicFiles, profileSetKey, publishProfileSet, removePublicFiles } from './profile-sets.mjs';
 import { BUCKET } from './submissions.mjs';
+import { GENERATION_BUCKET, GENERATION_LIMITS, artifactPath } from './generations.mjs';
 
 const CORS = { methods: 'GET, POST, OPTIONS', headers: 'Authorization, Content-Type' };
 /** @type {(body: any, status?: number) => Response} */
@@ -47,6 +48,53 @@ async function reviewList(db, sets) {
       face: face ? { url: url(at.face), size: face.size } : null, previewUrl: url(at.preview),
       reason: set.reason ?? null, current: set.current === true, entered: set.entered === true, validatedAt: set.validatedAt ?? null, reviewedAt: set.reviewedAt ?? null };
   });
+}
+/** Events the detail shows: the latest, newest first. */
+export const ADMIN_JOB_EVENTS = 80;
+const ARTIFACT_NAME = /^[a-z0-9][a-z0-9-]{0,47}$/;
+/**
+ * One request in full for the operator (상세, 2026-11-01): what the list cuts short (the whole description, notes, rounds, lease), the hosts by
+ * name, its pictures signed for ten minutes (the references, both looks, the motion previews) and its latest events. The brief and the
+ * prompt stay out; the profile only by name.
+ * @param {any} db @param {string} id
+ */
+async function generationDetail(db, id) {
+  const { data: row, error } = await db.from('af_generation_jobs').select('*').eq('id', id).maybeSingle();
+  if (error) throw new Problem(503, 'admin-unavailable');
+  if (!row) throw new Problem(404, 'not-found');
+  const hostIds = [...new Set([row.requested_host, row.assigned_host].filter(Boolean))];
+  const [hosts, uploads, events, user] = await Promise.all([
+    hostIds.length ? db.from('af_generation_hosts').select('id,name,official').in('id', hostIds) : { data: [] },
+    db.from('af_generation_uploads').select('id,path,content_type,width,height').eq('job_id', id),
+    db.from('af_generation_events').select('id,at,kind,data').eq('job_id', id).order('at', { ascending: false }).limit(ADMIN_JOB_EVENTS),
+    typeof db.auth?.admin?.getUserById === 'function' ? db.auth.admin.getUserById(row.owner_id).catch(() => null) : null]);
+  if (hosts.error || uploads.error || events.error) throw new Problem(503, 'admin-unavailable');
+  /** @type {Map<string, { id: string, name: string, official: boolean }>} */
+  const named = new Map((hosts.data ?? []).map(/** @param {any} h */ h => [h.id, { id: h.id, name: h.name, official: h.official === true }]));
+  const candidates = (Array.isArray(row.candidates) ? row.candidates : []).filter(/** @param {any} name */ name => ARTIFACT_NAME.test(name ?? ''));
+  const preview = (Array.isArray(row.preview) ? row.preview : []).filter(/** @param {any} p */ p => p && typeof p === 'object' && ARTIFACT_NAME.test(p.name ?? ''));
+  const refs = uploads.data ?? [];
+  /** @type {Map<string, string>} */
+  const urls = new Map();
+  const paths = [...refs.map(/** @param {any} ref */ ref => ref.path), ...candidates.map(/** @param {string} name */ name => artifactPath(id, name)),
+    ...preview.map(/** @param {any} p */ p => artifactPath(id, p.name))];
+  if (paths.length) {
+    // A picture Storage cannot sign is null; the detail shows the rest.
+    const { data } = await db.storage.from(GENERATION_BUCKET).createSignedUrls(paths, GENERATION_LIMITS.signedSeconds);
+    for (const item of Array.isArray(data) ? data : []) if (item && !item.error && typeof item.signedUrl === 'string') urls.set(item.path, item.signedUrl);
+  }
+  const host = /** @param {string | null} hid */ hid => (hid ? named.get(hid) ?? { id: hid, name: null, official: false } : null);
+  return { id: row.id, status: row.status, errorCode: row.error_code ?? null, progress: row.progress, description: row.description, language: row.language,
+    email: user?.data?.user?.email ?? null, ownerId: row.owner_id, delegate: row.delegate === true, hostChoice: row.host_choice ?? null,
+    requestedHost: host(row.requested_host ?? null), assignedHost: host(row.assigned_host ?? null), official: host(row.assigned_host ?? null)?.official ?? row.host_choice === 'oddbout',
+    profileName: typeof row.profile?.name === 'string' ? row.profile.name : typeof row.brief?.profile?.name === 'string' ? row.brief.profile.name : null,
+    choice: row.choice ?? null, appearanceNote: row.appearance_note ?? null, appearanceRound: row.appearance_revisions, motionNote: row.motion_note ?? null,
+    motionRound: row.motion_revisions, leases: row.stage_leases, leased: !!row.lease_expires_at && Date.parse(row.lease_expires_at) > Date.now(),
+    submissionId: row.submission_id ?? null, waitingSince: row.waiting_since ?? null, createdAt: row.created_at, updatedAt: row.updated_at,
+    refs: refs.map(/** @param {any} ref */ ref => ({ id: ref.id, width: ref.width, height: ref.height, url: urls.get(ref.path) ?? null })),
+    candidates: candidates.map(/** @param {string} name @param {number} i */ (name, i) => ({ key: i === 0 ? 'a' : 'b', name, url: urls.get(artifactPath(id, name)) ?? null })),
+    preview: preview.map(/** @param {any} p */ p => ({ clip: typeof p.clip === 'string' ? p.clip : null, name: p.name, url: urls.get(artifactPath(id, p.name)) ?? null })),
+    events: (events.data ?? []).map(/** @param {any} e */ e => ({ at: e.at, kind: e.kind, data: e.data ?? {} })) };
 }
 /** @param {{ db: any }} options @returns {import('./http.mjs').Route} */
 export function createAdminHandler({ db }) {
@@ -111,6 +159,10 @@ export function createAdminHandler({ db }) {
         const status = new URL(request.url).searchParams.get('status') ?? 'needs_review';
         if (!['needs_review', 'open'].includes(status)) throw new Problem(400, 'invalid-query');
         return reply({ ok: true, jobs: await rpc('af_admin_generations', { p_actor: actor, p_status: status }) });
+      }
+      if (parts.length === 3 && parts[1] === 'generations' && request.method === 'GET') {
+        if (!UUID.test(parts[2])) throw new Problem(400, 'invalid-query');
+        return reply({ ok: true, job: await generationDetail(db, parts[2].toLowerCase()) });
       }
       if (parts.length === 4 && parts[1] === 'generations' && ['retry', 'cancel'].includes(parts[3]) && request.method === 'POST') {
         if (!UUID.test(parts[2])) throw new Problem(400, 'invalid-review');

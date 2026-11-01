@@ -65,6 +65,7 @@ creator-kit ZIP에는 제작·연결 안내와 이 문서 지도가 들어 있�
 | [GENERATION-HOST](GENERATION-HOST.md) | 호스팅 생성 신청을 실제로 그리는 생성 PC 되기 |
 | [SINGLE-SUBSCRIPTION-HOSTS](SINGLE-SUBSCRIPTION-HOSTS.md) | 구독이 하나뿐인 호스트를 받을 수 있는지와 그 설계(구현 전) |
 | [MEASUREMENT](MEASUREMENT.md) | 호스팅 생성이 나아졌는지 보는 측정과 export |
+| [ADMIN-AGENT](ADMIN-AGENT.md) | 운영자 화면이 하는 일을 에이전트가 `npm run admin`으로 하기(운영자 로그인 세션) |
 | [DOMAIN-SETUP.ko](DOMAIN-SETUP.ko.md) | 도메인 DNS와 GitHub Pages, 정책 페이지 공개 |
 
 ## 기록 — 지난 점검과 평가

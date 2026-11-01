@@ -222,12 +222,21 @@ test('the admin approves and withdraws hosts, and runs a stopped stage again or 
     const waiting = (await call('GET', 'admin/generations?status=needs_review')).body.jobs;
     assert.deepEqual(waiting.map(j => [j.id, j.status, j.errorCode, j.official]), [[job.id, 'needs_review', 'look-unclear', true]]);
     assert.equal((await call('GET', 'admin/generations?status=everything')).status, 400);
+    // 상세 (2026-11-01): the whole request, its hosts by name and its latest events, newest first; the brief stays out.
+    const detail = (await call('GET', `admin/generations/${job.id}`)).body.job;
+    assert.deepEqual([detail.id, detail.status, detail.errorCode, detail.description, detail.official], [job.id, 'needs_review', 'look-unclear', '빨간 글러브를 낀 고양이 복서', true]);
+    assert.equal('brief' in detail, false); assert.deepEqual(detail.candidates, []); assert.deepEqual(detail.refs, []);
+    assert.equal(detail.events[0].kind, 'finished'); assert.equal(detail.events.at(-1).kind, 'created');
+    assert.equal((await call('GET', 'admin/generations/not-a-uuid')).status, 400);
+    assert.equal((await call('GET', `admin/generations/${crypto.randomUUID()}`)).status, 404);
+    assert.equal((await call('GET', `admin/generations/${job.id}`, undefined, theirs)).status, 403);
     assert.equal((await call('POST', `admin/generations/${job.id}/retry`, {})).body.job.status, 'appearance');
     assert.equal((await call('POST', `admin/generations/${job.id}/retry`, {})).status, 409); // not waiting any more
     assert.equal((await work('POST', 'claim', {})).body.job.status, 'appearance'); // the worker takes it again
     assert.equal((await call('GET', 'admin/generations?status=open')).body.jobs.length, 1);
     assert.equal((await call('POST', `admin/generations/${job.id}/cancel`, {})).body.job.status, 'cancelled');
     assert.equal((await call('POST', `admin/generations/${job.id}/cancel`, {})).status, 409);
+    assert.deepEqual((await call('GET', `admin/generations/${job.id}`)).body.job.events.slice(0, 2).map(e => [e.kind, e.data.action]), [['operator', 'cancel'], ['claimed', undefined]]);
     assert.equal((await call('GET', `generations/${job.id}`)).body.job.status, 'cancelled');
     assert.equal((await call('GET', 'admin/generation-hosts', undefined, theirs)).status, 403);
   } finally { await sql.close(); }
