@@ -1,6 +1,6 @@
 # ODDBOUT distribution
 
-**Next source-kit release: 0.6.4** (prepared from this change; publication is verified separately below).
+**Current source-kit release: 0.6.4** (2026-11-01: use the existing cloud App; keep optional workspace tooling separate).
 Ordinary ChatGPT/Dots use starts with the existing available ODDBOUT cloud App, which carries account tools and the creation skill together.
 Do not import this source ZIP as a second cloud plugin. The ZIP is reviewed runtime/source delivery for an explicitly chosen workspace,
 or a desktop-client package; its version is independent of the connected App. Private App IDs and links are not public distribution links.
@@ -10,7 +10,19 @@ The same Dots conversation then verified the existing account through native `ge
 and listed only that App's creation skill across all pages. The connected App remained version 1.0.1. This is account-specific evidence,
 not proof of public availability or generation. Published old kit paths remain immutable release history, not cloud App installation instructions.
 
-**Latest published source-kit release: 0.6.3** (2026-11-01: distinguish desktop MCP configuration from the ChatGPT/Dots cloud App connection, preserve other clients' setup, and add the creation skill to the same connected App).
+Published at
+`https://oddbout.com/creator-kit/0.6.4/f817d405588b298e94d258b2249117ed8de18b8c69b3efcff860ea20cd799377/release.json`
+(manifest SHA-256 `64a5250d8eb5d850c57dbe00935aacc08b1d5fa2166f4c86e53b238562b5748c`, helper `fetch-creator-kit.py`
+`b66c31ff833816dfa74c90d9155359d3fdd484dff8c12759e48addde01707592`, ZIP `35cccb4d6e20e23c51e006f11f4762f26590610de45f9c30dce0033df81db870`,
+4,179,082 bytes; Pages commit `5b1c9d5d689ec9536201f4faf7a2e2762504a568`, live-verified).
+Built from `955ee5a49707b47a415b08f7a4df08c8f2a04d37`; its tree matches PR #227's merge commit `14a0da291c03aae608d29b3a5c87ec4d88643ccd` (CI passed).
+The trusted helper inspected and extracted the actual ZIP. All 88 tracked non-vendor runtime files, including both READMEs and bundled docs,
+and all three skill files matched the source commit byte-for-byte. The runtime manifest verified the remaining bundled files;
+the extracted launcher's read-only status passed without installation or generation. Neither the removed private ZIP ID nor the private App ID appears in the archive.
+Publication added only three release files, preserved all 6,414 existing files, and verified public bytes and unchanged site entry documents.
+This release updates the source kit and its documentation; it does not update the connected App's saved package, OAuth grants or version.
+
+**Previous source-kit release: 0.6.3** (2026-11-01: distinguish desktop MCP configuration from the ChatGPT/Dots cloud App connection, preserve other clients' setup, and add the creation skill to the same connected App).
 Published at
 `https://oddbout.com/creator-kit/0.6.3/a228c3b3d1c04f934b92647e9dda4beab5ebf08b4582f7f696ca681645fa1361/release.json`
 (manifest SHA-256 `720e4cf0fb12dd69a1a8b29ae6565c963ea99bbd6cfdae41e8453a8c4084dbe6`, helper `fetch-creator-kit.py`
