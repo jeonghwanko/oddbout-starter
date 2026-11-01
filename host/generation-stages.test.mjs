@@ -549,32 +549,43 @@ async function scaleStage({ scaleCheck = () => 0, scaleFit, brokenRun = false, a
   return { done, calls, events, dir, again: () => stages.motions(job, dir) };
 }
 
-// Drafts as the keypose rows finish (2026-10-30): gen-set draws four rows (the fake: one every 60 ms), and the stage looks for finished rows
-// every 10 ms. The clips: fightIdle needs stance-a, combo needs combo-a and combo-b, groggy needs hurt-a.
+// Drafts as the keypose rows finish: the fake gen-set waits for each expected early upload before drawing the next rows.
+// The clips: fightIdle needs stance-a, combo needs combo-a and combo-b, groggy needs hurt-a (the last row, drafted after gen-set).
 const EARLY_CLIPS = { fightIdle: ['stance-a'], combo: ['combo-a', 'combo-b'], groggy: ['hurt-a'] };
-async function earlyStage({ extractCode = 0, earlyCode = 0, redraw = false } = {}) {
+async function earlyStage(t, { extractCode = 0, earlyCode = 0, redraw = false } = {}) {
   const timeline = [], rowStates = ['stance-a', 'combo-a', 'combo-b', 'hurt-a'];
+  const published = { fightidle: Promise.withResolvers(), combo: Promise.withResolvers() }, earlyFailed = Promise.withResolvers();
+  const afterRow = { 'stance-a': published.fightidle.promise, 'combo-b': published.combo.promise };
+  const stop = new AbortController();
+  // A broken upload path fails on the test's timeout, and cancellation releases the fake generator and its polling stage.
+  const cancel = () => { stop.abort(); earlyFailed.resolve(); };
+  t.signal.addEventListener('abort', cancel, { once: true });
   const hooks = {
     og: async (args, flag, tool, dir) => {
       const run = tool === 'gen-set' || tool === 'extract' ? flag(args, '--run-dir') : '';
       if (tool === 'gen-set' && run === path.join(dir, 'motion', 'rows')) {
         for (const state of rowStates) {
-          await new Promise(done => setTimeout(done, 60));
+          stop.signal.throwIfAborted();
           await mkdir(path.join(run, 'raw'), { recursive: true }); await mkdir(path.join(run, 'reports', 'gen-set'), { recursive: true });
           await writeFile(path.join(run, 'raw', `${state}.png`), `${state}-drawn`);
           await writeFile(path.join(run, 'reports', 'gen-set', `${state}.json`), JSON.stringify({ provider: 'codex', ok: true }));
+          if (afterRow[state]) await Promise.race([afterRow[state], earlyFailed.promise]);
         }
         // A row drawn again by the extract's redraw is a different image: the early drafts no longer stand for it.
         if (redraw) await writeFile(path.join(run, 'raw', 'stance-a.png'), 'stance-a-drawn-again');
         timeline.push('gen-set-ended');
         return { code: 0 };
       }
-      if (tool === 'extract' && run.endsWith('rows-early')) { timeline.push(`extract ${flag(args, '--states')}`); return { code: extractCode }; }
+      if (tool === 'extract' && run.endsWith('rows-early')) {
+        timeline.push(`extract ${flag(args, '--states')}`);
+        if (extractCode) earlyFailed.resolve();
+        return { code: extractCode };
+      }
     },
     motionsPy: async (command, rest) => {
       if (command === 'early-drafts') {
         timeline.push('early-drafts');
-        if (earlyCode) return { code: earlyCode };
+        if (earlyCode) { earlyFailed.resolve(); return { code: earlyCode }; }
         const have = new Set((await readdir(path.join(rest[0], 'raw'))).map(f => f.replace(/\.png$/, '')));
         await mkdir(rest[2], { recursive: true });
         for (const [clip, needs] of Object.entries(EARLY_CLIPS))
@@ -589,13 +600,19 @@ async function earlyStage({ extractCode = 0, earlyCode = 0, redraw = false } = {
       }
     },
   };
-  const made = await scaleStage({ scaleFit: () => ({ grown: {}, frames: 40, corrected: 0, guessed: [] }), rowStates, earlyPollMs: 10, hooks,
-    onArtifact: name => { if (name.startsWith('draft-') && !/-(walk|run)-/.test(name)) timeline.push(`up ${name}`); } });
-  return { ...made, timeline };
+  try {
+    const made = await scaleStage({ scaleFit: () => ({ grown: {}, frames: 40, corrected: 0, guessed: [] }), rowStates, earlyPollMs: 10, hooks, stop,
+      onArtifact: name => {
+        if (name.startsWith('draft-') && !/-(walk|run)-/.test(name)) timeline.push(`up ${name}`);
+        if (name === 'draft-fightidle-0') published.fightidle.resolve();
+        if (name === 'draft-combo-0') published.combo.resolve();
+      } });
+    return { ...made, timeline };
+  } finally { t.signal.removeEventListener('abort', cancel); }
 }
 
-test('drafts go up as the rows finish, and the final drafts leave out what went up early', async () => {
-  const { done, calls, timeline } = await earlyStage();
+test('drafts go up as the rows finish, and the final drafts leave out what went up early', { timeout: 30_000 }, async t => {
+  const { done, calls, timeline } = await earlyStage(t);
   assert.equal(done.outcome, 'ok', JSON.stringify(done));
   const up = name => timeline.indexOf(`up draft-${name}-0`);
   // Before gen-set ended: the stance's clip after one row, the combo after both of its rows; the last row's clip waits for the final drafts.
@@ -613,16 +630,16 @@ test('drafts go up as the rows finish, and the final drafts leave out what went 
   assert.ok(timeline.some(t => t.startsWith('extract ')));
 });
 
-test('a row drawn again after the early drafts: they do not stand for it, and every clip is drafted once more', async () => {
-  const { done, timeline } = await earlyStage({ redraw: true });
+test('a row drawn again after the early drafts: they do not stand for it, and every clip is drafted once more', { timeout: 30_000 }, async t => {
+  const { done, timeline } = await earlyStage(t, { redraw: true });
   assert.equal(done.outcome, 'ok', JSON.stringify(done));
   assert.ok(timeline.includes('drafts '));
   assert.ok(timeline.filter(t => t === 'up draft-fightidle-0').length === 2);
 });
 
-test('an early draft that fails never stops the stage: the final drafts make every clip', async () => {
+test('an early draft that fails never stops the stage: the final drafts make every clip', { timeout: 30_000 }, async t => {
   for (const options of [{ extractCode: 1 }, { earlyCode: 1 }]) {
-    const { done, timeline, dir } = await earlyStage(options);
+    const { done, timeline, dir } = await earlyStage(t, options);
     assert.equal(done.outcome, 'ok', JSON.stringify(options));
     assert.ok(timeline.includes('drafts '), JSON.stringify(options));
     assert.deepEqual([...new Set(timeline.filter(t => t.startsWith('up draft-')))].sort(), ['up draft-combo-0', 'up draft-fightidle-0', 'up draft-groggy-0']);
