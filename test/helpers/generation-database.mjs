@@ -10,7 +10,7 @@ export const webp = (w, h) => { const b = new Uint8Array(64); b.set(new TextEnco
 
 // One database, a creator with a token, another creator, the generation worker's key and a validation worker's key; Storage in memory.
 // `failing`: functions whose calls fail, as on a database the API is ahead of (2026-10-31, 보유 토큰).
-export async function generation({ decisionsReviewer = null, responsesReviewer = null, cascadeReviewer = null, failing = [] } = {}) {
+export async function generation({ decisionsReviewer = null, responsesReviewer = null, cascadeReviewer = null, failing = [], unanswered = [] } = {}) {
   const sql = await migratedDatabase(), owner = crypto.randomUUID(), other = crypto.randomUUID();
   for (const user of [owner, other]) {
     await sql.query('insert into auth.users(id) values($1)', [user]);
@@ -20,9 +20,13 @@ export async function generation({ decisionsReviewer = null, responsesReviewer =
   await sql.query("insert into public.af_workers(token_hash,label,scope) values($1,'gen','generation'),($2,'val','validation')",
     [await sha256(new TextEncoder().encode(workerToken)), await sha256(new TextEncoder().encode(validatorToken))]);
   const rpc = async (name, args) => {
-    if (failing.includes(name)) return { error: { message: `function public.${name} does not exist` } };
-    try { return { data: (await sql.query(`select to_jsonb(public.${name}(${Object.keys(args).map((key, i) => `${key} => $${i + 1}`).join(',')})) as value`, Object.values(args))).rows[0].value }; }
-    catch (error) { return { error: { message: error.message } }; }
+    // As PostgREST answers: a refusal carries the database's code; `unanswered` runs the function and then loses the answer, as
+    // supabase-js reports a failed fetch (no code).
+    if (failing.includes(name)) return { error: { message: `function public.${name} does not exist`, code: '42883' } };
+    try {
+      const data = (await sql.query(`select to_jsonb(public.${name}(${Object.keys(args).map((key, i) => `${key} => $${i + 1}`).join(',')})) as value`, Object.values(args))).rows[0].value;
+      return unanswered.includes(name) ? { error: { message: 'TypeError: fetch failed', code: '' } } : { data };
+    } catch (error) { return { error: { message: error.message, code: error.code ?? 'P0001' } }; }
   };
   const from = table => {
     const filters = [], values = []; let order = '', limit = '', gt = [];

@@ -1,10 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createCloudHandler, hostedNext, CLOUD_ISSUER, CLOUD_RESOURCE } from '../mcp/cloud.mjs';
+import { PICTURE_PAGE, TICKET_UPLOAD_URL, pictureLinkShape } from '../mcp/cloud/hosted-tools.mjs';
 import { generation, png, webp } from './helpers/generation-database.mjs';
 
 const HOSTED = ['request_hosted_fighter', 'get_hosted_fighter', 'choose_hosted_look', 'revise_hosted_motion', 'register_hosted_fighter', 'cancel_hosted_fighter',
-  'list_generation_hosts'];
+  'list_generation_hosts', 'start_picture_upload', 'get_picture_upload', 'report_picture_link'];
 
 // The cloud MCP over the hosted generation API on a real (PGlite) database: the agent carries the user's words and answers, the worker the rest.
 async function connector(g, hosted, fetcher = async () => new Response(png(512, 512))) {
@@ -12,7 +13,7 @@ async function connector(g, hosted, fetcher = async () => new Response(png(512, 
     af_mcp: 'registration-v1', is_anonymous: false, exp: Math.floor(Date.now() / 1000) + 600 };
   const downloads = [];
   const db = { ...g.db, auth: { getClaims: async () => ({ data: { claims } }) },
-    rpc: (name, args) => name === 'af_mcp_session_active' ? { data: true } : g.db.rpc(name, args) };
+    rpc: (name, args) => name === 'af_mcp_session_state' ? { data: 'usable' } : g.db.rpc(name, args) };
   const handle = createCloudHandler({ db, hosted, fetcher: async (...args) => { downloads.push(args[0]); return fetcher(...args); } });
   let loseResponse = false;
   const rpc = async (method, params) => {
@@ -336,5 +337,93 @@ test('a picture chosen from the ChatGPT Library reaches the request; other Azure
     // Registration keeps its narrow origins (the proof's boundary): a fighter.json from the Library is refused before any download.
     const registration = await call('prepare_fighter_registration', { manifest: { download_url: library, file_id: 'file-manifest' }, idempotencyKey: crypto.randomUUID() });
     assert.equal(registration.code, 'unsupported-file-origin'); assert.equal(downloads.length, 1);
+  } finally { await g.sql.close(); }
+});
+
+// 그림 올리기 표 (2026-11-01): Grok, Claude and the terminal agents attach no file ChatGPT's way; their pictures go in through a ticket.
+test('an agent without file attachments sends the user\'s pictures through a ticket and names them in the request', async () => {
+  const g = await generation();
+  try {
+    const { call, downloads } = await connector(g, { pollMs: 10 });
+    // Off, no ticket: the request's checks come first, as no picture is kept for a request that cannot be made (3차 리뷰 2026-11-01).
+    assert.equal((await call('start_picture_upload', {})).code, 'generation-unavailable');
+    assert.equal((await g.sql.query('select count(*)::int as n from public.af_generation_upload_tickets')).rows[0].n, 0);
+    await g.healthy();
+    // A chat with no terminal gets the link only: nothing in it uploads.
+    const linkOnly = await call('start_picture_upload', {});
+    assert.equal(linkOnly.page, `${PICTURE_PAGE}${linkOnly.ticket.id}`);
+    assert.deepEqual([linkOnly.command, linkOnly.ticket.secret], [undefined, undefined]);
+    const started = await call('start_picture_upload', { terminal: true });
+    assert.equal(started.ok, true, JSON.stringify(started));
+    const ticket = started.ticket.id;
+    assert.equal(started.ticket.secret, undefined);
+    const [, secret] = /x-oddbout-upload-ticket: (afu_[a-f0-9]{64})/.exec(started.command) ?? [];
+    assert.ok(secret, started.command);
+    assert.ok(started.command.endsWith(` ${TICKET_UPLOAD_URL}`) && started.command.includes('"@<file>"'), started.command);
+    // A terminal runs the command; the user adds the other on the site.
+    assert.equal((await g.call('POST', 'generations/ticket-uploads', png(512, 512), null, { 'x-oddbout-upload-ticket': secret })).status, 200);
+    assert.equal((await g.call('POST', `generations/uploads?ticket=${ticket}`, webp(400, 600))).status, 200);
+    // A conversation that lost its ticket finds it again, without the addresses; an empty one says to give the link again.
+    const listed = await call('get_picture_upload', {});
+    assert.deepEqual(listed.tickets.map(t => t.id), [ticket, linkOnly.ticket.id]);
+    assert.ok(listed.next.includes('Reuse an open one'), listed.next);
+    assert.ok((await call('get_picture_upload', { ticketId: linkOnly.ticket.id })).next.startsWith('Nothing in yet'));
+    const read = await call('get_picture_upload', { ticketId: ticket });
+    assert.deepEqual([read.ticket.open, read.ticket.closed, read.ticket.uploads.length], [false, 'full', 2]);
+    assert.ok(read.next.startsWith('Show him the pictures'), read.next);
+    assert.ok(read.ticket.uploads.every(u => u.usable && typeof u.url === 'string'), JSON.stringify(read.ticket.uploads));
+    const ids = read.ticket.uploads.map(u => u.id), ask = { description: '빨간 글러브를 낀 고양이 복서, 귀가 크다', language: 'ko' };
+    const attached = { download_url: 'https://files.oaiusercontent.com/file-1', file_id: 'file-1' };
+    // Two in all with attached files, refused before any attached one is downloaded; the rights confirmed as for any picture.
+    assert.equal((await call('request_hosted_fighter', { ...ask, picture: attached, pictureUploads: ids, rightsConfirmed: true,
+      idempotencyKey: crypto.randomUUID() })).code, 'invalid-refs');
+    assert.equal((await call('request_hosted_fighter', { ...ask, pictureUploads: ids, idempotencyKey: crypto.randomUUID() })).code, 'rights-required');
+    // An attached picture with another account's id: refused before the attachment moves. One id named twice (no room for an attachment
+    // beside it) is refused by the request.
+    const others = (await g.call('POST', 'generations/uploads', png(512, 512), 'other-token-0123456789')).body.upload.id;
+    const uploadsBefore = (await g.sql.query('select count(*)::int as n from public.af_generation_uploads')).rows[0].n;
+    for (const pictureUploads of [[others], [ids[0], ids[0]]]) {
+      const extra = pictureUploads.length > 1 ? {} : { picture: attached };
+      assert.equal((await call('request_hosted_fighter', { ...ask, ...extra, pictureUploads, rightsConfirmed: true, idempotencyKey: crypto.randomUUID() })).code,
+        'invalid-refs', JSON.stringify(pictureUploads));
+    }
+    assert.equal(downloads.length, 0);
+    assert.equal((await g.sql.query('select count(*)::int as n from public.af_generation_uploads')).rows[0].n, uploadsBefore);
+    const made = await call('request_hosted_fighter', { ...ask, pictureUploads: ids, rightsConfirmed: true, idempotencyKey: crypto.randomUUID() });
+    assert.equal(made.job.status, 'queued', JSON.stringify(made));
+    assert.equal(downloads.length, 0);
+    assert.equal((await g.work('POST', 'claim', {})).body.job.refs.length, 2);
+    assert.deepEqual((await call('get_picture_upload', { ticketId: ticket })).ticket.uploads.map(u => [u.used, u.usable]), [[true, false], [true, false]]);
+  } finally { await g.sql.close(); }
+});
+
+test('a picture address an agent reports is noted by its kind (and an http host) only, never fetched', async t => {
+  assert.deepEqual(pictureLinkShape('https://images.example.test/u/1234/gen/abc.JPG?sig=secret#x'), { kind: 'url', protocol: 'https:',
+    hostname: 'images.example.test', port: '', hasUserInfo: false, hasQuery: true, hasFragment: true, pathSegments: 4, extension: 'jpg', length: 59 });
+  assert.deepEqual(pictureLinkShape('data:image/png;base64,iVBORw0KGgo=', 20480), { kind: 'data-url', mediaType: 'image/png', length: 20480 });
+  // Only a picture's media type is named: any word/word parses as one (3차 리뷰 2026-11-01).
+  assert.equal(pictureLinkShape('data:kim.minsu-010-1234-5678+password-hunter2/x;base64,AAAA').mediaType, null);
+  assert.equal(pictureLinkShape('data:text/plain,hello').mediaType, 'other');
+  // Any script's letters and digits are masked; another scheme names only itself (a file id is no host); a blob names its origin.
+  assert.deepEqual(pictureLinkShape('홍길동 010-1234-5678'), { kind: 'not-a-url', length: 17, shape: 'aaa 999-9999-9999' });
+  assert.deepEqual(pictureLinkShape('file-service://file-AbC123xyz'), { kind: 'other-scheme', scheme: 'file-service:', length: 29 });
+  assert.deepEqual(pictureLinkShape('attachment://홍길동_여권.png'), { kind: 'other-scheme', scheme: 'attachment:', length: 23 });
+  // Any word before a colon parses as a scheme: only a file scheme is named (2차 리뷰 2026-11-01).
+  for (const text of ['password:hunter2', 'JohnSmith1984:my cat', 'sk-proj-abc123:xyz'])
+    assert.deepEqual(pictureLinkShape(text), { kind: 'other-scheme', scheme: 'other', length: text.length });
+  assert.deepEqual(pictureLinkShape('blob:https://grok.example.test/9f8e-11'), { kind: 'blob-url', origin: 'https://grok.example.test', length: 38 });
+  const g = await generation();
+  try {
+    const logged = t.mock.method(console, 'log', () => {});
+    const { call, downloads } = await connector(g, {});
+    const noted = await call('report_picture_link', { url: 'https://images.example.test/u/1234/gen/abc.png?sig=secret', madeBy: 'grok' });
+    assert.deepEqual([noted.ok, noted.fetched, noted.kept, noted.observed.hostname], [true, false, false, 'images.example.test']);
+    assert.equal(downloads.length, 0);
+    const line = logged.mock.calls.map(c => String(c.arguments[0])).find(text => text.includes('picture-link-probe'));
+    assert.ok(line && line.includes('"madeBy":"grok"') && !line.includes('secret') && !line.includes('1234'), line);
+    // The maker is one of a few words, never free text.
+    const probes = () => logged.mock.calls.filter(c => String(c.arguments[0]).includes('picture-link-probe')).length, seen = probes();
+    assert.equal(await call('report_picture_link', { url: 'https://images.example.test/a.png', madeBy: 'Kim Minsu' }), undefined);
+    assert.equal(probes(), seen);
   } finally { await g.sql.close(); }
 });
