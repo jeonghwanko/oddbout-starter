@@ -112,7 +112,7 @@ test('explicit invocation arguments reject incomplete, duplicate, unknown and am
   assert.deepEqual(parseContextFileArgs([]), { args: [], contextFile: undefined, contextReceipt: undefined });
 });
 
-test('file transport preserves group reviews, changed-context checks and session revision guards', async t => {
+test('file transport defers quality reviews while preserving missing-file, context and revision guards', async t => {
   const f = await fixture(t);
   const state = { mode: 'creation', contextRevision: gameContext.revision, groupId: 'locomotion', items: {
     idle: { version: 'v1', selectedVersion: 'v1', review: 'failed' },
@@ -122,7 +122,7 @@ test('file transport preserves group reviews, changed-context checks and session
   const stateFile = path.join(f.root, 'state.json'); await writeFile(stateFile, JSON.stringify(state));
   const decision = await contextMain([stateFile, ...f.flags]);
   assert.equal(decision.canAdvance, false);
-  assert.deepEqual(decision.blockers, ['unchecked:idle', 'missing:walk']);
+  assert.deepEqual(decision.blockers, ['missing:walk']);
   const changed = structuredClone(gameContext); changed.revision = 'b'.repeat(64);
   await f.save(Buffer.from(JSON.stringify(changed)));
   const review = (await f.call('review_creation_progress', { stateJson: JSON.stringify(state) })).structuredContent;
