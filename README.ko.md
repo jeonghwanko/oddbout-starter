@@ -41,20 +41,20 @@ ODDBOUT은 직접 만든 캐릭터로 플레이하는 대전 게임입니다. �
 
 ## PC 없이 Dots에서 등록하기
 
+ChatGPT/Dots 계정 작업은 본인 계정에서 이용할 수 있는 연결된 ODDBOUT 클라우드 앱을 선택합니다.
+계정 도구와 `create-fighter` 제작 스킬은 같은 앱에 있습니다. 대상 대화에서 native `get_profile`로 의도한 등록 계정인지 확인하고,
+호스트의 스킬 도구로 같은 앱의 제작 스킬과 지원 문서를 찾아 읽습니다.
+확인된 비공개 앱은 공개 배포 항목이 아닙니다. 이용 가능한 앱이 없다면 [최초 연결 안내](docs/CLOUD-MCP.md)를 따르세요.
+클라우드 연결을 위해 creator-kit ZIP을 가져오거나 두 번째 플러그인을 만들 필요는 없습니다. 계정·스킬 확인은 제작 요청이 아닙니다.
+
+Grok, Claude 등 지원되는 다른 클라이언트는 각자의 커넥터 설정을 사용합니다. 연결 후 클라우드 도구는 계정 확인·파일 전달·등록을 담당하고, 로컬 CLI 도구는 작업 공간 제작과 검사를 지원합니다. 호스팅 생성 도구를 쓸 수 있다면 요청에 따라 ODDBOUT 워커가 캐릭터를 만들 수 있습니다. 확인된 계정 ID, 요청 키, 작업 ID를 보관하세요. 시간 초과나 연결 중단 후에는 다시 제출하지 말고 [호스팅 작업 복구](docs/CLOUD-MCP.md#호스팅-작업의-중단과-미리보기-복구)에서 같은 ID나 원래 키로 작업을 찾아 미리보기 주소를 갱신합니다. 연결이나 URL 반환만으로 이미지가 실제 표시되고 검토됐다는 뜻은 아닙니다. 본인 작업 공간에서 제작할 때는 선택한 생성 계정을 사용합니다.
+
 **Dots 저장 VM 제작 경로**: 환경 준비자는 [설치 절차](deploy/dots-environment/README.md)를
 한 번 실행하고, 이후 사용자는 Git 주소와 제작 요청을 전달합니다. Dots가 `node dots.mjs --install`로
 고정 버전을 준비한 뒤 `node dots.mjs`로 같은 작업을 재개합니다. 생성은 본인의 Grok 구독을 사용합니다.
 [시작 지침](docs/DOTS-START.md)과 [비공개 원본 전달](docs/DOTS-PRIVATE-SOURCES.md)을 따릅니다.
 아직 실제 저장 VM의 생성·미리보기 전달까지 승인된 릴리스는 아닙니다. 설치·단위 테스트 통과와 구분합니다.
 
-ChatGPT/Dots에서 계정 도구를 쓰려면 지원되는 사용자 지정 MCP OAuth 설정으로 ODDBOUT 클라우드 앱을 연결합니다. 원격 HTTPS MCP를 선언한
-가져온 플러그인도 desktop-only로 표시될 수 있으며 `.app.json` 참조만으로 표시가 바뀌지 않습니다
-([공식 플러그인 관리 안내](https://learn.chatgpt.com/docs/enterprise/plugin-management#desktop-only-plugins)). 제작 스킬도 필요하면 Plugin Creator로
-같은 앱 기반 플러그인에 추가하고 앱 정보와 OAuth 설정을 보존합니다. 별도 wrapper 플러그인의 `mcp.json`은 앱 연결이 아닙니다.
-키트 ZIP은 소스 파일이며 앱을 연결하거나 플러그인을 설치하지 않습니다. Dots에서는 계정 도구를 쓰기 전에 대상 대화에서 `get_profile`로 계정을 확인하고,
-확인 전까지 기존 연결을 유지합니다. Grok, Claude 등 다른 지원 클라이언트는 각자의 연결 설정을 사용합니다. 클라우드 도구는 계정 확인·파일 전달·등록을,
-로컬 도구는 작업 공간의 제작과 검사를 담당합니다.
-서버 주소와 최초 연결 순서는 [클라우드 연결 안내](docs/CLOUD-MCP.md)에 있습니다.
 이미지 생성·미리보기·최종 검토는 선택한 실행 환경과 본인의 생성 계정을 사용합니다.
 아래 설치 과정은 제작 키트를 작업 공간에서 실행할 때의 안내이며 클라우드 로그인에는 필요하지 않습니다.
 
@@ -133,7 +133,7 @@ npm run sprite:setup
 
 도구 연결은 [Codex 로컬 플러그인 안내](docs/LOCAL-PLUGIN.md)를 따릅니다: `npm run plugin:build` 뒤 출력된 `codex plugin marketplace add …`와 `codex plugin add oddbout@ai-fighter-local`. 예전 MCP 직접 연결(`node scripts/print-install.mjs`)은 호환용으로 남아 있습니다. 다른 로컬 호스트는 `AI_FIGHTER_ROOT`를 이 저장소 경로로 지정하고 `mcp/stdio.mjs`를 연결합니다.
 
-별도의 Windows 배포 패키지는 [번들 안내](docs/PLUGIN-DISTRIBUTION.md)를 참고하세요. 로컬 플러그인 설치와 공개 디렉터리 등록은 별개입니다.
+검토된 소스 키트의 구성과 배포 기록은 [배포 안내](docs/PLUGIN-DISTRIBUTION.md)를 참고하세요. 로컬 플러그인 설치와 클라우드 앱 연결은 별개입니다.
 
 ## 등록하고 플레이하기
 
