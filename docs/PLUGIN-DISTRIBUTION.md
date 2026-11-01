@@ -1,6 +1,6 @@
 # ODDBOUT distribution
 
-**Current source-kit release: 0.6.7** (2026-11-01: explicit public context file handoff).
+**Current source-kit release: 0.6.7** (2026-11-01: explicit public context file handoff; the Dots pin moves to this release).
 
 Adds an explicit per-invocation public game-context file and receipt to the context and workspace-tool CLIs.
 The receipt checks the configured source, raw-byte SHA-256 and Git blob identity, and a 15-minute retrieval window.
@@ -12,7 +12,7 @@ JSON output to avoid initializing Node's socket-backed stdout in restricted host
 The guides distinguish Grok device login from the host's per-command execution approval. A default-sandbox
 `EPERM` alone does not establish that an existing approved Grok route is broken. No login, generation,
 credential migration, automatic permission escalation or security-policy change is part of this release.
-`deploy/dots-release.json` and active Dots workspace bindings stay unchanged; publication does not update them.
+Publication did not update `deploy/dots-release.json` or active Dots workspace bindings; the pin moved separately (below).
 
 - [Download the 0.6.7 ZIP](https://oddbout.com/creator-kit/0.6.7/9094ac2c755abb0fad0f3edf51875dd3b335d1c06f7fd17099100adab814a6aa/oddbout-0.6.7.zip)
 - [Release manifest](https://oddbout.com/creator-kit/0.6.7/9094ac2c755abb0fad0f3edf51875dd3b335d1c06f7fd17099100adab814a6aa/release.json)
@@ -49,6 +49,15 @@ configured proxy, destination rules and TLS. That approval runs a command outsid
 network-only grant. These responses establish reachability, not authenticated generation. Neither this diagnostic
 nor the kit verification logged in, generated, changed active workspace bindings, or republished a saved environment.
 
+After publication `deploy/dots-release.json` moved to `dbcb3d0` (0.6.7), the main merge whose tree equals the build
+source; it stays `candidate` with `savedVmAcceptance: pending`. A real `node dots.mjs --install` from that change into a
+fresh scratch runtime home and workspace cloned the commit, ran the npm and sprite setup steps (both exit 0; sprite-gen
+3.4.0 imports), bound 0.6.7/`dbcb3d0` with a clean tree and matching vendor pin, and stopped at Grok sign-in, which was
+not performed. Generation stayed unverified and was not dispatched. This does not republish the saved Dots environment:
+its new tasks keep the front-door checkout it was prepared with until the preparer reruns
+`deploy/dots-environment/install.sh` and republishes. Existing Dots tasks keep their workspace binding; no active Dots
+conversation, runtime, session or generated result was changed.
+
 **Previous source-kit release: 0.6.6** (2026-11-01: variable-frame Dots gait review; the Dots pin moves to this release).
 
 The Dots gait review accepts the contract's walk 12–32 and run 10–16 frame cycles (#236) instead of requiring 16/12, so a
@@ -81,7 +90,7 @@ Publication added only the ZIP, manifest and helper, preserved all 6,420 existin
 deleted), and verified HTTP 200 and exact bytes for the three public files plus unchanged site entry documents. The 0.6.5
 ZIP and manifest still serve their recorded hashes. No generation, login or registration was run.
 
-`deploy/dots-release.json` now pins `0a692cf` (0.6.6), still `candidate` with `savedVmAcceptance: pending`. A real
+`deploy/dots-release.json` then pinned `0a692cf` (0.6.6), still `candidate` with `savedVmAcceptance: pending`. A real
 `node dots.mjs --install` from this change into a fresh scratch runtime home and workspace cloned that commit, ran the
 npm and sprite setup steps (both exit 0; the engine imports), bound 0.6.6/`0a692cf` with a clean tree and matching vendor
 pin, and stopped at Grok sign-in, which was not performed. Generation stayed unverified and was not dispatched. This
