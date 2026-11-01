@@ -19,6 +19,14 @@ Follow the returned `nextAction`, resolve its single blocker, then rerun. A requ
 Do not ask for tokens, copy another user's credentials, put login into the image, or use API-key billing.
 Credential readiness leaves image/video entitlement unknown until actually established.
 
+Account approval and command network permission are separate. If an existing Grok job succeeded,
+preserve that account and inspect its report and outputs before diagnosing a later `EPERM` as a new
+login problem. Use only the host's supported per-command approval process for network diagnostics;
+do not change proxy, destination rules or TLS, and do not generate to test connectivity. For a public
+game-context lookup blocked in this VM, the [explicit file handoff](GAME-CREATION-CONTEXT.md#explicit-public-context-file-handoff)
+can use a fresh, complete response from a connected GitHub tool through official file delivery.
+It supplies public rules only; it does not replace Grok authentication or generation transport.
+
 If the user supplied a reference, follow [DOTS-PRIVATE-SOURCES.md](DOTS-PRIVATE-SOURCES.md) to move
 the original through the connected account's private source storage into this VM. Recover previously
 stored sources and jobs first. Check **VM-to-current-conversation preview display** separately as required

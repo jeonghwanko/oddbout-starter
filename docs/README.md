@@ -28,7 +28,7 @@ creator-kit ZIP에는 제작·연결 안내와 이 문서 지도가 들어 있�
 | [AUTHORING](AUTHORING.md) | 새 선수의 애셋과 `fighter.json` 규격 |
 | [CREATION-UX](CREATION-UX.md) | 사용자와 대화하는 제작 에이전트의 행동 규격 |
 | [DELIVERY](DELIVERY.md) | 외형 생성 전, 현재 대화에 그림을 실제로 보여 줄 수 있는지 확인 |
-| [GAME-CREATION-CONTEXT](GAME-CREATION-CONTEXT.md) | 게임의 모션·프레임·조작 정의, 프록시 조회 오류와 진행 중인 작업 보존 |
+| [GAME-CREATION-CONTEXT](GAME-CREATION-CONTEXT.md) | 게임의 모션·프레임·조작 정의, 프록시/실행 권한 진단, 공개 규격 파일 전달과 진행 중인 작업 보존 |
 | [CONNECTION-READINESS](CONNECTION-READINESS.md) | ODDBOUT 연결과 제작 준비 상태 확인 |
 | [OPEN-REGISTRATION](OPEN-REGISTRATION.md) | 가입 후 제작·검토·업로드·검사·등록: 연결된 클라우드 계정 사용 |
 | [DOT-DIALOGUE-ONLY](DOT-DIALOGUE-ONLY.md) | 생성 없이 실제 Dot에서 대화 흐름만 시험하기 |

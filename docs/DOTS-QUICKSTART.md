@@ -27,6 +27,10 @@ Creator-kit 0.6.5 includes the game-context fetch fix: it uses the host's inheri
 A new workspace from `node dots.mjs --install` gets the commit pinned in `deploy/dots-release.json`,
 so it has this fix only when that pin names 0.6.5 or later.
 For DNS or pre-HTTP connection failures, follow [the context network guide](GAME-CREATION-CONTEXT.md#network-errors-and-existing-workspaces).
+Keep account login, per-command network approval and successful generation distinct. A default-sandbox
+`EPERM` does not invalidate a prior successful approved job. If supported official tools can fetch and
+deliver the public context, use the [explicit file handoff](GAME-CREATION-CONTEXT.md#explicit-public-context-file-handoff);
+it keeps freshness, integrity and review checks and does not transport Grok requests.
 Keep an active fighter on its recorded runtime; do not pull, replace it or rerun generation to test a release.
 Retain sessions, jobs, selected versions and original outputs. Review the new kit separately for a new environment
 or an update after the current creation work finishes.

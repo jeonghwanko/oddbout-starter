@@ -1,6 +1,20 @@
 # ODDBOUT distribution
 
-**Current source-kit release: 0.6.6** (2026-11-01: variable-frame Dots gait review; the Dots pin moves to this release).
+**Source-kit candidate: 0.6.7** (publication verification is recorded after release).
+
+Adds an explicit per-invocation public game-context file and receipt to the context and workspace-tool CLIs.
+The receipt checks the configured source, raw-byte SHA-256 and Git blob identity, and a 15-minute retrieval window.
+It is local integrity metadata, not a signed origin or independent freshness certificate. The original trusted
+fetch and official file-delivery route remain required. Revision, missing-motion, user selection and quality
+gates are unchanged; failed file checks never silently fall back to networking. The CLIs also reuse direct-fd
+JSON output to avoid initializing Node's socket-backed stdout in restricted hosts.
+
+The guides distinguish Grok device login from the host's per-command execution approval. A default-sandbox
+`EPERM` alone does not establish that an existing approved Grok route is broken. No login, generation,
+credential migration, automatic permission escalation or security-policy change is part of this release.
+`deploy/dots-release.json` and active Dots workspace bindings stay unchanged; publication does not update them.
+
+**Latest published source-kit release: 0.6.6** (2026-11-01: variable-frame Dots gait review; the Dots pin moves to this release).
 
 The Dots gait review accepts the contract's walk 12–32 and run 10–16 frame cycles (#236) instead of requiring 16/12, so a
 valid cycle is not resampled to fit. Every actual frame still needs its own phase; contact measurements, visual review and
