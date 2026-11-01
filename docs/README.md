@@ -8,6 +8,8 @@ creator-kit ZIP에는 제작·연결 안내와 이 문서 지도가 들어 있�
 
 ## 처음이라면
 
+- **ChatGPT/Dots에서 연결·계정·스킬만 확인하려는 사용자**: [CLOUD-MCP](CLOUD-MCP.md) → [ODDBOUT-PLUGIN](ODDBOUT-PLUGIN.md).
+  기존 클라우드 플러그인을 선택한다. ZIP 가져오기나 VM 설치, 캐릭터 생성은 연결 확인에 필요하지 않다.
 - **선수를 만들려는 사용자·제작 에이전트**: [START-HERE](START-HERE.md) → [DOT-CREATION](DOT-CREATION.md) →
   [AUTHORING](AUTHORING.md) 순서로 읽는다.
 - **이 저장소의 코드를 고치는 사람**: 먼저 [../AGENTS.md](../AGENTS.md)(작업 규칙·저장소 지도·명령·배포 경로)를 읽고, 그다음

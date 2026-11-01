@@ -44,6 +44,18 @@ walks through each.
 
 ## Register from Dots without a PC
 
+For ChatGPT/Dots account operations, select the connected ODDBOUT cloud App available to your account. Its account tools and
+`create-fighter` skill belong to the same App. In the intended conversation, call native `get_profile` and confirm the expected
+registration account; find and read that App's skill and support document through the host's skill tools.
+The verified private App is not a public listing. If no App is available to you, see [first-time connection](docs/CLOUD-MCP.md).
+Do not import the creator-kit ZIP or create a second plugin for cloud connection. Account and skill checks do not authorize creation.
+
+Grok, Claude and other supported clients use their own connector setup. Once connected, cloud tools handle account checks, file transfer and registration; local CLI tools remain available for workspace creation and validation.
+When the hosted generation tools are available, ODDBOUT can make the fighter on its worker at your request.
+Save the verified account ID, request key and job ID; after a timeout or disconnect, follow [hosted job recovery](docs/CLOUD-MCP.md#호스팅-작업의-중단과-미리보기-복구)
+to look up the same job by its ID or original key and refresh preview URLs without resubmitting. A connection or a returned URL does not prove that an image was displayed and reviewed.
+Creation in your own workspace still uses your selected generation account.
+
 For **creation in a saved Dots VM**, use [the Dots VM entry point](docs/DOTS-START.md).
 The intended flow is one repository URL plus your creation request, using your own Grok subscription.
 The environment preparer runs [the install recipe](deploy/dots-environment/README.md) once; Dots then runs
@@ -51,18 +63,6 @@ The environment preparer runs [the install recipe](deploy/dots-environment/READM
 preview-delivery checks remain distinct from login. Saved-VM creation and delivery remain separate acceptance checks;
 unit tests or a parent-container run do not certify them.
 
-For ChatGPT/Dots account operations, use the supported custom MCP OAuth setup to connect the hosted ODDBOUT app. An imported plugin that declares
-a remote MCP, including HTTPS, may be desktop-only; adding an `.app.json` reference alone does not change that ([official plugin management guidance](https://learn.chatgpt.com/docs/enterprise/plugin-management#desktop-only-plugins)).
-If you also need the creation skill, use Plugin Creator to add it to that same app-backed plugin, preserving its identity and OAuth settings.
-Do not treat a second wrapper plugin's `mcp.json` as the app connection. A ZIP packages source; it does not connect the app or install a plugin.
-In Dots, verify the account with native `get_profile` in the intended conversation before using account tools. Preserve existing connections until verified.
-Grok, Claude and other supported clients use their own connector setup. Once connected, cloud tools handle account checks, file transfer and registration;
-local CLI tools remain available for workspace creation and validation.
-See [cloud connection instructions](docs/CLOUD-MCP.md) for each host's endpoint and first-time setup.
-When the hosted generation tools are available, ODDBOUT can make the fighter on its worker at your request.
-Save the verified account ID, request key and job ID; after a timeout or disconnect, follow [hosted job recovery](docs/CLOUD-MCP.md#호스팅-작업의-중단과-미리보기-복구)
-to look up the same job by its ID or original key and refresh preview URLs without resubmitting. A connection or a returned URL does not prove that an image was displayed and reviewed.
-Creation in your own workspace still uses your selected generation account.
 The setup below is for running the creation kit in a workspace; it is not required to authenticate the cloud connector.
 
 ## Create with the local kit
@@ -141,7 +141,7 @@ Setup also fetches the outside tools sprite-gen needs, without sudo: `img2webp` 
 
 To connect the tools, follow the [local Codex plugin guide](docs/LOCAL-PLUGIN.md): `npm run plugin:build`, then the printed `codex plugin marketplace add …` and `codex plugin add oddbout@ai-fighter-local`. The older manual MCP connection (`node scripts/print-install.mjs`) remains for compatibility. Other local hosts can connect `mcp/stdio.mjs` with `AI_FIGHTER_ROOT` set to the checkout.
 
-The [unified plugin guide](docs/ODDBOUT-PLUGIN.md) covers the portable source package. A local plugin installation does not mean the plugin is installed in Dots or listed in a public directory.
+The [unified plugin guide](docs/ODDBOUT-PLUGIN.md) and [distribution record](https://github.com/jeonghwanko/oddbout-starter/blob/main/docs/PLUGIN-DISTRIBUTION.md) cover the reviewed portable source kit. A local plugin installation does not mean the cloud App is connected in Dots or that the kit is listed in a public directory.
 
 ## Register and play
 

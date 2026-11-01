@@ -1,5 +1,12 @@
 # Dots: prepare once, resume the same fighter
 
+This guide is for an explicitly selected saved-VM generation workflow. Cloud account connection and hosted creation
+do not require VM setup. Reuse the existing available ODDBOUT App and verify native `get_profile` in the intended chat;
+connection readiness uses `purpose: "connection"` and never authorizes generation.
+Find `create-fighter` in the host's actual skill list and read that same App's skill or linked support document;
+metadata alone does not verify skill access. Do not install a separate skill or wrapper to reconnect it.
+Its private link is not a public distribution link. A separately reviewed creator-kit and its runtime installation remain distinct from App connection.
+
 A Git URL identifies software. It does not grant generation, registration, account access or network access.
 An explicit request to make a fighter authorizes the normal preparation and requested creation steps;
 do not ask again for every command. Keep the agreed review groups, provider, billing and retry boundaries.

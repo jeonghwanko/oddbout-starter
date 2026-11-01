@@ -13,16 +13,23 @@
 데스크톱 전용일 수 있으며, `.app.json` 참조만으로 그 제한이 사라지지 않는다
 ([플러그인 관리 안내](https://learn.chatgpt.com/docs/enterprise/plugin-management#desktop-only-plugins)).
 
-**ChatGPT/Dots 연결**: 지원되는 사용자 지정 MCP 서버/OAuth 흐름으로 `https://mcp.oddbout.com/mcp`를 연결하고 앱 설정에서 확인한다.
-제작 스킬도 필요하면 Plugin Creator를 사용해 같은 앱의 플러그인에 추가한다. 기존 앱 ID, OAuth 설정과 앱 정보를 유지한다. 별도 플러그인으로 감싸거나
-기존 앱 연결을 새 ID로 바꾸지 않는다. 같은 앱에 스킬을 추가하는 기능이 제공되지 않으면 새 플러그인을 만들지 말고 그 제한을 보고한다.
+**ChatGPT/Dots의 기본 경로**: 현재 사용자에게 이미 제공된 ODDBOUT 클라우드 앱을 대상 대화에서 선택한다.
+호스트의 실제 스킬 목록에서 같은 앱의 `create-fighter`를 찾고 그 스킬이나 연결된 지원 문서를 읽는다.
+native `get_profile`을 확인하고 의도한 계정이면 재사용한다. 앱 메타데이터만으로 스킬 사용을 확인하지 않는다.
+매번 사용자 지정 MCP를 추가하거나 스킬을 별도로 설치하지 않는다.
+이 확인은 해당 앱의 공개 배포를 뜻하지 않으며 개인 앱 링크나 ID를 공개 설치 주소로 안내하지 않는다.
+별도로 검토한 creator-kit의 소스/runtime 설치는 앱 연결과 구분한다. 버전별 확인 근거는 [통합 안내](ODDBOUT-PLUGIN.md)와 [배포 안내](https://github.com/jeonghwanko/oddbout-starter/blob/main/docs/PLUGIN-DISTRIBUTION.md)를 따른다.
+스킬이 실제로 빠진 것을 확인한 경우에만, 유지보수자가 지원되는 Plugin Creator 기능으로 같은 앱에 추가한다.
+기존 앱 ID, OAuth 설정과 앱 정보를 유지하며 새 wrapper나 앱 ID로 바꾸지 않는다. 지원되지 않으면 한계를 보고한다.
 
 각 단계는 따로 확인한다: 서버 배포, ZIP 공개, 앱 연결·플러그인 갱신, Dots 대화에서 선택, 도구 표시, 계정 응답.
 대상 대화에서 `get_profile`이 의도한 등록 계정을 반환해야 연결이 확인된다. 빈 목록, 404, `not-found`는 플러그인 삭제·교체 또는 서버 장애를
 증명하지 않는다. 확인 전까지 기존 연결·OAuth·세션·작업을 유지한다.
 사이트 로그인은 별도다. 로컬 CLI 로그인을 클라우드 MCP 로그인 대용으로 사용하지 않는다.
 
-ChatGPT에서 클라우드 앱을 연결할 때: ChatGPT → 플러그인 → 추가(+) → 사용자 지정 MCP 서버 추가.
+**최초 구성 또는 유지보수 복구에만**: 기존 사용 가능한 앱이 없음을 확인하고 새 연결 구성이 필요한 경우,
+지원되는 사용자 지정 MCP OAuth 경로를 사용한다. 기존 앱이 있는 사용자의 반복 설치 절차가 아니다.
+ChatGPT → 플러그인 → 추가(+) → 사용자 지정 MCP 서버 추가.
 이름 `ODDBOUT`, 위 서버 URL, 인증 `OAuth`를 선택한다. 클라이언트 ID/Secret은
 직접 넣지 않는다. 서버가 동적 클라이언트 등록과 PKCE를 지원한다.
 Google로 로그인한 뒤 표시된 계정을 확인하고 `연결 승인`을 누른다. 대상 대화의 `get_profile` 응답까지 확인한다.
@@ -209,14 +216,14 @@ Cursor의 Grok Bot이 02:21Z에 로그인 먼저 주소로 연결한 뒤 토큰�
 
 ## 사용 흐름
 
-0.6.3 키트 소스는 계정·등록에 호스팅 ODDBOUT MCP 하나를 쓰도록 구성한다. 실제 대화에서 노출되는 도구는
+creator-kit 소스는 계정·등록에 호스팅 ODDBOUT MCP 하나를 쓰도록 구성한다. 기존 사용 가능한 ODDBOUT 클라우드 앱 연결은 재사용한다. 실제 대화에서 노출되는 도구는
 호스트의 도구 검색/카탈로그로 확인하고 native `get_profile`로 계정을 검증한다. 로컬 제작·세션·작업 기록·파일 검증은 작업 공간의
 `creation:tool` CLI로 실행한다. 기존 `ai-fighter`/`ai-fighter-creator` MCP 연결 제거는 사용자의 명시적 요청이 있고,
 선택된 대체 MCP의 `get_profile`이 같은 의도된 계정으로 성공한 뒤에만 한다([이전 안내](ODDBOUT-PLUGIN.md)).
 
 | 작업 | 도구·실행 경로 |
 | --- | --- |
-| 연결 계정 확인 | 클라우드 `get_profile`, `check_creation_readiness` |
+| 연결 계정 확인 | 클라우드 `get_profile`, `check_creation_readiness(purpose: "connection")` |
 | 로컬 제작·재개·검증 | `creation:tool`의 세션·작업·환경·검증 도구([로컬 도구 안내](LOCAL-PLUGIN.md)) |
 | 새 파이터 등록 | 클라우드 `prepare_fighter_registration` → `upload_fighter_asset` → `submit_fighter_registration` → `get_fighter_submission` |
 | 내 기존 파이터 패키지 교체 | `prepare_fighter_registration`에 소유 파이터의 `fighterId`를 넣고 같은 업로드·제출 흐름 사용 |
@@ -228,6 +235,7 @@ Cursor의 Grok Bot이 02:21Z에 로그인 먼저 주소로 연결한 뒤 토큰�
 
 1. `get_fighter_spec`의 overview/schema/creation을 읽고 기존 제작·검토 규칙을 따른다.
    첫 생성 전·작업 공간 재시작 뒤·등록 전에는 이 클라우드 커넥터의 `check_creation_readiness`를 호출한다.
+   연결 확인만 할 때는 `purpose: "connection"`, 등록에는 `purpose: "registration"`, 허가된 생성 준비에는 `purpose: "generation"`을 명시한다.
    등록 계정 접근과 실제 생성·전달·패키지 검토 상태를 구분하며 로컬 stdio 로그인은 요구하지 않는다.
 2. 최종 패키지 승인과 등록 요청을 받은 실제 fighter.json을 `prepare_fighter_registration`에 파일로 전달한다.
    기존 소유 파이터를 교체하라는 요청이면 `fighterId`를 지정해 ID와 이력을 유지하고, 생략하면 새 파이터를 준비한다.

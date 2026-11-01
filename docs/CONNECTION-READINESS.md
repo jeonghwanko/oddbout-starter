@@ -5,15 +5,19 @@
 
 | 사용 경로 | 연결과 첫 확인 | 중단 후 재개 |
 | --- | --- | --- |
-| Dots/Grok의 호스팅 ODDBOUT MCP (`mcp/cloud.mjs`) | [CLOUD-MCP.md](CLOUD-MCP.md)의 호스트별 흐름으로 연결 → Google OAuth 승인 → 대상 대화에서 `get_profile`과 cloud `check_creation_readiness(purpose: "connection")` | 같은 계정의 `get_hosted_fighter`로 저장된 작업 조회. 아래 클라우드 절과 [호스팅 복구](CLOUD-MCP.md#호스팅-작업의-중단과-미리보기-복구) 참고 |
-| PC 또는 준비된 VM의 로컬 stdio MCP (`mcp/stdio.mjs`) | 로컬 `check_creation_readiness` → **ODDBOUT 연결** → 본인 Google 로그인·공개 기기 코드 확인·승인 | 기존 기기 요청과 로컬 제작 세션·작업 조회. 아래 로컬 절 참고 |
+| Dots/Grok의 호스팅 ODDBOUT MCP (`mcp/cloud.mjs`) | Dots는 기존 ODDBOUT 앱을 선택·재사용하고, 다른 호스트의 최초 연결은 [CLOUD-MCP.md](CLOUD-MCP.md)를 따른다. 대상 대화에서 `get_profile`과 cloud `check_creation_readiness(purpose: "connection")` 확인 | 같은 계정의 `get_hosted_fighter`로 저장된 작업 조회. 아래 클라우드 절과 [호스팅 복구](CLOUD-MCP.md#호스팅-작업의-중단과-미리보기-복구) 참고 |
+| PC 또는 준비된 VM의 로컬 stdio MCP (`mcp/stdio.mjs`) | 로컬 `check_creation_readiness(purpose: "connection")` → **ODDBOUT 연결** → 본인 Google 로그인·공개 기기 코드 확인·승인 | 기존 기기 요청과 로컬 제작 세션·작업 조회. 아래 로컬 절 참고 |
 
 클라우드 연결에 `connect_oddbout`, 로컬 로그인, PC 설치를 요구하지 않는다. 로컬 연결에서도 등록 계정, 생성 접근과
 결과 전달은 서로 다른 상태다. VM 설치와 네트워크 준비는 초기 환경 준비자가 처리하고 준비된 작업 공간을 재사용한다.
 
 ChatGPT/Dots에서 가져온 플러그인의 `mcp.json`은 클라우드 앱 연결과 다르다. 원격 HTTPS MCP가 있는 플러그인도 데스크톱 전용일 수 있으며
 `.app.json` 참조만으로 이 제한은 사라지지 않는다 ([공식 안내](https://learn.chatgpt.com/docs/enterprise/plugin-management#desktop-only-plugins)).
-제작 스킬도 필요하면 연결한 앱의 플러그인에 Plugin Creator로 추가하고 기존 앱 정보와 OAuth 설정을 유지한다.
+기존 사용 가능한 ODDBOUT 클라우드 앱을 재사용한다. 호스트의 실제 스킬 목록에서 같은 앱의 `create-fighter`를 찾고
+그 스킬이나 연결된 지원 문서를 읽는다. 앱 메타데이터만으로 스킬 사용을 확인하지 않는다.
+실제로 스킬이 없는 경우에만 유지보수자가 지원되는 기능으로 같은 앱에 추가하고 앱 정보·OAuth 설정을 유지한다.
+기존 사용 가능한 앱이 없을 때의 최초 구성·유지보수 복구만 사용자 지정 MCP OAuth 절차를 따른다. 개인 앱 링크는 공개 배포 주소가 아니다.
+별도로 검토한 creator-kit의 runtime 설치는 연결 점검과 구분하며 VM·생성기 설치나 생성을 요구하지 않는다.
 연결은 **대상 Dots 대화**에서 계정 도구가 표시되고 `get_profile`이 의도한 등록 계정을 반환할 때 확인된다.
 `mcp.json`, ZIP, 플러그인 목록, 공개 `/spec`, 다른 대화의 로그인은 이를 대신하지 않는다.
 `purpose: "connection"` 확인은 연결 전용이며 생성·업로드·등록을 실행하거나 생성 구독을 요구하지 않는다.
