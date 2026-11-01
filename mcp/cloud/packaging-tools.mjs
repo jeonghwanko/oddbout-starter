@@ -1,6 +1,7 @@
 // @ts-check
 // The cloud connector cannot open a Dots VM path. It returns structured invocations for the local MCP executor.
 import { z } from 'zod';
+import runtime from './packaging-runtime.json' with { type: 'json' };
 
 const absolute = z.string().min(1).max(512).refine(value => !/[\x00-\x1f]/.test(value)
   && (/^\//.test(value) || /^[A-Za-z]:[\\/]/.test(value)), 'existing absolute workspace path required');
@@ -23,10 +24,11 @@ export function registerPackagingPreparation({ register, invoke }) {
         feature: 'texture-resolution-1', next: 'Keep original files. Resolution fitting is not yet supported by the deployed contract.' };
       const root = kitPath.replace(/\\/g, '/').replace(/\/$/, '');
       const args = { planPath, outputPath, fitSheets };
-      return { ok: true, stage: 'workspace-execution-required', minimumKitVersion: '0.6.9',
-        kitRelease: 'https://github.com/jeonghwanko/oddbout-starter/blob/main/docs/PLUGIN-DISTRIBUTION.md',
+      return { ok: true, stage: 'workspace-execution-required', minimumKitVersion: runtime.version, runtime,
         contract: { features, limits: result.data?.limits, textureResolution: result.data?.textureResolution },
         prerequisites: ['Use the reviewed kit in a separate directory; preserve the active workspace runtime and selected versions.',
+          'Verify the download helper with helperSha256 before running it; pass manifestUrl and manifestSha256 to its download command. '
+          + 'The new destination contains plugin/. kitPath must name that extracted plugin root.',
           'Install its locked Node dependencies if missing. Existing game-pack input needs no Python engine or generation login.'],
         operations: ['inspect_fighter_packaging', 'pack_fighter_package'].map(tool => ({ tool, arguments: args,
           execution: { command: 'node', args: [`${root}/scripts/creation-tool.mjs`, 'call', workspacePath, tool, '<arguments-json-file>'],

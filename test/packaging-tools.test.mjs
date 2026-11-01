@@ -26,6 +26,9 @@ test('native cloud preparation is public, names actual workspace execution, and 
   const result = (await response.json()).result.structuredContent;
   assert.equal(result.ok, true, JSON.stringify(result));
   assert.equal(result.stage, 'workspace-execution-required');
+  assert.equal(result.minimumKitVersion, result.runtime.version);
+  assert.match(result.runtime.manifestSha256, /^[a-f0-9]{64}$/);
+  assert.match(result.runtime.manifestUrl, /^https:\/\/oddbout.com\/creator-kit\/0\.6\.9\/.*\/release.json$/);
   assert.deepEqual(result.operations.map(operation => operation.tool), ['inspect_fighter_packaging', 'pack_fighter_package']);
   assert.equal(result.operations[1].execution.args[0], '/kit/scripts/creation-tool.mjs');
   assert.equal(result.operations[1].execution.argumentsFileContents.fitSheets, true);

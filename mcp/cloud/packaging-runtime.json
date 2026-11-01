@@ -1,0 +1,7 @@
+{
+  "version": "0.6.9",
+  "manifestUrl": "https://oddbout.com/creator-kit/0.6.9/751dd23c884f6164dea631b68e4361878bb0042ef185b952ca14f36ca75b2c6a/release.json",
+  "manifestSha256": "7e4b319c774b000c16c3602c2dac1850f52c2c48b0fb253852621faed88c052b",
+  "helperUrl": "https://oddbout.com/creator-kit/0.6.9/751dd23c884f6164dea631b68e4361878bb0042ef185b952ca14f36ca75b2c6a/fetch-creator-kit.py",
+  "helperSha256": "b66c31ff833816dfa74c90d9155359d3fdd484dff8c12759e48addde01707592"
+}
