@@ -184,20 +184,23 @@ record their actual outputs as versions/evidence; do not claim they received man
 
 ## Final files and registration
 
-Follow `docs/GAIT-REVIEW.md`: one coordinate/scale reference, phase plan before generation,
-both same-foot stance ROIs, final game-pack pixels/durations, actual previews and verified contacts.
+Quality diagnosis in `docs/GAIT-REVIEW.md` is optional later work. Preserve selected files and actual previews;
+no same-foot stance, visual verdict or numerical pass is required for packaging or registration.
 For GPT walk/run, use the kit CLI and the pinned sprite-gen-agent motion engine. Generate diagnostic key poses first;
 review both physical legs, their hip attachments, contacts and body continuity before binding that image.
 Full sequences require the actual phase guide and reviewed key-pose reference, not only a layout guide.
 Use painted extraction with `ground_frames: false` to retain source flight height. Generation OK is not
 motion approval. Do not repair failed gait by pasting a frozen torso over separate legs, and stop after
 two consecutive failures of the same anatomy/contact requirement. Preserve unknown attempts without retrying.
-Use upstream `game-pack`, then `fighter:pack` with `reviewPolicy: required`. Never hand-assemble sheets
+Use upstream `game-pack`, then `fighter:pack` with the default `reviewPolicy: files-only`.
+Only file/contract checks gate packaging and registration. Gait scores and visual quality verdicts are deferred;
+do not require a passing report, an explicit visual override, or regeneration. Preserve existing diagnostics unchanged.
+Legacy `required`/`engine-loop` plans also use file checks only; review-group user choices still apply. Never hand-assemble sheets
 or invent measurements. A format fixture is never a generated character.
 
 Run the existing manifest and full-file validators. Record `package` with the manifest and every asset,
-then `package-review` with real validation reports and the user's final preview feedback.
-The session review is a record, not a substitute for those validators or generation authorization.
+and preserve the user's final preview feedback. `package-review` is an optional quality record, not a gate.
+The session requires current validated package bytes, not a quality verdict or generation authorization.
 The final `get_creation_session` must have no blockers before submission.
 
 Use the connected ODDBOUT account for registration from either workspace. Verify `get_profile` matches

@@ -65,7 +65,7 @@ function plan(directory, out, change = () => {}) {
   motions.dash.landmarks = { windup: { clip: 'fightIdle', step: 0 }, recover: { clip: 'fightIdle', step: 1 } };
   motions.fall.landmarks.getUp = [{ clip: 'hit', step: 4, durationMs: 90 }, { clip: 'fightIdle', step: 0, durationMs: 90 }];
   const value = { gamePack: 'game-pack.json', out, localId: 'packed-bot',
-    reviewPolicy: 'format-only',
+    reviewPolicy: 'files-only',
     profile: { name: 'Packed Bot', description: 'Packed from a sprite-gen game pack fixture.' }, motions };
   change(value);
   return value;
@@ -359,15 +359,17 @@ test('feet on the canvas edge still get transparent room for their contacts', as
   assert.ok(idle.frameHeight - idle.origins[0].originY >= 8);
 });
 
-test('normal authoring requires gait reviews; format-only is an explicit fixture exception', async () => {
+test('normal authoring packages files without a gait or visual review', async () => {
   const directory = await gamePack('review-required');
   await addGetUp(directory);
   const result = await run(directory, plan(directory, 'fighter', value => { useGetUp(value); delete value.reviewPolicy; }));
-  assert.equal(result.errors[0].code, 'GAIT_REVIEW_REQUIRED');
-  assert.equal(await stat(path.join(directory, 'fighter')).then(() => true, () => false), false);
+  assert.equal(result.ok, true, JSON.stringify(result.errors));
+  const report = JSON.parse(await readFile(result.report, 'utf8'));
+  assert.equal(report.reviewPolicy, 'files-only');
+  assert.equal(report.qualityReview, 'deferred');
 });
 
-test('reviewed variable-length input keeps its count, uses the verified stride and rejects changed playback timing', async () => {
+test('reviewed variable-length input keeps its count, uses fresh measurements and defers stale quality evidence', async () => {
   const directory = await gamePack('review-bound');
   await addGetUp(directory);
   // Video frame times are rarely whole milliseconds (24 fps = 41.66… ms). The review binds these exact values.
@@ -402,7 +404,10 @@ test('reviewed variable-length input keeps its count, uses the verified stride a
   await writeFile(packFile, JSON.stringify(pack));
   value.out = 'changed';
   const stale = await run(directory, value);
-  assert.equal(stale.errors[0].code, 'GAIT_REVIEW_STALE');
+  assert.equal(stale.ok, true, JSON.stringify(stale.errors));
+  const deferred = JSON.parse(await readFile(stale.report, 'utf8'));
+  assert.equal(deferred.motions.walk.qualityDiagnostics[0].code, 'GAIT_REVIEW_STALE');
+  assert.equal(deferred.motions.walk.stride.source, 'silhouette-estimate');
 });
 
 test('hosted loops pack with loop reviews: engine checks, judge verdicts and the measured stride, bound to the pixels', async () => {
@@ -410,7 +415,7 @@ test('hosted loops pack with loop reviews: engine checks, judge verdicts and the
   await addGetUp(directory);
   const value = plan(directory, 'fighter', p => { useGetUp(p); p.reviewPolicy = 'engine-loop'; delete p.motions.walk.stridePixels; });
   const missing = await run(directory, { ...value, out: 'missing' });
-  assert.equal(missing.errors[0].code, 'LOOP_REVIEW_REQUIRED');
+  assert.equal(missing.ok, true, JSON.stringify(missing.errors));
   for (const motion of ['walk', 'run']) {
     const sequence = await loadSequence({ file: 'game-pack.json', animation: `bot/${motion}` }, directory);
     // Fixture evidence exercises binding and packaging only, not a claim that the sample bot walks well.
@@ -423,17 +428,66 @@ test('hosted loops pack with loop reviews: engine checks, judge verdicts and the
     value.motions[motion].loopReview = `${motion}-loop.json`;
   }
   const mixed = await run(directory, { ...value, out: 'mixed', reviewPolicy: 'required' });
-  assert.equal(mixed.errors[0].code, 'PLAN_FIELD');
+  assert.equal(mixed.ok, true, JSON.stringify(mixed.errors));
   const packed = await run(directory, value);
   assert.equal(packed.ok, true, JSON.stringify(packed.errors));
   const fighter = JSON.parse(await readFile(path.join(directory, 'fighter/fighter.json'), 'utf8'));
   const report = JSON.parse(await readFile(path.join(directory, 'fighter/pack-report.json'), 'utf8'));
   assert.equal(fighter.clips.walk.stridePixels, 111);
   assert.equal(report.motions.walk.stride.source, 'loop-review');
-  assert.match(report.review, /No same-foot stance was measured/);
+  assert.equal(report.qualityReview, 'deferred');
   const packFile = path.join(directory, 'game-pack.json'), pack = JSON.parse(await readFile(packFile, 'utf8'));
-  pack.animations['bot/run'].durations_ms[0] += 5;
+  pack.animations['bot/run'].durations_ms = pack.animations['bot/run'].durations_ms.map(ms => ms + 5);
   await writeFile(packFile, JSON.stringify(pack));
   const stale = await run(directory, { ...value, out: 'stale' });
-  assert.equal(stale.errors[0].code, 'LOOP_REVIEW_STALE');
+  assert.equal(stale.ok, true, JSON.stringify(stale.errors));
+  const deferred = JSON.parse(await readFile(stale.report, 'utf8'));
+  assert.equal(deferred.motions.run.qualityDiagnostics[0].code, 'LOOP_REVIEW_STALE');
+});
+
+
+test('Velora-style unverified diagnostics and legacy policies never block or alter package pixels', async () => {
+  const directory = await gamePack('deferred-quality');
+  const diagnostic = { kind: 'ai-fighter-gait-review', version: 1, motion: 'walk', status: 'unverified', errors: [],
+    missing: ['Visual review: anatomy', 'Visual review: alternation', 'Visual review: loop', 'Unverified stance: 0', 'Unverified stance: 1'] };
+  await writeFile(path.join(directory, 'walk-review.json'), JSON.stringify(diagnostic));
+  const baseline = await run(directory, plan(directory, 'baseline'));
+  assert.equal(baseline.ok, true, JSON.stringify(baseline.errors));
+  for (const policy of ['files-only', 'required', 'engine-loop']) {
+    const result = await run(directory, plan(directory, policy, p => {
+      p.reviewPolicy = policy; p.motions.walk.gaitReview = 'walk-review.json'; p.motions.run.loopReview = 'missing.json';
+    }));
+    assert.equal(result.ok, true, JSON.stringify(result.errors));
+    const audit = JSON.parse(await readFile(result.report, 'utf8'));
+    assert.equal(audit.reviewPolicy, 'files-only'); assert.equal(audit.qualityReview, 'deferred');
+    assert.deepEqual(audit.motions.walk.qualityDiagnostics[0].report, diagnostic);
+    assert.equal(audit.motions.walk.qualityDiagnostics[0].status, 'deferred');
+    assert.equal(audit.motions.run.qualityDiagnostics[0].status, 'deferred');
+    for (const file of ['fighter.json', ...example.assets.map(a => a.path)])
+      assert.ok((await readFile(path.join(directory, 'baseline', file))).equals(await readFile(path.join(directory, policy, file))), file);
+  }
+  const invalid = await run(directory, plan(directory, 'invalid-duration', p => { p.motions.walk.durationMs = 0; }));
+  assert.equal(invalid.ok, false);
+  assert.equal(await stat(path.join(directory, 'invalid-duration')).then(() => true, () => false), false);
+});
+
+
+test('WebP-only game-pack textures produce the same final fighter bytes as PNG textures', async () => {
+  const directory = await gamePack('webp-input');
+  const original = await run(directory, plan(directory, 'from-png'));
+  assert.equal(original.ok, true, JSON.stringify(original.errors));
+  const file = path.join(directory, 'game-pack.json'), source = JSON.parse(await readFile(file, 'utf8'));
+  const before = await loadSequence({ file: 'game-pack.json', animation: 'bot/walk' }, directory);
+  for (const texture of source.textures) {
+    const webp = texture.image.replace(/\.png$/, '.webp');
+    await sharp(path.join(directory, texture.image)).webp({ lossless: true }).toFile(path.join(directory, webp));
+    texture.image = texture.webp = webp;
+  }
+  await writeFile(file, JSON.stringify(source));
+  const after = await loadSequence({ file: 'game-pack.json', animation: 'bot/walk' }, directory);
+  assert.equal(sequenceHash(after), sequenceHash(before));
+  const packed = await run(directory, plan(directory, 'from-webp'));
+  assert.equal(packed.ok, true, JSON.stringify(packed.errors));
+  for (const name of ['fighter.json', ...example.assets.map(a => a.path)])
+    assert.ok((await readFile(path.join(directory, 'from-png', name))).equals(await readFile(path.join(directory, 'from-webp', name))), name);
 });

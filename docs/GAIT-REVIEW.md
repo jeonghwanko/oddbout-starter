@@ -1,4 +1,10 @@
-# 보행 설계와 등록 전 검수
+# 보행 설계와 선택적 품질 진단
+
+현재 패키징·등록의 차단 조건은 **필수 파일·계약 검사만**이다. 이 문서의 보행 수치·시각 품질 검수는
+나중에 요청할 수 있는 선택적 진단이며, 실패·미검증·누락이어도 패키징이나 등록을 막지 않는다.
+`requireReview`는 진단 근거의 사용 가능성을 검사하는 함수이지 등록 전 필수 명령이 아니다.
+실제 관찰하지 않은 항목을 pass로 고치거나, 보고서를 채우기 위해 재생성하지 않는다.
+
 
 sprite-gen은 이 저장소의 `vendor/sprite-gen`에 고정된 [sprite-gen-agent](https://github.com/jeonghwanko/sprite-gen-agent) 커밋으로 설치된다.
 모션 엔진은 그 커밋에 들어 있다. `npm run sprite:setup`은 고정 커밋을 받아 설치하며, 알 수 없는 로컬 수정은 덮어쓰지 않는다.
@@ -282,29 +288,26 @@ npm run fighter:gait -- review output/my-walk/gait-plan.json output/my-walk/revi
 지면 오차는 plan의 `groundTolerance`로 검사하며 기본 512px 셀의 3px도 초기 검수 기준이지 모든 그림에 보장되는 품질 기준이 아니다.
 검수자는 기준을 바꾸어 오류를 숨기지 말고 변화의 근거를 기록한다.
 
-## 4. 등록 전 미리보기와 패키징
+## 4. 파일 검사와 선택적 품질 진단
 
-`preview.html`은 등록·로그인·외부 서버 없이 열리는 단일 파일이다. 정상/저속 재생, 프레임 이동, 지면선과 발 영역을 제공한다.
-검수에 실패해도 미리보기와 contact-sheet를 만든다. 이동 재생은 보폭이 검증된 경우에만 활성화된다.
-계획상 지지발과 실제 관찰·측정을 구분해서 표시한다. 실패를 통과로 보이게 프레임이나 재생 시간을 바꾸지 않는다.
+`fighter:pack`은 기본 `reviewPolicy: "files-only"`로 필수 파일·계약 검사만 한다. 이전 계획의
+`required`·`engine-loop`도 같은 동작으로 해석하므로 기존 계획을 고쳐 품질 검수 우회를 승인받을 필요가 없다.
+`gaitReview`·`loopReview`를 생략할 수 있고, 지정된 보고서가 실패·미검증·오래됐거나 읽히지 않아도
+`pack-report.json`의 `qualityDiagnostics`에 남기고 진행한다. 보고서의 판정을 통과로 바꾸지 않는다.
+`qualityReview: "deferred"`는 품질 검토가 미뤄졌다는 뜻이다.
 
-패키징 계획의 walk/run에 최종 game-pack에서 검사한 결과를 지정한다.
+프레임 수·중복·균일한 재생 시간, 이미지 디코드·알파·크기, 파일 해시·크기, 초상 crop·기준점·접지,
+필수 모션·접촉 시점·메타데이터 등 기존 파일·계약 검사는 그대로 실행한다. 최종 패키지 전체 디코드가
+실패하면 출력 폴더를 게시하지 않는다. 기존 결과를 덮어쓰지 않는다.
 
-```json
-{
-  "walk": { "animation": "cat-walk/walk", "gaitReview": "review-walk/review.json" },
-  "run": { "animation": "cat-run/run", "gaitReview": "review-run/review.json" }
-}
-```
+walk의 `stridePixels`는 게임 이동량이다. 계획에 있으면 보존하고, 없으면 현재 픽셀·시간과 일치하며
+통과한 선택적 보고서의 측정값 또는 기존 실루엣 추정을 사용한다. 둘 다 사용할 수 없으면 1~1600 범위의
+명시적 게임 이동량을 계획에 지정한다. 이 값은 관찰된 물리 보폭이나 품질 합격으로 주장하지 않는다.
+보고서의 측정값을 사용한 경우에도 시각 품질이 승인됐다는 뜻은 아니다.
 
-`fighter:pack`의 기본 `reviewPolicy`는 `required`다. 미검증·실패·다른 프레임·바뀐 시간의 결과를 거절한다.
-walk의 보폭은 이 근거에서 받아오므로 `stridePixels`를 수기로 덮어쓰지 않는다.
-`reviewPolicy: "format-only"`는 형식 테스트 fixture용 명시적 예외이며 결과 보고서에 시각 품질 미검증을 남긴다.
-이를 일반 캐릭터의 검수 통과 우회로로 쓰지 않는다. 서버 계약은 이 로컬 검수 결과를 보안 인증서로 신뢰하지 않는다.
-
-부츠 굽·앞창, 동물 발의 패드·발굽·발톱처럼 갈라진 접촉면이나 발가락 보행의 들린 뒤꿈치 때문에 공식 검사만 미검증인 경우
-[명시적 양발 윤곽 근거](FOOT-EVIDENCE.md)를 사용할 수 있다. v2 근거는 갈래를 발 단위로 묶고 이동을 앞쪽 접지 끝에서 잰다.
-이것은 AI Fighter가 유지하는 선택적 검사 확장이며 공식 검사 결과도 함께 보존한다. 다른 실패나 시각 검수를 대신하지 않는다.
+이후 품질 검토를 요청받으면 앞 절의 `fighter:gait review`를 실행할 수 있다. `preview.html`은 정상/저속 재생,
+프레임 이동, 지면선과 발 영역을 제공한다. 계획상의 지지발과 실제 관찰·측정을 구분하고, 미검증 결과를
+그대로 보여준다. 품질 진단을 위해 기존 프레임·재생 시간을 바꾸거나 자동으로 다시 생성하지 않는다.
 
 ## 달리기 공중 프레임 보존 계약
 
@@ -362,6 +365,6 @@ npm run fighter:gait -- loop-review <config.json> <loop-review.json>
   첫 테이크 깨끗한 컷 약 19개 중 14개가 이 이유 하나로 판정 전에 버려져 새 Grok 촬영이나 운영자 검토로 갔다. 생성기도 같은 규칙으로 컷을
   판정에 보낸다(`host/generation-stages.mjs` `lowMarginFeet`, 테스트가 둘을 같게 묶는다).
 - 기록은 최종 프레임과 시간에 묶인다(`sequenceSha256`). 엔진이 남긴 다시 찍기 사유가 하나라도 있거나, 발 이름이 없거나(위 예외 밖) 같거나,
-  판정 하나라도 fail이거나, 걷기 보폭이 없으면 `status: fail`이고 `fighter:pack`이 받지 않는다.
+  판정 하나라도 fail이거나, 걷기 보폭이 없으면 `status: fail`이고 패커는 그 측정값을 사용하지 않는다. 파일이 유효하면 패키징은 계속한다.
 - 같은 발 측정을 했다고 주장하지 않는다. `pack-report.json`의 `review`와 `motions.walk.stride.source`(`loop-review`)가 그 사실을 남긴다.
-- Dot 제작 경로는 그대로 `required`다(`creation:run`의 패키지 작업은 `required`가 아닌 정책을 거절한다).
+- 위 고리 검수도 선택적 품질 진단이다. `creation:run`은 `files-only`와 이전 `required`·`engine-loop` 계획을 받아 파일 검사만 수행하며, fixture 전용 `format-only`는 여전히 거절한다.

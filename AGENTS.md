@@ -159,15 +159,18 @@ generation and the live AI Fighter spec before creating a package, and use the b
 
 ### Motion quality
 
-- The v1 contract requires all 11 motions. With `gait-frames-1`, preserve the filmed/drawn cycle's distinct frames:
-  walk 12–32, run 10–16, with equal per-frame durations. The spec's `frames` (16/12) are authoring defaults, not fixed
-  acceptance counts. Do not drop, duplicate or interpolate frames merely to reach those defaults. The review plan
-  must cover every actual frame (`index: i`, `phase: i / frameCount`) with its support state; plans are not observations.
-  Dots keeps `reviewPolicy: required`, both same-foot stance measurements and visual review. Validate actual motion,
-  identity, foot alternation and ground contact; schema/decoder success alone is not visual approval.
-- Follow `docs/GAIT-REVIEW.md`: keep one coordinate/scale reference, write the phase plan before generation, run
-  `fighter:gait review` with both same-foot stance ROIs, and show its preview before registration. Missing or
-  uncertain observations stay unverified. Bind gait reviews to the final game-pack pixels and durations.
+- Packaging and registration use required file/contract checks only. Quality diagnostics (gait scores, same-foot
+  tracking, visual anatomy/alternation/loop verdicts) are deferred work, never a prerequisite or a reason to regenerate.
+  Do not call `requireReview` as a registration gate or demand an explicit visual override to continue.
+- The contract still requires all 11 motions, walk 12–32 and run 10–16 distinct frames, valid timing, decodable files,
+  correct dimensions, hashes, crops, origins, contacts and the remaining package checks. Keep selected versions and
+  review-group user feedback; neither user selection nor a file-check pass certifies animation quality.
+- `fighter:pack` defaults to `reviewPolicy: files-only`. Older `required`/`engine-loop` plans also use file checks only.
+  Existing reports stay intact as diagnostics; stale/failed/missing reports do not block. Fresh usable measurements
+  may supply geometry/stride, but never claim visual approval. Session quality reviews are also non-blocking;
+  missing/changed files, unselected versions, requested edits and an unvalidated package still block.
+- The following gait procedures are optional later quality work. When explicitly requested, keep one coordinate/scale
+  reference, bind observations to the actual pixels and durations, and leave uncertain observations unverified.
 - Split heel/forefoot contacts, padded/hoofed/clawed soles and lifted heels (digitigrade) may use
   `docs/FOOT-EVIDENCE.md` only with fresh per-frame outlines of both feet; v2 evidence groups sole lobes per foot and
   tracks the leading ground contact. This is an explicit AI Fighter extension: retain the upstream report and every
@@ -225,7 +228,7 @@ Both routes:
 - Build the package with `npm run sprite -- game-pack`, then `npm run fighter:pack -- <plan.json>` (see
   `docs/DOT-CREATION.md`). It measures scale, frames, origins, contacts and hashes from the pixels: do not
   hand-assemble sheets or type those values. The plan holds contact steps, landmarks and gait review paths.
-- Normal authoring uses the default reviewPolicy `required`; `format-only` is for format fixtures, not visual approval.
+- Normal authoring uses `reviewPolicy: files-only`; `format-only` remains a format-fixture label. Neither certifies visual quality.
 - Separate get-up art uses `fall.getUpAnimation` (`docs/DOT-CREATION.md`); keep auxiliary cells out of fall playback.
 - Any signed-in user may upload without an invitation or manual approval. Submit only within the user's request, and
   distinguish validation failures from post-publication moderation.

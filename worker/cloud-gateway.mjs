@@ -9,11 +9,14 @@ export const PUBLIC_RESOURCE = 'https://mcp.oddbout.com/mcp';
  * 401: the bot told its user ODDBOUT's login was down, dropped its sign-in and asked again (10-31, twice). Here the root is ours.
  */
 export const PUBLIC_SIGN_IN_RESOURCE = 'https://mcp.oddbout.com/signin';
+/** The Claude directory edition (2026-11-01, mcp/cloud/directory-edition.mjs), also only at mcp.oddbout.com: the address its listing names. */
+export const PUBLIC_DIRECTORY_RESOURCE = 'https://mcp.oddbout.com/claude';
 const UPSTREAM = 'https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter-mcp';
 const METADATA = '/.well-known/oauth-protected-resource';
 /** Each fixed route and the upstream path it reaches; nothing else is forwarded. */
 const ROUTES = new Map([['/mcp', ''], ['/mcp' + METADATA, METADATA], [METADATA + '/mcp', METADATA]]);
 const SIGN_IN_ROUTES = new Map([['/signin', '/signin'], ['/signin' + METADATA, '/signin' + METADATA], [METADATA + '/signin', '/signin' + METADATA]]);
+const DIRECTORY_ROUTES = new Map([['/claude', '/claude'], ['/claude' + METADATA, '/claude' + METADATA], [METADATA + '/claude', '/claude' + METADATA]]);
 export const DOMAIN_CHALLENGE = 'c8ZJAeo0-MPwQFn6nJQ1rcg_qzCq_kxMyIcZJksSfrM';
 export const BRANDED_DOMAIN_CHALLENGE = 'v4qUmFhpjDn1BF6ilHvAVROEnUfTK5XJMumPWkOK8PY';
 // The upstream must answer with headers in HEADER_TIMEOUT_MS; a streamed (SSE) body may then run until TOTAL_TIMEOUT_MS,
@@ -25,9 +28,10 @@ const HEADER_TIMEOUT_MS = 30_000, TOTAL_TIMEOUT_MS = 160_000;
  */
 export async function cloudGateway(req, res, fetcher = fetch, { headerTimeoutMs = HEADER_TIMEOUT_MS, totalTimeoutMs = TOTAL_TIMEOUT_MS } = {}) {
   const route = /** @type {string} */ (req.url); // always set on a request a server received
-  // Our host whatever its case or explicit default port: the sign-in-first routes exist only there.
+  // Our host whatever its case or explicit default port: the sign-in-first and directory routes exist only there.
   const branded = (req.headers.host ?? '').toLowerCase().replace(/:443$/, '') === 'mcp.oddbout.com', signIn = branded && SIGN_IN_ROUTES.has(route);
-  const path = signIn ? SIGN_IN_ROUTES.get(route) : ROUTES.get(route);
+  const directory = branded && DIRECTORY_ROUTES.has(route);
+  const path = signIn ? SIGN_IN_ROUTES.get(route) : directory ? DIRECTORY_ROUTES.get(route) : ROUTES.get(route);
   if (path === undefined && route !== '/.well-known/openai-apps-challenge') return false;
   /** @type {(status: number, body: string, type?: string) => void} */
   const reply = (status, body, type = 'application/json') => { res.writeHead(status, {'content-type':type,'cache-control':'no-store','x-content-type-options':'nosniff'}); res.end(body); };
@@ -42,7 +46,7 @@ export async function cloudGateway(req, res, fetcher = fetch, { headerTimeoutMs 
   // A client that goes away (closes the stream) ends the upstream request too.
   res.once('close', () => { if (!res.writableFinished) control.abort(); });
   try {
-    const resource = signIn ? PUBLIC_SIGN_IN_RESOURCE : branded ? PUBLIC_RESOURCE : LEGACY_PUBLIC_RESOURCE;
+    const resource = signIn ? PUBLIC_SIGN_IN_RESOURCE : directory ? PUBLIC_DIRECTORY_RESOURCE : branded ? PUBLIC_RESOURCE : LEGACY_PUBLIC_RESOURCE;
     const headers = new Headers({'x-oddbout-public-resource':resource});
     // The client's user-agent too: without it the function's logs show only this gateway's, and which client called is what a sign-in diagnosis needs.
     for (const name of ['authorization','content-type','accept','mcp-protocol-version','origin','user-agent']) if (typeof req.headers[name] === 'string') headers.set(name,req.headers[name]);

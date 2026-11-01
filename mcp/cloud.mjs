@@ -12,6 +12,7 @@ import { registerAgentTools } from './cloud/agent-tools.mjs';
 import { registerProfileSetTools } from './cloud/profile-set-tools.mjs';
 import { registerWorkshopTools } from './cloud/workshop-tools.mjs';
 import { HOSTED_INSTRUCTIONS, registerHostedTools } from './cloud/hosted-tools.mjs';
+import { DIRECTORY_DESCRIPTIONS, DIRECTORY_INSTRUCTIONS, DIRECTORY_TITLES } from './cloud/directory-edition.mjs';
 // The cloud MCP's tool families live in ./cloud/ (Edge-only, as this file); these names are this module's as before.
 export { allowedFileUrl, compactText, downloadHostFile } from './cloud/common.mjs';
 export { STYLE_GUIDE } from './cloud/agent-tools.mjs';
@@ -40,6 +41,15 @@ export const SIGN_IN_RESOURCE = `${CLOUD_RESOURCE}/signin`;
  * host it got a 401 and gave up its sign-in. The Supabase address keeps working for connectors already added with it.
  */
 export const PUBLIC_SIGN_IN_RESOURCE = 'https://mcp.oddbout.com/signin';
+/**
+ * The Claude directory edition (2026-11-01, cloud/directory-edition.mjs): the same server at `<function>/claude` lists only the tools a
+ * directory reviewer can run in Claude, signed out like the public address. Its tokens carry the same audience, as the sign-in-first ones do.
+ */
+export const DIRECTORY_RESOURCE = `${CLOUD_RESOURCE}/claude`;
+/** The address the directory listing names, through mcp.oddbout.com (worker/cloud-gateway.mjs). */
+export const PUBLIC_DIRECTORY_RESOURCE = 'https://mcp.oddbout.com/claude';
+/** The page the directory edition's metadata points to: connecting ODDBOUT in Claude. */
+export const DIRECTORY_DOCUMENTATION = 'https://oddbout.com/cloud-plugin/claude.html';
 /** @param {unknown} aud */
 export function validCloudAudience(aud) {
   const current = [CLOUD_RESOURCE, LEGACY_PUBLIC_RESOURCE, PUBLIC_RESOURCE];
@@ -145,11 +155,12 @@ export async function authenticateCloud(db, request, now = Date.now) {
 
 /**
  * @param {{ db: any, identity: Identity | null, fetcher?: typeof fetch, arena?: Arena | null, hosted?: Hosted | null,
- *   host?: { compact?: boolean, caller?: string | null } }} options
+ *   host?: { compact?: boolean, caller?: string | null }, edition?: 'full' | 'directory' }} options
  */
-export function cloudServer({ db, identity, fetcher = fetch, arena = null, hosted = null, host = {} }) {
+export function cloudServer({ db, identity, fetcher = fetch, arena = null, hosted = null, host = {}, edition = 'full' }) {
+  const directory = edition === 'directory';
   const server = new McpServer({ name: 'oddbout-cloud', version: '1.0.0' }, {
-    instructions: (hosted ? HOSTED_INSTRUCTIONS : '') + 'For creation in the user’s workspace, use the user’s own generation account. '
+    instructions: directory ? DIRECTORY_INSTRUCTIONS : (hosted ? HOSTED_INSTRUCTIONS : '') + 'For creation in the user’s workspace, use the user’s own generation account. '
       + 'Verify get_profile matches the intended registration account, especially after adding or switching connected accounts. '
       + 'Call this cloud connector’s check_creation_readiness before first generation, '
       + 'after a workspace restart and before registration. It checks account access; '
@@ -189,13 +200,14 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
   // A write states whether repeating it with the same arguments is safe (idempotentHint). It once defaulted to yes, and three tools that
   // make something new on every call told retrying clients they could repeat them (MCP 점검 2026-10-29).
   /** @type {Register} */
-  const register = (name, title, description, inputSchema, run, { write = false, publish = false, openWorld = false,
+  const registerTool = (name, title, description, inputSchema, run, { write = false, publish = false, openWorld = false,
     idempotent = write ? undefined : true, files = [], profile = false, publicTool = false, diagnostic = false } = {}) => {
     if (typeof idempotent !== 'boolean') throw Error(`${name}: a write tool states idempotent`);
     // Register types each tool's args; the SDK parses them with inputSchema before run sees them.
     server.registerTool(name, { title, description, inputSchema: /** @type {z.ZodRawShape} */ (inputSchema),
       ...(profile ? { outputSchema: z.object({ id: z.string().min(1), email: z.string().optional(), nickname: z.string().optional() }).strict() } : {}),
-      annotations: { ...READ, readOnlyHint: !write, openWorldHint: openWorld, destructiveHint: publish, idempotentHint: idempotent },
+      // The directory edition repeats the title among the annotations, where Anthropic's tool checklist looks for it with the hints.
+      annotations: { ...(directory ? { title } : {}), ...READ, readOnlyHint: !write, openWorldHint: openWorld, destructiveHint: publish, idempotentHint: idempotent },
       _meta: { securitySchemes: publicTool ? [{ type: 'noauth' }] : AUTH,
         ...(files.length ? { 'openai/fileParams': files } : {}), ...(profile ? { 'openai/profile': true } : {}) } }, async (/** @type {Record<string, unknown>} */ args) => {
       if (!publicTool && !identity) return { ...output({ ok: false, code: 'authentication-required' }),
@@ -208,6 +220,12 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
       catch (error) { return output({ ok: false, code: error instanceof Problem ? error.message : 'cloud-operation-unavailable' }); }
     });
   };
+  // The directory edition registers only its tools, under their titles there; any other is unknown to it, not refused.
+  /** @type {Register} */
+  const register = directory ? (name, title, description, inputSchema, run, options) => {
+    const directoryTitle = DIRECTORY_TITLES.get(name);
+    if (directoryTitle) registerTool(name, directoryTitle, DIRECTORY_DESCRIPTIONS.get(name) ?? description, inputSchema, run, options);
+  } : registerTool;
   registerRegistrationTools({ register, db, identity, invoke, fetcher, recordAgent });
   registerProfileSetTools({ register, db, identity, invoke, fetcher });
   // 에이전트 도구 (3단계, 2026-10-27): read ODDBOUT's records, spar, enter cups and tune the fighting style. Listed only with the arena key.
@@ -215,7 +233,7 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
     registerAgentTools({ register, arena, db, identity, invoke, recordAgent, caller: host.caller ?? null });
     registerWorkshopTools({ register, arena, invoke });
   }
-  if (hosted) registerHostedTools({ register, db, identity, invoke, fetcher, hosted });
+  if (hosted && !directory) registerHostedTools({ register, db, identity, invoke, fetcher, hosted });
   registerFileInputProbe({ register, fileSchema: FILE, identity, downloadFile: downloadHostFile, fetcher });
   registerCreatorSources({ register, fileSchema: FILE, identity, db, downloadFile: downloadHostFile, fetcher });
   return server;
@@ -226,18 +244,20 @@ const ALLOWED_ORIGINS = new Set(['https://chatgpt.com', 'https://chat.openai.com
   'https://grok.com', 'https://www.grok.com', 'https://cursor.com', 'https://www.cursor.com', 'https://claude.ai', 'https://claude.com']);
 
 /**
- * Where a request goes: its route under the function, whether it came to the sign-in-first address, and the resource its OAuth metadata
- * names (the sign-in-first address, the public address the gateway says it came through, or the function's own).
+ * Where a request goes: its route under the function, whether it came to the sign-in-first address, its edition, and the resource its OAuth
+ * metadata names (the sign-in-first or directory address, the public address the gateway says it came through, or the function's own).
  * @param {Request} request
+ * @returns {{ route: string, signInFirst: boolean, edition: 'full' | 'directory', resource: string }}
  */
 function routeOf(request) {
   // The Edge gateway may strip /functions/v1 and replace the origin before forwarding.
   const segments = new URL(request.url).pathname.split('/').filter(Boolean), prefix = segments.indexOf('ai-fighter-mcp');
-  const path = prefix < 0 ? segments : segments.slice(prefix + 1), signInFirst = path[0] === 'signin';
+  const path = prefix < 0 ? segments : segments.slice(prefix + 1), signInFirst = path[0] === 'signin', directory = path[0] === 'claude';
   const requestedResource = request.headers.get('x-oddbout-public-resource') ?? '';
   const resource = signInFirst ? (requestedResource === PUBLIC_SIGN_IN_RESOURCE ? PUBLIC_SIGN_IN_RESOURCE : SIGN_IN_RESOURCE)
+    : directory ? (requestedResource === PUBLIC_DIRECTORY_RESOURCE ? PUBLIC_DIRECTORY_RESOURCE : DIRECTORY_RESOURCE)
     : [PUBLIC_RESOURCE, LEGACY_PUBLIC_RESOURCE].includes(requestedResource) ? requestedResource : CLOUD_RESOURCE;
-  return { route: (signInFirst ? path.slice(1) : path).join('/'), signInFirst, resource };
+  return { route: (signInFirst || directory ? path.slice(1) : path).join('/'), signInFirst, edition: directory ? 'directory' : 'full', resource };
 }
 
 /**
@@ -250,12 +270,14 @@ const signInOf = (db, request) => authenticateCloud(db, request).catch(() => ({ 
 /**
  * The verified identity a call runs as: needed at the sign-in-first address and for account tools (with the problem when there is none),
  * tried for a public tool whose budget is the caller's (a valid token counts it on its owner, anything else on every signed-out agent),
- * else none.
- * @param {any} db @param {Request} request @param {any} body @param {boolean} signInFirst
+ * else none — and none for a tool the directory edition does not have.
+ * @param {any} db @param {Request} request @param {any} body @param {boolean} signInFirst @param {'full' | 'directory'} edition
  * @returns {Promise<SignIn | { identity: Identity | null, problem?: undefined }>}
  */
-async function identityFor(db, request, body, signInFirst) {
+async function identityFor(db, request, body, signInFirst, edition) {
   const tool = body.method === 'tools/call' ? body.params?.name : null;
+  // A tool the directory edition does not list is unknown there, signed in or not: no sign-in to reach a "not found".
+  if (edition === 'directory' && tool !== null && !DIRECTORY_TITLES.has(tool)) return { identity: null };
   if (signInFirst || (tool !== null && !PUBLIC_TOOLS.has(tool))) return signInOf(db, request);
   if (OWNER_BUDGET_TOOLS.has(tool) && request.headers.has('authorization')) return { identity: (await signInOf(db, request)).identity };
   return { identity: null };
@@ -296,10 +318,11 @@ function publishedToolList(result) {
  */
 export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted = null }) {
   return async request => {
-    const { route, signInFirst, resource } = routeOf(request);
+    const { route, signInFirst, edition, resource } = routeOf(request);
     if (route === '.well-known/oauth-protected-resource' && request.method === 'GET') return json({ resource,
       authorization_servers: [CLOUD_ISSUER], scopes_supported: ['openid', 'email', 'profile'],
-      resource_name: 'ODDBOUT character registration', resource_documentation: 'https://oddbout.com/docs.html' });
+      ...(edition === 'directory' ? { resource_name: 'ODDBOUT', resource_documentation: DIRECTORY_DOCUMENTATION }
+        : { resource_name: 'ODDBOUT character registration', resource_documentation: 'https://oddbout.com/docs.html' }) });
     if (route) return json({ error: 'not_found' }, 404);
     const origin = request.headers.get('origin');
     if (origin !== null && !ALLOWED_ORIGINS.has(origin)) return json({ error: 'origin_not_allowed' }, 403);
@@ -335,12 +358,12 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted =
     try { body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, 65536))); }
     catch { return json({ error: 'invalid_request' }, 400); }
     if (!body || Array.isArray(body) || typeof body.method !== 'string') return json({ error: 'invalid_request' }, 400);
-    const { identity, problem } = await identityFor(db, request, body, signInFirst);
+    const { identity, problem } = await identityFor(db, request, body, signInFirst, edition);
     if (problem) return signInProblem(problem);
     // A server per request on purpose: its tools close over this request's verified identity, so no state can carry one
     // user's identity into another's call. Measured 2026-10-28: building it with all tools and answering tools/list
     // takes about 1.8 ms, small beside the network hop, so sharing a server is not worth that guarantee.
-    const server = cloudServer({ db, identity, fetcher, arena, hosted, host: await hostOf(body) });
+    const server = cloudServer({ db, identity, fetcher, arena, hosted, host: await hostOf(body), edition });
     const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     try {
       await server.connect(transport);

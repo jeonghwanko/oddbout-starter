@@ -1,6 +1,54 @@
 # ODDBOUT distribution
 
-**Current source-kit release: 0.6.7** (2026-11-01: explicit public context file handoff; the Dots pin moves to this release).
+**Current source-kit release: 0.6.8** (2026-11-01: file-only packaging and lossless large-animation recovery).
+
+Packaging and session progress now require file and contract checks; numerical and visual quality reports are
+deferred diagnostics. Existing `required`/`engine-loop` plans work without another quality approval. Missing,
+failed or stale gait reports retain their actual status rather than being marked passed. Frame counts, decoding,
+integrity, timings, dimensions, required contract data, selected versions and pending user edits still matter.
+
+The pinned engine adds `game-pack --image-format webp` for lossless WebP-only intermediate packs. It preserves
+RGBA pixels, frames, timing and anchors while avoiding the duplicate PNG copy. An explicit
+`--max-bytes 200000000` permits intermediate files up to 200 MB; the default 50 MB budget and final fighter upload
+limits remain. See [the existing-workspace packaging repair](DOTS-QUICKSTART.md#file-only-packaging-repair-068)
+for running the new tools in a separate directory against existing files without regeneration.
+
+- [Download the 0.6.8 ZIP](https://oddbout.com/creator-kit/0.6.8/4c2fa15c962a0e7d21dd899104fdb2f9c93b4b706d3c1a2c4c067a4911d5797a/oddbout-0.6.8.zip)
+- [Release manifest](https://oddbout.com/creator-kit/0.6.8/4c2fa15c962a0e7d21dd899104fdb2f9c93b4b706d3c1a2c4c067a4911d5797a/release.json)
+- [Download helper](https://oddbout.com/creator-kit/0.6.8/4c2fa15c962a0e7d21dd899104fdb2f9c93b4b706d3c1a2c4c067a4911d5797a/fetch-creator-kit.py)
+
+| Verified item | Value |
+| --- | --- |
+| ZIP size | 4,195,467 bytes |
+| ZIP SHA-256 | `037fb013c464456d9adf7abc13b373e0dc12f28fe3d11b2913518c4586d0ab1f` |
+| Release manifest SHA-256 | `6025f680ae9a4777a8e6f83d5141f737d06e043a19fcd84250c6b795aad4128c` |
+| Runtime manifest SHA-256 | `ed87e7561c1e063eb18cd202c98a774fe4e60dfa404944f7f533d09c444e2979` |
+| Helper SHA-256 | `b66c31ff833816dfa74c90d9155359d3fdd484dff8c12759e48addde01707592` (unchanged) |
+| Build source | `492c6f0eb29a43fcb3d7007da75bbe49f54d6f1d` ([PR #245](https://github.com/jeonghwanko/oddbout-starter/pull/245)) |
+| Tested PR head | `1ee04d28c493472e5daf82d8753138eab96b9865` |
+| Main merge | `4348711eba073ac46dd2cd7223e83d0ac5aa5dcc` |
+| sprite-gen pin | `704cb9e5a34f16a0340e7fc6e46709a047ab02d4` ([engine PR #52](https://github.com/jeonghwanko/sprite-gen-agent/pull/52)) |
+| Pages publication | `4903b4ef0e13a70ee9ee925954928429fb0babf2` |
+
+Both repositories' full PR CI passed before merge. Focused packing tests show that deferred diagnostics do not
+alter package bytes, invalid files still block, and equivalent PNG/WebP inputs produce identical final packages.
+The engine tests verify exact decoded RGBA pixels, frame timing and explicit size-budget behavior. The final PR
+head differs from the archive build source only in a generated Git-plugin skill copy and a test expectation;
+neither is a source-kit archive input.
+
+The trusted helper verified the local archive and runtime manifest and extracted 738 files. The extracted
+launcher's read-only status reported `installed: false`. Publication added only the ZIP, manifest and helper,
+preserved all 6,426 existing site/release files with no changes or deletions, and verified HTTP 200 plus exact
+bytes for all three public release files and 12 unchanged site files at 2026-11-01 13:47:44 UTC.
+
+`deploy/dots-release.json` pins `54ffa66dcb6d07e1c1cff6d60ca79747d6130660` (0.6.8), still `candidate` with
+`savedVmAcceptance: pending`. Publication does not replace an active Dots runtime or republish its saved VM.
+Existing tasks need the separate repair route above. The actual Velora assets were not available in this
+release workspace, so her complete package and registration remain unverified. No generation, login or
+registration was run. A Library download denied by the VM destination allowlist is a separate environment
+preparation issue; this kit neither changes that allowlist nor establishes an HTTP 403 response.
+
+**Previous source-kit release: 0.6.7** (2026-11-01: explicit public context file handoff; the Dots pin moves to this release).
 
 Adds an explicit per-invocation public game-context file and receipt to the context and workspace-tool CLIs.
 The receipt checks the configured source, raw-byte SHA-256 and Git blob identity, and a 15-minute retrieval window.
