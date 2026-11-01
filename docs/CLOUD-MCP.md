@@ -253,9 +253,14 @@ Anthropic의 Claude 커넥터 디렉터리에 내는 주소는 `https://mcp.oddb
 - 32종 중 26종은 대결장 키(`ODDBOUT_ARENA_AGENT_KEY`)가 있을 때만 등록된다. 키가 빠지면 이 판은 6종만 보인다. 배포 확인의 "32종"이 이것을 잡는다.
 - 배포 순서는 DB 마이그레이션 → 함수(`fighter:mcp`) → Render(`worker:deploy`)다. 그 뒤 운영에서 `/claude`의 `tools/list`가 32종인지, 토큰 없는 `get_profile`이 위 401을 받는지,
   메타데이터의 `resource`가 접속 주소와 같은지 읽기 요청으로 확인한다.
-- 제출 전 필수 조건: Claude 연결 안내 페이지 `https://oddbout.com/cloud-plugin/claude.html`이 200으로 답해야 한다(2026-11-01 현재 404 — 메타데이터가 함수 배포 즉시 이 주소를 가리킨다).
+- 제출 전 필수 조건: Claude 연결 안내 페이지 `https://oddbout.com/cloud-plugin/claude.html`(·`claude.ko.html`)이 200으로 답해야 한다. 메타데이터의 `resource_documentation`이다.
+  이 페이지는 `website/cloud-plugin/content.mjs`의 `claude` 키로 만들고 사이트 게시에 함께 나간다(`scripts/build-cloud-plugin-site.mjs`).
+  디렉터리 게시 전에는 커스텀 커넥터 설치 링크(이름·주소가 채워진 추가 창)와 인증 "필요할 때 로그인", OAuth 클라이언트 "자동으로 등록"을 안내한다.
+  같은 날 개인정보·약관·지원 페이지도 연결한 앱 전부(OpenAI·Anthropic·xAI), 게임 도구가 받는 정보, 공개되는 글, 요청 로그 보관(제공자가 30일 안에 지움 —
+  Supabase 요금제별 1~28일, Render Hobby 7일), 보안 신고 창구를 담도록 고쳤다. 머리글은 `ODDBOUT CONNECTOR`다.
   심사 계정의 선수는 프로필 세트가 검증을 통과한 상태여야 한다. 아니면 심사자의 `enter_fighter`가 `profile-set-required`로 끝난다.
-- 디렉터리 심사는 메타데이터 탐색에 10초 한도를 둔다. `mcp.oddbout.com`은 Render 무료 서버라 잠들면 그보다 오래 걸린다. 상시 가동은 비용 결정이라 제출 전에 따로 정한다.
+- 디렉터리 심사는 메타데이터 탐색에 10초 한도를 둔다. `mcp.oddbout.com`은 Render 무료 서버라 잠들면 그보다 오래 걸린다.
+  2026-11-01 사용자 결정: 당분간 무료를 계속 쓰고, 사무실 PC의 crontab이 14분마다 `/health`를 불러 깨워 둔다. 그 PC가 꺼져 있으면 다시 잠드므로 심사 기간에는 켜 둔다.
 
 ## 사용 흐름
 
