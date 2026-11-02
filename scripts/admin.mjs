@@ -7,7 +7,7 @@
 //   profiles [--status review|approved|rejected] | profile-approve <set> | profile-reject <set> --reason <text>
 //   fighters [--status active|removed|all] [--search <text>] [--page <n>] | fighter-remove <fighter> --version <n> --reason <text>
 //   fighter-restore <fighter> --version <n> --reason <text>
-//   fighter <fighter> | replace-package <fighter> <package dir or fighter.json> --reason <text>
+//   fighter <fighter> | replace-package <fighter> <package dir or fighter.json> --reason <text> [--key <uuid>]
 //   edit-profile <fighter> --reason <text> [--profile <json or @file>] [--style <json, null or @file>]
 // Every answer is one JSON object on stdout. A command that changes something only shows what it would do (`dryRun: true`) until it is
 // run again with --yes: the agent shows that to its user and asks first.
@@ -162,20 +162,33 @@ async function jsonFlag(value, name) {
   catch { throw new Error(`invalid-value:--${name}`); }
 }
 
+/** The fighter an edit is about, as the operator sees him before it: name, owner, entry and package hash. @param {Client} client @param {string} fighter */
+async function current(client, fighter) {
+  const { fighter: f } = await client.request(`admin/fighters/${fighter}`);
+  return { name: f.name, ownerId: f.ownerId, entered: Boolean(f.enteredAt), manifestSha256: f.manifestSha256 };
+}
+/** The reason as the edit routes take it: a header, percent-encoded (an address would keep it in the request logs). @param {string} reason */
+const reasonHeader = reason => ({ 'x-admin-reason': encodeURIComponent(reason) });
+
 /**
- * replace-package: the owner's create → upload → submit, as the operator, then the validation's answer (polled up to ten minutes).
+ * replace-package: the owner's create → upload → submit, as the operator, then the validation's answer (polled up to ten minutes). The
+ * dry run reads the fighter (name, owner, entry) so the user sees whose fighter changes; the key names the package it replaces, so the
+ * same package sent again over a newer one is a new submission, not the old answer. Only a package that is now the fighter's is done.
  * @param {string[]} positional @param {Record<string, string | true>} flags @param {() => Promise<Client>} signIn
  * @param {(ms: number) => Promise<unknown>} wait
  */
 async function replacePackage([, target, where], flags, signIn, wait) {
   const fighter = id(target, 'fighter'), reason = text(flags.reason, 'reason');
   if (!where) throw new Error('missing-value:package');
-  const pkg = await readPackage(where), key = typeof flags.key === 'string' ? id(flags.key, 'key') : editKey('package', fighter, pkg.sha);
-  const change = `선수 ${fighter}의 패키지를 ${pkg.sha.slice(0, 12)}…(파일 ${pkg.files.length}개)로 바꿉니다. 출전 중이면 출전을 유지합니다. 사유: ${reason}`;
-  if (flags.yes !== true) return { ok: true, dryRun: true, change, request: { method: 'POST', route: `admin/fighters/${fighter}/submissions`, manifestSha256: pkg.sha, idempotencyKey: key } };
-  const client = await signIn(), query = new URLSearchParams({ reason }).toString();
-  let state = await client.request(`admin/fighters/${fighter}/submissions?${query}`, { method: 'POST',
-    headers: { 'content-type': 'application/json', 'idempotency-key': key }, body: pkg.text });
+  const pkg = await readPackage(where), client = await signIn(), now = await current(client, fighter);
+  const key = typeof flags.key === 'string' ? id(flags.key, 'key') : editKey('package', fighter, now.manifestSha256, pkg.sha);
+  const change = `선수 「${now.name}」(${fighter}, 주인 ${now.ownerId}, ${now.entered ? '출전 중 — 유지' : '출전 안 함'})의 패키지를 `
+    + `${pkg.sha.slice(0, 12)}…(파일 ${pkg.files.length}개)로 바꿉니다. 사유: ${reason}`;
+  const warning = pkg.name !== now.name ? { warning: 'name-differs', packageName: pkg.name, fighterName: now.name } : {};
+  if (flags.yes !== true) return { ok: true, dryRun: true, change, ...warning,
+    request: { method: 'POST', route: `admin/fighters/${fighter}/submissions`, manifestSha256: pkg.sha, idempotencyKey: key } };
+  let state = await client.request(`admin/fighters/${fighter}/submissions`, { method: 'POST',
+    headers: { 'content-type': 'application/json', 'idempotency-key': key, ...reasonHeader(reason) }, body: pkg.text });
   if (state.stage === 'uploading' && state.code !== 'upload-expired') {
     for (const file of pkg.files) await client.request(`admin/submissions/${state.submissionId}/assets/${file.id}`, { method: 'PUT',
       headers: { 'content-type': 'image/webp' }, body: file.bytes });
@@ -185,11 +198,14 @@ async function replacePackage([, target, where], flags, signIn, wait) {
     await wait(10000);
     state = await client.request(`admin/submissions/${state.submissionId}`);
   }
-  return { ...state, done: change };
+  if (state.stage === 'registered' && state.availability === 'active') return { ...state, ...warning, done: change };
+  const code = state.code === 'upload-expired' ? 'upload-expired' : state.stage === 'rejected' ? 'validation-rejected'
+    : state.stage === 'registered' ? `package-${state.availability ?? 'inactive'}` : 'validation-timeout';
+  return { ...state, ok: false, code };
 }
 
 /**
- * edit-profile: the owner's profile or style edit, as the operator, from the fighter's current package.
+ * edit-profile: the owner's profile or style edit, as the operator, from the fighter's current package. The dry run reads the fighter too.
  * @param {string[]} positional @param {Record<string, string | true>} flags @param {() => Promise<Client>} signIn
  */
 async function editProfile([, target], flags, signIn) {
@@ -197,14 +213,13 @@ async function editProfile([, target], flags, signIn) {
   const profile = await jsonFlag(flags.profile, 'profile'), style = await jsonFlag(flags.style, 'style');
   if (profile === undefined && style === undefined) throw new Error('missing-value:--profile');
   const edit = { ...(profile === undefined ? {} : { profile }), ...(style === undefined ? {} : { style }) };
-  const change = `선수 ${fighter}의 ${[profile === undefined ? null : `프로필(${Object.keys(profile ?? {}).join(', ')})`,
+  const client = await signIn(), now = await current(client, fighter);
+  const change = `선수 「${now.name}」(${fighter}, 주인 ${now.ownerId})의 ${[profile === undefined ? null : `프로필(${Object.keys(profile ?? {}).join(', ')})`,
     style === undefined ? null : style === null ? '전투 스타일 지우기' : '전투 스타일'].filter(Boolean).join('·')}을 고칩니다. 출전은 그대로입니다. 사유: ${reason}`;
   if (flags.yes !== true) return { ok: true, dryRun: true, change, request: { method: 'PATCH', route: `admin/fighters/${fighter}/profile`, body: edit } };
-  const client = await signIn();
-  const { fighter: current } = await client.request(`admin/fighters/${fighter}`);
-  const body = JSON.stringify({ ...edit, expectedManifestSha256: current.manifestSha256 });
-  const result = await client.request(`admin/fighters/${fighter}/profile?${new URLSearchParams({ reason })}`, { method: 'PATCH',
-    headers: { 'content-type': 'application/json', 'idempotency-key': editKey('profile', fighter, current.manifestSha256, body) }, body });
+  const body = JSON.stringify({ ...edit, expectedManifestSha256: now.manifestSha256 });
+  const result = await client.request(`admin/fighters/${fighter}/profile`, { method: 'PATCH',
+    headers: { 'content-type': 'application/json', 'idempotency-key': editKey('profile', fighter, now.manifestSha256, body), ...reasonHeader(reason) }, body });
   return { ...result, done: change };
 }
 
@@ -229,6 +244,9 @@ const HINTS = /** @type {Record<string, string>} */ ({
   'fighter-unchanged': '운영 패키지와 같은 내용입니다. 바꿀 것이 없습니다.',
   'open-submission-exists': '그 선수 주인의 다른 제출이 아직 열려 있습니다. 끝난 뒤 다시 하세요.',
   'idempotency-conflict': '같은 키의 다른 제출이 있습니다. --key 로 새 UUID 를 주세요.',
+  'validation-rejected': '서버 검사가 패키지를 거절했습니다(validation). 고친 뒤 다시 보내세요.',
+  'validation-timeout': '10분 안에 검사가 끝나지 않았습니다. fighter <id> 로 상태를 다시 보세요.',
+  'package-superseded': '이 패키지는 이미 다른 패키지로 대체됐습니다. 선수는 지금 패키지 그대로입니다.',
   'package-invalid': '패키지가 계약 검사를 통과하지 못했습니다(errors).',
 });
 

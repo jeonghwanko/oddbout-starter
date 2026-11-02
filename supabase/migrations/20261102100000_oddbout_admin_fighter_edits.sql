@@ -1,15 +1,11 @@
 -- 운영자 선수 수정 (2026-11-02 사용자: "슈퍼 계정으로 어드민이 수정할 수 있는 루트도 하나 만들어두자"): an operator (af_admins) replaces a
 -- fighter's package, or edits his profile and fighting style, without his owner's sign-in. The owner's own functions do the work under
 -- the owner's id, so every check of his own edit holds (account, moderation, open submission, unchanged package, storage budget). The
--- operator's id and reason stay on the submission and in af_admin_fighter_edits. 사용자 결정: an operator's new package keeps the fighter's
--- entry (af_finish clears it only for the owner's own — he enters again after watching his new motions); a profile or style edit keeps it
--- for everyone, as before.
+-- operator's id and reason stay in af_admin_fighter_edits only: the owner reads his own submissions and fighters (RLS), so they hold no
+-- operator id. 사용자 결정: an operator's new package keeps the fighter's entry (`keep_entry`; af_finish clears it only for the owner's own
+-- — he enters again after watching his new motions); a profile or style edit keeps it for everyone, as before.
 
-alter table public.af_submissions add column admin_actor uuid references auth.users(id), add column admin_reason text,
-  add column keep_entry boolean not null default false;
-alter table public.af_submissions add constraint af_submissions_admin_edit check
-  ((admin_actor is null and admin_reason is null and not keep_entry)
-    or (admin_actor is not null and admin_reason is not null and length(btrim(admin_reason)) between 1 and 500));
+alter table public.af_submissions add column keep_entry boolean not null default false;
 
 create table public.af_admin_fighter_edits (
   id bigint generated always as identity primary key,
@@ -29,26 +25,28 @@ grant all on public.af_admin_fighter_edits to service_role;
 grant usage,select on sequence public.af_admin_fighter_edits_id_seq to service_role;
 create policy af_admin_fighter_edits_service on public.af_admin_fighter_edits for all to service_role using(true) with check(true);
 
--- A new package for someone's fighter, as his owner's af_create_submission makes it. A retry with the same key answers the same row;
--- a key the owner already used for his own submission is a conflict.
+-- A new package for someone's fighter, as his owner's af_create_submission makes it. A retry by the same operator with the same key answers
+-- the same row; a key the owner used for his own submission is a conflict, even one he is creating at this moment (the row must be this
+-- transaction's: `created_at = now()`).
 create function public.af_admin_create_submission(p_actor uuid,p_fighter uuid,p_key uuid,p_text text,p_sha text,p_bytes bigint,p_reason text)
 returns public.af_submissions language plpgsql security invoker set search_path = '' as $$
-declare f public.af_fighters; s public.af_submissions; reason text := btrim(coalesce(p_reason,''));
+declare f public.af_fighters; s public.af_submissions; e public.af_admin_fighter_edits; reason text := btrim(coalesce(p_reason,''));
 begin
   if not public.af_admin_account(p_actor) then raise exception 'admin-required'; end if;
   if length(reason) not between 1 and 500 then raise exception 'invalid-reason'; end if;
   -- Not locked: the owner's functions lock af_settings before the fighter, and af_finish reads the entry again when the package lands.
   select * into f from public.af_fighters where id=p_fighter;
   if not found or f.deleted_at is not null then raise exception 'fighter-not-found'; end if;
-  select * into s from public.af_submissions where owner_id=f.owner_id and idempotency_key=p_key;
-  if found and s.admin_actor is distinct from p_actor then raise exception 'idempotency-conflict'; end if;
   s := public.af_create_submission(f.owner_id,p_key,p_text,p_sha,p_bytes,p_fighter);
-  if s.admin_actor is null then
-    update public.af_submissions set admin_actor=p_actor,admin_reason=reason,keep_entry=f.entered_at is not null
-      where id=s.id returning * into s;
-    insert into public.af_admin_fighter_edits(actor,fighter_id,owner_id,submission_id,kind,reason,kept_entry)
-      values(p_actor,f.id,f.owner_id,s.id,'package',reason,s.keep_entry);
+  select * into e from public.af_admin_fighter_edits where submission_id=s.id;
+  if found then
+    if e.actor is distinct from p_actor or e.kind<>'package' then raise exception 'idempotency-conflict'; end if;
+    return s;
   end if;
+  if s.created_at<>now() then raise exception 'idempotency-conflict'; end if;
+  update public.af_submissions set keep_entry=f.entered_at is not null where id=s.id returning * into s;
+  insert into public.af_admin_fighter_edits(actor,fighter_id,owner_id,submission_id,kind,reason,kept_entry)
+    values(p_actor,f.id,f.owner_id,s.id,'package',reason,s.keep_entry);
   return s;
 end $$;
 
@@ -58,7 +56,8 @@ language plpgsql security invoker set search_path = '' as $$
 declare s public.af_submissions;
 begin
   if not public.af_admin_account(p_actor) then raise exception 'admin-required'; end if;
-  select * into s from public.af_submissions where id=p_id and admin_actor is not null;
+  select s2.* into s from public.af_submissions s2 join public.af_admin_fighter_edits e on e.submission_id=s2.id
+    where s2.id=p_id and e.kind='package';
   if not found then raise exception 'not-found'; end if;
   return public.af_submit(s.owner_id,s.id);
 end $$;
@@ -66,20 +65,21 @@ end $$;
 -- A profile or style edit of someone's fighter, as his owner's af_update_fighter_profile makes it (registered at once, entry kept).
 create function public.af_admin_update_fighter_profile(p_actor uuid,p_reason text,p_owner uuid,p_key uuid,p_fighter uuid,p_base uuid,p_text text,p_sha text)
 returns public.af_submissions language plpgsql security invoker set search_path = '' as $$
-declare f public.af_fighters; s public.af_submissions; reason text := btrim(coalesce(p_reason,''));
+declare f public.af_fighters; s public.af_submissions; e public.af_admin_fighter_edits; reason text := btrim(coalesce(p_reason,''));
 begin
   if not public.af_admin_account(p_actor) then raise exception 'admin-required'; end if;
   if length(reason) not between 1 and 500 then raise exception 'invalid-reason'; end if;
   select * into f from public.af_fighters where id=p_fighter and owner_id=p_owner;
   if not found or f.deleted_at is not null then raise exception 'fighter-not-found'; end if;
-  select * into s from public.af_submissions where owner_id=p_owner and idempotency_key=p_key;
-  if found and s.admin_actor is distinct from p_actor then raise exception 'idempotency-conflict'; end if;
   s := public.af_update_fighter_profile(p_owner,p_key,p_fighter,p_base,p_text,p_sha);
-  if s.admin_actor is null then
-    update public.af_submissions set admin_actor=p_actor,admin_reason=reason where id=s.id returning * into s;
-    insert into public.af_admin_fighter_edits(actor,fighter_id,owner_id,submission_id,kind,reason,kept_entry)
-      values(p_actor,f.id,f.owner_id,s.id,'profile',reason,f.entered_at is not null);
+  select * into e from public.af_admin_fighter_edits where submission_id=s.id;
+  if found then
+    if e.actor is distinct from p_actor or e.kind<>'profile' then raise exception 'idempotency-conflict'; end if;
+    return s;
   end if;
+  if s.created_at<>now() then raise exception 'idempotency-conflict'; end if;
+  insert into public.af_admin_fighter_edits(actor,fighter_id,owner_id,submission_id,kind,reason,kept_entry)
+    values(p_actor,f.id,f.owner_id,s.id,'profile',reason,f.entered_at is not null);
   return s;
 end $$;
 
@@ -119,7 +119,7 @@ begin
       -- Same row, new package: the ID, created_at and moderation fields stay; the duel record follows the ID. The entry does not, unless an
       -- operator made the package (`keep_entry`) — then it stays as it stands now (an owner who withdrew meanwhile stays withdrawn).
       if s.keep_entry and f.entered_at is not null then
-        evidence := evidence||jsonb_build_object('adminEntryKept',jsonb_build_object('submission',s.id,'actor',s.admin_actor,'at',now()));
+        evidence := evidence||jsonb_build_object('adminEntryKept',jsonb_build_object('submission',s.id,'at',now()));
       end if;
       update public.af_fighters set status='registered',submission_id=s.id,manifest_sha=s.manifest_sha,profile=s.manifest->'profile',review_state='approved',
         runtime_approved=true,runtime_scope='arena-player-v1',runtime_manifest_sha=s.manifest_sha,duel_approved=true,duel_manifest_sha=s.manifest_sha,

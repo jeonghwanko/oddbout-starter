@@ -37,18 +37,26 @@
 ## 남의 선수 고치기 (2026-11-02)
 
 운영자가 선수 주인의 로그인 없이 그 선수의 패키지·프로필·전투 스타일을 고친다. 서버는 주인이 직접 고칠 때와 같은 함수와 검사를 주인 계정으로
-돌린다(계정 상태, 내려진 선수, 열린 제출, 같은 패키지, 저장 한도). 다른 점은 셋이다.
+돌린다(계정 상태, 내려진 선수, 열린 제출, 같은 패키지, 저장 한도). 그래서 주인 계정이 꺼졌거나 그 계정의 요청 한도에 걸리면 운영자 수정도 같은
+코드(`account-disabled`·`rate-limit`)로 실패한다. 주인 수정과 다른 점은 셋이다.
 
-- 운영자 계정과 사유가 제출 행(`af_submissions.admin_actor`·`admin_reason`)과 감사 표(`af_admin_fighter_edits`)에 남는다. `fighter <id>`가 최근 5개를 보인다.
-- 운영자가 올린 새 패키지는 출전을 유지한다. 주인이 올린 새 패키지는 전처럼 출전을 풀고, 주인이 새 동작을 본 뒤 다시 출전시킨다.
-  프로필·스타일 수정은 누가 하든 출전을 유지한다.
+- 운영자 계정과 사유는 비공개 감사 표(`af_admin_fighter_edits`)에만 남는다. 주인은 자기 제출·선수 행을 읽으므로 그 행에는 운영자 정보를 두지 않는다.
+  `fighter <id>`가 최근 5개를 결과 상태와 함께 보인다(검사에서 거절되거나 만료된 시도도 보인다).
+- 운영자가 올린 새 패키지는 출전을 유지한다(`af_submissions.keep_entry`). 주인이 올린 새 패키지는 전처럼 출전을 풀고, 주인이 새 동작을 본 뒤
+  다시 출전시킨다. 프로필·스타일 수정은 누가 하든 출전을 유지한다.
 - 파일은 주인의 저장 경로(`<주인>/<제출>/…`)에 들어간다. 운영자의 제출은 `admin/submissions/<id>`로만 다루고, 주인의 제출은 다루지 않는다.
+  주인이 이미 쓴 열쇠(`idempotency-key`)는 주인의 것이다. 운영자가 같은 열쇠를 보내면 `idempotency-conflict`다.
+
+시험 실행도 선수를 읽어 이름·주인·출전 여부를 보인다. 패키지의 이름이 지금 이름과 다르면 `warning: name-differs`를 붙인다. 다른 선수 id를
+붙여 넣지 않았는지 그 문장으로 확인한다.
 
 `replace-package`는 패키지를 계약으로 검사하고 파일마다 크기·해시를 맞춘 뒤 보낸다. 만들기 → 파일 올리기 → 검사 대기열 → 결과(최대 10분)를
-차례로 하고 마지막 상태를 돌려준다. 같은 선수·같은 패키지는 같은 열쇠(`idempotency-key`)를 써서, 연결이 끊긴 뒤 다시 부르면 이어서 한다.
-검사에서 거절된 같은 패키지를 다시 보내려면 `--key <새 UUID>`를 준다. `edit-profile`은 지금 패키지 해시를 읽고 그 위에 고친다.
-API는 `api/admin-fighter-edits.mjs`(`GET admin/fighters/<id>`, `POST admin/fighters/<id>/submissions?reason=`, `PUT admin/submissions/<id>/assets/<asset>`,
-`POST admin/submissions/<id>/submit`, `GET admin/submissions/<id>`, `PATCH admin/fighters/<id>/profile?reason=`), 데이터베이스는
+차례로 한다. 패키지가 그 선수의 지금 패키지가 됐을 때만 `done`이다. 아니면 `ok: false`와 `validation-rejected`·`validation-timeout`·
+`package-superseded`·`upload-expired` 중 하나다. 열쇠는 선수·지금 패키지·새 패키지로 정한다. 연결이 끊긴 뒤 다시 부르면 이어서 하고,
+그사이 다른 패키지가 올라갔으면 새 제출이 된다. 검사에서 거절된 같은 패키지를 다시 보내려면 `--key <새 UUID>`를 준다.
+`edit-profile`은 지금 패키지 해시를 읽고 그 위에 고친다. 사유는 요청 주소가 아니라 `X-Admin-Reason` 헤더(퍼센트 인코딩)로 간다.
+API는 `api/admin-fighter-edits.mjs`(`GET admin/fighters/<id>`, `POST admin/fighters/<id>/submissions`, `PUT admin/submissions/<id>/assets/<asset>`,
+`POST admin/submissions/<id>/submit`, `GET admin/submissions/<id>`, `PATCH admin/fighters/<id>/profile`), 데이터베이스는
 `supabase/migrations/20261102100000_oddbout_admin_fighter_edits.sql`, 시험은 `test/admin-fighter-edits.test.mjs`다.
 
 ## 바꾸는 명령은 두 번 부른다
