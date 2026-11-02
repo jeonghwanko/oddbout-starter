@@ -363,10 +363,10 @@ export async function main({ once = false } = {}) {
       fetchBytes: async url => { const r = await fetch(url, { signal: AbortSignal.timeout(60_000) }); if (!r.ok) throw new Error(`download ${r.status}`); return new Uint8Array(await r.arrayBuffer()); },
       motionsPy: args => unlessStopped(controller.signal, () => run(python, ['-I', path.join(ROOT, 'bin', 'motions.py'), ...args], { cwd: kit, log, signal: controller.signal })
         .then(code => ({ code }))),
-      // Method 5: at 6 libwebp's slowest alpha search took 3–7 s per transparent look instead of 0.1–0.2 s, for 1 % fewer bytes. `side`: the
-      // longest side kept (1024; the expression sheet keeps its 1536, which its profile set takes exactly).
-      toWebp: async (from, to, side = 1024) => {
-        const code = await run(python, ['-I', '-c', 'import sys\nfrom PIL import Image\nim = Image.open(sys.argv[1]); s = int(sys.argv[3]); im.thumbnail((s, s)); im.save(sys.argv[2], "WEBP", quality=90, method=5)', from, to, String(side)], { cwd: kit, log });
+      // Method 5: at 6 libwebp's slowest alpha search took 3–7 s per transparent look instead of 0.1–0.2 s, for 1 % fewer bytes. `size`: the
+      // longest side kept (1024), or `<width>x<height>` exactly (the expression sheet, which its profile set takes at 1536 × 1024).
+      toWebp: async (from, to, size = '1024') => {
+        const code = await run(python, ['-I', '-c', 'import sys\nfrom PIL import Image\nim = Image.open(sys.argv[1]); a = sys.argv[3]\nif "x" in a: im = im.resize(tuple(int(n) for n in a.split("x")), Image.LANCZOS)\nelse: im.thumbnail((int(a), int(a)))\nim.save(sys.argv[2], "WEBP", quality=90, method=5)', from, to, String(size)], { cwd: kit, log });
         if (code !== 0) throw Object.assign(new Error('webp-failed'), { code: 'webp-failed' });
       },
       // Review evidence over the server's limits (2 MiB, 2048 px): lossless WebP, at most 2048 px, nearest so pixel art stays sharp.

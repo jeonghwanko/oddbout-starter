@@ -554,12 +554,13 @@ test('a hosted fighter\'s chosen front becomes his profile set when his package 
       width: 1024, height: 1536, face: { x: 400, y: 30, side: 250 } });
     // A sheet that is not this front's, or not the set's size, is left out; the front stays.
     const otherSheet = await front('front-b-0', { x: 400, y: 30, side: 250 }, 'expressions-0-a');
-    assert.deepEqual([otherSheet.status, otherSheet.body.expressionsRefused, 'expressions' in otherSheet.body.profileFront], [200, 'invalid-artifact', false]);
+    assert.deepEqual([otherSheet.status, otherSheet.body.expressionsRefused, 'expressions' in otherSheet.body], [200, 'invalid-artifact', false]);
     await work('PUT', `jobs/${held.id}/artifacts/expressions-0-b`, webp(1024, 1024), { 'x-generation-lease': held.leaseToken, 'content-type': 'image/webp' });
     assert.equal((await front('front-b-0', { x: 400, y: 30, side: 250 }, 'expressions-0-b')).body.expressionsRefused, 'EXPRESSIONS_DIMENSIONS');
     await work('PUT', `jobs/${held.id}/artifacts/expressions-0-b`, sheet, { 'x-generation-lease': held.leaseToken, 'content-type': 'image/webp' });
     const withSheet = await front('front-b-0', { x: 400, y: 30, side: 250 }, 'expressions-0-b');
-    assert.deepEqual(withSheet.body.profileFront.expressions, { artifact: 'expressions-0-b', path: 'expressions.webp', bytes: 64, sha256: await sha256(sheet),
+    assert.equal('expressions' in withSheet.body.profileFront, false, 'the front stays as an API before the sheet reads it');
+    assert.deepEqual(withSheet.body.expressions, { artifact: 'expressions-0-b', path: 'expressions.webp', bytes: 64, sha256: await sha256(sheet),
       width: 1536, height: 1024 });
     // The package goes in and the validator registers it: the set is made from the kept front and queued for its own check.
     const created = await work('POST', `jobs/${held.id}/submission`, JSON.stringify(example), json);
@@ -830,4 +831,25 @@ test('a request\'s check refuses refs it could not take: another account\'s, use
     assert.equal(made.status, 200, JSON.stringify(made.body));
     assert.equal((await check([mine])).body.code, 'invalid-refs');
   } finally { await sql.close(); }
+});
+
+// 리뷰 (2026-11-03): a hosted sheet that cannot be read is left out; the front's set still goes in.
+test('a hosted fighter\'s sheet that cannot be read leaves his front\'s set as it was', async () => {
+  const { attachJobProfileSet } = await import('../api/generations.mjs');
+  const front = webp(1024, 1536), owner = crypto.randomUUID(), job = crypto.randomUUID(), fighter = crypto.randomUUID();
+  const frontFile = { path: 'front.webp', bytes: front.length, sha256: await sha256(front), width: 1024, height: 1536 };
+  const rpcs = [], stored = [];
+  const db = {
+    from: () => { const q = { select: () => q, eq: () => q, update: () => q,
+      maybeSingle: async () => ({ data: { id: job, owner_id: owner, profile_set_id: null, profile_front: { artifact: 'front-a-0', ...frontFile, face: { x: 400, y: 30, side: 250 } },
+        profile_expressions: { artifact: 'expressions-0-a', path: 'expressions.webp', bytes: 64, sha256: 'e'.repeat(64), width: 1536, height: 1024 } } }),
+      then: (ok, no) => Promise.resolve({ error: null }).then(ok, no) }; return q; },
+    rpc: async (name, args) => { rpcs.push([name, args]); return { data: { id: crypto.randomUUID() }, error: null }; },
+    storage: { from: () => ({
+      download: async path => path.endsWith('front-a-0.webp') ? { data: new Blob([front]), error: null } : { data: null, error: { message: 'storage down' } },
+      upload: async path => { stored.push(path); return { error: null }; } }) } };
+  assert.ok(await attachJobProfileSet(db, { id: crypto.randomUUID(), status: 'registered', fighter_id: fighter }));
+  const created = rpcs.find(([name]) => name === 'af_profile_set_create')[1];
+  assert.equal('expressions' in JSON.parse(created.p_text), false);
+  assert.deepEqual(stored.map(p => p.split('/').at(-1)), ['front.webp']);
 });

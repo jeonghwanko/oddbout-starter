@@ -871,9 +871,10 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
   async function expressionSheet(job, dir, front) {
     const name = expressionsName(job.appearanceRound, job.choice), folder = path.join(dir, 'looks', name);
     const event = data => Promise.resolve(api.progress?.(job, undefined, { kind: 'expressions', ...data })).catch(() => {});
+    const started = path.join(folder, 'started');
     try {
       await mkdir(folder, { recursive: true });
-      const png = path.join(folder, 'sheet.png'), report = path.join(folder, 'sheet.report.json'), started = path.join(folder, 'started');
+      const png = path.join(folder, 'sheet.png'), report = path.join(folder, 'sheet.report.json');
       const webp = path.join(folder, `${name}.webp`), uploaded = path.join(folder, 'uploaded.json');
       if (existsSync(uploaded)) return;
       if (!existsSync(png) || !await finishedLook(report)) {
@@ -881,17 +882,30 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
         await writeFile(started, new Date().toISOString());
         const promptFile = path.join(folder, 'prompt.txt');
         await writeFile(promptFile, expressionsPrompt(job.brief));
+        const since = Date.now();
         const { code } = await og(expressionsCommand({ promptFile, out: png, report, front, anchor: styleAnchor }));
+        // og refused it before it ran (no slot, the account's allowance: exit 3 or 75 and no report of this run): nothing was sent, so a
+        // later run may draw it (리뷰 2026-11-03). Anything else may have been paid for and is never drawn again.
+        if (code !== 0 && [NOT_STARTED_EXIT, ASK_EXIT].includes(code) && !await readOutcome(report, { since })) {
+          await rm(started, { force: true });
+          return event({ outcome: 'failed', code: `expressions-not-started-${code}` });
+        }
         if (code !== 0 || !existsSync(png)) return event({ outcome: 'failed', code: `expressions-exit-${code}` });
       }
-      // The profile set takes the sheet at exactly its size: another one goes without (no drawing again).
+      // codex sizes the picture itself (`--aspect-ratio` reaches grok and openai only): a 3:2 sheet is fitted to the set's exact size, any
+      // other shape goes without (no drawing again).
       const size = pngSize(await readFile(png));
-      if (size?.width !== EXPRESSIONS_SIZE.width || size?.height !== EXPRESSIONS_SIZE.height) return event({ outcome: 'failed', code: 'expressions-size' });
-      if (!existsSync(webp)) await toWebp(png, webp, EXPRESSIONS_SIZE.width);
+      if (!size || Math.abs(size.width / size.height - EXPRESSIONS_SIZE.width / EXPRESSIONS_SIZE.height) > 0.01)
+        return event({ outcome: 'failed', code: 'expressions-size' });
+      if (!existsSync(webp)) await toWebp(png, webp, `${EXPRESSIONS_SIZE.width}x${EXPRESSIONS_SIZE.height}`);
       await api.artifact(job, name, await readFile(webp));
       await writeFile(uploaded, JSON.stringify({ artifact: name }));
       await event({ outcome: 'chosen', artifact: name });
-    } catch { await event({ outcome: 'failed', code: 'expressions-error' }); }
+    } catch (error) {
+      // A stopped stage refuses the run before og starts it: nothing was sent.
+      if (error?.code === 'stage-stopped') await rm(started, { force: true }).catch(() => {});
+      await event({ outcome: 'failed', code: 'expressions-error' });
+    }
   }
 
   /** One loop (walk or run) the engine cut without a retake reason and the judge passed, or the reason none was. */
@@ -1543,8 +1557,10 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       const out = path.join(dir, 'looks', `${chosen.name}.face.json`);
       if (!existsSync(out) && (await motionsPy(['face-box', chosen.file, out])).code !== 0) return;
       const sheet = await readJson(path.join(dir, 'looks', expressionsName(job.appearanceRound, job.choice), 'uploaded.json')).catch(() => null);
-      const reply = await api.profileFront(job, { artifact: chosen.name, face: await readJson(out),
-        ...(typeof sheet?.artifact === 'string' ? { expressions: sheet.artifact } : {}) });
+      const front = { artifact: chosen.name, face: await readJson(out) };
+      let reply = await api.profileFront(job, { ...front, ...(typeof sheet?.artifact === 'string' ? { expressions: sheet.artifact } : {}) });
+      // An API from before the sheet refuses the field (`invalid-body`): the front goes alone (리뷰 2026-11-03, a host updated first).
+      if (!reply?.ok && reply?.code === 'invalid-body' && typeof sheet?.artifact === 'string') reply = await api.profileFront(job, front);
       await Promise.resolve(api.progress?.(job, undefined, { kind: 'profile-front', outcome: reply?.ok ? 'ok' : 'refused',
         ...(reply?.ok ? {} : { code: String(reply?.code ?? 'refused').slice(0, 60) }),
         ...(reply?.ok && reply.expressionsRefused ? { expressionsRefused: String(reply.expressionsRefused).slice(0, 60) } : {}) })).catch(() => {});

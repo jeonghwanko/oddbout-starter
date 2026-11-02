@@ -24,7 +24,7 @@ import { accountTokens } from './account.mjs';
  *   preview: unknown, profile: any, submission_id: string | null, progress: number, error_code: string | null, lease_token: string | null,
  *   lease_expires_at: string | null, created_at: string, updated_at: string, delegate: boolean, host_choice: string,
  *   requested_host: string | null, assigned_host: string | null, started_at?: string | null, charged_at?: string | null,
- *   refunded_at?: string | null, profile_front?: any, profile_set_id?: string | null }} Job
+ *   refunded_at?: string | null, profile_front?: any, profile_expressions?: any, profile_set_id?: string | null }} Job
  * @typedef {{ id: string, path: string, content_type: string, width: number, height: number }} Upload  A job's reference picture (af_generation_uploads).
  */
 
@@ -123,10 +123,11 @@ export const artifactPath = (job, name) => `jobs/${job}/${name}.webp`;
  */
 export async function attachJobProfileSet(db, submission) {
   if (submission?.status !== 'registered' || !submission.fighter_id) return null;
-  const { data: job, error } = await db.from('af_generation_jobs').select('id,owner_id,profile_front,profile_set_id').eq('submission_id', submission.id).maybeSingle();
+  const { data: job, error } = await db.from('af_generation_jobs').select('id,owner_id,profile_front,profile_expressions,profile_set_id')
+    .eq('submission_id', submission.id).maybeSingle();
   if (error) throw new Problem(503, 'database-unavailable');
   if (!job?.profile_front || job.profile_set_id) return job?.profile_set_id ?? null;
-  const { artifact, face, expressions: sheet, ...front } = job.profile_front;
+  const { artifact, face, ...front } = job.profile_front, sheet = job.profile_expressions;
   /** @type {(name: string) => Promise<Uint8Array<ArrayBuffer>>} */
   const artifactBytes = async name => {
     const { data: download, error: downloadError } = await db.storage.from(GENERATION_BUCKET).download(artifactPath(job.id, name));
@@ -136,9 +137,10 @@ export async function attachJobProfileSet(db, submission) {
   if (typeof artifact !== 'string' || !parseProfileSet(JSON.stringify({ version: PROFILE_SET_VERSION, front, face })).ok) return null;
   const bytes = await artifactBytes(artifact);
   if (bytes.length !== front.bytes || await sha256(bytes) !== front.sha256) return null;
-  // His expression sheet (2026-11-03), checked as the front is: one that no longer matches is left out, and his set goes in without it.
+  // His expression sheet (2026-11-03), checked as the front is: one that cannot be read or no longer matches is left out, and his set
+  // goes in without it (리뷰: a sheet's storage error took the front's set down).
   const { artifact: sheetArtifact, ...expressions } = sheet && typeof sheet === 'object' ? sheet : { artifact: null };
-  const sheetBytes = typeof sheetArtifact === 'string' ? await artifactBytes(sheetArtifact) : null;
+  const sheetBytes = typeof sheetArtifact === 'string' ? await artifactBytes(sheetArtifact).catch(() => null) : null;
   const withSheet = sheetBytes && sheetBytes.length === expressions.bytes && await sha256(sheetBytes) === expressions.sha256;
   const text = JSON.stringify({ version: PROFILE_SET_VERSION, front, face, ...(withSheet ? { expressions } : {}) });
   if (!parseProfileSet(text).ok) return null;
@@ -147,7 +149,11 @@ export async function attachJobProfileSet(db, submission) {
   const set = await rpc('af_profile_set_create', { p_owner: job.owner_id, p_fighter: submission.fighter_id, p_key: job.id, p_text: text,
     p_sha: await sha256(new TextEncoder().encode(text)), p_bytes: front.bytes });
   await storeOnce(db, BUCKET, profileSetKey(job.owner_id, set.id, 'front'), bytes, front.sha256);
-  if (withSheet && sheetBytes) await storeOnce(db, BUCKET, profileSetKey(job.owner_id, set.id, 'expressions'), sheetBytes, expressions.sha256);
+  // Named in the set by now: one more try before the set is left waiting for it (as the front's own store is).
+  if (withSheet && sheetBytes) {
+    const key = profileSetKey(job.owner_id, set.id, 'expressions');
+    await storeOnce(db, BUCKET, key, sheetBytes, expressions.sha256).catch(() => storeOnce(db, BUCKET, key, sheetBytes, expressions.sha256));
+  }
   await rpc('af_profile_set_submit', { p_owner: job.owner_id, p_id: set.id });
   const { error: linkError } = await db.from('af_generation_jobs').update({ profile_set_id: set.id }).eq('id', job.id);
   if (linkError) throw new Problem(503, 'database-unavailable');
@@ -626,10 +632,12 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       const parsed = parseProfileSet(JSON.stringify({ version: PROFILE_SET_VERSION, front, face: body.face }));
       if (!parsed.ok) throw new Problem(422, 'invalid-profile-set', parsed.errors);
       const sheet = body.expressions === undefined ? null : await jobSheet(row, front, parsed.data.face, body.expressions);
-      const profileFront = { artifact: chosen, ...front, face: parsed.data.face, ...(sheet?.expressions ? { expressions: sheet.expressions } : {}) };
-      const { error: saveError } = await db.from('af_generation_jobs').update({ profile_front: profileFront }).eq('id', row.id);
+      const profileFront = { artifact: chosen, ...front, face: parsed.data.face };
+      // The sheet in its own column: an API from before it reads `profile_front` alone (a rollback keeps the front's set).
+      const { error: saveError } = await db.from('af_generation_jobs').update({ profile_front: profileFront, profile_expressions: sheet?.expressions ?? null })
+        .eq('id', row.id);
       if (saveError) throw new Problem(503, 'database-unavailable');
-      return { ok: true, profileFront, ...(sheet?.refused ? { expressionsRefused: sheet.refused } : {}) };
+      return { ok: true, profileFront, ...(sheet?.expressions ? { expressions: sheet.expressions } : {}), ...(sheet?.refused ? { expressionsRefused: sheet.refused } : {}) };
     }
     if (parts[1] === 'jobs' && parts[3] === 'submission') {
       const row = await heldForSubmission(request, parts[2]);

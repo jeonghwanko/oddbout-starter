@@ -68,17 +68,22 @@ test('a passing painting: the card and face are stored under the lease, then fin
   assert.deepEqual((await sharp(Buffer.from(calls.derived.card)).metadata()).height, 600);
 });
 
-test('an expression sheet (2026-11-03): downloaded with the front, the arena\'s 1152 × 768 copy stored as `sheet`; an empty cell rejects the set', async () => {
+test('an expression sheet (2026-11-03): downloaded with the front, the arena\'s 1152 × 768 copy stored as `sheet`; a failing sheet is left out, never the front', async () => {
   const calls = await serve(await painting(), undefined, { sheet: await expressionSheet() });
   assert.equal((await runProfileSetWithConfig(config)).stage, 'review');
   const { sheet } = calls.finish.derived;
   assert.deepEqual(sheet, { sha256: await sha256(calls.derived.sheet), bytes: calls.derived.sheet.length, width: 1152, height: 768, cell: 384 });
   const stored = await sharp(Buffer.from(calls.derived.sheet)).metadata();
   assert.deepEqual([stored.format, stored.width, stored.height, stored.hasAlpha], ['webp', 1152, 768, true]);
+  // A sheet without its KO face (리뷰 2026-11-03: a hosted sheet nobody checked took the front's set down): the set passes without it.
   const empty = await serve(await painting(), undefined, { sheet: await expressionSheet({ empty: true }) });
+  assert.equal((await runProfileSetWithConfig(config)).stage, 'review');
+  assert.deepEqual([empty.finish.passed, empty.finish.result.errors, empty.finish.result.sheetErrors], [true, [], [{ code: 'EXPRESSIONS_EMPTY_CELL', path: '/expressions' }]]);
+  assert.deepEqual(Object.keys(empty.derived).sort(), ['card', 'face']); assert.equal('sheet' in empty.finish.derived, false);
+  // A front that fails takes the set down with both reasons.
+  const both = await serve(await painting(), { x: 402, y: 700, side: 220 }, { sheet: await expressionSheet({ empty: true }) });
   assert.equal((await runProfileSetWithConfig(config)).stage, 'rejected');
-  assert.deepEqual(empty.finish.result.errors, [{ code: 'EXPRESSIONS_EMPTY_CELL', path: '/expressions' }]);
-  assert.deepEqual(empty.derived, {}, 'nothing is stored for a rejected set');
+  assert.deepEqual(both.finish.result.errors.map(e => e.code), ['FACE_POSITION', 'EXPRESSIONS_EMPTY_CELL']);
   // A claim without the sheet's link is the server's fault: the set goes back, no attempt spent.
   const unlinked = await serve(await painting(), undefined, { sheet: await expressionSheet(), claim: { expressions: undefined } });
   const result = await runProfileSetWithConfig(config);

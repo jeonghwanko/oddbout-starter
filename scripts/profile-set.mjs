@@ -2,7 +2,8 @@
 // A profile set's files from the pictures the user chose (선수 프로필 세트, 2026-10-31; 표정 시트, 2026-11-03): the front painting framed for
 // the card, its face square measured on its pixels (host/motions.py face-box, which hosted fighters use), the expression sheet at its size,
 // profile-set.json with their sizes and hashes, and the previews to show the user. The server's parse and the validator's own pixel checks
-// (worker/profile-set-check.mjs) run here too, so a set this writes passes them. Pixels are scaled uniformly and padded, never redrawn.
+// (worker/profile-set-check.mjs) run here too, so a set this writes passes them. The front is scaled uniformly and padded, a 3:2 sheet
+// (within 1 %) fitted to 1536 × 1024; nothing is redrawn.
 // Never overwrites a folder. Writes nothing unless the whole set passes.
 import { createHash } from 'node:crypto';
 import { lstat, mkdir, rename, rm, writeFile } from 'node:fs/promises';
@@ -31,6 +32,8 @@ class SetFailure extends Error {
 
 /** @param {Buffer} bytes */
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
+/** Python's round (half to even), so the face square is face-box's to the pixel. @param {number} value */
+const roundEven = value => { const down = Math.floor(value), part = value - down; return part > 0.5 || (part === 0.5 && down % 2 !== 0) ? down + 1 : down; };
 
 /** The pixels where alpha is above `threshold`, as a box; null when there are none. @param {Pixels} image @param {number} threshold @returns {Bounds | null} */
 function inkBounds({ data, width, height, channels }, threshold) {
@@ -53,9 +56,9 @@ export function faceBox(image) {
   let headLeft = width, headRight = -1;
   for (let y = solid.top; y < solid.top + Math.max(1, Math.floor(height * FACE_HEAD_SHARE)); y++) for (let x = 0; x < width; x++)
     if (data[(y * width + x) * channels + 3] >= FACE_ALPHA) { if (x < headLeft) headLeft = x; if (x > headRight) headRight = x; }
-  const side = Math.max(16, Math.min(figureWidth, height, Math.round(height * FACE_SIDE)));
+  const side = Math.max(16, Math.min(figureWidth, height, roundEven(height * FACE_SIDE)));
   const centre = (headLeft + headRight + 1) / 2;
-  return { x: Math.max(solid.left, Math.min(solid.right + 1 - side, Math.round(centre - side / 2))), y: solid.top, side };
+  return { x: Math.max(solid.left, Math.min(solid.right + 1 - side, roundEven(centre - side / 2))), y: solid.top, side };
 }
 
 /** A picture's RGBA pixels; a picture without transparency is refused with the cutout step. @param {string} file @param {string} where */

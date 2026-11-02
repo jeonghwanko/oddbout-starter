@@ -1269,12 +1269,12 @@ test('beside the motions, the sheet is drawn once from the chosen front, goes up
   await mkdir(path.join(dir, 'looks'), { recursive: true });
   await writeFile(path.join(dir, 'looks', 'front-b-0.png'), 'front');
   const flag = (args, name) => args[args.indexOf(name) + 1];
-  let sheetCode = 0;
+  let sheetCode = 0, sheetSize = [1536, 1024];
   const og = async (args, { stdin } = {}) => {
     calls.push({ args, stdin });
     if (args.includes('gen') && args.includes('--aspect-ratio')) {
       if (sheetCode !== 0) return { code: sheetCode };
-      await writeFile(flag(args, '--out'), pngHeader(1536, 1024)); await writeFile(flag(args, '--report'), JSON.stringify({ ok: true })); return { code: 0 };
+      await writeFile(flag(args, '--out'), pngHeader(...sheetSize)); await writeFile(flag(args, '--report'), JSON.stringify({ ok: true })); return { code: 0 };
     }
     if (args.includes('gen')) { await writeFile(flag(args, '--out'), 'side'); await writeFile(flag(args, '--report'), JSON.stringify({ ok: true })); return { code: 0 }; }
     if (args[0] === 'codex') { await writeFile(flag(args, '-o'), JSON.stringify({ checks: Object.fromEntries(SIDE_CHECKS.map(c => [c, 'pass'])), notes: 'The same boxer.' })); return { code: 0 }; }
@@ -1301,7 +1301,7 @@ test('beside the motions, the sheet is drawn once from the chosen front, goes up
   assert.deepEqual(sheet.args.filter((a, i) => sheet.args[i - 1] === '--ref'), [path.join(dir, 'looks', 'front-b-0.png'), '/kit/style-anchor-front.webp']);
   assert.match(await readFile(flag(sheet.args, '--prompt-file'), 'utf8'), /6\. Knocked out/);
   assert.ok(uploads.includes('expressions-0-b'));
-  assert.deepEqual(webps.find(([name]) => name === 'expressions-0-b.webp'), ['expressions-0-b.webp', 1536], 'the sheet keeps its 1536 px');
+  assert.deepEqual(webps.find(([name]) => name === 'expressions-0-b.webp'), ['expressions-0-b.webp', '1536x1024'], 'the sheet keeps the set\'s exact size');
   assert.deepEqual(events.filter(e => e?.kind === 'expressions'), [{ kind: 'expressions', outcome: 'chosen', artifact: 'expressions-0-b' }]);
   // A stage run again draws no second sheet.
   calls.length = 0;
@@ -1328,6 +1328,35 @@ test('beside the motions, the sheet is drawn once from the chosen front, goes up
   fronts.length = 0;
   await stages.submitting({ ...job, choice: 'a' }, failed);
   assert.deepEqual(fronts, [{ artifact: 'front-a-0', face: { x: 400, y: 30, side: 250 } }]);
+
+  // og refused it before it ran (no slot: exit 3, the allowance: 75, no report of this run): nothing was sent, so a later run draws it.
+  const refused = await mkdtemp(path.join(tmpdir(), 'gen-faces-refused-'));
+  await mkdir(path.join(refused, 'looks'), { recursive: true });
+  await writeFile(path.join(refused, 'looks', 'front-a-0.png'), 'front');
+  for (const code of [3, 75]) {
+    sheetCode = code; calls.length = 0; events.length = 0;
+    await stages.motions({ ...job, choice: 'a' }, refused);
+    assert.deepEqual(events.filter(e => e?.kind === 'expressions').map(e => e.code), [`expressions-not-started-${code}`]);
+  }
+  sheetCode = 0; sheetSize = [1530, 1020]; calls.length = 0; events.length = 0;
+  await stages.motions({ ...job, choice: 'a' }, refused);
+  // codex sized it a little off 1536 × 1024: a 3:2 sheet is fitted, not thrown away.
+  assert.deepEqual(events.filter(e => e?.kind === 'expressions').map(e => e.outcome), ['chosen']);
+  assert.deepEqual(webps.at(-1), ['expressions-0-a.webp', '1536x1024']);
+  // Another shape goes without (no drawing again).
+  const square = await mkdtemp(path.join(tmpdir(), 'gen-faces-square-'));
+  await mkdir(path.join(square, 'looks'), { recursive: true });
+  await writeFile(path.join(square, 'looks', 'front-a-0.png'), 'front');
+  sheetSize = [1024, 1024]; events.length = 0;
+  await stages.motions({ ...job, choice: 'a' }, square);
+  assert.deepEqual(events.filter(e => e?.kind === 'expressions').map(e => e.code), ['expressions-size']);
+
+  // An API from before the sheet refuses the field (invalid-body): the front goes again, alone.
+  fronts.length = 0;
+  api.profileFront = async (job, front) => { fronts.push(front); return front.expressions ? { ok: false, code: 'invalid-body' } : { ok: true }; };
+  await rm(path.join(dir, 'looks', 'front-b-0.face.json'), { force: true });
+  await stages.submitting(job, dir);
+  assert.deepEqual(fronts.map(f => 'expressions' in f), [true, false]);
 });
 
 test('the chosen front and its face square go to the job before the package; a front that cannot be measured never stops it', async () => {

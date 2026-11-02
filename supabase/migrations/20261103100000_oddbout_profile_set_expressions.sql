@@ -24,7 +24,8 @@ begin
   return p;
 end $$;
 
--- As 20261031100000, and the sheet: a set with one passes only from a 0.2.0 validator with its derived sheet, whose object must exist.
+-- As 20261031100000, and the sheet: a set with one passes only from a 0.2.0 validator, with its derived sheet (whose object must exist) or,
+-- when the sheet failed its check, without it and with the reasons (`sheetErrors`): a failing sheet never takes the front's set down.
 create or replace function public.af_profile_set_finish(p_id uuid, p_lease uuid, p_sha text, p_passed boolean, p_result jsonb, p_derived jsonb)
 returns public.af_profile_sets language plpgsql security invoker set search_path = '' as $$
 declare p public.af_profile_sets; base text; card jsonb; face jsonb; sheet jsonb;
@@ -53,7 +54,9 @@ begin
     or jsonb_typeof(card->'width') is distinct from 'number' or not (card->'width' >= '1'::jsonb and card->'width' <= '600'::jsonb)
     or card->'height' is distinct from '600'::jsonb
     or face->'size' is distinct from '192'::jsonb or jsonb_typeof(card->'face') is distinct from 'object'
-    or (p.manifest ? 'expressions') <> (sheet is not null)
+    or (sheet is not null and not (p.manifest ? 'expressions'))
+    or (sheet is null and p.manifest ? 'expressions' and (jsonb_typeof(p_result->'sheetErrors') is distinct from 'array'
+      or jsonb_array_length(p_result->'sheetErrors') = 0))
     or (sheet is not null and (jsonb_typeof(sheet) is distinct from 'object' or coalesce(sheet->>'sha256', '') !~ '^[a-f0-9]{64}$'
       or jsonb_typeof(sheet->'bytes') is distinct from 'number' or sheet->'width' is distinct from '1152'::jsonb
       or sheet->'height' is distinct from '768'::jsonb or sheet->'cell' is distinct from '384'::jsonb))
@@ -97,3 +100,7 @@ grant execute on function public.af_profile_set_submit(uuid, uuid), public.af_pr
 -- reason are kept here only, as af_admin_fighter_edits keeps an operator's package.
 alter table public.af_profile_set_events drop constraint af_profile_set_events_kind_check,
   add constraint af_profile_set_events_kind_check check (kind in ('approve', 'reject', 'withdraw', 'public-cleanup-failed', 'admin-expressions'));
+
+-- A hosted fighter's sheet (the worker's `profile-front`), kept apart from his front: an API from before the sheet reads `profile_front`
+-- alone, so a rollback still makes the front's set.
+alter table public.af_generation_jobs add column profile_expressions jsonb;

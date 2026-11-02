@@ -20,6 +20,8 @@ const png = ({ data, width, height }, channels = 4) => sharp(data, { raw: { widt
 test('faceBox measures as host/motions.py face-box does: the head\'s square, 17 % of the figure, at its top', () => {
   // The host test's figure (generation-stages.test.mjs) with a square head: 801 px tall from y 100, the head over x 150–249.
   assert.deepEqual(faceBox(pixels(400, 1000, [[150, 100, 249, 199], [100, 200, 300, 900]])), { x: 132, y: 100, side: 136 });
+  // The host test's own ellipse head (x 150-250, centre 200.5): 132.5 rounds to even, as Python's round does.
+  assert.deepEqual(faceBox(pixels(400, 1000, [[150, 100, 250, 199], [100, 200, 300, 900]])), { x: 132, y: 100, side: 136 });
 });
 
 test('fighter:profile-set frames the chosen front, measures its face, fits the sheet and writes a set the server and validator accept', async () => {

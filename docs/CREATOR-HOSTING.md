@@ -115,8 +115,12 @@ stores the derived card and face under the lease and finishes it for the
 operator's review. A set with an expression sheet (2026-11-03) has the sheet
 decoded too and its arena copy (1152 × 768, `sheet`) stored beside them; only a
 0.2.0 validator may pass such a set
-(`20261103100000_oddbout_profile_set_expressions.sql`), so deploy the migration
-and Render before the Edge functions that accept the sheet. `20261031100100_oddbout_profile_set_dispatch.sql` makes the
+(`20261103100000_oddbout_profile_set_expressions.sql`). Deploy in this order:
+the migration, Render, the creator site (its review card shows the sheet before
+an operator approves one), `ai-fighter`, then `ai-fighter-mcp` (it runs its own
+copy of the API: before `ai-fighter` it takes sheets the validator's claim cannot
+sign), then the generation hosts. A sheet that fails the check is left out
+(`sheetErrors`); the front's set passes without it. `20261031100100_oddbout_profile_set_dispatch.sql` makes the
 same wake function and cron fire for queued sets.
 
 Free instances sleep after inactivity; the first subsequent submission can

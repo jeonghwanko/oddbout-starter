@@ -20,7 +20,7 @@ const CHECK_TIMEOUT_MS = 30000;
  *   front: { bytes: number, sha256: string, width: number, height: number, downloadUrl: string }, face: { x: number, y: number, side: number },
  *   expressions?: { bytes: number, sha256: string, width: number, height: number, downloadUrl: string } }} ClaimedSet
  */
-/** @typedef {{ ok: boolean, stage?: string, errors: { code: string, path: string }[], derived?: any }} ChildVerdict */
+/** @typedef {{ ok: boolean, stage?: string, errors: { code: string, path: string }[], derived?: any, sheetErrors?: { code: string, path: string }[] }} ChildVerdict */
 
 /**
  * Run the pixel check in a child process with its own deadline. A child that dies or runs out of time on this painting is its verdict
@@ -121,7 +121,11 @@ async function validateProfileSet(project, token, job, directory, deadline, chec
         ...(stored.sheet ? { sheet: { ...stored.sheet, ...verdict.derived.sheet } } : {}) };
     }
   }
+  /** @type {(errors: { code: string, path?: string }[]) => { code: string, path: string }[]} */
+  const listed = errors => errors.slice(0, 20).map(e => ({ code: e.code, path: e.path ?? '' }));
+  // A sheet that failed is left out of a passing set; its errors say why (af_profile_set_finish takes a set without its sheet only so).
   const result = { validatorVersion: PROFILE_SET_VALIDATOR_VERSION, stage: verdict.ok ? 'profile-set-full-decode' : verdict.stage ?? 'profile-set-check',
-    errors: verdict.errors.slice(0, 20).map(e => ({ code: e.code, path: e.path ?? '' })), manifestSha256: job.manifestSha256 };
+    errors: listed(verdict.errors), manifestSha256: job.manifestSha256,
+    ...(verdict.ok && verdict.sheetErrors?.length ? { sheetErrors: listed(verdict.sheetErrors) } : {}) };
   return { passed: verdict.ok, result, ...(verdict.ok ? { derived } : {}) };
 }

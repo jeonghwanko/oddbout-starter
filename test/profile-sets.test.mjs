@@ -252,10 +252,24 @@ test('Postgres (2026-11-03): a set with an expression sheet needs its upload, a 
     await assert.rejects(finish(lease, { card: derived.card, face: derived.face }), /validation-incomplete/, 'the arena sheet is required');
     await assert.rejects(finish(lease, derived), /validation-incomplete/, 'the arena sheet must be stored');
     await assert.rejects(finish(lease, { ...derived, sheet: { ...derived.sheet, width: 1536 } }), /validation-incomplete/);
+    const finishWith = (row, derivedFiles, more) => db.query('select to_jsonb(public.af_profile_set_finish($1,$2,$3,true,$4,$5)) as value',
+      [row.id, row.lease_token, row.manifest_sha, { validatorVersion: PROFILE_SET_VALIDATOR_VERSION, stage: 'profile-set-full-decode', errors: [], ...more },
+        derivedFiles]).then(value);
+    await assert.rejects(finishWith(lease, { card: derived.card, face: derived.face }, { sheetErrors: [] }), /validation-incomplete/);
     await object(first.id, 'sheet', 500);
     assert.equal((await finish(lease, derived)).status, 'review');
     await db.query('select public.af_admin_profile_set_approve($1,$2)', [admin, first.id]);
     assert.deepEqual((await db.query('select profile_set from public.af_roster_entries where id=$1', [fighter])).rows[0].profile_set, { id: first.id, derived });
+
+    // A sheet the validator left out (its reasons in sheetErrors): the set passes without it, the front's files as always.
+    const { row: dropped } = await created({ ...set(), expressions: sheetFile() }, null);
+    await object(dropped.id, 'front', 1000); await object(dropped.id, 'expressions', 2000);
+    await db.query('select public.af_profile_set_submit($1,$2)', [owner, dropped.id]);
+    const droppedLease = await claim(dropped.id);
+    await object(dropped.id, 'card', 300); await object(dropped.id, 'face', 200);
+    const passed = await finishWith(droppedLease, { card: derived.card, face: derived.face }, { sheetErrors: [{ code: 'EXPRESSIONS_EMPTY_CELL', path: '/expressions' }] });
+    assert.deepEqual([passed.status, 'sheet' in passed.derived], ['review', false]);
+    await db.query("update public.af_profile_sets set status = 'rejected' where id = $1", [dropped.id]);
 
     // A set without a sheet still passes from a 0.1.0 validator (deployed before this one), never with a sheet it was not sent.
     const { row: second, derived: plain } = await created(set(), null);

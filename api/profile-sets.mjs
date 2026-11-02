@@ -104,6 +104,8 @@ export function profileSetView(row, urls) {
     ...(card && face ? { derived: { card: { width: card.width, height: card.height, face: card.face }, face: { size: face.size },
       ...(sheet ? { sheet: { width: sheet.width, height: sheet.height, cell: sheet.cell } } : {}) } } : {}),
     ...(row.reason ? { reason: row.reason } : {}), ...(row.validation?.errors ? { errors: row.validation.errors } : {}),
+    // A sheet the validator left out of a passing set (2026-11-03): the set goes on with his face square only.
+    ...(Array.isArray(row.validation?.sheetErrors) && row.validation.sheetErrors.length ? { sheetErrors: row.validation.sheetErrors } : {}),
     createdAt: row.created_at, ...(row.approved_at ? { approvedAt: row.approved_at } : {}), ...(urls ? { urls } : {}),
     pending: { uploading: [...PROFILE_SET_ASSETS.filter(id => id === 'front' || expressions).map(id => `upload-${id}`), 'submit'],
       queued: ['server-validation', 'operator-review'], validating: ['server-validation', 'operator-review'], review: ['operator-review'] }[row.status] ?? [] };

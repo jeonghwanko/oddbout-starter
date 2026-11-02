@@ -107,8 +107,8 @@ export function hostedNext(job) {
       if (job.submission?.stage === 'registered') return `Registered: fighter ${job.submission.fighterId}, in production. Tell the user: he can watch `
         + 'every motion on his fighter page and enter him there (출전); other people meet him only after that. enter_fighter does it here '
         + 'once he confirmed each of the eleven motions. '
-        + (job.profileSetId ? `His chosen front${job.expressions?.url ? ' and his six arena faces' : ''} went in as his profile set (${job.profileSetId}): `
-          + 'the home and the arena show them once an operator approves it.'
+        + (job.profileSetId ? `His chosen front went in as his profile set (${job.profileSetId}): the home and the arena show it once an operator approves it. `
+          + (job.expressions?.url ? 'His six arena faces were sent with it; get_profile_set says whether they passed the check (sheetErrors when not).' : '')
           : 'His profile set (front picture) did not go in with it: prepare_profile_set can upload one.');
       if (job.submission?.stage === 'rejected') return `The server check refused the package. A person at ODDBOUT will look at it.${spent(job)}`;
       return 'The server is checking the package. Call get_hosted_fighter with waitSeconds.';

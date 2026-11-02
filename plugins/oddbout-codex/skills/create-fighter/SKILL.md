@@ -133,9 +133,10 @@ his face in the arena, and the home lists him only once his profile set is appro
 6. After registration, upload the set with `prepare_profile_set` (fighter id, its `profile-set.json`), `upload_profile_set_asset` for
    `front` and then `expressions`, and `submit_profile_set`, and follow `get_profile_set`. The set is not part of the package.
 
-A registered fighter without a sheet (made before 2026-11-03) gets one the same way: draw the sheet from his approved front, build a new
-set from the same front and the sheet, and upload it. His package, entry and record do not change; his current set stays until an
-operator approves the new one.
+A registered fighter without a sheet (made before 2026-11-03) can get one when the user asks for it: that request is the new generation's
+authorization. Draw the sheet from his approved front, build a new set from the same front and the sheet, and upload it. His package,
+entry and record do not change; his current set stays until an operator approves the new one. A sheet that fails the server's check is
+left out (`get_profile_set` → `sheetErrors`) and the set goes on with his face square only.
 
 ## Work in review groups
 
