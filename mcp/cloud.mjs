@@ -14,6 +14,8 @@ import { registerProfileSetTools } from './cloud/profile-set-tools.mjs';
 import { registerWorkshopTools } from './cloud/workshop-tools.mjs';
 import { HOSTED_INSTRUCTIONS, registerHostedTools } from './cloud/hosted-tools.mjs';
 import { DIRECTORY_DESCRIPTIONS, DIRECTORY_INSTRUCTIONS, DIRECTORY_TITLES } from './cloud/directory-edition.mjs';
+import { CLOUD_ISSUER, CLOUD_RESOURCE, DIRECTORY_DOCUMENTATION, DIRECTORY_RESOURCE, LEGACY_PUBLIC_RESOURCE, PUBLIC_DIRECTORY_RESOURCE, PUBLIC_RESOURCE,
+  PUBLIC_SIGN_IN_RESOURCE, SIGN_IN_RESOURCE } from './cloud/resources.mjs';
 // The cloud MCP's tool families live in ./cloud/ (Edge-only, as this file); these names are this module's as before.
 export { CALL_BUDGET_MS, allowedFileUrl, compactText, downloadHostFile, timedFetch } from './cloud/common.mjs';
 export { STYLE_GUIDE } from './cloud/agent-tools.mjs';
@@ -27,30 +29,9 @@ export { HOSTED_WAIT_SECONDS, hostedNext } from './cloud/hosted-tools.mjs';
  * @typedef {import('./cloud/common.mjs').Register} Register
  */
 
-export const CLOUD_RESOURCE = 'https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter-mcp';
-export const LEGACY_PUBLIC_RESOURCE = 'https://ai-fighter-validator.onrender.com/mcp';
-export const PUBLIC_RESOURCE = 'https://mcp.oddbout.com/mcp';
-/**
- * Sign-in first (2026-10-28): the same server at `<function>/signin` asks every request for a sign-in, not only the account tools. Grok's custom
- * connector has no option for it: it decides at its first request whether a server needs one. At mcp.oddbout.com the public tools answer signed
- * out (ChatGPT relies on that), so Grok connected without an account and never offered the sign-in. Its tokens carry the same audience.
- */
-export const SIGN_IN_RESOURCE = `${CLOUD_RESOURCE}/signin`;
-/**
- * The same sign-in-first address through mcp.oddbout.com (2026-11-01, worker/cloud-gateway.mjs). There the host root is ours, so a client that
- * looks for the metadata at `/.well-known/oauth-protected-resource/signin` (RFC 9728, as Cursor's Grok Bot does) finds it; at the Supabase
- * host it got a 401 and gave up its sign-in. The Supabase address keeps working for connectors already added with it.
- */
-export const PUBLIC_SIGN_IN_RESOURCE = 'https://mcp.oddbout.com/signin';
-/**
- * The Claude directory edition (2026-11-01, cloud/directory-edition.mjs): the same server at `<function>/claude` lists only the tools a
- * directory reviewer can run in Claude, signed out like the public address. Its tokens carry the same audience, as the sign-in-first ones do.
- */
-export const DIRECTORY_RESOURCE = `${CLOUD_RESOURCE}/claude`;
-/** The address the directory listing names, through mcp.oddbout.com (worker/cloud-gateway.mjs). */
-export const PUBLIC_DIRECTORY_RESOURCE = 'https://mcp.oddbout.com/claude';
-/** The page the directory edition's metadata points to: connecting ODDBOUT in Claude. */
-export const DIRECTORY_DOCUMENTATION = 'https://oddbout.com/cloud-plugin/claude.html';
+// The addresses live in ./cloud/resources.mjs, which the mcp.oddbout.com gateway shares; these names are this module's as before.
+export { ARENA_URL, CLOUD_ISSUER, CLOUD_RESOURCE, DIRECTORY_DOCUMENTATION, DIRECTORY_RESOURCE, LEGACY_PUBLIC_RESOURCE, PUBLIC_DIRECTORY_RESOURCE,
+  PUBLIC_RESOURCE, PUBLIC_SIGN_IN_RESOURCE, SIGN_IN_RESOURCE } from './cloud/resources.mjs';
 /** @param {unknown} aud */
 export function validCloudAudience(aud) {
   const current = [CLOUD_RESOURCE, LEGACY_PUBLIC_RESOURCE, PUBLIC_RESOURCE];
@@ -59,9 +40,6 @@ export function validCloudAudience(aud) {
   const expected = aud.length === 2 ? [CLOUD_RESOURCE, LEGACY_PUBLIC_RESOURCE] : current;
   return aud.length === expected.length && aud.every(value => expected.includes(value));
 }
-export const CLOUD_ISSUER = 'https://ztfxxhtmtrvxvuxlqmgz.supabase.co/auth/v1';
-/** ODDBOUT's arena function (the game's `oddbout-arena`): rankings, records, cups, bout records, and the agent calls behind its key. */
-export const ARENA_URL = 'https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/oddbout-arena';
 /**
  * Tools anyone may call without a connected account: the contract and ODDBOUT's public records. The agent tools (3단계, 2026-10-27) list only
  * while the arena key is configured (`ODDBOUT_ARENA_AGENT_KEY`), so a release of this code alone does not change the published tool list.

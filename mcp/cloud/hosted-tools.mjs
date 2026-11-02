@@ -5,7 +5,8 @@ import { GENERATION_LIMITS, UPLOAD_TICKET_HEADER } from '../../api/generations.m
 import { Problem } from '../../api/http.mjs';
 import spec from '../../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { profileLimits } from '../../contracts/ai-fighter/profile-limits.mjs';
-import { FILE, LIBRARY_FILE_HOSTS, UUID_ARG, downloadHostFile, pause, timeLeft, within } from './common.mjs';
+import { FILE, LIBRARY_FILE_HOSTS, UUID_ARG, downloadHostFile, pause, timeLeft, unavailable, within } from './common.mjs';
+import { TICKET_UPLOAD_URL } from './resources.mjs';
 /**
  * @typedef {import('./common.mjs').Identity} Identity
  * @typedef {import('./common.mjs').Hosted} Hosted
@@ -124,7 +125,7 @@ const withNext = result => result?.ok && result.job ? { ...result, next: hostedN
  * 64 KB bodies (`worker/cloud-gateway.mjs`).
  */
 export const PICTURE_PAGE = 'https://oddbout.com/creator.html#view=upload&ticket=';
-export const TICKET_UPLOAD_URL = 'https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter/generations/ticket-uploads';
+export { TICKET_UPLOAD_URL };
 /** The schemes an agent's file addresses use, named in the log; any other is `other`. */
 const FILE_SCHEMES = new Set(['file:', 'sandbox:', 'attachment:', 'content:', 'cid:', 'file-service:', 'ftp:']);
 /** Who made the picture, as the agent names it: one of these words, so the log keeps no free text. */
@@ -168,7 +169,7 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
   /** @param {string} key */
   const jobIdForKey = async key => {
     const { data, error } = await db.from('af_generation_jobs').select('id').eq('owner_id', /** @type {Identity} */ (identity).owner).eq('idempotency_key', key.toLowerCase()).maybeSingle();
-    if (error) throw new Problem(503, 'database-unavailable');
+    if (error) throw unavailable('database-unavailable', error);
     return data?.id ?? null;
   };
   register('request_hosted_fighter', 'ODDBOUT에 선수 만들기 맡기기', 'ODDBOUT makes a fighter for the connected user on its own generation worker: '
