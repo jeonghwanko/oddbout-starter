@@ -102,8 +102,11 @@ export async function extractFailedRows(run) {
   return [...new Set(named.filter(state => state && states.has(state)))];
 }
 
-/** The text model for the brief and the image model for the looks (the subscription's; `gpt-6.1-sol` is refused on a ChatGPT login). */
-export const MODELS = Object.freeze({ text: 'gpt-6-sol', image: 'gpt-6-sol' });
+/**
+ * The text model for the brief and the image model for the looks, on the host's subscription. `gpt-6.1-sol` since 2026-11-03 (사용자: "gpt에
+ * 6.1 sol을 사용하도록 모델 수정해줘"): a ChatGPT login refused it on 2026-10-30 and answered it on 2026-11-03 (a text call on the operator's VM).
+ */
+export const MODELS = Object.freeze({ text: 'gpt-6.1-sol', image: 'gpt-6.1-sol' });
 // Codex features that reach files, a shell, a browser, the computer, plugins, hooks, sub-agents or a new image: all off for the brief
 // (`og harden` turns the same off for the service's codex as a whole, image generation kept for the looks).
 export const CODEX_TOOLS_OFF = Object.freeze(['shell_tool', 'unified_exec', 'browser_use', 'browser_use_external', 'computer_use', 'apps', 'code_mode_host',
