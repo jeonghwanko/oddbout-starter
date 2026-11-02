@@ -130,6 +130,8 @@ test('open worlds: two per account, factions, placing fighters, the owner\'s can
     const list = (await call('GET', 'worlds', undefined, null)).body;
     assert.ok(list.worlds.some(w => w.id === world && w.owner === '항구지기' && !w.operator));
     assert.ok(list.worlds.some(w => w.id === 'kkumssi' && w.operator)); assert.equal(list.covers.length, 8);
+    // NIGHTCROWN (2026-11-02) is the second operator world; its cast is placed only where the four fighters exist (not in this database).
+    assert.ok(list.worlds.some(w => w.id === 'nightcrown' && w.operator && w.fighters === 0));
     // Factions; a fighter in a faction; another owner's fighter placed by him; the world's owner takes one out.
     assert.equal((await call('PATCH', `worlds/${world}`, { factions: [{ id: 'dock', name: '부두파' }, { id: 'light', name: '등대회' }] })).body.world.factions.length, 2);
     assert.equal((await call('PATCH', `worlds/${world}`, { factions: [{ id: 'x', name: '남의 것' }] }, them)).body.code, 'not-found');
