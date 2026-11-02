@@ -25,7 +25,7 @@ import { existsSync } from 'node:fs';
 import { appendFile, copyFile, cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { NOT_STARTED_EXIT, judgeOutcome, readOutcome } from './sprite-outcome.mjs';
+import { ASK_EXIT, NOT_STARTED_EXIT, judgeOutcome, readOutcome } from './sprite-outcome.mjs';
 // No OpenAI credentials or API calls on a generation host. Use its existing ODDBOUT worker identity.
 
 const reviewHash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -367,7 +367,8 @@ export const sideStyleOnly = value => !sidePassed(value) && SIDE_CHECKS.every(ch
 /**
  * Exit 75, or a report that asks the codex question: codex cannot run on this host now (signed out, or its usage is used up). Nothing was
  * made, so the stage is tried again; the worker marks its codex health down (generation-worker.mjs) and claims nothing until a health
- * check passes. A job whose stage keeps meeting it still ends after the server's three leases (`stage-attempts`).
+ * check passes. A job whose stage keeps meeting it still ends after the server's three leases (`stage-attempts`). og's own account guard
+ * (signed out, never pinned, another account) exits 75 too (2026-11-03): the brief and the judges, codex runs, take this route as well.
  */
 export const ASKS = 'provider-asks';
 const ASKED = Object.freeze({ retry: ASKS });
@@ -627,7 +628,8 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
     // said the same command may succeed, so a request the provider took, or any error read another way, still goes to an operator).
     if (limited && verdict.next === 'retry' && verdict.codes.includes('provider-rate-limited')) return { retry: limited };
     if (verdict.next === 'retry' || (!said && code === NOT_STARTED_EXIT)) return { retry: `${prefix}-exit-${code}` };
-    if (verdict.next === 'answer') return ASKED;
+    // og's account refusal (75 and no report from this run) is the refused command's provider: grok's on a video run.
+    if (verdict.next === 'answer') return limited && !said && code === ASK_EXIT ? { retry: limited } : ASKED;
     const review = { resume: `${prefix}-unfinished`, inspect: `${prefix}-outcome-unknown` }[verdict.next]
       ?? (code === 3 ? `${prefix}-not-started` : `${prefix}-${verdict.codes[0] ?? `exit-${code}`}`);
     return { review, ...(verdict.requestIds.length ? { requestIds: verdict.requestIds } : {}) };
@@ -655,6 +657,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
     const schema = path.join(dir, 'brief-schema.json'), out = path.join(dir, 'brief.json');
     await writeFile(schema, JSON.stringify(BRIEF_SCHEMA));
     const { code } = await og(briefCommand({ schema, out, refs }), { stdin: briefPrompt(job, refs.length) });
+    if (code === ASK_EXIT) return asOutcome(ASKED);
     if (code !== 0 || !existsSync(out)) return { outcome: 'retry', result: { code: `brief-exit-${code}` } };
     let parsed;
     try { parsed = checkedBrief(JSON.parse(await readFile(out, 'utf8'))); }
@@ -876,7 +879,8 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       const since = Date.now();
       const { code } = await og(sprite('video-set', '--base', `side@right=${input.still}`, '--facing', 'right', '--states', gait, '--key', input.key,
         '--anchor', 'none', '--out-dir', clip, '--character', character, '--concurrency', '1', ...motion));
-      if (code === 75) return ASKED;
+      // 75: sprite-gen's codex question (its report says so — codex is down) or og refusing grok's account (no report — grok is down).
+      if (code === ASK_EXIT) return failedRun('video', code, path.join(clip, 'set.report.json'), since, GROK_LIMITED);
       // No clip at all (a limit, an outage): try the stage later rather than film again with other words, unless the set report
       // says a request xAI took is unfinished (resume it), its outcome cannot be told, or the same run would fail again.
       if (code !== 0 && !existsSync(path.join(item, 'frames', 'keyed')) && !existsSync(path.join(item, 'loop')))
@@ -989,7 +993,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
               { stdin: await readFile(path.join(judge, 'judge-prompt.txt'), 'utf8') }));
             verdict = judged === 0 ? checkedVerdict(await readJson(verdictFile).catch(() => null)) : null;
           }
-          if (!verdict) return { retry: `judge-exit-${judged}` };
+          if (!verdict) return judged === ASK_EXIT ? ASKED : { retry: `judge-exit-${judged}` };
           if (loopTaken(verdict, meta)) {
             tried.push({ take, cut: cutName, passed: true, ...(verdict.loop === 'pass' ? {} : { loopBy: 'engine-seam' }), ...cutFacts(meta) });
             return { strip, verdict: verdictFile, take, tried };
