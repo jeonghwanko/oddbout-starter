@@ -15,13 +15,19 @@ import { isPublishableKey } from './login.mjs';
 const root = new URL('../', import.meta.url);
 /** @param {NodeJS.ProcessEnv} [env] */
 export function createBroadcastDemo(env = process.env) {
-  const port = Number(env.ODDBOUT_BROADCAST_PORT ?? 5180);
+  const port = Number(env.ODDBOUT_BROADCAST_PORT ?? env.PORT ?? 5180);
   if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('invalid-demo-port');
+  const bindHost = env.ODDBOUT_BROADCAST_BIND_HOST ?? '127.0.0.1';
+  if (!['127.0.0.1', '0.0.0.0'].includes(bindHost)) throw new Error('invalid-demo-bind-host');
   const publicOrigin = env.ODDBOUT_COMMERCE_ORIGIN ?? `http://127.0.0.1:${port}`;
   const publicUrl = new URL(publicOrigin);
   if (publicUrl.origin !== publicOrigin) throw new Error('invalid-demo-origin');
+  // Public mode is for a dedicated Sandbox service behind a TLS-terminating proxy.
+  // Forwarded headers never choose the origin, callback URL, or permitted Host.
+  if (bindHost === '0.0.0.0' && publicUrl.protocol !== 'https:') throw new Error('public-demo-https-required');
   const url = env.SUPABASE_URL, secret = env.SUPABASE_SERVICE_ROLE_KEY, publishableKey = env.SUPABASE_PUBLISHABLE_KEY;
   if (publishableKey && !isPublishableKey(publishableKey)) throw new Error('invalid-browser-publishable-key');
+  if (env.ODDBOUT_COMMERCE_ENABLED === '1' && (!url || !secret || !publishableKey)) throw new Error('demo-commerce-database-required');
   const db = url && secret ? createClient(url, secret, { auth: { persistSession: false, autoRefreshToken: false } }) : null;
   const get = (/** @type {string} */ name) => name === 'ODDBOUT_COMMERCE_ORIGIN' ? publicOrigin : env[name];
   const commerce = db ? commerceFromEnvironment({ db, get }) : null;
@@ -41,7 +47,11 @@ export function createBroadcastDemo(env = process.env) {
   ]);
   const server = createServer(async (req, res) => {
     try {
-      // The local development entry is loopback-only. Public deployment needs its own configured TLS host.
+      // Proxy health checks may use an internal Host. This route exposes liveness only.
+      if (req.method === 'GET' && req.url === '/healthz') {
+        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+        res.end('{"ok":true,"service":"oddbout-broadcast-sandbox"}'); return;
+      }
       if (req.headers.host !== publicUrl.host) { res.writeHead(403); res.end('invalid-host'); return; }
       const address = new URL(req.url ?? '/', publicOrigin);
       if (address.pathname === '/') { res.writeHead(302, { location: '/broadcast/' }); res.end(); return; }
@@ -68,12 +78,14 @@ export function createBroadcastDemo(env = process.env) {
       res.writeHead(response.status, Object.fromEntries(response.headers)); res.end(Buffer.from(await response.arrayBuffer()));
     } catch { if (!res.headersSent) res.writeHead(503, { 'content-type': 'application/json' }); res.end('{"ok":false,"code":"demo-unavailable"}'); }
   });
-  return { server, port, publicOrigin };
+  server.requestTimeout = 30_000;
+  server.headersTimeout = 15_000;
+  return { server, port, publicOrigin, bindHost };
 }
 
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
-  const { server, port, publicOrigin } = createBroadcastDemo();
-  server.listen(port, '127.0.0.1', () => console.log(`ODDBOUT Sandbox console: ${publicOrigin}/broadcast/`));
+  const { server, port, publicOrigin, bindHost } = createBroadcastDemo();
+  server.listen(port, bindHost, () => console.log(`ODDBOUT Sandbox console: ${publicOrigin}/broadcast/`));
   const stop = () => { server.close(); server.closeIdleConnections(); };
   process.once('SIGINT', stop); process.once('SIGTERM', stop);
 }
