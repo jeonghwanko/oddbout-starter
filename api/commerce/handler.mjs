@@ -1,5 +1,5 @@
 // @ts-check
-import { Problem, readBody } from '../http.mjs';
+import { Problem, logFailure, readBody } from '../http.mjs';
 import { PayPalError } from './paypal.mjs';
 
 /** @typedef {ReturnType<typeof import('./service.mjs').createCommerceService>} Service */
@@ -52,6 +52,7 @@ export function createCommerceHandler({ service, authenticate, publicOrigin, age
       if (error instanceof Problem) return json({ ok: false, code: error.message }, error.status);
       if (error instanceof PayPalError) return json({ ok: false, code: error.code, outcomeUnknown: error.outcomeUnknown }, 502);
       if (error instanceof SyntaxError || error instanceof TypeError) return json({ ok: false, code: 'invalid-input' }, 422);
+      logFailure('commerce', request, error);
       return json({ ok: false, code: 'commerce-unavailable' }, 503);
     }
   };

@@ -4,7 +4,7 @@
 // required motion he ticked on the creator site's motions page; `DELETE fighters/<id>/entry` returns him to 제작 중. Both answer the same
 // when repeated, so they need no idempotency key (`supabase/migrations/20261030130000_ai_fighter_entry.sql`).
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
-import { Problem, UUID, jsonResponse, readBody, rpcCaller, verifiedUserId } from './http.mjs';
+import { Problem, UUID, jsonResponse, logFailure, readBody, rpcCaller, verifiedUserId } from './http.mjs';
 
 const CORS = { methods: 'POST, DELETE, OPTIONS', headers: 'Authorization, Content-Type' };
 const STATUS = Object.freeze({ 'authentication-required': 401, 'account-disabled': 403, 'not-found': 404, 'rate-limit': 429,
@@ -55,6 +55,7 @@ export function createFighterEntryHandler({ db }) {
       const { sha, clips } = entryRequest(body);
       return json(await call('af_enter_fighter', { p_owner: owner, p_fighter: fighter, p_sha: sha, p_clips: clips }));
     } catch (error) {
+      logFailure('fighter-entry', request, error);
       if (error instanceof Problem) return json({ ok: false, stage: 'api', code: error.message }, error.status);
       return json({ ok: false, stage: 'api', code: 'service-unavailable' }, 503);
     }

@@ -11,7 +11,7 @@ import { createWorkshopHandler, workshopRoute } from './workshop.mjs';
 import { attachJobProfileSet, createGenerationHandler, generationRoute } from './generations.mjs';
 import { createFighterDeletionHandler, deletionRoute } from './fighter-deletion.mjs';
 import { createFighterEntryHandler, entryRoute } from './fighter-entry.mjs';
-import { Problem, UUID, bearerToken, jsonResponse, readBody, rpcProblem, sha256, verifiedUserId } from './http.mjs';
+import { Problem, UUID, bearerToken, jsonResponse, logFailure, readBody, rpcProblem, sha256, verifiedUserId } from './http.mjs';
 import { BUCKET, SUBMISSION_STATUS, checkedManifest, objectKey, storeAsset } from './submissions.mjs';
 import { PROFILE_SET_SPEC, createProfileSetHandler, profileSetRoute, profileSetWorkerRoute, rosterProfileSet } from './profile-sets.mjs';
 
@@ -278,6 +278,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
       }
       throw new Problem(404, 'route-not-found');
     } catch (error) {
+      logFailure('api', request, error);
       if (error instanceof Problem) return json({ ok: false, stage: 'api', code: error.message, ...(error.errors ? { errors: error.errors } : {}) }, error.status);
       return json({ ok: false, stage: 'api', code: 'service-unavailable' }, 503);
     }
