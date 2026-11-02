@@ -4,6 +4,49 @@ Earlier source-kit releases, moved here from [PLUGIN-DISTRIBUTION.md](../PLUGIN-
 release and the distribution procedures. Each entry records that release as published and verified at the time; it is not
 current procedure. Published release paths stay immutable.
 
+**Previous source-kit release: 0.6.11** (2026-11-03 KST: workspace tool calls without the 60 s timeout).
+
+In 0.6.10 the in-process workspace tools ran under the SDK client's 60-second request timeout. A fitted
+`pack_fighter_package` that took longer was reported as `workspace-command-failed` while it went on to finish (#272).
+0.6.11 calls them without that limit. Built from `main` after #275, it also carries the workspace MCP's shared worker
+queue for package validation and packaging, lock release that tolerates a busy file, job lists that report an
+unreadable record instead of failing, and history appended only after its session is saved. Playwright is a
+development dependency only (#267). The contract, validators and sprite-gen pin are unchanged.
+
+Cloud `prepare_fighter_packaging` points to the reviewed 0.6.11 runtime once `ai-fighter-mcp` is deployed with
+this pin, and supplies workspace execution instructions; the cloud cannot read Dots files. Install locked Node
+dependencies in the extracted `plugin/runtime/`, then use its `inspect_fighter_packaging` and `pack_fighter_package`
+tools on the existing plan. There is no new generation or generation login.
+
+- [Download the 0.6.11 ZIP](https://oddbout.com/creator-kit/0.6.11/4ba719daf0b84131325e654d3fdfe1a2362b9b88881df793a9d462b09f7125f5/oddbout-0.6.11.zip)
+- [Release manifest](https://oddbout.com/creator-kit/0.6.11/4ba719daf0b84131325e654d3fdfe1a2362b9b88881df793a9d462b09f7125f5/release.json)
+- [Download helper](https://oddbout.com/creator-kit/0.6.11/4ba719daf0b84131325e654d3fdfe1a2362b9b88881df793a9d462b09f7125f5/fetch-creator-kit.py)
+
+| Verified item | Value |
+| --- | --- |
+| ZIP size | 4,201,010 bytes |
+| ZIP SHA-256 | `848365c831b0373e88438078474dcda4d0555177a800734b9985f99ee9381223` |
+| Release manifest SHA-256 | `ec6a435e1ddccecf479c07871c6d898b66d27b62cd1d5b685c9e36c736382bf7` |
+| Runtime manifest SHA-256 | `faccf72053efe94b7704356959079b71fff2d746b7ba4e15b23201ae169789ae` |
+| Helper SHA-256 | `b66c31ff833816dfa74c90d9155359d3fdd484dff8c12759e48addde01707592` (unchanged) |
+| Archive build source | `a67a10bd0d5288a7c20516af49e7ff85e1d8f3aa` (the main merge) |
+| Tested PR head | `530031badd90dc430d860e0c7bd0e7732ab9fbe3` ([PR #277](https://github.com/jeonghwanko/oddbout-starter/pull/277)) |
+| Main merge | `a67a10bd0d5288a7c20516af49e7ff85e1d8f3aa` |
+| sprite-gen pin | `704cb9e5a34f16a0340e7fc6e46709a047ab02d4` (unchanged) |
+| Kit Pages publication | `717c743ed53f8d18a942909698950ea4f5d5ac77` |
+
+Full PR CI passed. The archive was built from a clean worktree at the main merge, so its content id differs from
+the PR's dry run (`fc41779f…`), which predates #274 and #275 on `main`. The trusted helper verified and extracted all
+738 archive files; locked production Node dependencies installed (no vulnerabilities reported), and the extracted
+runtime's `creation:tool` listed all 18 workspace tools and carries #272's in-process timeout. No Python engine ran.
+
+Publication added only three release files, preserved 6,400 existing files without changes or deletions,
+and verified HTTP 200 and exact release bytes plus 12 unchanged site files at 2026-11-02T19:12:17.858Z. The three
+public files, downloaded again afterwards, have the hashes above. This release requires no game/API/site build.
+
+The Dots source pin is `a67a10bd0d5288a7c20516af49e7ff85e1d8f3aa` (0.6.11), still a candidate with
+saved-VM acceptance pending. No animation was generated and no registration was submitted during this release verification.
+
 **Previous source-kit release: 0.6.10** (2026-11-02 KST: measured package-wide byte and pixel fitting).
 
 The 0.6.9 sheet fitting could retain a package above the server's total limits. With 0.6.10, existing
