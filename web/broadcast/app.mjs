@@ -4,7 +4,13 @@ let client, session, catalog, journal, config;
 let walletSpendingBlocked = false;
 let refreshRevision = 0;
 const busyActions = new Set();
-const show = value => { $('status').textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2); };
+const show = value => {
+  $('status').textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+  $('activity-summary').textContent = typeof value === 'string' ? value
+    : value.status === 'credited' ? 'Top-up complete. Your credits are ready.'
+    : value.approved ? 'Budget approved. You can start your rehearsal.'
+    : 'Session updated. View the details below.';
+};
 async function call(path, body) {
   if (!session) throw new Error('Sign in to your ODDBOUT account first.');
   const owner = session.user.id, accountScope = journal;
@@ -18,6 +24,7 @@ async function call(path, body) {
 }
 function requireJournal() { if (!session || !journal) throw new Error('Sign in to your ODDBOUT account first.'); return journal; }
 function updateControls() {
+  $('google-signin').disabled = !client || busyActions.has('google-signin');
   for (const id of ['topup-form', 'budget-form', 'broadcast-form', 'host-cup', 'stop', 'refresh', 'verify-payment']) {
     const disabled = busyActions.has(id) || !session || !config?.commerceEnabled
       || (walletSpendingBlocked && ['topup-form', 'budget-form', 'broadcast-form', 'host-cup'].includes(id))
@@ -48,11 +55,27 @@ function action(id, callback, event = 'click', exclusive = false) {
           await callback();
         });
       } else await callback();
-    } catch (error) { show(error.message); }
+    } catch (error) {
+      show(error.message);
+      if (id === 'google-signin') $('login-status').textContent = error.message;
+    }
     finally { busyActions.delete(id); buttons.forEach(button => button.disabled = false); updateControls(); }
   });
 }
 const fighters = () => $('fighterIds').value.split(',').map(id => id.trim()).filter(Boolean);
+const renderHost = () => { $('hosts-readiness').textContent = $('hostId').value + ' · Check OBS on this host before starting.'; };
+function renderLineup() {
+  const names = { kuma: 'Kuma', yume: 'Yume', bravow: 'Bravow', beotim: 'Beotim' };
+  $('fighter-lineup').replaceChildren(...fighters().map(id => {
+    const chip = document.createElement('span');
+    if (Object.hasOwn(names, id)) {
+      const image = document.createElement('img'); image.src = './assets/' + id + '.webp';
+      image.alt = ''; image.width = 30; image.height = 30; chip.append(image);
+    }
+    chip.append(document.createTextNode(Object.hasOwn(names, id) ? names[id] : id)); return chip;
+  }));
+}
+$('fighterIds').addEventListener('input', renderLineup);
 function showCheckout(result) {
   $('payment-intent').value = result.intentId;
   const link = $('paypal-approval');
@@ -73,6 +96,9 @@ async function refresh() {
   $('wallet-status').textContent = walletSpendingBlocked ? 'Spending is frozen after a payment adjustment. Stop and report remain available; reconcile the original payment before further spending.' : '';
   for (const [id, field] of [['balance', 'balanceCredits'], ['available', 'availableCredits'], ['reserved', 'reservedCredits']]) $(id).textContent = Number(wallet[field]).toLocaleString();
   if (walletSpendingBlocked) $('available').textContent = 'Blocked';
+  if ($('activity-summary').textContent === 'Account connected. Loading your current balance.') {
+    show(wallet.balanceCredits > 0 ? 'Ready when you are. Set a budget to begin.' : 'Add credits to set up your first show.');
+  }
   updateControls();
   const id = selected;
   if (id) {
@@ -84,12 +110,12 @@ async function refresh() {
     }));
   }
 }
-action('login-form', async () => {
+action('google-signin', async () => {
   if (!client) throw new Error('Account connection is not configured on this development server.');
-  const { error } = await client.auth.signInWithOtp({ email: $('email').value, options: { emailRedirectTo: location.origin + '/broadcast/' } });
+  $('login-status').textContent = '';
+  const { error } = await client.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + '/broadcast/' } });
   if (error) throw error;
-  $('login-status').textContent = 'Check your email for the ODDBOUT sign-in link.';
-}, 'submit');
+});
 action('signout', async () => { const result = await client?.auth.signOut(); if (result?.error) throw result.error; });
 action('topup-form', async () => {
   const saved = requireJournal(), { op, result } = await mutate(saved, 'topup', { productId: $('productId').value }, 'checkout');
@@ -140,8 +166,15 @@ function authChanged(value) {
   const previousOwner = session?.user.id;
   if (previousOwner !== value?.user.id) { refreshRevision++; walletSpendingBlocked = false; $('wallet-status').textContent = ''; }
   session = value; $('signout').hidden = !value;
+  $('google-signin').hidden = Boolean(value);
+  $('account-identity').hidden = !value;
+  const profileName = value?.user.user_metadata?.full_name;
+  const name = typeof profileName === 'string' && profileName.trim() ? profileName : value?.user.email || 'Your account';
+  $('account-name').textContent = value ? name : '';
+  $('account-avatar').textContent = value ? Array.from(name)[0].toUpperCase() : '';
+  $('account-identity').title = value?.user.email ?? '';
   updateControls();
-  $('login-status').textContent = value ? 'Connected to ODDBOUT.' : 'Signed out.';
+  $('login-status').textContent = '';
   if (previousOwner !== value?.user.id) {
     journal = value ? createOperationJournal(localStorage, value.user.id) : null;
     show(value ? 'Account connected. Loading your current balance.' : 'Signed out.');
@@ -159,32 +192,36 @@ function authChanged(value) {
     if (pendingApproval) {
       for (const id of ['hostId', 'channelId', 'maxCredits']) $(id).value = pendingApproval[id];
       $('fighterIds').value = pendingApproval.fighterIds.join(',');
-      show('A budget approval is pending. Review & approve recovers its original deadline and settings.');
+      show('A budget approval is pending. Review budget to recover its original deadline and settings.');
     }
     const pendingStart = journal?.get('start')?.input;
     if (pendingStart) $('approvalId').value = pendingStart.approvalId;
     const pendingCup = journal?.get('cup')?.input;
     if (pendingCup) { $('broadcastId').value = pendingCup.broadcastId; $('fighterIds').value = pendingCup.fighterIds.join(','); show('A cup request is pending. Queue one cup recovers the same request.'); }
   }
+  renderLineup();
+  renderHost();
   if (value && config?.commerceEnabled) setTimeout(() => refresh().catch(error => show(error.message)), 0);
 }
 async function initialize() {
+  renderLineup();
   config = await fetch('./config').then(r => r.json());
   const result = await fetch('/commerce/catalog').then(r => r.json()); catalog = result.catalog;
-  $('productId').replaceChildren(...catalog.products.map(product => new Option(product.name + ' · USD ' + (product.amountCents / 100).toFixed(2) + ' (Sandbox)', product.id)));
+  $('productId').replaceChildren(...catalog.products.map(product => new Option(product.name + ' · $' + (product.amountCents / 100).toFixed(2) + ' USD', product.id)));
   $('hostId').replaceChildren(...catalog.hosts.map(host => new Option(host.id, host.id)));
-  $('hosts-readiness').textContent = 'Configured hosts are selectable. Run the host doctor on the target machine; live readiness is currently unverified.';
+  $('hostId').addEventListener('change', renderHost); renderHost();
   updateControls();
   $('configuration-status').textContent = !config.commerceEnabled
     ? 'Commerce is disabled on this server. This is a preview; payment and broadcast actions are unavailable.'
     : !catalog.paypalConfigured ? 'PayPal Sandbox is not configured. Top-ups are unavailable; existing credits can still be used.'
-    : 'Sandbox rehearsal only. Twitch ownership and live output have not been verified.';
+    : '';
+  $('configuration-status').hidden = !$('configuration-status').textContent;
   const query = new URLSearchParams(location.search), intent = query.get('intent');
   if (intent) {
     show(query.get('cancelled') === '1' ? 'PayPal approval cancelled. No credits were added by this return.' : 'Return to your original console tab and choose Verify payment. If it was closed, sign in and recover the same checkout.');
     history.replaceState(null, '', '/broadcast/');
   }
-  if (!config.authConfigured) { $('login-status').textContent = 'Development preview: account, database and PayPal credentials are not configured.'; show('No balances or successful operations are simulated.'); return; }
+  if (!config.authConfigured) { show('No balances or successful operations are simulated.'); return; }
   client = globalThis.supabase.createClient(config.supabaseUrl, config.publishableKey, { auth: { persistSession: false, autoRefreshToken: true, detectSessionInUrl: true } });
   client.auth.onAuthStateChange((_event, value) => { try { authChanged(value); } catch (error) { show(error.message); } });
   authChanged((await client.auth.getSession()).data.session);

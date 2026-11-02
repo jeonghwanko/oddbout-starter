@@ -1,163 +1,450 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="dark">
-  <meta name="theme-color" content="#101411">
-  <title>ODDBOUT · Broadcast Console</title>
-  <link rel="stylesheet" href="./style.css">
-</head>
-<body>
-  <div class="shell">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <meta name="theme-color" content="#f7f6f0" />
+    <title>ODDBOUT · Broadcast Studio</title>
+    <link rel="stylesheet" href="./style.css" />
+    <link rel="icon" href="./assets/kuma.webp" type="image/webp" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <svg
+      class="icon-definitions"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <defs>
+        <symbol id="i-arrow" viewBox="0 0 24 24">
+          <path d="M5 12h14m-6-6 6 6-6 6" />
+        </symbol>
+        <symbol id="i-external" viewBox="0 0 24 24">
+          <path
+            d="M14 4h6v6m0-6L10 14m-1-9H5a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1h13a1 1 0 0 0 1-1v-4"
+          />
+        </symbol>
+        <symbol id="i-wallet" viewBox="0 0 24 24">
+          <path
+            d="M20 8H5a2 2 0 0 1 0-4h13v4M3 6v12a2 2 0 0 0 2 2h15V8m0 4h-5v4h5"
+          />
+        </symbol>
+        <symbol id="i-sliders" viewBox="0 0 24 24">
+          <path d="M4 7h5m6 0h5M4 17h9m6 0h1M9 4v6m6-6v6m-2 4v6m6-6v6" />
+        </symbol>
+        <symbol id="i-play" viewBox="0 0 24 24">
+          <path d="m8 5 11 7-11 7Z" />
+        </symbol>
+        <symbol id="i-refresh" viewBox="0 0 24 24">
+          <path
+            d="M20 7v5h-5M4 17v-5h5m-4-5a8 8 0 0 1 13-1l2 3M4 15l2 3a8 8 0 0 0 13-1"
+          />
+        </symbol>
+        <symbol id="i-stop" viewBox="0 0 24 24">
+          <rect x="6" y="6" width="12" height="12" rx="2" />
+        </symbol>
+        <symbol id="i-logout" viewBox="0 0 24 24">
+          <path d="M9 4H5v16h4m4-13 5 5-5 5m-4-5h12" />
+        </symbol>
+        <symbol id="i-monitor" viewBox="0 0 24 24">
+          <rect x="3" y="4" width="18" height="13" rx="2" />
+          <path d="M8 21h8m-4-4v4" />
+        </symbol>
+        <symbol id="i-cup" viewBox="0 0 24 24">
+          <path
+            d="M8 3h8v6a4 4 0 0 1-8 0Zm0 2H4v3a4 4 0 0 0 4 4m8-7h4v3a4 4 0 0 1-4 4m-4 1v7m-4 1h8"
+          />
+        </symbol>
+        <symbol id="i-info" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 11v6m0-10v1" />
+        </symbol>
+      </defs>
+    </svg>
     <header class="topbar">
-      <a class="brand" href="#main" aria-label="ODDBOUT Broadcast home">
-        <span class="brand-mark" aria-hidden="true">O</span>
-        <span class="brand-name">ODDBOUT<span class="brand-divider">/</span><span>ON AIR</span></span>
-      </a>
-      <div class="topbar-right">
-        <span class="environment"><span class="environment-dot"></span> PAYPAL SANDBOX</span>
-        <button class="button button-quiet" id="signout" type="button" hidden>Sign out</button>
+      <div class="topbar-inner">
+        <a class="brand" href="https://oddbout.com/" aria-label="ODDBOUT home"
+          ><img
+            src="./assets/oddbout-logo.webp"
+            alt="ODDBOUT Fight Club"
+            width="378"
+            height="80" /></a
+        ><span class="studio-label">Broadcast Studio</span>
+        <nav aria-label="Studio">
+          <a href="#wallet">Wallet</a><a href="#setup">Setup</a
+          ><a href="#control">Control</a>
+        </nav>
+        <div class="account">
+          <button
+            id="google-signin"
+            class="google-button"
+            type="button"
+            disabled
+            aria-label="Sign in with Google"
+          >
+            <img
+              src="./assets/google-signin.png"
+              alt="Sign in with Google"
+              width="189"
+              height="40"
+            /></button
+          ><span id="account-identity" class="account-identity" hidden
+            ><span class="avatar" id="account-avatar" aria-hidden="true"></span
+            ><span id="account-name"></span></span
+          ><button
+            class="icon-button"
+            id="signout"
+            type="button"
+            aria-label="Sign out"
+            title="Sign out"
+            hidden
+          >
+            <svg class="icon" aria-hidden="true"><use href="#i-logout" /></svg>
+          </button>
+        </div>
       </div>
     </header>
-
-    <main id="main">
+    <main id="main" class="shell">
       <section class="intro" aria-labelledby="page-title">
-        <div>
-          <p class="eyebrow">BROADCAST CONTROL ROOM <span class="eyebrow-line"></span></p>
-          <h1 id="page-title">Make room<br><span>for the next bout.</span></h1>
-          <p class="intro-copy">Fund a broadcast, set its limits, then let your producer take the corner.</p>
+        <div class="intro-copy">
+          <span class="badge"><span class="dot"></span> SANDBOX STUDIO</span>
+          <h1 id="page-title">
+            Small setup.<br /><span>Big fight energy.</span>
+          </h1>
+          <p>Your fighters. Your budget. Your show.</p>
         </div>
-        <div class="intro-stamp" aria-label="ODDBOUT broadcast console">
-          <span>ODD<br>BOUT</span><span class="stamp-orbit" aria-hidden="true">✳</span>
+        <div class="fighter-poster" aria-hidden="true">
+          <span class="poster-caption">THE NEXT ROUND IS YOURS</span>
+          <div class="poster-faces">
+            <img src="./assets/kuma.webp" alt="" width="112" height="112" /><img
+              src="./assets/yume.webp"
+              alt=""
+              width="112"
+              height="112"
+            /><img
+              src="./assets/bravow.webp"
+              alt=""
+              width="112"
+              height="112"
+            /><img src="./assets/beotim.webp" alt="" width="112" height="112" />
+          </div>
+          <span class="poster-rule"></span
+          ><span class="poster-foot"
+            >4 FIGHTERS <span>3 BOUTS</span> 1 CHAMPION</span
+          >
         </div>
       </section>
-
-      <section class="panel auth-panel" aria-labelledby="account-title">
+      <p
+        id="login-status"
+        class="inline-status"
+        role="status"
+        aria-live="polite"
+      ></p>
+      <p
+        id="configuration-status"
+        class="notice"
+        role="status"
+        aria-live="polite"
+        hidden
+      ></p>
+      <section id="wallet" class="section-block" aria-labelledby="wallet-title">
         <div class="section-heading">
-          <div><p class="eyebrow">01 / ACCOUNT</p><h2 id="account-title">Your corner</h2></div>
-          <span class="section-note">Sign in to manage credits and broadcasts.</span>
-        </div>
-        <form id="login-form" class="login-form">
-          <label class="field field-grow" for="email">Email address
-            <input id="email" name="email" type="email" autocomplete="email" placeholder="you@example.com" required>
-          </label>
-          <button class="button button-primary" type="submit">Continue <span aria-hidden="true">↗</span></button>
-        </form>
-        <p class="inline-status" id="login-status" role="status" aria-live="polite">Sign in to view your account.</p>
-        <p class="inline-status" id="configuration-status" role="status" aria-live="polite"></p>
-      </section>
-
-      <section class="section-block" aria-labelledby="wallet-title">
-        <div class="section-heading section-heading-outside">
-          <div><p class="eyebrow">02 / WALLET</p><h2 id="wallet-title">Credits, in your corner</h2></div>
-          <span class="section-note">Sandbox credits have no cash value.</span>
+          <h2 id="wallet-title">
+            <svg class="icon" aria-hidden="true"><use href="#i-wallet" /></svg>
+            Your credits
+          </h2>
+          <span class="section-note">Test credits only · No real charges</span>
         </div>
         <div class="wallet-grid">
-          <article class="metric-card metric-available">
-            <span class="metric-label">AVAILABLE</span>
-            <output class="metric-value" id="available">—</output>
-            <span class="metric-foot">Ready to allocate</span>
+          <article class="wallet-card">
+            <div class="wallet-primary">
+              <span class="metric-label">Available</span>
+              <div>
+                <output id="available">—</output
+                ><span class="credit-unit">credits</span>
+              </div>
+            </div>
+            <div class="wallet-secondary">
+              <div><span>Reserved</span><output id="reserved">—</output></div>
+              <div><span>Total</span><output id="balance">—</output></div>
+            </div>
+            <svg class="wallet-watermark" aria-hidden="true">
+              <use href="#i-cup" />
+            </svg>
           </article>
-          <article class="metric-card">
-            <span class="metric-label">RESERVED</span>
-            <output class="metric-value" id="reserved">—</output>
-            <span class="metric-foot">Held for active budgets</span>
-          </article>
-          <article class="metric-card">
-            <span class="metric-label">TOTAL BALANCE</span>
-            <output class="metric-value" id="balance">—</output>
-            <span class="metric-foot">Available + reserved</span>
-          </article>
-        </div>
-        <p id="wallet-status" class="inline-status" role="status" aria-live="polite"></p>
-        <form id="topup-form" class="panel topup-panel">
-          <div class="topup-copy"><span class="mini-icon" aria-hidden="true">＋</span><div><h3>Top up with PayPal</h3><p>Choose a Sandbox package. You’ll review the order on PayPal.</p></div></div>
-          <label class="field product-field" for="productId">Credit package
-            <select id="productId" name="productId" required>
-              <option value="">Loading packages…</option>
-            </select>
-          </label>
-          <button class="button button-secondary" type="submit">Continue to checkout <span aria-hidden="true">↗</span></button>
-        </form>
-        <div class="panel form-panel" id="payment-recovery" hidden>
-          <p>Keep this console open while approving your order on PayPal.</p>
-          <a id="paypal-approval" class="button button-primary" target="_blank" rel="noopener noreferrer" hidden>Open PayPal Sandbox ↗</a>
-          <label class="field" for="payment-intent">Payment reference<input id="payment-intent" readonly></label>
-          <button class="button button-secondary" id="verify-payment" type="button">Verify payment</button>
-        </div>
-      </section>
-
-      <section class="section-block" aria-labelledby="budget-title">
-        <div class="section-heading section-heading-outside">
-          <div><p class="eyebrow">03 / BUDGET</p><h2 id="budget-title">Set the terms</h2></div>
-          <span class="section-note">Approve a clear limit before the broadcast starts.</span>
-        </div>
-        <form id="budget-form" class="panel form-panel">
-          <div class="form-grid">
-            <label class="field" for="hostId">Broadcast host
-              <select id="hostId" name="hostId" required>
-                <option value="">Choose a host</option>
-              </select>
-              <span class="field-hint">Select a configured host. Verify OBS and rendering on that host before live operation.</span>
-            </label>
-            <label class="field" for="channelId">Session channel label
-              <input id="channelId" name="channelId" type="text" autocomplete="off" placeholder="A label for this rehearsal" required>
-              <span class="field-hint">A private session label. Twitch ownership and live output are not verified. Never enter a stream key.</span>
-            </label>
-            <label class="field" for="durationHours">Duration limit
-              <span class="input-suffix"><input id="durationHours" name="durationHours" type="number" min="1" max="24" step="1" value="2" required><span>hours</span></span>
-            </label>
-            <label class="field" for="maxCredits">Maximum credits
-              <input id="maxCredits" name="maxCredits" type="number" min="25" step="1" placeholder="Set a spending cap" required>
-            </label>
-            <label class="field field-full" for="fighterIds">Eligible fighters
-              <input id="fighterIds" name="fighterIds" type="text" value="kuma,yume,bravow,beotim" autocomplete="off" spellcheck="false" required>
-              <span class="field-hint">Four unique fighter IDs, comma separated. Availability is checked before approval.</span>
-            </label>
-          </div>
-          <div class="approval-callout"><span class="callout-mark" aria-hidden="true">!</span><p>Approving lets ODDBOUT use <strong>up to your stated credit limit</strong> on the selected host and channel, until the duration ends or you stop it.</p></div>
-          <div class="form-actions"><span class="section-note">You can stop a broadcast at any time. A cup already on screen finishes and is charged; queued cups are cancelled and their credits return.</span><button class="button button-primary" type="submit">Review &amp; approve <span aria-hidden="true">→</span></button></div>
-        </form>
-      </section>
-
-      <section class="section-block" aria-labelledby="broadcast-title">
-        <div class="section-heading section-heading-outside">
-          <div><p class="eyebrow">04 / REHEARSAL CONTROL</p><h2 id="broadcast-title">Take it to the ring</h2></div>
-          <span class="section-note">Starting uses an approved budget.</span>
-        </div>
-        <div class="control-grid">
-          <form id="broadcast-form" class="panel form-panel">
-            <label class="field" for="approvalId">Approved budget ID
-              <input id="approvalId" name="approvalId" type="text" autocomplete="off" placeholder="Created after approval" required>
-            </label>
-            <div class="form-actions compact-actions"><span></span><button class="button button-primary" type="submit">Start broadcast <span aria-hidden="true">→</span></button></div>
+          <form id="topup-form" class="panel topup-panel">
+            <div class="topup-heading">
+              <h3>Add a little firepower.</h3>
+              <img
+                src="./assets/paypal.png"
+                alt="PayPal"
+                width="100"
+                height="26"
+              />
+            </div>
+            <label class="field" for="productId"
+              >Credit package<select id="productId" name="productId" required>
+                <option value="">Loading packages…</option>
+              </select></label
+            ><button class="button button-paypal" type="submit">
+              Top up with PayPal
+              <svg class="icon" aria-hidden="true">
+                <use href="#i-external" />
+              </svg>
+            </button>
+            <p class="field-hint">Review your test payment on PayPal.</p>
           </form>
-          <article class="panel host-panel" aria-labelledby="hosts-title">
-            <div class="panel-heading"><div><p class="eyebrow">HOST CHECK</p><h3 id="hosts-title">Configured hosts</h3></div><span class="live-indicator"><span></span> UNVERIFIED</span></div>
-            <div id="hosts-readiness" class="readiness-list" aria-live="polite"><p class="empty-note">Host readiness will appear after the live check.</p></div>
-          </article>
         </div>
-
-        <div class="panel broadcast-panel">
-          <div class="broadcast-bar">
-            <div class="broadcast-identity"><span class="signal-badge"><span></span> BROADCAST</span><label class="field broadcast-id-field" for="broadcastId">Broadcast ID
-              <input id="broadcastId" name="broadcastId" type="text" autocomplete="off" placeholder="No broadcast selected">
-            </label></div>
-            <div class="button-row"><button id="host-cup" class="button button-primary" type="button">Queue one cup</button><button id="refresh" class="button button-secondary" type="button">Refresh status</button><button id="stop" class="button button-danger" type="button">Stop broadcast</button></div>
+        <p
+          id="wallet-status"
+          class="inline-status"
+          role="status"
+          aria-live="polite"
+        ></p>
+        <div class="panel payment-recovery" id="payment-recovery" hidden>
+          <div>
+            <h3>Finish your top-up</h3>
+            <p>Approve on PayPal, then verify here.</p>
           </div>
-          <div class="live-grid">
-            <section class="feed-column" aria-labelledby="jobs-title"><div class="feed-heading"><h3 id="jobs-title">Active jobs</h3><span class="feed-caption">From the server</span></div><div id="active-jobs" class="jobs-list" aria-live="polite"><p class="empty-note">No jobs loaded.</p></div></section>
-            <section class="feed-column" aria-labelledby="activity-title"><div class="feed-heading"><h3 id="activity-title">Status feed</h3><span class="feed-caption">Latest response</span></div><pre id="status" class="data-feed" aria-live="polite">Waiting for account and broadcast status.</pre></section>
-          </div>
-          <section class="report-section" aria-labelledby="report-title"><div class="feed-heading"><h3 id="report-title">Broadcast report</h3><span class="feed-caption">Saved results</span></div><pre id="report" class="data-feed report-feed">No report loaded.</pre></section>
+          <a
+            id="paypal-approval"
+            class="button button-secondary"
+            target="_blank"
+            rel="noopener noreferrer"
+            hidden
+            >Open PayPal
+            <svg class="icon" aria-hidden="true">
+              <use href="#i-external" /></svg></a
+          ><button
+            class="button button-primary"
+            id="verify-payment"
+            type="button"
+          >
+            Verify payment
+          </button>
+          <details class="payment-reference">
+            <summary>Payment reference</summary>
+            <label class="field" for="payment-intent"
+              ><span class="sr-only">Payment reference</span
+              ><input id="payment-intent" readonly
+            /></label>
+          </details>
         </div>
       </section>
+      <div class="workspace-grid">
+        <section
+          id="setup"
+          class="section-block"
+          aria-labelledby="budget-title"
+        >
+          <div class="section-heading">
+            <h2 id="budget-title">
+              <svg class="icon" aria-hidden="true">
+                <use href="#i-sliders" />
+              </svg>
+              Set up your show
+            </h2>
+            <span class="step-label">01</span>
+          </div>
+          <form id="budget-form" class="panel form-panel">
+            <div class="form-grid">
+              <label class="field" for="hostId"
+                >Broadcast host<select id="hostId" name="hostId" required>
+                  <option value="">Choose a host</option>
+                </select></label
+              >
+              <label class="field" for="channelId"
+                >Session name<input
+                  id="channelId"
+                  name="channelId"
+                  type="text"
+                  autocomplete="off"
+                  placeholder="Friday fight night"
+                  required
+              /></label>
+              <label class="field" for="durationHours"
+                >Time limit<span class="input-suffix"
+                  ><input
+                    id="durationHours"
+                    name="durationHours"
+                    type="number"
+                    min="1"
+                    max="24"
+                    step="1"
+                    value="2"
+                    required
+                  /><span>hours</span></span
+                ></label
+              >
+              <label class="field" for="maxCredits"
+                >Credit limit<input
+                  id="maxCredits"
+                  name="maxCredits"
+                  type="number"
+                  min="25"
+                  step="1"
+                  placeholder="e.g. 250"
+                  required
+              /></label>
+              <div class="field field-full">
+                <label for="fighterIds">Fighter lineup</label>
+                <div
+                  id="fighter-lineup"
+                  class="lineup"
+                  aria-label="Selected fighters"
+                ></div>
+                <input
+                  id="fighterIds"
+                  name="fighterIds"
+                  type="text"
+                  value="kuma,yume,bravow,beotim"
+                  autocomplete="off"
+                  spellcheck="false"
+                  required
+                  aria-describedby="fighters-hint"
+                /><span class="field-hint" id="fighters-hint"
+                  >4 unique fighter IDs, separated by commas.</span
+                >
+              </div>
+            </div>
+            <div class="approval-callout">
+              <svg class="icon" aria-hidden="true"><use href="#i-info" /></svg>
+              <p>
+                Approve spending up to this limit on your selected host and
+                session. Stop anytime; the cup already playing finishes and is
+                charged. Unused credits return.
+              </p>
+            </div>
+            <button class="button button-primary full-width" type="submit">
+              Review budget
+              <svg class="icon" aria-hidden="true"><use href="#i-arrow" /></svg>
+            </button>
+          </form>
+        </section>
+        <section
+          id="control"
+          class="section-block"
+          aria-labelledby="broadcast-title"
+        >
+          <div class="section-heading">
+            <h2 id="broadcast-title">
+              <svg class="icon" aria-hidden="true"><use href="#i-play" /></svg>
+              Run the ring
+            </h2>
+            <span class="step-label">02</span>
+          </div>
+          <div class="panel control-panel">
+            <div class="host-heading">
+              <span class="host-icon"
+                ><svg class="icon" aria-hidden="true">
+                  <use href="#i-monitor" /></svg
+              ></span>
+              <div>
+                <h3>Broadcast host</h3>
+                <span class="status-pill">Live output unverified</span>
+              </div>
+            </div>
+            <p id="hosts-readiness" class="field-hint" aria-live="polite">
+              Loading configured hosts…
+            </p>
+            <form id="broadcast-form">
+              <label class="field" for="approvalId"
+                >Approved budget<input
+                  id="approvalId"
+                  name="approvalId"
+                  type="text"
+                  autocomplete="off"
+                  placeholder="Appears after approval"
+                  required /></label
+              ><button class="button button-primary full-width" type="submit">
+                <svg class="icon" aria-hidden="true">
+                  <use href="#i-play" />
+                </svg>
+                Start rehearsal
+              </button>
+            </form>
+            <div class="session-controls">
+              <label class="field" for="broadcastId"
+                >Current session<input
+                  id="broadcastId"
+                  name="broadcastId"
+                  type="text"
+                  autocomplete="off"
+                  placeholder="No session yet"
+              /></label>
+              <div class="button-row">
+                <button
+                  id="host-cup"
+                  class="button button-secondary"
+                  type="button"
+                >
+                  <svg class="icon" aria-hidden="true">
+                    <use href="#i-cup" />
+                  </svg>
+                  Queue a cup</button
+                ><button
+                  id="refresh"
+                  class="icon-button"
+                  type="button"
+                  aria-label="Refresh status"
+                  title="Refresh status"
+                >
+                  <svg class="icon" aria-hidden="true">
+                    <use href="#i-refresh" />
+                  </svg></button
+                ><button
+                  id="stop"
+                  class="icon-button button-danger"
+                  type="button"
+                  aria-label="Stop broadcast"
+                  title="Stop broadcast"
+                >
+                  <svg class="icon" aria-hidden="true">
+                    <use href="#i-stop" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <p class="rehearsal-note">
+              Rehearsal mode. Twitch streaming is not connected.
+            </p>
+          </div>
+        </section>
+      </div>
+      <section class="section-block" aria-labelledby="activity-title">
+        <div class="section-heading"><h2 id="activity-title">Activity</h2></div>
+        <div class="panel activity-panel">
+          <p id="activity-summary" role="status" aria-live="polite">
+            Sign in to get your show started.
+          </p>
+          <div id="active-jobs" class="jobs-list" aria-live="polite"></div>
+          <details class="technical-details">
+            <summary>Session details</summary>
+            <div class="detail-grid">
+              <section>
+                <h3>Latest response</h3>
+                <pre id="status" class="data-feed">
+Waiting for account and broadcast status.</pre
+                >
+              </section>
+              <section>
+                <h3>Broadcast report</h3>
+                <pre id="report" class="data-feed">No report loaded.</pre>
+              </section>
+            </div>
+          </details>
+        </div>
+      </section>
+      <footer class="footer">
+        <span>Good fights. Good company.</span
+        ><a href="https://oddbout.com/"
+          >Back to ODDBOUT
+          <svg class="icon" aria-hidden="true"><use href="#i-external" /></svg
+        ></a>
+      </footer>
     </main>
-
-    <footer class="footer"><span>ODDBOUT · BROADCAST CONTROL</span><span>PAYPAL SANDBOX · NO REAL-MONEY CHARGES</span></footer>
-  </div>
-  <script src="./supabase.js"></script>
-  <script type="module" src="./app.mjs"></script>
-</body>
+    <script src="./supabase.js"></script>
+    <script type="module" src="./app.mjs"></script>
+  </body>
 </html>

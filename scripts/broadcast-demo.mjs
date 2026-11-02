@@ -45,6 +45,17 @@ export function createBroadcastDemo(env = process.env) {
     ['/broadcast/operations.mjs', ['web/broadcast/operations.mjs', 'text/javascript; charset=utf-8']],
     ['/broadcast/supabase.js', ['node_modules/@supabase/supabase-js/dist/umd/supabase.js', 'text/javascript; charset=utf-8']],
   ]);
+  // Explicit asset allowlist: never turn this into an arbitrary filesystem route.
+  for (const name of ['oddbout-logo', 'kuma', 'yume', 'bravow', 'beotim']) {
+    files.set(`/broadcast/assets/${name}.webp`, [`web/broadcast/assets/${name}.webp`, 'image/webp']);
+  }
+  for (const name of ['paypal', 'google-signin']) {
+    files.set(`/broadcast/assets/${name}.png`, [`web/broadcast/assets/${name}.png`, 'image/png']);
+  }
+  for (const name of ['dm-sans', 'space-grotesk']) {
+    files.set(`/broadcast/assets/${name}.ttf`, [`web/broadcast/assets/${name}.ttf`, 'font/ttf']);
+    files.set(`/broadcast/assets/${name}-OFL.txt`, [`web/broadcast/assets/${name}-OFL.txt`, 'text/plain; charset=utf-8']);
+  }
   const server = createServer(async (req, res) => {
     try {
       // Proxy health checks may use an internal Host. This route exposes liveness only.

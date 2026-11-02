@@ -3,6 +3,46 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { createBroadcastDemo } from '../../scripts/broadcast-demo.mjs';
 
+test('Google-only account flow recovers from OAuth errors and clears identity on sign-out', { timeout: 30_000 }, async t => {
+  const { server } = createBroadcastDemo({ ODDBOUT_BROADCAST_PORT: '5190' });
+  await new Promise(resolve => server.listen(5190, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  const browser = await chromium.launch({ channel: process.env.ODDBOUT_TEST_BROWSER_CHANNEL ?? 'chrome', headless: true });
+  t.after(() => browser.close());
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await page.route('**/broadcast/config', route => route.fulfill({ json: { commerceEnabled: false, authConfigured: true, supabaseUrl: 'https://isolated.example', publishableKey: 'test-public' } }));
+  await page.route('**/broadcast/supabase.js', route => route.fulfill({ contentType: 'text/javascript', body: `
+    globalThis.supabase={createClient(){let cb, attempts=0; return {auth:{
+      onAuthStateChange(fn){cb=fn;},async getSession(){return {data:{session:null}};},
+      async signInWithOAuth(options){globalThis.__oauthOptions=options;
+        if (++attempts===1) return {error:{message:'OAuth unavailable'}};
+        cb('SIGNED_IN',{access_token:'fixture-token',user:{id:'google-fixture',email:'fixture@example.test',user_metadata:{full_name:'Studio Tester'}}});
+        return {error:null};},
+      async signOut(){cb('SIGNED_OUT',null);return {error:null};}
+    }};}};` }));
+  await page.goto('http://127.0.0.1:5190/broadcast/');
+  await page.waitForFunction(() => !document.getElementById('google-signin').disabled);
+  assert.equal(await page.locator('input[type="email"]').count(), 0);
+  await page.getByRole('button', { name: 'Sign in with Google' }).click();
+  await page.locator('#login-status').filter({ hasText: 'OAuth unavailable' }).waitFor();
+  assert.equal(await page.locator('#google-signin').isEnabled(), true);
+  assert.deepEqual(await page.evaluate(() => globalThis.__oauthOptions), { provider: 'google', options: { redirectTo: 'http://127.0.0.1:5190/broadcast/' } });
+  await page.locator('#google-signin').click();
+  await page.locator('#account-name').filter({ hasText: 'Studio Tester' }).waitFor();
+  assert.equal(await page.locator('#google-signin').isVisible(), false);
+  await page.locator('#fighterIds').fill('yume,custom,kuma,beotim');
+  assert.equal(await page.locator('#fighter-lineup').textContent(), 'YumecustomKumaBeotim');
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  await page.waitForFunction(() => [...document.images].every(image => image.complete));
+  assert.equal(await page.locator('img').evaluateAll(images => images.every(image => image.complete && image.naturalWidth > 0)), true);
+  await page.locator('#signout').click();
+  await page.locator('#google-signin').waitFor();
+  assert.equal(await page.locator('#account-name').textContent(), '');
+  assert.equal(await page.locator('#account-avatar').textContent(), '');
+  assert.equal(await page.locator('#account-identity').getAttribute('title'), '');
+  assert.equal(await page.evaluate(() => JSON.stringify({ ...localStorage }).includes('fixture-token')), false);
+});
+
 // Explicit opt-in: node --test test/browser/broadcast-console.test.mjs
 // Requires installed Chrome (or ODDBOUT_TEST_BROWSER_CHANNEL). No real accounts/payments.
 test('real browser: disabled integration, cross-tab payment fencing, rejection recovery and sign-out privacy', { timeout: 60_000 }, async t => {
@@ -14,7 +54,7 @@ test('real browser: disabled integration, cross-tab payment fencing, rejection r
   const errors = [], origin = 'http://127.0.0.1:5189', id = '11111111-1111-4111-8111-111111111111';
   const preview = await browser.newPage({ viewport: { width: 390, height: 844 } });
   await preview.goto(origin + '/broadcast/');
-  await preview.getByText('No balances or successful operations are simulated.').waitFor();
+  await preview.locator('#activity-summary').filter({ hasText: 'No balances or successful operations are simulated.' }).waitFor();
   for (const selector of ['#topup-form button', '#host-cup', '#stop']) assert.equal(await preview.locator(selector).isDisabled(), true);
   assert.equal(await preview.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await preview.close();
@@ -51,9 +91,9 @@ test('real browser: disabled integration, cross-tab payment fencing, rejection r
     await route.fulfill({ json: { ok: true, data: { id: 'acknowledged-job' } } });
   });
   await tab1.locator('#host-cup').click(); await started;
-  await tab2.locator('#host-cup').click(); await tab2.getByText(/Another tab is processing/).waitFor();
+  await tab2.locator('#host-cup').click(); await tab2.locator('#activity-summary').filter({ hasText: /Another tab is processing/ }).waitFor();
   assert.equal(calls.length, 1);
-  release(); await tab1.getByText(/acknowledged-job/).waitFor();
+  release(); await tab1.waitForFunction(() => document.getElementById('status').textContent.includes('acknowledged-job'));
   await context.unroute('**/commerce/cups');
 
   const rejected = [];
@@ -62,7 +102,7 @@ test('real browser: disabled integration, cross-tab payment fencing, rejection r
     return route.fulfill({ status: 422, json: { ok: false, code: 'invalid-fighters' } });
   });
   await tab1.locator('#fighterIds').fill('bad,yume,bravow,beotim');
-  await tab1.locator('#host-cup').click(); await tab1.getByText('invalid-fighters', { exact: true }).waitFor();
+  await tab1.locator('#host-cup').click(); await tab1.locator('#activity-summary').filter({ hasText: 'invalid-fighters' }).waitFor();
   await tab1.locator('#fighterIds').fill('kuma,yume,bravow,beotim');
   await tab1.locator('#host-cup').click();
   await tab1.waitForFunction(() => !document.getElementById('host-cup').disabled);
@@ -71,9 +111,9 @@ test('real browser: disabled integration, cross-tab payment fencing, rejection r
 
   const retry = [];
   await context.route('**/commerce/cups', route => { retry.push(route.request().postDataJSON()); return route.abort('failed'); });
-  await tab1.locator('#host-cup').click(); await tab1.getByText('Failed to fetch', { exact: true }).waitFor();
+  await tab1.locator('#host-cup').click(); await tab1.locator('#activity-summary').filter({ hasText: 'Failed to fetch' }).waitFor();
   await tab1.reload(); await tab1.locator('#signout').waitFor({ state: 'visible' });
-  await tab1.locator('#host-cup').click(); await tab1.getByText('Failed to fetch', { exact: true }).waitFor();
+  await tab1.locator('#host-cup').click(); await tab1.locator('#activity-summary').filter({ hasText: 'Failed to fetch' }).waitFor();
   assert.deepEqual(retry[0], retry[1]);
   // A later auth failure cannot prove that the earlier lost response did not commit.
   await context.unroute('**/commerce/cups');
@@ -81,11 +121,11 @@ test('real browser: disabled integration, cross-tab payment fencing, rejection r
     retry.push(route.request().postDataJSON());
     return route.fulfill({ status: 401, json: { ok: false, code: 'authentication-required' } });
   });
-  await tab1.locator('#host-cup').click(); await tab1.getByText('authentication-required', { exact: true }).waitFor();
+  await tab1.locator('#host-cup').click(); await tab1.locator('#activity-summary').filter({ hasText: 'authentication-required' }).waitFor();
   await context.unroute('**/commerce/cups');
   await context.route('**/commerce/cups', route => { retry.push(route.request().postDataJSON()); return route.abort('failed'); });
   await tab1.reload(); await tab1.locator('#signout').waitFor({ state: 'visible' });
-  await tab1.locator('#host-cup').click(); await tab1.getByText('Failed to fetch', { exact: true }).waitFor();
+  await tab1.locator('#host-cup').click(); await tab1.locator('#activity-summary').filter({ hasText: 'Failed to fetch' }).waitFor();
   assert.equal(retry.length, 4);
   assert.deepEqual(retry[3], retry[0], 'an auth refusal on recovery must not replace a possibly committed request key');
   const persisted = await tab1.evaluate(() => JSON.stringify({ ...localStorage }));
@@ -126,7 +166,7 @@ test('real browser: disabled integration, cross-tab payment fencing, rejection r
   releaseOldReport(); await (await oldReportResponse).finished();
   await tab1.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   assert.equal(await tab1.locator('#report').textContent(), 'Refresh to load the selected session.');
-  await tab1.locator('#refresh').click(); await tab1.locator('#report').filter({ hasText: otherSession }).waitFor();
+  await tab1.locator('#refresh').click(); await tab1.waitForFunction(id => document.getElementById('report').textContent.includes(id), otherSession);
   spendingBlocked = true;
   await tab1.locator('#refresh').click(); await tab1.getByText(/Spending is frozen/).waitFor();
   for (const selector of ['#topup-form button', '#budget-form button', '#broadcast-form button', '#host-cup']) assert.equal(await tab1.locator(selector).isDisabled(), true);
