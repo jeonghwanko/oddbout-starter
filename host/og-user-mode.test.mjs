@@ -40,8 +40,9 @@ esac`);
   await script(path.join(fakes, 'systemctl'), `echo "$*" >> "${base}/systemctl.log"`);
   await script(path.join(fakes, 'systemd-run'), `echo "$*" >> "${base}/systemd-run.log"; while [ "$1" != "--" ]; do shift; done; shift; exec "$@"`);
   await script(path.join(fakes, 'sudo'), `echo "sudo $*" >> "${base}/sudo.log"; exit 1`);
-  const env = { ...process.env, PATH: `${fakes}:${process.env.PATH}`, OG_UNIT_DIR: units, OG_SVC_USER: '', OG_ROOT: '' };
-  const og = (args, input) => spawnSync(path.join(root, 'bin', 'og'), args, { input, encoding: 'utf8', env });
+  // Read at each call: a test sets OG_SLOT_WAIT in process.env for one run.
+  const env = () => ({ ...process.env, PATH: `${fakes}:${process.env.PATH}`, OG_UNIT_DIR: units, OG_SVC_USER: '', OG_ROOT: '' });
+  const og = (args, input) => spawnSync(path.join(root, 'bin', 'og'), args, { input, encoding: 'utf8', env: env() });
   return { base, root, units, og, env };
 }
 
@@ -130,7 +131,7 @@ test('a signal to og\'s process group stops the command og runs, og ends after i
     await script(path.join(bin, 'slow-step'), `trap 'echo term > "${base}/stopped"; exit 143' TERM
 echo started > "${base}/started"; sleep 60 & wait`);
     // As the worker runs og: its own process group, stopped by signalling that group.
-    const child = spawn(path.join(root, 'bin', 'og'), ['run', job, '--', 'slow-step'], { env, detached: true, stdio: 'ignore' });
+    const child = spawn(path.join(root, 'bin', 'og'), ['run', job, '--', 'slow-step'], { env: env(), detached: true, stdio: 'ignore' });
     const exited = new Promise(done => child.on('exit', (code, signal) => done({ code, signal, at: Date.now() })));
     for (let i = 0; i < 100 && !existsSync(path.join(base, 'started')); i++) await new Promise(done => setTimeout(done, 100));
     assert.ok(existsSync(path.join(base, 'started')), 'the command started');
