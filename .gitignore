@@ -1,5 +1,7 @@
 node_modules/
 .oddbout-private/
+.oddbout-broadcast/
+deploy/broadcast-hosts.json
 input/sources/
 .cache/
 .dots-runtime.json
