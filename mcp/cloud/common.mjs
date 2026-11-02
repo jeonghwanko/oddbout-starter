@@ -2,6 +2,7 @@
 // The cloud MCP's shared pieces: tool argument schemas and annotations, results as hosts read them, host file downloads and arena calls.
 import { z } from 'zod';
 import { Problem, readBody } from '../../api/http.mjs';
+import { compactText } from '../tool-result.mjs';
 
 /**
  * What cloud.mjs hands the tool families. `Identity` is the verified caller (authenticateCloud): null on a signed-out call, which
@@ -58,23 +59,13 @@ export const FILE = z.object({ download_url: z.string().max(8192), file_id: z.st
 export const UUID_ARG = () => z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
 export const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 export const AUTH = [{ type: 'oauth2', scopes: ['openid', 'email', 'profile'] }];
-/** @type {(value: Record<string, unknown>, compact?: boolean) => ToolOutput} */
+/**
+ * `compact`: a host that reads the structured content (ChatGPT) gets compactText; other hosts read only the text and keep the whole JSON.
+ * @type {(value: Record<string, unknown>, compact?: boolean) => ToolOutput}
+ */
 export const output = (value, compact = false) => ({ content: [{ type: 'text', text: compact ? compactText(value) : JSON.stringify(value) }], structuredContent: value,
   ...(value.ok === false ? { isError: true } : {}) });
-/**
- * A result's text for a host that also reads its structured content (ChatGPT — the Apps SDK hands the model both): the JSON again doubled
- * every result in the conversation (MCP 점검, 2026-10-27; the contract schema is 24 KB). A small result or a failure stays whole; a large one
- * says where its fields are. Other hosts read only the text and keep the whole JSON.
- * @param {Record<string, unknown>} value
- */
-export function compactText(value) {
-  const text = JSON.stringify(value);
-  if (text.length <= 1200 || value?.ok === false) return text;
-  const parts = Object.entries(value).map(([key, item]) => Array.isArray(item) ? `${key}[${item.length}]`
-    : item && typeof item === 'object' ? `${key}{${Object.keys(item).slice(0, 8).join(',')}${Object.keys(item).length > 8 ? ',…' : ''}}`
-      : `${key}=${(JSON.stringify(item) ?? String(item)).slice(0, 40)}`);
-  return `Full result in structuredContent (${text.length} characters): ${parts.join(', ')}`;
-}
+export { compactText };
 
 // Files come from the host's fileParams capability, never arbitrary URLs or VM paths.
 // Do not follow redirects: even an allowed origin must not redirect to a private network or another service.

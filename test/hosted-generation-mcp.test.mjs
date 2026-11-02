@@ -103,6 +103,55 @@ test('an agent asks ODDBOUT for a fighter, passes the picks and registers it in 
   } finally { await g.sql.close(); }
 });
 
+test('a request with a picture checks the account once for its three signed-in routes (MCP 점검 2026-11-03: once per route)', async () => {
+  const g = await generation();
+  try {
+    await g.healthy();
+    const { call } = await connector(g, {}), rpc = g.db.rpc, calls = [];
+    g.db.rpc = (name, args) => { calls.push(name); return rpc(name, args); };
+    const ask = { description: '빨간 글러브를 낀 고양이 복서, 귀가 크다', language: 'ko', rightsConfirmed: true, idempotencyKey: crypto.randomUUID(),
+      picture: { download_url: 'https://files.oaiusercontent.com/file-1', file_id: 'file-1' } };
+    // The check, the upload and the request itself (capabilities is public).
+    assert.equal((await call('request_hosted_fighter', ask)).job.status, 'queued');
+    assert.deepEqual(calls.filter(name => name === 'af_authorize'), ['af_authorize']);
+    // The next call is another request: it checks again.
+    assert.equal((await call('get_hosted_fighter', { idempotencyKey: ask.idempotencyKey })).job.status, 'queued');
+    assert.equal(calls.filter(name => name === 'af_authorize').length, 2);
+  } finally { await g.sql.close(); }
+});
+
+test('a wait on a submitted fighter reads the job and its submission in one query a tick, and ends when the check does', async () => {
+  const g = await generation();
+  try {
+    await g.healthy();
+    // The connector takes the database as it is now: record its reads from the start.
+    const from = g.db.from, reads = [];
+    g.db.from = table => { const query = from(table), select = query.select;
+      query.select = columns => { reads.push([table, columns]); return select(columns); }; return query; };
+    const { call } = await connector(g, { pollMs: 10 });
+    const { job } = await call('request_hosted_fighter', { description: '빨간 글러브를 낀 고양이 복서, 귀가 크다', language: 'ko', idempotencyKey: crypto.randomUUID() });
+    const submission = crypto.randomUUID();
+    await g.sql.query(`insert into public.af_submissions(id,owner_id,idempotency_key,manifest_text,manifest,manifest_sha,asset_bytes,status)
+      values($1,$2,gen_random_uuid(),'{}','{}'::jsonb,repeat('a',64),1,'validating')`, [submission, g.owner]);
+    await g.sql.query("update public.af_generation_jobs set status = 'submitted', submission_id = $1 where id = $2", [submission, job.id]);
+    reads.length = 0;
+    await call('get_hosted_fighter', { jobId: job.id });
+    const once = reads.splice(0);
+    const tick = ([table, columns]) => table === 'af_generation_jobs' && columns === 'status,submission:af_submissions!submission_id(status)';
+    // The check ends once the wait has seen it running.
+    const settle = async () => { while (!reads.some(tick)) await new Promise(done => setTimeout(done, 5));
+      await g.sql.query("update public.af_submissions set status = 'rejected' where id = $1", [submission]); };
+    const started = Date.now();
+    const [waited] = await Promise.all([call('get_hosted_fighter', { jobId: job.id, waitSeconds: 5 }), settle()]);
+    assert.ok(Date.now() - started < 3000, `${Date.now() - started} ms`);
+    assert.equal(waited.job.status, 'submitted');
+    // Every tick is one joined read; the submission is read on its own only by the job's final read, as without a wait.
+    assert.ok(reads.filter(tick).length >= 2, `${reads.filter(tick).length} ticks`);
+    const own = list => list.filter(([table]) => table === 'af_submissions').length;
+    assert.equal(own(reads), own(once));
+  } finally { await g.sql.close(); }
+});
+
 test('a lost request response resumes on a fresh connector with the same job and fresh previews, even while new requests are disabled', async () => {
   const g = await generation();
   try {

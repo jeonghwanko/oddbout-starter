@@ -1,16 +1,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { ElicitRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { accountItem, checkKit, checkReadiness, creationProgress, elicitAccount, KIT_BRANCH } from '../mcp/creation-readiness.mjs';
+import { accountItem, checkKit, checkReadiness, creationProgress, elicitAccount, FETCH_INTERVAL_MS, FETCH_RECORD, KIT_BRANCH } from '../mcp/creation-readiness.mjs';
 import { createServer } from '../mcp/server.mjs';
 import { createEnvironmentStore } from '../mcp/creation-environment.mjs';
 
-const installed = { source: true, environment: true };
+const installed = { source: true, environment: true }, kitRoot = fileURLToPath(new URL('../', import.meta.url));
 const workingTools = { inspect: async () => ({ ffmpeg: { status: 'ok' }, ffprobe: { status: 'ok' }, img2webp: { status: 'ok' }, rife: { status: 'ok' } }) };
 
 /** A scripted git: answers by the first arguments and records every call. */
@@ -82,6 +83,46 @@ test('an up-to-date checkout on the pre-fork pin is sent to setup, engine edits 
   const packaged = await checkKit({ progress: { inProgress: false }, installed, inspectEngine: engineState(true),
     git: async args => { calls.push(args[0]); return { code: 128, stdout: '' }; } });
   assert.deepEqual([packaged.status, packaged.reason, calls], ['ready', 'not-a-git-checkout', ['rev-parse']]);
+});
+
+test('the workspace keeps the last kit fetch: for five minutes after a failed one no call fetches, and one call fetches at a time', async t => {
+  // Each creation:tool call is a fresh process (a fakeGit keeps no memory either): on a blocked network every call paid the 60 s fetch.
+  const workspaceRoot = await mkdtemp(path.join(tmpdir(), 'kit-fetch-')); t.after(() => rm(workspaceRoot, { recursive: true, force: true }));
+  const base = { progress: { inProgress: false }, installed, inspectEngine: engineState(true), workspaceRoot };
+  const fetches = calls => calls.filter(call => call.startsWith('fetch')).length, record = path.join(workspaceRoot, FETCH_RECORD);
+  const offline = fakeGit({ fetch: 1, counts: '0\t0' });
+  const first = await checkKit({ ...base, git: offline.git });
+  assert.deepEqual([first.remoteChecked, first.reason, first.remoteRetryAt], [false, 'remote-unreachable-current-unknown', undefined]);
+  const kept = JSON.parse(await readFile(record, 'utf8'));
+  assert.deepEqual([kept.schemaVersion, kept.ok, kept.kitRoot, kept.branch], [1, false, path.resolve(kitRoot), KIT_BRANCH]);
+  const again = await checkKit({ ...base, git: offline.git });
+  assert.equal(fetches(offline.calls), 1);
+  assert.deepEqual([again.remoteChecked, again.reason], [false, 'remote-unreachable-current-unknown']);
+  assert.equal(Date.parse(again.remoteRetryAt), Date.parse(kept.attemptedAt) + FETCH_INTERVAL_MS);
+  // Five minutes on it fetches again. A success ends the wait and holds off no later call: a kit change published since still shows.
+  await writeFile(record, JSON.stringify({ ...kept, attemptedAt: new Date(Date.now() - FETCH_INTERVAL_MS - 1000).toISOString() }));
+  const online = fakeGit({ counts: '0\t0' });
+  const checked = [await checkKit({ ...base, git: online.git }), await checkKit({ ...base, git: online.git })];
+  assert.deepEqual(checked.map(result => [result.remoteChecked, result.reason, result.remoteRetryAt]), [[true, null, undefined], [true, null, undefined]]);
+  assert.equal(fetches(online.calls), 2);
+  assert.equal(JSON.parse(await readFile(record, 'utf8')).ok, true);
+  // Another kit's failed attempt is not this kit's, and checkRemote false neither fetches nor writes.
+  await writeFile(record, JSON.stringify(kept));
+  assert.equal((await checkKit({ ...base, git: online.git })).remoteRetryAt, again.remoteRetryAt);
+  const other = fakeGit({ counts: '0\t0' });
+  await checkKit({ ...base, root: path.join(workspaceRoot, 'other-kit'), git: other.git });
+  assert.equal(fetches(other.calls), 1);
+  await rm(record);
+  await checkKit({ ...base, fetchRemote: false, git: other.git });
+  await assert.rejects(readFile(record), { code: 'ENOENT' });
+  // Two calls at once: the second waits for the first's fetch and reuses its attempt instead of waiting out a fetch of its own.
+  let release; const gate = new Promise(done => { release = done; });
+  const blocked = fakeGit({ fetch: 1, counts: '0\t0' });
+  const slow = async (args, options) => { if (args[0] === 'fetch') await gate; return blocked.git(args, options); };
+  const both = Promise.all([checkKit({ ...base, git: slow }), checkKit({ ...base, git: slow })]);
+  setTimeout(release, 50);
+  assert.deepEqual((await both).map(result => result.remoteChecked), [false, false]);
+  assert.equal(fetches(blocked.calls), 1);
 });
 
 test('Dots readiness verifies the immutable workspace pin without fetching or treating detached HEAD as a branch error', async t => {

@@ -2,7 +2,9 @@
 // Separate workspace setup, ODDBOUT connection, provider choice, generation access and parent delivery.
 // It never generates, never switches providers, and never proves that a preview was displayed.
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { access } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { inspectSpriteEngine } from '../scripts/sprite-gen.mjs';
@@ -11,6 +13,8 @@ import { unverifiedCreation } from './connection-readiness.mjs';
 import { createEnvironmentStore } from './creation-environment.mjs';
 import { doctor as inspectDotsRuntime } from '../scripts/dots-workspace.mjs';
 import { readRecord, safePath } from '../scripts/dots-safety.mjs';
+import { atomicJson, localPath, readJson } from './creation-store.mjs';
+import { withFileLock } from './file-lock.mjs';
 
 /**
  * @typedef {import('./creation-store.mjs').CreationStore} CreationStore
@@ -22,7 +26,8 @@ import { readRecord, safePath } from '../scripts/dots-safety.mjs';
  *   fetchRemote?: boolean, git?: typeof runGit, inspectEngine?: (spriteRoot: string) => Promise<Engine>,
  *   inspectPinnedRuntime?: typeof inspectDotsRuntime }} KitOptions
  * @typedef {{ status: string, branch: string | null, behind: number | null, ahead: number | null, remoteChecked: boolean, engine: Engine | null,
- *   changedFiles: string[], nextCommands: string[], restartRequired: boolean, reason?: string | null, versionPolicy?: string }} KitResult
+ *   changedFiles: string[], nextCommands: string[], restartRequired: boolean, reason?: string | null, versionPolicy?: string,
+ *   remoteRetryAt?: string }} KitResult  `remoteRetryAt`: a fetch failed within FETCH_INTERVAL_MS, so none ran; the next is due then.
  */
 
 // codex/creator-hosting was the kit branch until 2026-10-29; it is frozen there and a checkout on it is told to move.
@@ -125,9 +130,49 @@ async function installedSpriteGen(spriteRoot) {
     environment: await exists(path.join(spriteRoot, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python')) };
 }
 
-const FETCH_INTERVAL_MS = 5 * 60_000, lastFetch = /** @type {Map<string, number>} */ (new Map());
+/**
+ * A kit fetch's last attempt. Each creation:tool call is a fresh process, so a cache in memory alone never held: on a blocked network
+ * every readiness call waited out the 60-second fetch again (MCP 점검 2026-11-03). The workspace keeps the attempt next to its other
+ * records; within FETCH_INTERVAL_MS of a failed one the kit is not fetched again. A success ends that wait but holds off no other
+ * process's fetch: a kit change published a minute ago still shows.
+ * @typedef {{ at: number, ok: boolean }} FetchAttempt
+ */
+export const FETCH_INTERVAL_MS = 5 * 60_000, FETCH_RECORD = 'output/kit-fetch.json';
+const lastFetch = /** @type {Map<string, FetchAttempt>} */ (new Map());
+/** @param {string | undefined} workspaceRoot @param {string} root @returns {Promise<FetchAttempt | null>} */
+async function recordedFetch(workspaceRoot, root) {
+  if (!workspaceRoot) return null;
+  try {
+    const record = await readJson(await localPath(workspaceRoot, FETCH_RECORD));
+    const at = Date.parse(record?.attemptedAt);
+    return record?.schemaVersion === 1 && record.kitRoot === path.resolve(root) && record.branch === KIT_BRANCH && Number.isFinite(at)
+      && typeof record.ok === 'boolean' ? { at, ok: record.ok } : null;
+  } catch { return null; }
+}
+/** A record that cannot be written costs the next call a fetch, never this check. @param {string | undefined} workspaceRoot @param {string} root @param {FetchAttempt} attempt */
+async function recordFetch(workspaceRoot, root, attempt) {
+  if (!workspaceRoot) return;
+  try {
+    await atomicJson(await localPath(workspaceRoot, FETCH_RECORD, { createParents: true }), { schemaVersion: 1, kitRoot: path.resolve(root),
+      branch: KIT_BRANCH, attemptedAt: new Date(attempt.at).toISOString(), ok: attempt.ok });
+  } catch { /* the next call fetches */ }
+}
+/**
+ * One kit's git work at a time across processes: two readiness calls fetching or fast-forwarding the same checkout collide on git's own
+ * locks, and the second can wait for the first's fetch and then reuse its recorded attempt. Keyed by the kit, in the temporary directory,
+ * so the checkout gains no file.
+ * @param {string} root
+ */
+const kitLock = root => path.join(tmpdir(), `oddbout-kit-${createHash('sha256').update(path.resolve(root)).digest('hex').slice(0, 16)}.lock`);
+// A fetch and a fast-forward take up to 60 seconds each.
+const KIT_LOCK_WAIT_MS = 150_000;
+
 /** @param {KitOptions & { spriteRoot: string, present: Installed }} options */
-async function checkKitCore({ progress, present, fetchRemote = true, git = runGit, root = kitRoot, spriteRoot,
+async function checkKitCore(options) {
+  return withFileLock(kitLock(options.root ?? kitRoot), () => checkKitLocked(options), { busy: 'kit-update-busy', waitMs: KIT_LOCK_WAIT_MS });
+}
+/** @param {KitOptions & { spriteRoot: string, present: Installed }} options */
+async function checkKitLocked({ progress, present, fetchRemote = true, git = runGit, root = kitRoot, spriteRoot, workspaceRoot,
   inspectEngine = inspectSpriteEngine }) {
   /** @type {KitResult} */
   const result = { status: 'ready', branch: null, behind: null, ahead: null, remoteChecked: false, engine: null,
@@ -142,12 +187,21 @@ async function checkKitCore({ progress, present, fetchRemote = true, git = runGi
   if (result.branch !== KIT_BRANCH) return { ...result, status: 'blocked', reason: 'wrong-branch', expectedBranch: KIT_BRANCH };
   // Edits inside the submodule are checked below; here only tracked edits in this checkout or a moved gitlink count.
   const dirty = (await git(['status', '--porcelain', '--untracked-files=no', '--ignore-submodules=dirty'], { cwd: root })).stdout;
-  // A long-running MCP process re-checks the published branch at most every FETCH_INTERVAL_MS (real git only).
-  const fresh = git === runGit && Date.now() - (lastFetch.get(root) ?? -Infinity) < FETCH_INTERVAL_MS;
-  if (fetchRemote && fresh) result.remoteChecked = true;
-  else if (fetchRemote) {
-    result.remoteChecked = (await git(['fetch', '--quiet', 'origin', KIT_BRANCH], { cwd: root, timeout: 60000 })).code === 0;
-    if (result.remoteChecked && git === runGit) lastFetch.set(root, Date.now());
+  if (fetchRemote) {
+    // The workspace's last attempt and this process's own (real git only, as a long-running MCP process keeps it).
+    const recorded = await recordedFetch(workspaceRoot, root), seen = git === runGit ? lastFetch.get(root) : undefined;
+    const latest = [recorded, seen].reduce((newest, attempt) => attempt && (!newest || attempt.at > newest.at) ? attempt : newest, null);
+    /** @type {(attempt: FetchAttempt) => boolean} */
+    const recent = attempt => Date.now() - attempt.at >= 0 && Date.now() - attempt.at < FETCH_INTERVAL_MS;
+    if (latest && recent(latest) && !latest.ok) result.remoteRetryAt = new Date(latest.at + FETCH_INTERVAL_MS).toISOString();
+    else if (seen && recent(seen) && seen.ok) result.remoteChecked = true;
+    else {
+      result.remoteChecked = (await git(['fetch', '--quiet', 'origin', KIT_BRANCH], { cwd: root, timeout: 60000 })).code === 0;
+      /** @type {FetchAttempt} */
+      const attempt = { at: Date.now(), ok: result.remoteChecked };
+      if (git === runGit) lastFetch.set(root, attempt);
+      await recordFetch(workspaceRoot, root, attempt);
+    }
   }
   if (result.remoteChecked) {
     const counts = (await git(['rev-list', '--left-right', '--count', `HEAD...origin/${KIT_BRANCH}`], { cwd: root })).stdout.split(/\s+/).map(Number);

@@ -10,6 +10,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import example from '../contracts/ai-fighter/v1/example.fighter.json' with { type: 'json' };
 import { createServer } from '../mcp/server.mjs';
 import { makePackageValidator, resolveManifest } from '../mcp/package-access.mjs';
+import { creationTool } from '../scripts/creation-tool.mjs';
 const root = fileURLToPath(new URL('../', import.meta.url));
 
 // The workspace server in process, as creation:tool runs it.
@@ -105,7 +106,7 @@ test('the file tools share one serial decoder; a changed asset is reported, neve
 test('one motion of the schema or example is a small read', async () => {
   const client = await connectInProcess({});
   try {
-    const size = async args => JSON.stringify((await client.callTool({ name: 'get_fighter_spec', arguments: args })).content).length;
+    const size = async args => JSON.stringify((await client.callTool({ name: 'get_fighter_spec', arguments: args })).structuredContent).length;
     for (const section of ['schema', 'example']) {
       const full = await size({ section }), one = await size({ section, motion: 'walk' });
       assert.ok(one * 3 < full, `${section}: ${one} of ${full}`);
@@ -119,6 +120,21 @@ test('one motion of the schema or example is a small read', async () => {
     const victory = (await client.callTool({ name: 'get_fighter_spec', arguments: { section: 'example', motion: 'victory' } })).structuredContent;
     assert.equal(victory.ok, true); assert.equal(victory.data.clip, null);
   } finally { await client.close(); }
+});
+test('a large result is sent once: its text names the fields in structuredContent, a failure stays whole', async () => {
+  // creation:tool prints the whole result; get_fighter_spec creation sent its 67.5 KB of guides twice (146 KB, MCP 점검 2026-11-03).
+  const result = await creationTool({ workspace: root, name: 'get_fighter_spec', args: { section: 'creation' } });
+  const data = JSON.stringify(result.structuredContent), text = result.content[0].text;
+  assert.match(text, /^Full result in structuredContent \(\d+ characters\): ok=true, stage="creation-kit", data\{tool,packageRoot,registrationMode,guide,interactionGuide\}$/);
+  assert.ok(JSON.stringify(result).length < data.length + 1000, `${JSON.stringify(result).length} of ${data.length}`);
+  // Where the engine is, without the ffmpeg, img2webp and RIFE probes that check_creation_readiness runs.
+  assert.equal(result.structuredContent.data.tool.tools, undefined);
+  assert.equal(result.structuredContent.data.tool.setupCommand, 'npm run sprite:setup');
+  // A small result and a failure keep their JSON text.
+  const small = await creationTool({ workspace: root, name: 'get_fighter_spec', args: { section: 'example', motion: 'victory' } });
+  assert.deepEqual(JSON.parse(small.content[0].text), small.structuredContent);
+  const failed = await creationTool({ workspace: root, name: 'validate_fighter_manifest', args: { manifestJson: '{"a":1,"a":2}' } });
+  assert.equal(failed.isError, true); assert.deepEqual(JSON.parse(failed.content[0].text), failed.structuredContent);
 });
 test('annotations say which tools reach the network: the game context does, local file checks do not', async () => {
   const client = await connectInProcess();

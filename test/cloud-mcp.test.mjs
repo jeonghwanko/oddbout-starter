@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createCloudHandler, authenticateCloud, EXPIRED_TOKEN_GRACE_MS, SIGN_IN_PROBLEMS, allowedFileUrl, downloadHostFile, compactText, timedFetch, CLOUD_RESOURCE, CLOUD_ISSUER, PUBLIC_RESOURCE, LEGACY_PUBLIC_RESOURCE, SIGN_IN_RESOURCE, PUBLIC_SIGN_IN_RESOURCE, DIRECTORY_RESOURCE, PUBLIC_DIRECTORY_RESOURCE, DIRECTORY_DOCUMENTATION } from '../mcp/cloud.mjs';
+import { createCloudHandler, scopedDatabase, authenticateCloud, EXPIRED_TOKEN_GRACE_MS, SIGN_IN_PROBLEMS, allowedFileUrl, downloadHostFile, compactText, timedFetch, CLOUD_RESOURCE, CLOUD_ISSUER, PUBLIC_RESOURCE, LEGACY_PUBLIC_RESOURCE, SIGN_IN_RESOURCE, PUBLIC_SIGN_IN_RESOURCE, DIRECTORY_RESOURCE, PUBLIC_DIRECTORY_RESOURCE, DIRECTORY_DOCUMENTATION } from '../mcp/cloud.mjs';
 import { DIRECTORY_INSTRUCTIONS, DIRECTORY_TITLES } from '../mcp/cloud/directory-edition.mjs';
 import { verifiedUserId } from '../api/http.mjs';
 import { safeClientRedirect, authorizationId } from '../web/cloud-connect/connect.mjs';
@@ -462,6 +462,47 @@ test('every write tool says whether a retry is safe; the ones that make somethin
     start_picture_upload: false, store_creator_source: true, prepare_creator_source_download: true,
   });
   for (const tool of tools.filter(t => t.annotations.readOnlyHint)) assert.equal(tool.annotations.idempotentHint, true, tool.name);
+});
+
+test('each edition\'s tools/list stays within its byte budget', async () => {
+  // Every conversation pays for the list (MCP 점검 2026-11-03: about 14k tokens for the full one). Measured that day at 57,512, 43,038 and
+  // 30,892 bytes; each ceiling sits just above. The descriptions carry product rules, so do not shorten them in bulk to fit: raise a ceiling
+  // on purpose, in the change that needs it, and say why.
+  const arena = { url: 'https://arena.test/oddbout-arena', key: 'k'.repeat(64), fetcher: async () => Response.json({ ok: true }) };
+  const bytes = async (options, url) => {
+    const response = await createCloudHandler({ db: dbFor(), ...options })(new Request(url, { method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }) }));
+    return new TextEncoder().encode(await response.text()).length;
+  };
+  for (const [edition, options, url, ceiling] of [['full, arena and hosted', { arena, hosted: {} }, CLOUD_RESOURCE, 58_000],
+    ['full without hosted', { arena }, CLOUD_RESOURCE, 43_500], ['directory', { arena, hosted: {} }, DIRECTORY_RESOURCE, 31_500]]) {
+    const size = await bytes(options, url);
+    assert.ok(size <= ceiling, `${edition}: tools/list is ${size} bytes, over its ${ceiling}`);
+  }
+});
+
+test('one request checks its account once for all its in-process routes; a failed check is asked again', async () => {
+  const calls = [], answers = [{ error: { message: 'rate-limit' } }, { data: true }];
+  const db = { rpc: async (name, args) => { calls.push([name, args]); await new Promise(done => setTimeout(done, 5)); return name === 'af_authorize' ? answers.shift() ?? { data: true } : { data: name }; } };
+  const scoped = scopedDatabase(db, owner);
+  assert.equal((await scoped.rpc('af_authorize', { p_owner: owner })).error.message, 'rate-limit');
+  // Asked again after the refusal; then concurrent routes share the one check, and later ones reuse it.
+  const answered = await Promise.all([scoped.rpc('af_authorize', { p_owner: owner }), scoped.rpc('af_authorize', { p_owner: owner })]);
+  assert.deepEqual(answered, [{ data: true }, { data: true }]);
+  assert.deepEqual(await scoped.rpc('af_authorize', { p_owner: owner }), { data: true });
+  assert.equal(calls.filter(([name]) => name === 'af_authorize').length, 2);
+  // Another owner's check and every other function still reach the database.
+  const other = crypto.randomUUID();
+  await scoped.rpc('af_authorize', { p_owner: other }); await scoped.rpc('af_create_submission', { p_owner: owner }); await scoped.rpc('af_create_submission', { p_owner: owner });
+  assert.deepEqual(calls.slice(2).map(([name, args]) => [name, args.p_owner]), [['af_authorize', other], ['af_create_submission', owner], ['af_create_submission', owner]]);
+  assert.equal((await scoped.auth.getClaims()).data.claims.sub, owner);
+  // A thrown check is forgotten too.
+  let tries = 0;
+  const thrown = scopedDatabase({ rpc: async () => { tries++; throw Error('fetch failed'); } }, owner);
+  await assert.rejects(thrown.rpc('af_authorize', { p_owner: owner }), /fetch failed/);
+  await assert.rejects(thrown.rpc('af_authorize', { p_owner: owner }), /fetch failed/);
+  assert.equal(tries, 2);
 });
 
 test('a large result\'s short text survives a field with no JSON form', () => {

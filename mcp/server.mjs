@@ -16,6 +16,7 @@ import { accountChoice, registerEnvironmentTools } from './creation-environment.
 import { errorCode } from './error-code.mjs';
 import { registerPackagingTools } from './packaging-tools.mjs';
 import { serialQueue } from './serial-worker.mjs';
+import { compactText } from './tool-result.mjs';
 
 const annotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 // These read the game's current creation context over the network.
@@ -45,7 +46,8 @@ function respond(result) {
   };
   const bounded = result.errors ? { ...result, errors: result.errors.slice(0, 50).map(error => diagnostic(error)),
     ...(result.errors.length > 50 ? { errorCount: result.errors.length } : {}) } : result;
-  return { isError: !bounded.ok, structuredContent: bounded, content: [{ type: 'text', text: JSON.stringify(bounded) }] };
+  // The data is in structuredContent, which creation:tool prints too; a large success's text only says where its fields are.
+  return { isError: !bounded.ok, structuredContent: bounded, content: [{ type: 'text', text: compactText(bounded) }] };
 }
 /**
  * The workspace tools. Registration belongs to the connected ODDBOUT cloud tools; this server never reads a CLI login.
@@ -87,8 +89,9 @@ export function createServer({ root, contextRequest } = {}) {
         const clip = /** @type {Record<string, { assetId: string } | undefined>} */ (example.clips)[motion] ?? null;
         return respond({ ok: true, stage: 'public-contract', data: { motion, clip, asset: clip && example.assets.find(asset => asset.id === clip.assetId) } });
       }
+      // Where the engine is, without probing ffmpeg, img2webp and RIFE: check_creation_readiness owns the tools.
       if (section === 'creation') return respond({ ok: true, stage: 'creation-kit', data: {
-        tool: await spriteStatus(), packageRoot: root ?? null, registrationMode: 'cloud',
+        tool: await spriteStatus({ tools: false }), packageRoot: root ?? null, registrationMode: 'cloud',
         guide: await readFile(new URL('../docs/DOT-CREATION.md', import.meta.url), 'utf8'),
         interactionGuide: await readFile(new URL('../docs/CREATION-UX.md', import.meta.url), 'utf8'),
       } });
