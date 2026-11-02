@@ -21,8 +21,9 @@ DB와 Sandbox 설정 없이 실행하면 `preview-unconfigured` 모드다. 이 �
 
 먼저 테스트 전용 Supabase 프로젝트임을 프로젝트 참조 ID와 대시보드에서 확인한다. 아래 migration은 `commerce` 지갑·원장·예산·작업 schema와 RPC를 만든다. 이 SQL을 **격리된 개발/데모 프로젝트에만** 적용한다.
 
-- `supabase/migrations/20261102115107_commerce_broadcast_ledger.sql`
-- 운영 또는 기존 프로덕션 프로젝트에 적용하지 않는다. 이 저장소에는 이 migration만 안전하게 단독 적용하는 CLI 별칭이 없다. 대상 프로젝트를 확인하고 기존의 검토된 DB 변경 절차를 사용한다.
+- `supabase/sandbox/20261102115107_commerce_broadcast_ledger.sql`
+- 운영 또는 기존 프로덕션 프로젝트에 적용하지 않는다. 그래서 이 파일은 `supabase/migrations/` 밖에 있다: 운영 DB 절차·`supabase db push`·배포 drift watch는 이 SQL을 보지 않는다. 대상 프로젝트를 확인하고 SQL 편집기 등으로 이 파일 하나만 실행한다.
+- 운영 `ai-fighter`·`ai-fighter-mcp` Edge 함수와 Render는 commerce를 싣지 않는다(2026-11-03). Sandbox API·producer MCP·worker API는 `scripts/broadcast-demo.mjs` 서버에서만 돈다.
 
 서버 환경 변수는 코드의 실제 이름과 조건을 따른다.
 
@@ -138,4 +139,4 @@ Grant는 등록된 사용자·broadcast에 한정되고, 매 요청 때 broadcas
 - OBS/호스트 doctor: `scripts/broadcast-host.mjs`, `broadcast/hosts.mjs`
 - render-only worker: `scripts/broadcast-runner.mjs`, `broadcast/runner.mjs`
 - 선택형 AI producer: `scripts/broadcast-producer.mjs`, `broadcast/producer.mjs`
-- 별도 Sandbox 원장 migration: `supabase/migrations/20261102115107_commerce_broadcast_ledger.sql`
+- 별도 Sandbox 원장 SQL(운영 migration 아님): `supabase/sandbox/20261102115107_commerce_broadcast_ledger.sql`

@@ -4,6 +4,9 @@ import { readFile, readdir } from 'node:fs/promises';
 
 const directory = new URL('../supabase/migrations/', import.meta.url);
 const migrations = (await readdir(directory)).filter(name => name.endsWith('.sql')).sort();
+// The PayPal Sandbox ledger (supabase/sandbox/) goes only to its own test project, never production, but its API role loads safeupdate too.
+const sandbox = new URL('../supabase/sandbox/', import.meta.url);
+const sandboxFiles = (await readdir(sandbox)).filter(name => name.endsWith('.sql')).sort();
 // Applied before this rule (2026-10-27). They stay as written; production already ran them.
 // 20261028180000 broke the rule and ran in production the same day; 20261028181000 restates its three functions whole.
 const STRING_PATCHED = ['20261024022222_ai_fighter_profile_edits.sql', '20261024104406_ai_fighter_owner_deletion.sql',
@@ -24,8 +27,8 @@ test('a function names the rows it updates or deletes (the API role preloads saf
   // the function statements tests run (helpers/fighter-database.mjs); this check also covers branches and functions no test reaches.
   // Each function's last definition across the migrations is the live one.
   const latest = new Map();
-  for (const name of migrations) {
-    const sql = (await readFile(new URL(name, directory), 'utf8')).replace(/--[^\n]*/g, '');
+  for (const [name, url] of [...migrations.map(name => [name, new URL(name, directory)]), ...sandboxFiles.map(name => [name, new URL(name, sandbox)])]) {
+    const sql = (await readFile(url, 'utf8')).replace(/--[^\n]*/g, '');
     for (const match of sql.matchAll(/create\s+(?:or\s+replace\s+)?function\s+([a-z_."]+)\s*\([\s\S]*?\$\$([\s\S]*?)\$\$/gi))
       latest.set(match[1].replaceAll('"', ''), { name, body: match[2] });
   }

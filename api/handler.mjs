@@ -1,6 +1,5 @@
 // @ts-check
 import { updateFighterProfile } from './fighter-profile.mjs';
-import { createCommerceHandler } from './commerce/handler.mjs';
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { createAccountHandler } from './account.mjs';
 import { createDeviceLoginHandler } from './device-login.mjs';
@@ -66,12 +65,10 @@ function check(error) { if (error) throw rpcProblem(error, SUBMISSION_STATUS); }
 /**
  * @param {{ db: any, simulateDuel?: any, engineVersion?: any, engines?: any, release?: any, creatorLink?: import('./http.mjs').CreatorLink | null,
  *   analytics?: import('./http.mjs').Analytics | null, agentClient?: any, limiter?: import('./http.mjs').Limiter | null, decisionsReviewer?: import('./http.mjs').Reviewer | null,
- *   responsesReviewer?: import('./http.mjs').Reviewer | null, cascadeReviewer?: import('./http.mjs').Reviewer | null,
- *   commerce?: {service:import('./commerce/handler.mjs').Service,publicOrigin:string}|null }} options
+ *   responsesReviewer?: import('./http.mjs').Reviewer | null, cascadeReviewer?: import('./http.mjs').Reviewer | null }} options
  * @returns {(request: Request) => Promise<Response>}
  */
-export function createHandler({ db, simulateDuel = null, engineVersion = null, engines = null, release = null, creatorLink = null, analytics = null, agentClient = null, limiter = null, decisionsReviewer = null, responsesReviewer = null, cascadeReviewer = null, commerce = null }) {
-  const commerceHandler = commerce ? createCommerceHandler({ ...commerce, authenticate: request => verifiedUserId(db, request), agent: agentClient !== null }) : null;
+export function createHandler({ db, simulateDuel = null, engineVersion = null, engines = null, release = null, creatorLink = null, analytics = null, agentClient = null, limiter = null, decisionsReviewer = null, responsesReviewer = null, cascadeReviewer = null }) {
   const duelHandler = createDuelHandler({db,simulateDuel,engineVersion,engines,release,limiter});
   const statisticsHandler = createFighterStatisticsHandler({ db });
   const accountHandler = createAccountHandler({ db, creatorLink });
@@ -135,7 +132,6 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
     try {
       const segments = new URL(request.url).pathname.split('/').filter(Boolean), prefix = segments.indexOf('ai-fighter');
       const parts = prefix >= 0 ? segments.slice(prefix + 1) : segments, method = request.method;
-      if (parts[0] === 'commerce' && commerceHandler) return commerceHandler(request, parts);
       const profileRoute = parts[0] === 'fighters' && parts[2] === 'profile' && parts.length === 3;
       if (profileRoute) {
         cors = { methods: 'PATCH, OPTIONS', headers: 'Authorization, Content-Type, Idempotency-Key' };

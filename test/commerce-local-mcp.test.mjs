@@ -4,8 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { createCommerceMcpHandler } from '../mcp/cloud/commerce-handler.mjs';
-import { createHandler } from '../api/handler.mjs';
 import { createCommerceHandler } from '../api/commerce/handler.mjs';
+import { verifiedUserId } from '../api/http.mjs';
 import { createCommerceService } from '../api/commerce/service.mjs';
 import { COMMERCE_CATALOG } from '../api/commerce/catalog.mjs';
 import { commerceDatabase } from './helpers/commerce-database.mjs';
@@ -113,7 +113,7 @@ test('grant expiration and shorter session deadline are enforced again on every 
 });
 
 test('opaque producer bearer cannot approve budgets through real human REST handler even with forged same-origin confirmation', async t => {
-  const f = await setup(t); const main = createHandler({ db: f.dbFacade, commerce: f.commerce });
+  const f = await setup(t); const main = createCommerceHandler({ ...f.commerce, authenticate: request => verifiedUserId(f.dbFacade, request) });
   const approve = token => main(new Request(`${ORIGIN}/ai-fighter/commerce/approvals`, { method: 'POST', headers: { authorization: `Bearer ${token}`, origin: ORIGIN, 'content-type': 'application/json' }, body: JSON.stringify(f.approvalBody()) }));
   const before = (await f.db.query('select count(*)::int as n from commerce.approvals')).rows[0].n;
   assert.equal((await approve(TOKEN)).status, 401);
