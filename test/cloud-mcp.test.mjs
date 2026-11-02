@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createCloudHandler, authenticateCloud, EXPIRED_TOKEN_GRACE_MS, SIGN_IN_PROBLEMS, allowedFileUrl, downloadHostFile, compactText, CLOUD_RESOURCE, CLOUD_ISSUER, PUBLIC_RESOURCE, LEGACY_PUBLIC_RESOURCE, SIGN_IN_RESOURCE, PUBLIC_SIGN_IN_RESOURCE, DIRECTORY_RESOURCE, PUBLIC_DIRECTORY_RESOURCE, DIRECTORY_DOCUMENTATION } from '../mcp/cloud.mjs';
+import { createCloudHandler, authenticateCloud, EXPIRED_TOKEN_GRACE_MS, SIGN_IN_PROBLEMS, allowedFileUrl, downloadHostFile, compactText, timedFetch, CLOUD_RESOURCE, CLOUD_ISSUER, PUBLIC_RESOURCE, LEGACY_PUBLIC_RESOURCE, SIGN_IN_RESOURCE, PUBLIC_SIGN_IN_RESOURCE, DIRECTORY_RESOURCE, PUBLIC_DIRECTORY_RESOURCE, DIRECTORY_DOCUMENTATION } from '../mcp/cloud.mjs';
 import { DIRECTORY_INSTRUCTIONS, DIRECTORY_TITLES } from '../mcp/cloud/directory-edition.mjs';
 import { verifiedUserId } from '../api/http.mjs';
 import { safeClientRedirect, authorizationId } from '../web/cloud-connect/connect.mjs';
@@ -692,4 +692,106 @@ test('an agent enters his fighter on the watched package and withdraws him; list
     assert.equal((await call(handle, 'withdraw_fighter', { fighterId: fighter })).structuredContent.stage, 'in-production');
     assert.equal(await listed(), false);
   } finally { await f.sql.close(); }
+});
+
+test('initialize answers each 2025 protocol version the server speaks, 2025-11-25 included', async () => {
+  const handle = createCloudHandler({ db: dbFor() });
+  for (const version of ['2025-03-26', '2025-06-18', '2025-11-25']) {
+    const init = await (await handle(request('initialize', { protocolVersion: version, capabilities: {}, clientInfo: { name: 'test', version: '1' } }))).json();
+    assert.equal(init.result.protocolVersion, version);
+  }
+});
+
+// MCP 점검 2026-11-03: one call has a budget from its request's arrival, ends when its client goes away, and leaves one log line.
+const cupArena = (issueMs = 0) => {
+  const seen = { polls: 0 };
+  return { seen, arena: { url: 'https://arena.test/oddbout-arena', key: 'k'.repeat(64), pollMs: 20, pollTries: 1000, fetcher: async url => {
+    if (url.endsWith('/agent/cup')) { await new Promise(done => setTimeout(done, issueMs)); return Response.json({ ok: true, ticket: crypto.randomUUID() }); }
+    if (url.includes('/cup?id=')) { seen.polls++; return Response.json({ ok: true, cup: { state: 'open', bouts: [] } }); }
+    return Response.json({ ok: true, fighters: [] });
+  } } };
+};
+const toolCall = (name, args, { signal, headers = {} } = {}) => new Request(CLOUD_RESOURCE, { method: 'POST', signal, headers: { 'content-type': 'application/json',
+  accept: 'application/json, text/event-stream', authorization: `Bearer ${token}`, ...headers },
+  body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }) });
+
+test('enter_cup ends by the call budget counted from the request, its issue included, and says to read the cup', async t => {
+  t.mock.method(console, 'log', () => {});
+  const { arena, seen } = cupArena(150);
+  const handle = createCloudHandler({ db: dbFor(), arena, budgetMs: 400 });
+  const started = Date.now();
+  const entered = (await call(handle, 'enter_cup', { fighterId: crypto.randomUUID() })).structuredContent;
+  assert.equal(entered.state, 'open'); assert.equal(entered.next, 'get_cup');
+  // The wait once started after the issue: 150 ms of issue, then the whole CUP_WAIT_MS.
+  assert.ok(Date.now() - started < 1500, `${Date.now() - started} ms`); assert.ok(seen.polls >= 1 && seen.polls < 20, `${seen.polls} polls`);
+});
+
+test('a client that goes away ends a waiting call at once', async t => {
+  t.mock.method(console, 'log', () => {});
+  const { arena, seen } = cupArena();
+  const handle = createCloudHandler({ db: dbFor(), arena });
+  const gone = new AbortController(), started = Date.now();
+  setTimeout(() => gone.abort(), 100);
+  const entered = (await (await handle(toolCall('enter_cup', { fighterId: crypto.randomUUID() }, { signal: gone.signal }))).json()).result.structuredContent;
+  assert.equal(entered.state, 'open');
+  assert.ok(Date.now() - started < 2000, `${Date.now() - started} ms`);
+  const polls = seen.polls;
+  await new Promise(done => setTimeout(done, 100));
+  assert.equal(seen.polls, polls, 'no polling after the call ended');
+});
+
+test('every tool call leaves one log line: tool, client, protocol and request id, never its arguments, token or account', async t => {
+  const logged = t.mock.method(console, 'log', () => {});
+  const handle = createCloudHandler({ db: dbFor() });
+  const id = crypto.randomUUID();
+  await handle(toolCall('get_profile', {}, { headers: { 'mcp-protocol-version': '2025-11-25', 'x-request-id': id } }));
+  // No version header (the SDK refuses a malformed one before any tool runs), and a request id that is not the gateway's.
+  await handle(toolCall('get_profile', {}, { headers: { 'x-request-id': 'forged-id' } }));
+  const lines = logged.mock.calls.map(entry => JSON.parse(entry.arguments[0]));
+  assert.equal(lines.length, 2);
+  assert.deepEqual({ ...lines[0], ms: 0 }, { stage: 'mcp-call', tool: 'get_profile', edition: 'full', client, protocol: '2025-11-25', requestId: id, ms: 0, ok: true });
+  assert.equal(typeof lines[0].ms, 'number');
+  assert.equal(lines[1].protocol, null); assert.match(lines[1].requestId, /^[0-9a-f-]{36}$/); assert.notEqual(lines[1].requestId, 'forged-id');
+  const raw = logged.mock.calls.map(entry => entry.arguments[0]).join('\n');
+  for (const secret of [token, 'test@example.com', owner, 'Bearer']) assert.ok(!raw.includes(secret), secret);
+});
+
+test('a server fault logs what failed behind its code; a refusal logs no detail; the caller gets only the code', async t => {
+  const errors = t.mock.method(console, 'error', () => {}), logged = t.mock.method(console, 'log', () => {});
+  const bug = createCloudHandler({ db: { ...dbFor(), from: () => { throw new TypeError('private row value'); } } });
+  const result = await call(bug, 'list_my_fighters');
+  assert.equal(result.structuredContent.code, 'cloud-operation-unavailable'); assert.ok(!JSON.stringify(result).includes('private row'));
+  const [line] = errors.mock.calls.map(entry => JSON.parse(entry.arguments[0]));
+  assert.deepEqual([line.stage, line.tool, line.ok, line.code], ['mcp-call', 'list_my_fighters', false, 'cloud-operation-unavailable']);
+  assert.deepEqual(line.error, { name: 'TypeError', message: 'private row value' }); assert.ok(line.stack.length >= 1);
+  // A deletion the database could not run is its fault (503, logged with the database's error); before 2026-11-03 it was a silent 400.
+  const db = { ...dbFor(), rpc: async name => name === 'af_mcp_session_state' ? { data: 'usable' } : { error: { message: 'private database details', code: '57014' } } };
+  const args = { fighterId: crypto.randomUUID(), confirmationToken: crypto.randomUUID(), confirmName: 'Exact name', confirm: true };
+  const failed = await call(createCloudHandler({ db }), 'delete_fighter', args);
+  assert.equal(failed.structuredContent.code, 'database-unavailable'); assert.ok(!JSON.stringify(failed).includes('private database'));
+  const database = JSON.parse(errors.mock.calls.at(-1).arguments[0]);
+  assert.deepEqual([database.tool, database.code, database.error], ['delete_fighter', 'database-unavailable', { message: 'private database details', code: '57014' }]);
+  // The deletion's own refusal stays the caller's: an ordinary line without detail.
+  const refusing = { ...dbFor(), rpc: async name => name === 'af_mcp_session_state' ? { data: 'usable' } : { error: { message: 'deletion-name-mismatch' } } };
+  assert.equal((await call(createCloudHandler({ db: refusing }), 'delete_fighter', args)).structuredContent.code, 'deletion-name-mismatch');
+  const refusal = JSON.parse(logged.mock.calls.at(-1).arguments[0]);
+  assert.deepEqual([refusal.tool, refusal.ok, refusal.code, refusal.error], ['delete_fighter', false, 'deletion-name-mismatch', undefined]);
+  assert.equal(errors.mock.callCount(), 2);
+});
+
+test('the database fetch ends by its limit and keeps a caller\'s own signal; a failed download keeps no URL behind its code', async () => {
+  /** @type {typeof fetch} */
+  const hanging = (input, init) => new Promise((_, reject) => init.signal.addEventListener('abort', () => reject(init.signal.reason)));
+  // Node does not keep a process alive for AbortSignal.timeout alone; a server always is.
+  const alive = setInterval(() => {}, 1000), started = Date.now();
+  try {
+    await assert.rejects(timedFetch(50, hanging)('https://db.test/rest/v1/af_fighters'), { name: 'TimeoutError' });
+    assert.ok(Date.now() - started < 1000);
+    const caller = new AbortController(); setTimeout(() => caller.abort(), 20);
+    await assert.rejects(timedFetch(5000, hanging)('https://db.test/rest/v1/af_fighters', { signal: caller.signal }), { name: 'AbortError' });
+  } finally { clearInterval(alive); }
+  const url = 'https://files.oaiusercontent.com/file-x?sig=private-signature';
+  const failure = await downloadHostFile({ download_url: url, file_id: 'f' }, 10, async () => { throw new TypeError(`error sending request for url (${url})`); })
+    .catch(error => error);
+  assert.deepEqual([failure.status, failure.message, failure.cause], [503, 'file-download-unavailable', { name: 'TypeError' }]);
 });

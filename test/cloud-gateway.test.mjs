@@ -151,3 +151,14 @@ test('a client that goes away stops the upstream request',async()=>{
     assert.equal(upstream.aborted,true);
   });
 });
+// MCP 점검 2026-11-03: the function's log lines for one call share the gateway's request id, which the client gets back. A client's own is not taken.
+test('each forwarded call carries a fresh request id of the gateway\'s, returned to the client',async()=>{
+  const seen=[];
+  await serverFor(async(url,options)=>{seen.push(options.headers.get('x-request-id'));return new Response('{}',{headers:{'content-type':'application/json'}})},async base=>{
+    const first=await fetch(base+'/mcp',{method:'POST',headers:{'content-type':'application/json','x-request-id':'00000000-0000-4000-8000-000000000000'},body:'{}'});
+    const second=await fetch(base+'/mcp',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});
+    assert.match(seen[0],/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    assert.notEqual(seen[0],'00000000-0000-4000-8000-000000000000'); assert.notEqual(seen[0],seen[1]);
+    assert.deepEqual([first.headers.get('x-request-id'),second.headers.get('x-request-id')],seen);
+  });
+});

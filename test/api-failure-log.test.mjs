@@ -38,6 +38,15 @@ test('a bug logs its name, message and first stack frames', t => {
   assert.ok(Array.isArray(line.stack) && line.stack.length >= 1 && line.stack.length <= 3);
 });
 
+test('a line names the MCP call that made it by its UUID request id; any other value is left out', t => {
+  const error = capture(t), id = crypto.randomUUID();
+  const withId = value => new Request('https://test/ai-fighter/generations', { headers: { 'x-request-id': value } });
+  logFailure('generation', withId(id), new Problem(503, 'storage-unavailable'));
+  logFailure('generation', withId('"},{"stage":"forged'), new Problem(503, 'storage-unavailable'));
+  const [named, other] = lines(error);
+  assert.equal(named.requestId, id); assert.equal(other.requestId, undefined); assert.equal(other.stage, 'api-failure');
+});
+
 test('the admin route logs one line when its database call fails, and answers the caller as before', async t => {
   const error = capture(t);
   const handle = createHandler({ db: {

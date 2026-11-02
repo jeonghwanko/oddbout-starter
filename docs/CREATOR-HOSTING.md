@@ -80,6 +80,16 @@ caller got, and what failed: the error's name and message, and for a database fa
 behind the route's `…-unavailable` code. It never holds the query string, headers, body or Postgres `details`, which can
 carry tokens or row values. A 4xx is the caller's and writes nothing.
 
+The cloud MCP (`ai-fighter-mcp`) writes one `"stage":"mcp-call"` line per tool call (`logCall` in `mcp/cloud.mjs`,
+2026-11-03): the tool, edition, the OAuth client id, the `MCP-Protocol-Version` the client sent, a `requestId`, the time
+taken, `ok` and the result's `code`. Never its arguments, token, account or URLs. A call that failed on the server's side (a
+bug, or a 5xx with the database or arena error behind it) goes to stderr with the same `error` and `stack` fields as
+`api-failure`; the rest go to stdout. The mcp.oddbout.com gateway makes the `requestId` for each call, passes it to the
+function as `x-request-id` and returns it to the client in the same header. The function carries it to its in-process API
+calls, so an `api-failure` line from a tool's call has the same `requestId`. Each call has a 25-second budget from its
+arrival (`CALL_BUDGET_MS`): `enter_cup` and `get_hosted_fighter` stop waiting by then and say what to read next, and every
+database or Storage call ends by 15 seconds (`timedFetch`). The gateway waits up to 45 seconds for the answer's headers.
+
 Startup runs the real child-process WebP validator against the existing
 geometric test fixture. Health is available only after it passes. No fighter
 registration or gameplay approval is created by this readiness check.
