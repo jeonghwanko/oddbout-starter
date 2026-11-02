@@ -18,8 +18,9 @@ const ROOT = process.env.OG_ROOT || path.dirname(path.dirname(fileURLToPath(impo
 export const TIMING = Object.freeze({ heartbeatMs: 60_000, healthMs: 3_600_000, idleMs: 15_000, renewMs: 60_000, errorMs: 60_000, pruneMs: 86_400_000,
   askedRecheckMs: 900_000 });
 /**
- * How long one stage may run (2026-10-29): past it the stage's runs are stopped (SIGTERM, so sprite-gen writes its reports) and the job
- * goes to an operator as `<stage>-stage-timeout`, never back to the queue, since a stopped run may already have sent a paid request.
+ * How long one stage may run (2026-10-29): past it the stage's runs are stopped (SIGTERM, which og passes on to its command, so sprite-gen
+ * writes its reports) and the job goes to an operator as `<stage>-stage-timeout`, never back to the queue, since a stopped run may already
+ * have sent a paid request.
  * A motions stage usually takes 15-30 minutes; og stops any single run at 90 (RUN_TIMEOUT).
  */
 export const STAGE_LIMIT_MS = Object.freeze({ queued: 20 * 60_000, appearance: 45 * 60_000, motions: 150 * 60_000, submitting: 30 * 60_000 });
@@ -92,6 +93,54 @@ export function createTally() {
   };
 }
 
+/**
+ * Generating runs on record (2026-11-02). Before og runs a command that makes a picture or a clip on a subscription, the job folder gets
+ * `dispatches/<n>.json`; its `end` is written when og returns. A stage reclaimed after the worker died mid-run (killed, out of memory, a
+ * power cut) looked only at its outputs, and a look or a row with no picture yet went out again: paid twice. A record with no end is a
+ * run whose outcome nobody saw, so the stage goes to an operator without running (`<stage>-dispatch-unknown`); once the server has taken
+ * that, the records are marked handed over and an operator's retry runs the stage. Text runs (codex exec: the brief, the judges) and
+ * pixel tools are not recorded: run again, they make no picture.
+ */
+export const FREE_SPRITE_TOOLS = Object.freeze(['extract', 'prepare', 'scale-check', 'video-loop', 'video-cycle-align', 'game-pack']);
+export const generates = args => args[0] === 'npm' && args[1] === 'run' && args[2] === 'sprite'
+  && !FREE_SPRITE_TOOLS.includes(args[args.indexOf('--') + 1]);
+export const DISPATCH_UNKNOWN = 'dispatch-unknown';
+export function createDispatches(dir, now = () => new Date().toISOString()) {
+  const folder = path.join(dir, 'dispatches');
+  let n = 0;
+  const read = async file => { try { return JSON.parse(await readFile(file, 'utf8')); } catch { return null; } };
+  return {
+    /** The records whose run never ended on record: `{ name, tool }`. One that cannot be read counts (its run may have gone out). */
+    async unended() {
+      const open = [];
+      for (const name of (await readdir(folder).catch(() => [])).filter(name => name.endsWith('.json')).sort()) {
+        const record = await read(path.join(folder, name));
+        if (!record || (record.end == null && record.handedOver == null))
+          open.push({ name, tool: typeof record?.tool === 'string' ? record.tool : null });
+      }
+      return open;
+    },
+    /** Before a run: its record, or null for a command that makes no picture. A record that cannot be written refuses the run. */
+    async begin(args) {
+      if (!generates(args)) return null;
+      await mkdir(folder, { recursive: true });
+      const file = path.join(folder, `${Date.now()}-${process.pid}-${n++}.json`), record = { tool: toolName(args), startedAt: now() };
+      await writeFile(file, JSON.stringify(record) + '\n', { flag: 'wx' });
+      return { file, record };
+    },
+    /** After the run: its exit code. Not written (a full disk), the record stays open and the stage's next claim goes to an operator. */
+    end: (started, code) => started ? writeFile(started.file, JSON.stringify({ ...started.record, end: { code, at: now() } }) + '\n').catch(() => {})
+      : Promise.resolve(),
+    /** Marks open records handed to an operator, after the server took the stage's review. */
+    async handOver(open) {
+      for (const { name } of open) {
+        const file = path.join(folder, name);
+        await writeFile(file, JSON.stringify({ ...(await read(file) ?? {}), handedOver: now() }) + '\n');
+      }
+    },
+  };
+}
+
 export function createApi({ base, key, fetcher = fetch }) {
   const headers = extra => ({ authorization: `Bearer ${key}`, ...extra });
   const json = async response => { try { return { status: response.status, ...(await response.json()) }; } catch { return { status: response.status, ok: false, code: 'bad-reply' }; } };
@@ -160,6 +209,9 @@ export function timedOutOutcome(status, outcome) {
   const requestIds = outcome?.result?.requestIds;
   return { outcome: 'review', result: { code: `${status}-stage-timeout`, ...(Array.isArray(requestIds) && requestIds.length ? { requestIds } : {}) } };
 }
+/** A stage that found a generating run with no end on record (createDispatches) goes to an operator; the tools name what to look at. */
+export const dispatchUnknownOutcome = (status, open) => ({ outcome: 'review',
+  result: { code: `${status}-${DISPATCH_UNKNOWN}`, runs: open.slice(0, 8).map(record => record.tool ?? 'unreadable') } });
 /** The provider a stage's outcome code says cannot run here now (the codex question, Grok's 429), if it does. */
 export const limitedProvider = code => ({ [ASKS]: 'codex', [GROK_LIMITED]: 'grok' })[code];
 /** The health after a stage's outcome: a provider that cannot run here now is marked down until a check passes. */
@@ -195,20 +247,37 @@ const STAGE_PROVIDERS = Object.freeze({ appearance: ['codex'], motions: ['codex'
 export const errorCode = (error, fallback = 'stage-error') => String(error?.code ?? fallback).slice(0, 60);
 
 /**
- * One child process in its own process group; its output appended to the job's log. Resolves its exit code (signals count as 128 + n).
- * Stopping it signals the whole group: og's bash waits for its command before its own trap runs, so only the group stops the work.
+ * How a stopped run ends (2026-11-02). og passes SIGTERM on to its command's own process group and waits for it (timeout's SIGKILL comes
+ * 30 s later); a group still there after STOP_GRACE_MS gets SIGKILL. A run resolves when its output closes, or OUTPUT_DRAIN_MS after it
+ * exited: a process that left the group and still holds the pipes held the stage, and the worker, until it ended.
  */
-function run(command, args, { cwd, log, stdin, signal }) {
+export const STOP_GRACE_MS = 90_000, OUTPUT_DRAIN_MS = 10_000;
+
+/**
+ * One child process in its own process group; its output appended to the job's log. Resolves its exit code (signals count as 128 + n).
+ * Stopping it signals the whole group, and og passes the signal on to the command it runs (above).
+ */
+export function run(command, args, { cwd, log, stdin, signal, graceMs = STOP_GRACE_MS, drainMs = OUTPUT_DRAIN_MS }) {
   return new Promise(resolve => {
     if (signal?.aborted) return resolve(128 + 15);   // stopped before it began: nothing started
     const child = spawn(command, args, { cwd, stdio: ['pipe', 'pipe', 'pipe'], detached: true });
     const write = chunk => { appendFile(log, chunk).catch(() => {}); };
     child.stdout.on('data', write); child.stderr.on('data', write);
     child.stdin.end(stdin ?? '');
-    const stop = () => { try { process.kill(-child.pid, 'SIGTERM'); } catch { child.kill('SIGTERM'); } };
+    const group = sig => { try { process.kill(-child.pid, sig); } catch { try { child.kill(sig); } catch {} } };
+    /** @type {NodeJS.Timeout | undefined} */ let kill;
+    /** @type {NodeJS.Timeout | undefined} */ let drain;
+    const stop = () => { group('SIGTERM'); kill = setTimeout(() => group('SIGKILL'), graceMs); };
+    let ended = false;
+    const end = code => {
+      if (ended) return;
+      ended = true; clearTimeout(kill); clearTimeout(drain); signal?.removeEventListener('abort', stop); resolve(code);
+    };
+    const codeOf = (code, sig) => code ?? 128 + (sig === 'SIGKILL' ? 9 : 15);
     signal?.addEventListener('abort', stop, { once: true });
-    child.on('close', (code, sig) => { signal?.removeEventListener('abort', stop); resolve(code ?? 128 + (sig === 'SIGKILL' ? 9 : 15)); });
-    child.on('error', () => resolve(127));
+    child.on('exit', (code, sig) => { drain = setTimeout(() => end(codeOf(code, sig)), drainMs); });
+    child.on('close', (code, sig) => end(codeOf(code, sig)));
+    child.on('error', () => end(127));
   });
 }
 
@@ -278,11 +347,14 @@ export async function main({ once = false } = {}) {
     // The kit tree's loop review takes a low-margin cut (tools/ai-fighter/gait.mjs `lowMarginFeet`, 2026-11-01): read per job, as `og setup` moves it.
     const lowMarginFeetTaken = await readFile(path.join(kit, 'tools', 'ai-fighter', 'gait.mjs'), 'utf8')
       .then(text => text.includes('export const lowMarginFeet'), () => false);
+    const dispatches = createDispatches(dir);
     const stages = createStages({
-      og: (args, { stdin } = {}) => unlessStopped(controller.signal, () => {
-        const started = Date.now();
-        return run(og, ['run', ogId, '--', ...args], { cwd: kit, log, stdin, signal: controller.signal })
-          .then(code => { tally.add(args, code, Date.now() - started); return { code }; });
+      og: (args, { stdin } = {}) => unlessStopped(controller.signal, async () => {
+        const started = Date.now(), record = await dispatches.begin(args);
+        const code = await run(og, ['run', ogId, '--', ...args], { cwd: kit, log, stdin, signal: controller.signal });
+        await dispatches.end(record, code);
+        tally.add(args, code, Date.now() - started);
+        return { code };
       }),
       api, signal: controller.signal, lowMarginFeetTaken,
       fetchBytes: async url => { const r = await fetch(url, { signal: AbortSignal.timeout(60_000) }); if (!r.ok) throw new Error(`download ${r.status}`); return new Uint8Array(await r.arrayBuffer()); },
@@ -299,10 +371,12 @@ export async function main({ once = false } = {}) {
         if (code !== 0) throw Object.assign(new Error('evidence-fit-failed'), { code: 'evidence-fit-failed' });
       },
     });
-    let outcome;
+    let outcome, unknown = [];
     try {
+      unknown = await dispatches.unended();
       const stage = stages[job.status];
-      outcome = stage ? await stage(job, dir) : { outcome: 'failed', result: { code: `no-stage-${job.status}` } };
+      outcome = unknown.length ? dispatchUnknownOutcome(job.status, unknown)
+        : stage ? await stage(job, dir) : { outcome: 'failed', result: { code: `no-stage-${job.status}` } };
     } catch (error) {
       // A numeric code (a child process's) used to throw here, outside this catch: the finish never went and the job lost a lease.
       outcome = { outcome: 'retry', result: { code: errorCode(error) } };
@@ -331,6 +405,8 @@ export async function main({ once = false } = {}) {
       .catch(error => ({ ok: false, code: error?.message ?? 'finish-failed' }));
     await say(`job ${job.id} ${job.status} → ${outcome.outcome}${outcome.result?.code ? ` (${outcome.result.code})` : ''} ${reply.ok ? reply.status : `finish refused ${reply.code}`}`);
     if (!reply.ok) await reportStageTokens(api, job, tokens, say);
+    if (unknown.length && reply.ok)
+      await dispatches.handOver(unknown).catch(error => say(`job ${job.id} dispatch records not handed over: ${error?.message ?? error}`));
     if (['rejected', 'failed'].includes(outcome.outcome) || reply.status === 'submitted') await writeFile(path.join(dir, '.closed'), '').catch(() => {});
   }
 

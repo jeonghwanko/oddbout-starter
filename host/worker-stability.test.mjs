@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ASKS, GROK_LIMITED, createStages } from './generation-stages.mjs';
-import { STAGE_LIMIT_MS, createApi, createCooldowns, healthAfter, reportStageTokens, STAGE_STOPPED, TIMING, errorCode, stageLimitMs, timedOutOutcome, unlessStopped } from './generation-worker.mjs';
+import { STAGE_LIMIT_MS, createApi, createCooldowns, createDispatches, dispatchUnknownOutcome, generates, healthAfter, reportStageTokens, run,
+  STAGE_STOPPED, TIMING, errorCode, stageLimitMs, timedOutOutcome, unlessStopped } from './generation-worker.mjs';
 
 const brief = { profile: { name: 'Blue' }, look: { subject: 'A blue cat boxer', palette: ['blue'], prop: 'gloves', avoid: 'none' },
   motion: { temper: 'bold', attack: 'jab' } };
@@ -189,4 +190,54 @@ test('a stage\'s tokens after its lease was lost go on the usage route, and what
   await reportStageTokens({ usage: async () => ({ ok: false, status: 404, code: 'not-found' }) }, job, tokens, say);
   await reportStageTokens({ usage: async () => { throw new Error('fetch failed'); } }, job, tokens, say);
   assert.deepEqual(lines.slice(2), ['job job-1 motions 900 tokens not reported (not-found)', 'job job-1 motions 900 tokens not reported (fetch failed)']);
+});
+
+// A stage reclaimed after the worker died mid-run (2026-11-02) looked only at its outputs: a look with no picture yet went out again.
+const sprite = (...args) => ['npm', 'run', 'sprite', '--', ...args];
+test('only runs that make a picture or a clip are recorded: sprite-gen image and video tools, not text runs or pixel tools', () => {
+  for (const tool of ['gen', 'gen-set', 'video-set', 'video', 'a-tool-not-known-yet']) assert.equal(generates(sprite(tool, '--x')), true, tool);
+  for (const tool of ['extract', 'prepare', 'scale-check', 'video-loop', 'video-cycle-align', 'game-pack']) assert.equal(generates(sprite(tool, '--x')), false, tool);
+  assert.equal(generates(['codex', 'exec', '-m', 'gpt']), false);
+  assert.equal(generates(['npm', 'run', 'fighter:pack', '--', 'plan.json']), false);
+});
+
+test('a generating run with no end on record sends the stage to an operator until the server has taken that, then lets it run', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'dispatch-'));
+  try {
+    const dispatches = createDispatches(dir, () => 't');
+    assert.equal(await dispatches.begin(sprite('extract', '--run-dir', 'r')), null);
+    assert.deepEqual(await dispatches.unended(), []);
+    // A run that ended (any code: the stage that saw it judged it) leaves nothing open.
+    const ended = await dispatches.begin(sprite('gen', '--out', 'a.png'));
+    await dispatches.end(ended, 1);
+    assert.deepEqual(JSON.parse(await readFile(ended.file, 'utf8')), { tool: 'sprite gen', startedAt: 't', end: { code: 1, at: 't' } });
+    assert.deepEqual(await dispatches.unended(), []);
+    // The worker died during a run: its record has no end. A record that cannot be read counts too.
+    await dispatches.begin(sprite('video-set', '--states', 'walk'));
+    await writeFile(path.join(dir, 'dispatches', '9-torn.json'), '{"tool":');
+    const open = await dispatches.unended();
+    assert.deepEqual(open.map(record => record.tool), ['sprite video-set', null]);
+    assert.deepEqual(dispatchUnknownOutcome('motions', open), { outcome: 'review', result: { code: 'motions-dispatch-unknown', runs: ['sprite video-set', 'unreadable'] } });
+    // Handed to an operator (the server took the review): an operator's retry runs the stage.
+    await dispatches.handOver(open);
+    assert.deepEqual(await dispatches.unended(), []);
+    assert.equal((await readdir(path.join(dir, 'dispatches'))).length, 3);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+// Process groups: the worker and og run on a Linux host.
+const linuxOnly = { skip: process.platform !== 'linux' && 'process groups are the Linux host\'s' };
+test('a run whose child exited while something it left holds the output ends anyway, and a stopped run that ignores SIGTERM gets SIGKILL', linuxOnly, async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'run-')), log = path.join(dir, 'worker.log');
+  try {
+    let started = Date.now();
+    assert.equal(await run('bash', ['-c', 'sleep 3 & exit 0'], { cwd: dir, log, drainMs: 200 }), 0);
+    assert.ok(Date.now() - started < 2000, `${Date.now() - started} ms`);
+    const controller = new AbortController();
+    started = Date.now();
+    const stopped = run('bash', ['-c', 'trap "" TERM; sleep 3; sleep 3'], { cwd: dir, log, signal: controller.signal, graceMs: 200 });
+    setTimeout(() => controller.abort(), 100);
+    assert.equal(await stopped, 137);
+    assert.ok(Date.now() - started < 2000, `${Date.now() - started} ms`);
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });
