@@ -11,6 +11,7 @@
 //   edit-profile <fighter> --reason <text> [--profile <json or @file>] [--style <json, null or @file>]
 //   storage | storage-remove (<submission>... | --oldest <n>)
 //   profile-expressions <sheets.json> --reason <text> [--attempt <n>]
+//   profile-front <fighter> <set folder> --reason <text> [--attempt <n>]
 // Every answer is one JSON object on stdout. A command that changes something only shows what it would do (`dryRun: true`) until it is
 // run again with --yes: the agent shows that to its user and asks first.
 import { createHash } from 'node:crypto';
@@ -18,14 +19,15 @@ import { realpathSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createRemoteClient } from '../api/client.mjs';
+import { createRemoteClient, transferTimeoutMs } from '../api/client.mjs';
 import { probeImage } from '../api/image-probe.mjs';
-import { checkExpressionSheet } from '../worker/profile-set-check.mjs';
+import { parseProfileSet } from '../api/profile-set-contract.mjs';
+import { checkExpressionSheet, checkProfileSet } from '../worker/profile-set-check.mjs';
 import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/validate.mjs';
 import { defaultSessionPath } from './login.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-/** @typedef {{ request: (route: string, options?: { method?: string, body?: any, headers?: Record<string, string> }) => Promise<any> }} Client */
+/** @typedef {{ request: (route: string, options?: { method?: string, body?: any, headers?: Record<string, string>, timeoutMs?: number }) => Promise<any> }} Client */
 /**
  * @typedef {{ method: 'GET' | 'POST', route: string, body?: Record<string, unknown>, change?: string }} Call
  *   `change` (a sentence for the user) marks a command that changes something; only --yes sends it.
@@ -126,6 +128,7 @@ export async function runAdmin({ argv = process.argv.slice(2), connect = createR
   if (positional[0] === 'edit-profile') return editProfile(positional, flags, signIn);
   if (positional[0] === 'storage-remove') return storageRemove(positional, flags, signIn);
   if (positional[0] === 'profile-expressions') return addSheets(positional, flags, signIn);
+  if (positional[0] === 'profile-front') return addFront(positional, flags, signIn);
   const call = planCall(positional, flags);
   if (call.change && flags.yes !== true) return { ok: true, dryRun: true, change: call.change, request: { method: call.method, route: `admin/${call.route}`, body: call.body } };
   const client = await signIn();
@@ -305,6 +308,54 @@ async function addSheets([, list], flags, signIn) {
     next: 'npm run admin -- profiles --status review 로 검사를 통과한 새 세트(KO 얼굴)를 보고 profile-approve <set> --yes' };
 }
 
+/**
+ * profile-front (2026-11-03 — 사용자: "운영자가 올릴 수 있게 해줘"): a whole profile set for a fighter who has no approved one, from the folder
+ * the kit's `npm run fighter:profile-set` wrote (profile-set.json and the pictures it names); `profile-expressions` needs an approved front to
+ * copy. Every file is read and checked before anything is sent: its size, hash and WebP size against the set file, and the validator's own
+ * pixel checks. The dry run reads the fighter, so the user sees whose set it becomes. One request carries the set file and its pictures
+ * (admin/fighters/<id>/profile-sets, multipart). The new set waits for the validator, then for profile-approve. `--attempt <n>` makes a new
+ * key (after an `upload-expired`).
+ * @param {string[]} positional @param {Record<string, string | true>} flags @param {() => Promise<Client>} signIn
+ */
+async function addFront([, target, folder], flags, signIn) {
+  const fighter = id(target, 'fighter'), reason = text(flags.reason, 'reason'), attempt = flags.attempt === undefined ? '1' : text(flags.attempt, 'attempt');
+  if (!/^[1-9][0-9]{0,2}$/.test(attempt)) throw new Error('invalid-value:--attempt');
+  if (!folder) throw new Error('missing-value:set');
+  let file;
+  try { file = await readFile(path.join(folder, 'profile-set.json')); } catch { throw new Error('invalid-value:set'); }
+  const manifest = new TextDecoder().decode(file), parsed = parseProfileSet(manifest);
+  if (!parsed.ok) throw Object.assign(new Error('profile-set-invalid'), { errors: parsed.errors });
+  const set = parsed.data;
+  /** @type {{ name: 'front' | 'expressions', bytes: Buffer }[]} */
+  const pictures = [];
+  for (const [name, entry] of /** @type {const} */ ([['front', set.front], ['expressions', set.expressions]])) {
+    if (!entry) continue;
+    let bytes;
+    try { bytes = await readFile(path.join(folder, entry.path)); } catch { throw Object.assign(new Error('asset-mismatch'), { errors: [entry.path] }); }
+    const probed = probeImage(bytes);
+    if (bytes.length !== entry.bytes || sha256(bytes) !== entry.sha256 || probed?.type !== 'image/webp' || probed.width !== entry.width || probed.height !== entry.height)
+      throw Object.assign(new Error('asset-mismatch'), { errors: [entry.path] });
+    pictures.push({ name, bytes });
+  }
+  const front = /** @type {Buffer} */ (pictures[0].bytes), sheet = pictures[1]?.bytes;
+  const checked = await checkProfileSet(front, set), sheetChecked = sheet ? await checkExpressionSheet(sheet) : { ok: true };
+  if (!checked.ok || !sheetChecked.ok) throw Object.assign(new Error('profile-set-invalid'),
+    { errors: [...(checked.ok ? [] : checked.errors), ...(sheetChecked.ok ? [] : /** @type {any} */ (sheetChecked).errors)] });
+  const sha = sha256(file), key = editKey('front', fighter, sha, ...(attempt === '1' ? [] : [attempt]));
+  const client = await signIn(), now = await current(client, fighter);
+  const change = `선수 「${now.name}」(${fighter}, 주인 ${now.ownerId})의 프로필 세트(정면 ${set.front.width} × ${set.front.height}, 얼굴 칸 `
+    + `${set.face.x}·${set.face.y}·${set.face.side}, 표정 시트 ${sheet ? '있음' : '없음'})를 주인 이름으로 올립니다. 승인된 세트가 없는 선수만 됩니다. `
+    + `검사와 운영자 승인 뒤에 홈·명단·무투장에 보입니다. 사유: ${reason}`;
+  const request = { method: 'POST', route: `admin/fighters/${fighter}/profile-sets`, manifestSha256: sha, idempotencyKey: key };
+  if (flags.yes !== true) return { ok: true, dryRun: true, change, request };
+  const form = new FormData();
+  form.append('profile-set', new Blob([new Uint8Array(file)], { type: 'application/json' }), 'profile-set.json');
+  for (const { name, bytes } of pictures) form.append(name, new Blob([new Uint8Array(bytes)], { type: 'image/webp' }), `${name}.webp`);
+  const result = await client.request(request.route, { method: 'POST', headers: { 'idempotency-key': key, ...reasonHeader(reason) }, body: form,
+    timeoutMs: transferTimeoutMs(file.length + pictures.reduce((sum, picture) => sum + picture.bytes.length, 0)) });
+  return { ...result, done: change, next: 'npm run admin -- profiles --status review 로 검사를 통과한 새 세트(카드·얼굴·KO 얼굴)를 보고 profile-approve <set> --yes' };
+}
+
 export const USAGE = [
   'npm run admin -- whoami | review | open | show <job> | retry <job> --yes | cancel <job> --yes',
   'npm run admin -- hosts | host-approve <host> --yes | host-withdraw <host> --yes',
@@ -315,6 +366,7 @@ export const USAGE = [
   'npm run admin -- edit-profile <fighter> --reason <text> [--profile <json|@file>] [--style <json|null|@file>] --yes',
   'npm run admin -- storage | storage-remove (<submission>... | --oldest <n>) --yes',
   'npm run admin -- profile-expressions <sheets.json> --reason <text> [--attempt <n>] --yes',
+  'npm run admin -- profile-front <fighter> <set folder> --reason <text> [--attempt <n>] --yes',
   'Session: --session <file>, else ODDBOUT_ADMIN_SESSION, else the npm run login session file.',
 ];
 
@@ -335,6 +387,10 @@ const HINTS = /** @type {Record<string, string>} */ ({
   'sheet-mismatch': '시트 파일(errors)이 목록의 sha256 과 다르거나 검증기의 시트 검사(1536 × 1024 WebP, 알파, 여섯 칸)를 통과하지 못합니다.',
   'fighter-mismatch': '그 프로필 세트는 목록이 말한 선수의 것이 아닙니다. sheets.json 의 fighterId·profileSetId 를 확인하세요.',
   'upload-expired': '같은 키의 세트가 업로드 도중 닫혔습니다. --attempt 2 로 새 키를 쓰세요.',
+  'approved-profile-set-exists': '그 선수는 승인된 프로필 세트가 있습니다. 시트는 profile-expressions 로 붙이고, 정면은 주인이 바꿉니다.',
+  'asset-mismatch': '세트 폴더의 그림(errors)이 profile-set.json 의 크기·sha256·WebP 크기와 다르거나 없습니다.',
+  'profile-set-invalid': '세트 파일 또는 그림이 서버 계약·검증기 검사를 통과하지 못했습니다(errors). 키트의 npm run fighter:profile-set 으로 다시 만드세요.',
+  'open-profile-set-exists': '그 선수의 다른 프로필 세트가 아직 열려 있습니다(업로드·검사 중). 끝난 뒤 다시 하세요.',
   'not-unused': '그 제출(errors)은 안 쓰는 목록에 없습니다: 지금 쓰는 패키지이거나, 이미 지웠거나, 오래된 순 200개 밖입니다. storage 로 다시 보세요.',
 });
 

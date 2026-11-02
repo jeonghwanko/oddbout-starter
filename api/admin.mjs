@@ -1,6 +1,7 @@
 // @ts-check
 import { Problem, UUID, jsonResponse, logFailure, readBody, rpcCaller, verifiedUserId } from './http.mjs';
 import { PROFILE_SET_LIMITS, addOperatorSheet, cleanupPublicFiles, profileSetKey, publishProfileSet, removePublicFiles } from './profile-sets.mjs';
+import { addOperatorFront, operatorFrontForm } from './admin-profile-front.mjs';
 import { BUCKET } from './submissions.mjs';
 import { ADMIN_EDIT_CORS, adminFighterEditRoute, createAdminFighterEdits, reasonOf } from './admin-fighter-edits.mjs';
 import { adminStorageRoute, createAdminStorage } from './admin-storage.mjs';
@@ -198,6 +199,14 @@ export function createAdminHandler({ db, present }) {
         const bytes = await readBody(request, PROFILE_SET_LIMITS.expressionsBytes);
         return reply({ ok: true, profileSet: await addOperatorSheet(db, { actor, setId: parts[2].toLowerCase(), fighterId: fighter.toLowerCase(),
           key: key.toLowerCase(), reason, bytes }) });
+      }
+      // 운영자의 정면 (2026-11-03): a whole set for a fighter with no approved one, as a new set under his owner (admin-profile-front.mjs).
+      if (parts.length === 4 && parts[1] === 'fighters' && parts[3] === 'profile-sets' && request.method === 'POST') {
+        if (!UUID.test(parts[2])) throw new Problem(400, 'invalid-review');
+        const reason = reasonOf(request), key = request.headers.get('idempotency-key') ?? '';
+        if (!UUID.test(key)) throw new Problem(400, 'invalid-id');
+        return reply({ ok: true, profileSet: await addOperatorFront(db, { actor, fighterId: parts[2].toLowerCase(), key: key.toLowerCase(), reason,
+          ...await operatorFrontForm(request) }) });
       }
       if (parts.length === 4 && parts[1] === 'profile-sets' && ['approve', 'reject'].includes(parts[3]) && request.method === 'POST') {
         if (!UUID.test(parts[2])) throw new Problem(400, 'invalid-review');

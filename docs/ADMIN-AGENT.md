@@ -26,6 +26,8 @@
 | `hosts` · `host-approve <host>` · `host-withdraw <host>` | 생성 호스트 목록 · 승인 · 승인 거두기 | 생성 호스트 |
 | `profiles [--status review\|approved\|rejected]` | 프로필 세트 목록 | 프로필 세트 |
 | `profile-approve <set>` · `profile-reject <set> --reason <글>` | 승인 · 돌려보내기(이유는 제작자에게 보임) | 프로필 세트 |
+| `profile-expressions <sheets.json> --reason <글>` | 승인된 정면이 있는 선수들에게 표정 시트를 붙인 새 세트([공개 등록](OPEN-REGISTRATION.md)) | (화면 없음) |
+| `profile-front <id> <세트 폴더> --reason <글>` | 승인된 세트가 없는 선수의 세트 전체(정면·얼굴 칸·시트)를 주인 이름으로 올림 | (화면 없음) |
 | `fighters [--status active\|removed\|all] [--search <글>] [--page <n>]` | 선수 목록(20명씩) | 선수 |
 | `fighter-remove <id> --version <n> --reason <글>` · `fighter-restore …` | 선수 내리기 · 복원(사유는 제작자에게 보임) | 선수 |
 | `fighter <id>` | 선수 한 명: 주인, 패키지 해시, 출전, 전투 스타일, 최근 운영자 수정 5개 | (화면 없음) |
@@ -81,7 +83,8 @@ API는 `api/admin-storage.mjs`(`GET admin/storage`, `POST admin/storage/removals
 
 ## 바꾸는 명령은 두 번 부른다
 
-`retry`, `cancel`, `host-*`, `profile-approve`, `profile-reject`, `fighter-*`, `replace-package`, `edit-profile`, `storage-remove`는 처음에 보내지 않는다. 할 일을 문장으로 돌려준다
+`retry`, `cancel`, `host-*`, `profile-approve`, `profile-reject`, `profile-expressions`, `profile-front`, `fighter-*`, `replace-package`, `edit-profile`,
+`storage-remove`는 처음에 보내지 않는다. 할 일을 문장으로 돌려준다
 (`dryRun: true`, `change`). 에이전트는 그 문장을 사용자에게 보이고 승인을 받은 뒤 같은 명령에 `--yes`를 붙여 다시 부른다.
 제작자에게 보이는 이유·사유는 사용자가 정한 말만 쓴다.
 
@@ -89,5 +92,6 @@ API는 `api/admin-storage.mjs`(`GET admin/storage`, `POST admin/storage/removals
 
 - 세션 파일의 토큰을 출력하거나 대화·로그에 옮기지 않는다. 명령은 토큰을 출력하지 않는다.
 - 이 명령은 플러그인 묶음과 creator-kit ZIP에 들어가지 않는다(`scripts/build-plugin-bundle.mjs`의 목록 밖). 운영자 저장소에서만 쓴다.
-- API는 `api/admin.mjs`(선수 고치기는 `api/admin-fighter-edits.mjs`, 저장 용량 정리는 `api/admin-storage.mjs`), 명령은 `scripts/admin.mjs`,
-  시험은 `test/admin-cli.test.mjs`·`test/admin-fighter-edits.test.mjs`·`test/storage-cleanup.test.mjs`·`test/generation-hosts.test.mjs`다.
+- API는 `api/admin.mjs`(선수 고치기는 `api/admin-fighter-edits.mjs`, 저장 용량 정리는 `api/admin-storage.mjs`, 운영자의 정면은 `api/admin-profile-front.mjs`),
+  명령은 `scripts/admin.mjs`, 시험은 `test/admin-cli.test.mjs`·`test/admin-fighter-edits.test.mjs`·`test/storage-cleanup.test.mjs`·`test/generation-hosts.test.mjs`·
+  `test/operator-front.test.mjs`다.
