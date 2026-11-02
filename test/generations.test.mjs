@@ -872,3 +872,72 @@ test('a hosted fighter\'s sheet that cannot be read leaves his front\'s set as i
   assert.equal(expired.length, 1, 'the set with the sheet is closed');
   assert.deepEqual(rpcs.filter(([name]) => name === 'af_profile_set_submit').length, 1);
 });
+
+// 신청한 에이전트 (2026-11-03): only the cloud MCP's verified client (the handler's `agentClient`) names the agent that asked; a request on the
+// site, or a body that names one, has none. The worker's submission for the job takes it, so the fighter's "made with" shows it.
+test('the agent that asked: the MCP\'s live named client only, never a request body; the worker\'s submission records it', async () => {
+  const client = crypto.randomUUID(), gone = crypto.randomUUID();
+  const mcp = await generation({ agentClient: client }), site = await generation();
+  try {
+    for (const g of [mcp, site]) await g.healthy();
+    await mcp.sql.query('insert into auth.oauth_clients(id,client_name,deleted_at) values($1,$2,null),($3,$4,now())', [client, `  ${'Grok'.padEnd(50, '!')}`, gone, 'Gone agent']);
+    const ask = (g, body = {}) => g.call('POST', 'generations', { description: '빨간 글러브를 낀 고양이 복서, 귀가 크다', language: 'ko', ...body }, undefined,
+      { 'idempotency-key': crypto.randomUUID() });
+    const named = await ask(mcp), column = job => mcp.sql.query('select agent_client, agent_name from public.af_generation_jobs where id = $1', [job]);
+    assert.equal(named.body.job.agent, 'Grok'.padEnd(40, '!'));
+    assert.deepEqual((await column(named.body.job.id)).rows[0], { agent_client: client, agent_name: 'Grok'.padEnd(40, '!') });
+    // Read again, and in the list, the same name.
+    assert.equal((await mcp.call('GET', `generations/${named.body.job.id}`)).body.job.agent, 'Grok'.padEnd(40, '!'));
+    assert.equal((await mcp.call('GET', 'generations')).body.jobs[0].agent, 'Grok'.padEnd(40, '!'));
+    // The site's handler has no client; a body field is refused, so it cannot name one (not even a live client's).
+    const plain = await ask(site);
+    assert.equal(plain.body.job.agent, null);
+    assert.equal((await site.call('GET', `generations/${plain.body.job.id}`)).body.job.agent, null);
+    for (const field of ['agentClient', 'agent', 'agent_client', 'p_agent_client']) {
+      const refused = await ask(mcp, { [field]: gone });
+      assert.deepEqual([refused.status, refused.body.code], [422, 'invalid-body'], field);
+    }
+    assert.equal((await mcp.sql.query('select count(*)::int as n from public.af_generation_jobs')).rows[0].n, 1);
+    // A client the database does not know (or has deleted) names no agent; the request still goes through.
+    const unknown = await generation({ agentClient: crypto.randomUUID() });
+    try {
+      await unknown.healthy();
+      const job = (await ask(unknown)).body.job;
+      assert.equal(job.agent, null);
+      assert.deepEqual((await unknown.sql.query('select agent_client, agent_name from public.af_generation_jobs')).rows, [{ agent_client: null, agent_name: null }]);
+    } finally { await unknown.sql.close(); }
+    // The table keeps both or neither, a name of 1 to 40 characters.
+    await assert.rejects(mcp.sql.query('update public.af_generation_jobs set agent_client = null where id = $1', [named.body.job.id]), /agent_pair/);
+    await assert.rejects(mcp.sql.query('update public.af_generation_jobs set agent_name = $1 where id = $2', ['x'.repeat(41), named.body.job.id]), /check/);
+    // The package the worker makes for the job takes the agent; one for a job without an agent (and one the owner made himself) takes none.
+    const submit = async (g, job) => {
+      await g.sql.query("update public.af_generation_jobs set status = 'submitting', profile = $2 where id = $1", [job, { name: 'Blue', description: 'x' }]);
+      const held = (await g.work('POST', 'claim', {})).body.job;
+      assert.equal(held.status, 'submitting');
+      const created = await g.work('POST', `jobs/${held.id}/submission`, JSON.stringify(example), { 'x-generation-lease': held.leaseToken, 'content-type': 'application/json' });
+      assert.equal(created.body.stage, 'uploading');
+      return (await g.sql.query('select id from public.af_submissions where idempotency_key = $1', [job])).rows[0].id;
+    };
+    const agents = (g, submission) => g.sql.query('select client_id, client_name from public.af_submission_agents where submission_id = $1', [submission]);
+    const made = await submit(mcp, named.body.job.id);
+    assert.deepEqual((await agents(mcp, made)).rows, [{ client_id: client, client_name: 'Grok'.padEnd(40, '!') }]);
+    await mcp.sql.query("update public.af_submissions set status = 'rejected' where id = $1", [made]);
+    assert.deepEqual((await agents(site, await submit(site, plain.body.job.id))).rows, []);
+    // His own upload under a key that is not a job of his names no agent either.
+    const text = JSON.stringify(example), own = (await mcp.sql.query('select to_jsonb(public.af_create_submission($1, $2, $3, $4, $5, null)) as value',
+      [mcp.owner, crypto.randomUUID(), text, await sha256(new TextEncoder().encode(text)), example.assets.reduce((sum, a) => sum + a.bytes, 0)])).rows[0].value;
+    assert.deepEqual((await agents(mcp, own.id)).rows, []);
+  } finally { await mcp.sql.close(); await site.sql.close(); }
+});
+
+test('af_generation_create keeps its old call: an older caller names no agent', async () => {
+  const { sql, owner, healthy } = await generation();
+  try {
+    await healthy();
+    const signatures = (await sql.query("select pg_get_function_identity_arguments(oid) as args from pg_proc where proname = 'af_generation_create'")).rows;
+    assert.equal(signatures.length, 1); assert.match(signatures[0].args, /p_agent_client uuid$/);
+    const job = (await sql.query("select to_jsonb(public.af_generation_create(p_owner => $1, p_key => $2, p_description => $3, p_language => 'ko', p_refs => '{}', p_rights => false)) as value",
+      [owner, crypto.randomUUID(), '빨간 글러브를 낀 고양이 복서, 귀가 크다'])).rows[0].value;
+    assert.equal(job.agent_client, null); assert.equal(job.agent_name, null);
+  } finally { await sql.close(); }
+});

@@ -24,7 +24,8 @@ import { accountTokens } from './account.mjs';
  *   preview: unknown, profile: any, submission_id: string | null, progress: number, error_code: string | null, lease_token: string | null,
  *   lease_expires_at: string | null, created_at: string, updated_at: string, delegate: boolean, host_choice: string,
  *   requested_host: string | null, assigned_host: string | null, started_at?: string | null, charged_at?: string | null,
- *   refunded_at?: string | null, profile_front?: any, profile_expressions?: any, profile_set_id?: string | null }} Job
+ *   refunded_at?: string | null, profile_front?: any, profile_expressions?: any, profile_set_id?: string | null, agent_client?: string | null,
+ *   agent_name?: string | null }} Job
  * @typedef {{ id: string, path: string, content_type: string, width: number, height: number }} Upload  A job's reference picture (af_generation_uploads).
  */
 
@@ -207,12 +208,15 @@ export function confirmedProfile(value) {
 /**
  * @param {{ db: any, authenticate: { (request: Request, worker: false): Promise<string>, (request: Request, worker: 'generation'): Promise<string | null> },
  *   present: (row: any) => Promise<object>, decisionsReviewer?: import('./http.mjs').Reviewer | null, responsesReviewer?: import('./http.mjs').Reviewer | null,
- *   cascadeReviewer?: import('./http.mjs').Reviewer | null }} options
+ *   cascadeReviewer?: import('./http.mjs').Reviewer | null, agentClient?: string | null }} options
+ *   `agentClient` (2026-11-03): the cloud MCP's OAuth client for its in-process calls, from its verified token (handler.mjs); a request it
+ *   makes records the agent as its asker. The public handler never sets it, and no request body can: the site and the kit have none.
  *   `authenticate` resolves to the signed-in creator's id, or for a generation worker key to its host's id (null: the official host); it
  *   throws a Problem for any other caller. `present` shows a submission row (as the database returns it) the way its creator reads it.
  * @returns {import('./http.mjs').Route}
  */
-export function createGenerationHandler({ db, authenticate, present, decisionsReviewer = null, responsesReviewer = null, cascadeReviewer = null }) {
+export function createGenerationHandler({ db, authenticate, present, decisionsReviewer = null, responsesReviewer = null, cascadeReviewer = null, agentClient = null }) {
+  const agent = UUID.test(agentClient ?? '') ? /** @type {string} */ (agentClient).toLowerCase() : null;
   const productionReviewer = cascadeReviewer ?? decisionsReviewer;
   const call = rpcCaller(db, STATUS, { contains: true });
   const bucket = () => db.storage.from(GENERATION_BUCKET);
@@ -313,7 +317,9 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       profileSetId: row.profile_set_id ?? null,
       // What it took from his tokens so far (null: not readable now).
       tokens: tokens ? tokens.get(row.id) ?? 0 : null,
-      host: { choice: row.host_choice ?? 'oddbout', requested: hosts.get(row.requested_host) ?? null, assigned: hosts.get(row.assigned_host) ?? null } };
+      host: { choice: row.host_choice ?? 'oddbout', requested: hosts.get(row.requested_host) ?? null, assigned: hosts.get(row.assigned_host) ?? null },
+      // The agent that asked for it (2026-11-03: the cloud MCP's client name, as the client gave it), null for a request made on the site.
+      agent: row.agent_name ?? null };
   }
   /** @param {string} owner @param {string} jobId @returns {Promise<Job>} */
   async function ownJob(owner, jobId) {
@@ -576,7 +582,9 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       const row = await call('af_generation_create', { p_owner: owner, p_key: key, p_description: description,
         p_language: body.language, p_refs: refs, p_rights: body.rightsConfirmed === true,
         // 맡기기 (2026-10-28): the worker picks the look and goes on to the motions; the creator answers once, at the end.
-        ...(body.delegate ? { p_delegate: true } : {}), ...target });
+        ...(body.delegate ? { p_delegate: true } : {}), ...target,
+        // 신청한 에이전트 (2026-11-03): only the cloud MCP's verified client; the database keeps it if the client is live and named.
+        ...(agent ? { p_agent_client: agent } : {}) });
       return { ok: true, job: await view(row) };
     }
     if (parts[0] === 'generations' && parts.length === 2 && method === 'GET') return { ok: true, job: await view(await ownJob(owner, parts[1])) };

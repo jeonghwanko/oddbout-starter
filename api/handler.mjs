@@ -60,7 +60,7 @@ const view = (row, fighter) => {
 function check(error) { if (error) throw rpcProblem(error, SUBMISSION_STATUS); }
 /**
  * `agentClient` (공방과 연대기, 2026-10-27): the cloud MCP's OAuth client for its in-process calls — the workshop labels notes and canon
- * versions with that agent's name. The public Edge handler never sets it.
+ * versions with that agent's name, and a hosted request with the agent that asked for it. The public Edge handler never sets it.
  */
 /**
  * @param {{ db: any, simulateDuel?: any, engineVersion?: any, engines?: any, release?: any, creatorLink?: import('./http.mjs').CreatorLink | null,
@@ -115,7 +115,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
   // The operator's routes, his fighter edits shown as the creator's own (`present`).
   const adminHandler = createAdminHandler({ db, present });
   const workshopHandler = createWorkshopHandler({ db, authenticate: request => authenticate(request, false), rpc, agentClient });
-  const generationHandler = createGenerationHandler({ db, authenticate, present, decisionsReviewer, responsesReviewer, cascadeReviewer });
+  const generationHandler = createGenerationHandler({ db, authenticate, present, decisionsReviewer, responsesReviewer, cascadeReviewer, agentClient });
   const deletionHandler = createFighterDeletionHandler({ db });
   const entryHandler = createFighterEntryHandler({ db });
   const profileSetHandler = createProfileSetHandler({ db, authenticate });
