@@ -147,7 +147,7 @@ Cursor의 Grok Bot이 02:21Z에 로그인 먼저 주소로 연결한 뒤 토큰�
 (`/.well-known/oauth-protected-resource/functions/v1/ai-fighter-mcp/signin` 등)에서 찾았다. 그 주소는 Supabase 게이트웨이가 401로 답한다.
 이것이 갱신하지 못한 이유인지는 추정이다. 클라이언트 내부는 보지 못했다. 갱신은 클라이언트가 할 일이라 우리가 줄 것이 더 없다. 서버에서 할 수 있는 일은 아래 두 가지다.
 
-- **Cursor 웹 에이전트(Grok Bot)에만 만료 유예**: 만료된 커넥터 토큰을 7일(`EXPIRED_TOKEN_GRACE_MS`, Supabase 토큰 수명 설정의 최댓값)까지 받는다.
+- **Cursor 웹 에이전트(Grok Bot)에만 만료 유예**: 만료된 커넥터 토큰을 세션의 마지막 사용 후 7일까지 받는다(2026-11-02, 처음에는 토큰 만료 후 7일).
   `getClaims(token, { allowExpired: true })`로 서명을 검증한다. 받는 조건은 `af_mcp_expired_token_state`(마이그레이션 `20261031150000`)가 `usable`이라고 답하는 경우다.
   - 연결이 살아 있고(`af_mcp_session_active`), 사용자가 정지·삭제되지 않았다. 아니면 `ended`.
   - 클라이언트가 Cursor의 것이다. Cursor MCP 콜백(`https://www.cursor.com/agents/mcp/oauth/callback`·`/bot/mcp/oauth/callback`)이 하나 이상 있고,
@@ -157,18 +157,24 @@ Cursor의 Grok Bot이 02:21Z에 로그인 먼저 주소로 연결한 뒤 토큰�
   - 그 토큰을 발급한 뒤 세션이 갱신되지 않았다. 아니면 `refreshed`다. Auth는 갱신할 때마다 새 토큰에 서명한 직후 `auth.sessions.refreshed_at`(UTC,
     시간대 없는 timestamp)을 적는다. 발급 시각 + 5초 이후의 `refreshed_at`은 더 새 토큰이 있다는 뜻이다.
   로그아웃·내 에이전트에서 연결 해제·승인 취소는 즉시 막힌다. Supabase Auth 자신(`/auth/v1/user` 등)은 만료 토큰을 계속 거절한다.
+  - 세션의 마지막 사용 후 7일이 지나지 않았다. 아니면 `lapsed`다(`af_mcp_session_state`, 마이그레이션 `20261102201000`). 마지막 사용은
+    토큰 만료 시각과, 이 함수가 통과시킨 마지막 호출 중 늦은 쪽이다. 세션마다 `af_mcp_session_editions.last_used_at`에 한 시간에 한 번만 적는다.
+    그래서 봇이 일주일에 한 번이라도 쓰면 로그인이 이어지고, 7일(± 1시간) 쓰지 않으면 끝난다. 상한은 두지 않았다(사용자 결정). 쓰는 동안
+    토큰 하나가 계속 유효하므로, 그 토큰이 새면 로그아웃·연결 해제 전까지 쓸 수 있다.
   토큰 훅으로 `exp` 자체를 늘리는 방법은 쓰지 않았다. Auth의 `/auth/v1/user`는 대상·역할을 보지 않아서, 그러면 그 토큰으로 이메일·비밀번호
   변경까지 7일 동안 열린다. 확인하지 못한 경계도 있다. refresh token 재사용 탐지가 세션 행을 남기는지, 세션 시간 제한·비활성 제한을 쓰는지다.
-  둘 다 Cursor 클라이언트의 7일 안으로 한정된다.
+  둘 다 Cursor 클라이언트의 유예 안으로 한정된다.
 - **거절 이유**: 거절한 토큰의 401은 RFC 6750대로 이유를 말한다. 헤더는 `WWW-Authenticate: Bearer resource_metadata="…", scope="…", error="invalid_token",
-  error_description="…"`이고, 앞부분은 예전과 같다. 본문은 `{ error, code, error_description }`이다. 토큰 없이 온 요청에는 지금처럼 `error`를 붙이지 않는다.
+  error_description="…"`이고, 앞부분은 예전과 같다. 본문은 `{ error, code, error_description }`이다. `sign-in-lapsed`는 다시 연결할 페이지
+  (`GROK_RECONNECT_PAGE`, 로그인 뒤 My agents의 Grok 시트)를 설명문 끝, 헤더의 `error_uri`, 본문의 `reconnect_url`에 함께 싣는다. 토큰 없이 온 요청에는 지금처럼 `error`를 붙이지 않는다.
   설명문에는 따옴표·쉼표·세미콜론을 넣지 않는다. 헤더를 단순하게 자르는 클라이언트를 위해서다. 서버 지침에도 두 가지를 적었다.
   이 이유를 사용자에게 그대로 전한다. 다시 연결하라는 이유면 재시도를 예약하지 않는다.
 
 | `code` | 상태 | 뜻 | 사용자 조치 |
 | --- | --- | --- | --- |
 | `authentication-required` | 401 | 토큰 없음 | 커넥터에서 ODDBOUT 로그인 |
-| `token-expired` | 401 | 만료(Cursor 외 클라이언트), 또는 Cursor에서 만료 뒤 7일이 지남 | 에이전트가 갱신. 못 하면 커넥터 설정에서 다시 연결 |
+| `token-expired` | 401 | 만료(Cursor 외 클라이언트) | 에이전트가 갱신. 못 하면 커넥터 설정에서 다시 연결 |
+| `sign-in-lapsed` | 401 | Cursor(Grok Bot)에서 만료된 토큰을 7일 동안 쓰지 않음 | 링크의 안내대로 커넥터에서 다시 로그인 |
 | `token-superseded` | 401 | 더 새 토큰이 이미 발급된 옛 토큰 | 새 토큰 사용. 안 되면 다시 연결 |
 | `connection-ended` | 401 | 로그아웃, 연결 해제, 승인 취소, 사용자 정지·삭제 | 커넥터 설정에서 ODDBOUT 다시 연결 |
 | `invalid-token` | 401 | 서명·형식·발급자·대상·역할이 커넥터 토큰이 아님 | 커넥터 설정에서 ODDBOUT 다시 연결 |

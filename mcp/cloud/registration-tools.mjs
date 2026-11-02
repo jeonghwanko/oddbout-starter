@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { Problem, rpcProblem, sha256 } from '../../api/http.mjs';
 import spec from '../../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import schema from '../../contracts/ai-fighter/v1/fighter.schema.json' with { type: 'json' };
-import { FILE, UUID_ARG, downloadHostFile } from './common.mjs';
+import { FILE, UUID_ARG, downloadHostFile, unavailable } from './common.mjs';
 import { cleanupPublicFiles } from '../../api/profile-sets.mjs';
 /**
  * @typedef {import('./common.mjs').Identity} Identity
@@ -74,7 +74,7 @@ export function registerRegistrationTools({ register, db, identity, invoke, fetc
   register('list_my_fighters', '내 캐릭터', 'List only the connected user’s registered fighters.', {}, async () => {
     const { data, error } = await db.from('af_fighters').select('id,profile,status,review_state,created_at,entered_at').eq('owner_id', /** @type {Identity} */ (identity).owner)
       .is('deleted_at', null).order('created_at', { ascending: false }).limit(50);
-    if (error) throw new Problem(503, 'database-unavailable'); return { ok: true, fighters: data };
+    if (error) throw unavailable('database-unavailable', error); return { ok: true, fighters: data };
   });
   // The deletion functions' own refusals; anything else is the database's, a 503 to retry (it was a 400 until 2026-11-03).
   const deletionRefusals = Object.fromEntries(['not-found', 'authentication-required', 'invalid-deletion-confirmation', 'deletion-name-mismatch',
@@ -117,14 +117,14 @@ export function registerRegistrationTools({ register, db, identity, invoke, fetc
       if (result.ok) await recordAgent(result.submissionId);
       if (!result.ok || result.stage !== 'uploading') return result;
       const { data, error } = await db.from('af_submissions').select('manifest').eq('id', result.submissionId).eq('owner_id', /** @type {Identity} */ (identity).owner).single();
-      if (error) throw new Problem(503, 'database-unavailable');
+      if (error) throw unavailable('database-unavailable', error);
       return { ...result, assets: data.manifest.assets.map(/** @param {ManifestAsset} asset */ ({ id, path, bytes, sha256 }) => ({ id, path, bytes, sha256 })) };
     }, { write: true, openWorld: true, idempotent: true, files: ['manifest'] });
   register('upload_fighter_asset', '캐릭터 파일 전달', 'Upload one actual WebP file to your private submission. Its size and SHA-256 must match fighter.json. '
     + 'Repeat safely with identical bytes; never regenerate for a delivery failure.',
     { submissionId: UUID_ARG(), assetId: z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/), file: FILE }, async ({ submissionId, assetId, file }) => {
       const { data: row, error } = await db.from('af_submissions').select('manifest,status,expires_at').eq('id', submissionId).eq('owner_id', /** @type {Identity} */ (identity).owner).maybeSingle();
-      if (error) throw new Problem(503, 'database-unavailable'); if (!row) throw new Problem(404, 'not-found');
+      if (error) throw unavailable('database-unavailable', error); if (!row) throw new Problem(404, 'not-found');
       if (row.status !== 'uploading' || Date.parse(row.expires_at) <= Date.now()) throw new Problem(409, 'upload-closed');
       const asset = row.manifest.assets.find(/** @param {ManifestAsset} a */ a => a.id === assetId);
       if (!asset || !Number.isSafeInteger(asset.bytes) || asset.bytes > spec.limits.assetBytes) throw new Problem(404, 'asset-not-found');

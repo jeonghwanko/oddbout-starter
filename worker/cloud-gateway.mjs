@@ -2,17 +2,13 @@
 // First-party HTTPS entry point for the same ODDBOUT MCP resource server.
 // No admin key, arbitrary URL forwarding, cookies or payload logging.
 import { randomUUID } from 'node:crypto';
-export const LEGACY_PUBLIC_RESOURCE = 'https://ai-fighter-validator.onrender.com/mcp';
-export const PUBLIC_RESOURCE = 'https://mcp.oddbout.com/mcp';
-/**
- * The sign-in-first address on our own host (2026-11-01), only at mcp.oddbout.com. Cursor's Grok Bot looks for the resource metadata at the
- * host root, where RFC 9728 puts it (`/.well-known/oauth-protected-resource/<path>`). At the Supabase host that root is not ours and answers
- * 401: the bot told its user ODDBOUT's login was down, dropped its sign-in and asked again (10-31, twice). Here the root is ours.
- */
-export const PUBLIC_SIGN_IN_RESOURCE = 'https://mcp.oddbout.com/signin';
-/** The Claude directory edition (2026-11-01, mcp/cloud/directory-edition.mjs), also only at mcp.oddbout.com: the address its listing names. */
-export const PUBLIC_DIRECTORY_RESOURCE = 'https://mcp.oddbout.com/claude';
-const UPSTREAM = 'https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter-mcp';
+// The addresses are the function's own (mcp/cloud/resources.mjs): one copy for both. The sign-in-first and directory addresses exist only at
+// mcp.oddbout.com. Cursor's Grok Bot looks for the resource metadata at the host root, where RFC 9728 puts it
+// (`/.well-known/oauth-protected-resource/<path>`); at the Supabase host that root is not ours and answers 401: the bot told its user
+// ODDBOUT's login was down, dropped its sign-in and asked again (10-31, twice). Here the root is ours.
+import { CLOUD_RESOURCE as UPSTREAM, LEGACY_PUBLIC_RESOURCE, PUBLIC_DIRECTORY_RESOURCE, PUBLIC_RESOURCE, PUBLIC_SIGN_IN_RESOURCE }
+  from '../mcp/cloud/resources.mjs';
+export { LEGACY_PUBLIC_RESOURCE, PUBLIC_DIRECTORY_RESOURCE, PUBLIC_RESOURCE, PUBLIC_SIGN_IN_RESOURCE };
 const METADATA = '/.well-known/oauth-protected-resource';
 /** Each fixed route and the upstream path it reaches; nothing else is forwarded. */
 const ROUTES = new Map([['/mcp', ''], ['/mcp' + METADATA, METADATA], [METADATA + '/mcp', METADATA]]);

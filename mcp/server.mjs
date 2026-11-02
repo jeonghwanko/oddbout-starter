@@ -7,7 +7,7 @@ import schema from '../contracts/ai-fighter/v1/fighter.schema.json' with { type:
 import example from '../contracts/ai-fighter/v1/example.fighter.json' with { type: 'json' };
 import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/validate.mjs';
 import { makePackageValidator } from './package-access.mjs';
-import { fetchCreationContext, reviewCreationProgress } from './creation-context.mjs';
+import { GROUP_IDS, fetchCreationContext, reviewCreationProgress } from './creation-context.mjs';
 import { spriteStatus } from '../scripts/sprite-gen.mjs';
 import { registerCreatorTools } from './creator-tools.mjs';
 import { checkReadiness } from './creation-readiness.mjs';
@@ -17,6 +17,7 @@ import { errorCode } from './error-code.mjs';
 import { registerPackagingTools } from './packaging-tools.mjs';
 import { serialQueue } from './serial-worker.mjs';
 import { compactText } from './tool-result.mjs';
+import kit from '../package.json' with { type: 'json' };
 
 const annotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 // These read the game's current creation context over the network.
@@ -54,7 +55,8 @@ function respond(result) {
  * @param {{ root?: string, contextRequest?: typeof fetch }} [options]
  */
 export function createServer({ root, contextRequest } = {}) {
-  const server = new McpServer({ name: 'ai-fighter-authoring', version: '0.2.0' }, {
+  // The kit's own version, not a number of this file's that drifted (it said 0.2.0 at kit 0.6.11).
+  const server = new McpServer({ name: 'ai-fighter-authoring', version: kit.version }, {
     instructions: [
       'ODDBOUT workspace tools handle creation and validation only. Use the connected ODDBOUT cloud tools for get_profile, account readiness and registration. Do not run local registration login or inherit a saved CLI account.',
       'Read get_fighter_spec context at entry and each group. The game owns current motions, controls and timing. Preserve context revision and item/version selections; review_creation_progress checks the group boundary. A link starts intake directly; detail choices never approve the whole appearance.',
@@ -75,7 +77,7 @@ export function createServer({ root, contextRequest } = {}) {
   server.registerTool('get_fighter_spec', {
     description: 'Read context first for game-owned current motions, frames, controls, timing and group gates; refresh at each new group and preserve its revision. Optional group narrows context motions. Read overview and creation for the package workflow and sprite-gen setup. Read guide, schema and example for the package contract; motion narrows schema/example (the optional clips skill, entrance and victory have no example clip). Example art is a format fixture.',
     inputSchema: { section: z.enum(['overview', 'creation', 'guide', 'schema', 'example', 'context']).default('overview'),
-      group: z.enum(['appearance', 'locomotion', 'attacks', 'defense', 'style', 'final']).optional(),
+      group: z.enum(GROUP_IDS).optional(),
       motion: z.enum(MOTIONS).optional() }, outputSchema, annotations: contextAnnotations,
   }, async ({ section, motion, group }) => {
     if (section === 'context') {

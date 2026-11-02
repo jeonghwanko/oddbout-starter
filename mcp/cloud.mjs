@@ -14,6 +14,8 @@ import { registerProfileSetTools } from './cloud/profile-set-tools.mjs';
 import { registerWorkshopTools } from './cloud/workshop-tools.mjs';
 import { HOSTED_INSTRUCTIONS, registerHostedTools } from './cloud/hosted-tools.mjs';
 import { DIRECTORY_DESCRIPTIONS, DIRECTORY_INSTRUCTIONS, DIRECTORY_TITLES } from './cloud/directory-edition.mjs';
+import { CLOUD_ISSUER, CLOUD_RESOURCE, DIRECTORY_DOCUMENTATION, DIRECTORY_RESOURCE, LEGACY_PUBLIC_RESOURCE, PUBLIC_DIRECTORY_RESOURCE, PUBLIC_RESOURCE,
+  PUBLIC_SIGN_IN_RESOURCE, SIGN_IN_RESOURCE } from './cloud/resources.mjs';
 // The cloud MCP's tool families live in ./cloud/ (Edge-only, as this file); these names are this module's as before.
 export { CALL_BUDGET_MS, allowedFileUrl, compactText, downloadHostFile, timedFetch } from './cloud/common.mjs';
 export { STYLE_GUIDE } from './cloud/agent-tools.mjs';
@@ -27,30 +29,9 @@ export { HOSTED_WAIT_SECONDS, hostedNext } from './cloud/hosted-tools.mjs';
  * @typedef {import('./cloud/common.mjs').Register} Register
  */
 
-export const CLOUD_RESOURCE = 'https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter-mcp';
-export const LEGACY_PUBLIC_RESOURCE = 'https://ai-fighter-validator.onrender.com/mcp';
-export const PUBLIC_RESOURCE = 'https://mcp.oddbout.com/mcp';
-/**
- * Sign-in first (2026-10-28): the same server at `<function>/signin` asks every request for a sign-in, not only the account tools. Grok's custom
- * connector has no option for it: it decides at its first request whether a server needs one. At mcp.oddbout.com the public tools answer signed
- * out (ChatGPT relies on that), so Grok connected without an account and never offered the sign-in. Its tokens carry the same audience.
- */
-export const SIGN_IN_RESOURCE = `${CLOUD_RESOURCE}/signin`;
-/**
- * The same sign-in-first address through mcp.oddbout.com (2026-11-01, worker/cloud-gateway.mjs). There the host root is ours, so a client that
- * looks for the metadata at `/.well-known/oauth-protected-resource/signin` (RFC 9728, as Cursor's Grok Bot does) finds it; at the Supabase
- * host it got a 401 and gave up its sign-in. The Supabase address keeps working for connectors already added with it.
- */
-export const PUBLIC_SIGN_IN_RESOURCE = 'https://mcp.oddbout.com/signin';
-/**
- * The Claude directory edition (2026-11-01, cloud/directory-edition.mjs): the same server at `<function>/claude` lists only the tools a
- * directory reviewer can run in Claude, signed out like the public address. Its tokens carry the same audience, as the sign-in-first ones do.
- */
-export const DIRECTORY_RESOURCE = `${CLOUD_RESOURCE}/claude`;
-/** The address the directory listing names, through mcp.oddbout.com (worker/cloud-gateway.mjs). */
-export const PUBLIC_DIRECTORY_RESOURCE = 'https://mcp.oddbout.com/claude';
-/** The page the directory edition's metadata points to: connecting ODDBOUT in Claude. */
-export const DIRECTORY_DOCUMENTATION = 'https://oddbout.com/cloud-plugin/claude.html';
+// The addresses live in ./cloud/resources.mjs, which the mcp.oddbout.com gateway shares; these names are this module's as before.
+export { ARENA_URL, CLOUD_ISSUER, CLOUD_RESOURCE, DIRECTORY_DOCUMENTATION, DIRECTORY_RESOURCE, LEGACY_PUBLIC_RESOURCE, PUBLIC_DIRECTORY_RESOURCE,
+  PUBLIC_RESOURCE, PUBLIC_SIGN_IN_RESOURCE, SIGN_IN_RESOURCE } from './cloud/resources.mjs';
 /** @param {unknown} aud */
 export function validCloudAudience(aud) {
   const current = [CLOUD_RESOURCE, LEGACY_PUBLIC_RESOURCE, PUBLIC_RESOURCE];
@@ -59,9 +40,6 @@ export function validCloudAudience(aud) {
   const expected = aud.length === 2 ? [CLOUD_RESOURCE, LEGACY_PUBLIC_RESOURCE] : current;
   return aud.length === expected.length && aud.every(value => expected.includes(value));
 }
-export const CLOUD_ISSUER = 'https://ztfxxhtmtrvxvuxlqmgz.supabase.co/auth/v1';
-/** ODDBOUT's arena function (the game's `oddbout-arena`): rankings, records, cups, bout records, and the agent calls behind its key. */
-export const ARENA_URL = 'https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/oddbout-arena';
 /**
  * Tools anyone may call without a connected account: the contract and ODDBOUT's public records. The agent tools (3단계, 2026-10-27) list only
  * while the arena key is configured (`ODDBOUT_ARENA_AGENT_KEY`), so a release of this code alone does not change the published tool list.
@@ -85,15 +63,17 @@ const json = (value, status = 200, headers = {}) => new Response(JSON.stringify(
   headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', ...headers } });
 
 /**
- * How long past its expiry a connector token is still taken from Cursor's web agents (2026-10-31). Cursor's Grok Bot signed in at 02:21Z
- * and never refreshed, though it holds a refresh token (offline_access granted): from 03:21Z it sent that token with every call, got a
- * bare 401 and told its user ODDBOUT's login provider was down. af_mcp_expired_token_state decides: the connection live, the client
- * Cursor's (a cursor.com MCP callback, any other redirect a loopback one), and the session not refreshed since the token was issued.
- * Every other client gets the plain expiry, as the MCP spec asks:
- * the MCP SDKs refresh only on a 401, so a grace for them would only lengthen their tokens. Supabase Auth itself refuses every expired
- * token, so the grace reaches nothing beyond this server. Seven days is Supabase's longest token lifetime.
+ * An expired connector token is still taken from Cursor's web agents (2026-10-31). Cursor's Grok Bot signed in at 02:21Z and never
+ * refreshed, though it holds a refresh token (offline_access granted): from 03:21Z it sent that token with every call, got a bare 401 and
+ * told its user ODDBOUT's login provider was down. af_mcp_expired_token_state decides: the connection live, the client Cursor's (a
+ * cursor.com MCP callback, any other redirect a loopback one), and the session not refreshed since the token was issued. Every other
+ * client gets the plain expiry, as the MCP spec asks: the MCP SDKs refresh only on a 401, so a grace for them would only lengthen their
+ * tokens. Supabase Auth itself refuses every expired token, so the grace reaches nothing beyond this server.
+ * How long: until 7 days after the session's last use (af_mcp_session_state, 2026-11-02 user: the bot stays signed in while it is used),
+ * at first 7 days after the token's expiry whatever the bot did. A sign-out or a revoked grant still ends it at once.
+ * Past it the 401 says to sign in again and names this page: My agents with Grok's sheet open, after the site's own sign-in.
  */
-export const EXPIRED_TOKEN_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
+export const GROK_RECONNECT_PAGE = 'https://oddbout.com/creator.html#view=agents&agent=grok';
 /**
  * Why a call has no verified identity, as its 401 or 503 says (RFC 6750 error_description: ASCII without quotes, commas or semicolons,
  * which naive challenge parsers split on). Agents relay it to their user: a refused sign-in needs a renewal or a reconnect, which no
@@ -107,13 +87,17 @@ export const SIGN_IN_PROBLEMS = Object.freeze({
   'connection-ended': 'This ODDBOUT connection was signed out or disconnected (My agents). Reconnect ODDBOUT in the connector settings.',
   'invalid-token': 'This is not an ODDBOUT connector sign-in. Reconnect ODDBOUT in the connector settings.',
   'other-address': 'This ODDBOUT sign-in was made for another ODDBOUT connector address. Reconnect ODDBOUT in the connector settings.',
+  'sign-in-lapsed': 'This ODDBOUT sign-in ended after 7 days without use. Sign in again: reconnect ODDBOUT in this agent\'s connector '
+    + `settings. How: ${GROK_RECONNECT_PAGE}`,
   'sign-in-check-unavailable': 'ODDBOUT could not check the sign-in just now (a temporary server problem). Retry in a minute.',
 });
 /** auth-js errors that mean the check could not run (network, a 5xx, a body that is not JSON), not that the token is bad. */
 const UNAVAILABLE_AUTH_ERRORS = new Set(['AuthRetryableFetchError', 'AuthUnknownError']);
 /** What af_mcp_session_state's answers mean for the caller ('usable' lets the call through). */
 const SESSION_STATE_PROBLEMS = Object.freeze({ strict: 'token-expired', refreshed: 'token-superseded', ended: 'connection-ended',
-  'other-edition': 'other-address' });
+  'other-edition': 'other-address', lapsed: 'sign-in-lapsed' });
+/** Where a refused sign-in's user reconnects from: its 401 names the page (RFC 6750 error_uri) beside the reason. */
+const RECONNECT_PAGES = Object.freeze(/** @type {Partial<Record<keyof typeof SIGN_IN_PROBLEMS, string>>} */ ({ 'sign-in-lapsed': GROK_RECONNECT_PAGE }));
 /** @typedef {{ identity: Identity, problem?: undefined } | { identity: null, problem: keyof typeof SIGN_IN_PROBLEMS }} SignIn */
 
 /**
@@ -143,13 +127,13 @@ export async function authenticateCloud(db, request, now = Date.now, edition = '
     return { identity: null, problem: 'invalid-token' };
   }
   const expired = c.exp * 1000 <= now();
-  if (expired && (c.exp * 1000 + EXPIRED_TOKEN_GRACE_MS <= now() || !Number.isFinite(c.iat))) return { identity: null, problem: 'token-expired' };
+  if (expired && !Number.isFinite(c.iat)) return { identity: null, problem: 'token-expired' };
   // Revoked OAuth grants and signed-out sessions stop writes immediately, not merely when the JWT expires. af_mcp_session_state answers
   // 'usable' or why not (SESSION_STATE_PROBLEMS), in one call: the connection (for an expired token, with its grace) and the edition its
   // session is bound to. The token says nothing of the address it was made for (Supabase Auth keeps no RFC 8707 resource), so the first
   // signed-in call binds the session to its edition and the other edition refuses it (2026-11-01).
   const { data: live, error: checkError } = await db.rpc('af_mcp_session_state', { p_owner: c.sub, p_session: c.session_id, p_client: c.client_id,
-    p_edition: edition, ...(expired ? { p_issued_at: Math.floor(c.iat) } : {}) });
+    p_edition: edition, ...(expired ? { p_issued_at: Math.floor(c.iat), p_expires_at: Math.floor(c.exp) } : {}) });
   if (checkError) return { identity: null, problem: 'sign-in-check-unavailable' };
   if (live === 'usable') return { identity: { owner: c.sub, email: c.email ?? '', claims: c } };
   const problem = Object.hasOwn(SESSION_STATE_PROBLEMS, live) ? SESSION_STATE_PROBLEMS[/** @type {keyof typeof SESSION_STATE_PROBLEMS} */ (live)] : null;
@@ -393,16 +377,17 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted =
      * A call without a sign-in says why (RFC 6750): a token it refused is named `invalid_token` with the reason, so the agent can tell its
      * user instead of guessing at an outage (Grok Bot, 2026-10-31); a call with no token is only asked to sign in. The challenge keeps
      * its earlier start for clients that read it by prefix. A check that could not run is a 503 to retry, never a 401 that sends the
-     * client back to its sign-in.
+     * client back to its sign-in. A lapsed sign-in also names the page its user reconnects from (`error_uri`, and `reconnect_url`).
      * @param {keyof typeof SIGN_IN_PROBLEMS} problem
      */
     const signInProblem = problem => {
-      const error_description = SIGN_IN_PROBLEMS[problem];
+      const error_description = SIGN_IN_PROBLEMS[problem], page = RECONNECT_PAGES[problem];
       if (problem === 'sign-in-check-unavailable') {
         return json({ error: 'temporarily_unavailable', code: problem, error_description }, 503, { 'retry-after': '30' });
       }
-      const refused = problem === 'authentication-required' ? '' : `, error="invalid_token", error_description="${error_description}"`;
-      return json({ error: 'invalid_token', code: problem, error_description }, 401, { 'www-authenticate':
+      const refused = problem === 'authentication-required' ? ''
+        : `, error="invalid_token", error_description="${error_description}"${page ? `, error_uri="${page}"` : ''}`;
+      return json({ error: 'invalid_token', code: problem, error_description, ...(page ? { reconnect_url: page } : {}) }, 401, { 'www-authenticate':
         `Bearer resource_metadata="${resource}/.well-known/oauth-protected-resource", scope="openid email profile"${refused}` });
     };
     if (request.method !== 'POST') {

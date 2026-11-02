@@ -17,7 +17,9 @@ import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
  *   pendingEdits?: string[], profile?: { selected?: boolean }, packageReview?: string, packageFilesValid?: boolean }} ProgressState
  */
 
-const groups = ['appearance', 'locomotion', 'attacks', 'defense', 'final'];
+/** Every review group a tool may name, in order: `style` is the optional one, the others are required. One list for all the tools. */
+export const GROUP_IDS = /** @type {[string, ...string[]]} */ (['appearance', 'locomotion', 'attacks', 'defense', 'style', 'final']);
+const groups = GROUP_IDS.filter(id => id !== 'style');
 /** An optional group (`optional: true`, 2026-10-27: style — skill, entrance, victory) may be skipped as a whole and never blocks.
  * @type {(group: WorkflowGroup) => boolean} */
 export const isOptionalGroup = group => group?.optional === true;
