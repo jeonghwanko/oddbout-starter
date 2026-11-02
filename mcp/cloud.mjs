@@ -3,10 +3,10 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { z } from 'zod';
 import { createHandler } from '../api/handler.mjs';
-import { Problem, UUID, bearerToken, readBody } from '../api/http.mjs';
+import { Problem, UUID, bearerToken, failureDetail, readBody } from '../api/http.mjs';
 import { registerFileInputProbe } from './file-input-probe.mjs';
 import { registerCreatorSources } from './creator-sources.mjs';
-import { AUTH, FILE, READ, downloadHostFile, output } from './cloud/common.mjs';
+import { AUTH, CALL_BUDGET_MS, FILE, READ, downloadHostFile, output } from './cloud/common.mjs';
 import { registerRegistrationTools } from './cloud/registration-tools.mjs';
 import { registerPackagingPreparation } from './cloud/packaging-tools.mjs';
 import { registerAgentTools } from './cloud/agent-tools.mjs';
@@ -15,7 +15,7 @@ import { registerWorkshopTools } from './cloud/workshop-tools.mjs';
 import { HOSTED_INSTRUCTIONS, registerHostedTools } from './cloud/hosted-tools.mjs';
 import { DIRECTORY_DESCRIPTIONS, DIRECTORY_INSTRUCTIONS, DIRECTORY_TITLES } from './cloud/directory-edition.mjs';
 // The cloud MCP's tool families live in ./cloud/ (Edge-only, as this file); these names are this module's as before.
-export { allowedFileUrl, compactText, downloadHostFile } from './cloud/common.mjs';
+export { CALL_BUDGET_MS, allowedFileUrl, compactText, downloadHostFile, timedFetch } from './cloud/common.mjs';
 export { STYLE_GUIDE } from './cloud/agent-tools.mjs';
 export { HOSTED_WAIT_SECONDS, hostedNext } from './cloud/hosted-tools.mjs';
 /**
@@ -157,10 +157,29 @@ export async function authenticateCloud(db, request, now = Date.now, edition = '
 }
 
 /**
- * @param {{ db: any, identity: Identity | null, fetcher?: typeof fetch, arena?: Arena | null, hosted?: Hosted | null,
- *   host?: { compact?: boolean, caller?: string | null }, edition?: 'full' | 'directory' }} options
+ * One request's call, for its tools and its log line: `requestId` (the gateway's, else this function's), the client's `protocol` version,
+ * the request's `signal` (aborted when the client goes away) and the `deadline` its answer is due by (CALL_BUDGET_MS from its arrival).
+ * @typedef {{ requestId?: string, protocol?: string | null, signal?: AbortSignal, deadline?: number }} Call
  */
-export function cloudServer({ db, identity, fetcher = fetch, arena = null, hosted = null, host = {}, edition = 'full' }) {
+
+/**
+ * One JSON line per tool call (MCP 점검 2026-11-03: a failed call left no trace, and nothing said which tools agents use or which protocol
+ * version they speak — the 2026-07-28 move waits on that). Only ODDBOUT's own names and codes, never arguments, tokens, URLs or the owner.
+ * A failure of the server's (a bug, or a 5xx with what failed behind it) goes to the error log with failureDetail.
+ * @param {{ tool: string, edition: string, client: string | null, call: Call, started: number, value: Record<string, unknown>, failure?: unknown }} line
+ */
+function logCall({ tool, edition, client, call, started, value, failure }) {
+  const code = typeof value.code === 'string' ? value.code.slice(0, 80) : undefined;
+  const fault = failure !== undefined && !(failure instanceof Problem && failure.status < 500);
+  (fault ? console.error : console.log)(JSON.stringify({ stage: 'mcp-call', tool, edition, client, protocol: call.protocol ?? null,
+    requestId: call.requestId ?? null, ms: Date.now() - started, ok: value.ok !== false, ...(code ? { code } : {}), ...(fault ? failureDetail(failure) : {}) }));
+}
+
+/**
+ * @param {{ db: any, identity: Identity | null, fetcher?: typeof fetch, arena?: Arena | null, hosted?: Hosted | null,
+ *   host?: { compact?: boolean, caller?: string | null }, edition?: 'full' | 'directory', call?: Call }} options
+ */
+export function cloudServer({ db, identity, fetcher = fetch, arena = null, hosted = null, host = {}, edition = 'full', call = {} }) {
   const directory = edition === 'directory';
   const server = new McpServer({ name: 'oddbout-cloud', version: '1.0.0' }, {
     instructions: directory ? DIRECTORY_INSTRUCTIONS : (hosted ? HOSTED_INSTRUCTIONS : '') + 'For creation in the user’s workspace, use the user’s own generation account. '
@@ -189,8 +208,10 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
   const api = createHandler({ db: scoped ?? db, agentClient: identity?.claims.client_id ?? null });
   /** @type {Invoke} */
   const invoke = async (path, method = 'GET', body, headers = {}) => {
-    const response = await api(new Request(`https://internal.invalid/ai-fighter/${path}`, {
-      method, headers: { authorization: 'Bearer internal-request-identity', ...headers }, ...(body === undefined ? {} : { body }) }));
+    // The request id rides along, so an API failure's line (logFailure) names the call that made it.
+    const response = await api(new Request(`https://internal.invalid/ai-fighter/${path}`, { method, headers: {
+      authorization: 'Bearer internal-request-identity', ...(call.requestId ? { 'x-request-id': call.requestId } : {}), ...headers },
+      ...(body === undefined ? {} : { body }) }));
     return response.json();
   };
   // Which agent made a submission (`af_record_submission_agent`, 2026-10-27): the roster shows a fighter's maker. Never fails the call.
@@ -212,15 +233,25 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
       // The directory edition repeats the title among the annotations, where Anthropic's tool checklist looks for it with the hints.
       annotations: { ...(directory ? { title } : {}), ...READ, readOnlyHint: !write, openWorldHint: openWorld, destructiveHint: publish, idempotentHint: idempotent },
       _meta: { securitySchemes: publicTool ? [{ type: 'noauth' }] : AUTH,
-        ...(files.length ? { 'openai/fileParams': files } : {}), ...(profile ? { 'openai/profile': true } : {}) } }, async (/** @type {Record<string, unknown>} */ args) => {
+        ...(files.length ? { 'openai/fileParams': files } : {}), ...(profile ? { 'openai/profile': true } : {}) } },
+    async (/** @type {Record<string, unknown>} */ args, /** @type {{ signal?: AbortSignal } | undefined} */ extra) => {
       if (!publicTool && !identity) return { ...output({ ok: false, code: 'authentication-required' }),
         _meta: { 'mcp/www_authenticate': [`Bearer resource_metadata="${CLOUD_RESOURCE}/.well-known/oauth-protected-resource"`] } };
-      try {
-        const result = output(await run(/** @type {Parameters<typeof run>[0]} */ (args)), host.compact === true);
-        // A diagnostic failure is useful data; keep it readable by hosts that throw away tool errors.
-        return diagnostic ? { ...result, isError: false } : result;
-      }
-      catch (error) { return output({ ok: false, code: error instanceof Problem ? error.message : 'cloud-operation-unavailable' }); }
+      const started = Date.now(), signals = [extra?.signal, call.signal].filter(signal => signal !== undefined);
+      // The SDK's signal ends with a cancellation; the request's, when the client goes away (2026-07-28 reads a closed stream as one).
+      /** @type {import('./cloud/common.mjs').ToolContext} */
+      const context = { signal: signals.length ? AbortSignal.any(signals) : new AbortController().signal, deadline: call.deadline ?? started + CALL_BUDGET_MS };
+      /** @type {Record<string, unknown>} */
+      let value;
+      /** @type {unknown} */
+      let failure;
+      try { value = await run(/** @type {Parameters<typeof run>[0]} */ (args), context); }
+      catch (error) { failure = error; value = { ok: false, code: error instanceof Problem ? error.message : 'cloud-operation-unavailable' }; }
+      logCall({ tool: name, edition, client: identity?.claims.client_id ?? null, call, started, value, failure });
+      if (failure !== undefined) return output(value);
+      const result = output(value, host.compact === true);
+      // A diagnostic failure is useful data; keep it readable by hosts that throw away tool errors.
+      return diagnostic ? { ...result, isError: false } : result;
     });
   };
   // The directory edition registers only its tools, under their titles there; any other is unknown to it, not refused.
@@ -319,10 +350,12 @@ function publishedToolList(result) {
  * @param {typeof fetch} [options.fetcher]
  * @param {{url: string, key: string, fetcher?: typeof fetch, cupWaitMs?: number, pollMs?: number, pollTries?: number} | null} [options.arena]
  * @param {{pollMs?: number} | null} [options.hosted]
+ * @param {number} [options.budgetMs]  one call's budget from its arrival (CALL_BUDGET_MS; shorter in tests)
  * @returns {(request: Request) => Promise<Response>}
  */
-export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted = null }) {
+export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted = null, budgetMs = CALL_BUDGET_MS }) {
   return async request => {
+    const started = Date.now();
     const { route, signInFirst, edition, resource } = routeOf(request);
     if (route === '.well-known/oauth-protected-resource' && request.method === 'GET') return json({ resource,
       authorization_servers: [CLOUD_ISSUER], scopes_supported: ['openid', 'email', 'profile'],
@@ -368,14 +401,24 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted =
     // A server per request on purpose: its tools close over this request's verified identity, so no state can carry one
     // user's identity into another's call. Measured 2026-10-28: building it with all tools and answering tools/list
     // takes about 1.8 ms, small beside the network hop, so sharing a server is not worth that guarantee.
-    const server = cloudServer({ db, identity, fetcher, arena, hosted, host: await hostOf(body), edition });
+    // A UUID request id (the gateway makes one per call; a caller at the function's own address may send its own: it only joins log lines),
+    // else one of our own. The version a client says it speaks, as a date only.
+    const given = request.headers.get('x-request-id') ?? '', version = request.headers.get('mcp-protocol-version') ?? '';
+    /** @type {Call} */
+    const call = { requestId: UUID.test(given) ? given.toLowerCase() : crypto.randomUUID(),
+      protocol: /^\d{4}-\d{2}-\d{2}$/.test(version) ? version : null, signal: request.signal, deadline: started + budgetMs };
+    const server = cloudServer({ db, identity, fetcher, arena, hosted, host: await hostOf(body), edition, call });
     const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     try {
       await server.connect(transport);
       const response = await transport.handleRequest(request, { parsedBody: body });
       if (body.method === 'tools/list' && response.status === 200) return json(publishedToolList(await response.json()));
       return response;
-    } catch { return json({ error: 'mcp_unavailable' }, 503); }
+    } catch (error) {
+      console.error(JSON.stringify({ stage: 'mcp-call', method: String(body.method).slice(0, 80), edition, protocol: call.protocol, requestId: call.requestId,
+        ms: Date.now() - started, ok: false, code: 'mcp_unavailable', ...failureDetail(error) }));
+      return json({ error: 'mcp_unavailable' }, 503);
+    }
     finally { await server.close(); }
   };
 }

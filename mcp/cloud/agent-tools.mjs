@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { Problem } from '../../api/http.mjs';
 import spec from '../../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { profileLimits } from '../../contracts/ai-fighter/profile-limits.mjs';
-import { CUP_WAIT_MS, UUID_ARG, arenaCall } from './common.mjs';
+import { CUP_WAIT_MS, UUID_ARG, arenaCall, pause, timeLeft } from './common.mjs';
 import { ENTRY_CLIPS, entryRequest } from '../../api/fighter-entry.mjs';
 /**
  * @typedef {import('./common.mjs').Identity} Identity
@@ -103,15 +103,17 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
     + 'the results count in the cup rankings. Only an entered fighter (enter_fighter) enters. Requires the user\'s request. '
     + 'Returns the finished cup (a few seconds); '
     + 'if it is still running, read it with get_cup.',
-    { fighterId: UUID_ARG() }, async ({ fighterId }) => {
-      const issued = await call('agent/cup', { owner: /** @type {Identity} */ (identity).owner, fighter: fighterId });
+    { fighterId: UUID_ARG() }, async ({ fighterId }, { signal, deadline: due }) => {
+      const issued = await arenaCall(arena, 'agent/cup', { owner: /** @type {Identity} */ (identity).owner, fighter: fighterId }, undefined, timeLeft(due, 20000));
       if (!issued.ok) return issued;
       // A cup is fought in about seven seconds: wait for it here so the agent needs no second call (MCP 점검 2026-10-27).
-      // The whole wait ends by CUP_WAIT_MS, each read bounded by the time left, well inside the Edge request limit.
-      const deadline = Date.now() + (arena.cupWaitMs ?? CUP_WAIT_MS), pollMs = arena.pollMs ?? 1000;
-      for (let i = 0; i < (arena.pollTries ?? 12) && Date.now() + pollMs < deadline; i++) {
-        await new Promise(done => setTimeout(done, pollMs));
-        const cup = await arenaCall(arena, `cup?id=${issued.ticket}`, undefined, undefined, Math.max(1, Math.min(20000, deadline - Date.now()))).catch(() => null);
+      // The wait ends by the call's deadline (counted from its request, the issue included: 2026-11-03) or CUP_WAIT_MS, each read bounded by
+      // the time left; a client that went away ends it at once. The cup is made either way: an open one is read with get_cup.
+      const deadline = Math.min(due, Date.now() + (arena.cupWaitMs ?? CUP_WAIT_MS)), pollMs = arena.pollMs ?? 1000;
+      for (let i = 0; i < (arena.pollTries ?? 12) && Date.now() + pollMs < deadline && !signal.aborted; i++) {
+        await pause(pollMs, signal);
+        if (signal.aborted) break;
+        const cup = await arenaCall(arena, `cup?id=${issued.ticket}`, undefined, undefined, timeLeft(deadline, 20000), { signal }).catch(() => null);
         if (cup?.ok && cup.cup && cup.cup.state !== 'open') return { ...issued, cup: cup.cup };
       }
       return { ...issued, state: 'open', next: 'get_cup' };

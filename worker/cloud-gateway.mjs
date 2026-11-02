@@ -1,6 +1,7 @@
 // @ts-check
 // First-party HTTPS entry point for the same ODDBOUT MCP resource server.
 // No admin key, arbitrary URL forwarding, cookies or payload logging.
+import { randomUUID } from 'node:crypto';
 export const LEGACY_PUBLIC_RESOURCE = 'https://ai-fighter-validator.onrender.com/mcp';
 export const PUBLIC_RESOURCE = 'https://mcp.oddbout.com/mcp';
 /**
@@ -21,7 +22,10 @@ export const DOMAIN_CHALLENGE = 'c8ZJAeo0-MPwQFn6nJQ1rcg_qzCq_kxMyIcZJksSfrM';
 export const BRANDED_DOMAIN_CHALLENGE = 'v4qUmFhpjDn1BF6ilHvAVROEnUfTK5XJMumPWkOK8PY';
 // The upstream must answer with headers in HEADER_TIMEOUT_MS; a streamed (SSE) body may then run until TOTAL_TIMEOUT_MS,
 // a little past the Edge function's own request limit. Before, 30 s covered the whole body and cut long streams off.
-const HEADER_TIMEOUT_MS = 30_000, TOTAL_TIMEOUT_MS = 160_000;
+// The function answers each call as one JSON response, so its headers come when the tool is done: the header limit is the whole call's.
+// The function ends a call by its own budget (CALL_BUDGET_MS, 25 s); 45 s leaves its sign-in check and answer room (MCP 점검 2026-11-03,
+// when 30 s cut off an enter_cup that had made its cup).
+const HEADER_TIMEOUT_MS = 45_000, TOTAL_TIMEOUT_MS = 160_000;
 /**
  * @param {import('node:http').IncomingMessage} req @param {import('node:http').ServerResponse} res @param {typeof fetch} [fetcher]
  * @param {{ headerTimeoutMs?: number, totalTimeoutMs?: number }} [timeouts]
@@ -47,7 +51,9 @@ export async function cloudGateway(req, res, fetcher = fetch, { headerTimeoutMs 
   res.once('close', () => { if (!res.writableFinished) control.abort(); });
   try {
     const resource = signIn ? PUBLIC_SIGN_IN_RESOURCE : directory ? PUBLIC_DIRECTORY_RESOURCE : branded ? PUBLIC_RESOURCE : LEGACY_PUBLIC_RESOURCE;
-    const headers = new Headers({'x-oddbout-public-resource':resource});
+    // A request id of our own (never the client's) ties the function's log lines for this call together; the client gets it back.
+    const requestId = randomUUID();
+    const headers = new Headers({'x-oddbout-public-resource':resource,'x-request-id':requestId});
     // The client's user-agent too: without it the function's logs show only this gateway's, and which client called is what a sign-in diagnosis needs.
     for (const name of ['authorization','content-type','accept','mcp-protocol-version','origin','user-agent']) if (typeof req.headers[name] === 'string') headers.set(name,req.headers[name]);
     const chunks=[]; let bytes=0;
@@ -55,7 +61,7 @@ export async function cloudGateway(req, res, fetcher = fetch, { headerTimeoutMs 
     const response = await fetcher(UPSTREAM+path,{method:req.method,headers,redirect:'error',signal:control.signal,...(req.method==='POST'?{body:Buffer.concat(chunks)}:{})});
     clearTimeout(headerTimer);
     /** @type {Record<string, string>} */
-    const responseHeaders = {'cache-control':'no-store','x-content-type-options':'nosniff'};
+    const responseHeaders = {'cache-control':'no-store','x-content-type-options':'nosniff','x-request-id':requestId};
     for (const name of ['content-type','www-authenticate','retry-after','allow','access-control-allow-origin','access-control-allow-methods','access-control-allow-headers','access-control-expose-headers']) if(response.headers.has(name)) responseHeaders[name]=/** @type {string} */ (response.headers.get(name));
     res.writeHead(response.status,responseHeaders);
     for await (const part of response.body ?? []) res.write(part);

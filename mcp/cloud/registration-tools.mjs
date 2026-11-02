@@ -1,7 +1,7 @@
 // @ts-check
 // The registration tools: the contract, the connected account and its readiness, the owner's fighters, deletion, and a package's way in.
 import { z } from 'zod';
-import { Problem, sha256 } from '../../api/http.mjs';
+import { Problem, rpcProblem, sha256 } from '../../api/http.mjs';
 import spec from '../../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import schema from '../../contracts/ai-fighter/v1/fighter.schema.json' with { type: 'json' };
 import { FILE, UUID_ARG, downloadHostFile } from './common.mjs';
@@ -76,15 +76,14 @@ export function registerRegistrationTools({ register, db, identity, invoke, fetc
       .is('deleted_at', null).order('created_at', { ascending: false }).limit(50);
     if (error) throw new Problem(503, 'database-unavailable'); return { ok: true, fighters: data };
   });
+  // The deletion functions' own refusals; anything else is the database's, a 503 to retry (it was a 400 until 2026-11-03).
+  const deletionRefusals = Object.fromEntries(['not-found', 'authentication-required', 'invalid-deletion-confirmation', 'deletion-name-mismatch',
+    'deletion-confirmation-expired', 'fighter-changed', 'fighter-deleted'].map(code => [code, 400]));
   /** @param {string} name @param {Record<string, unknown>} args */
   const deletionRpc = async (name, args) => {
     const { data, error } = await db.rpc(name, { p_owner: /** @type {Identity} */ (identity).owner,
       p_session: /** @type {Identity} */ (identity).claims.session_id, p_client: /** @type {Identity} */ (identity).claims.client_id, ...args });
-    if (error) {
-      const expected = ['not-found','authentication-required','invalid-deletion-confirmation','deletion-name-mismatch',
-        'deletion-confirmation-expired','fighter-changed','fighter-deleted'];
-      throw new Problem(400, expected.includes(error.message) ? error.message : 'database-unavailable');
-    }
+    if (error) throw rpcProblem(error, deletionRefusals);
     return data;
   };
   register('prepare_fighter_deletion', '캐릭터 삭제 확인', 'After a deletion request, verify ownership and return the exact account, fighter, effects and a 10-minute confirmation. '

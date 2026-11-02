@@ -8,13 +8,13 @@ const HOSTED = ['request_hosted_fighter', 'get_hosted_fighter', 'choose_hosted_l
   'list_generation_hosts', 'start_picture_upload', 'get_picture_upload', 'report_picture_link'];
 
 // The cloud MCP over the hosted generation API on a real (PGlite) database: the agent carries the user's words and answers, the worker the rest.
-async function connector(g, hosted, fetcher = async () => new Response(png(512, 512))) {
+async function connector(g, hosted, fetcher = async () => new Response(png(512, 512)), { budgetMs } = {}) {
   const claims = { sub: g.owner, client_id: crypto.randomUUID(), session_id: crypto.randomUUID(), iss: CLOUD_ISSUER, aud: CLOUD_RESOURCE, role: 'af_mcp',
     af_mcp: 'registration-v1', is_anonymous: false, exp: Math.floor(Date.now() / 1000) + 600 };
   const downloads = [];
   const db = { ...g.db, auth: { getClaims: async () => ({ data: { claims } }) },
     rpc: (name, args) => name === 'af_mcp_session_state' ? { data: 'usable' } : g.db.rpc(name, args) };
-  const handle = createCloudHandler({ db, hosted, fetcher: async (...args) => { downloads.push(args[0]); return fetcher(...args); } });
+  const handle = createCloudHandler({ db, hosted, budgetMs, fetcher: async (...args) => { downloads.push(args[0]); return fetcher(...args); } });
   let loseResponse = false;
   const rpc = async (method, params) => {
     const response = await handle(new Request(CLOUD_RESOURCE, { method: 'POST',
@@ -131,6 +131,10 @@ test('a lost request response resumes on a fresh connector with the same job and
     assert.equal((await resumed.call('get_hosted_fighter', { idempotencyKey: ask.idempotencyKey })).job.id, jobId);
     const waiting = await resumed.call('get_hosted_fighter', { jobId, waitSeconds: 1 });
     assert.equal(waiting.job.status, 'queued'); assert.match(waiting.next, /get_hosted_fighter/);
+    // The wait ends inside the call's budget, its last seconds left to the job's read (MCP 점검 2026-11-03): 25 s asked, 4.5 s allowed.
+    const bounded = await connector(g, { pollMs: 10 }, undefined, { budgetMs: 4500 }), waitStarted = Date.now();
+    assert.equal((await bounded.call('get_hosted_fighter', { jobId, waitSeconds: 25 })).job.status, 'queued');
+    assert.ok(Date.now() - waitStarted < 3000, `${Date.now() - waitStarted} ms`);
 
     let held = (await g.work('POST', 'claim', {})).body.job;
     const finish = (job, result) => g.work('POST', 'finish', { jobId: job.id, leaseToken: job.leaseToken, outcome: 'ok', result });

@@ -5,7 +5,7 @@ import { GENERATION_LIMITS, UPLOAD_TICKET_HEADER } from '../../api/generations.m
 import { Problem } from '../../api/http.mjs';
 import spec from '../../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { profileLimits } from '../../contracts/ai-fighter/profile-limits.mjs';
-import { FILE, LIBRARY_FILE_HOSTS, UUID_ARG, downloadHostFile } from './common.mjs';
+import { FILE, LIBRARY_FILE_HOSTS, UUID_ARG, downloadHostFile, pause, timeLeft, within } from './common.mjs';
 /**
  * @typedef {import('./common.mjs').Identity} Identity
  * @typedef {import('./common.mjs').Hosted} Hosted
@@ -47,6 +47,8 @@ const SUBMISSION_PENDING = new Set(['uploading', 'queued', 'validating']);
 /** The longest wait one get_hosted_fighter call holds: enter_cup's proven wait (CUP_WAIT_MS), inside the hosts' tool timeouts and the Edge limit. */
 export const HOSTED_WAIT_SECONDS = 25;
 const HOSTED_POLL_MS = 3000;
+/** What a wait leaves of the call's deadline for the job's own read and its signed URLs (2026-11-03: the wait once took the whole budget). */
+const HOSTED_READ_MS = 4000;
 const PROFILE_KEYS = ['name', 'description', 'names', 'lines', 'stats'];
 /** @type {(status: string, submission: string | null) => boolean} */
 const hostedSettled = (status, submission) => !HOSTED_WORKING.has(status) && !(status === 'submitted' && SUBMISSION_PENDING.has(submission ?? 'queued'));
@@ -193,7 +195,7 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
       picture: FILE.optional(), secondPicture: FILE.optional(), pictureUploads: z.array(UUID_ARG()).max(GENERATION_LIMITS.refs).optional(),
       rightsConfirmed: z.boolean().optional(), delegate: z.boolean().optional(),
       host: z.union([z.enum(['oddbout', 'any', 'mine']), UUID_ARG()]).optional(), hostConsent: z.boolean().optional(), idempotencyKey: UUID_ARG() },
-    async ({ description, language, picture, secondPicture, pictureUploads = [], rightsConfirmed, delegate, host, hostConsent, idempotencyKey }) => {
+    async ({ description, language, picture, secondPicture, pictureUploads = [], rightsConfirmed, delegate, host, hostConsent, idempotencyKey }, { signal, deadline }) => {
       // Once saved, the same key returns its job without re-uploading pictures. Before that, use read-only recovery.
       const existingId = await jobIdForKey(idempotencyKey);
       if (existingId) return withNext(await invoke(`generations/${existingId}`));
@@ -215,8 +217,9 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
       }
       const refs = [...pictureUploads];
       for (const file of pictures) {
-        const uploaded = await invoke('generations/uploads', 'POST', await downloadHostFile(file, GENERATION_LIMITS.refBytes, fetcher, LIBRARY_FILE_HOSTS),
-          { 'content-type': 'application/octet-stream' });
+        // Each download within what is left of the call (two once took 40 seconds), and not past a client that went away.
+        const bytes = await downloadHostFile(file, GENERATION_LIMITS.refBytes, fetcher, LIBRARY_FILE_HOSTS, within(signal, timeLeft(deadline, 20000)));
+        const uploaded = await invoke('generations/uploads', 'POST', bytes, { 'content-type': 'application/octet-stream' });
         if (!uploaded.ok) return uploaded;
         refs.push(uploaded.upload.id);
       }
@@ -296,7 +299,7 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
     + `his latest five requests and whether hosted generation is open. Read the same job again if a preview URL expired; `
     + `do not regenerate. waitSeconds (up to ${HOSTED_WAIT_SECONDS}) is a bounded wait, not a completion guarantee; `
     + `if still working, check this job again later.`,
-    { jobId: JOB.optional(), idempotencyKey: UUID_ARG().optional(), waitSeconds: z.number().int().min(0).max(HOSTED_WAIT_SECONDS).optional() }, async ({ jobId, idempotencyKey, waitSeconds = 0 }) => {
+    { jobId: JOB.optional(), idempotencyKey: UUID_ARG().optional(), waitSeconds: z.number().int().min(0).max(HOSTED_WAIT_SECONDS).optional() }, async ({ jobId, idempotencyKey, waitSeconds = 0 }, { signal, deadline: due }) => {
       if (jobId && idempotencyKey) return { ok: false, code: 'invalid-selector' };
       if (idempotencyKey) {
         jobId = await jobIdForKey(idempotencyKey);
@@ -307,9 +310,10 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
         const list = await invoke('generations');
         return list.ok ? { ...list, jobs: list.jobs.map(/** @param {HostedJob} job */ job => ({ ...job, next: hostedNext(job) })) } : list;
       }
-      // Wait on the state alone (no signed URLs per look), then read the job once.
-      const deadline = Date.now() + waitSeconds * 1000, pollMs = hosted.pollMs ?? HOSTED_POLL_MS;
-      while (Date.now() + pollMs <= deadline) {
+      // Wait on the state alone (no signed URLs per look), then read the job once: the wait leaves the call's last seconds to that read,
+      // and stops when the client went away.
+      const deadline = Math.min(Date.now() + waitSeconds * 1000, due - HOSTED_READ_MS), pollMs = hosted.pollMs ?? HOSTED_POLL_MS;
+      while (Date.now() + pollMs <= deadline && !signal.aborted) {
         const { data: row, error } = await db.from('af_generation_jobs').select('status,submission_id').eq('id', jobId).eq('owner_id', /** @type {Identity} */ (identity).owner).maybeSingle();
         if (error || !row) break;
         let stage = null;
@@ -318,7 +322,7 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
           stage = data?.status ?? null;
         }
         if (hostedSettled(row.status, stage)) break;
-        await new Promise(done => setTimeout(done, pollMs));
+        await pause(pollMs, signal);
       }
       return withNext(await invoke(`generations/${jobId}`));
     });

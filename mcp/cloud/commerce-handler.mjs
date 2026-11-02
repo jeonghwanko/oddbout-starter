@@ -5,7 +5,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { createCommerceHandler } from '../../api/commerce/handler.mjs';
 import { Problem, UUID } from '../../api/http.mjs';
 import { registerCommerceTools } from './commerce-tools.mjs';
-import { output } from './common.mjs';
+import { CALL_BUDGET_MS, output } from './common.mjs';
 
 const PRODUCER_TOOLS = new Set(['get_credit_balance', 'get_broadcast_prices', 'get_broadcast', 'get_broadcast_job', 'get_broadcast_report', 'host_cup']);
 const TOKEN = /^obp_[A-Za-z0-9_-]{32,256}$/;
@@ -133,12 +133,14 @@ export function createCommerceMcpHandler({ commerce, producers = [], now = Date.
     /** @type {import('./common.mjs').Register} */
     const register = (name, title, description, inputSchema, run, { write = false, publish = false, openWorld = false, idempotent = !write } = {}) => {
       if (!PRODUCER_TOOLS.has(name)) return;
-      server.registerTool(name, { title, description, inputSchema: /** @type {import('zod').ZodRawShape} */ (inputSchema), annotations: { readOnlyHint: !write, destructiveHint: publish, openWorldHint: openWorld, idempotentHint: idempotent } }, async (/** @type {Record<string,unknown>} */ args) => {
+      server.registerTool(name, { title, description, inputSchema: /** @type {import('zod').ZodRawShape} */ (inputSchema), annotations: { readOnlyHint: !write, destructiveHint: publish, openWorldHint: openWorld, idempotentHint: idempotent } }, async (/** @type {Record<string,unknown>} */ args, /** @type {{ signal?: AbortSignal } | undefined} */ extra) => {
+        /** @type {import('./common.mjs').ToolContext} */
+        const context = { signal: extra?.signal ?? new AbortController().signal, deadline: Date.now() + CALL_BUDGET_MS };
         try {
           await sessionOf(activeGrant);
           if (['host_cup', 'get_broadcast', 'get_broadcast_report'].includes(name) && (typeof args.broadcastId !== 'string' || args.broadcastId.toLowerCase() !== activeGrant.broadcastId)) throw new Problem(403, 'producer-session-scope');
           const scopedArgs = ['host_cup', 'get_broadcast', 'get_broadcast_report'].includes(name) ? { ...args, broadcastId: activeGrant.broadcastId } : args;
-          return output(await run(/** @type {Parameters<typeof run>[0]} */ (scopedArgs)));
+          return output(await run(/** @type {Parameters<typeof run>[0]} */ (scopedArgs), context));
         } catch (error) { return output({ ok: false, code: error instanceof Problem ? error.message : 'commerce-unavailable' }); }
       });
     };

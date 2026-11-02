@@ -117,7 +117,8 @@ function describeError(value) {
  * One JSON line on the server log (Supabase function logs, the Render log) for an answer a route could not give: a 5xx — anything not a
  * Problem, or a Problem of 500 and up. It names the route (method and path), the code the caller got, what failed (name, message, Postgres
  * code; for a 503 rpcProblem made, the database's own error) and, for a bug, the first stack frames. A 4xx is the caller's and logs nothing.
- * Never the query, headers or body: they can carry tokens (API 점검 2026-11-03 — a 503 used to leave no trace).
+ * Never the query, headers or body: they can carry tokens (API 점검 2026-11-03 — a 503 used to leave no trace). A UUID `x-request-id` (the
+ * mcp.oddbout.com gateway's, carried by the cloud MCP's in-process calls) ties the line to the MCP call that made it.
  * @param {string} scope  the route family, e.g. 'api' or 'admin'
  * @param {Request} request
  * @param {unknown} error
@@ -127,9 +128,20 @@ export function logFailure(scope, request, error) {
   if (status < 500) return;
   let path = '';
   try { path = new URL(request.url).pathname; } catch { /* a request without a URL logs no path */ }
-  const stack = !problem && error instanceof Error ? error.stack?.split('\n').slice(1, 4).map(line => line.trim()) : undefined;
+  const requestId = request.headers?.get('x-request-id') ?? '';
   console.error(JSON.stringify({ stage: 'api-failure', scope, method: request.method, path, status, ...(problem ? { code: problem.message } : {}),
-    error: describeError(problem ? problem.cause : error), ...(stack ? { stack } : {}) }));
+    ...(UUID.test(requestId) ? { requestId } : {}), ...failureDetail(error) }));
+}
+
+/**
+ * What failed, for a log line: a Problem's cause (rpcProblem's database error), or a bug's name, message and first stack frames.
+ * @param {unknown} error
+ * @returns {{ error?: Record<string, string>, stack?: string[] }}
+ */
+export function failureDetail(error) {
+  const problem = error instanceof Problem ? error : null;
+  const stack = !problem && error instanceof Error ? error.stack?.split('\n').slice(1, 4).map(line => line.trim()) : undefined;
+  return { error: describeError(problem ? problem.cause : error), ...(stack ? { stack } : {}) };
 }
 
 /**
