@@ -1,0 +1,1 @@
+import{r as e}from"./leagueContent-Cw5ToWtl.js";export{e as profiles};
