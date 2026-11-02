@@ -4,7 +4,7 @@
 이 문서에는 게임이 직접 생성한 현재 규격이 아래 JSON으로 포함되어 있습니다.
 다른 안내만 읽고 규격을 읽었다고 간주하지 마세요. 첫 응답 전에 아래 JSON의
 revision, workflow, contract, controls, timing을 읽고 이번 대화의 기준으로 저장하세요.
-첫 응답에는 “게임 규격 f49b61a0886c 기준”이라고 출처를 짧게 밝히고,
+첫 응답에는 “게임 규격 d57accd4a5c4 기준”이라고 출처를 짧게 밝히고,
 캐릭터 설명이나 참고 이미지를 요청하세요. 사용자에게 기술 수치를 고르라고 하지 마세요.
 
 ## 제작 범위
@@ -28,7 +28,7 @@ review_creation_progress가 연결되어 있으면 선택 상태를 검사하고
 
 ## 자료 갱신
 
-이 문서는 게임 소스에서 자동 생성한 시작 시점의 스냅샷입니다. 현재 revision: f49b61a0886c56c06079e70fb4eb02fc683d63de66680b723554dbc23bb0fd17
+이 문서는 게임 소스에서 자동 생성한 시작 시점의 스냅샷입니다. 현재 revision: d57accd4a5c42494c53956ace230655c46e4de5cc406e0500426f95113b630d7
 새 묶음·재개·패키징 전에 [현재 게임 JSON](https://raw.githubusercontent.com/jeonghwanko/oddbout-starter/refs/heads/codex/game-context/creation-context.json)을 다시 읽고 revision을 비교하세요.
 바뀌면 이전 자료·선택을 보관하고 영향을 받은 항목만 설명·재검토하세요. 가져오지 못하면 그 사실을 말하고,
 외형 상담만 계속할 수 있습니다. 규격에 의존하는 묶음으로 진행하거나 수치를 추정하지 마세요.
@@ -652,24 +652,24 @@ Dot의 제품 기억을 초기화하는 기능은 아닙니다. 이전 기록의
     "onChange": "Keep previous context and selections, report only affected requirements, recheck affected items. Never silently mix revisions.",
     "unavailable": "Appearance consultation may continue. Do not invent controls/timing, advance a rules-dependent group, generate or package against an unverified current contract."
   },
-  "revision": "f49b61a0886c56c06079e70fb4eb02fc683d63de66680b723554dbc23bb0fd17",
+  "revision": "d57accd4a5c42494c53956ace230655c46e4de5cc406e0500426f95113b630d7",
   "provenance": {
-    "sourceCommit": "8139e6b75f38ff7ef1cc7d230be6fed10519aa56",
+    "sourceCommit": "a93c4f712351d4054cf24db6664b0e05f1fbf456",
     "sourceDirty": false,
     "sourceFiles": {
-      "tools/ai-fighter/creation-context.mjs": "985c90423c990dcc7236e03783a9a867cb606a3836c1f21a4d2a87a14d19bc49",
+      "tools/ai-fighter/creation-context.mjs": "9a3271babcd03f09c52ad2435aeca582a145848d7264aa3547ff574140115d0b",
       "tools/ai-fighter/export-creation-context.mjs": "fcad318b37dae57a352b4c8ee509a1b03dd143a83f0518d726b06ff53df6d30d",
       "contracts/ai-fighter/v1/contract-source.mjs": "a5767dd67b29aa25bd48bb8ea95bb84d05d088970d097d4a0c5ad4f5837d03d8",
-      "src/world/native-city-combat.json": "0eb2dea149253f08ddc7067b0f3388f9f10dfe3cae9c8485d2e13a9aefa632be",
+      "src/world/native-city-combat.json": "20ebcbfddb44bb35e7d5f48fa3a2c1e85e9d46c0b67feb35fbfeeef4630d7c0d",
       "src/app/InputBindings.ts": "024ee9d2e11706deeb350b28a91d545763f789bdc7229289fbef0d19c9892127",
-      "src/render/scenes/village/NativeCityFightInputController.ts": "0aa2e10401626e0017b3613bd00a91e4ada5ae6b33e060f2d8783324ade02a14",
-      "src/render/art/FighterFightSkin.ts": "22614bda6b0e8b58ef27972fe83077c1c89243c1a816c5cb12782932ac6486af",
-      "src/render/effects/NativeCityFightFeel.ts": "7cbb1bf98527169b7d8c77ddb7af332f5f45745aa3626fdf30c62a4afc069209",
+      "src/render/scenes/village/NativeCityFightInputController.ts": "13af5f8ab1691af64e942d005e3c09f7724b2b097880471d99ff423008417854",
+      "src/render/art/FighterFightSkin.ts": "701856d60de7eff9edfdeb59c3140e44ec58089a2d6034239af16811c5f79236",
+      "src/render/effects/NativeCityFightFeel.ts": "f8dd8d864838c309d300b3aa018ab7f221af319cc5606401a31418d64815f3eb",
       "src/render/effects/CombatPresentation.ts": "5bfe4d824c650a0b45ba700616b75002945f2888bd8f2c9b552723d9a478d6d4",
-      "src/sim/cityFight/NativeCityLupinSwing.ts": "31398a04dc5c2997d8aeaecd1a036905a3e760bb4813ba9504b2c419ad8a9fa3",
-      "src/sim/cityFight/NativeCityFight.ts": "ba8e5254c4c17fb55c8cc02f24ab4ad5ce569028559aeb5a3357f10c7b695fce",
-      "src/sim/cityFight/NativeCityFightContacts.ts": "f2319515f8f001a6440672c663029b9f15d8cce9fa1e49139bc3cd9b4c5ff0b9",
-      "src/sim/cityFight/NativeCityFightDefend.ts": "828fea79419fe95d3e487cd7fb0b22daaed0b971c97c2e327872c75849e961c1"
+      "src/sim/cityFight/NativeCityLupinSwing.ts": "258c87c8da7008460e94d9ad069c040cfb3962a32d8c31b57f317dba3d69db65",
+      "src/sim/cityFight/NativeCityFight.ts": "334b804dced93ebe2e7e0a5e78af2c000b39072746b39653c212f4afa0e349ec",
+      "src/sim/cityFight/NativeCityFightContacts.ts": "452ceed93445880f45246c8a64a51b396df495cf216ba175626101aebc7249ea",
+      "src/sim/cityFight/NativeCityFightDefend.ts": "f1eeedb45bbe806121a6bb0b5ccae61b6886db7066417d7fa8ddc9d0297a13cb"
     },
     "generated": true
   }
