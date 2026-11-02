@@ -92,3 +92,8 @@ revoke all on function public.af_profile_set_submit(uuid, uuid), public.af_profi
   public.af_profile_set_stale_public(uuid) from public, anon, authenticated;
 grant execute on function public.af_profile_set_submit(uuid, uuid), public.af_profile_set_finish(uuid, uuid, text, boolean, jsonb, jsonb),
   public.af_profile_set_stale_public(uuid) to service_role;
+
+-- An operator's sheet for someone's fighter (api/profile-sets.mjs addOperatorSheet): the new set is his owner's; the operator's id and
+-- reason are kept here only, as af_admin_fighter_edits keeps an operator's package.
+alter table public.af_profile_set_events drop constraint af_profile_set_events_kind_check,
+  add constraint af_profile_set_events_kind_check check (kind in ('approve', 'reject', 'withdraw', 'public-cleanup-failed', 'admin-expressions'));

@@ -1,8 +1,8 @@
 // @ts-check
 import { Problem, UUID, jsonResponse, logFailure, readBody, rpcCaller, verifiedUserId } from './http.mjs';
-import { cleanupPublicFiles, profileSetKey, publishProfileSet, removePublicFiles } from './profile-sets.mjs';
+import { PROFILE_SET_LIMITS, addOperatorSheet, cleanupPublicFiles, profileSetKey, publishProfileSet, removePublicFiles } from './profile-sets.mjs';
 import { BUCKET } from './submissions.mjs';
-import { ADMIN_EDIT_CORS, adminFighterEditRoute, createAdminFighterEdits } from './admin-fighter-edits.mjs';
+import { ADMIN_EDIT_CORS, adminFighterEditRoute, createAdminFighterEdits, reasonOf } from './admin-fighter-edits.mjs';
 import { adminStorageRoute, createAdminStorage } from './admin-storage.mjs';
 import { GENERATION_BUCKET, GENERATION_LIMITS, artifactPath } from './generations.mjs';
 
@@ -188,6 +188,15 @@ export function createAdminHandler({ db, present }) {
         const status = new URL(request.url).searchParams.get('status') ?? 'review';
         if (!['review', 'approved', 'rejected'].includes(status)) throw new Problem(400, 'invalid-query');
         return reply({ ok: true, profileSets: await reviewList(db, await rpc('af_admin_profile_sets', { p_actor: actor, p_status: status })) });
+      }
+      // 운영자의 표정 시트 (2026-11-03): a sheet for a fighter's current approved set, as a new set under his owner (profile-sets.mjs).
+      if (parts.length === 4 && parts[1] === 'profile-sets' && parts[3] === 'expressions' && request.method === 'POST') {
+        if (!UUID.test(parts[2])) throw new Problem(400, 'invalid-review');
+        const reason = reasonOf(request), key = request.headers.get('idempotency-key') ?? '';
+        if (!UUID.test(key)) throw new Problem(400, 'invalid-id');
+        if (request.headers.get('content-type') !== 'image/webp') throw new Problem(415, 'webp-required');
+        const bytes = await readBody(request, PROFILE_SET_LIMITS.expressionsBytes);
+        return reply({ ok: true, profileSet: await addOperatorSheet(db, { actor, setId: parts[2].toLowerCase(), key: key.toLowerCase(), reason, bytes }) });
       }
       if (parts.length === 4 && parts[1] === 'profile-sets' && ['approve', 'reject'].includes(parts[3]) && request.method === 'POST') {
         if (!UUID.test(parts[2])) throw new Problem(400, 'invalid-review');

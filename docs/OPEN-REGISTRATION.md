@@ -83,6 +83,9 @@ ODDBOUT 통합 플러그인은 연결된 Google 계정을 PC와 Dots 등록에 �
   이하, 3 × 2칸에 무투장 얼굴 여섯(기본·맞음·으스댐·위기·옆눈질·KO 순서, 모두 화면 오른쪽을 보는 3/4 측면)이다. 체력바 얼굴이 경기 따라 바뀌고,
   KO 컷인은 진 선수의 KO 얼굴과 이긴 선수의 옆눈질을 보인다. 없으면 무투장은 모든 상황에 얼굴 칸 한 장을 쓴다. 생성 문구는 규격의
   `expressions.prompt`, 키트의 `npm run fighter:profile-set`이 세트 파일과 그림을 만든다.
+- 운영자의 표정 시트(2026-11-03): 시트 없이 승인된 선수에게 운영자가 시트를 붙인다. `npm run admin -- profile-expressions <sheets.json> --reason <text>`
+  (`POST admin/profile-sets/<지금 승인된 세트>/expressions`, `image/webp`, `Idempotency-Key`, `X-Admin-Reason`)가 그 세트의 정면·얼굴 칸에 시트를 붙인
+  새 세트를 주인 이름으로 만들어 검사에 보낸다. 운영자의 id와 사유는 `af_profile_set_events`(`admin-expressions`)에만 남는다. 승인 전에는 지금 세트가 그대로다.
 - 화풍: 우리 게임의 담백한 셀 채색이다. 규격의 `style.colouring` 문구를 모든 생성에 붙이고, `style.anchor.url`의 기준 그림을 마지막 참조로 붙인다.
 - API(주인): `POST /fighters/:id/profile-sets`(UUID `Idempotency-Key`, 본문 = 세트 파일) → `PUT /profile-sets/:id/assets/front`(`image/webp`)
   (시트가 있으면 `PUT /profile-sets/:id/assets/expressions`도) → `POST /profile-sets/:id/submit`. 상태는 `GET /profile-sets/:id`(자기 파일의 10분 서명 주소 포함), 선수별 최근 10개는 `GET /fighters/:id/profile-sets`.

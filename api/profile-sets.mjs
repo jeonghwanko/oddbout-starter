@@ -6,7 +6,8 @@
 // No Node-only imports: Deno and Node.
 import { Problem, UUID, jsonResponse, logFailure, readBody, rpcProblem, sha256 } from './http.mjs';
 import { BUCKET } from './submissions.mjs';
-import { PROFILE_SET_ASSETS, PROFILE_SET_LIMITS, parseProfileSet } from './profile-set-contract.mjs';
+import { probeImage } from './image-probe.mjs';
+import { PROFILE_SET_ASSETS, PROFILE_SET_LIMITS, PROFILE_SET_VERSION, parseProfileSet } from './profile-set-contract.mjs';
 // The set file's contract lives in profile-set-contract.mjs (no imports: the validator and the kit read it); the API's callers import it here.
 export { PROFILE_SET_ASSETS, PROFILE_SET_EXPRESSIONS, PROFILE_SET_EXPRESSIONS_PROMPT, PROFILE_SET_LIMITS, PROFILE_SET_SPEC, PROFILE_SET_STYLE,
   PROFILE_SET_VERSION, STYLE_ANCHOR_URL, parseProfileSet } from './profile-set-contract.mjs';
@@ -335,4 +336,60 @@ export async function cleanupPublicFiles(db, fighterId) {
     await db.rpc('af_profile_set_unpublished', { p_fighter: fighterId, p_ids: data.map(row => row.id) });
     return { removed: paths.length };
   } catch { return { removed: 0 }; }
+}
+
+/**
+ * 운영자의 표정 시트 (2026-11-03 — 사용자: "무투장 패배 표정 없는 캐릭터들은 image-gen으로 생성해서 추가하고"): a sheet for a registered fighter,
+ * without his owner's sign-in. From his current approved set (`setId`) a new set is made under his owner with the same front painting and
+ * face square and the sheet, its front copied in private storage, and submitted: the validator, then the operator's review, as any set.
+ * His current set stays until the new one is approved. The operator's id and reason go to af_profile_set_events (`admin-expressions`); the
+ * same key answers the same set, also after it was approved.
+ * @param {any} db @param {{ actor: string, setId: string, key: string, reason: string, bytes: Uint8Array<ArrayBuffer> }} input
+ */
+export async function addOperatorSheet(db, { actor, setId, key, reason, bytes }) {
+  /** @param {string} name @param {Record<string, unknown>} args */
+  const rpc = async (name, args) => { const { data, error } = await db.rpc(name, args); if (error) throw rpcProblem(error, PROFILE_SET_STATUS); return data; };
+  /** @param {string} column @param {string} value @returns {Promise<ProfileSetRow | null>} */
+  const setBy = async (column, value) => {
+    const { data, error } = await db.from('af_profile_sets').select('*').eq(column, value).maybeSingle();
+    if (error) throw new Problem(503, 'database-unavailable');
+    return data;
+  };
+  const from = await setBy('id', setId);
+  if (!from) throw new Problem(404, 'not-found');
+  // A retry after the new set went in (even approved, which supersedes `from`) answers it.
+  const { data: earlier, error: earlierError } = await db.from('af_profile_sets').select('*').eq('owner_id', from.owner_id).eq('idempotency_key', key).maybeSingle();
+  if (earlierError) throw new Problem(503, 'database-unavailable');
+  if (earlier && earlier.status !== 'uploading') {
+    if (earlier.fighter_id !== from.fighter_id) throw new Problem(409, 'idempotency-conflict');
+    return profileSetView(earlier);
+  }
+  const { data: fighter, error: fighterError } = await db.from('af_fighters').select('id,profile_set_id,deleted_at').eq('id', from.fighter_id).maybeSingle();
+  if (fighterError) throw new Problem(503, 'database-unavailable');
+  if (from.status !== 'approved' || !fighter || fighter.deleted_at || fighter.profile_set_id !== from.id) throw new Problem(409, 'review-conflict');
+  const probed = probeImage(bytes);
+  if (probed?.type !== 'image/webp') throw new Problem(415, 'webp-required');
+  const { front, face } = JSON.parse(from.manifest_text);
+  const expressions = { path: 'expressions.webp', bytes: bytes.length, sha256: await sha256(bytes), width: probed.width, height: probed.height };
+  const text = JSON.stringify({ version: PROFILE_SET_VERSION, front, face, expressions });
+  const parsed = parseProfileSet(text);
+  if (!parsed.ok) throw new Problem(422, 'invalid-profile-set', parsed.errors);
+  const row = await rpc('af_profile_set_create', { p_owner: from.owner_id, p_fighter: from.fighter_id, p_key: key, p_text: text,
+    p_sha: await sha256(new TextEncoder().encode(text)), p_bytes: front.bytes });
+  const { data: download, error: downloadError } = await db.storage.from(BUCKET).download(profileSetKey(from.owner_id, from.id, 'front'));
+  if (downloadError || !download) throw new Problem(503, 'storage-unavailable');
+  const frontBytes = new Uint8Array(await download.arrayBuffer());
+  // The approved front is what the new set names: a private copy that no longer matches it is not sent on.
+  if (frontBytes.length !== front.bytes || await sha256(frontBytes) !== front.sha256) throw new Problem(409, 'review-conflict');
+  await storeOnce(db, BUCKET, profileSetKey(row.owner_id, row.id, 'front'), frontBytes, front.sha256);
+  await storeOnce(db, BUCKET, profileSetKey(row.owner_id, row.id, 'expressions'), bytes, expressions.sha256);
+  const submitted = await rpc('af_profile_set_submit', { p_owner: row.owner_id, p_id: row.id });
+  const { data: logged, error: loggedError } = await db.from('af_profile_set_events').select('id').eq('profile_set_id', row.id).eq('kind', 'admin-expressions').limit(1);
+  if (loggedError) throw new Problem(503, 'database-unavailable');
+  if (!logged?.length) {
+    const { error: logError } = await db.from('af_profile_set_events').insert({ fighter_id: row.fighter_id, profile_set_id: row.id, actor, kind: 'admin-expressions',
+      data: { reason, from: from.id } });
+    if (logError) throw new Problem(503, 'database-unavailable');
+  }
+  return profileSetView(submitted);
 }

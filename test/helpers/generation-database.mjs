@@ -53,6 +53,16 @@ export async function generation({ decisionsReviewer = null, responsesReviewer =
       embeds = [...columns.matchAll(/(\w+):(\w+)!(\w+)\(([\w,]+)\)/g)].map(([, alias, other, column, fields]) => ({ alias, other, column, fields: fields.split(',') }));
       return q;
     }, update: value => { patch = value; return q; }, eq: (key, val) => { values.push(val); filters.push(`${key}=$${values.length}`); return q; },
+      // An insert as PostgREST answers it: `{ error }` (2026-11-03: the operator's sheet records its event).
+      insert: async value => {
+        try {
+          for (const row of Array.isArray(value) ? value : [value]) {
+            const keys = Object.keys(row);
+            await sql.query(`insert into public.${table}(${keys.join(',')}) values (${keys.map((_, i) => `$${i + 1}`).join(',')})`, keys.map(key => row[key]));
+          }
+          return { error: null };
+        } catch (error) { return { error: { message: error.message, code: error.code ?? 'P0001' } }; }
+      },
       gt: (key, val) => { values.push(val); filters.push(`${key}>$${values.length}`); return q; },
       in: (key, vals) => { values.push(vals); filters.push(`${key}=any($${values.length})`); return q; },
       order: (key, o) => { order = ` order by ${key}${o?.ascending === false ? ' desc' : ''}`; return q; }, limit: n => { limit = ` limit ${n}`; return q; },
