@@ -36,6 +36,11 @@ The builder does not read the game's `vite.config.ts`. It loads the game's own
 plugin lists when the source has them: `tools/ai-fighter/site-build-plugins.mjs`
 (plugins that shape the shipped bundle, such as the sound registry without its
 source records) and `tools/ai-fighter/bout-share-pages.mjs`. Older sources build without them.
+The game's updates plugin also emits `updates-manifest.json`, listing its static
+landing/detail pages and official artwork. `scripts/site-updates.mjs` validates
+that optional output; the builder adds its pages to the sitemap and publication
+checks cover every listed page, image and linked stylesheet. Older revisions
+without the landing page remain buildable; partial updates output fails validation.
 Publish the resulting files to the existing Pages branch after local review.
 
 The existing Supabase project `ztfxxhtmtrvxvuxlqmgz` continues to own login,
@@ -294,6 +299,10 @@ configured by analyticsMeasurementId in deploy/creator-site.json.
 
 The Pages builder adds scripts/site-analytics.mjs through the Vite module graph to
 the main Vite pages, so its hashed module is covered by artifact and live asset checks.
+Static translated updates pages and update details receive the same runtime inline
+after the build; their complete HTML bytes are covered by the same artifact and live
+checks. The language-neutral updates.html redirect has no tag, so only the selected
+language's destination sends a page view.
 The tag runs only on the configured HTTPS host, excludes the admin page and incoming
 sign-in secrets, sends one page view per document, and respects Global Privacy Control.
 It keeps standard campaign tags but drops other query parameters and fragments;
@@ -304,6 +313,31 @@ The privacy page is updated during the same build to disclose Analytics and cook
 
 Analytics account data-sharing choices remain at their initial defaults unless
 the owner explicitly approves a later change. No existing ads-coffee property is used.
+
+### Social profile links
+
+Use these links in the corresponding social profiles. The landing page selects a
+language while preserving the campaign query values:
+
+| Profile | URL |
+| --- | --- |
+| YouTube | https://oddbout.com/updates.html?utm_source=youtube&utm_medium=social&utm_campaign=profile |
+| X | https://oddbout.com/updates.html?utm_source=x&utm_medium=social&utm_campaign=profile |
+| Threads | https://oddbout.com/updates.html?utm_source=threads&utm_medium=social&utm_campaign=profile |
+| Instagram | https://oddbout.com/updates.html?utm_source=instagram&utm_medium=social&utm_campaign=profile |
+| TikTok | https://oddbout.com/updates.html?utm_source=tiktok&utm_medium=social&utm_campaign=profile |
+
+In GA4 Reports → Acquisition → Traffic acquisition, use Session source / medium
+to compare each platform's `social` visits and Session campaign to filter `profile`.
+The updates pages also send `landing_start_click`, `update_open`,
+`update_detail_click`, `world_link_click`, and `social_link_click`. Events include
+only the page's supported `lang`, the published update `slug` or an allowed social
+`platform` where relevant, and the same sanitized page/referrer addresses as page
+views. Each update opening is counted once per document. No click label, arbitrary
+attribute, or destination URL is collected. Event listeners respect the existing
+privacy opt-outs and do not delay navigation. Register `lang`, `slug`, and `platform`
+as event-scoped custom dimensions if they are needed in reports; collection does
+not itself create custom dimensions. Standard reports may lag Realtime.
 
 ### GA4 milestones
 
@@ -366,10 +400,11 @@ deploy/creator-site.json owns youtubeChannelUrl. The Vite social plugin adds it
 to the shared public footer, with a static homepage fallback. It does not add
 an embedded player or change the existing site's Analytics privacy choices.
 
-The first channel profile link points to:
-https://oddbout.com/?utm_source=youtube&utm_medium=organic_video&utm_campaign=oddbout_channel&utm_content=profile
+The first channel profile link uses the YouTube updates link in Social profile links
+above. Updating the channel profile is a separate account action after publication.
 
-For ordinary video descriptions, use the same source, medium and campaign with
+For ordinary video descriptions, use utm_source=youtube, utm_medium=organic_video,
+utm_campaign=oddbout_channel, and
 utm_content set to the public video ID. For Shorts, direct viewers to the profile
 link; ordinary Shorts description/comment URLs are not clickable. GA4 Traffic
 acquisition can report source/medium youtube / organic_video and the existing
