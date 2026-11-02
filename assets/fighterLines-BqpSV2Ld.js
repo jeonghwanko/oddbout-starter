@@ -1,0 +1,1 @@
+var e=Object.freeze([`challenge`,`win`,`lose`]);function t(t){if(!t||typeof t!=`object`||Array.isArray(t))return;let n={};for(let r of e){let e=t[r];typeof e==`string`&&e.trim()&&e.length<=40&&(n[r]=e)}return Object.keys(n).length>0?n:void 0}export{t as n,e as t};
