@@ -1,7 +1,7 @@
 // @ts-check
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { Problem, readBody } from '../api/http.mjs';
-import { validateCupResult } from './runner.mjs';
+import { Problem, UUID, readBody } from '../api/http.mjs';
+import { WORKER_LEASE_SECONDS, validateCupResult } from './runner.mjs';
 
 /** Worker credentials stay on the selected host, never in a browser or MCP arguments.
  * @param {{store:ReturnType<typeof import('../api/commerce/store.mjs').createCommerceStore>,workers:{hostId:string,token:string}[]}} options */
@@ -24,8 +24,13 @@ export function createBroadcastWorkerHandler({ store, workers }) {
       const workerId = `${worker.hostId}:${body.workerId}`;
       const command = new URL(request.url).pathname.split('/').filter(Boolean).at(-1);
       let data;
-      if (command === 'claim') data = await store.claimJob(workerId, { hostId: worker.hostId, leaseSeconds: 60 });
-      else if (command === 'renew') data = await store.renewJob(workerId, { jobId: body.jobId, leaseToken: body.leaseToken, leaseSeconds: 60 });
+      if (command === 'claim') data = await store.claimJob(workerId, { hostId: worker.hostId, leaseSeconds: WORKER_LEASE_SECONDS });
+      else if (command === 'renew') data = await store.renewJob(workerId, { jobId: body.jobId, leaseToken: body.leaseToken, leaseSeconds: WORKER_LEASE_SECONDS });
+      // What the ledger holds for this worker: the one job named, or its running and unknown jobs (runner reconciliation).
+      else if (command === 'status') {
+        if (body.jobId !== undefined && (typeof body.jobId !== 'string' || !UUID.test(body.jobId))) throw new Problem(422, 'invalid-job-id');
+        data = await store.workerJobs(workerId, body.jobId === undefined ? {} : { jobId: body.jobId });
+      }
       else if (command === 'complete') {
         if (body.outcome === 'succeeded') {
           try {

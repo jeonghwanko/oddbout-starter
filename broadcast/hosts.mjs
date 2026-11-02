@@ -79,8 +79,10 @@ export function buildSshDoctorArgs(value, configPath) {
   if (host.transport !== 'ssh' || !host.sshTarget || !host.repoRoot || !host.repoRoot.startsWith('/')) throw configError('host_ssh_unconfigured');
   if (!['linux', 'darwin'].includes(host.platform ?? '')) throw configError('host_ssh_platform_unsupported');
   if (!safeString(configPath) || configPath.startsWith('/') || configPath.includes('\\') || configPath.split('/').some(part => part === '..' || !part)) throw configError('host_invalid_remote_config_path');
-  const command = `cd ${quotePosix(host.repoRoot)} && exec ${quotePosix(host.nodeExecutable ?? 'node')} scripts/broadcast-host.mjs --remote-self --doctor --host ${quotePosix(host.id)} --config ${quotePosix(configPath)}`;
-  return ['-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=10', '--', host.sshTarget, command];
+  // The doctor reads the same env file the runner does, or it reports OBS unconfigured on a host whose runner works.
+  const envFile = host.remoteEnvFile ? ` ${quotePosix(`--env-file=${host.remoteEnvFile}`)}` : '';
+  const command = `cd ${quotePosix(host.repoRoot)} && exec ${quotePosix(host.nodeExecutable ?? 'node')}${envFile} scripts/broadcast-host.mjs --remote-self --doctor --host ${quotePosix(host.id)} --config ${quotePosix(configPath)}`;
+  return ['-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=10', '-o', 'SendEnv=-*', '--', host.sshTarget, command];
 }
 
 /** This runs ON the selected host. Read-only checks do not establish render,

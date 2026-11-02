@@ -335,3 +335,23 @@ test('signed refund before provider order creation survives capture-response los
   assert.equal((await f.db.query("select count(*)::int as n from commerce.ledger where kind='topup'")).rows[0].n,1);
   assert.equal((await f.db.query('select count(*)::int as n from commerce.payment_adjustment_inbox')).rows[0].n,1);
 });
+
+test('a refund naming its capture only by the up link still freezes the owner; a disagreeing link is refused',async t=>{
+  const f=await fixture(t);await f.funded();
+  const handler=createCommerceHandler({service:f.service,publicOrigin:ORIGIN,authenticate:request=>verifiedUserId(f.dbFacade,request)});
+  const send=async event=>{
+    const response=await handler(new Request(`${ORIGIN}/ai-fighter/commerce/webhook`,{method:'POST',headers:{'content-type':'application/json',
+      'paypal-auth-algo':'SHA256withRSA','paypal-cert-url':'https://api.sandbox.paypal.com/v1/notifications/certs/CERT1',
+      'paypal-transmission-id':'TX2','paypal-transmission-time':new Date().toISOString(),'paypal-transmission-sig':'fixture-valid-signature'},body:JSON.stringify(event)}));
+    return {status:response.status,body:await response.json()};
+  };
+  // The refund resource as PayPal's samples show it: self and up links, no supplementary_data.
+  const linkOnly={id:'REFUND-LINK-1',event_type:'PAYMENT.CAPTURE.REFUNDED',resource:{id:'REFUND-RESOURCE-2',status:'COMPLETED',
+    links:[{rel:'self',href:'https://api.sandbox.paypal.com/v2/payments/refunds/REFUND-RESOURCE-2'},{rel:'up',href:'https://api.sandbox.paypal.com/v2/payments/captures/CAPTUREORDER1'}]}};
+  const recorded=await send(linkOnly);assert.equal(recorded.status,200);assert.equal(recorded.body.applied,true);
+  assert.equal((await f.store.wallet(OWNER)).spendingBlocked,true);
+  const disagree={...linkOnly,id:'REFUND-LINK-2',resource:{...linkOnly.resource,supplementary_data:{related_ids:{capture_id:'CAPTUREOTHER'}}}};
+  assert.equal((await send(disagree)).status,409);
+  const foreign={...linkOnly,id:'REFUND-LINK-3',resource:{...linkOnly.resource,links:[{rel:'up',href:'https://attacker.example/v2/payments/captures/CAPTUREORDER1'}]}};
+  assert.equal((await send(foreign)).status,422);
+});

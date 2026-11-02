@@ -191,8 +191,8 @@ export async function runBroadcastRunner(argv, { env = process.env, platform = p
     try { lock = await open(lockPath, 'wx', 0o600); }
     catch { return report({ status: 'unconfigured', reason: 'runner_state_locked' }); }
     await lock.writeFile(JSON.stringify({ hostId: host.id, pid: process.pid, startedAt: new Date().toISOString() }));
+    // A checkpoint left by a lost reply or a crash is settled with the server by the runner before it claims anything.
     const pending = await readCheckpoint(statePath);
-    if (pending) return report({ status: 'unknown', jobId: pending.job?.id, reason: 'runner_reconciliation_required' });
     obs = await createObsClient({ url: host.obsUrl, password: env[host.obsPasswordEnv] });
     const runner = createBroadcastRunner({ hostId: host.id, workerId: args.workerId,
       apiOrigin: env.ODDBOUT_BROADCAST_API_ORIGIN, workerToken: env.ODDBOUT_BROADCAST_WORKER_TOKEN,

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createBroadcastRunner, createPlaywrightRenderer, createWorkerTransport, ConfirmedRenderFailure, validateCupResult } from '../broadcast/runner.mjs';
+import { createBroadcastRunner, createPlaywrightRenderer, createWorkerTransport, ConfirmedRenderFailure, WorkerRefusal, validateCupResult } from '../broadcast/runner.mjs';
 import { parseRunnerArgs } from '../scripts/broadcast-runner.mjs';
 import { commerceDatabase } from './helpers/commerce-database.mjs';
 import { createBroadcastWorkerHandler } from '../broadcast/worker-api.mjs';
@@ -30,7 +30,7 @@ test('adversarial stale/missing job identity and fabricated engine evidence cann
 function fixture(extra={}) {
   const job=claimedJob(); const calls=[]; const obsCalls=[]; const checkpoints=[]; let closes=0; let renders=0;
   const base={hostId:'current-pc',apiOrigin:'http://localhost:8000',workerToken:'test-worker-token-not-a-credential',workerId:'worker-one',
-    arenaUrl:'http://localhost:5178/broadcast.html',heartbeatMs:5,
+    arenaUrl:'http://localhost:5178/broadcast.html',heartbeatMs:5,retryMs:1,
     obs:{request:async(type)=>{obsCalls.push(type); return {outputActive:true,outputReconnecting:false};},close(){}},
     renderer:{runCup:async()=>{renders++;return cupResult();},close:async()=>{closes++;}},
     checkpoint:async(record)=>{checkpoints.push(record ? structuredClone(record) : null);},
@@ -95,7 +95,7 @@ test('heartbeat renewals maintain fence, and a lost lease aborts rendering even 
   const f=fixture(); let aborted=false; let renewals=0;
   const original=f.options.transport;
   f.options.transport=async(command,input)=>{
-    if(command==='renew') {renewals++; if(renewals===2) throw new Error('stale lease');}
+    if(command==='renew') {renewals++; if(renewals===2) throw new WorkerRefusal('stale-lease',409);}
     return original(command,input);
   };
   f.options.renderer={runCup:async(_,{signal})=>new Promise(resolve=>signal.addEventListener('abort',()=>{aborted=true;resolve(cupResult());},{once:true})),close:async()=>{}};
@@ -135,15 +135,27 @@ test('real PostgreSQL lease expiry aborts the runner and quarantines the origina
 
 test('transport uncertainty after possible successful completion persists original evidence and never rerenders',async()=>{
   const f=fixture(); const original=f.options.transport;
-  f.options.transport=async(command,input)=>{ const value=await original(command,input); if(command==='complete') throw new Error('response lost after commit'); return value; };
+  f.options.transport=async(command,input)=>{ if(command==='status') throw new Error('unreachable'); const value=await original(command,input); if(command==='complete') throw new Error('response lost after commit'); return value; };
   const runner=createBroadcastRunner(f.options);
   const report=await runner.runOnce(); assert.equal(report.reason,'runner_completion_outcome_unknown');
+  // The ledger takes an identical completion again, so the same evidence is resent, never a new render.
+  const completes=f.calls.filter(x=>x.command==='complete'); assert.equal(completes.length,3);
+  assert.ok(completes.every(x=>JSON.stringify(x.input)===JSON.stringify(completes[0].input)));
   const saved=f.checkpoints.at(-1); assert.equal(saved.status,'succeeded'); assert.equal(saved.completion.outcome,'succeeded');
   assert.deepEqual(saved.completion.result.bouts,cupResult().bouts);
   assert.equal((await runner.runOnce()).reason,'runner_reconciliation_required'); assert.equal(f.renders,1);
-  const restored=fixture({pending:saved});
-  assert.equal((await createBroadcastRunner(restored.options).runOnce()).reason,'runner_reconciliation_required');
-  assert.equal(restored.calls.length,0);
+  // A restarted process (its own worker ID) asks under the checkpoint's worker ID and resends the kept completion.
+  const restored=fixture({pending:saved,workerId:'worker-two'}); const restoredOriginal=restored.options.transport;
+  restored.options.transport=async(command,input)=>{ if(command!=='status'&&command!=='claim') return restoredOriginal(command,input);
+    restored.calls.push({command,input:structuredClone(input)}); return command==='status' ? [{...restored.job,status:'running'}] : null; };
+  assert.equal((await createBroadcastRunner(restored.options).runOnce()).status,'idle'); assert.equal(restored.renders,0);
+  assert.deepEqual(restored.calls.filter(x=>x.command!=='claim').map(x=>[x.command,x.input.workerId]),[['status','worker-one'],['complete','worker-one']]);
+  assert.equal(JSON.stringify(restored.calls.find(x=>x.command==='complete').input),JSON.stringify(saved.completion));
+  // Once the ledger already shows the job settled, the checkpoint clears without another request.
+  const settled=fixture({pending:saved}); settled.options.transport=async(command,input)=>{ settled.calls.push({command,input});
+    return command==='status' ? [{...settled.job,status:'succeeded'}] : null; };
+  assert.equal((await createBroadcastRunner(settled.options).runOnce()).status,'idle');
+  assert.deepEqual(settled.calls.map(x=>x.command),['status','claim']); assert.equal(settled.checkpoints[0],null);
 });
 
 test('lost claim response persists a pre-claim barrier, including when no job ID is known',async()=>{
@@ -152,9 +164,23 @@ test('lost claim response persists a pre-claim barrier, including when no job ID
   assert.equal((await runner.runOnce()).reason,'runner_claim_outcome_unknown');
   const saved=f.checkpoints.at(-1); assert.equal(saved.status,'claim-pending'); assert.equal(saved.job,undefined);
   assert.equal((await runner.runOnce()).reason,'runner_reconciliation_required');
-  const restored=fixture({pending:saved});
-  assert.equal((await createBroadcastRunner(restored.options).runOnce()).reason,'runner_reconciliation_required');
-  assert.equal(restored.calls.length,0);
+  // Restarted: nothing held under the old worker ID means the claim never happened, so polling resumes.
+  const empty=fixture({pending:saved,workerId:'worker-two'}); empty.options.transport=async(command,input)=>{ empty.calls.push({command,input}); return command==='status' ? [] : null; };
+  assert.equal((await createBroadcastRunner(empty.options).runOnce()).status,'idle'); assert.equal(empty.renders,0);
+  assert.deepEqual(empty.calls.map(x=>[x.command,x.input.workerId]),[['status','worker-one'],['claim','worker-two']]);
+  // A job the lost claim did take was never rendered by this runner: it settles as failed, so its credits and host return.
+  const held=fixture({pending:saved,workerId:'worker-two'}); const heldOriginal=held.options.transport;
+  held.options.transport=async(command,input)=>{ if(command!=='status'&&command!=='claim') return heldOriginal(command,input);
+    held.calls.push({command,input:structuredClone(input)}); return command==='status' ? [{...held.job,status:'running'}] : null; };
+  assert.equal((await createBroadcastRunner(held.options).runOnce()).status,'idle'); assert.equal(held.renders,0);
+  const failed=held.calls.find(x=>x.command==='complete').input;
+  assert.deepEqual([failed.workerId,failed.jobId,failed.leaseToken,failed.outcome,failed.result.reason],['worker-one',held.job.id,2,'failed','runner_claim_reply_lost']);
+  // A refused claim (the server answered) took nothing: no barrier, and a bad credential stops the loop.
+  for(const [refusal,status] of [[new WorkerRefusal('invalid-worker-id',422),'idle'],[new WorkerRefusal('worker-authentication-required',401),'unconfigured'],[new WorkerRefusal('runner_api_unreachable',0),'idle']]){
+    const g=fixture({transport:async()=>{throw refusal;}});
+    const result=await createBroadcastRunner(g.options).runOnce(); assert.equal(result.status,status); assert.equal(result.reason,refusal.message);
+    assert.equal(g.checkpoints.at(-1),null);
+  }
 });
 
 test('shutdown aborts the active renderer and retains the fenced unknown job instead of claiming more',async()=>{
@@ -329,7 +355,7 @@ test('cleanup uncertainty persists real result evidence through the worker API w
   assert.equal((await db.query("select count(*)::int as n from commerce.ledger where kind='spend'")).rows[0].n,0);
 });
 
-test('a late browser launch after cancellation closes exactly once and never dispatches a cup',async()=>{
+test('a late browser launch after cancellation closes exactly once and never dispatches a cup, a confirmed failure',async()=>{
   let launch;let closed=0;let dispatched=0;
   const pending=new Promise(resolve=>{launch=resolve;});
   const playwright={chromium:{launch:async()=>pending}};
@@ -337,5 +363,42 @@ test('a late browser launch after cancellation closes exactly once and never dis
   const controller=new AbortController();const result=renderer.runCup(claimedJob(),{signal:controller.signal});
   controller.abort();await renderer.close();
   launch({newContext:async()=>{dispatched++;throw new Error('must not dispatch');},close:async()=>{closed++;}});
-  await assert.rejects(result,/runner_render_outcome_unknown/);assert.equal(closed,1);assert.equal(dispatched,0);
+  await assert.rejects(result,error=>error instanceof ConfirmedRenderFailure&&error.message==='runner_renderer_setup_failed');assert.equal(closed,1);assert.equal(dispatched,0);
+});
+
+test('worker transport separates a refusal the server answered from an uncertain failure',async()=>{
+  const make=fetchImpl=>createWorkerTransport({apiOrigin:'http://localhost:8000',workerToken:'test-worker-token-not-a-credential',fetchImpl});
+  const reply=(status,body)=>async()=>new Response(typeof body==='string'?body:JSON.stringify(body),{status});
+  await assert.rejects(make(reply(409,{ok:false,code:'stale-lease'}))('renew',{}),error=>error instanceof WorkerRefusal&&error.message==='stale-lease'&&error.status===409);
+  await assert.rejects(make(reply(503,{ok:false,code:'worker-request-failed'}))('renew',{}),error=>!(error instanceof WorkerRefusal)&&error.message==='runner_worker_request_failed');
+  await assert.rejects(make(reply(404,'<html>proxy</html>'))('renew',{}),error=>!(error instanceof WorkerRefusal));
+  await assert.rejects(make(async()=>{throw new TypeError('fetch failed',{cause:{code:'ECONNREFUSED'}});})('claim',{}),error=>error instanceof WorkerRefusal&&error.status===0);
+  await assert.rejects(make(async()=>{throw new TypeError('fetch failed',{cause:{code:'ECONNRESET'}});})('claim',{}),error=>!(error instanceof WorkerRefusal));
+});
+
+test('a lost claim reply over the real worker API settles after restart: no render, no charge, host free',async t=>{
+  const {db,store}=await commerceDatabase();t.after(()=>db.close());
+  const topup=await store.createTopup('owner',{requestKey:'lost-topup',amountCents:500,credits:200,currency:'USD'});
+  await store.attachOrder('owner',topup.id,'LOSTORDER');
+  await store.creditCapture('owner',topup.id,{providerOrderId:'LOSTORDER',captureId:'LOSTCAPTURE',amountCents:500,currency:'USD',status:'COMPLETED'});
+  const approval=await store.approveBudget('owner',{requestKey:'lost-approval',channelId:'lost-channel',hostId:'current-pc',endsAt:new Date(Date.now()+3_600_000).toISOString(),maxCredits:100,allowedTools:['host_cup'],fighterIds:['a','b','c','d'],priceVersion:'test-v1'});
+  const broadcast=await store.startBroadcast('owner',{requestKey:'lost-start',approvalId:approval.id});
+  const job=await store.enqueueCup('owner',{requestKey:'lost-cup',broadcastId:broadcast.id,fighterIds:['a','b','c','d'],priceVersion:'test-v1',priceCredits:25});
+  const token='fixture-worker-credential-32-characters';const handle=createBroadcastWorkerHandler({store,workers:[{hostId:'current-pc',token}]});
+  let loseClaim=true;
+  const fetchImpl=async(url,init)=>{const response=await handle(new Request(url,init));
+    if(loseClaim&&String(url).endsWith('/claim')){loseClaim=false;throw new TypeError('fetch failed');} return response;};
+  const options=f=>({...f.options,transport:createWorkerTransport({apiOrigin:'http://localhost:8000',workerToken:token,fetchImpl})});
+  const first=fixture();
+  assert.equal((await createBroadcastRunner(options(first)).runOnce()).reason,'runner_claim_outcome_unknown');
+  assert.equal((await store.getJob('owner',job.id)).status,'running');
+  const restarted=fixture({pending:first.checkpoints.at(-1),workerId:'worker-two'});
+  assert.equal((await createBroadcastRunner(options(restarted)).runOnce()).status,'idle');
+  assert.equal(first.renders+restarted.renders,0);
+  const settled=await store.getJob('owner',job.id);
+  assert.equal(settled.status,'failed'); assert.equal(settled.result.reason,'runner_claim_reply_lost');
+  assert.equal((await store.wallet('owner')).balanceCredits,200);
+  assert.equal(restarted.checkpoints.at(-1),null);
+  const bad=await handle(new Request('https://worker.example/commerce-worker/status',{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({workerId:'worker-one',jobId:'not-a-uuid'})}));
+  assert.equal(bad.status,422); assert.equal((await bad.json()).code,'invalid-job-id');
 });
