@@ -112,6 +112,11 @@ async function readJson(request, limit, empty) {
 }
 /** @type {(job: string, name: string) => string} */
 export const artifactPath = (job, name) => `jobs/${job}/${name}.webp`;
+/** A UUID made from `seed`, the same each time: a job's second idempotency key (its front-only profile set). @param {string} seed */
+async function derivedKey(seed) {
+  const hex = await sha256(new TextEncoder().encode(seed));
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-${(8 | (parseInt(hex[16], 16) & 3)).toString(16)}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
 
 /**
  * 선수 프로필 세트 (2026-10-31): a hosted fighter's set, made the moment the validator registers his package. The job kept his chosen front
@@ -141,21 +146,33 @@ export async function attachJobProfileSet(db, submission) {
   // goes in without it (리뷰: a sheet's storage error took the front's set down).
   const { artifact: sheetArtifact, ...expressions } = sheet && typeof sheet === 'object' ? sheet : { artifact: null };
   const sheetBytes = typeof sheetArtifact === 'string' ? await artifactBytes(sheetArtifact).catch(() => null) : null;
-  const withSheet = sheetBytes && sheetBytes.length === expressions.bytes && await sha256(sheetBytes) === expressions.sha256;
-  const text = JSON.stringify({ version: PROFILE_SET_VERSION, front, face, ...(withSheet ? { expressions } : {}) });
-  if (!parseProfileSet(text).ok) return null;
+  const withSheet = Boolean(sheetBytes && sheetBytes.length === expressions.bytes && await sha256(sheetBytes) === expressions.sha256);
   /** @type {(name: string, args: Record<string, unknown>) => Promise<any>} */
   const rpc = async (name, args) => { const { data, error: rpcError } = await db.rpc(name, args); if (rpcError) throw new Problem(409, rpcError.message); return data; };
-  const set = await rpc('af_profile_set_create', { p_owner: job.owner_id, p_fighter: submission.fighter_id, p_key: job.id, p_text: text,
-    p_sha: await sha256(new TextEncoder().encode(text)), p_bytes: front.bytes });
-  await storeOnce(db, BUCKET, profileSetKey(job.owner_id, set.id, 'front'), bytes, front.sha256);
-  // Named in the set by now: one more try, then the set is closed so it never holds his owner's own upload (리뷰 2026-11-03).
-  if (withSheet && sheetBytes) {
-    const key = profileSetKey(job.owner_id, set.id, 'expressions');
-    try { await storeOnce(db, BUCKET, key, sheetBytes, expressions.sha256).catch(() => storeOnce(db, BUCKET, key, sheetBytes, expressions.sha256)); }
-    catch (caught) { await expireUpload(db, set.id); throw caught; }
+  /** His set under `key`, with the sheet or without. @param {string} key @param {boolean} sheetToo */
+  const make = async (key, sheetToo) => {
+    const text = JSON.stringify({ version: PROFILE_SET_VERSION, front, face, ...(sheetToo ? { expressions } : {}) });
+    if (!parseProfileSet(text).ok) return null;
+    const made = await rpc('af_profile_set_create', { p_owner: job.owner_id, p_fighter: submission.fighter_id, p_key: key, p_text: text,
+      p_sha: await sha256(new TextEncoder().encode(text)), p_bytes: front.bytes });
+    await storeOnce(db, BUCKET, profileSetKey(job.owner_id, made.id, 'front'), bytes, front.sha256);
+    // Named in the set by now: one more try, then the set is closed so it never holds his owner's own upload (리뷰 2026-11-03).
+    if (sheetToo && sheetBytes) {
+      const at = profileSetKey(job.owner_id, made.id, 'expressions');
+      try { await storeOnce(db, BUCKET, at, sheetBytes, expressions.sha256).catch(() => storeOnce(db, BUCKET, at, sheetBytes, expressions.sha256)); }
+      catch (caught) { await expireUpload(db, made.id); throw caught; }
+    }
+    await rpc('af_profile_set_submit', { p_owner: job.owner_id, p_id: made.id });
+    return made;
+  };
+  let set;
+  try { set = await make(job.id, withSheet); }
+  catch (caught) {
+    // The set with his sheet did not go in (its store failed, or an earlier try left it expired): his front goes alone, under a key of its own.
+    if (!withSheet) throw caught;
+    set = await make(await derivedKey(`${job.id}:front-only`), false);
   }
-  await rpc('af_profile_set_submit', { p_owner: job.owner_id, p_id: set.id });
+  if (!set) return null;
   const { error: linkError } = await db.from('af_generation_jobs').update({ profile_set_id: set.id }).eq('id', job.id);
   if (linkError) throw new Problem(503, 'database-unavailable');
   return set.id;

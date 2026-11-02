@@ -852,4 +852,23 @@ test('a hosted fighter\'s sheet that cannot be read leaves his front\'s set as i
   const created = rpcs.find(([name]) => name === 'af_profile_set_create')[1];
   assert.equal('expressions' in JSON.parse(created.p_text), false);
   assert.deepEqual(stored.map(p => p.split('/').at(-1)), ['front.webp']);
+
+  // The sheet reads but cannot be stored, twice: that set is closed and his front goes alone under a second key.
+  const sheet = webp(1536, 1024), sets = [], expired = [];
+  rpcs.length = 0; stored.length = 0;
+  db.from = table => { const q = { select: () => q, eq: () => q, update: value => { if (table === 'af_profile_sets') expired.push(value); return q; },
+    maybeSingle: async () => ({ data: { id: job, owner_id: owner, profile_set_id: null, profile_front: { artifact: 'front-a-0', ...frontFile, face: { x: 400, y: 30, side: 250 } },
+      profile_expressions: { artifact: 'expressions-0-a', path: 'expressions.webp', bytes: sheet.length, sha256: await sha256(sheet), width: 1536, height: 1024 } } }),
+    then: (ok, no) => Promise.resolve({ error: null }).then(ok, no) }; return q; };
+  db.rpc = async (name, args) => { rpcs.push([name, args]); if (name === 'af_profile_set_create') { sets.push(args); return { data: { id: crypto.randomUUID() }, error: null }; }
+    return { data: {}, error: null }; };
+  db.storage.from = () => ({
+    download: async path => path.endsWith('front-a-0.webp') ? { data: new Blob([front]), error: null } : path.endsWith('expressions-0-a.webp')
+      ? { data: new Blob([sheet]), error: null } : { data: null, error: { message: 'missing' } },
+    upload: async path => { if (path.endsWith('/expressions.webp')) return { error: { message: 'storage down' } }; stored.push(path); return { error: null }; } });
+  assert.ok(await attachJobProfileSet(db, { id: crypto.randomUUID(), status: 'registered', fighter_id: fighter }));
+  assert.deepEqual(sets.map(args => 'expressions' in JSON.parse(args.p_text)), [true, false]);
+  assert.equal(sets[0].p_key, job); assert.notEqual(sets[1].p_key, job);
+  assert.equal(expired.length, 1, 'the set with the sheet is closed');
+  assert.deepEqual(rpcs.filter(([name]) => name === 'af_profile_set_submit').length, 1);
 });

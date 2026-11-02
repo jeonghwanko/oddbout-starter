@@ -115,6 +115,9 @@ begin
   if length(reason) not between 1 and 500 then raise exception 'invalid-reason'; end if;
   select * into base from public.af_profile_sets where id = p_from;
   if not found then raise exception 'not-found'; end if;
+  -- The owner first, then his fighter: the order his own deletion takes (af_delete_owned_fighter), and two calls with one key wait here,
+  -- so the second finds the first's set below and writes no second event.
+  perform 1 from public.af_creators where owner_id = base.owner_id for update;
   select * into p from public.af_profile_sets where owner_id = base.owner_id and idempotency_key = p_key;
   if found then
     if p.manifest_sha <> p_sha or p.based_on is distinct from base.id then raise exception 'idempotency-conflict'; end if;
