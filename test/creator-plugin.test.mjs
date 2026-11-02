@@ -449,6 +449,14 @@ test('workspace CLI preserves projects and revision guards across calls and reje
   await assert.rejects(creationTool({ workspace: '.' }), /absolute-workspace-required/);
 });
 
+test('workspace CLI calls have no 60 s client timeout: the tool runs on in this process, so a timeout only hid a finished pack', async t => {
+  const f = await fixture(t);
+  const callTool = t.mock.method(Client.prototype, 'callTool'), listTools = t.mock.method(Client.prototype, 'listTools');
+  await creationTool({ workspace: f.root, name: 'list_creation_sessions' });
+  await creationTool({ workspace: f.root });
+  for (const call of [callTool.mock.calls[0], listTools.mock.calls[0]]) assert.equal(call.arguments[call.arguments.length - 1].timeout, 2 ** 31 - 1);
+});
+
 test('a version whose copy was interrupted can be recorded again instead of failing on leftover files', async t => {
   const f = await fixture(t);
   const file = await f.put('input/idle-v1.txt', 'new bytes');

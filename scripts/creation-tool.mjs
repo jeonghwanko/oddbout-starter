@@ -9,6 +9,10 @@ import { createServer } from '../mcp/server.mjs';
 import { writeCliJson } from '../dots.mjs';
 import { fileContextRequest, parseContextFileArgs } from './creation-context-file.mjs';
 
+// The server runs in this process and its tools ignore cancellation, so the SDK's 60 s request timeout never stopped one: it
+// reported a fitted pack that went on to finish as failed (74 s on CI, 2026-11-02). A tool's own limits decide how long it runs.
+const IN_PROCESS_TIMEOUT_MS = 2 ** 31 - 1;
+
 /** @param {{ workspace?: string, name?: string, args?: Record<string, unknown>, contextRequest?: typeof fetch }} [options] */
 export async function creationTool({ workspace, name, args = {}, contextRequest } = {}) {
   if (!workspace || !path.isAbsolute(workspace)) throw Error('absolute-workspace-required');
@@ -21,7 +25,8 @@ export async function creationTool({ workspace, name, args = {}, contextRequest 
   try {
     await server.connect(serverSide);
     await client.connect(clientSide);
-    return name ? await client.callTool({ name, arguments: args }) : await client.listTools();
+    const options = { timeout: IN_PROCESS_TIMEOUT_MS };
+    return name ? await client.callTool({ name, arguments: args }, undefined, options) : await client.listTools(undefined, options);
   } finally { await client.close(); await server.close(); }
 }
 
