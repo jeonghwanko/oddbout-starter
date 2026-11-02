@@ -225,8 +225,16 @@ test('a generating run with no end on record sends the stage to an operator unti
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
+test('a child that ends without reading its input ends its run with its own code, not the worker with a write error', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'run-')), log = path.join(dir, 'worker.log');
+  try {
+    // More than a pipe holds, so the write is still going when the child has gone.
+    assert.equal(await run(process.execPath, ['-e', 'process.exit(75)'], { cwd: dir, log, stdin: 'x'.repeat(1 << 20) }), 75);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
 // Process groups: the worker and og run on a Linux host.
-const linuxOnly = { skip: process.platform !== 'linux' && 'process groups are the Linux host\'s' };
+const linuxOnly ={ skip: process.platform !== 'linux' && 'process groups are the Linux host\'s' };
 test('a run whose child exited while something it left holds the output ends anyway, and a stopped run that ignores SIGTERM gets SIGKILL', linuxOnly, async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'run-')), log = path.join(dir, 'worker.log');
   try {
