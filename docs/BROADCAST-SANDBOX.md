@@ -21,8 +21,9 @@ DB와 Sandbox 설정 없이 실행하면 `preview-unconfigured` 모드다. 이 �
 
 먼저 테스트 전용 Supabase 프로젝트임을 프로젝트 참조 ID와 대시보드에서 확인한다. 아래 migration은 `commerce` 지갑·원장·예산·작업 schema와 RPC를 만든다. 이 SQL을 **격리된 개발/데모 프로젝트에만** 적용한다.
 
-- `supabase/migrations/20261102115107_commerce_broadcast_ledger.sql`
-- 운영 또는 기존 프로덕션 프로젝트에 적용하지 않는다. 이 저장소에는 이 migration만 안전하게 단독 적용하는 CLI 별칭이 없다. 대상 프로젝트를 확인하고 기존의 검토된 DB 변경 절차를 사용한다.
+- `supabase/sandbox/20261102115107_commerce_broadcast_ledger.sql`
+- 운영 또는 기존 프로덕션 프로젝트에 적용하지 않는다. 그래서 이 파일은 `supabase/migrations/` 밖에 있다: 운영 DB 절차·`supabase db push`·배포 drift watch는 이 SQL을 보지 않는다. 대상 프로젝트를 확인하고 SQL 편집기 등으로 이 파일 하나만 실행한다.
+- 운영 `ai-fighter`·`ai-fighter-mcp` Edge 함수와 Render는 commerce를 싣지 않는다(2026-11-03). Sandbox API·producer MCP·worker API는 `scripts/broadcast-demo.mjs` 서버에서만 돈다.
 
 서버 환경 변수는 코드의 실제 이름과 조건을 따른다.
 
@@ -88,6 +89,26 @@ npm run broadcast:runner -- --host office-stable --config deploy/broadcast-hosts
 
 방송 session deadline 처리는 백그라운드 cron/daemon이 아니라 성공한 DB RPC에서 관찰될 때 수행하는 bounded maintenance다. 만료된 session이 관찰되면 실행 전 queued 컵은 취소되고 queued 및 미사용 reservation이 해제된다. lease가 만료된 running 작업은 audience outcome이 불명확하므로 `unknown`으로 남고 해당 credit은 계속 보류된다. 따라서 만료된 미실행 예산을 반환하려고 별도 `Stop` 호출이 필요하지는 않지만, 알 수 없는 실행 결과의 credit을 자동 해제하지 않는다.
 
+호스트는 세션 끝까지 240초(`COMMERCE_CATALOG.tools.host_cup.startWindowSeconds`, 원장 `claim_job`과 같은 값) 미만이 남은 컵을 집지 않는다. 컵은 화면에서 약 2분 걸리고 lease는 세션 끝에서 끊기므로, 그보다 늦게 시작한 컵은 반드시 `unknown`으로 끝나 호스트를 막았다. 남은 컵은 마감 때 실패 처리되고 credit이 돌아간다. producer도 그 구간에서는 모델을 부르지 않고 `producer_session_ending`으로 멈춘다. `Stop`은 새 작업만 멈춘다: 이미 화면에 나온 컵은 lease를 계속 갱신해 끝까지 진행하고 성공하면 정산된다.
+
+### runner 복구와 운영자 해제
+
+runner는 상태 파일(`.oddbout-broadcast/<hostId>.json`)이 남아 있으면 새 컵을 집기 전에 worker API `status`로 그 기록의 worker ID(재시작한 프로세스는 새 ID를 쓴다)가 서버에 가진 작업을 묻는다.
+
+- claim 응답만 잃은 경우: 서버에 아무것도 없으면 기록을 지우고 계속한다. 잡힌 작업이 있으면 이 runner가 렌더하지 않았으므로 `failed`(`runner_claim_reply_lost`)로 보고해 credit과 호스트를 돌려준다.
+- 완료 응답을 잃은 경우: 저장한 완료 보고를 그대로 다시 보낸다(원장은 같은 보고를 한 번만 반영한다). 서버가 이미 끝났다고 하면 기록만 지운다.
+- 컵 도중 죽은 경우나 서버에서 `unknown`인 작업: 화면에 무엇이 나갔는지 아무도 모르므로 `runner_operator_release_required`로 멈춘다.
+
+worker API가 4xx 코드로 답한 거절과 연결 거부는 확정(아무 일도 일어나지 않음)으로, 그 밖의 실패는 불확실로 다룬다. renew 응답 하나를 잃어도 lease가 남아 있으면 컵을 계속하고, 완료 보고는 같은 내용으로 세 번까지 다시 보낸다. 아직 아무것도 화면에 보내지 않았는데 중단된 컵과 경기 페이지가 직접 `broadcast_execution_failed`라고 답한 컵은 `failed`로 보고한다(과금 없음).
+
+`unknown` 작업은 운영자가 호스트를 확인한 뒤 Sandbox 프로젝트의 service key로 해제한다. 해제는 과금하지 않고 작업을 `failed`로 닫아 호스트 자리와 할당을 돌려주며, 세션은 확정 실패 때처럼 닫힌다. HTTP 경로는 없다.
+
+```powershell
+node --env-file=.env scripts/broadcast-release.mjs --job <unknown job UUID> --note "호스트 확인: 화면에 컵 없음"
+```
+
+해제 뒤 runner를 다시 시작하면 `status`가 그 작업을 끝난 것으로 보고 상태 파일을 지운다. 상태 파일을 직접 지우거나 새 request key로 재시도하지 않는 규칙은 그대로다.
+
 설정이 없으면 commerce 동작이 비활성화되고, PayPal Sandbox가 빠진 경우 top-up과 결제 확인만 비활성화된다. wallet이 지출 동결 상태면 UI에서 top-up·승인·시작·컵 작업을 막고 stop/report를 남긴다. 서명 검증된 환불·reversal webhook이 아직 local ledger에 연결되지 않은 capture를 가리키면 owner 없는 append-only inbox에 이벤트가 기록되고 webhook 응답은 `recorded: true`, `applied: false`로 반환된다. 이후 정식 capture가 연결될 때 inbox 이벤트를 같은 database transaction에서 ledger에 연결하고 wallet spending freeze를 적용하므로 조정 이벤트와 spendable credit 사이에 관측 가능한 미동결 구간을 두지 않는다. 이미 credited capture와 연결된 webhook은 계정 지출을 동결하고 현재 실행 중인 작업을 `unknown`으로 보류한다. 이 처리는 현금 환불을 실행하거나 잔액을 자동 차감·조정·해제하지 않는다. 추가 지출은 신뢰된 수동 reconciliation 전까지 동결 상태로 남으며, 해당 운영자 경로는 아직 제공되지 않는다. 이는 PayPal Sandbox 경로에 대한 코드·PGlite 검사일 뿐 실제 provider webhook이나 결제를 검증한 것이 아니다.
 
 ## 5. 선택형 AI producer
@@ -102,7 +123,7 @@ node --env-file=.env scripts/broadcast-producer.mjs --broadcast <approved-broadc
 
 `--once`를 빼면 상태가 바뀔 때까지 polling한다. 중지하려면 `Ctrl+C`를 누른다. OpenAI API 호출 비용은 PayPal Sandbox 크레딧·방송 원장에 포함되지 않으며 별도로 청구될 수 있다. 알 수 없는 모델 응답을 성공이나 작업 완료로 간주하지 않는다.
 
-Producer는 checkpoint 파일과 별도 `.lock` 파일로 동일 상태 경로의 중복 실행을 막는다. 비정상 종료 시 `.lock`이 남아 다음 실행이 `producer_state_locked`로 fail-closed 될 수 있다. 같은 호스트에서 기록된 PID와 실제 프로세스를 확인하고, producer와 runner가 실행 중이지 않음을 확인한 뒤에만 orphan `.lock`을 제거한다. 원본 JSON 상태 파일과 request key는 보존한다. 상태 파일을 삭제하거나 새 request key로 재시도하지 않는다. `prepared`/`unknown` 작업이나 host의 unknown 결과는 신뢰된 operator reconciliation endpoint가 아직 구현되지 않아 자동 복구할 수 없다. 불명확한 지출 결과는 원장을 확인하기 전까지 보류한다.
+Producer는 checkpoint 파일과 별도 `.lock` 파일로 동일 상태 경로의 중복 실행을 막는다. 비정상 종료 시 `.lock`이 남아 다음 실행이 `producer_state_locked`로 fail-closed 될 수 있다. 같은 호스트에서 기록된 PID와 실제 프로세스를 확인하고, producer와 runner가 실행 중이지 않음을 확인한 뒤에만 orphan `.lock`을 제거한다. 원본 JSON 상태 파일과 request key는 보존한다. 상태 파일을 삭제하거나 새 request key로 재시도하지 않는다. producer의 `prepared`/`unknown` 요청은 자동 복구하지 않는다. host의 `unknown` 작업은 위의 운영자 해제(`scripts/broadcast-release.mjs`)로 닫는다. 불명확한 지출 결과는 원장을 확인하기 전까지 보류한다.
 
 브라우저 console은 사람 계정에 Supabase 로그인하며 access token은 메모리에만 둔다. 결제·승인·시작·컵 같은 변경 요청은 브라우저 owner journal에 request key와 입력을 먼저 기록하고, 실제 첫 fetch 직전에 dispatched 표시를 영속화한다. 첫 시도의 명시적 precondition 거절은 해당 request key를 지워 새 입력으로 다시 시작할 수 있지만, 이미 dispatch된 요청 뒤 인증 또는 precondition 거절이 와도 이전 시도가 서버에서 처리됐을 수 있어 원래 request key를 보존한다. 브라우저를 닫거나 네트워크가 끊겨도 같은 계정에서 그 key로 복구한다. 이전 journal에서 dispatched 표시가 없는 항목도 이미 시도된 것으로 취급한다. 만료된 approval draft는 quote가 `invalid-end-time`을 반환하고 브라우저 시각도 만료를 나타낼 때 approval 키만 정리한다. 만료된 approval은 새 session을 시작할 수 없으며 이 정리는 잔액을 소비하지 않는다. local `/mcp`는 일반 Supabase JWT와 production `af_mcp` grant를 거부하고, 서버 설정 `ODDBOUT_BROADCAST_PRODUCERS_JSON`에 등록된 별도 `obp_` grant만 받는다. 각 항목은 `owner` UUID, 이미 승인된 `broadcastId` UUID, `obp_`와 32개 이상의 URL-safe 난수 문자를 붙인 `token`, ISO `expiresAt`으로 구성된다. 해당 비밀은 격리 서버 설정과 producer의 비밀 환경에만 provision한다. 값이나 callback을 일반 대화에 붙여넣지 않는다. 이 local 설정은 기존 production cloud MCP connector의 `af_mcp` 권한을 바꾸지 않는다.
 
@@ -138,4 +159,4 @@ Grant는 등록된 사용자·broadcast에 한정되고, 매 요청 때 broadcas
 - OBS/호스트 doctor: `scripts/broadcast-host.mjs`, `broadcast/hosts.mjs`
 - render-only worker: `scripts/broadcast-runner.mjs`, `broadcast/runner.mjs`
 - 선택형 AI producer: `scripts/broadcast-producer.mjs`, `broadcast/producer.mjs`
-- 별도 Sandbox 원장 migration: `supabase/migrations/20261102115107_commerce_broadcast_ledger.sql`
+- 별도 Sandbox 원장 SQL(운영 migration 아님): `supabase/sandbox/20261102115107_commerce_broadcast_ledger.sql`

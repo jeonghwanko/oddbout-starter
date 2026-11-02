@@ -53,10 +53,34 @@ Cup iframe이 실패·취소된 뒤 다음 작업을 오염시킨다는 가설�
 - 별도 Cup `npm run check`: **137개 테스트**, 타입 검사, 프로덕션 빌드 통과. 2차에는 Cup 애플리케이션 코드 변경이 없어 1차의 실제 세 경기 렌더링 측정을 반복하지 않았다.
 - 실제 PayPal·모델 API·원격 SSH 실행·OBS/Twitch 송출이나 배포는 수행하지 않았다. 로컬 검사는 원격 CI 결과를 대신하지 않는다.
 
+## 3차: 재현하고 수정한 문제 (2026-11-03)
+
+#264 병합 뒤 다른 담당(Claude)이 원장·PayPal·배포 경계를 직접 읽고, runner/producer와 Cup renderer는 별도 검토자 둘이 PGlite·실제 runner 코드로 재현했다. 1·2차 목록을 다시 확인하는 대신 그 밖의 실패를 찾았다. 세 검토가 독립적으로 같은 결론에 닿았다: `unknown` 작업 하나가 그 호스트를 영구히 막고(호스트당 running/unknown 1개 unique index), 해제할 경로가 없었다.
+
+| 우선순위 | 재현 조건과 영향 | 수정 및 회귀 확인 |
+| --- | --- | --- |
+| P1 | 운영 배포 경계: Sandbox 원장 SQL이 `supabase/migrations/`에 있어 운영 DB 절차와 배포 drift watch가 "적용 안 된 운영 migration"으로 셌다. 운영 `ai-fighter`/`ai-fighter-mcp` 진입점에 commerce가 연결됐지만 그 Edge에는 worker API가 없어 켜도 컵이 실행되지 않는다 | SQL을 `supabase/sandbox/`로 옮기고(safeupdate 규칙은 계속 검사), 운영 진입점 4개 파일을 #264 이전 바이트로 되돌림. 세 운영 import graph(ai-fighter 36, ai-fighter-mcp 43, Render 18개 파일)가 `f17fcc0^1`과 파일 단위로 같음을 확인 |
+| P1 | 사용자가 컵 도중 Stop을 누르면 `renew_job`이 `broadcast-stopped`로 거절해 runner가 컵을 중단하고 `unknown` 보고 → 호스트 영구 차단 | Stop 중(`stopping`)에도 renew 허용. 실행 중 컵은 끝까지 진행해 성공 시 정산, 나머지는 해제(PGlite) |
+| P1 | 마감 직전에 집은 컵(약 124초)은 lease가 `ends_at`에서 끊겨 반드시 `unknown` | claim이 남은 시간 240초 미만이면 거절, catalog `startWindowSeconds`로 같은 값을 공개. 남은 queued 컵은 마감 때 실패·해제(PGlite). producer는 그 구간에서 모델을 부르지 않음 |
+| P1 | claim 응답 유실(ECONNREFUSED·401 포함)이 `claim-pending`을 남기고 재시작마다 `runner_reconciliation_required` | worker API `status`로 기록의 worker ID가 가진 작업을 조회: 없으면 해제, 잡혀 있으면 렌더하지 않았으므로 `failed`. 4xx 거절·연결 거부는 확정으로 기록을 지움. 실제 worker API + PGlite에서 유실 → 재시작 → `failed`·과금 0·호스트 해제 확인 |
+| P1 | renew 응답 하나만 잃어도 컵 중단, 완료 응답 유실은 재시도 없음 | lease가 남는 동안 불확실한 renew 실패 허용(거절은 즉시 중단). 같은 완료 보고를 세 번까지 재전송. 재시작 시 저장된 완료 보고 재전송 |
+| P1 | `unknown` 해제 경로 없음 | 원장 `release_job`(service role 전용, HTTP 경로 없음)과 `scripts/broadcast-release.mjs`: 과금 없이 `failed`로 닫고 호스트·할당 반환, 메모 필수 |
+| P1 | 아직 아무것도 화면에 보내지 않은 컵이 중단되거나(마감·Stop), 경기 페이지가 직접 `broadcast_execution_failed`(팩 로드 실패, 부팅 watchdog, 최소화된 창)라고 답해도 `unknown` | 미발송·페이지 확정 실패는 `failed`(과금 없음). 브라우저가 닫히거나 응답을 잃은 경우는 계속 `unknown` |
+| P2 | PayPal 환불 webhook 샘플은 capture를 `links[rel=up]`으로만 가리키는데 코드는 `supplementary_data.related_ids.capture_id`만 읽음 → 실제 환불이 계속 422로 기록되지 않을 수 있음(미확인: 제3자 샘플·PayPal 환불 문서 기준, 실제 Sandbox 환불 미실행) | up 링크(PayPal Sandbox API origin만)도 받고, 둘 다 있으면 일치해야 함 |
+| P2 | producer가 `wait` 뒤 컨텍스트가 변하지 않아 세션 끝까지 다시 묻지 않음 | 남은 시간(5분 단위)과 컵 시작 구간을 컨텍스트에 넣어 5분마다 다시 판단 |
+| P2 | 원격 doctor가 runner와 달리 `remoteEnvFile`을 읽지 않아 OBS 미설정으로 오판, 로컬 환경을 ssh에 넘길 수 있음 | doctor에도 `--env-file`과 `SendEnv=-*` |
+
+확인했지만 문제가 없던 것: SSH 명령 주입, 상태 파일 경로, 비밀값 노출, producer prompt injection, postMessage origin/source·재생, 결과와 렌더 불일치, XSS, 이중 실행·이중 과금. Cup 쪽 P2(경기 사이 승자 화면이 바로 잘림)는 별도 Cup 저장소 PR로 다룬다.
+
+### 3차 검증
+
+- starter `npm run test:fast`: 827개 중 820 통과, 6 건너뜀, 1 실패. 실패한 `host/og-user-mode.test.mjs`의 process-group 신호 검사는 이 VM에서 #264 이전 커밋(`f17fcc0^1`)에서도 같게 실패한다.
+- `npm run typecheck` 통과. 실제 PayPal·모델 API·SSH·OBS 송출과 운영 배포는 실행하지 않았다.
+
 ## 남은 운영 한계
 
 - 실제 PayPal Sandbox 거래와 실제 Twitch/OBS 송출, 24시간 연속 운전은 아직 검증하지 않았다. `--live`는 차단되어 있다.
-- unknown 작업과 환불 동결을 안전하게 대조·해제하는 운영자 endpoint/UI는 아직 없다. 관련 재화와 호스트 실행 자리는 보류한다. 자동 현금 환불·원장 차감도 구현하지 않았다.
+- `unknown` 작업은 `scripts/broadcast-release.mjs`로 과금 없이 해제한다(3차). 환불 동결을 푸는 운영자 경로와 UI는 아직 없다. 자동 현금 환불·원장 차감도 구현하지 않았다.
 - 강제 종료로 남은 `.lock`은 같은 호스트에서 프로세스 종료를 확인한 운영자가 처리해야 한다. 원래 JSON 상태와 request key를 삭제하거나 새 키로 재시도하지 않는다.
 - 로컬 producer grant는 서버에서 별도로 설정해야 하며 자동 발급·갱신하지 않는다. 브라우저 승인과 계정 토큰을 프로듀서에 넘기는 방식으로 대체하지 않는다.
 - 원장 RPC는 전역 mutex를 사용하는 초기 구현이다. 다수 방송자의 운영 처리량은 별도 부하 검증과 개선이 필요하다.

@@ -152,9 +152,9 @@ declare
   v_one text; v_two text; v_worker text := p_input->>'workerId'; v_count integer;
 begin
   if p_input is null or jsonb_typeof(p_input) <> 'object' then raise exception 'commerce:invalid-input'; end if;
-  if p_command not in ('claim_job','renew_job','complete_job','lookup_order','record_adjustment') and
+  if p_command not in ('claim_job','renew_job','complete_job','worker_jobs','release_job','lookup_order','record_adjustment') and
     (p_owner is null or length(p_owner) not between 1 and 128) then raise exception 'commerce:owner-required'; end if;
-  if p_command in ('claim_job','renew_job','complete_job') and
+  if p_command in ('claim_job','renew_job','complete_job','worker_jobs') and
     (v_worker is null or length(v_worker) not between 1 and 128) then raise exception 'commerce:invalid-input'; end if;
   if p_command in ('create_topup','approve_budget','start_broadcast','enqueue_cup') and
     (v_key is null or length(v_key) not between 1 and 128) then raise exception 'commerce:invalid-input'; end if;
@@ -334,8 +334,10 @@ begin
   elsif p_command='claim_job' then
     v_lease:=coalesce((p_input->>'leaseSeconds')::integer,60);
     if v_lease not between 1 and 300 or coalesce(p_input->>'hostId','') !~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$' then raise exception 'commerce:invalid-input'; end if;
+    -- A cup takes about two minutes and its lease ends at the session's end: one claimed later than this window before
+    -- ends_at could only end unknown and hold the host. COMMERCE_CATALOG.tools.host_cup.startWindowSeconds states it too.
     select x.* into j from commerce.jobs x join commerce.broadcasts s on s.id=x.broadcast_id join commerce.wallets funds on funds.owner=x.owner
-      where not funds.spending_blocked and s.status in ('queued','running') and s.ends_at>v_now and x.host_id=p_input->>'hostId' and
+      where not funds.spending_blocked and s.status in ('queued','running') and s.ends_at>v_now+interval '240 seconds' and x.host_id=p_input->>'hostId' and
         x.status='queued'
         and not exists(select 1 from commerce.jobs active where active.host_id=x.host_id and active.id<>x.id
           and active.status in ('running','unknown'))
@@ -362,7 +364,8 @@ begin
     if p_command='renew_job' then
       v_lease:=coalesce((p_input->>'leaseSeconds')::integer,60);
       if v_lease not between 1 and 300 then raise exception 'commerce:invalid-input'; end if;
-      if b.ends_at<=v_now or b.status not in ('queued','running') or j.status<>'running' then raise exception 'commerce:broadcast-stopped'; end if;
+      -- Stop ends new work; the cup already on screen keeps its lease and settles like any other.
+      if b.ends_at<=v_now or b.status not in ('queued','running','stopping') or j.status<>'running' then raise exception 'commerce:broadcast-stopped'; end if;
       update commerce.jobs set lease_until=least(v_now+make_interval(secs=>v_lease),b.ends_at) where id=j.id returning * into j;
       return to_jsonb(j);
     end if;
@@ -429,6 +432,31 @@ begin
     end if;
     return to_jsonb(j);
 
+  elsif p_command='worker_jobs' then
+    -- A runner that lost a claim or completion reply asks what the server holds for it before anything else.
+    select coalesce(jsonb_agg(to_jsonb(x) order by x.created_at,x.id),'[]'::jsonb) into v_jobs from commerce.jobs x
+      where x.worker_id=v_worker and (case when p_input ? 'jobId' then x.id=(p_input->>'jobId')::uuid else x.status in ('running','unknown') end);
+    return v_jobs;
+  elsif p_command='release_job' then
+    -- Operator only (service role, never an HTTP route): close an unknown job without charging it. This frees its host
+    -- slot and allocation; the session closes as a confirmed failure would close it.
+    select * into j from commerce.jobs where id=(p_input->>'jobId')::uuid;
+    if not found then raise exception 'commerce:not-found'; end if;
+    if j.status<>'unknown' then raise exception 'commerce:job-not-unknown'; end if;
+    if length(coalesce(p_input->>'note','')) not between 1 and 500 then raise exception 'commerce:invalid-input'; end if;
+    update commerce.broadcasts set allocated_credits=allocated_credits-j.price_credits where id=j.broadcast_id returning * into b;
+    update commerce.jobs set status='failed',finished_at=v_now,result=jsonb_build_object('reason','operator-released-unknown',
+      'note',p_input->>'note','unknownResult',j.result) where id=j.id returning * into j;
+    if b.status in ('stopping','needs_attention') then
+      v_release:=b.reserved_credits-b.allocated_credits;
+      if v_release>0 then
+        update commerce.wallets set reserved_credits=reserved_credits-v_release where owner=b.owner;
+        update commerce.broadcasts set reserved_credits=allocated_credits where id=b.id;
+        insert into commerce.ledger(owner,kind,cause_id,broadcast_id,balance_delta,reserved_delta) values(b.owner,'release',j.id,b.id,0,-v_release);
+      end if;
+      update commerce.broadcasts set status=case when allocated_credits=0 then 'completed' else 'stopping' end where id=b.id;
+    end if;
+    return to_jsonb(j);
   elsif p_command='get_job' then
     select * into j from commerce.jobs where id=(p_input->>'jobId')::uuid and owner=p_owner;
     if not found then raise exception 'commerce:not-found'; end if;

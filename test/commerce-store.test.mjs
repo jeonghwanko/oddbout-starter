@@ -214,7 +214,8 @@ test('stop releases queued/unallocated funds, retains active allocation and sett
   assert.equal(stopping.status,'stopping'); assert.equal(stopping.reservedCredits,25);
   assert.equal((await store.getJob('owner',queued.id)).status,'failed');
   await rejects(store.enqueueCup('owner',cup(b.id,{requestKey:'after-stop'})),'broadcast-stopped');
-  await rejects(store.renewJob('worker',{jobId:claim.id,leaseToken:claim.leaseToken}),'broadcast-stopped');
+  // Stop ends new work only: the cup already on screen keeps renewing its lease.
+  assert.equal((await store.renewJob('worker',{jobId:claim.id,leaseToken:claim.leaseToken})).id,claim.id);
   await store.stopBroadcast('owner',b.id);
   assert.equal((await store.wallet('owner')).reservedCredits,25);
   await store.completeJob('worker',{jobId:claim.id,leaseToken:claim.leaseToken,outcome:'failed',result:{reason:'confirmed-runner-failure'}});
@@ -401,4 +402,58 @@ test('pending adjustment with a conflicting order cannot assign or freeze the ev
   for(const change of [{eventId:null},{eventId:123},{captureId:123},{providerOrderId:null}])await assert.rejects(store.recordPaymentAdjustment({eventId:'BAD-TYPE',eventType:'PAYMENT.CAPTURE.REVERSED',captureId:'CAPTURE-LATER',...change}));
   await assert.rejects(db.query("delete from commerce.payment_adjustment_inbox where event_id='WRONG-ORDER-EARLY'"),/commerce:append-only/);
   await assert.rejects(db.transaction(async tx=>{await tx.exec('set local role authenticated');await tx.query('select * from commerce.payment_adjustment_inbox');}),/permission denied/);
+});
+
+test('a cup running when the owner stops finishes and is charged; the rest of the session is released', async t => {
+  const {db,store}=await commerceDatabase(); t.after(()=>db.close());
+  const b=await session(store);
+  const job=await store.enqueueCup('owner',cup(b.id));
+  const claim=await store.claimJob('worker',{hostId:'current-pc'});
+  assert.equal((await store.stopBroadcast('owner',b.id)).status,'stopping');
+  await store.renewJob('worker',{jobId:claim.id,leaseToken:claim.leaseToken});
+  const done=await store.completeJob('worker',{jobId:job.id,leaseToken:claim.leaseToken,outcome:'succeeded',result:evidence(claim)});
+  assert.equal(done.status,'succeeded');
+  assert.deepEqual(await store.wallet('owner'),{owner:'owner',balanceCredits:175,reservedCredits:0,availableCredits:175,spendingBlocked:false,blockReason:null});
+  assert.equal((await store.report('owner',b.id)).broadcast.status,'completed');
+});
+
+test('a host claims no cup in the last 240 s of a session; the queued cup fails at the deadline and its credits return', async t => {
+  const {db,store}=await commerceDatabase(); t.after(()=>db.close());
+  const b=await session(store,{endsAt:new Date(Date.now()+230_000).toISOString()});
+  const job=await store.enqueueCup('owner',cup(b.id));
+  assert.equal(await store.claimJob('worker',{hostId:'current-pc'}),null);
+  await db.query("update commerce.broadcasts set ends_at=clock_timestamp()-interval '1 second' where id=$1",[b.id]);
+  assert.equal((await store.getJob('owner',job.id)).status,'failed');
+  assert.equal((await store.wallet('owner')).reservedCredits,0);
+  // The catalog states the same window to the producer.
+  const {COMMERCE_CATALOG}=await import('../api/commerce/catalog.mjs');
+  assert.equal(COMMERCE_CATALOG.tools.host_cup.startWindowSeconds,240);
+});
+
+test('worker status names what a worker holds; an operator releases an unknown job without a charge and frees its host', async t => {
+  const {db,store}=await commerceDatabase(); t.after(()=>db.close());
+  const b=await session(store);
+  const job=await store.enqueueCup('owner',cup(b.id));
+  const claim=await store.claimJob('current-pc:lost',{hostId:'current-pc'});
+  assert.deepEqual((await store.workerJobs('current-pc:lost')).map(x=>[x.id,x.status]),[[job.id,'running']]);
+  assert.deepEqual(await store.workerJobs('current-pc:other'),[]);
+  await rejects(store.releaseJob(job.id,'operator checked the host'),'job-not-unknown');
+  await store.completeJob('current-pc:lost',{jobId:job.id,leaseToken:claim.leaseToken,outcome:'unknown',result:{reason:'runner_render_outcome_unknown'}});
+  assert.equal((await store.workerJobs('current-pc:lost',{jobId:job.id}))[0].status,'unknown');
+  const next=await store.enqueueCup('owner',cup(b.id,{requestKey:'blocked'})).catch(error=>error.message);
+  assert.equal(next,'broadcast-stopped');
+  assert.equal(await store.claimJob('current-pc:other',{hostId:'current-pc'}),null);
+  await rejects(store.releaseJob(job.id,''),'invalid-input');
+  const released=await store.releaseJob(job.id,'operator checked the host: no cup on screen');
+  assert.equal(released.status,'failed'); assert.equal(released.result.reason,'operator-released-unknown');
+  assert.equal(released.result.unknownResult.reason,'runner_render_outcome_unknown');
+  assert.deepEqual(await store.workerJobs('current-pc:lost'),[]);
+  assert.deepEqual(await store.wallet('owner'),{owner:'owner',balanceCredits:200,reservedCredits:0,availableCredits:200,spendingBlocked:false,blockReason:null});
+  assert.equal((await store.report('owner',b.id)).broadcast.status,'completed');
+  assert.equal((await db.query("select count(*)::int as n from commerce.ledger where kind='spend'")).rows[0].n,0);
+  await rejects(store.releaseJob(job.id,'again'),'job-not-unknown');
+  // The host takes the next session's cup.
+  const second=await store.startBroadcast('owner',{requestKey:'start-2',approvalId:(await store.approveBudget('owner',approval({requestKey:'approval-2',channelId:'channel-2'}))).id});
+  await store.enqueueCup('owner',cup(second.id,{requestKey:'cup-2'}));
+  assert.equal((await store.claimJob('current-pc:other',{hostId:'current-pc'})).broadcastId,second.id);
 });

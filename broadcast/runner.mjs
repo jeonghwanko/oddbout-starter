@@ -6,6 +6,14 @@ export class ConfirmedRenderFailure extends Error {
   /** @param {string} code */
   constructor(code) { super(code); this.name = 'ConfirmedRenderFailure'; }
 }
+/** The worker API answered with a refusal (4xx with its own JSON code), or no connection was ever made: the command
+ * did not take effect. Any other failure may have, and stays uncertain. */
+export class WorkerRefusal extends Error {
+  /** @param {string} code @param {number} status */
+  constructor(code, status) { super(code); this.name = 'WorkerRefusal'; this.status = status; }
+}
+/** The lease the worker API grants on claim and renew (broadcast/worker-api.mjs). */
+export const WORKER_LEASE_SECONDS = 60;
 class RendererCleanupError extends Error {
   /** @param {any} observedResult */
   constructor(observedResult) { super('runner_renderer_cleanup_unknown'); this.observedResult = observedResult; }
@@ -57,7 +65,7 @@ export function createWorkerTransport({ apiOrigin, workerToken, requestTimeoutMs
   if (typeof workerToken !== 'string' || workerToken.length < 16 || /[\r\n]/.test(workerToken)) throw new Error('runner_worker_token_required');
   if (!Number.isSafeInteger(requestTimeoutMs) || requestTimeoutMs < 1 || requestTimeoutMs > 60_000) throw new Error('runner_invalid_timeout');
   return async (command, input, { signal } = {}) => {
-    if (!['claim', 'renew', 'complete'].includes(command)) throw new Error('runner_invalid_command');
+    if (!['claim', 'renew', 'complete', 'status'].includes(command)) throw new Error('runner_invalid_command');
     if (signal?.aborted) throw new Error('runner_worker_request_failed');
     const controller = new AbortController();
     const requestSignal = AbortSignal.any([controller.signal, ...(signal ? [signal] : [])]);
@@ -68,7 +76,7 @@ export function createWorkerTransport({ apiOrigin, workerToken, requestTimeoutMs
         method: 'POST', headers: { authorization: `Bearer ${workerToken}`, 'content-type': 'application/json' },
         body: JSON.stringify(input), signal: requestSignal, redirect: 'error',
       });
-      if (!response.ok || !response.body) throw new Error();
+      if (!response.body) throw new Error();
       reader = response.body.getReader();
       const chunks = []; let size = 0;
       while (true) {
@@ -79,10 +87,16 @@ export function createWorkerTransport({ apiOrigin, workerToken, requestTimeoutMs
       const bytes = new Uint8Array(size); let offset = 0;
       for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
       const body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+      if (response.status >= 400 && response.status < 500 && body?.ok === false && typeof body.code === 'string' && /^[a-z0-9_-]{1,64}$/.test(body.code))
+        throw new WorkerRefusal(body.code, response.status);
       if (!response.ok || !body || body.ok !== true || !Object.hasOwn(body, 'data')) throw new Error();
       return body.data;
       })(), requestTimeoutMs, requestSignal);
-    } catch { throw new Error('runner_worker_request_failed'); }
+    } catch (/** @type {any} */ error) {
+      if (error instanceof WorkerRefusal) throw error;
+      if (error?.cause?.code === 'ECONNREFUSED') throw new WorkerRefusal('runner_api_unreachable', 0);
+      throw new Error('runner_worker_request_failed');
+    }
     finally { controller.abort(); if (reader) void reader.cancel().catch(() => {}); }
   };
 }
@@ -136,8 +150,11 @@ export function createPlaywrightRenderer({ arenaUrl, playwright, platform = proc
         observedResult = { ...result, rendererObservation: { renderer: 'playwright-visible-chromium', arenaUrl: observedUrl.href,
           observedDispatchAt: observedStart, observedResultAt: new Date().toISOString() } };
         return observedResult;
-      } catch {
-        if (!dispatched && !signal.aborted) throw new ConfirmedRenderFailure('runner_renderer_setup_failed');
+      } catch (/** @type {any} */ error) {
+        // Nothing reached the arena before dispatch, aborted or not. After it, only the page's own verdict that the cup
+        // did not complete (BroadcastCup's broadcast_execution_failed) is certain; a closed browser or a lost reply is not.
+        if (!dispatched) throw new ConfirmedRenderFailure('runner_renderer_setup_failed');
+        if (!signal.aborted && /\bbroadcast_execution_failed\b/.test(String(error?.message))) throw new ConfirmedRenderFailure('runner_page_reported_failure');
         throw new Error('runner_render_outcome_unknown');
       } finally {
         signal.removeEventListener('abort', aborted);
@@ -185,7 +202,7 @@ export function validateCupResult(value, job) {
  * identity and the dedicated scene have a verifiable host/server contract.
  * @param {{hostId:string,apiOrigin:string,workerToken:string,workerId:string,arenaUrl:string,
  * obs:import('./obs.mjs').ObsClient,live?:boolean,renderer?:CupRenderer,playwright?:any,
- * transport?:WorkerTransport,heartbeatMs?:number,requestTimeoutMs?:number,
+ * transport?:WorkerTransport,heartbeatMs?:number,requestTimeoutMs?:number,retryMs?:number,
  * pending?:RunnerCheckpoint|null,checkpoint?:(record:RunnerCheckpoint|null)=>Promise<void>}} options
  */
 export function createBroadcastRunner(options) {
@@ -196,19 +213,70 @@ export function createBroadcastRunner(options) {
   const transport = options.transport ?? createWorkerTransport(options);
   const requestTimeoutMs = options.requestTimeoutMs ?? 10_000;
   if (!Number.isSafeInteger(requestTimeoutMs) || requestTimeoutMs < 1 || requestTimeoutMs > 60_000) throw new Error('runner_invalid_timeout');
+  const retryMs = options.retryMs ?? 2000;
+  if (!Number.isSafeInteger(retryMs) || retryMs < 1 || retryMs > 10_000) throw new Error('runner_invalid_retry');
   /** @param {string} command @param {any} input @param {AbortSignal} [signal] */
   const request = (command, input, signal) => signal?.aborted ? Promise.reject(new Error('runner_aborted')) : bounded(transport(command, input, { signal }), requestTimeoutMs, signal);
   /** @type {RunnerCheckpoint|null} */ let pending = options.pending ?? null;
   let busy = false;
   /** @param {RunnerCheckpoint|null} record */
   async function save(record) { if (options.checkpoint) await options.checkpoint(record); pending = record; }
+  /** The ledger accepts an identical completion again, so a lost reply is retried a few times before it counts as unknown.
+   * @param {any} completion @returns {Promise<string|null>} why it is still unsettled, or null */
+  async function complete(completion) {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const completed = await request('complete', completion);
+        return completed && completed.id === completion.jobId && completed.status === completion.outcome ? null : 'runner_completion_outcome_unknown';
+      } catch (error) {
+        if (error instanceof WorkerRefusal) return 'runner_completion_rejected';
+        if (attempt >= 3) return 'runner_completion_outcome_unknown';
+        try { await delay(retryMs); } catch { return 'runner_completion_outcome_unknown'; }
+      }
+    }
+  }
+  /** A checkpoint left by a lost reply or a crash: ask the server what it holds under the checkpoint's worker ID (a new
+   * process has its own) before any new work. Returns null once nothing is left to settle.
+   * @param {RunnerCheckpoint} record @param {AbortSignal} [signal] */
+  async function reconcile(record, signal) {
+    const prefix = `${options.hostId}:`;
+    const workerId = record.job ? record.job.workerId.slice(prefix.length) : record.workerId;
+    /** @param {string} reason @param {string} [jobId] */
+    const blocked = (reason, jobId = record.job?.id) => ({ status: 'unknown', ...(jobId ? { jobId } : {}), reason });
+    if (typeof workerId !== 'string' || !workerId || (record.job && !record.job.workerId.startsWith(prefix))) return blocked('runner_reconciliation_required');
+    let jobs;
+    try { jobs = await request('status', { workerId, ...(record.job ? { jobId: record.job.id } : {}) }, signal); }
+    catch { return blocked('runner_reconciliation_required'); }
+    if (!Array.isArray(jobs) || (record.job && jobs.length !== 1)
+      || jobs.some(job => !job || typeof job.id !== 'string' || !Number.isSafeInteger(job.leaseToken) || (record.job && job.id !== record.job.id))) return blocked('runner_reconciliation_required');
+    for (const job of jobs) {
+      if (['succeeded', 'failed'].includes(job.status)) continue;
+      const kept = record.completion?.outcome !== 'unknown' ? record.completion : undefined;
+      if (job.status === 'unknown') {
+        // Lost lease or frozen wallet: only a kept terminal completion may still land; otherwise an operator decides.
+        if (!kept || await complete(kept)) return blocked('runner_operator_release_required', job.id);
+        continue;
+      }
+      // A lost claim reply means this worker never rendered the job; after a crash mid-cup nobody knows what was shown.
+      const completion = kept ?? { workerId, jobId: job.id, leaseToken: job.leaseToken,
+        ...(record.job ? { outcome: 'unknown', result: { reason: 'runner_restarted_mid_cup' } } : { outcome: 'failed', result: { reason: 'runner_claim_reply_lost' } }) };
+      const unsettled = await complete(completion);
+      if (unsettled || completion.outcome === 'unknown') return blocked(unsettled ?? 'runner_operator_release_required', job.id);
+    }
+    try { await save(null); } catch { return blocked('runner_checkpoint_failed'); }
+    return null;
+  }
 
   /** @param {{signal?:AbortSignal}} [runOptions] */
   async function runOnce({ signal } = {}) {
     if (busy) throw new Error('runner_already_running');
-    if (pending) return { status: 'unknown', jobId: pending.job?.id, reason: 'runner_reconciliation_required' };
     if (signal?.aborted) return { status: 'idle', reason: 'runner_stopped' };
     if (options.live) return { status: 'unconfigured', reason: 'runner_live_channel_unverified' };
+    if (pending) {
+      busy = true;
+      try { const blocked = await reconcile(pending, signal); if (blocked) return blocked; }
+      finally { busy = false; }
+    }
     busy = true;
     /** @type {CupJob|undefined} */ let job;
     /** @type {CupRenderer|undefined} */ let renderer;
@@ -235,8 +303,13 @@ export function createBroadcastRunner(options) {
       try { await save(pending); }
       catch { return { status: 'unknown', reason: 'runner_checkpoint_failed' }; }
       let claim;
+      const claimSentAt = Date.now();
       try { claim = await request('claim', { workerId: options.workerId }, execution.signal); }
-      catch { return { status: 'unknown', reason: 'runner_claim_outcome_unknown' }; }
+      catch (error) {
+        if (!(error instanceof WorkerRefusal)) return { status: 'unknown', reason: 'runner_claim_outcome_unknown' };
+        try { await save(null); } catch { return { status: 'unknown', reason: 'runner_checkpoint_failed' }; }
+        return { status: [401, 403].includes(error.status) ? 'unconfigured' : 'idle', reason: error.message };
+      }
       if (claim === null) {
         try { await save(null); } catch { return { status: 'unknown', reason: 'runner_checkpoint_failed' }; }
         return { status: 'idle' };
@@ -252,30 +325,46 @@ export function createBroadcastRunner(options) {
       const remaining = Date.parse(job.endsAt) - Date.now();
       if (remaining <= 0) loseLease('runner_approval_expired');
       else endTimer = setTimeout(() => loseLease('runner_approval_expired'), Math.min(remaining, 2_147_483_647));
+      // The lease runs WORKER_LEASE_SECONDS from the server's grant, which came after we sent the request that got it.
+      let leaseSentAt = claimSentAt;
       heartbeatTask = (async () => {
         while (!heartbeat.signal.aborted && !execution.signal.aborted) {
           try { await delay(heartbeatMs, heartbeat.signal); } catch { break; }
           if (heartbeat.signal.aborted || execution.signal.aborted) break;
+          const sentAt = Date.now();
+          let renewed;
           try {
-            const renewed = await request('renew', { workerId: options.workerId, jobId: activeJob.id, leaseToken: activeJob.leaseToken },
+            renewed = await request('renew', { workerId: options.workerId, jobId: activeJob.id, leaseToken: activeJob.leaseToken },
               AbortSignal.any([heartbeat.signal, execution.signal]));
-            if (!renewed || renewed.id !== activeJob.id || renewed.leaseToken !== activeJob.leaseToken
-              || renewed.hostId !== activeJob.hostId || renewed.workerId !== activeJob.workerId || renewed.broadcastId !== activeJob.broadcastId
-              || renewed.seed !== activeJob.seed || JSON.stringify(renewed.fighterIds) !== JSON.stringify(activeJob.fighterIds)) throw new Error();
-          } catch { if (!heartbeat.signal.aborted) loseLease('runner_lease_lost'); break; }
+          } catch (error) {
+            if (heartbeat.signal.aborted || execution.signal.aborted) break;
+            // A lost reply leaves the last grant running: give up on a refusal, or once the next beat could land too late.
+            if (error instanceof WorkerRefusal || Date.now() + heartbeatMs + requestTimeoutMs >= leaseSentAt + WORKER_LEASE_SECONDS * 1000) {
+              loseLease('runner_lease_lost'); break;
+            }
+            continue;
+          }
+          if (!renewed || renewed.id !== activeJob.id || renewed.leaseToken !== activeJob.leaseToken
+            || renewed.hostId !== activeJob.hostId || renewed.workerId !== activeJob.workerId || renewed.broadcastId !== activeJob.broadcastId
+            || renewed.seed !== activeJob.seed || JSON.stringify(renewed.fighterIds) !== JSON.stringify(activeJob.fighterIds)) {
+            loseLease('runner_lease_lost'); break;
+          }
+          leaseSentAt = sentAt;
         }
       })();
 
       /** @type {'succeeded'|'failed'|'unknown'} */ let outcome = 'unknown';
       /** @type {any} */ let result;
       /** @type {()=>void} */ let onAbort = () => {};
+      /** @type {Promise<any>|undefined} */ let cup;
       try {
         if (execution.signal.aborted) throw new Error();
         const aborted = new Promise((_, reject) => {
           onAbort = () => reject(new Error('runner_execution_aborted'));
           execution.signal.addEventListener('abort', onAbort, { once: true });
         });
-        result = validateCupResult(await Promise.race([renderer.runCup(structuredClone(job), { signal: execution.signal }), aborted]), job);
+        cup = renderer.runCup(structuredClone(job), { signal: execution.signal });
+        result = validateCupResult(await Promise.race([cup, aborted]), job);
         if (execution.signal.aborted) throw new Error();
         outcome = 'succeeded';
         result = { ...result, runnerObservation: { hostId: options.hostId, jobId: job.id, leaseToken: job.leaseToken,
@@ -283,11 +372,16 @@ export function createBroadcastRunner(options) {
           broadcast: { verified: false, liveSeconds: null } } };
       } catch (/** @type {any} */ error) {
         /** @type {any} */ let observedResult;
-        if (error instanceof RendererCleanupError) {
+        // An abort wins the race above; give the renderer a moment to say whether anything reached the arena.
+        let verdict = error;
+        if (cup && execution.signal.aborted && !(error instanceof ConfirmedRenderFailure))
+          verdict = await bounded(cup.then(() => error, (/** @type {any} */ settled) => settled), 10_000).catch(() => error);
+        if (verdict instanceof RendererCleanupError) {
           reason = 'runner_renderer_cleanup_unknown';
-          try { observedResult = validateCupResult(error.observedResult, job); } catch { /* No invented evidence. */ }
+          try { observedResult = validateCupResult(verdict.observedResult, job); } catch { /* No invented evidence. */ }
         }
-        if (error instanceof ConfirmedRenderFailure && !execution.signal.aborted) { outcome = 'failed'; reason = error.message; }
+        // Never dispatched (aborted first) or confirmed by the renderer: no cup was shown in full, so nothing is charged.
+        if (!cup || verdict instanceof ConfirmedRenderFailure) { outcome = 'failed'; reason ||= cup ? verdict.message : 'runner_not_dispatched'; }
         else { outcome = 'unknown'; reason ||= 'runner_render_outcome_unknown'; }
         result = { reason, ...(observedResult ? { observedResult } : {}), runnerObservation: { mode: 'render-only', broadcast: { verified: false, liveSeconds: null } } };
       } finally {
@@ -306,10 +400,8 @@ export function createBroadcastRunner(options) {
       pending = { schemaVersion: 1, job, status: outcome, completion };
       try { await save(pending); }
       catch { return { status: 'unknown', jobId: job.id, reason: 'runner_checkpoint_failed' }; }
-      try {
-        const completed = await request('complete', completion);
-        if (!completed || completed.id !== job.id || completed.status !== (outcome === 'succeeded' ? 'succeeded' : outcome)) throw new Error();
-      } catch { return { status: 'unknown', jobId: job.id, reason: 'runner_completion_outcome_unknown' }; }
+      const unsettled = await complete(completion);
+      if (unsettled) return { status: 'unknown', jobId: job.id, reason: unsettled };
       if (outcome !== 'unknown') {
         try { await save(null); } catch { return { status: 'unknown', jobId: job.id, reason: 'runner_checkpoint_failed' }; }
       }
@@ -326,7 +418,9 @@ export function createBroadcastRunner(options) {
     if (!Number.isSafeInteger(pollMs) || pollMs < 1 || pollMs > 60_000) throw new Error('runner_invalid_poll');
     while (!signal.aborted) {
       const result = await runOnce({ signal }); onResult(result);
-      if (['unknown', 'unconfigured', 'failed'].includes(result.status)) return result;
+      // A lost claim or completion reply is settled by the next runOnce from the checkpoint; anything else needs a person.
+      if (['unknown', 'unconfigured', 'failed'].includes(result.status)
+        && !(result.status === 'unknown' && ['runner_claim_outcome_unknown', 'runner_completion_outcome_unknown'].includes(/** @type {any} */ (result).reason))) return result;
       try { await delay(pollMs, signal); } catch { break; }
     }
     return { status: 'stopped' };

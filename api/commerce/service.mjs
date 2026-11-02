@@ -80,7 +80,11 @@ export function createCommerceService({ store, paypal, merchantId = '', publicOr
       const event = JSON.parse(body);
       if(event?.event_type==='PAYMENT.CAPTURE.REFUNDED'||event?.event_type==='PAYMENT.CAPTURE.REVERSED'){
         const related=event.resource?.supplementary_data?.related_ids;
-        const captureId=event.event_type==='PAYMENT.CAPTURE.REFUNDED'?related?.capture_id:event.resource?.id;
+        // A refund resource names its capture by the `up` link; supplementary_data, when present, must agree with it.
+        const up=(Array.isArray(event.resource?.links)?event.resource.links:[]).find((/** @type {any} */ link)=>link?.rel==='up')?.href;
+        const linked=typeof up==='string'?up.match(/^https:\/\/api(?:-m)?\.sandbox\.paypal\.com\/v2\/payments\/captures\/([A-Za-z0-9_-]{1,128})$/)?.[1]:undefined;
+        if(event.event_type==='PAYMENT.CAPTURE.REFUNDED'&&linked!==undefined&&related?.capture_id!==undefined&&related.capture_id!==linked)throw new Problem(409,'adjustment-mismatch');
+        const captureId=event.event_type==='PAYMENT.CAPTURE.REFUNDED'?related?.capture_id??linked:event.resource?.id;
         if(typeof event.id!=='string'||typeof captureId!=='string'||(related?.order_id!==undefined&&typeof related.order_id!=='string'))throw new Problem(422,'webhook-adjustment-linkage-missing');
         if(event.event_type==='PAYMENT.CAPTURE.REVERSED'&&related?.capture_id!==undefined&&related.capture_id!==captureId)throw new Problem(409,'adjustment-mismatch');
         const adjustment=await store.recordPaymentAdjustment({eventId:event.id,eventType:event.event_type,captureId,

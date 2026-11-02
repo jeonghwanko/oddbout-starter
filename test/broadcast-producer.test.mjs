@@ -18,7 +18,7 @@ async function fixture(t,{decision=hostDecision(),maxModelCalls=24}={}) {
   const report={broadcast:{id:broadcastId,status:'running',channelId:'channel',hostId:'current-pc',endsAt,
     reservedCredits:100,allocatedCredits:0,spentCredits:0},approval:{fighterIds:[...fighters],allowedTools:['host_cup'],priceVersion:'prices-v1',
     channelId:'channel',hostId:'current-pc',endsAt,maxCredits:100},jobs:[]};
-  const catalog={version:'prices-v1',fighters:[...fighters,'quickcat'],tools:{host_cup:{credits:25}},hosts:[{id:'current-pc'}]};
+  const catalog={version:'prices-v1',fighters:[...fighters,'quickcat'],tools:{host_cup:{credits:25,startWindowSeconds:240}},hosts:[{id:'current-pc'}]};
   const wallet={balanceCredits:100,reservedCredits:100,availableCredits:0};
   const tools=[];const modelRequests=[];const checkpoints=[];const wire=[];
   let modelFailure=false;let mutationMode='normal';let readFailures=0;
@@ -210,4 +210,18 @@ test('approval deadline interrupts a model boundary that never settles without c
   const producer=f.create({modelCall:async()=>new Promise(()=>{})});
   const result=await Promise.race([producer.step(),new Promise(resolve=>setTimeout(()=>resolve({status:'hung'}),150))]);
   assert.notEqual(result.status,'hung');assert.equal(f.tools.some(tool=>tool.name==='host_cup'),false);
+});
+
+test('after a wait the model is asked again as the session runs down, and not at all inside the cup start window',async t=>{
+  const f=await fixture(t,{decision:waitDecision()});let clock=Date.now();
+  const producer=f.create({now:()=>clock});
+  assert.equal((await producer.step()).status,'waiting');assert.equal(f.modelRequests.length,1);
+  const context=JSON.parse(f.modelRequests[0].request.input.at(-1).content);
+  assert.equal(context.cupStartWindowSeconds,240);assert.equal(context.minutesRemaining%5,0);
+  assert.equal((await producer.step()).reason,'producer_state_unchanged');
+  clock+=5*60_000;
+  assert.equal((await producer.step()).status,'waiting');assert.equal(f.modelRequests.length,2);
+  clock=Date.parse(f.report.broadcast.endsAt)-239_000;
+  assert.equal((await producer.step()).reason,'producer_session_ending');assert.equal(f.modelRequests.length,2);
+  assert.equal(f.tools.some(tool=>tool.name==='host_cup'),false);
 });

@@ -76,3 +76,17 @@ test('approved budget and session references survive sign-in in a new tab', () =
   assert.equal(restored.selected('approvalId'), 'approved');
   assert.equal(restored.selected('broadcastId'), 'running');
 });
+
+test('operator release takes one UUID and a note, and reports the released job without a charge', async t => {
+  const { parseReleaseArgs, releaseJob } = await import('../scripts/broadcast-release.mjs');
+  const id = '11111111-1111-4111-8111-111111111111';
+  assert.deepEqual(parseReleaseArgs(['--job', id.toUpperCase(), '--note', 'no cup on screen']), { jobId: id, note: 'no cup on screen' });
+  for (const argv of [[], ['--job', 'job-1', '--note', 'x'], ['--job', id], ['--job', id, '--note', 'x'.repeat(501)], ['--job', id, '--note', 'x', '--force', '1']])
+    assert.throws(() => parseReleaseArgs(argv), /release_invalid_arguments/);
+  await assert.rejects(releaseJob(['--job', id, '--note', 'x'], { env: {} }), /release_environment_required/);
+  const calls = [];
+  const store = /** @type {any} */ ({ releaseJob: async (jobId, note) => { calls.push([jobId, note]);
+    return { id: jobId, status: 'failed', broadcastId: 'b', hostId: 'current-pc', result: { reason: 'operator-released-unknown' }, owner: 'private' }; } });
+  assert.deepEqual(await releaseJob(['--job', id, '--note', 'checked'], { store }), { id, status: 'failed', broadcastId: 'b', hostId: 'current-pc', reason: 'operator-released-unknown' });
+  assert.deepEqual(calls, [[id, 'checked']]);
+});

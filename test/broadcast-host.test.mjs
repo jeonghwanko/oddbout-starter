@@ -35,8 +35,11 @@ test('config rejects secrets, unknown fields, duplicate IDs and malicious SSH ta
 
 test('SSH dispatch uses fixed doctor, strict host-key checking, batch mode and POSIX quoting', () => {
   const args = buildSshDoctorArgs(remote, 'deploy/broadcast-hosts.json');
-  assert.deepEqual(args.slice(0, -1), ['-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=10', '--', 'runner@office-stable']);
+  assert.deepEqual(args.slice(0, -1), ['-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=10', '-o', 'SendEnv=-*', '--', 'runner@office-stable']);
   assert.equal(args.at(-1), "cd '/srv/oddbout starter' && exec 'node' scripts/broadcast-host.mjs --remote-self --doctor --host 'office-stable' --config 'deploy/broadcast-hosts.json'");
+  // The doctor reads the runner's env file, where the host keeps its OBS password.
+  assert.equal(buildSshDoctorArgs({ ...remote, remoteEnvFile: '.env.broadcast.local' }, 'deploy/broadcast-hosts.json').at(-1),
+    "cd '/srv/oddbout starter' && exec 'node' '--env-file=.env.broadcast.local' scripts/broadcast-host.mjs --remote-self --doctor --host 'office-stable' --config 'deploy/broadcast-hosts.json'");
   assert.match(buildSshDoctorArgs({ ...remote, nodeExecutable: '/opt/Node Runtime/bin/node' }, 'deploy/hosts.json').at(-1), /exec '\/opt\/Node Runtime\/bin\/node'/);
   assert.throws(() => buildSshDoctorArgs({ ...remote, nodeExecutable: 'node --eval evil' }, 'deploy/hosts.json'), /host_invalid_node_executable/);
   assert.equal(quotePosix("/srv/it's $(touch evil); `whoami`"), "'/srv/it'\"'\"'s $(touch evil); `whoami`'");

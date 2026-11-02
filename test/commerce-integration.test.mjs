@@ -3,12 +3,15 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { createHandler } from '../api/handler.mjs';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { createCommerceHandler } from '../api/commerce/handler.mjs';
+import { verifiedUserId } from '../api/http.mjs';
 import { createCommerceService } from '../api/commerce/service.mjs';
 import { createPayPalSandbox } from '../api/commerce/paypal.mjs';
 import { COMMERCE_CATALOG } from '../api/commerce/catalog.mjs';
 import { createBroadcastWorkerHandler } from '../broadcast/worker-api.mjs';
-import { cloudServer } from '../mcp/cloud.mjs';
+import { registerCommerceTools } from '../mcp/cloud/commerce-tools.mjs';
+import { output } from '../mcp/cloud/common.mjs';
 import { commerceDatabase } from './helpers/commerce-database.mjs';
 
 const OWNER = '11111111-1111-4111-8111-111111111111';
@@ -57,8 +60,9 @@ async function fixture(t) {
   const service = createCommerceService({ store: database.store, paypal, merchantId: MERCHANT, publicOrigin: ORIGIN, webhookId: 'WEBHOOK1', hosts: [{ id: 'current-pc' }, { id: 'office-stable' }, { id: 'svl-mac-01' }] });
   const db = { rpc: database.rpc, auth: { getClaims: async token => ({ data: { claims: token === `fixture-${OWNER}` || token === `fixture-${OTHER}` ? { sub: token.slice(8), role: 'authenticated', is_anonymous: false } : null }, error: null }) } };
   const commerce = { service, publicOrigin: ORIGIN };
-  const handle = createHandler({ db, commerce });
-  const agentHandle = createHandler({ db, commerce, agentClient: 'fixture-oauth-client' });
+  // The Sandbox API runs only in the demo server (scripts/broadcast-demo.mjs), never in the production ai-fighter function.
+  const handle = createCommerceHandler({ ...commerce, authenticate: request => verifiedUserId(db, request) });
+  const agentHandle = createCommerceHandler({ ...commerce, authenticate: request => verifiedUserId(db, request), agent: true });
   async function call(path, { owner = OWNER, method = 'POST', body = {}, origin = ORIGIN, handler = handle } = {}) {
     const response = await handler(new Request(`${ORIGIN}/ai-fighter/commerce/${path}`, { method, headers: { ...(owner ? { authorization: `Bearer fixture-${owner}` } : {}), ...(origin !== null ? { origin } : {}), ...(method === 'POST' ? { 'content-type': 'application/json' } : {}) }, ...(method === 'POST' ? { body: JSON.stringify(body) } : {}) }));
     return { status: response.status, body: await response.json(), headers: response.headers };
@@ -85,8 +89,15 @@ async function fixture(t) {
     const response = await worker(new Request(`https://worker.example.test/broadcast-worker/${command}`, { method: 'POST', headers: { authorization: `Bearer ${workers.find(item => item.hostId === hostId).token}`, 'content-type': 'application/json' }, body: JSON.stringify({ workerId: 'integration-worker', ...body }) }));
     return { status: response.status, body: await response.json() };
   }
+  // An account-bound agent's tool surface: the commerce tools over the agent-mode handler, which refuses budget approval.
   async function mcp(owner = OWNER) {
-    const server = cloudServer({ db, commerce, identity: { owner, email: 'integration@example.test', claims: { client_id: '33333333-3333-4333-8333-333333333333', session_id: '44444444-4444-4444-8444-444444444444' } } });
+    const server = new McpServer({ name: 'commerce-integration', version: '1.0.0' });
+    const api = createCommerceHandler({ ...commerce, authenticate: async () => owner, agent: true });
+    /** @type {import('../mcp/cloud/common.mjs').Invoke} */
+    const invoke = async (path, method = 'GET', body, headers = {}) =>
+      (await api(new Request(`${ORIGIN}/${path}`, { method, headers, ...(body === undefined ? {} : { body }) }))).json();
+    registerCommerceTools({ invoke, register: (name, title, description, inputSchema, run, { write = false, idempotent = !write } = {}) =>
+      server.registerTool(name, { title, description, inputSchema, annotations: { readOnlyHint: !write, idempotentHint: idempotent } }, async args => output(await run(args))) });
     const client = new Client({ name: 'commerce-integration', version: '1.0.0' });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
@@ -208,7 +219,7 @@ test('host worker bearer controls claims despite body.hostId; lease fencing and 
   assert.equal(report.body.data.confirmedSpentCredits, 0); assert.equal(report.body.data.remainingReservedCredits, 25); assert.equal(report.body.data.broadcastObservation.liveSeconds, null);
 });
 
-test('actual cloud MCP tools invoke account-bound service/store, expose no approval tool and keep server prices', async t => {
+test('commerce MCP tools invoke account-bound service/store, expose no approval tool and keep server prices', async t => {
   const f = await fixture(t); await f.funded(); const approved = await f.call('approvals', { body: budget() }); assert.equal(approved.status, 200);
   const owner = await f.mcp(); const other = await f.mcp(OTHER);
   const list = await owner.listTools();
@@ -234,10 +245,10 @@ test('webhook authenticity is checked before linkage, and duplicate completion s
   // The webhook resource is merely a signal: canonical order data is re-fetched.
   const headers = { 'content-type': 'application/json', 'paypal-auth-algo': 'SHA256withRSA', 'paypal-cert-url': 'https://api.sandbox.paypal.com/v1/notifications/certs/CERT1', 'paypal-transmission-id': 'TX1', 'paypal-transmission-time': new Date().toISOString(), 'paypal-transmission-sig': 'fixture-valid-signature' };
   const before = f.calls.length;
-  const forged = await f.call('webhook', { owner: null, origin: null, body: event, handler: request => createHandler({ db: f.dbFacade, commerce: { service: f.service, publicOrigin: ORIGIN } })(new Request(request, { headers: { ...headers, 'paypal-transmission-sig': 'forged' } })) });
+  const forged = await f.call('webhook', { owner: null, origin: null, body: event, handler: request => createCommerceHandler({ service: f.service, publicOrigin: ORIGIN, authenticate: request => verifiedUserId(f.dbFacade, request) })(new Request(request, { headers: { ...headers, 'paypal-transmission-sig': 'forged' } })) });
   assert.equal(forged.status, 400); assert.equal(forged.body.code, 'invalid-paypal-webhook');
   assert.equal(f.calls.length, before + 1); assert.equal(f.calls.at(-1).path, '/v1/notifications/verify-webhook-signature');
-  const actual = createHandler({ db: f.dbFacade, commerce: { service: f.service, publicOrigin: ORIGIN } });
+  const actual = createCommerceHandler({ service: f.service, publicOrigin: ORIGIN, authenticate: request => verifiedUserId(f.dbFacade, request) });
   for (let index = 0; index < 2; index++) {
     const response = await actual(new Request(`${ORIGIN}/ai-fighter/commerce/webhook`, { method: 'POST', headers, body: JSON.stringify(event) }));
     assert.equal(response.status, 200); assert.equal((await response.json()).applied, true);
@@ -253,7 +264,7 @@ test('verified refunds dedupe durably, freeze the capture owner and block new/ac
   const nextApproval=await f.call('approvals',{body:budget({channelId:'next-session'})});assert.equal(nextApproval.status,200);
   const broadcast=await f.started();const queued=await f.call('cups',{body:{requestKey:randomUUID(),broadcastId:broadcast.id,fighterIds:FIGHTERS}});
   const active=(await f.work('claim')).body.data;assert.equal(active.id,queued.body.data.id);
-  const handler=createHandler({db:f.dbFacade,commerce:{service:f.service,publicOrigin:ORIGIN}});
+  const handler=createCommerceHandler({service:f.service,publicOrigin:ORIGIN,authenticate:request=>verifiedUserId(f.dbFacade,request)});
   const send=async(event,signature='fixture-valid-signature')=>{
     const response=await handler(new Request(`${ORIGIN}/ai-fighter/commerce/webhook`,{method:'POST',headers:{'content-type':'application/json',
       'paypal-auth-algo':'SHA256withRSA','paypal-cert-url':'https://api.sandbox.paypal.com/v1/notifications/certs/CERT1',
@@ -323,4 +334,24 @@ test('signed refund before provider order creation survives capture-response los
   assert.equal((await f.store.wallet(OWNER)).spendingBlocked,true);assert.equal((await f.store.wallet(OTHER)).spendingBlocked,false);
   assert.equal((await f.db.query("select count(*)::int as n from commerce.ledger where kind='topup'")).rows[0].n,1);
   assert.equal((await f.db.query('select count(*)::int as n from commerce.payment_adjustment_inbox')).rows[0].n,1);
+});
+
+test('a refund naming its capture only by the up link still freezes the owner; a disagreeing link is refused',async t=>{
+  const f=await fixture(t);await f.funded();
+  const handler=createCommerceHandler({service:f.service,publicOrigin:ORIGIN,authenticate:request=>verifiedUserId(f.dbFacade,request)});
+  const send=async event=>{
+    const response=await handler(new Request(`${ORIGIN}/ai-fighter/commerce/webhook`,{method:'POST',headers:{'content-type':'application/json',
+      'paypal-auth-algo':'SHA256withRSA','paypal-cert-url':'https://api.sandbox.paypal.com/v1/notifications/certs/CERT1',
+      'paypal-transmission-id':'TX2','paypal-transmission-time':new Date().toISOString(),'paypal-transmission-sig':'fixture-valid-signature'},body:JSON.stringify(event)}));
+    return {status:response.status,body:await response.json()};
+  };
+  // The refund resource as PayPal's samples show it: self and up links, no supplementary_data.
+  const linkOnly={id:'REFUND-LINK-1',event_type:'PAYMENT.CAPTURE.REFUNDED',resource:{id:'REFUND-RESOURCE-2',status:'COMPLETED',
+    links:[{rel:'self',href:'https://api.sandbox.paypal.com/v2/payments/refunds/REFUND-RESOURCE-2'},{rel:'up',href:'https://api.sandbox.paypal.com/v2/payments/captures/CAPTUREORDER1'}]}};
+  const recorded=await send(linkOnly);assert.equal(recorded.status,200);assert.equal(recorded.body.applied,true);
+  assert.equal((await f.store.wallet(OWNER)).spendingBlocked,true);
+  const disagree={...linkOnly,id:'REFUND-LINK-2',resource:{...linkOnly.resource,supplementary_data:{related_ids:{capture_id:'CAPTUREOTHER'}}}};
+  assert.equal((await send(disagree)).status,409);
+  const foreign={...linkOnly,id:'REFUND-LINK-3',resource:{...linkOnly.resource,links:[{rel:'up',href:'https://attacker.example/v2/payments/captures/CAPTUREORDER1'}]}};
+  assert.equal((await send(foreign)).status,422);
 });

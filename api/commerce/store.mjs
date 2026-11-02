@@ -59,6 +59,10 @@ export function createCommerceStore(db) {
     renewJob: (workerId, input) => command(null, 'renew_job', { ...input, workerId }),
     /** @param {string} workerId @param {any} input */
     completeJob: (workerId, input) => command(null, 'complete_job', { ...input, workerId }),
+    /** The named job, or every running/unknown job, held by this worker. @param {string} workerId @param {{jobId?:string}} [input] */
+    workerJobs: (workerId, input = {}) => command(null, 'worker_jobs', { ...input, workerId }),
+    /** Operator only, never an HTTP route: close an unknown job without charging it. @param {string} jobId @param {string} note */
+    releaseJob: (jobId, note) => command(null, 'release_job', { jobId, note }),
     /** @param {string} owner @param {string} broadcastId */
     stopBroadcast: (owner, broadcastId) => command(owner, 'stop_broadcast', { broadcastId }),
     /** @param {string} owner @param {string} broadcastId */

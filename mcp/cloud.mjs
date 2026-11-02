@@ -12,7 +12,6 @@ import { registerPackagingPreparation } from './cloud/packaging-tools.mjs';
 import { registerAgentTools } from './cloud/agent-tools.mjs';
 import { registerProfileSetTools } from './cloud/profile-set-tools.mjs';
 import { registerWorkshopTools } from './cloud/workshop-tools.mjs';
-import { registerCommerceTools } from './cloud/commerce-tools.mjs';
 import { HOSTED_INSTRUCTIONS, registerHostedTools } from './cloud/hosted-tools.mjs';
 import { DIRECTORY_DESCRIPTIONS, DIRECTORY_INSTRUCTIONS, DIRECTORY_TITLES } from './cloud/directory-edition.mjs';
 // The cloud MCP's tool families live in ./cloud/ (Edge-only, as this file); these names are this module's as before.
@@ -159,10 +158,9 @@ export async function authenticateCloud(db, request, now = Date.now, edition = '
 
 /**
  * @param {{ db: any, identity: Identity | null, fetcher?: typeof fetch, arena?: Arena | null, hosted?: Hosted | null,
- *   host?: { compact?: boolean, caller?: string | null }, edition?: 'full' | 'directory',
- *   commerce?: ReturnType<typeof import('../api/commerce/config.mjs').commerceFromEnvironment> }} options
+ *   host?: { compact?: boolean, caller?: string | null }, edition?: 'full' | 'directory' }} options
  */
-export function cloudServer({ db, identity, fetcher = fetch, arena = null, hosted = null, host = {}, edition = 'full', commerce = null }) {
+export function cloudServer({ db, identity, fetcher = fetch, arena = null, hosted = null, host = {}, edition = 'full' }) {
   const directory = edition === 'directory';
   const server = new McpServer({ name: 'oddbout-cloud', version: '1.0.0' }, {
     instructions: directory ? DIRECTORY_INSTRUCTIONS : (hosted ? HOSTED_INSTRUCTIONS : '') + 'For creation in the user’s workspace, use the user’s own generation account. '
@@ -188,7 +186,7 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
     const value = Reflect.get(target, key); return typeof value === 'function' ? value.bind(target) : value;
   } }) : null;
   // The workshop labels what this client writes (made with); the in-process API takes its OAuth client from the verified token only.
-  const api = createHandler({ db: scoped ?? db, agentClient: identity?.claims.client_id ?? null, commerce });
+  const api = createHandler({ db: scoped ?? db, agentClient: identity?.claims.client_id ?? null });
   /** @type {Invoke} */
   const invoke = async (path, method = 'GET', body, headers = {}) => {
     const response = await api(new Request(`https://internal.invalid/ai-fighter/${path}`, {
@@ -240,7 +238,6 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
     registerWorkshopTools({ register, arena, invoke, separateWrites: directory });
   }
   if (hosted && !directory) registerHostedTools({ register, db, identity, invoke, fetcher, hosted });
-  if (commerce && !directory) registerCommerceTools({ register, invoke });
   registerFileInputProbe({ register, fileSchema: FILE, identity, downloadFile: downloadHostFile, fetcher });
   registerCreatorSources({ register, fileSchema: FILE, identity, db, downloadFile: downloadHostFile, fetcher });
   return server;
@@ -322,10 +319,9 @@ function publishedToolList(result) {
  * @param {typeof fetch} [options.fetcher]
  * @param {{url: string, key: string, fetcher?: typeof fetch, cupWaitMs?: number, pollMs?: number, pollTries?: number} | null} [options.arena]
  * @param {{pollMs?: number} | null} [options.hosted]
- * @param {ReturnType<typeof import('../api/commerce/config.mjs').commerceFromEnvironment>} [options.commerce]
  * @returns {(request: Request) => Promise<Response>}
  */
-export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted = null, commerce = null }) {
+export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted = null }) {
   return async request => {
     const { route, signInFirst, edition, resource } = routeOf(request);
     if (route === '.well-known/oauth-protected-resource' && request.method === 'GET') return json({ resource,
@@ -372,7 +368,7 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted =
     // A server per request on purpose: its tools close over this request's verified identity, so no state can carry one
     // user's identity into another's call. Measured 2026-10-28: building it with all tools and answering tools/list
     // takes about 1.8 ms, small beside the network hop, so sharing a server is not worth that guarantee.
-    const server = cloudServer({ db, identity, fetcher, arena, hosted, commerce, host: await hostOf(body), edition });
+    const server = cloudServer({ db, identity, fetcher, arena, hosted, host: await hostOf(body), edition });
     const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     try {
       await server.connect(transport);
