@@ -1,51 +1,53 @@
 # ODDBOUT distribution
 
-**Current source-kit release: 0.6.12** (2026-11-03 KST: compact workspace results and the MCP structure cleanup).
+**Current source-kit release: 0.6.13** (2026-11-03 KST: expression sheets and the profile-set kit command).
 
-0.6.11's workspace tools printed every result twice: once as text, once as `structuredContent`, which `creation:tool` prints as well. 0.6.12 keeps
-the full result in `structuredContent` and makes a large success's text one line naming its fields (#279). With that,
-`get_fighter_spec(creation)` no longer repeats its guides and no longer probes ffmpeg, img2webp and RIFE, which readiness
-owns. A blocked kit fetch in readiness waits five minutes before the next attempt, and the state is kept across processes.
-The tools share one review-group list, and the server and `creation:tool` report the kit's own version (#281). The bundle
-writes the runtime's own `package.json`, which those modules read for the version (#285). The contract, validators and
-sprite-gen pin are unchanged.
+A registered fighter's profile set may now carry his expression sheet: six arena faces, the KO card's defeat face last (#282). 0.6.13
+ships `npm run fighter:profile-set -- --front <pick> [--expressions <sheet>] --out <folder>`. It frames the chosen front, measures
+the face square as hosted generation does, fits a 3:2 sheet to 1536 × 1024, runs the server's set-file parse and the validator's own
+pixel checks, and writes `profile-set.json`, `front.webp`, `expressions.webp` and the round-face and KO previews. The kit carries
+the contract (`api/profile-set-contract.mjs`) and the check (`worker/profile-set-check.mjs`), not the server API. The creation guides,
+AGENTS.md and the create-fighter skill draw the sheet from the approved front and upload it with `assetId: expressions`. Tool results also
+carry the site's deep links (`siteUrl`, #288). The contract, validators of the duel package and sprite-gen pin are unchanged.
 
-Cloud `prepare_fighter_packaging` points to the reviewed 0.6.12 runtime once `ai-fighter-mcp` is deployed with
+Cloud `prepare_fighter_packaging` points to the reviewed 0.6.13 runtime once `ai-fighter-mcp` is deployed with
 this pin. It also supplies the workspace execution instructions; the cloud cannot read Dots files. Install the locked Node
 dependencies in the extracted `plugin/runtime/`, then run its `inspect_fighter_packaging` and `pack_fighter_package`
 tools on the existing plan. There is no new generation or generation login.
 
-- [Download the 0.6.12 ZIP](https://oddbout.com/creator-kit/0.6.12/8e9adcf2c942e4959697f2fd9297970bc3c6e5f1d0f96245855482d6f8cec3d5/oddbout-0.6.12.zip)
-- [Release manifest](https://oddbout.com/creator-kit/0.6.12/8e9adcf2c942e4959697f2fd9297970bc3c6e5f1d0f96245855482d6f8cec3d5/release.json)
-- [Download helper](https://oddbout.com/creator-kit/0.6.12/8e9adcf2c942e4959697f2fd9297970bc3c6e5f1d0f96245855482d6f8cec3d5/fetch-creator-kit.py)
+- [Download the 0.6.13 ZIP](https://oddbout.com/creator-kit/0.6.13/6fdeedc579fc0455ac6d031ac32fff2bdcfa6e83408aff7fd308c74f0d0f178b/oddbout-0.6.13.zip)
+- [Release manifest](https://oddbout.com/creator-kit/0.6.13/6fdeedc579fc0455ac6d031ac32fff2bdcfa6e83408aff7fd308c74f0d0f178b/release.json)
+- [Download helper](https://oddbout.com/creator-kit/0.6.13/6fdeedc579fc0455ac6d031ac32fff2bdcfa6e83408aff7fd308c74f0d0f178b/fetch-creator-kit.py)
 
 | Verified item | Value |
 | --- | --- |
-| ZIP size | 4,203,815 bytes |
-| ZIP SHA-256 | `323aa2f267ce6f7897cedae935bfde61b94be7d6478325f8cdfec6baaebb275b` |
-| Release manifest SHA-256 | `6535c3d05e8dbd47d5ca3bc7086c0e2afd6b7fcab3bbf9b11618d035614ffeb5` |
-| Runtime manifest SHA-256 | `34c54c6fc9e085665d2f15332a558d81b6f0ec39ce0b98c2fc4f6a80649a8942` |
+| ZIP size | 4,202,585 bytes |
+| ZIP SHA-256 | `9b13237dc111cdf1ab6b1df3a664681cc92a358b37883e17da13979e986c2ef2` |
+| Release manifest SHA-256 | `7342a12c389b14c7bbccce2334bb76b3aa85ae22b5507230956118bc11555285` |
+| Runtime manifest SHA-256 | `908b4e723fe7da217ad9298ab6937cb3abf54ab8fcbcad4bd8bc74075e32afc3` |
 | Helper SHA-256 | `b66c31ff833816dfa74c90d9155359d3fdd484dff8c12759e48addde01707592` (unchanged) |
-| Archive build source | `042eef30ddae0d7378c02b4ee3f1602106a6c2e1` (main after [PR #285](https://github.com/jeonghwanko/oddbout-starter/pull/285)) |
-| Tested PR head | `bad4d09b46c12d0161ba4e1148188584ed43da3c` ([PR #284](https://github.com/jeonghwanko/oddbout-starter/pull/284)) |
-| Main merge | `9e06aebf7164ae540924e7ece7e753317720f857` (version), `042eef30ddae0d7378c02b4ee3f1602106a6c2e1` (bundle fix) |
+| Archive build source | `b24d04641a79f49ff1cc51a6ff16cf937b99dcf8` (main after [PR #292](https://github.com/jeonghwanko/oddbout-starter/pull/292)) |
+| Tested PR head | `d88e40af978f84e067637b603f7c3afae43f5d60` ([PR #292](https://github.com/jeonghwanko/oddbout-starter/pull/292)) |
 | sprite-gen pin | `704cb9e5a34f16a0340e7fc6e46709a047ab02d4` (unchanged) |
-| Kit Pages publication | `97e8ab16813027679cece13368450f232894c11a` |
+| Kit Pages publication | `b6c5643705fe778ff1e3222e06a2aabb58086d3d` |
 
-Full PR CI passed for #284 and #285. The first build after #284 stopped with `EEXIST` on the runtime `package.json`. #281's
-version import had put a copy of it into the runtime file list; #285 leaves that copy out and tests for it. The archive was built
-from a clean worktree at the main merge. The trusted helper verified and extracted all 739 archive files. Locked production Node
-dependencies installed with no vulnerabilities reported. The extracted runtime reports version 0.6.12, its `creation:tool` lists all
-18 workspace tools, and `get_fighter_spec` answers with a one-line text. No Python engine ran.
+Full PR CI passed for #292 (and for #282 before it). The archive was built from a clean worktree at the main merge with the sprite-gen
+submodule checked out at its pin; a trial build of the PR head before the merge already held the new command, the contract and the pixel
+check and left `api/http.mjs` out. The trusted helper downloaded the published release, verified it and extracted all 742 archive files.
+Locked production Node dependencies installed with no vulnerabilities reported. The extracted runtime reports version 0.6.13 and the
+`fighter:profile-set` script, its `creation:tool` lists all 18 workspace tools, and its `fighter:profile-set` built a set from a house front
+and sheet that its own validator check passed. No Python engine ran.
 
-Publication added only three release files, preserved 6,403 existing files without changes or deletions,
-and verified HTTP 200 and exact release bytes plus 12 unchanged site files at 2026-11-02T20:52:30.627Z. The three
-public files were downloaded again afterwards and have the hashes above. This release requires no game, API or site build.
+Publication added only three release files, preserved 6,366 existing files without changes or deletions,
+and verified HTTP 200 and exact release bytes plus 12 unchanged site files at 2026-11-02T22:51:18.956Z. This release requires no game,
+API or site build.
 
-The Dots source pin is `042eef30ddae0d7378c02b4ee3f1602106a6c2e1` (0.6.12). It is still a candidate, with saved-VM acceptance pending. No animation
-was generated and no registration was submitted during this release verification.
+The Dots source pin is `b24d04641a79f49ff1cc51a6ff16cf937b99dcf8` (0.6.13). It is still a candidate, with saved-VM acceptance pending. A
+scratch `node dots.mjs --install` at this pin installed the runtime (npm and sprite-gen setup exit 0, version 0.6.13 at that commit); Grok
+sign-in, generation and delivery were not verified (`grok-generation-and-delivery-unverified`). The saved Dots environment was not
+republished. No animation was generated and no registration was submitted during this release verification.
 
-Earlier releases (0.6.11 back to 0.4.0) and their verification records are in [records/KIT-RELEASES.md](records/KIT-RELEASES.md).
+Earlier releases (0.6.12 back to 0.4.0) and their verification records are in [records/KIT-RELEASES.md](records/KIT-RELEASES.md).
 When a new release becomes current, move the entry above there.
 
 For installation and migration use [ODDBOUT-PLUGIN.md](ODDBOUT-PLUGIN.md). `plugin:bundle` now produces a
