@@ -44,14 +44,15 @@ Google로 로그인한 뒤 표시된 계정을 확인하고 `연결 승인`을 �
 따라서 계정 도구 자체가 없다면 설치·선택·호스트 도구 노출을 먼저 확인한다. 인증 만료는 실제 호출의 오류로 구분한다.
 
 키트나 저장소에서 서버 설정만 점검하려면 다음 명령을 쓴다. 첫 명령은 파일만 읽고, `--probe`를 붙여야 공개 서버의
-초기화와 도구 목록을 읽는다. 토큰·쿠키·로컬 로그인 파일을 사용하지 않고 계정 조회·로그인·생성·등록을 실행하지 않는다.
+초기화와 도구 목록을 읽는다. 2025년판으로 찾은 뒤 2026-07-28 클라이언트처럼 세션 없이 `server/discover`와 도구 목록을 한 번 더 읽어
+`modernServer`에 적는다. 둘 중 하나라도 `discovered`가 아니면 `--probe`는 실패로 끝난다. 토큰·쿠키·로컬 로그인 파일을 사용하지 않고 계정 조회·로그인·생성·등록을 실행하지 않는다.
 
 ```sh
 npm run mcp:check
 npm run mcp:check -- --probe
 ```
 
-`server: discovered`여도 `hostPlugin`, `conversationTools`, `account`는 모두 `unverified`다. 이 결과를 Dots 연결 완료로
+`server`와 `modernServer`가 `discovered`여도 `hostPlugin`, `conversationTools`, `account`는 모두 `unverified`다. 이 결과를 Dots 연결 완료로
 바꾸어 보고하지 않는다. 공개 탐색의 401도 사용자의 실제 로그인 상태를 증명하지 않는다. 현재 플러그인의 ID·범위·버전을
 확인하고 해당 대화에서 native `get_profile`이 성공해야 계정 연결이 확인된다. 이전 private 링크가 없으면 현재 상세 링크를
 추정하지 말고 호스트의 실제 항목이나 사용자에게 확인한다. 도구 갱신·선택에 대한 [공식 안내](https://developers.openai.com/api/docs/guides/custom-mcp-server#how-to-use)를 따른다.
