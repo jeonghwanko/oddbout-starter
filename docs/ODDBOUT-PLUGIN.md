@@ -91,6 +91,7 @@ npm run creation:tool -- call "<absolute-workspace>" get_fighter_spec "<argument
 ```
 
 인자는 JSON 파일로 전달한다. `list`로 현재 스키마를 읽고 `call`로 기존 도구 이름을 호출한다.
+결과의 데이터는 `structuredContent`에서 읽는다. 큰 결과의 text에는 필드 목록만 있다.
 프로젝트와 작업 ID, 낙관적 revision 검사, 검수 근거, 중복 실행 방지와 파일 접근 제한은 그대로 적용된다.
 CLI 오류는 0이 아닌 종료 코드로 전달한다. 계정 연결과 실제 이미지 표시·검수는 별도로 확인한다.
 

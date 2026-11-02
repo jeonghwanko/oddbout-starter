@@ -176,6 +176,31 @@ function logCall({ tool, edition, client, call, started, value, failure }) {
 }
 
 /**
+ * The database the in-process API sees for one verified request: its sign-in is `owner`'s. The shim cannot be selected from tool inputs
+ * and never receives/returns a privileged credential or another user's identity.
+ * Each signed-in route checks the account (`af_authorize`: a disabled account, the per-minute budget), so one tool call checked it once
+ * per invoke (three for request_hosted_fighter with a picture, MCP 점검 2026-11-03) and spent that much of the budget. The request's first
+ * answer stands for its other routes; a failed check is asked again, as before.
+ * @param {any} db @param {string} owner
+ */
+export function scopedDatabase(db, owner) {
+  /** @type {Promise<any> | undefined} */
+  let authorized;
+  const forget = () => { authorized = undefined; };
+  /** @type {(name: string, args?: any, ...rest: unknown[]) => any} */
+  const rpc = (name, args, ...rest) => {
+    if (name !== 'af_authorize' || rest.length || !args || Object.keys(args).length !== 1 || args.p_owner !== owner) return db.rpc(name, args, ...rest);
+    authorized ??= Promise.resolve(db.rpc(name, args)).then(answer => { if (answer?.error) forget(); return answer; }, error => { forget(); throw error; });
+    return authorized;
+  };
+  return new Proxy(db, { get(target, key) {
+    if (key === 'auth') return { getClaims: async () => ({ data: { claims: { sub: owner, is_anonymous: false, role: 'authenticated' } }, error: null }) };
+    if (key === 'rpc') return rpc;
+    const value = Reflect.get(target, key); return typeof value === 'function' ? value.bind(target) : value;
+  } });
+}
+
+/**
  * @param {{ db: any, identity: Identity | null, fetcher?: typeof fetch, arena?: Arena | null, hosted?: Hosted | null,
  *   host?: { compact?: boolean, caller?: string | null }, edition?: 'full' | 'directory', call?: Call }} options
  */
@@ -198,12 +223,8 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
       + 'A refused ODDBOUT sign-in (401 invalid_token) states its reason: tell the user that reason; it is not an outage, and when it asks '
       + 'to reconnect ODDBOUT in the connector settings, scheduled retries cannot fix it. Only a 503 asks for a retry. '
       + 'A queued submission is not registered; inspect its status. Reuse one UUID for retries of identical bytes.' });
-  // The existing API runs in-process with an identity bound to this verified request. The shim cannot be
-  // selected from tool inputs and never receives/returns a privileged credential or another user's identity.
-  const scoped = identity ? new Proxy(db, { get(target, key) {
-    if (key === 'auth') return { getClaims: async () => ({ data: { claims: { sub: identity.owner, is_anonymous: false, role: 'authenticated' } }, error: null }) };
-    const value = Reflect.get(target, key); return typeof value === 'function' ? value.bind(target) : value;
-  } }) : null;
+  // The existing API runs in-process with an identity bound to this verified request.
+  const scoped = identity ? scopedDatabase(db, identity.owner) : null;
   // The workshop labels what this client writes (made with); the in-process API takes its OAuth client from the verified token only.
   const api = createHandler({ db: scoped ?? db, agentClient: identity?.claims.client_id ?? null });
   /** @type {Invoke} */

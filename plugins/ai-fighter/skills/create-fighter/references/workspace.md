@@ -55,7 +55,8 @@ npm run creation:tool -- call "<workspace>" get_fighter_spec "<arguments.json>"
 
 Write arguments as an ordinary JSON file with a file tool, e.g. `{"section":"creation"}`. Read the
 `list` result for actual tool schemas. Calls use the same MCP validation, store locks, version checks,
-job ledger and package validator as the old local plugin. Exit nonzero or `isError: true` is a failure;
+job ledger and package validator as the old local plugin. Read a result's data in `structuredContent`:
+a large result's text only lists its fields. Exit nonzero or `isError: true` is a failure;
 do not continue as though the mutation succeeded. Do not echo credentials into input JSON.
 
 Use these calls wherever the main skill names `list_creation_sessions`, `create_creation_session`,

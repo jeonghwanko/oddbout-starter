@@ -314,14 +314,11 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
       // and stops when the client went away.
       const deadline = Math.min(Date.now() + waitSeconds * 1000, due - HOSTED_READ_MS), pollMs = hosted.pollMs ?? HOSTED_POLL_MS;
       while (Date.now() + pollMs <= deadline && !signal.aborted) {
-        const { data: row, error } = await db.from('af_generation_jobs').select('status,submission_id').eq('id', jobId).eq('owner_id', /** @type {Identity} */ (identity).owner).maybeSingle();
+        // The job and its submission's state in one query (MCP 점검 2026-11-03: two per tick).
+        const { data: row, error } = await db.from('af_generation_jobs').select('status,submission:af_submissions!submission_id(status)')
+          .eq('id', jobId).eq('owner_id', /** @type {Identity} */ (identity).owner).maybeSingle();
         if (error || !row) break;
-        let stage = null;
-        if (row.status === 'submitted' && row.submission_id) {
-          const { data } = await db.from('af_submissions').select('status').eq('id', row.submission_id).maybeSingle();
-          stage = data?.status ?? null;
-        }
-        if (hostedSettled(row.status, stage)) break;
+        if (hostedSettled(row.status, row.status === 'submitted' ? row.submission?.status ?? null : null)) break;
         await pause(pollMs, signal);
       }
       return withNext(await invoke(`generations/${jobId}`));

@@ -32,14 +32,27 @@ export async function generation({ decisionsReviewer = null, responsesReviewer =
     const filters = [], values = []; let order = '', limit = '', gt = [];
     /** @type {Record<string, unknown> | null} An update's columns (2026-10-31: the API writes a job's profile front and set). */
     let patch = null;
+    // A row a foreign key names, as PostgREST embeds `alias:table!column(fields)` (2026-11-03: the hosted wait reads a job and its submission).
+    let embeds = [];
     const where = () => filters.length ? ' where ' + filters.join(' and ') : '';
     const run = async () => {
-      if (!patch) return (await sql.query(`select to_jsonb(t) as value from public.${table} t${where()}${order}${limit}`, values)).rows.map(r => r.value);
+      if (!patch) {
+        const rows = (await sql.query(`select to_jsonb(t) as value from public.${table} t${where()}${order}${limit}`, values)).rows.map(r => r.value);
+        for (const row of rows) for (const { alias, other, column, fields } of embeds) {
+          const found = row[column] == null ? null
+            : (await sql.query(`select to_jsonb(e) as value from public.${other} e where id = $1`, [row[column]])).rows[0]?.value ?? null;
+          row[alias] = found && Object.fromEntries(fields.map(field => [field, found[field]]));
+        }
+        return rows;
+      }
       const keys = Object.keys(patch);
       await sql.query(`update public.${table} set ${keys.map((key, i) => `${key}=$${values.length + i + 1}`).join(',')}${where()}`, [...values, ...keys.map(key => patch[key])]);
       return [];
     };
-    const q = { select: () => q, update: value => { patch = value; return q; }, eq: (key, val) => { values.push(val); filters.push(`${key}=$${values.length}`); return q; },
+    const q = { select: (columns = '') => {
+      embeds = [...columns.matchAll(/(\w+):(\w+)!(\w+)\(([\w,]+)\)/g)].map(([, alias, other, column, fields]) => ({ alias, other, column, fields: fields.split(',') }));
+      return q;
+    }, update: value => { patch = value; return q; }, eq: (key, val) => { values.push(val); filters.push(`${key}=$${values.length}`); return q; },
       gt: (key, val) => { values.push(val); filters.push(`${key}>$${values.length}`); return q; },
       in: (key, vals) => { values.push(vals); filters.push(`${key}=any($${values.length})`); return q; },
       order: (key, o) => { order = ` order by ${key}${o?.ascending === false ? ' desc' : ''}`; return q; }, limit: n => { limit = ` limit ${n}`; return q; },
