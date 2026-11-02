@@ -16,8 +16,8 @@ import { cleanupPublicFiles } from '../../api/profile-sets.mjs';
 
 /**
  * A submission's or fighter's result with where the user follows it on the site (siteUrl, 2026-11-03): the fighter's all-motions page once
- * registered (registering does not enter him; his owner does, after watching), else the submission's page. A refusal and a deleted
- * fighter point nowhere.
+ * registered (registering does not enter him; his owner does, after watching), else the submission's page — a refused one too, where
+ * the site lists why. A failed call and a deleted fighter point nowhere.
  * @param {any} result  The API's JSON.
  */
 export function withSiteLink(result) {

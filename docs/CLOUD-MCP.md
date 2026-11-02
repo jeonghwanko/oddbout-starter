@@ -471,7 +471,7 @@ ChatGPT 밖의 에이전트(Grok·Claude·Gemini CLI·Codex CLI·Cursor의 Grok 
 
 등록은 선수를 출전시키지 않는다. 출전은 주인이 동작을 보고 하는 별도 단계다. 그래서 등록된 선수(`submission.stage`가 `registered`이고 `fighterId`가 있는 작업, 등록된 제출,
 `get_registered_fighter`)는 동작 확인 화면을, 그 밖에는 작업·제출 화면을 가리킨다. 삭제된 선수와 실패한 호출에는 없다.
-큰 결과를 줄여 쓰는 호스트(`compactText`)도 `siteUrl`은 자르지 않는다.
+큰 결과를 줄여 쓰는 호스트(`compactText`)도 맨 위의 `siteUrl`은 자르지 않는다. 목록 속 `jobs[].siteUrl`은 줄인 글에서 빠지고 `structuredContent`에만 있다.
 
 **신청한 에이전트(2026-11-03).** 호스팅 신청(`af_generation_jobs.agent_client`·`agent_name`)은 신청한 에이전트의 OAuth 클라이언트 이름(40자까지)을 기록한다.
 작업 보기(`GET generations`, `GET generations/:id`)의 `agent`가 그 이름(없으면 null)이다. 사이트·키트로 낸 신청과 body의 값에는 없다. 클라우드 MCP가 검증한 토큰의
