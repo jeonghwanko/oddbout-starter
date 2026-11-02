@@ -1,11 +1,12 @@
 // @ts-check
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 import { createHash, timingSafeEqual } from 'node:crypto';
+import { z } from 'zod';
 import { createCommerceHandler } from '../../api/commerce/handler.mjs';
 import { Problem, UUID } from '../../api/http.mjs';
 import { registerCommerceTools } from './commerce-tools.mjs';
 import { CALL_BUDGET_MS, output } from './common.mjs';
+import { mcpServing } from './serve.mjs';
 
 const PRODUCER_TOOLS = new Set(['get_credit_balance', 'get_broadcast_prices', 'get_broadcast', 'get_broadcast_job', 'get_broadcast_report', 'host_cup']);
 const TOKEN = /^obp_[A-Za-z0-9_-]{32,256}$/;
@@ -61,6 +62,7 @@ export function createCommerceMcpHandler({ commerce, producers = [], now = Date.
     seen.add(digest.toString('hex'));
     return { owner: value.owner.toLowerCase(), broadcastId: value.broadcastId.toLowerCase(), digest, expiresAt: Date.parse(value.expiresAt) };
   });
+  const serve = mcpServing(65536);
   const clock = () => { const value = now(); if (!Number.isFinite(value)) throw new Problem(503, 'producer-clock-unavailable'); return value; };
   /** @param {typeof grants[number]} grant */
   async function sessionOf(grant) {
@@ -81,7 +83,7 @@ export function createCommerceMcpHandler({ commerce, producers = [], now = Date.
     if (url.origin !== origin.origin || (requestOrigin !== null && requestOrigin !== origin.origin)) return json({ error: 'origin_not_allowed' }, 403);
     if (url.pathname === '/mcp/.well-known/oauth-protected-resource' && request.method === 'GET') return json({ resource, resource_name: 'ODDBOUT Sandbox commerce', bearer_methods_supported: ['header'] });
     if (url.pathname !== '/mcp') return json({ error: 'not_found' }, 404);
-    if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: { ...headers, 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-allow-headers': 'Authorization, Content-Type, MCP-Protocol-Version' } });
+    if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: { ...headers, 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-allow-headers': 'Authorization, Content-Type, MCP-Protocol-Version, Mcp-Method, Mcp-Name' } });
     if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, { allow: 'POST, OPTIONS' });
     const token = request.headers.get('authorization')?.match(/^Bearer (obp_[A-Za-z0-9_-]{32,256})$/)?.[1];
     let grant;
@@ -133,9 +135,9 @@ export function createCommerceMcpHandler({ commerce, producers = [], now = Date.
     /** @type {import('./common.mjs').Register} */
     const register = (name, title, description, inputSchema, run, { write = false, publish = false, openWorld = false, idempotent = !write } = {}) => {
       if (!PRODUCER_TOOLS.has(name)) return;
-      server.registerTool(name, { title, description, inputSchema: /** @type {import('zod').ZodRawShape} */ (inputSchema), annotations: { readOnlyHint: !write, destructiveHint: publish, openWorldHint: openWorld, idempotentHint: idempotent } }, async (/** @type {Record<string,unknown>} */ args, /** @type {{ signal?: AbortSignal } | undefined} */ extra) => {
+      server.registerTool(name, { title, description, inputSchema: z.object(/** @type {z.ZodRawShape} */ (inputSchema)), annotations: { readOnlyHint: !write, destructiveHint: publish, openWorldHint: openWorld, idempotentHint: idempotent } }, async (/** @type {Record<string,unknown>} */ args, /** @type {import('@modelcontextprotocol/server').ServerContext | undefined} */ ctx) => {
         /** @type {import('./common.mjs').ToolContext} */
-        const context = { signal: extra?.signal ?? new AbortController().signal, deadline: Date.now() + CALL_BUDGET_MS };
+        const context = { signal: ctx?.mcpReq?.signal ?? new AbortController().signal, deadline: Date.now() + CALL_BUDGET_MS };
         try {
           await sessionOf(activeGrant);
           if (['host_cup', 'get_broadcast', 'get_broadcast_report'].includes(name) && (typeof args.broadcastId !== 'string' || args.broadcastId.toLowerCase() !== activeGrant.broadcastId)) throw new Problem(403, 'producer-session-scope');
@@ -145,14 +147,11 @@ export function createCommerceMcpHandler({ commerce, producers = [], now = Date.
       });
     };
     registerCommerceTools({ register, invoke });
-    const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     try {
-      await server.connect(transport);
-      const response = await transport.handleRequest(request, { parsedBody: body });
+      const response = await serve(server, request, body);
       const merged = new Headers(response.headers);
       for (const [key, value] of Object.entries(headers)) merged.set(key, value);
       return new Response(response.body, { status: response.status, headers: merged });
     } catch { return json({ error: 'mcp_unavailable' }, 503); }
-    finally { await server.close(); }
   };
 }

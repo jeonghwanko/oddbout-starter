@@ -1,6 +1,6 @@
 // @ts-check
 import { readFile } from 'node:fs/promises';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import schema from '../contracts/ai-fighter/v1/fighter.schema.json' with { type: 'json' };
@@ -24,13 +24,14 @@ const annotations = { readOnlyHint: true, destructiveHint: false, idempotentHint
 const contextAnnotations = { ...annotations, openWorldHint: true };
 // The required motions, then the optional clips (skill, entrance, victory) a package may add.
 const MOTIONS = /** @type {[string, ...string[]]} */ ([...Object.keys(spec.motions), ...Object.keys(spec.optionalClips)]);
-const outputSchema = { ok: z.boolean(), stage: z.string(), data: z.unknown().optional(), errors: z.array(z.unknown()).optional(),
+const outputSchema = z.object({ ok: z.boolean(), stage: z.string(), data: z.unknown().optional(), errors: z.array(z.unknown()).optional(),
   pending: z.array(z.string()).optional(), assetBytes: z.number().optional(), decodedPixels: z.number().optional(), errorCount: z.number().optional(),
-  code: z.string().optional() };
+  code: z.string().optional() });
 /**
  * A tool's own result. Its fields pass through; `errors` is bounded here.
  * @typedef {{ ok: boolean, stage: string, errors?: unknown[], [key: string]: unknown }} ToolResult
- * @typedef {(result: ToolResult) => import('@modelcontextprotocol/sdk/types.js').CallToolResult} Respond
+ * @typedef {(result: ToolResult) => import('@modelcontextprotocol/server').CallToolResult} Respond
+ * @typedef {typeof outputSchema} OutputSchema
  */
 /** @type {Respond} */
 function respond(result) {
@@ -76,9 +77,9 @@ export function createServer({ root, contextRequest } = {}) {
   });
   server.registerTool('get_fighter_spec', {
     description: 'Read context first for game-owned current motions, frames, controls, timing and group gates; refresh at each new group and preserve its revision. Optional group narrows context motions. Read overview and creation for the package workflow and sprite-gen setup. Read guide, schema and example for the package contract; motion narrows schema/example (the optional clips skill, entrance and victory have no example clip). Example art is a format fixture.',
-    inputSchema: { section: z.enum(['overview', 'creation', 'guide', 'schema', 'example', 'context']).default('overview'),
+    inputSchema: z.object({ section: z.enum(['overview', 'creation', 'guide', 'schema', 'example', 'context']).default('overview'),
       group: z.enum(GROUP_IDS).optional(),
-      motion: z.enum(MOTIONS).optional() }, outputSchema, annotations: contextAnnotations,
+      motion: z.enum(MOTIONS).optional() }), outputSchema, annotations: contextAnnotations,
   }, async ({ section, motion, group }) => {
     if (section === 'context') {
       try { return respond({ ok: true, stage: 'game-creation-context', data: await fetchCreationContext({ request: contextRequest, group }) }); }
@@ -108,7 +109,7 @@ export function createServer({ root, contextRequest } = {}) {
   });
   server.registerTool('review_creation_progress', {
     description: 'Check the current group against the latest game context. Supply only selections actually stated in this conversation, by item/version. Hypothetical reviews work only in dialogue-only mode. Never grants registration permission.',
-    inputSchema: { stateJson: z.string().max(32768) }, outputSchema, annotations: contextAnnotations,
+    inputSchema: z.object({ stateJson: z.string().max(32768) }), outputSchema, annotations: contextAnnotations,
   }, async ({ stateJson }) => {
     try {
       const context = await fetchCreationContext({ request: contextRequest });
@@ -118,7 +119,7 @@ export function createServer({ root, contextRequest } = {}) {
   });
   server.registerTool('validate_fighter_manifest', {
     description: 'Validate raw fighter.json text. Reject duplicates, unknown fields, invalid references and over-budget data. Does not read files or grant registration.',
-    inputSchema: { manifestJson: z.string().max(spec.limits.jsonBytes) }, outputSchema, annotations,
+    inputSchema: z.object({ manifestJson: z.string().max(spec.limits.jsonBytes) }), outputSchema, annotations,
   }, async ({ manifestJson }) => {
     try {
       const parsed = parseFighterJson(manifestJson);
@@ -140,13 +141,15 @@ export function createServer({ root, contextRequest } = {}) {
       + 'Infrastructure CONNECT failures belong to the environment preparer; distinguish default Work cloud network settings from custom Codex environment publishing. The kit cannot change host network settings. Do not ask ordinary creators to repeat setup or sign in to fix a network block. '
       + 'Generation access and parent-conversation delivery have separate unverified states; kitAndAccountReady, saved sessions and records are not live proof. '
       + 'If blocked, report the named actor and next action. Never ask for a callback address/token in chat or work around a block. After recovery read existing sessions/jobs; do not regenerate or resubmit.',
-    inputSchema: { sessionId: identifier.optional(), purpose: z.enum(['generation', 'connection', 'registration']).default('generation'),
-      account: accountChoice.optional(), checkRemote: z.boolean().default(true) },
+    inputSchema: z.object({ sessionId: identifier.optional(), purpose: z.enum(['generation', 'connection', 'registration']).default('generation'),
+      account: accountChoice.optional(), checkRemote: z.boolean().default(true) }),
     outputSchema, annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
-  }, async ({ sessionId, purpose, account, checkRemote }) => {
+  }, async ({ sessionId, purpose, account, checkRemote }, ctx) => {
     try {
+      // The account form is this request's elicitation. It reaches a 2025-era client (creation:tool's in-process one is); on a
+      // 2026-07-28 request the SDK refuses it before sending, and readiness falls back to numbered choices.
       return respond({ ok: true, stage: 'creation-readiness', data: await checkReadiness({ ...records, sessionId, purpose, account, environment,
-        lowLevelServer: server.server, kit: { fetchRemote: checkRemote } }) });
+        elicitInput: ctx.mcpReq.elicitInput, kit: { fetchRemote: checkRemote } }) });
     } catch (error) {
       return respond({ ok: false, stage: 'creation-readiness', code: errorCode(error, 'readiness-check-failed', { missing: 'record-or-file-not-found' }) });
     }
@@ -154,7 +157,7 @@ export function createServer({ root, contextRequest } = {}) {
   if (validatePackage) {
     server.registerTool('validate_fighter_package', {
       description: 'Local-only: fully decode and check WebP files under the configured workspace. Pass a relative path such as output/my-fighter/fighter.json. Serial worker shared with packaging, 20-second timeout; never uploads or approves.',
-      inputSchema: { manifestPath: z.string().min(1).max(512) }, outputSchema, annotations,
+      inputSchema: z.object({ manifestPath: z.string().min(1).max(512) }), outputSchema, annotations,
     }, async ({ manifestPath }) => respond(await validatePackage(manifestPath)));
   }
   return server;

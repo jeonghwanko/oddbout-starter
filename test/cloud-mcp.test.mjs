@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { createCloudHandler, scopedDatabase, authenticateCloud, GROK_RECONNECT_PAGE, SIGN_IN_PROBLEMS, allowedFileUrl, downloadHostFile, compactText, timedFetch, CLOUD_RESOURCE, CLOUD_ISSUER, PUBLIC_RESOURCE, LEGACY_PUBLIC_RESOURCE, SIGN_IN_RESOURCE, PUBLIC_SIGN_IN_RESOURCE, DIRECTORY_RESOURCE, PUBLIC_DIRECTORY_RESOURCE, DIRECTORY_DOCUMENTATION } from '../mcp/cloud.mjs';
 import { DIRECTORY_INSTRUCTIONS, DIRECTORY_TITLES } from '../mcp/cloud/directory-edition.mjs';
 import { verifiedUserId } from '../api/http.mjs';
@@ -901,4 +902,45 @@ test('the database fetch ends by its limit and keeps a caller\'s own signal; a f
   const failure = await downloadHostFile({ download_url: url, file_id: 'f' }, 10, async () => { throw new TypeError(`error sending request for url (${url})`); })
     .catch(error => error);
   assert.deepEqual([failure.status, failure.message, failure.cause], [503, 'file-download-unavailable', { name: 'TypeError' }]);
+});
+
+// SDK v2 (2026-11-03): the same server answers 2026-07-28 clients (server/discover, Mcp-Method and Mcp-Name headers) beside the 2025 ones.
+test('a 2026-07-28 client discovers, lists and calls the same tools; the list keeps its published shape; the 2025 era still answers', async t => {
+  const logged = t.mock.method(console, 'log', () => {});
+  const handle = createCloudHandler({ db: dbFor() }), lists = [];
+  const fetchVia = async (url, init) => {
+    const response = await handle(new Request(url, init));
+    if (new Headers(init?.headers).get('mcp-method') === 'tools/list') lists.push(await response.clone().json());
+    return response;
+  };
+  for (const versionNegotiation of [{ mode: { pin: '2026-07-28' } }, { mode: 'auto' }]) {
+    const client = new Client({ name: 'test-2026', version: '1' }, { versionNegotiation });
+    await client.connect(new StreamableHTTPClientTransport(new URL(CLOUD_RESOURCE), { fetch: fetchVia,
+      requestInit: { headers: { authorization: `Bearer ${token}` } } }));
+    try {
+      assert.equal(client.getNegotiatedProtocolVersion(), '2026-07-28');
+      assert.equal((await client.listTools()).tools.length, 21);
+      assert.deepEqual((await client.callTool({ name: 'get_profile', arguments: {} })).structuredContent, { id: owner, email: 'test@example.com', nickname: 'ODDBOUT' });
+    } finally { await client.close(); }
+  }
+  // What hosts read of the list: securitySchemes beside the tool, no JSON Schema draft line, as for the 2025 era.
+  const tools = lists[0].result.tools, profile = tools.find(tool => tool.name === 'get_profile');
+  assert.deepEqual(profile.securitySchemes, [{ type: 'oauth2', scopes: ['openid', 'email', 'profile'] }]);
+  assert.equal(JSON.stringify(lists[0]).includes('json-schema.org'), false);
+  // The call's log line names the era it spoke.
+  const lines = logged.mock.calls.map(entry => JSON.parse(entry.arguments[0])).filter(line => line.tool === 'get_profile');
+  assert.deepEqual(lines.map(line => line.protocol), ['2026-07-28', '2026-07-28']);
+  // A 2026 call to an account tool without a sign-in is still the 401 that names the resource metadata.
+  const signedOut = await handle(new Request(CLOUD_RESOURCE, { method: 'POST', headers: { 'content-type': 'application/json',
+    accept: 'application/json, text/event-stream', 'mcp-protocol-version': '2026-07-28', 'mcp-method': 'tools/call', 'mcp-name': 'get_profile' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'get_profile', arguments: {},
+      _meta: { 'io.modelcontextprotocol/protocolVersion': '2026-07-28' } } }) }));
+  assert.equal(signedOut.status, 401); assert.match(signedOut.headers.get('www-authenticate'), /resource_metadata=/);
+  // A client that never opted in speaks 2025-11-25 and gets the same tools.
+  const legacy = new Client({ name: 'test-2025', version: '1' });
+  await legacy.connect(new StreamableHTTPClientTransport(new URL(CLOUD_RESOURCE), { fetch: (url, init) => handle(new Request(url, init)) }));
+  try {
+    assert.equal(legacy.getNegotiatedProtocolVersion(), '2025-11-25');
+    assert.equal((await legacy.listTools()).tools.length, 21);
+  } finally { await legacy.close(); }
 });

@@ -3,8 +3,7 @@
 import { readFile, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { Client, InMemoryTransport, ProtocolError, ProtocolErrorCode } from '@modelcontextprotocol/client';
 import { createServer } from '../mcp/server.mjs';
 import { writeCliJson } from '../dots.mjs';
 import { fileContextRequest, parseContextFileArgs } from './creation-context-file.mjs';
@@ -27,7 +26,14 @@ export async function creationTool({ workspace, name, args = {}, contextRequest 
     await server.connect(serverSide);
     await client.connect(clientSide);
     const options = { timeout: IN_PROCESS_TIMEOUT_MS };
-    return name ? await client.callTool({ name, arguments: args }, undefined, options) : await client.listTools(undefined, options);
+    if (!name) return await client.listTools(undefined, options);
+    try { return await client.callTool({ name, arguments: args }, options); }
+    catch (error) {
+      // SDK v2 answers a tool the server does not list with the spec's -32602, not a tool result (v1 gave one): name it, so a mistyped
+      // tool reads as one and not as a workspace command that failed.
+      if (error instanceof ProtocolError && error.code === ProtocolErrorCode.InvalidParams && /^Tool .+ not found$/.test(error.message)) throw Error('unknown-tool');
+      throw error;
+    }
   } finally { await client.close(); await server.close(); }
 }
 

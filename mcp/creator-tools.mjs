@@ -5,10 +5,10 @@ import { changeSchema, createCreationStore, identifier } from './creation-store.
 import { createJobStore, jobPlanSchema } from './creation-jobs.mjs';
 import { errorCode } from './error-code.mjs';
 
-/** A tool's input, checked by its schema. @template {z.ZodRawShape} S @typedef {import('@modelcontextprotocol/sdk/server/zod-compat.js').ShapeOutput<S>} ShapeOutput */
+/** A tool's input, checked by its schema. @template {z.ZodRawShape} S @typedef {z.output<z.ZodObject<S>>} ShapeOutput */
 /**
- * @param {import('@modelcontextprotocol/sdk/server/mcp.js').McpServer} server
- * @param {{ root: string, contextRequest?: typeof fetch, respond: import('./server.mjs').Respond, outputSchema: z.ZodRawShape,
+ * @param {import('@modelcontextprotocol/server').McpServer} server
+ * @param {{ root: string, contextRequest?: typeof fetch, respond: import('./server.mjs').Respond, outputSchema: import('./server.mjs').OutputSchema,
  *   validatePackage?: (relative: string) => Promise<import('./package-access.mjs').PackageCheck> }} options
  */
 export function registerCreatorTools(server, { root, contextRequest, respond, outputSchema, validatePackage }) {
@@ -20,14 +20,15 @@ export function registerCreatorTools(server, { root, contextRequest, respond, ou
   const session = { sessionId: identifier }, revision = z.number().int().positive();
   const job = { ...session, jobId: z.string().uuid() };
   /**
-   * The SDK cannot resolve its callback type for a generic shape, so the call passes a plain one and `fn` gets S's input.
+   * Each tool's fields, checked as one z.object. The SDK cannot resolve its callback type for a generic shape, so the call passes a
+   * plain object schema and `fn` gets S's input.
    * @template {z.ZodRawShape} S
-   * @param {string} name @param {string} description @param {S} inputSchema
-   * @param {import('@modelcontextprotocol/sdk/types.js').ToolAnnotations} annotations
+   * @param {string} name @param {string} description @param {S} shape
+   * @param {import('@modelcontextprotocol/server').ToolAnnotations} annotations
    * @param {(input: ShapeOutput<S>) => unknown} fn
    */
-  const register = (name, description, inputSchema, annotations, fn) => server.registerTool(name,
-    { description, inputSchema: /** @type {z.ZodRawShape} */ (inputSchema), outputSchema, annotations }, async input => {
+  const register = (name, description, shape, annotations, fn) => server.registerTool(name,
+    { description, inputSchema: /** @type {z.ZodObject} */ (z.object(shape)), outputSchema, annotations }, async input => {
       try { return respond({ ok: true, stage: name, data: await fn(/** @type {ShapeOutput<S>} */ (input)) }); }
       catch (error) { return respond({ ok: false, stage: name,
         code: errorCode(error, 'invalid-input-or-local-operation-failed', { missing: 'record-or-file-not-found' }) }); }

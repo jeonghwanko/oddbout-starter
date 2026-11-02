@@ -77,19 +77,19 @@ export function makePackagingRunner(root, { timeoutMs, graceMs, queue = serialQu
   return (args, inspectOnly) => queue(() => packOnce(args, inspectOnly), () => ({ ok: false, stage: 'packaging', code: 'packaging-busy' }));
 }
 
-/** @param {import('@modelcontextprotocol/sdk/server/mcp.js').McpServer} server
+/** @param {import('@modelcontextprotocol/server').McpServer} server
  * @param {{ root: string, respond: import('./server.mjs').Respond, queue?: SerialQueue }} options */
 export function registerPackagingTools(server, { root, respond, queue }) {
   const run = makePackagingRunner(root, { queue });
-  const inputSchema = { planPath: z.string().min(1).max(512), outputPath: z.string().min(1).max(512).optional(),
-    fitSheets: z.boolean().default(false), outputScale: z.number().min(.25).max(1).optional() };
+  const inputSchema = z.object({ planPath: z.string().min(1).max(512), outputPath: z.string().min(1).max(512).optional(),
+    fitSheets: z.boolean().default(false), outputScale: z.number().min(.25).max(1).optional() });
   for (const inspectOnly of [true, false]) {
     const name = inspectOnly ? 'inspect_fighter_packaging' : 'pack_fighter_package';
     server.registerTool(name, {
       description: inspectOnly
         ? 'Measure and encode existing game-pack inputs without writing files. Return sheet, byte and pixel budgets. fitSheets also fits total package and per-asset budgets using measured bounded trials; outputScale sets an optional maximum density after body normalization. Preserve all frames, timing and game size; never generate.'
         : 'Build and fully validate a new package from existing files. fitSheets fits sheet dimensions AND total/per-asset byte and pixel budgets without changing encoding or removing frames. Optional outputScale (.25–1) caps density after normalization. Requires texture-resolution-1; preserves game size and originals. Never generate, register or request quality approval. Output must be a new output/<session>-work/artifacts/ directory.',
-      inputSchema, outputSchema: { ok: z.boolean(), stage: z.string() },
+      inputSchema, outputSchema: z.object({ ok: z.boolean(), stage: z.string() }),
       annotations: { readOnlyHint: inspectOnly, destructiveHint: false, idempotentHint: inspectOnly, openWorldHint: false },
     }, async args => respond(/** @type {import('./server.mjs').ToolResult} */ (await run(args, inspectOnly))));
   }

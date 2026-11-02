@@ -254,13 +254,14 @@ export function accountItem(choice) {
 }
 
 /**
- * Ask for the account through a host form when the client supports elicitation. Any failure means "ask in text".
- * @param {import('@modelcontextprotocol/sdk/server/index.js').Server} [lowLevelServer] @returns {Promise<{ method: string, choice: string | null }>}
+ * Ask for the account through a host form when the client supports elicitation. Any failure means "ask in text": the request's
+ * `elicitInput` refuses before sending when the client declared no form elicitation, or when the request is on the 2026-07-28 era.
+ * @param {import('@modelcontextprotocol/server').ServerContext['mcpReq']['elicitInput']} [elicitInput] @returns {Promise<{ method: string, choice: string | null }>}
  */
-export async function elicitAccount(lowLevelServer) {
-  if (!lowLevelServer?.getClientCapabilities?.()?.elicitation) return { method: 'unsupported', choice: null };
+export async function elicitAccount(elicitInput) {
+  if (!elicitInput) return { method: 'unsupported', choice: null };
   try {
-    const answer = await lowLevelServer.elicitInput({
+    const answer = await elicitInput({
       message: '이번 캐릭터 생성에 쓸 본인 구독을 골라 주세요. 다른 서비스나 유료 API로 자동 전환하지 않습니다.',
       requestedSchema: { type: 'object', required: ['account'], properties: { account: { type: 'string', title: '생성 계정',
         oneOf: ACCOUNT_OPTIONS.map(({ id, label }) => ({ const: id, title: label })) } } },
@@ -272,10 +273,10 @@ export async function elicitAccount(lowLevelServer) {
 
 /**
  * @param {{ store?: CreationStore, jobs?: JobStore, sessionId?: string, account?: string, purpose?: string,
- *   lowLevelServer?: import('@modelcontextprotocol/sdk/server/index.js').Server, kit?: Omit<KitOptions, 'progress'>,
+ *   elicitInput?: import('@modelcontextprotocol/server').ServerContext['mcpReq']['elicitInput'], kit?: Omit<KitOptions, 'progress'>,
  *   tools?: Parameters<typeof checkTools>[0], environment?: EnvironmentStore }} [options]
  */
-export async function checkReadiness({ store, jobs, sessionId, account, purpose = 'generation', lowLevelServer, kit = {}, tools = {}, environment } = {}) {
+export async function checkReadiness({ store, jobs, sessionId, account, purpose = 'generation', elicitInput, kit = {}, tools = {}, environment } = {}) {
   if (!['generation', 'connection', 'registration'].includes(purpose)) throw new Error('invalid-readiness-purpose');
   const needsGeneration = purpose === 'generation';
   const progress = await creationProgress({ store, jobs, sessionId });
@@ -285,7 +286,7 @@ export async function checkReadiness({ store, jobs, sessionId, account, purpose 
   const saved = workspace ? await workspace.read({ allowMoved: true }) : null;
   const savedChoice = ACCOUNT_OPTIONS.some(o => o.id === saved?.account) ? /** @type {NonNullable<typeof saved>} */ (saved).account : null;
   let choice = account ?? savedChoice, elicitation = savedChoice && !account ? 'saved-environment' : 'not-needed';
-  if (needsGeneration && !choice) ({ method: elicitation, choice } = await elicitAccount(lowLevelServer));
+  if (needsGeneration && !choice) ({ method: elicitation, choice } = await elicitAccount(elicitInput));
   const notRequired = { status: 'not-required', reason: 'no-generation-in-this-step', nextCommands: [] };
   // The workspace registers through the connected ODDBOUT tools; it never reads or offers a local account.
   const infrastructure = { status: 'not-required', reason: 'cloud-registration-route' };
