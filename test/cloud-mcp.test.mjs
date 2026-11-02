@@ -425,8 +425,12 @@ test('agent tools list only with the arena key; reads are public, spars and cups
   assert.deepEqual(spar.echo, { owner, a: 'kuma', b: 'yume', seed: 3 }); assert.equal(calls.at(-1).headers['x-arena-agent'], key);
   await call(handle, 'read_bout', { a: 'kuma', b: 'yume', seed: 7 }); assert.equal(calls.at(-1).headers['x-arena-owner'], owner);
   const fighter = crypto.randomUUID();
-  const entered = (await call(handle, 'enter_cup', { fighterId: fighter })).structuredContent;
-  assert.deepEqual(entered.echo, { owner, fighter }); assert.equal(entered.state, 'open'); assert.equal(entered.next, 'get_cup');
+  // The cup's idempotency key goes to the arena lowercase (its UUID check is), as the agent's own (2026-11-03); a call without one is refused.
+  const cupKey = crypto.randomUUID();
+  const entered = (await call(handle, 'enter_cup', { fighterId: fighter, idempotencyKey: cupKey.toUpperCase() })).structuredContent;
+  assert.deepEqual(entered.echo, { owner, fighter, idempotencyKey: cupKey }); assert.equal(entered.state, 'open'); assert.equal(entered.next, 'get_cup');
+  const unkeyed = calls.length;
+  assert.equal((await call(handle, 'enter_cup', { fighterId: fighter })).isError, true); assert.equal(calls.length, unkeyed, 'no cup without a key');
   assert.equal((await call(handle, 'read_bout', { cupId: fighter })).structuredContent.code, 'invalid-bout');
   const failing = createCloudHandler({ db: dbFor(), arena: { ...arena, fetcher: async () => { throw new Error('down'); } } });
   assert.equal((await call(failing, 'get_rankings', {})).structuredContent.code, 'arena-unavailable');
@@ -459,7 +463,7 @@ test('MCP 점검: short UUID schemas without $schema; a cup entry waits for the 
   assert.equal(text.includes('json-schema.org'), false);
   const uuid = listed.result.tools.find(t => t.name === 'enter_cup').inputSchema.properties.fighterId;
   assert.ok(uuid.pattern.length < 80, uuid.pattern);
-  const entered = (await call(handle, 'enter_cup', { fighterId: crypto.randomUUID() })).structuredContent;
+  const entered = (await call(handle, 'enter_cup', { fighterId: crypto.randomUUID(), idempotencyKey: crypto.randomUUID() })).structuredContent;
   assert.equal(entered.cup.state, 'done'); assert.equal(polls, 3);
   const record = (await call(handle, 'get_fighter_record', { fighterId: 'kuma' })).structuredContent;
   assert.deepEqual(record.recent, [{ cup: ticket, round: 0, slot: 0 }]);
@@ -510,7 +514,7 @@ test('every write tool says whether a retry is safe; the ones that make somethin
   assert.deepEqual(writes, {
     prepare_fighter_deletion: true, delete_fighter: true, prepare_fighter_registration: true, upload_fighter_asset: true, submit_fighter_registration: true,
     prepare_profile_set: true, upload_profile_set_asset: true, submit_profile_set: true,
-    enter_cup: false, update_fighter_profile: true, update_fighter_style: true, enter_fighter: true, withdraw_fighter: true,
+    enter_cup: true, update_fighter_profile: true, update_fighter_style: true, enter_fighter: true, withdraw_fighter: true,
     update_fighter_canon: true, post_workshop_note: false, resolve_workshop_note: true, set_fighter_relation: true, manage_world: false, write_world_post: true,
     request_hosted_fighter: false, choose_hosted_look: false, revise_hosted_motion: false, register_hosted_fighter: true, cancel_hosted_fighter: true,
     start_picture_upload: false, store_creator_source: true, prepare_creator_source_download: true,
@@ -521,7 +525,8 @@ test('every write tool says whether a retry is safe; the ones that make somethin
 test('each edition\'s tools/list stays within its byte budget', async () => {
   // Every conversation pays for the list (MCP 점검 2026-11-03: about 14k tokens for the full one). Measured that day at 57,512, 43,038 and
   // 30,892 bytes; each ceiling sits just above. The descriptions carry product rules, so do not shorten them in bulk to fit: raise a ceiling
-  // on purpose, in the change that needs it, and say why.
+  // on purpose, in the change that needs it, and say why. Raised the same day by 500 for both full lists: enter_cup's idempotency key and its
+  // retry rule (+269 bytes) on lists already at 57,913 and 43,374.
   const arena = { url: 'https://arena.test/oddbout-arena', key: 'k'.repeat(64), fetcher: async () => Response.json({ ok: true }) };
   const bytes = async (options, url) => {
     const response = await createCloudHandler({ db: dbFor(), ...options })(new Request(url, { method: 'POST',
@@ -529,8 +534,8 @@ test('each edition\'s tools/list stays within its byte budget', async () => {
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }) }));
     return new TextEncoder().encode(await response.text()).length;
   };
-  for (const [edition, options, url, ceiling] of [['full, arena and hosted', { arena, hosted: {} }, CLOUD_RESOURCE, 58_000],
-    ['full without hosted', { arena }, CLOUD_RESOURCE, 43_500], ['directory', { arena, hosted: {} }, DIRECTORY_RESOURCE, 31_500]]) {
+  for (const [edition, options, url, ceiling] of [['full, arena and hosted', { arena, hosted: {} }, CLOUD_RESOURCE, 58_500],
+    ['full without hosted', { arena }, CLOUD_RESOURCE, 44_000], ['directory', { arena, hosted: {} }, DIRECTORY_RESOURCE, 31_500]]) {
     const size = await bytes(options, url);
     assert.ok(size <= ceiling, `${edition}: tools/list is ${size} bytes, over its ${ceiling}`);
   }
@@ -619,7 +624,7 @@ test('a cup entry stops waiting at its deadline and hands over to get_cup', asyn
     return Response.json({ ok: true });
   } };
   const handle = createCloudHandler({ db: dbFor(), arena }), started = Date.now();
-  const entered = (await call(handle, 'enter_cup', { fighterId: crypto.randomUUID() })).structuredContent;
+  const entered = (await call(handle, 'enter_cup', { fighterId: crypto.randomUUID(), idempotencyKey: crypto.randomUUID() })).structuredContent;
   assert.deepEqual([entered.state, entered.next], ['open', 'get_cup']);
   assert.ok(Date.now() - started < 1000, `waited ${Date.now() - started} ms`);
 });
@@ -822,7 +827,7 @@ test('enter_cup ends by the call budget counted from the request, its issue incl
   const { arena, seen } = cupArena(150);
   const handle = createCloudHandler({ db: dbFor(), arena, budgetMs: 400 });
   const started = Date.now();
-  const entered = (await call(handle, 'enter_cup', { fighterId: crypto.randomUUID() })).structuredContent;
+  const entered = (await call(handle, 'enter_cup', { fighterId: crypto.randomUUID(), idempotencyKey: crypto.randomUUID() })).structuredContent;
   assert.equal(entered.state, 'open'); assert.equal(entered.next, 'get_cup');
   // The wait once started after the issue: 150 ms of issue, then the whole CUP_WAIT_MS.
   assert.ok(Date.now() - started < 1500, `${Date.now() - started} ms`); assert.ok(seen.polls >= 1 && seen.polls < 20, `${seen.polls} polls`);
@@ -834,7 +839,7 @@ test('a client that goes away ends a waiting call at once', async t => {
   const handle = createCloudHandler({ db: dbFor(), arena });
   const gone = new AbortController(), started = Date.now();
   setTimeout(() => gone.abort(), 100);
-  const entered = (await (await handle(toolCall('enter_cup', { fighterId: crypto.randomUUID() }, { signal: gone.signal }))).json()).result.structuredContent;
+  const entered = (await (await handle(toolCall('enter_cup', { fighterId: crypto.randomUUID(), idempotencyKey: crypto.randomUUID() }, { signal: gone.signal }))).json()).result.structuredContent;
   assert.equal(entered.state, 'open');
   assert.ok(Date.now() - started < 2000, `${Date.now() - started} ms`);
   const polls = seen.polls;
