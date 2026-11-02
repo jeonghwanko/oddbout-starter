@@ -11,6 +11,9 @@ npm ci --ignore-scripts
 npm run broadcast:dev
 ```
 
+host runner의 경기 화면 렌더러는 `playwright`를 쓴다. 이 패키지는 개발 의존성(`devDependencies`)이다(2026-11-03). 그래서 위처럼 `--omit=dev` 없이
+설치한 체크아웃에서만 runner가 경기를 그린다. 검증 워커(Render, `npm ci --omit=dev`)와 크리에이터 킷의 필수 의존성 검사에는 들어가지 않는다.
+
 기본 로컬 주소는 `http://127.0.0.1:5180/broadcast/`이다. 이 서버는 loopback에만 바인딩한다. 브라우저에서 열면 UI를 볼 수 있다.
 
 DB와 Sandbox 설정 없이 실행하면 `preview-unconfigured` 모드다. 이 화면은 연결·잔액·결제·방송 성공을 시뮬레이션하지 않는다. 계정 인증과 실제 작업은 사용할 수 없다. `Ctrl+C`로 서버를 종료한다. 기본 포트를 바꾸려면 실행 전에 `ODDBOUT_BROADCAST_PORT`를 설정한다. `ODDBOUT_COMMERCE_ORIGIN`을 지정할 때는 브라우저 주소와 정확히 같은 origin이어야 한다.
