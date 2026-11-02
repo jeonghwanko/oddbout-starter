@@ -64,6 +64,7 @@ creator-kit ZIP에는 제작·연결 안내와 이 문서 지도가 들어 있�
 | 문서 | 다루는 것 |
 | --- | --- |
 | [CREATOR-HOSTING](CREATOR-HOSTING.md) | ODDBOUT 사이트·API·검증 작업자의 호스팅 구성 |
+| [PAYPAL-AGENT-BROADCAST-PLAN](PAYPAL-AGENT-BROADCAST-PLAN.md) | PayPal 재화 충전·유료 MCP·AI 대회 편성·24시간 송출 개발 계획(구현 전) |
 | [CLOUD-MCP](CLOUD-MCP.md) | 단일 호스팅 MCP(`mcp.oddbout.com`) 연결과 계정 확인을 통한 등록 |
 | [GENERATION-HOST](GENERATION-HOST.md) | 호스팅 생성 신청을 실제로 그리는 생성 PC 되기 |
 | [SINGLE-SUBSCRIPTION-HOSTS](SINGLE-SUBSCRIPTION-HOSTS.md) | 구독이 하나뿐인 호스트를 받을 수 있는지와 그 설계(구현 전) |
