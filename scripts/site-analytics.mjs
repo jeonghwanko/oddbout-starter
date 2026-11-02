@@ -11,8 +11,8 @@ const resolvedId = '\0oddbout-analytics';
  *   transformIndexHtml?: { order: 'pre', handler: (html: string, context: { filename: string }) => string } }} SitePlugin
  */
 
-/** @param {string} measurementId @param {string} hostname @param {string | null} apiBase */
-function startAnalytics(measurementId, hostname, apiBase) {
+/** @param {string} measurementId @param {string} hostname @param {string | null} apiBase @param {string[]} updateSlugs */
+function startAnalytics(measurementId, hostname, apiBase, updateSlugs) {
   if (window.location.hostname !== hostname || window.location.protocol !== 'https:' ||
       window.location.pathname.endsWith('/admin.html') || window.oddboutAnalyticsStarted) return;
   const current = new URL(window.location.href);
@@ -79,6 +79,45 @@ function startAnalytics(measurementId, hostname, apiBase) {
     if (name === 'hosted_request') { safe.delegate = parameters.delegate === true ? 'yes' : 'no'; safe.queued = parameters.queued === true ? 'yes' : 'no'; }
     window.gtag('event', name, safe);
   });
+  // The static updates pages have no application module. Read only their explicit action markers;
+  // labels, arbitrary attributes and destination addresses never become event parameters.
+  if (document.body?.hasAttribute('data-oddbout-updates')) {
+    const lang = document.documentElement.lang;
+    const opened = new Set();
+    /** @param {string} name @param {Record<string, string>} [parameters] */
+    const send = (name, parameters = {}) => {
+      if (!permitted() || !['ko', 'en', 'ja'].includes(lang)) return;
+      window.gtag('event', name, { ...page, send_to: measurementId, lang, ...parameters });
+    };
+    /** @param {Element} target */
+    const slugFor = target => {
+      const slug = target.closest('[data-update-slug]')?.getAttribute('data-update-slug');
+      return slug && updateSlugs.includes(slug) ? slug : null;
+    };
+    document.addEventListener('click', event => {
+      if (!(event.target instanceof Element)) return;
+      const target = event.target.closest('[data-analytics-action]');
+      if (!target || !document.body.contains(target)) return;
+      const action = target.getAttribute('data-analytics-action');
+      if (action === 'start') send('landing_start_click');
+      if (action === 'world') send('world_link_click');
+      if (action === 'read_update') {
+        const slug = slugFor(target);
+        if (slug) send('update_detail_click', { slug });
+      }
+      if (action === 'social') {
+        const platform = target.getAttribute('data-social-platform');
+        if (platform && ['youtube', 'discord', 'x', 'threads', 'instagram', 'tiktok'].includes(platform)) send('social_link_click', { platform });
+      }
+    });
+    document.addEventListener('toggle', event => {
+      if (!(event.target instanceof HTMLDetailsElement) || !event.target.open || !document.body.contains(event.target)) return;
+      const slug = slugFor(event.target);
+      if (!slug || opened.has(slug) || !permitted()) return;
+      opened.add(slug);
+      send('update_open', { slug });
+    }, true);
+  }
   window.dispatchEvent(new CustomEvent('oddbout:analytics-ready'));
   window.gtag('event', 'page_view', { ...page, page_title: document.title });
   const script = document.createElement('script');
@@ -87,12 +126,13 @@ function startAnalytics(measurementId, hostname, apiBase) {
   document.head.append(script);
 }
 
-/** @param {string} measurementId @param {string} siteUrl @param {string | null} [apiBase] */
-export function analyticsSource(measurementId, siteUrl, apiBase = null) {
+/** @param {string} measurementId @param {string} siteUrl @param {string | null} [apiBase] @param {string[]} [updateSlugs] */
+export function analyticsSource(measurementId, siteUrl, apiBase = null, updateSlugs = []) {
   if (!/^G-[A-Z0-9]{6,20}$/.test(measurementId ?? '')) throw new Error('Invalid GA4 measurement ID');
   const site = new URL(siteUrl);
   if (site.protocol !== 'https:') throw new Error('Analytics requires the HTTPS public site');
-  return `(${startAnalytics.toString()})(${JSON.stringify(measurementId)}, ${JSON.stringify(site.hostname)}, ${JSON.stringify(apiBase)});`;
+  if (updateSlugs.some(slug => !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug))) throw new Error('Invalid update Analytics slug');
+  return `(${startAnalytics.toString()})(${JSON.stringify(measurementId)}, ${JSON.stringify(site.hostname)}, ${JSON.stringify(apiBase)}, ${JSON.stringify(updateSlugs)});`;
 }
 
 /** @param {string} html @param {boolean} [privacy] */
@@ -100,7 +140,7 @@ export function analyticsHtml(html, privacy = false) {
   if (privacy) {
     const anchor = '<h3>Technical information</h3>';
     if (!html.includes(anchor)) throw new Error('Review the analytics privacy notice after source changes');
-    html = html.replace(anchor, '<h3>Website analytics</h3><p>We use Google Analytics to measure visits, page views, game starts, match completions and copying a creation request. For visitors who allow Analytics and sign in, we link the Analytics browser identifier to their account within our backend so that a successful server-validated fighter registration can be counted. This link is retained for at most 30 days and is not sent to Google as an account identifier. Google Analytics uses cookies and browser or device information to produce usage reports. We do not send account emails, sign-in tokens, fighter uploads or account identifiers to Analytics. Our tag keeps only standard campaign tags in page addresses, excludes other query parameters and URL fragments, and reduces referral addresses to website origins. Advertising personalization and Google signals are disabled. <a href="https://policies.google.com/technologies/partner-sites" target="_blank" rel="noopener noreferrer">How Google uses information from sites that use its services ↗</a></p>' + anchor)
+    html = html.replace(anchor, '<h3>Website analytics</h3><p>We use Google Analytics to measure visits, page views, game starts, match completions, copying a creation request and interactions with updates pages. For visitors who allow Analytics and sign in, we link the Analytics browser identifier to their account within our backend so that a successful server-validated fighter registration can be counted. This link is retained for at most 30 days and is not sent to Google as an account identifier. Google Analytics uses cookies and browser or device information to produce usage reports. We do not send account emails, sign-in tokens, fighter uploads or account identifiers to Analytics. Our tag keeps only standard campaign tags in page addresses, excludes other query parameters and URL fragments, and reduces referral addresses to website origins. Advertising personalization and Google signals are disabled. <a href="https://policies.google.com/technologies/partner-sites" target="_blank" rel="noopener noreferrer">How Google uses information from sites that use its services ↗</a></p>' + anchor)
       .replace('<strong>Google</strong> — account sign-in.', '<strong>Google</strong> — account sign-in and website usage analytics.')
       .replace('Google may use its own cookies during sign-in.', 'Google may use its own cookies during sign-in and for Analytics. You can block Analytics with browser privacy tools or the <a href="https://tools.google.com/dlpage/gaoptout" target="_blank" rel="noopener noreferrer">Google Analytics opt-out browser add-on</a>. Our tag also respects Global Privacy Control.');
   }
@@ -117,6 +157,8 @@ export function googleAnalyticsPlugin(measurementId, siteUrl, apiBase = null) {
     resolveId(id) { if (id === virtualId) return resolvedId; },
     load(id) { if (id === resolvedId) return source; },
     transformIndexHtml: { order: 'pre', handler(html, context) {
+      // This page only chooses a language. Its destination sends the single page view.
+      if (context.filename.replaceAll('\\', '/').endsWith('/updates.html')) return html;
       return analyticsHtml(html, context.filename.replaceAll('\\', '/').endsWith('/privacy.html'));
     } },
   };

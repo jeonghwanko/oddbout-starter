@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { policyFiles } from './build-plugin-policy-site.mjs';
 import { discoveryFiles } from './site-discovery.mjs';
+import { updatesPublishedFiles } from './site-updates.mjs';
 
 export const hosting = JSON.parse(await readFile(new URL('../deploy/creator-site.json', import.meta.url), 'utf8'));
 /** @type {(cwd: string, ...args: string[]) => string} */
@@ -180,6 +181,7 @@ export async function publishedFiles(root, siteUrl = hosting.siteUrl) {
     }
     if (!modules) throw new Error(`Missing Vite entry: ${page}`);
   }
+  for (const file of await updatesPublishedFiles(root, siteUrl)) files.add(file);
   for (const file of files) {
     if (!file || /(^|\/)\.\.(\/|$)|[\\?#]/.test(file) || file.startsWith('/') || /^[a-z]+:/i.test(file)) {
       throw new Error('Unsafe manifest asset path');
@@ -200,6 +202,7 @@ export async function verifyLiveSite(root, { siteUrl = hosting.siteUrl, request 
     const mime = file.endsWith('.html') ? 'text/html' : file.endsWith('.css') ? 'text/css'
       : /\.(?:m?js)$/.test(file) ? /^(?:text|application)\/javascript$/
       : file.endsWith('.wasm') ? 'application/wasm'
+      : file.endsWith('.webp') ? 'image/webp' : file.endsWith('.json') ? 'application/json'
       : file.endsWith('.xml') ? /^(?:application|text)\/xml$/ : file.endsWith('.txt') ? 'text/plain' : null;
     const actualMime = (response.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase();
     if (mime && (typeof mime === 'string' ? actualMime !== mime : !mime.test(actualMime))) {
