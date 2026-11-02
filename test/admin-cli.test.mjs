@@ -124,3 +124,25 @@ test('edit-profile reads the current package hash and sends the edit with the re
   await assert.rejects(runAdmin({ argv: ['edit-profile', JOB, '--reason', 'x'], connect, env: {} }), /missing-value:--profile/);
   await assert.rejects(runAdmin({ argv: ['edit-profile', JOB, '--reason', 'x', '--style', '{bad'], connect, env: {} }), /invalid-value:--style/);
 });
+
+test('storage-remove shows which unused folders go and what the budget becomes until --yes, then sends exactly those', async () => {
+  const [a, b, c] = ['11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222', '33333333-3333-4333-8333-333333333333'];
+  const report = { ok: true, usedBytes: 380e6, limitBytes: 400e6, unusedCount: 3, unusedBytes: 30e6, unused: [
+    { submissionId: a, email: 'one@example.com', name: '루비아', reason: 'replaced', createdAt: '2026-10-20T01:00:00Z', bytes: 6e6, files: 11 },
+    { submissionId: b, email: 'two@example.com', name: 'Rejected', reason: 'rejected', createdAt: '2026-10-21T01:00:00Z', bytes: 9e6, files: 11 },
+    { submissionId: c, email: 'one@example.com', name: '모른', reason: 'upload-expired', createdAt: '2026-10-22T01:00:00Z', bytes: 15e6, files: 4 }] };
+  const calls = [];
+  const connect = async () => ({ request: async (route, options = {}) => { calls.push({ route, ...options }); return route === 'admin/storage' ? report : { ok: true, removed: 2 }; } });
+  assert.equal((await runAdmin({ argv: ['storage'], connect, env: {} })).usedBytes, 380e6);
+  const dry = await runAdmin({ argv: ['storage-remove', '--oldest', '2'], connect, env: {} });
+  assert.equal(dry.dryRun, true); assert.deepEqual(dry.request.body.submissionIds, [a, b]);
+  assert.match(dry.change, /2개\(15\.0 MB, 2026-10-20부터\).*380\.0 MB → 365\.0 MB \/ 400\.0 MB/);
+  assert.deepEqual(dry.folders.map(folder => folder.email), ['one@example.com', 'two@example.com']);
+  assert.deepEqual(calls.map(call => call.route), ['admin/storage', 'admin/storage'], 'a dry run only reads');
+  const done = await runAdmin({ argv: ['storage-remove', c.toUpperCase(), a, a, '--yes'], connect, env: {} });
+  assert.equal(done.removed, 2); assert.match(done.done, /2개\(21\.0 MB, 2026-10-20부터/);
+  assert.deepEqual([calls.at(-1).route, calls.at(-1).method, JSON.parse(calls.at(-1).body)], ['admin/storage/removals', 'POST', { submissionIds: [c, a] }]);
+  await assert.rejects(runAdmin({ argv: ['storage-remove', JOB, '--yes'], connect, env: {} }), /not-unused/);
+  for (const argv of [['storage-remove'], ['storage-remove', a, '--oldest', '1'], ['storage-remove', '--oldest', '0'], ['storage-remove', '--oldest', '51']])
+    await assert.rejects(runAdmin({ argv, connect: async () => { throw Error('no call expected'); }, env: {} }), /missing-value:submission|invalid-value:--oldest/);
+});
