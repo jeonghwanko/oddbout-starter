@@ -263,6 +263,9 @@ export function run(command, args, { cwd, log, stdin, signal, graceMs = STOP_GRA
     const child = spawn(command, args, { cwd, stdio: ['pipe', 'pipe', 'pipe'], detached: true });
     const write = chunk => { appendFile(log, chunk).catch(() => {}); };
     child.stdout.on('data', write); child.stderr.on('data', write);
+    // A child that ends without reading its input closes the pipe: the write's EPIPE is not the run's outcome (its exit code is),
+    // and with no listener it was an uncaught exception that ended the worker and every stage on it (CI, 2026-11-02).
+    child.stdin.on('error', () => {});
     child.stdin.end(stdin ?? '');
     const group = sig => { try { process.kill(-child.pid, sig); } catch { try { child.kill(sig); } catch {} } };
     /** @type {NodeJS.Timeout | undefined} */ let kill;
