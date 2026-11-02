@@ -40,9 +40,10 @@ esac`);
   await script(path.join(fakes, 'systemctl'), `echo "$*" >> "${base}/systemctl.log"`);
   await script(path.join(fakes, 'systemd-run'), `echo "$*" >> "${base}/systemd-run.log"; while [ "$1" != "--" ]; do shift; done; shift; exec "$@"`);
   await script(path.join(fakes, 'sudo'), `echo "sudo $*" >> "${base}/sudo.log"; exit 1`);
-  const og = (args, input) => spawnSync(path.join(root, 'bin', 'og'), args, { input, encoding: 'utf8',
-    env: { ...process.env, PATH: `${fakes}:${process.env.PATH}`, OG_UNIT_DIR: units, OG_SVC_USER: '', OG_ROOT: '' } });
-  return { base, root, units, og };
+  // Read at each call: a test sets OG_SLOT_WAIT in process.env for one run.
+  const env = () => ({ ...process.env, PATH: `${fakes}:${process.env.PATH}`, OG_UNIT_DIR: units, OG_SVC_USER: '', OG_ROOT: '' });
+  const og = (args, input) => spawnSync(path.join(root, 'bin', 'og'), args, { input, encoding: 'utf8', env: env() });
+  return { base, root, units, og, env };
 }
 
 test('a host install runs og as its own account: providers signed in inside the root, the ledger marks the host, no sudo', linuxOnly, async () => {
@@ -110,6 +111,38 @@ test('a host install runs og as its own account: providers signed in inside the 
     assert.ok(!existsSync(path.join(units, 'oddbout-host-worker.service')));
     assert.ok(!existsSync(path.join(units, 'oddbout-host.slice')), 'a host\'s slice goes with its install');
     assert.ok(!existsSync(path.join(base, 'sudo.log')));
+  } finally { await rm(base, { recursive: true, force: true }); }
+});
+
+// The worker stops a stage by signalling og's process group (2026-11-02). timeout runs the command in a process group of its own, which
+// that signal never reached: og exited and the paid command ran on to RUN_TIMEOUT. og passes the signal on and ends after its command.
+test('a signal to og\'s process group stops the command og runs, og ends after it, and the command still reads the caller\'s stdin', linuxOnly, async () => {
+  const { base, root, og, env } = await hostInstall();
+  try {
+    const job = '20261102-gen-0123abcd', dir = path.join(root, 'kit', 'output', job);
+    await mkdir(dir, { recursive: true }); await writeFile(path.join(dir, 'request.json'), '{}');
+    const bin = path.join(root, 'tools', 'node_modules', '.bin'), script = (file, body) => writeFile(file, `#!/bin/bash\n${body}\n`, { mode: 0o755 });
+    // Local commands (no codex slot, no login). A brief's prompt reaches its command on stdin, as before the run went to the background.
+    await script(path.join(bin, 'read-step'), `cat > "${base}/stdin"`);
+    const read = og(['run', job, '--', 'read-step'], 'the prompt');
+    assert.equal(read.status, 0, read.stderr);
+    assert.equal(await readFile(path.join(base, 'stdin'), 'utf8'), 'the prompt');
+
+    await script(path.join(bin, 'slow-step'), `trap 'echo term > "${base}/stopped"; exit 143' TERM
+echo started > "${base}/started"; sleep 60 & wait`);
+    // As the worker runs og: its own process group, stopped by signalling that group.
+    const child = spawn(path.join(root, 'bin', 'og'), ['run', job, '--', 'slow-step'], { env: env(), detached: true, stdio: 'ignore' });
+    const exited = new Promise(done => child.on('exit', (code, signal) => done({ code, signal, at: Date.now() })));
+    for (let i = 0; i < 100 && !existsSync(path.join(base, 'started')); i++) await new Promise(done => setTimeout(done, 100));
+    assert.ok(existsSync(path.join(base, 'started')), 'the command started');
+    const stoppedAt = Date.now();
+    process.kill(-child.pid, 'SIGTERM');
+    const { code, at } = await exited;
+    assert.equal(code, 143);
+    assert.ok(at - stoppedAt < 20_000, `og ended ${at - stoppedAt} ms after the signal`);
+    assert.equal((await readFile(path.join(base, 'stopped'), 'utf8')).trim(), 'term', 'the command itself got the signal');
+    const end = (await readFile(path.join(root, 'ledger.jsonl'), 'utf8')).trim().split('\n').map(line => JSON.parse(line)).at(-1);
+    assert.deepEqual([end.kind, end.phase, end.tool, end.exit], ['run', 'end', 'slow-step', 143]);
   } finally { await rm(base, { recursive: true, force: true }); }
 });
 

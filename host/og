@@ -128,12 +128,14 @@ svc_env() { "${SVC_ENV[@]}" "$@"; }
 
 ledger() { "$NODE" "$HERE/ledger-report.mjs" --append "$LEDGER" "$@" || echo "og: ledger write failed" >&2; }
 
+# IN_SLICE_EXEC=1: the command replaces this process (systemd-run --scope execs its command too), so the caller's PID becomes the command's.
 in_slice() {
+  local replace=; [ -z "${IN_SLICE_EXEC:-}" ] || replace=exec
   if systemctl --user show-environment >/dev/null 2>&1; then
-    systemd-run --user --scope --quiet --collect --slice="$SLICE" -- "$@"
+    $replace systemd-run --user --scope --quiet --collect --slice="$SLICE" -- "$@"
   elif [ "${OG_ALLOW_NO_SLICE:-}" = 1 ]; then
     echo "og: user systemd unreachable — running WITHOUT the memory cap (OG_ALLOW_NO_SLICE=1)" >&2
-    "$@"
+    $replace "$@"
   else
     die "user systemd for $SVC_USER is unreachable (linger? loginctl enable-linger $SVC_USER) — refusing to run without the $SLICE memory cap"
   fi
@@ -440,7 +442,7 @@ PY
 }
 
 # Globals so the signal traps can close the ledger line of an interrupted run.
-RUN_JOB= RUN_DIR= RUN_ID= RUN_TOOL= RUN_PROVIDER= RUN_T0= RUN_WAIT=0 RUN_MARK= RUN_DONE=
+RUN_JOB= RUN_DIR= RUN_ID= RUN_TOOL= RUN_PROVIDER= RUN_T0= RUN_WAIT=0 RUN_MARK= RUN_DONE= RUN_CHILD=
 finish_run() {
   [ -n "$RUN_ID" ] && [ -z "$RUN_DONE" ] || return 0
   RUN_DONE=1
@@ -454,6 +456,25 @@ finish_run() {
   if [ "$RUN_PROVIDER" != codex ] && [ "$sessions" -gt 0 ]; then
     echo "og: WARNING — '$RUN_TOOL' was classified $RUN_PROVIDER but $sessions codex session(s) started in this job meanwhile (it, or a run overlapping it)" >&2
   fi
+}
+
+# A run's command, in the kit with the service environment, under the memory slice and the run's time limit. cmd_run starts it in the
+# background and every step execs the next (in_slice, systemd-run, env), so its PID is timeout's own.
+run_command() {
+  local dir=$1; shift
+  cd "$KIT" || exit 3
+  IN_SLICE_EXEC=1 in_slice "${SVC_ENV[@]}" TMPDIR="$dir/.tmp" timeout --kill-after=30 "$RUN_TIMEOUT" "$@"
+}
+# The signal traps of a run. timeout puts itself and the command in a process group of their own, which a signal to og's group (the
+# worker stopping a stage, 2026-11-02) never reached: og exited and the paid command ran on to RUN_TIMEOUT. The signal is passed on
+# to timeout, which stops the command's whole group (SIGKILL 30 s later), and og waits for it so the ledger closes after the command.
+# ${!:-}: a signal between the command's start and RUN_CHILD=$! still finds it (no other job runs in the background before it). A second
+# signal while the command stops (a second Ctrl-C) is ignored: it would run this trap again, and its `exit` would end og before the ledger line.
+stop_run() {
+  trap '' HUP INT TERM
+  local rc=$1 child=${RUN_CHILD:-${!:-}}
+  if [[ $child =~ ^[0-9]+$ ]]; then kill -TERM "$child" 2>/dev/null || true; wait "$child" 2>/dev/null || true; fi
+  finish_run "$rc"; exit "$rc"
 }
 
 cmd_run() {
@@ -471,9 +492,9 @@ cmd_run() {
   RUN_MARK=$(mktemp)
   rm -f "$dir/.delivered"   # the package may change; deliver again
   mkdir -p "$dir/.tmp"      # scratch dirs (sprite-gen gen-set rows) stay inside the job: purge removes them, and their codex sessions count
-  trap 'finish_run 129; exit 129' HUP
-  trap 'finish_run 130; exit 130' INT
-  trap 'finish_run 143; exit 143' TERM
+  trap 'stop_run 129' HUP
+  trap 'stop_run 130' INT
+  trap 'stop_run 143' TERM
   ledger --job "$job" --kind run --phase start --run "$RUN_ID" --tool "$RUN_TOOL" --provider "$RUN_PROVIDER" --account "$RUN_ACCOUNT"
   t1=$(now_ms)
   if ! acquire_slots "$k"; then
@@ -482,7 +503,12 @@ cmd_run() {
     return 3
   fi
   RUN_WAIT=$(($(now_ms) - t1)); RUN_T0=$(now_ms)
-  (cd "$KIT" && in_slice "${SVC_ENV[@]}" TMPDIR="$dir/.tmp" timeout --kill-after=30 "$RUN_TIMEOUT" "$@") || rc=$?
+  # In the background so a trap runs at once (bash runs it only after a foreground command ends); stdin stays the command's (a brief's
+  # prompt), not the /dev/null a background command gets.
+  run_command "$dir" "$@" 0<&0 &
+  RUN_CHILD=$!
+  wait "$RUN_CHILD" || rc=$?
+  RUN_CHILD=ended   # reaped: its PID may belong to another process now
   finish_run $rc
   trap - HUP INT TERM
   return $rc
