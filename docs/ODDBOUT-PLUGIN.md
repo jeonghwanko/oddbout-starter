@@ -61,7 +61,8 @@ OAuth 승인을 반복하지 않는다. 인증 오류가 실제 반환될 때만
 목록 반영이 늦더라도 재설치·중복 앱 생성·작업 공간 초기화로 해결하지 않는다. 기본 동작은 제거하지 않는 것이다.
 
 로컬 개발 설치는 기존 `ai-fighter-local` 마켓플레이스의 소스를 새 디렉터리로 전환하고
-`oddbout@ai-fighter-local`을 설치하는 별도 절차다. 이 명령의 성공은 ChatGPT 개인 플러그인 가져오기나
+`oddbout@ai-fighter-local`을 설치하는 별도 절차다([로컬 설치 안내](LOCAL-PLUGIN.md#optional-local-development-installation-on-this-computer)).
+Git으로 설치하는 Codex 제작 스킬(`oddbout@oddbout`)은 [Codex 설치 안내](LOCAL-PLUGIN.md#install-the-codex-skill-from-git)를 따른다. 이 명령의 성공은 ChatGPT 개인 플러그인 가져오기나
 Dots 대화에서의 MCP 연결을 뜻하지 않는다. 새 대화에서 현재 스킬을 확인한다. 캐시 밖의 작업 폴더·원본·선택·작업
 기록은 보존한다. 별도 클라우드 개인/워크스페이스 플러그인 가져오기·갱신은 해당 지원 UI에서 확인한다.
 

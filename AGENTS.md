@@ -15,8 +15,8 @@ enforce: keep them when you change either.
 | Change code, tests or docs here | [Hard rules](#hard-rules), [Changing this repository](#changing-this-repository) | The doc that owns the area ([docs/README.md](docs/README.md)). [Creating a fighter](#creating-a-fighter) states product requirements the code implements: read the part your change touches |
 | Deploy or operate the service | [Hard rules](#hard-rules), [Deploys](#deploys) | `docs/CREATOR-HOSTING.md`, `docs/CLOUD-MCP.md`, `docs/GENERATION-HOST.md` |
 
-`docs/research/` and the dated reviews under 기록 in `docs/README.md` record past results, not current procedure,
-unless a rule below tells you to read one.
+`docs/records/` and `docs/research/` (기록 in `docs/README.md`) record past results, not current procedure, unless a
+rule below tells you to read one.
 
 ## Hard rules
 

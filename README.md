@@ -10,7 +10,7 @@ ODDBOUT is a fighting game where you play with a character you create. This repo
 
 ## Install the Codex plugin
 
-Install the local custom plugin from this Git repository: [Codex installation guide](docs/CODEX-PLUGIN.md). It adds the creation skill and reuses your existing ODDBOUT MCP. No directory approval or creator-kit ZIP is required. Login stays a separate user action.
+Install the local custom plugin from this Git repository: [Codex installation guide](docs/LOCAL-PLUGIN.md#install-the-codex-skill-from-git). It adds the creation skill and reuses your existing ODDBOUT MCP. No directory approval or creator-kit ZIP is required. Login stays a separate user action.
 
 ## Gameplay preview
 
@@ -152,7 +152,7 @@ Setup downloads the pinned sprite-gen source into this checkout and installs it 
 
 Setup also fetches the outside tools sprite-gen needs, without sudo: `img2webp` with `-exact` (libwebp 1.6.0, SHA-256 pinned, placed in the kit's environment when your system has none or an older one such as Ubuntu 24.04's 1.3.x) and RIFE for smooth walk and run loops (`sprite-gen rife install`, about 430 MB download). Install `ffmpeg` yourself first: `sudo apt install ffmpeg` (Ubuntu/Debian), `brew install ffmpeg` (macOS) or `winget install --id Gyan.FFmpeg -e` (Windows). Setup and `sprite:status` list each tool as `ok`, `missing` or `broken` with the command that fixes it. A Linux machine without a GPU also needs `sudo apt install libvulkan1 mesa-vulkan-drivers` for RIFE; without RIFE, loops are cut as filmed with a warning. Keep an in-progress character workspace in place and avoid pulling repository updates during creation.
 
-To connect the tools, follow the [local Codex plugin guide](docs/LOCAL-PLUGIN.md): `npm run plugin:build`, then the printed `codex plugin marketplace add …` and `codex plugin add oddbout@ai-fighter-local`. The older manual MCP connection (`node scripts/print-install.mjs`) remains for compatibility. Other local hosts can connect `mcp/stdio.mjs` with `AI_FIGHTER_ROOT` set to the checkout.
+To connect the tools, follow the [local Codex plugin guide](docs/LOCAL-PLUGIN.md#optional-local-development-installation-on-this-computer): `npm run plugin:build`, then the printed `codex plugin marketplace add …` and `codex plugin add oddbout@ai-fighter-local`. The older manual MCP connection (`node scripts/print-install.mjs`) remains for compatibility. Other local hosts can connect `mcp/stdio.mjs` with `AI_FIGHTER_ROOT` set to the checkout.
 
 The [unified plugin guide](docs/ODDBOUT-PLUGIN.md) and [distribution record](https://github.com/jeonghwanko/oddbout-starter/blob/main/docs/PLUGIN-DISTRIBUTION.md) cover the reviewed portable source kit. A local plugin installation does not mean the cloud App is connected in Dots or that the kit is listed in a public directory.
 

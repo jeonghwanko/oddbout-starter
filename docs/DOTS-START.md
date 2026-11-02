@@ -7,7 +7,7 @@ metadata alone does not verify skill access. Preserve the App's identity, OAuth 
 Connection checks do not authorize generation or require VM setup, a generation subscription or installation of a separately reviewed creator-kit.
 
 The saved VM product path is **Dots + this user's Grok subscription**. Read
-[DOTS-VM-ARCHITECTURE.md](DOTS-VM-ARCHITECTURE.md) and
+[the saved VM path](DOTS-QUICKSTART.md#the-saved-vm-path) and
 [the environment preparation recipe](../deploy/dots-environment/README.md).
 Source `/workspace/.oddbout-tools/env.sh` in each new shell. From the saved front-door checkout,
 run `node dots.mjs --install` for a new workspace or `node dots.mjs` thereafter. The default workspace is
@@ -27,11 +27,12 @@ game-context lookup blocked in this VM, the [explicit file handoff](GAME-CREATIO
 can use a fresh, complete response from a connected GitHub tool through official file delivery.
 It supplies public rules only; it does not replace Grok authentication or generation transport.
 
-If the user supplied a reference, follow [DOTS-PRIVATE-SOURCES.md](DOTS-PRIVATE-SOURCES.md) to move
+If the user supplied a reference, follow [the private source transfer](DOTS-QUICKSTART.md#private-source-transfer) to move
 the original through the connected account's private source storage into this VM. Recover previously
 stored sources and jobs first. Check **VM-to-current-conversation preview display** separately as required
 by DELIVERY.md before dispatching a new local generation. If this host offers no supported display path,
-use the documented private Pages file-reference route when available and verify its actual display.
+use the documented [private Pages file-reference route](DOTS-QUICKSTART.md#vm-previews-through-a-private-page)
+when available and verify its actual display.
 If no supported route is available, stop at that precise blocker; source download alone does not fix
 output delivery. Preserve returned Library references so another conversation can recover the same bytes.
 

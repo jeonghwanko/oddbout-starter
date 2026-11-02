@@ -18,4 +18,4 @@ This is an invite-only registration beta. Technical registration is separate fro
 - Store user sessions and worker configs outside the checkout with owner-only access. Never configure the MCP with the service-role key or worker config. Renew or revoke invitations and worker credentials after their 30-day beta validity.
 - No credentials belong in this repository. Report vulnerabilities through the repository's private security reporting when available; otherwise open an issue without secrets or private file contents.
 
-See [the adversarial review](docs/ADVERSARIAL-REVIEW.md) for reproduced defects and remaining release blockers.
+See [the adversarial review](docs/records/ADVERSARIAL-REVIEW.md) for reproduced defects and remaining release blockers.
