@@ -884,9 +884,10 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
         await writeFile(promptFile, expressionsPrompt(job.brief));
         const since = Date.now();
         const { code } = await og(expressionsCommand({ promptFile, out: png, report, front, anchor: styleAnchor }));
-        // og refused it before it ran (no slot, the account's allowance: exit 3 or 75 and no report of this run): nothing was sent, so a
-        // later run may draw it (리뷰 2026-11-03). Anything else may have been paid for and is never drawn again.
-        if (code !== 0 && [NOT_STARTED_EXIT, ASK_EXIT].includes(code) && !await readOutcome(report, { since })) {
+        // Nothing was sent (its own report says so, og found no slot, or the account's allowance stopped it before it ran: 75 and no report
+        // of this run): a later run may draw it (리뷰 2026-11-03). Anything else may have been paid for and is never drawn again.
+        const said = code === 0 ? null : await readOutcome(report, { since });
+        if (code !== 0 && (judgeOutcome({ code, report: said }).charge === 'not-charged' || (code === ASK_EXIT && !said))) {
           await rm(started, { force: true });
           return event({ outcome: 'failed', code: `expressions-not-started-${code}` });
         }

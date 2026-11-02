@@ -23,7 +23,7 @@ export const PUBLIC_BUCKET = 'af-profile-sets';
  * A row of af_profile_sets as the API reads it.
  * @typedef {{ id: string, fighter_id: string, owner_id: string, status: string, manifest_text: string, manifest_sha: string,
  *   manifest: ProfileSetFile, derived: any, validation: any, reason: string | null, lease_token: string | null, lease_until: string | null,
- *   expires_at: string, created_at: string, validated_at: string | null, approved_at: string | null }} ProfileSetRow
+ *   expires_at: string, created_at: string, validated_at: string | null, approved_at: string | null, based_on?: string | null }} ProfileSetRow
  */
 
 /** @type {(value: unknown) => boolean} */
@@ -79,7 +79,7 @@ export const PROFILE_SET_STATUS = Object.freeze({
   'upload-expired': 409, 'upload-closed': 409, 'stale-validation': 409, 'review-conflict': 409, 'fighter-deleted': 409,
   'not-found': 404, 'fighter-not-found': 404, 'rate-limit': 429, 'account-disabled': 403, 'admin-required': 403,
   'validator-version': 400, 'validation-incomplete': 400, 'validation-result-limit': 400, 'invalid-release-code': 400, 'invalid-review': 400,
-  'invalid-query': 400, 'byte-budget-mismatch': 422,
+  'invalid-query': 400, 'byte-budget-mismatch': 422, 'invalid-reason': 400, 'fighter-mismatch': 409,
 });
 
 /** Is this path a profile set's? (The worker's are under `worker/`, the operator's under `admin/`.) @param {string[]} parts */
@@ -344,31 +344,19 @@ export async function cleanupPublicFiles(db, fighterId) {
  * 운영자의 표정 시트 (2026-11-03 — 사용자: "무투장 패배 표정 없는 캐릭터들은 image-gen으로 생성해서 추가하고"): a sheet for a registered fighter,
  * without his owner's sign-in. From his current approved set (`setId`) a new set is made under his owner with the same front painting and
  * face square and the sheet, its front copied in private storage, and submitted: the validator, then the operator's review, as any set.
- * His current set stays until the new one is approved. The operator's id and reason go to af_profile_set_events (`admin-expressions`); the
- * same key answers the same set, also after it was approved.
- * @param {any} db @param {{ actor: string, setId: string, key: string, reason: string, bytes: Uint8Array<ArrayBuffer> }} input
+ * His current set stays until the new one is approved, and it is approved only while the set it was copied from is still his current one
+ * (af_admin_profile_set_approve). af_admin_profile_set_expressions makes the set, records its base and the operator's event in one
+ * transaction. `fighterId` is the fighter the operator means: another set's fighter is refused. The same key answers the same set for the
+ * same sheet, also after it was approved; a failure after the set was made expires it, so it never holds his owner's own upload.
+ * @param {any} db @param {{ actor: string, setId: string, fighterId: string, key: string, reason: string, bytes: Uint8Array<ArrayBuffer> }} input
  */
-export async function addOperatorSheet(db, { actor, setId, key, reason, bytes }) {
+export async function addOperatorSheet(db, { actor, setId, fighterId, key, reason, bytes }) {
   /** @param {string} name @param {Record<string, unknown>} args */
   const rpc = async (name, args) => { const { data, error } = await db.rpc(name, args); if (error) throw rpcProblem(error, PROFILE_SET_STATUS); return data; };
-  /** @param {string} column @param {string} value @returns {Promise<ProfileSetRow | null>} */
-  const setBy = async (column, value) => {
-    const { data, error } = await db.from('af_profile_sets').select('*').eq(column, value).maybeSingle();
-    if (error) throw new Problem(503, 'database-unavailable');
-    return data;
-  };
-  const from = await setBy('id', setId);
+  const { data: from, error } = await db.from('af_profile_sets').select('*').eq('id', setId).maybeSingle();
+  if (error) throw new Problem(503, 'database-unavailable');
   if (!from) throw new Problem(404, 'not-found');
-  // A retry after the new set went in (even approved, which supersedes `from`) answers it.
-  const { data: earlier, error: earlierError } = await db.from('af_profile_sets').select('*').eq('owner_id', from.owner_id).eq('idempotency_key', key).maybeSingle();
-  if (earlierError) throw new Problem(503, 'database-unavailable');
-  if (earlier && earlier.status !== 'uploading') {
-    if (earlier.fighter_id !== from.fighter_id) throw new Problem(409, 'idempotency-conflict');
-    return profileSetView(earlier);
-  }
-  const { data: fighter, error: fighterError } = await db.from('af_fighters').select('id,profile_set_id,deleted_at').eq('id', from.fighter_id).maybeSingle();
-  if (fighterError) throw new Problem(503, 'database-unavailable');
-  if (from.status !== 'approved' || !fighter || fighter.deleted_at || fighter.profile_set_id !== from.id) throw new Problem(409, 'review-conflict');
+  if (from.fighter_id !== fighterId) throw new Problem(409, 'fighter-mismatch');
   const probed = probeImage(bytes);
   if (probed?.type !== 'image/webp') throw new Problem(415, 'webp-required');
   const { front, face } = JSON.parse(from.manifest_text);
@@ -376,22 +364,37 @@ export async function addOperatorSheet(db, { actor, setId, key, reason, bytes })
   const text = JSON.stringify({ version: PROFILE_SET_VERSION, front, face, expressions });
   const parsed = parseProfileSet(text);
   if (!parsed.ok) throw new Problem(422, 'invalid-profile-set', parsed.errors);
-  const row = await rpc('af_profile_set_create', { p_owner: from.owner_id, p_fighter: from.fighter_id, p_key: key, p_text: text,
-    p_sha: await sha256(new TextEncoder().encode(text)), p_bytes: front.bytes });
+  const sha = await sha256(new TextEncoder().encode(text));
+  // A retry after the set went past its upload (even approved, which supersedes `from`): the same set, for the same sheet only.
+  const { data: earlier, error: earlierError } = await db.from('af_profile_sets').select('*').eq('owner_id', from.owner_id).eq('idempotency_key', key).maybeSingle();
+  if (earlierError) throw new Problem(503, 'database-unavailable');
+  if (earlier && (earlier.manifest_sha !== sha || earlier.based_on !== from.id)) throw new Problem(409, 'idempotency-conflict');
+  if (earlier && earlier.status !== 'uploading') return profileSetView(earlier);
+  if (earlier && uploadExpired(earlier)) throw new Problem(409, 'upload-expired');
+  // His approved front, checked before anything is made (리뷰 2026-11-03: a set made first and left half-uploaded held his owner's upload).
   const { data: download, error: downloadError } = await db.storage.from(BUCKET).download(profileSetKey(from.owner_id, from.id, 'front'));
   if (downloadError || !download) throw new Problem(503, 'storage-unavailable');
   const frontBytes = new Uint8Array(await download.arrayBuffer());
-  // The approved front is what the new set names: a private copy that no longer matches it is not sent on.
   if (frontBytes.length !== front.bytes || await sha256(frontBytes) !== front.sha256) throw new Problem(409, 'review-conflict');
-  await storeOnce(db, BUCKET, profileSetKey(row.owner_id, row.id, 'front'), frontBytes, front.sha256);
-  await storeOnce(db, BUCKET, profileSetKey(row.owner_id, row.id, 'expressions'), bytes, expressions.sha256);
-  const submitted = await rpc('af_profile_set_submit', { p_owner: row.owner_id, p_id: row.id });
-  const { data: logged, error: loggedError } = await db.from('af_profile_set_events').select('id').eq('profile_set_id', row.id).eq('kind', 'admin-expressions').limit(1);
-  if (loggedError) throw new Problem(503, 'database-unavailable');
-  if (!logged?.length) {
-    const { error: logError } = await db.from('af_profile_set_events').insert({ fighter_id: row.fighter_id, profile_set_id: row.id, actor, kind: 'admin-expressions',
-      data: { reason, from: from.id } });
-    if (logError) throw new Problem(503, 'database-unavailable');
+  /** @type {ProfileSetRow} */
+  const row = await rpc('af_admin_profile_set_expressions', { p_actor: actor, p_from: from.id, p_key: key, p_text: text, p_sha: sha,
+    p_bytes: front.bytes, p_reason: reason });
+  if (row.status !== 'uploading') return profileSetView(row);
+  try {
+    await storeOnce(db, BUCKET, profileSetKey(row.owner_id, row.id, 'front'), frontBytes, front.sha256);
+    await storeOnce(db, BUCKET, profileSetKey(row.owner_id, row.id, 'expressions'), bytes, expressions.sha256);
+    return profileSetView(await rpc('af_profile_set_submit', { p_owner: row.owner_id, p_id: row.id }));
+  } catch (caught) {
+    await expireUpload(db, row.id);
+    throw caught;
   }
-  return profileSetView(submitted);
+}
+/**
+ * Close a set left half-uploaded by the API itself (an operator's sheet, a hosted fighter's): it no longer holds his owner's own upload.
+ * Never throws: the failure it follows is the answer.
+ * @param {any} db @param {string} id
+ */
+export async function expireUpload(db, id) {
+  await Promise.resolve().then(() => db.from('af_profile_sets').update({ expires_at: new Date().toISOString() }).eq('id', id).eq('status', 'uploading'))
+    .catch(() => {});
 }

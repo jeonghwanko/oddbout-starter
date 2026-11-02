@@ -192,11 +192,12 @@ export function createAdminHandler({ db, present }) {
       // 운영자의 표정 시트 (2026-11-03): a sheet for a fighter's current approved set, as a new set under his owner (profile-sets.mjs).
       if (parts.length === 4 && parts[1] === 'profile-sets' && parts[3] === 'expressions' && request.method === 'POST') {
         if (!UUID.test(parts[2])) throw new Problem(400, 'invalid-review');
-        const reason = reasonOf(request), key = request.headers.get('idempotency-key') ?? '';
-        if (!UUID.test(key)) throw new Problem(400, 'invalid-id');
+        const reason = reasonOf(request), key = request.headers.get('idempotency-key') ?? '', fighter = request.headers.get('x-admin-fighter') ?? '';
+        if (!UUID.test(key) || !UUID.test(fighter)) throw new Problem(400, 'invalid-id');
         if (request.headers.get('content-type') !== 'image/webp') throw new Problem(415, 'webp-required');
         const bytes = await readBody(request, PROFILE_SET_LIMITS.expressionsBytes);
-        return reply({ ok: true, profileSet: await addOperatorSheet(db, { actor, setId: parts[2].toLowerCase(), key: key.toLowerCase(), reason, bytes }) });
+        return reply({ ok: true, profileSet: await addOperatorSheet(db, { actor, setId: parts[2].toLowerCase(), fighterId: fighter.toLowerCase(),
+          key: key.toLowerCase(), reason, bytes }) });
       }
       if (parts.length === 4 && parts[1] === 'profile-sets' && ['approve', 'reject'].includes(parts[3]) && request.method === 'POST') {
         if (!UUID.test(parts[2])) throw new Problem(400, 'invalid-review');

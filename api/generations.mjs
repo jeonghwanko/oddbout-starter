@@ -13,7 +13,7 @@ import { SUBMISSION_STATUS, checkedManifest, storeAsset } from './submissions.mj
 import { DECISIONS, reviewEvidence } from './decisions-review.mjs';
 import { benchmarkReview } from './decisions-benchmark.mjs';
 import { BENCHMARK_BODY_BYTES } from './sequence-benchmark.mjs';
-import { PROFILE_SET_LIMITS, PROFILE_SET_VERSION, parseProfileSet, profileSetKey, storeOnce } from './profile-sets.mjs';
+import { PROFILE_SET_LIMITS, PROFILE_SET_VERSION, expireUpload, parseProfileSet, profileSetKey, storeOnce } from './profile-sets.mjs';
 import { BUCKET } from './submissions.mjs';
 import { accountTokens } from './account.mjs';
 /**
@@ -149,10 +149,11 @@ export async function attachJobProfileSet(db, submission) {
   const set = await rpc('af_profile_set_create', { p_owner: job.owner_id, p_fighter: submission.fighter_id, p_key: job.id, p_text: text,
     p_sha: await sha256(new TextEncoder().encode(text)), p_bytes: front.bytes });
   await storeOnce(db, BUCKET, profileSetKey(job.owner_id, set.id, 'front'), bytes, front.sha256);
-  // Named in the set by now: one more try before the set is left waiting for it (as the front's own store is).
+  // Named in the set by now: one more try, then the set is closed so it never holds his owner's own upload (리뷰 2026-11-03).
   if (withSheet && sheetBytes) {
     const key = profileSetKey(job.owner_id, set.id, 'expressions');
-    await storeOnce(db, BUCKET, key, sheetBytes, expressions.sha256).catch(() => storeOnce(db, BUCKET, key, sheetBytes, expressions.sha256));
+    try { await storeOnce(db, BUCKET, key, sheetBytes, expressions.sha256).catch(() => storeOnce(db, BUCKET, key, sheetBytes, expressions.sha256)); }
+    catch (caught) { await expireUpload(db, set.id); throw caught; }
   }
   await rpc('af_profile_set_submit', { p_owner: job.owner_id, p_id: set.id });
   const { error: linkError } = await db.from('af_generation_jobs').update({ profile_set_id: set.id }).eq('id', job.id);

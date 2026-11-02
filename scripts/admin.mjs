@@ -10,7 +10,7 @@
 //   fighter <fighter> | replace-package <fighter> <package dir or fighter.json> --reason <text> [--key <uuid>]
 //   edit-profile <fighter> --reason <text> [--profile <json or @file>] [--style <json, null or @file>]
 //   storage | storage-remove (<submission>... | --oldest <n>)
-//   profile-expressions <sheets.json> --reason <text>
+//   profile-expressions <sheets.json> --reason <text> [--attempt <n>]
 // Every answer is one JSON object on stdout. A command that changes something only shows what it would do (`dryRun: true`) until it is
 // run again with --yes: the agent shows that to its user and asks first.
 import { createHash } from 'node:crypto';
@@ -20,6 +20,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRemoteClient } from '../api/client.mjs';
 import { probeImage } from '../api/image-probe.mjs';
+import { checkExpressionSheet } from '../worker/profile-set-check.mjs';
 import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/validate.mjs';
 import { defaultSessionPath } from './login.mjs';
 
@@ -265,12 +266,15 @@ async function storageRemove([, ...targets], flags, signIn) {
 /**
  * profile-expressions (2026-11-03 — 사용자: "무투장 패배 표정 없는 캐릭터들은 image-gen으로 생성해서 추가하고"): each listed fighter's sheet as a new
  * profile set from his current approved one (admin/profile-sets/<set>/expressions). The list is a JSON file `{ sheets: [{ fighterId,
- * profileSetId, name, file, sha256 }] }`, files beside it: every file is read and checked (its hash, a 1536 × 1024 WebP) before anything is
- * sent. Each sheet is sent on its own; one refused never stops the rest. The new sets wait for the validator, then for profile-approve.
+ * profileSetId, name, file, sha256 }] }`, files beside it: every file is read and checked (its hash, the validator's own pixel check) before
+ * anything is sent. Each sheet is sent on its own with the fighter it is meant for (the server refuses a set of another), and one refused
+ * never stops the rest. The new sets wait for the validator, then for profile-approve. `--attempt <n>` makes new keys (after an
+ * `upload-expired`).
  * @param {string[]} positional @param {Record<string, string | true>} flags @param {() => Promise<Client>} signIn
  */
 async function addSheets([, list], flags, signIn) {
-  const reason = text(flags.reason, 'reason');
+  const reason = text(flags.reason, 'reason'), attempt = flags.attempt === undefined ? '1' : text(flags.attempt, 'attempt');
+  if (!/^[1-9][0-9]{0,2}$/.test(attempt)) throw new Error('invalid-value:--attempt');
   if (!list) throw new Error('missing-value:sheets');
   let entries;
   try { entries = JSON.parse(await readFile(list, 'utf8')).sheets; } catch { throw new Error('invalid-value:sheets'); }
@@ -280,9 +284,10 @@ async function addSheets([, list], flags, signIn) {
     const set = id(entry?.profileSetId, 'profile-set'), fighter = id(entry?.fighterId, 'fighter');
     if (typeof entry.file !== 'string' || !/^[a-z0-9][a-z0-9._-]{0,80}\.webp$/i.test(entry.file)) throw Object.assign(new Error('invalid-value:sheets'), { errors: [set] });
     const bytes = await readFile(path.join(path.dirname(list), entry.file)), probed = probeImage(bytes), sha = sha256(bytes);
-    if (sha !== entry.sha256 || probed?.type !== 'image/webp' || probed.width !== 1536 || probed.height !== 1024)
+    if (sha !== entry.sha256 || probed?.type !== 'image/webp' || probed.width !== 1536 || probed.height !== 1024 || !(await checkExpressionSheet(bytes)).ok)
       throw Object.assign(new Error('sheet-mismatch'), { errors: [entry.file] });
-    sheets.push({ fighterId: fighter, profileSetId: set, name: typeof entry.name === 'string' ? entry.name : '', bytes, sha, key: editKey('expressions', set, sha) });
+    sheets.push({ fighterId: fighter, profileSetId: set, name: typeof entry.name === 'string' ? entry.name : '', bytes, sha,
+      key: editKey('expressions', set, sha, ...(attempt === '1' ? [] : [attempt])) });
   }
   const change = `선수 ${sheets.length}명(${sheets.map(sheet => sheet.name || sheet.fighterId).join(', ')})의 승인된 정면에 표정 시트를 붙인 새 프로필 세트를 `
     + `주인 이름으로 올립니다. 검사와 운영자 승인 뒤에 무투장에 보이고, 그때까지 지금 세트가 그대로입니다. 사유: ${reason}`;
@@ -292,7 +297,7 @@ async function addSheets([, list], flags, signIn) {
   for (const sheet of sheets) {
     try {
       const answer = await client.request(`admin/profile-sets/${sheet.profileSetId}/expressions`, { method: 'POST',
-        headers: { 'content-type': 'image/webp', 'idempotency-key': sheet.key, ...reasonHeader(reason) }, body: sheet.bytes });
+        headers: { 'content-type': 'image/webp', 'idempotency-key': sheet.key, 'x-admin-fighter': sheet.fighterId, ...reasonHeader(reason) }, body: sheet.bytes });
       results.push({ fighterId: sheet.fighterId, name: sheet.name, ok: true, profileSetId: answer.profileSet?.profileSetId, stage: answer.profileSet?.stage });
     } catch (error) { results.push({ fighterId: sheet.fighterId, name: sheet.name, ok: false, code: error instanceof Error ? error.message : String(error) }); }
   }
@@ -309,7 +314,7 @@ export const USAGE = [
   'npm run admin -- fighter <fighter> | replace-package <fighter> <package dir|fighter.json> --reason <text> [--key <uuid>] --yes',
   'npm run admin -- edit-profile <fighter> --reason <text> [--profile <json|@file>] [--style <json|null|@file>] --yes',
   'npm run admin -- storage | storage-remove (<submission>... | --oldest <n>) --yes',
-  'npm run admin -- profile-expressions <sheets.json> --reason <text> --yes',
+  'npm run admin -- profile-expressions <sheets.json> --reason <text> [--attempt <n>] --yes',
   'Session: --session <file>, else ODDBOUT_ADMIN_SESSION, else the npm run login session file.',
 ];
 
@@ -327,7 +332,9 @@ const HINTS = /** @type {Record<string, string>} */ ({
   'validation-timeout': '10분 안에 검사가 끝나지 않았습니다. fighter <id> 로 상태를 다시 보세요.',
   'package-superseded': '이 패키지는 이미 다른 패키지로 대체됐습니다. 선수는 지금 패키지 그대로입니다.',
   'package-invalid': '패키지가 계약 검사를 통과하지 못했습니다(errors).',
-  'sheet-mismatch': '시트 파일(errors)이 목록의 sha256 이나 1536 × 1024 WebP 와 다릅니다.',
+  'sheet-mismatch': '시트 파일(errors)이 목록의 sha256 과 다르거나 검증기의 시트 검사(1536 × 1024 WebP, 알파, 여섯 칸)를 통과하지 못합니다.',
+  'fighter-mismatch': '그 프로필 세트는 목록이 말한 선수의 것이 아닙니다. sheets.json 의 fighterId·profileSetId 를 확인하세요.',
+  'upload-expired': '같은 키의 세트가 업로드 도중 닫혔습니다. --attempt 2 로 새 키를 쓰세요.',
   'not-unused': '그 제출(errors)은 안 쓰는 목록에 없습니다: 지금 쓰는 패키지이거나, 이미 지웠거나, 오래된 순 200개 밖입니다. storage 로 다시 보세요.',
 });
 

@@ -100,6 +100,59 @@ grant execute on function public.af_profile_set_submit(uuid, uuid), public.af_pr
 -- reason are kept here only, as af_admin_fighter_edits keeps an operator's package.
 alter table public.af_profile_set_events drop constraint af_profile_set_events_kind_check,
   add constraint af_profile_set_events_kind_check check (kind in ('approve', 'reject', 'withdraw', 'public-cleanup-failed', 'admin-expressions'));
+-- The approved set an operator's copy was made from: it is approved only while that set is still his current one (리뷰 2026-11-03: an
+-- approval must never put back a front the owner replaced meanwhile).
+alter table public.af_profile_sets add column based_on uuid references public.af_profile_sets(id);
+
+-- The operator's set: his owner's af_profile_set_create from the fighter's current approved set, its base and the operator's event in one
+-- transaction (리뷰 2026-11-03: an event written after the upload could be lost on a retry). The same key answers the same set, at any
+-- status, only for the same sheet and base.
+create function public.af_admin_profile_set_expressions(p_actor uuid, p_from uuid, p_key uuid, p_text text, p_sha text, p_bytes bigint, p_reason text)
+returns public.af_profile_sets language plpgsql security invoker set search_path = '' as $$
+declare base public.af_profile_sets; f public.af_fighters; p public.af_profile_sets; reason text := btrim(coalesce(p_reason, ''));
+begin
+  if not public.af_admin_account(p_actor) then raise exception 'admin-required'; end if;
+  if length(reason) not between 1 and 500 then raise exception 'invalid-reason'; end if;
+  select * into base from public.af_profile_sets where id = p_from;
+  if not found then raise exception 'not-found'; end if;
+  select * into p from public.af_profile_sets where owner_id = base.owner_id and idempotency_key = p_key;
+  if found then
+    if p.manifest_sha <> p_sha or p.based_on is distinct from base.id then raise exception 'idempotency-conflict'; end if;
+    return p;
+  end if;
+  select * into f from public.af_fighters where id = base.fighter_id for update;
+  if base.status <> 'approved' or f.deleted_at is not null or f.profile_set_id is distinct from base.id then raise exception 'review-conflict'; end if;
+  p := public.af_profile_set_create(base.owner_id, base.fighter_id, p_key, p_text, p_sha, p_bytes);
+  update public.af_profile_sets set based_on = base.id where id = p.id returning * into p;
+  insert into public.af_profile_set_events(fighter_id, profile_set_id, actor, kind, data)
+    values (p.fighter_id, p.id, p_actor, 'admin-expressions', jsonb_build_object('reason', reason, 'from', base.id));
+  return p;
+end $$;
+revoke all on function public.af_admin_profile_set_expressions(uuid, uuid, uuid, text, text, bigint, text) from public, anon, authenticated;
+grant execute on function public.af_admin_profile_set_expressions(uuid, uuid, uuid, text, text, bigint, text) to service_role;
+
+-- As 20261031100000, and an operator's copy (`based_on`) is approved only while its base is still the fighter's current set.
+create or replace function public.af_admin_profile_set_approve(p_actor uuid, p_id uuid) returns jsonb
+language plpgsql security invoker set search_path = '' as $$
+declare p public.af_profile_sets; f public.af_fighters; fighter uuid;
+begin
+  if not public.af_admin_account(p_actor) then raise exception 'admin-required'; end if;
+  select fighter_id into fighter from public.af_profile_sets where id = p_id;
+  if not found then raise exception 'not-found'; end if;
+  select * into f from public.af_fighters where id = fighter for update;
+  select * into p from public.af_profile_sets where id = p_id for update;
+  if p.status = 'approved' and f.profile_set_id is not distinct from p.id then
+    return jsonb_build_object('id', p.id, 'fighterId', p.fighter_id, 'status', p.status, 'derived', p.derived);
+  end if;
+  if p.status <> 'review' or f.deleted_at is not null or f.review_state = 'rejected' then raise exception 'review-conflict'; end if;
+  if p.based_on is not null and f.profile_set_id is distinct from p.based_on then raise exception 'review-conflict'; end if;
+  update public.af_profile_sets set status = 'superseded' where fighter_id = p.fighter_id and status = 'approved' and id <> p.id;
+  update public.af_profile_sets set status = 'approved', reviewed_by = p_actor, reviewed_at = now(), approved_at = now(), reason = null
+    where id = p.id returning * into p;
+  update public.af_fighters set profile_set_id = p.id where id = p.fighter_id;
+  insert into public.af_profile_set_events(fighter_id, profile_set_id, actor, kind) values (p.fighter_id, p.id, p_actor, 'approve');
+  return jsonb_build_object('id', p.id, 'fighterId', p.fighter_id, 'status', p.status, 'derived', p.derived);
+end $$;
 
 -- A hosted fighter's sheet (the worker's `profile-front`), kept apart from his front: an API from before the sheet reads `profile_front`
 -- alone, so a rollback still makes the front's set.

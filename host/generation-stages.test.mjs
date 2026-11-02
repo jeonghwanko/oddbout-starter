@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ALIGN_AGAIN, BEAT_LIMIT, GROK_LIMITED, BRIEF_SCHEMA, ONE_STRIDE_OF, GAIT_EVENT_BYTES, GAIT_OWN_FEATURE, gaitEvent, gaitRanges, GAIT_RETAKES, CODEX_TOOLS_OFF, EVEN_BEAT, PREVIEW_CLIPS, RUN_FROM_WALK, RUN_FROM_WALK_PACE, SCALE_ROUNDS, SCALE_WIDE, appearancePrompt, briefCommand, briefPrompt, characterPhrase, checkedBrief, checkedVerdict, createStages, lookPick, namedFeet, feetAlternate, lowMarginFeet, ENGINE_CUE_RHYTHM, ogJobId, retakeReasons,
   submissionOutcome, withProfile, EXTRACT_REDRAWS, extractFailedRows, ENGINE_SEAM_MAX, loopTaken, HOUSE_COLOURING, LOOK_CHECKS, SIDE_CHECKS, SIDE_COLOURING, SIDE_TAKES,
-  lookJudgePrompt, sideJudgePrompt, sidePrompt, EXPRESSION_CELLS, expressionsPrompt, expressionsName } from './generation-stages.mjs';
+  lookJudgePrompt, sideJudgePrompt, sidePrompt, EXPRESSION_CELLS, expressionsPrompt, expressionsName, MODELS } from './generation-stages.mjs';
 import { ENGINE_SEAM_MAX as REVIEW_SEAM_MAX, ENGINE_CUE_RHYTHM as REVIEW_CUE_RHYTHM, lowMarginFeet as reviewLowMarginFeet } from '../tools/ai-fighter/gait.mjs';
 import { parseEnv, parseHealth } from './generation-worker.mjs';
 import { ASKS } from './generation-stages.mjs';
@@ -1252,6 +1252,13 @@ const pngHeader = (width, height) => {
   bytes.writeUInt32BE(width, 16); bytes.writeUInt32BE(height, 20);
   return bytes;
 };
+test('og health asks codex with the hosted stages\' model (a login that refuses it takes no job)', async () => {
+  const og = await readFile(path.join(path.dirname(fileURLToPath(import.meta.url)), 'og'), 'utf8');
+  assert.equal(og.match(/^CODEX_MODEL=\$\{OG_CODEX_MODEL:-([^}]+)\}$/m)?.[1], MODELS.text);
+  assert.match(og, /codex exec --skip-git-repo-check --sandbox read-only -m "\$CODEX_MODEL"/);
+  assert.deepEqual(MODELS, { text: 'gpt-6.1-sol', image: 'gpt-6.1-sol' });
+});
+
 test('the expression sheet says the creators\' agents\' cells, colours as the front and keeps the arena\'s order (KO last)', async () => {
   const { PROFILE_SET_EXPRESSIONS_PROMPT } = await import('../api/profile-sets.mjs');
   const agents = PROFILE_SET_EXPRESSIONS_PROMPT.split('\n');
@@ -1269,10 +1276,11 @@ test('beside the motions, the sheet is drawn once from the chosen front, goes up
   await mkdir(path.join(dir, 'looks'), { recursive: true });
   await writeFile(path.join(dir, 'looks', 'front-b-0.png'), 'front');
   const flag = (args, name) => args[args.indexOf(name) + 1];
-  let sheetCode = 0, sheetSize = [1536, 1024];
+  let sheetCode = 0, sheetSize = [1536, 1024], sheetReport = null;
   const og = async (args, { stdin } = {}) => {
     calls.push({ args, stdin });
     if (args.includes('gen') && args.includes('--aspect-ratio')) {
+      if (sheetReport) await writeFile(flag(args, '--report'), JSON.stringify(sheetReport));
       if (sheetCode !== 0) return { code: sheetCode };
       await writeFile(flag(args, '--out'), pngHeader(...sheetSize)); await writeFile(flag(args, '--report'), JSON.stringify({ ok: true })); return { code: 0 };
     }
@@ -1338,6 +1346,11 @@ test('beside the motions, the sheet is drawn once from the chosen front, goes up
     await stages.motions({ ...job, choice: 'a' }, refused);
     assert.deepEqual(events.filter(e => e?.kind === 'expressions').map(e => e.code), [`expressions-not-started-${code}`]);
   }
+  // A run that failed with its own report saying nothing reached the provider: the same.
+  sheetCode = 1; sheetReport = { ok: false, provider_submitted: false, errors: [{ code: 'bad-arguments' }] }; events.length = 0;
+  await stages.motions({ ...job, choice: 'a' }, refused);
+  assert.deepEqual(events.filter(e => e?.kind === 'expressions').map(e => e.code), ['expressions-not-started-1']);
+  sheetReport = null;
   sheetCode = 0; sheetSize = [1530, 1020]; calls.length = 0; events.length = 0;
   await stages.motions({ ...job, choice: 'a' }, refused);
   // codex sized it a little off 1536 × 1024: a 3:2 sheet is fitted, not thrown away.

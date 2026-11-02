@@ -86,6 +86,9 @@ ODDBOUT 통합 플러그인은 연결된 Google 계정을 PC와 Dots 등록에 �
 - 운영자의 표정 시트(2026-11-03): 시트 없이 승인된 선수에게 운영자가 시트를 붙인다. `npm run admin -- profile-expressions <sheets.json> --reason <text>`
   (`POST admin/profile-sets/<지금 승인된 세트>/expressions`, `image/webp`, `Idempotency-Key`, `X-Admin-Reason`)가 그 세트의 정면·얼굴 칸에 시트를 붙인
   새 세트를 주인 이름으로 만들어 검사에 보낸다. 운영자의 id와 사유는 `af_profile_set_events`(`admin-expressions`)에만 남는다. 승인 전에는 지금 세트가 그대로다.
+  세트·바탕(`based_on`)·사건은 한 트랜잭션(`af_admin_profile_set_expressions`)이고, 요청은 대상 선수(`X-Admin-Fighter`)를 함께 보내 다른 선수의 세트를
+  거절한다. 바탕 세트가 더 이상 그 선수의 지금 세트가 아니면(주인이 그 사이 새 정면을 승인받으면) 승인이 거절된다. 만든 뒤 저장이 실패한 세트는 바로
+  닫혀 주인의 업로드를 막지 않는다(같은 키는 `upload-expired` — CLI `--attempt 2`).
 - 화풍: 우리 게임의 담백한 셀 채색이다. 규격의 `style.colouring` 문구를 모든 생성에 붙이고, `style.anchor.url`의 기준 그림을 마지막 참조로 붙인다.
 - API(주인): `POST /fighters/:id/profile-sets`(UUID `Idempotency-Key`, 본문 = 세트 파일) → `PUT /profile-sets/:id/assets/front`(`image/webp`)
   (시트가 있으면 `PUT /profile-sets/:id/assets/expressions`도) → `POST /profile-sets/:id/submit`. 상태는 `GET /profile-sets/:id`(자기 파일의 10분 서명 주소 포함), 선수별 최근 10개는 `GET /fighters/:id/profile-sets`.
