@@ -57,6 +57,19 @@ export const FILE = z.object({ download_url: z.string().max(8192), file_id: z.st
  * conversation — MCP 점검 2026-10-27); the server checks the ids again (`api/http.mjs` UUID), so a short pattern is enough here.
  */
 export const UUID_ARG = () => z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+/** The creator website. Its page links (`#job=`, `#submission=`, `#fighter=…&view=motions`, `#view=upload&ticket=`) are the site's routes; the origin lives here only. */
+export const CREATOR_PAGE = 'https://oddbout.com/creator.html';
+/**
+ * The page where the user follows what an agent started (2026-11-03, site deep links): a registered fighter's all-motions page (the owner
+ * watches the eleven motions there and enters him — registering does not), else his hosted request or his package submission. Null with
+ * nothing to point at; a deleted fighter has no page.
+ * @param {{ fighterId?: string | null, jobId?: string | null, submissionId?: string | null }} target
+ * @returns {string | null}
+ */
+export const siteUrl = ({ fighterId, jobId, submissionId }) => fighterId ? `${CREATOR_PAGE}#fighter=${fighterId}&view=motions`
+  : jobId ? `${CREATOR_PAGE}#job=${jobId}` : submissionId ? `${CREATOR_PAGE}#submission=${submissionId}` : null;
+/** What an agent does with a `siteUrl`: one sentence, shared by every result that carries one. */
+export const SITE_URL_NEXT = 'The user can follow this on the ODDBOUT website too: give him siteUrl to watch progress, pick a look, review the motions and enter the fighter (출전).';
 export const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 export const AUTH = [{ type: 'oauth2', scopes: ['openid', 'email', 'profile'] }];
 /**

@@ -2,14 +2,15 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createCloudHandler, hostedNext, CLOUD_ISSUER, CLOUD_RESOURCE } from '../mcp/cloud.mjs';
 import { PICTURE_PAGE, TICKET_UPLOAD_URL, pictureLinkShape } from '../mcp/cloud/hosted-tools.mjs';
+import { CREATOR_PAGE, siteUrl } from '../mcp/cloud/common.mjs';
 import { generation, png, webp } from './helpers/generation-database.mjs';
 
 const HOSTED = ['request_hosted_fighter', 'get_hosted_fighter', 'choose_hosted_look', 'revise_hosted_motion', 'register_hosted_fighter', 'cancel_hosted_fighter',
   'list_generation_hosts', 'start_picture_upload', 'get_picture_upload', 'report_picture_link'];
 
 // The cloud MCP over the hosted generation API on a real (PGlite) database: the agent carries the user's words and answers, the worker the rest.
-async function connector(g, hosted, fetcher = async () => new Response(png(512, 512)), { budgetMs } = {}) {
-  const claims = { sub: g.owner, client_id: crypto.randomUUID(), session_id: crypto.randomUUID(), iss: CLOUD_ISSUER, aud: CLOUD_RESOURCE, role: 'af_mcp',
+async function connector(g, hosted, fetcher = async () => new Response(png(512, 512)), { budgetMs, clientId = crypto.randomUUID(), meta } = {}) {
+  const claims = { sub: g.owner, client_id: clientId, session_id: crypto.randomUUID(), iss: CLOUD_ISSUER, aud: CLOUD_RESOURCE, role: 'af_mcp',
     af_mcp: 'registration-v1', is_anonymous: false, exp: Math.floor(Date.now() / 1000) + 600 };
   const downloads = [];
   const db = { ...g.db, auth: { getClaims: async () => ({ data: { claims } }) },
@@ -19,12 +20,13 @@ async function connector(g, hosted, fetcher = async () => new Response(png(512, 
   const rpc = async (method, params) => {
     const response = await handle(new Request(CLOUD_RESOURCE, { method: 'POST',
     headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: 'Bearer signed-connector-token-for-test' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) }));
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params: meta && method === 'tools/call' ? { ...params, _meta: meta } : params }) }));
     if (loseResponse) { loseResponse = false; await response.body?.cancel(); throw new Error('simulated lost response'); }
     return (await response.json()).result;
   };
   return { downloads, loseNextResponse: () => { loseResponse = true; }, tools: async () => (await rpc('tools/list', {})).tools,
-    call: async (name, args) => (await rpc('tools/call', { name, arguments: args })).structuredContent };
+    call: async (name, args) => (await rpc('tools/call', { name, arguments: args })).structuredContent,
+    text: async (name, args) => (await rpc('tools/call', { name, arguments: args })).content[0].text };
 }
 
 test('hosted generation tools list only when configured', async () => {
@@ -479,4 +481,64 @@ test('a picture address an agent reports is noted by its kind (and an http host)
     assert.equal(await call('report_picture_link', { url: 'https://images.example.test/a.png', madeBy: 'Kim Minsu' }), undefined);
     assert.equal(probes(), seen);
   } finally { await g.sql.close(); }
+});
+
+// siteUrl (2026-11-03): the user's page for what the agent started — the request's, the fighter's all-motions page once registered.
+test('hosted results carry siteUrl: the request\'s page, his fighter\'s motions page once registered; the agent that asked is shown', async () => {
+  const g = await generation(), clientId = crypto.randomUUID();
+  try {
+    await g.healthy();
+    await g.sql.query('insert into auth.oauth_clients(id,client_name,deleted_at) values($1,$2,null)', [clientId, 'Grok']);
+    const { call } = await connector(g, { pollMs: 10 }, undefined, { clientId });
+    const made = await call('request_hosted_fighter', { description: '빨간 글러브를 낀 고양이 복서, 귀가 크다', language: 'ko', idempotencyKey: crypto.randomUUID() });
+    const jobId = made.job.id;
+    assert.equal(made.siteUrl, `${CREATOR_PAGE}#job=${jobId}`); assert.equal(made.siteUrl, `https://oddbout.com/creator.html#job=${jobId}`);
+    assert.match(made.next, /give him siteUrl to watch progress, pick a look, review the motions and enter the fighter/);
+    assert.equal(made.job.agent, 'Grok');
+    const read = await call('get_hosted_fighter', { jobId });
+    assert.equal(read.siteUrl, made.siteUrl); assert.equal(read.job.agent, 'Grok');
+    // Each of the recent jobs of a list has its own.
+    const listed = await call('get_hosted_fighter', {});
+    assert.deepEqual(listed.jobs.map(job => job.siteUrl), [made.siteUrl]);
+    assert.equal(listed.siteUrl, undefined);
+    // A registered fighter: the all-motions page (registering does not enter him), whose text names it instead of repeating the sentence.
+    const submission = crypto.randomUUID(), fighter = crypto.randomUUID();
+    await g.sql.query(`insert into public.af_submissions(id,owner_id,idempotency_key,manifest_text,manifest,manifest_sha,asset_bytes,status,fighter_id)
+      values($1,$2,gen_random_uuid(),'{}','{}'::jsonb,repeat('a',64),1,'registered',$3)`, [submission, g.owner, fighter]);
+    await g.sql.query("update public.af_generation_jobs set status = 'submitted', submission_id = $1 where id = $2", [submission, jobId]);
+    const registered = await call('get_hosted_fighter', { jobId });
+    assert.equal(registered.siteUrl, `${CREATOR_PAGE}#fighter=${fighter}&view=motions`);
+    assert.match(registered.next, /Registered: fighter .* \(give him siteUrl\)/); assert.ok(!registered.next.includes('pick a look'));
+    assert.equal((await call('get_hosted_fighter', {})).jobs[0].siteUrl, registered.siteUrl);
+    // A registered submission with no fighter id points at the request; a job that is over says nothing of the site.
+    await g.sql.query("update public.af_submissions set fighter_id = null where id = $1", [submission]);
+    assert.equal((await call('get_hosted_fighter', { jobId })).siteUrl, `${CREATOR_PAGE}#job=${jobId}`);
+    await g.sql.query("update public.af_generation_jobs set status = 'failed', submission_id = null where id = $1", [jobId]);
+    const failed = await call('get_hosted_fighter', { jobId });
+    assert.ok(!failed.next.includes('siteUrl')); assert.equal(failed.siteUrl, `${CREATOR_PAGE}#job=${jobId}`);
+  } finally { await g.sql.close(); }
+});
+
+test('a host that reads the structured result gets a short text that keeps siteUrl whole', async () => {
+  const g = await generation();
+  try {
+    await g.healthy();
+    const { call, text } = await connector(g, { pollMs: 10 }, undefined, { meta: { 'openai/locale': 'en' } });
+    const made = await call('request_hosted_fighter', { description: '빨간 글러브를 낀 고양이 복서, 귀가 크다', language: 'ko', idempotencyKey: crypto.randomUUID() });
+    assert.equal(made.siteUrl, `${CREATOR_PAGE}#job=${made.job.id}`);
+    // Enough to pass the compact limit: the text names fields, and the link is not cut.
+    await g.sql.query("update public.af_generation_jobs set description = repeat('가', 590) where id = $1", [made.job.id]);
+    const short = await text('get_hosted_fighter', { jobId: made.job.id });
+    assert.match(short, /^Full result in structuredContent/);
+    assert.ok(short.includes(`siteUrl="${made.siteUrl}"`), short);
+  } finally { await g.sql.close(); }
+});
+
+test('siteUrl names a fighter before a request before a submission, and nothing with nothing to name', () => {
+  const id = crypto.randomUUID(), other = crypto.randomUUID();
+  assert.equal(siteUrl({ fighterId: id, jobId: other, submissionId: other }), `${CREATOR_PAGE}#fighter=${id}&view=motions`);
+  assert.equal(siteUrl({ fighterId: null, jobId: id, submissionId: other }), `${CREATOR_PAGE}#job=${id}`);
+  assert.equal(siteUrl({ submissionId: id }), `${CREATOR_PAGE}#submission=${id}`);
+  assert.equal(siteUrl({}), null);
+  assert.ok(PICTURE_PAGE.startsWith(`${CREATOR_PAGE}#view=upload&ticket=`));
 });
