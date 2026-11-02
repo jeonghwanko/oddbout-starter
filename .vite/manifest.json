@@ -1,4 +1,21 @@
 {
+  "../../../Users/turbo08/crashbang-heroes/kaito_web/node_modules/@supabase/supabase-js/dist/index.mjs": {
+    "file": "assets/dist-BziIhgZ3.js",
+    "name": "dist",
+    "src": "../../../Users/turbo08/crashbang-heroes/kaito_web/node_modules/@supabase/supabase-js/dist/index.mjs",
+    "isDynamicEntry": true,
+    "imports": [
+      "_dist-CuSK8MRy.js"
+    ]
+  },
+  "../../../Users/turbo08/crashbang-heroes/kaito_web/node_modules/three/examples/jsm/libs/basis/basis_transcoder.js": {
+    "file": "assets/basis_transcoder-o4Hde_L7.js",
+    "src": "../../../Users/turbo08/crashbang-heroes/kaito_web/node_modules/three/examples/jsm/libs/basis/basis_transcoder.js"
+  },
+  "../../../Users/turbo08/crashbang-heroes/kaito_web/node_modules/three/examples/jsm/libs/basis/basis_transcoder.wasm": {
+    "file": "assets/basis_transcoder-VXdx5NbI.wasm",
+    "src": "../../../Users/turbo08/crashbang-heroes/kaito_web/node_modules/three/examples/jsm/libs/basis/basis_transcoder.wasm"
+  },
   "_ArenaArtCatalog-BvHAhPAB.js": {
     "file": "assets/ArenaArtCatalog-BvHAhPAB.js",
     "name": "ArenaArtCatalog",
@@ -539,8 +556,8 @@
     "file": "assets/fighterApiBase-CeB_1v89.js",
     "name": "fighterApiBase"
   },
-  "_fighterCreator-C-mnCvtT.js": {
-    "file": "assets/fighterCreator-C-mnCvtT.js",
+  "_fighterCreator-DmXrpT70.js": {
+    "file": "assets/fighterCreator-DmXrpT70.js",
     "name": "fighterCreator",
     "imports": [
       "__oddbout-milestones-ZGuRIpfF.js",
@@ -562,14 +579,14 @@
     "file": "assets/fighterLines-BqpSV2Ld.js",
     "name": "fighterLines"
   },
-  "_fighterProfile-C3ZBRMVM.js": {
-    "file": "assets/fighterProfile-C3ZBRMVM.js",
+  "_fighterProfile-C9wF9EVP.js": {
+    "file": "assets/fighterProfile-C9wF9EVP.js",
     "name": "fighterProfile",
     "imports": [
       "_Locale-B1I3z1uL.js",
       "_worldCommunityLocale-CbJ5OnXZ.js",
       "_dist-CuSK8MRy.js",
-      "_fighterCreator-C-mnCvtT.js",
+      "_fighterCreator-DmXrpT70.js",
       "_fighterApiBase-CeB_1v89.js",
       "_registeredFighters-CiA1ObwK.js",
       "_accountControl-CGbdqWAJ.js",
@@ -665,7 +682,7 @@
       "_fighterApiBase-CeB_1v89.js"
     ],
     "dynamicImports": [
-      "node_modules/@supabase/supabase-js/dist/index.mjs"
+      "../../../Users/turbo08/crashbang-heroes/kaito_web/node_modules/@supabase/supabase-js/dist/index.mjs"
     ]
   },
   "_palette-D63XinfX.js": {
@@ -1172,19 +1189,19 @@
     ]
   },
   "admin.html": {
-    "file": "assets/admin-C3wI5vaE.js",
+    "file": "assets/admin-CZGHzysG.js",
     "name": "admin",
     "src": "admin.html",
     "isEntry": true,
     "imports": [
       "__oddbout-analytics-CVdYY990.js",
-      "_fighterCreator-C-mnCvtT.js",
+      "_fighterCreator-DmXrpT70.js",
       "_oddboutSession-1K9PeLHt.js",
       "_siteChrome-gkd8xDR1.js",
       "_UtcTime-BFPbMiHs.js"
     ],
     "css": [
-      "assets/admin-C5ydh1kR.css",
+      "assets/admin-CkoqJZ_0.css",
       "assets/creatorTheme-Dazqaj5q.css"
     ]
   },
@@ -1206,7 +1223,7 @@
     ]
   },
   "creator.html": {
-    "file": "assets/creator-O-SWGzM7.js",
+    "file": "assets/creator-B0cc8uzj.js",
     "name": "creator",
     "src": "creator.html",
     "isEntry": true,
@@ -1219,8 +1236,8 @@
       "_preload-helper-Czpn1I53.js",
       "_storageKeys-BtLHOZxo.js",
       "_localePreference-CJLSrOPo.js",
-      "_fighterProfile-C3ZBRMVM.js",
-      "_fighterCreator-C-mnCvtT.js",
+      "_fighterProfile-C9wF9EVP.js",
+      "_fighterCreator-DmXrpT70.js",
       "_fighterApiBase-CeB_1v89.js",
       "_oddboutSession-1K9PeLHt.js",
       "_registeredFighters-CiA1ObwK.js",
@@ -1322,7 +1339,7 @@
     ]
   },
   "fighters.html": {
-    "file": "assets/fighters-BTpJBmGe.js",
+    "file": "assets/fighters-CATgM7RH.js",
     "name": "fighters",
     "src": "fighters.html",
     "isEntry": true,
@@ -1330,7 +1347,7 @@
       "__oddbout-analytics-CVdYY990.js",
       "_Locale-B1I3z1uL.js",
       "_localePreference-CJLSrOPo.js",
-      "_fighterProfile-C3ZBRMVM.js",
+      "_fighterProfile-C9wF9EVP.js",
       "_fighterApiBase-CeB_1v89.js",
       "_registeredFighters-CiA1ObwK.js",
       "_accountControl-CGbdqWAJ.js",
@@ -1343,7 +1360,7 @@
     ]
   },
   "league.html": {
-    "file": "assets/league-DFJgBSws.js",
+    "file": "assets/league-BHbb6mLm.js",
     "name": "league",
     "src": "league.html",
     "isEntry": true,
@@ -1351,7 +1368,7 @@
       "__oddbout-analytics-CVdYY990.js",
       "_Locale-B1I3z1uL.js",
       "_localePreference-CJLSrOPo.js",
-      "_fighterProfile-C3ZBRMVM.js",
+      "_fighterProfile-C9wF9EVP.js",
       "_fighterApiBase-CeB_1v89.js",
       "_registeredFighters-CiA1ObwK.js",
       "_siteChrome-gkd8xDR1.js",
@@ -1361,23 +1378,6 @@
     "css": [
       "assets/league-DysZ4K0S.css"
     ]
-  },
-  "node_modules/@supabase/supabase-js/dist/index.mjs": {
-    "file": "assets/dist-BziIhgZ3.js",
-    "name": "dist",
-    "src": "node_modules/@supabase/supabase-js/dist/index.mjs",
-    "isDynamicEntry": true,
-    "imports": [
-      "_dist-CuSK8MRy.js"
-    ]
-  },
-  "node_modules/three/examples/jsm/libs/basis/basis_transcoder.js": {
-    "file": "assets/basis_transcoder-o4Hde_L7.js",
-    "src": "node_modules/three/examples/jsm/libs/basis/basis_transcoder.js"
-  },
-  "node_modules/three/examples/jsm/libs/basis/basis_transcoder.wasm": {
-    "file": "assets/basis_transcoder-VXdx5NbI.wasm",
-    "src": "node_modules/three/examples/jsm/libs/basis/basis_transcoder.wasm"
   },
   "privacy.html": {
     "file": "assets/privacy-DQn_NaAg.js",
@@ -2719,7 +2719,7 @@
     ]
   },
   "world.html": {
-    "file": "assets/world-BtPWert9.js",
+    "file": "assets/world-By4jSEB8.js",
     "name": "world",
     "src": "world.html",
     "isEntry": true,
@@ -2728,8 +2728,8 @@
       "_Locale-B1I3z1uL.js",
       "_preload-helper-Czpn1I53.js",
       "_worldCommunityLocale-CbJ5OnXZ.js",
-      "_fighterProfile-C3ZBRMVM.js",
-      "_fighterCreator-C-mnCvtT.js",
+      "_fighterProfile-C9wF9EVP.js",
+      "_fighterCreator-DmXrpT70.js",
       "_fighterApiBase-CeB_1v89.js",
       "_oddboutSession-1K9PeLHt.js",
       "_registeredFighters-CiA1ObwK.js",
