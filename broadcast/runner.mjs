@@ -108,6 +108,8 @@ export function createWorkerTransport({ apiOrigin, workerToken, requestTimeoutMs
  * @returns {CupRenderer} */
 export function createPlaywrightRenderer({ arenaUrl, playwright, platform = process.platform, env = process.env }) {
   const arena = checkedUrl(arenaUrl, true);
+  const browserChannel = env.ODDBOUT_BROADCAST_BROWSER_CHANNEL;
+  if (browserChannel && !['chrome', 'msedge'].includes(browserChannel)) throw new Error('runner_invalid_browser_channel');
   /** @type {any} */ let browser;
   /** @type {Promise<void>|undefined} */ let closing;
   let closed = false;
@@ -133,7 +135,7 @@ export function createPlaywrightRenderer({ arenaUrl, playwright, platform = proc
       try {
         const runtime = playwright ?? await import('playwright');
         if (signal.aborted || closed) throw new Error();
-        browser = await runtime.chromium.launch({ headless: false });
+        browser = await runtime.chromium.launch({ headless: false, ...(browserChannel ? { channel: browserChannel } : {}) });
         if (signal.aborted || closed) { await close(); throw new Error(); }
         const context = await browser.newContext();
         const page = await context.newPage();
@@ -147,7 +149,7 @@ export function createPlaywrightRenderer({ arenaUrl, playwright, platform = proc
           { jobId: job.id, leaseToken: job.leaseToken, seed: job.seed, fighterIds: job.fighterIds });
         if (page.url() !== arena) throw new Error();
         const observedUrl = new URL(arena); observedUrl.search = '';
-        observedResult = { ...result, rendererObservation: { renderer: 'playwright-visible-chromium', arenaUrl: observedUrl.href,
+        observedResult = { ...result, rendererObservation: { renderer: 'playwright-visible-chromium', browserChannel: browserChannel ?? 'bundled-chromium', arenaUrl: observedUrl.href,
           observedDispatchAt: observedStart, observedResultAt: new Date().toISOString() } };
         return observedResult;
       } catch (/** @type {any} */ error) {

@@ -355,6 +355,15 @@ test('cleanup uncertainty persists real result evidence through the worker API w
   assert.equal((await db.query("select count(*)::int as n from commerce.ledger where kind='spend'")).rows[0].n,0);
 });
 
+test('an explicitly selected browser is used once; launch failure never falls back',async()=>{
+  const launches=[];
+  const playwright={chromium:{launch:async options=>{launches.push(options);throw new Error('installed browser unavailable');}}};
+  const renderer=createPlaywrightRenderer({arenaUrl:'http://localhost/broadcast.html',platform:'win32',playwright,env:{ODDBOUT_BROADCAST_BROWSER_CHANNEL:'chrome'}});
+  await assert.rejects(renderer.runCup(claimedJob(),{signal:new AbortController().signal}),/runner_renderer_setup_failed/);
+  assert.deepEqual(launches,[{headless:false,channel:'chrome'}]);
+  assert.throws(()=>createPlaywrightRenderer({arenaUrl:'http://localhost/broadcast.html',env:{ODDBOUT_BROADCAST_BROWSER_CHANNEL:'unreviewed'}}),/runner_invalid_browser_channel/);
+});
+
 test('a late browser launch after cancellation closes exactly once and never dispatches a cup, a confirmed failure',async()=>{
   let launch;let closed=0;let dispatched=0;
   const pending=new Promise(resolve=>{launch=resolve;});

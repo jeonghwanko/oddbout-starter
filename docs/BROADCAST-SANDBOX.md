@@ -2,6 +2,8 @@
 
 이 안내는 현재 `oddbout-starter` 코드에서 확인되는 경로만 설명한다. 아직 PayPal 실결제·실제 Twitch 송출·24시간 운전 완료를 뜻하지 않는다.
 
+외부 HTTPS 데모의 구성·배포·실행 순서는 [BROADCAST-HOSTING](BROADCAST-HOSTING.md)을 따른다.
+
 ## 1. 설치와 UI 미리보기
 
 필요 조건은 Node.js 22.12 이상과 npm이다.
@@ -41,6 +43,8 @@ DB와 Sandbox 설정 없이 실행하면 `preview-unconfigured` 모드다. 이 �
 | `PAYPAL_SANDBOX_CLIENT_ID`, `PAYPAL_SANDBOX_CLIENT_SECRET`, `PAYPAL_SANDBOX_MERCHANT_ID` | PayPal Sandbox API 설정. 세 값은 모두 설정하거나 모두 생략한다. |
 | `PAYPAL_SANDBOX_WEBHOOK_ID` | PayPal webhook 검증용 ID. webhook을 쓸 때 Sandbox webhook endpoint의 ID를 설정한다. |
 | `ODDBOUT_BROADCAST_PORT` | 로컬 서버 포트; 기본 `5180`. |
+| `PORT` | `ODDBOUT_BROADCAST_PORT`가 없을 때 쓰는 호스팅 플랫폼 포트. |
+| `ODDBOUT_BROADCAST_BIND_HOST` | 기본 `127.0.0.1`. HTTPS 프록시 뒤의 격리 데모에서만 `0.0.0.0`을 명시한다. HTTPS origin이 없으면 외부 bind를 거부한다. |
 | `ODDBOUT_BROADCAST_WORKERS_JSON` | worker API가 허용할 호스트별 worker token 설정 JSON. 비밀 토큰을 공개 문서·브라우저·저장소에 넣지 않는다. |
 | `ODDBOUT_BROADCAST_PRODUCERS_JSON` | 이미 승인된 세션 하나에 묶는 local producer grant 목록. 비어 있으면 `/mcp` producer 인증은 fail-closed다. 형식은 아래 설명을 참고한다. |
 
@@ -51,7 +55,7 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 node --env-file=.env scripts/broadcast-demo.mjs
 ```
 
-서버는 기본적으로 `127.0.0.1`에 바인딩한다. PayPal 복귀는 HTTPS 주소 또는 `localhost`/loopback 주소만 허용한다. 공개 호스팅은 이 개발 서버를 외부에 그대로 노출하는 절차가 아니며, TLS와 운영 설정을 따로 준비해야 한다.
+서버는 기본적으로 `127.0.0.1`에 바인딩한다. PayPal 복귀는 HTTPS 주소 또는 `localhost`/loopback 주소만 허용한다. 외부 데모는 [BROADCAST-HOSTING](BROADCAST-HOSTING.md)의 별도 서비스·TLS 프록시 설정을 쓴다. `/healthz`는 프로세스 응답만 뜻한다. Commerce를 켰는데 DB URL·서버 키·공개 키가 빠지면 시작을 거부한다.
 
 ## 3. 방송 호스트 점검
 
@@ -71,6 +75,8 @@ node --env-file=.env scripts/broadcast-host.mjs --doctor --host current-pc --con
 로그인 계정은 ODDBOUT 계정일 뿐 Twitch 방송자 신원이나 채널 소유권을 증명하지 않는다. 채널 필드는 개인 rehearsal label이며, 승인·보고는 해당 로그인 계정과 선택한 host에 묶인다. Twitch identity와 live output은 검증되지 않았고, 브라우저에 stream key를 입력하지 않는다. 동일 계정의 동시 변경 요청은 Web Locks와 요청 키로 조정한다. Web Locks를 지원하지 않는 브라우저에서는 결제·승인·시작·컵 요청을 fail-closed 처리한다. 서로 다른 host의 작업은 별도 host lease로 구분되며, 같은 host의 기존 running/unknown 작업은 해결될 때까지 해당 host slot을 점유한다.
 
 ## 4. 현재 실행 모드와 한계
+
+기본 브라우저는 `npx playwright install chromium`으로 설치한다. 설치된 Chrome/Edge를 쓰려면 호스트 환경에 `ODDBOUT_BROADCAST_BROWSER_CHANNEL=chrome` 또는 `msedge`를 명시한다. 자동 fallback은 없으며 관측 결과에 선택한 브라우저를 기록한다. 결제·작업 claim 없이 실제 세 경기만 점검하려면 `npm run broadcast:check-renderer -- <arena-origin>/broadcast.html`을 쓴다.
 
 host runner는 선택 호스트의 그래픽 세션에서 실행한다. 로컬 설정·서버와 승인된 작업·worker token·OBS WebSocket·`ODDBOUT_BROADCAST_API_ORIGIN`, `ODDBOUT_BROADCAST_WORKER_TOKEN`, `ODDBOUT_BROADCAST_ARENA_URL`가 필요하다. Linux는 `DISPLAY` 또는 `WAYLAND_DISPLAY`가 필요하다. arena URL은 쿼리가 없는 `/broadcast.html` 경로여야 하며 페이지가 `window.oddboutBroadcast.runCup`을 제공해야 한다. 이 starter 개발 서버는 경기 페이지를 제공하지 않으므로 호환되는 게임 페이지가 별도로 필요하다. Playwright의 visible Chromium도 runner 호스트에 설치되어 있어야 한다. 기본 상태 파일은 `.oddbout-broadcast/<hostId>.json`이고 실행 중복을 막는 lock을 둔다.
 

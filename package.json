@@ -18,6 +18,7 @@
     "broadcast:runner": "node scripts/broadcast-runner.mjs",
     "broadcast:producer": "node scripts/broadcast-producer.mjs",
     "broadcast:check-ui": "node --test test/browser/broadcast-console.test.mjs",
+    "broadcast:check-renderer": "node scripts/check-broadcast-renderer.mjs",
     "broadcast:release": "node scripts/broadcast-release.mjs",
     "site:build": "node scripts/build-creator-site.mjs",
     "site:publish": "node scripts/publish-creator-site.mjs",

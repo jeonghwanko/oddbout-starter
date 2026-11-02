@@ -1,0 +1,36 @@
+# Separate hackathon services, never the production ai-fighter validator/gateway.
+# Publish the reviewed changes before applying this Blueprint from main.
+# Free is a preview starting point, not an availability guarantee for a 24-hour run.
+services:
+  - type: web
+    name: oddbout-broadcast-sandbox
+    runtime: node
+    repo: https://github.com/jeonghwanko/oddbout-starter
+    branch: main
+    plan: free
+    buildCommand: npm ci --omit=dev --ignore-scripts
+    startCommand: node scripts/broadcast-demo.mjs
+    healthCheckPath: /healthz
+    autoDeployTrigger: "off"
+    envVars:
+      - key: NODE_VERSION
+        value: 22.22.2
+      - key: ODDBOUT_BROADCAST_BIND_HOST
+        value: 0.0.0.0
+      - key: ODDBOUT_COMMERCE_ORIGIN
+        sync: false
+      - key: ODDBOUT_COMMERCE_ENABLED
+        value: "0"
+      - key: ODDBOUT_BROADCAST_HOST_IDS
+        value: current-pc
+  - type: web
+    name: oddbout-broadcast-arena
+    runtime: static
+    repo: https://github.com/jeonghwanko/oddbout-twitch-cup
+    branch: main
+    buildCommand: npm ci --include=dev && npm run build
+    staticPublishPath: dist
+    autoDeployTrigger: "off"
+    envVars:
+      - key: NODE_VERSION
+        value: 22.22.2
