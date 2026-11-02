@@ -1,37 +1,30 @@
 // Install only bundled bytes into a writable, per-user runtime. Never download or run setup here.
 import { createHash, randomUUID } from 'node:crypto';
-import { lstat, mkdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { setTimeout as delay } from 'node:timers/promises';
+// A sibling, not a runtime file: it ships beside this launcher, which runs before the runtime is unpacked.
+import { absoluteParts, isProtected, pathWithoutLinks, relativeParts, renameRetrying } from './local-files.mjs';
 
 const pluginRoot = fileURLToPath(new URL('./', import.meta.url));
 const hash = data => createHash('sha256').update(data).digest('hex');
 const exists = file => lstat(file).then(() => true, error => { if (error.code !== 'ENOENT') throw error; return false; });
 function child(root, relative) {
-  if (!relative || relative.includes('\\') || relative.includes(':') || relative.startsWith('/') ||
-      relative.split('/').some(part => !part || part === '.' || part === '..')) throw Error('Invalid bundled path');
-  return path.join(root, ...relative.split('/'));
+  const parts = relativeParts(relative, /[\\:]/);
+  if (!parts) throw Error('Invalid bundled path');
+  return path.join(root, ...parts);
 }
 
 async function safeLocation(target, { source = false } = {}) {
   if (!path.isAbsolute(target)) throw Error('An absolute directory is required.');
   target = path.resolve(target);
-  const parsed = path.parse(target), parts = target.slice(parsed.root.length).split(path.sep);
-  let current = parsed.root;
-  for (const [index, part] of parts.entries()) {
-    // Codex's code namespaces are not credential stores. Cache bytes are read-only;
-    // only this launcher's own directory may use that exception, never caller paths.
-    const ownSource = source && !path.relative(pluginRoot, target).startsWith('..') && !path.isAbsolute(path.relative(pluginRoot, target));
-    const codeNamespace = part.toLowerCase() === '.codex' &&
-      (parts[index + 1] === 'worktrees' && parts.length > index + 3 ||
-       ownSource && parts[index + 1] === 'plugins' && parts[index + 2] === 'cache' && parts.length > index + 3);
-    if (!codeNamespace && /^(?:\.codex|\.grok|\.ssh|\.aws|sessions|auth\.json|client\.json|pending-login\.json)$/i.test(part)) throw Error('Protected location is not a kit directory.');
-    current = path.join(current, part);
-    const info = await lstat(current).catch(e => { if (e.code !== 'ENOENT') throw e; return null; });
-    if (info?.isSymbolicLink()) throw Error('Kit paths must not contain symlinks.');
-  }
+  // Codex's code namespaces are not credential stores. Cache bytes are read-only;
+  // only this launcher's own directory may use that exception, never caller paths.
+  const own = path.relative(pluginRoot, target), ownSource = source && !own.startsWith('..') && !path.isAbsolute(own);
+  const { base, parts } = absoluteParts(target);
+  if (isProtected(parts, { pluginCache: ownSource })) throw Error('Protected location is not a kit directory.');
+  if (!await pathWithoutLinks(base, parts)) throw Error('Kit paths must not contain symlinks.');
 }
 async function readMetadata(file) {
   await safeLocation(file, { source: true });
@@ -74,15 +67,9 @@ export async function inspect({ base = process.env.AI_FIGHTER_CREATOR_HOME || pa
 
 // Large source bundles can still be held by Windows scanners after the last write.
 // Retry the same atomic rename; never delete an existing runtime to make room.
-export async function commitRuntime(pending, runtime, marker, { move = rename, wait = delay, platform = process.platform } = {}) {
-  for (let attempt = 0; ; attempt++) {
-    try { await move(pending, runtime); return; }
-    catch (error) {
-      if (await exists(marker)) return; // Another installer completed the identical content-addressed runtime.
-      if (platform !== 'win32' || !['EPERM', 'EACCES', 'EBUSY'].includes(error.code) || attempt >= 6) throw error;
-      await wait(100 * (attempt + 1));
-    }
-  }
+export function commitRuntime(pending, runtime, marker, { move, wait, platform } = {}) {
+  // A failure is no failure once another installer has completed the identical content-addressed runtime.
+  return renameRetrying(pending, runtime, { stepMs: 100, done: () => exists(marker), move, wait, platform });
 }
 
 export async function initialize({ base = process.env.AI_FIGHTER_CREATOR_HOME || path.join(homedir(), '.ai-fighter', 'creator'),

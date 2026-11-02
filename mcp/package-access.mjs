@@ -1,8 +1,9 @@
 // @ts-check
 import { fork } from 'node:child_process';
-import { lstat, realpath } from 'node:fs/promises';
+import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { pathWithoutLinks, relativeParts } from '../plugins/ai-fighter/local-files.mjs';
 
 /**
  * A package check's verdict. The worker's (server/ai-fighter-package.mjs) carries more fields.
@@ -13,14 +14,11 @@ const issue = code => ({ ok: false, stage: 'local-access', errors: [{ code, path
 // A local trusted workspace only. Concurrent hostile filesystem replacement needs OS isolation.
 /** @param {string} root @param {string} relative */
 export async function resolveManifest(root, relative) {
-  if (!relative || relative.includes('\\') || relative.includes(':') || relative.includes('\0') || path.isAbsolute(relative) ||
-      relative.split('/').some(part => !part || part === '.' || part === '..') || !relative.endsWith('/fighter.json')) return null;
-  const canonicalRoot = await realpath(root);
-  let target = canonicalRoot;
-  for (const component of relative.split('/')) {
-    target = path.join(target, component);
-    if ((await lstat(target)).isSymbolicLink()) return null;
-  }
+  const parts = relativeParts(relative, /[\\:\0]/);
+  if (!parts || !relative.endsWith('/fighter.json')) return null;
+  // Every component must exist: a missing one throws (PACKAGE_UNAVAILABLE), a link is refused (PATH_NOT_ALLOWED).
+  const canonicalRoot = await realpath(root), target = await pathWithoutLinks(canonicalRoot, parts, { allowMissing: false });
+  if (!target) return null;
   const resolved = await realpath(target), within = path.relative(canonicalRoot, resolved);
   if (within.startsWith(`..${path.sep}`) || within === '..' || path.isAbsolute(within)) return null;
   return resolved;

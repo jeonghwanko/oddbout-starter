@@ -37,6 +37,9 @@ async function fixture(t) {
   return f;
 }
 const exists = file => lstat(file).then(() => true, () => false);
+// The launcher and the sibling module it imports, as a bundle's plugin directory carries them.
+const copyLauncher = plugin => Promise.all(['launcher.mjs', 'local-files.mjs']
+  .map(file => cp(new URL(`../plugins/ai-fighter/${file}`, import.meta.url), path.join(plugin, file))));
 
 test('default doctor is offline, creates no workspace/cache and never starts a CLI or reads credentials', async t => {
   const f = await fixture(t);
@@ -232,7 +235,7 @@ test('Dots blocks Codex image paths without making Grok depend on Codex source',
 test('bundle status is read-only; explicit install binds a reviewed hash and doctor rejects forged or corrupted provenance', async t => {
   const f = await fixture(t), plugin = path.join(f.base, 'plugin'), user = path.join(f.base, 'user');
   await mkdir(plugin);
-  await cp(new URL('../plugins/ai-fighter/launcher.mjs', import.meta.url), path.join(plugin, 'launcher.mjs'));
+  await copyLauncher(plugin);
   await cp(f.runtime, path.join(plugin, 'runtime'), { recursive: true });
   const files = {};
   for (const relative of ['package.json', 'package-lock.json', 'vendor/sprite-gen/sprite_gen/gen/codex_provider.py',
@@ -265,7 +268,7 @@ test('invalid install options and old runtimes fail before an install subprocess
 
 test('launcher rejects symlink metadata before reading its contents', async t => {
   const f = await fixture(t), plugin = path.join(f.base, 'unsafe-plugin');
-  await mkdir(plugin); await cp(new URL('../plugins/ai-fighter/launcher.mjs', import.meta.url), path.join(plugin, 'launcher.mjs'));
+  await mkdir(plugin); await copyLauncher(plugin);
   const launcher = await import(pathToFileURL(path.join(plugin, 'launcher.mjs')));
   const target = await f.put('.codex/auth.json', 'SECRET', f.base);
   try { await symlink(target, path.join(plugin, 'runtime-manifest.json')); }

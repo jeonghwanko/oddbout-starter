@@ -5,7 +5,7 @@ import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/pr
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { assertCommitted, checkRuntimeImports, runtimeFileList } from '../scripts/build-plugin-bundle.mjs';
+import { assertCommitted, checkLauncherImports, checkRuntimeImports, runtimeFileList } from '../scripts/build-plugin-bundle.mjs';
 
 const repository = fileURLToPath(new URL('../', import.meta.url));
 // Side-effect-free entry modules (CLI mains are guarded); importing them evaluates the whole shipped graph.
@@ -23,7 +23,7 @@ test('the runtime file list is closed over imports and keeps the Edge-only cloud
   const files = await runtimeFileList();
   for (const required of ['tools/ai-fighter/projected-ground.mjs', 'tools/ai-fighter/gait.mjs', 'scripts/pack-fighter.mjs',
     'mcp/stdio.mjs', 'mcp/server.mjs', 'contracts/ai-fighter/v1/spec.json', 'server/ai-fighter-package.mjs',
-    'scripts/check-cloud-discovery.mjs', 'plugins/ai-fighter/mcp.json', ...shippedDocs])
+    'scripts/check-cloud-discovery.mjs', 'plugins/ai-fighter/mcp.json', 'plugins/ai-fighter/local-files.mjs', ...shippedDocs])
     assert.ok(files.includes(required), required);
   for (const serverOnly of ['mcp/cloud.mjs', 'mcp/cloud/common.mjs', 'mcp/cloud/hosted-tools.mjs', 'mcp/file-input-probe.mjs', 'mcp/creator-sources.mjs', 'api/handler.mjs', 'api/http.mjs'])
     assert.ok(!files.includes(serverOnly), `${serverOnly} stays out of the local kit`);
@@ -44,6 +44,17 @@ test('a runtime staged from the file list imports every entry module', { timeout
   await writeFile(smoke, entries.map(file => `await import(${JSON.stringify(pathToFileURL(path.join(runtime, file)).href)});`).join('\n'));
   const result = spawnSync(process.execPath, [smoke], { cwd: runtime, encoding: 'utf8', timeout: 45_000, stdio: ['ignore', 'pipe', 'pipe'] });
   assert.equal(result.status, 0, result.stderr || result.error?.message);
+});
+
+test('the launcher imports only Node built-ins and its own plugin directory, never runtime/ or a package', async () => {
+  await checkLauncherImports(path.join(repository, 'plugins', 'ai-fighter'));
+  for (const [name, source] of [['package', "import { z } from 'zod';\n"], ['runtime', "import './runtime/mcp/x.mjs';\n"]]) {
+    const plugin = path.join(temporary, `launcher-${name}`);
+    await mkdir(path.join(plugin, 'runtime', 'mcp'), { recursive: true });
+    await writeFile(path.join(plugin, 'runtime', 'mcp', 'x.mjs'), 'export {};\n');
+    await writeFile(path.join(plugin, 'launcher.mjs'), `import 'node:fs';\n${source}`);
+    await assert.rejects(checkLauncherImports(plugin), /only Node built-ins and its own plugin directory: (zod|runtime\/mcp\/x\.mjs)$/);
+  }
 });
 
 test('a kit is built only from committed files', async () => {
