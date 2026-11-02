@@ -1,11 +1,12 @@
 // @ts-check
 // Workspace execution behind MCP and creation:tool. No generation, login, registration or shell commands.
-import { fork } from 'node:child_process';
 import { lstat, realpath } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { localPath, readJson } from './creation-store.mjs';
+import { forkWorker, serialQueue } from './serial-worker.mjs';
+
+/** @typedef {import('./serial-worker.mjs').SerialQueue} SerialQueue */
 
 /** @param {string} root @param {string} file */
 async function confined(root, file) {
@@ -55,40 +56,31 @@ export async function packagingInputs(root, args) {
   return { root, planFile, out, inputBytes: bytes, inputPixels: pixels };
 }
 
-/** @param {string} root @param {{ timeoutMs?: number }} [options] */
-export function makePackagingRunner(root, { timeoutMs } = {}) {
-  let busy = false;
+/** In the server's shared worker queue (package validation waits there too), else its own.
+ * @param {string} root @param {{ timeoutMs?: number, graceMs?: number, queue?: SerialQueue }} [options] */
+export function makePackagingRunner(root, { timeoutMs, graceMs, queue = serialQueue() } = {}) {
   /** @param {{ planPath: string, outputPath?: string, fitSheets?: boolean, outputScale?: number }} args @param {boolean} inspectOnly */
-  return async (args, inspectOnly) => {
-    if (busy) return { ok: false, stage: 'packaging', code: 'packaging-busy' };
-    busy = true;
+  const packOnce = async (args, inspectOnly) => {
     try {
       const input = await packagingInputs(root, args);
-      return await new Promise(resolve => {
-        const child = fork(fileURLToPath(new URL('./packaging-worker.mjs', import.meta.url)),
-          [input.planFile, JSON.stringify({ inspectOnly, fitSheets: args.fitSheets ?? false, outputScale: args.outputScale, out: input.out })],
-          { stdio: ['ignore', 'ignore', 'ignore', 'ipc'], execArgv: ['--max-old-space-size=256'],
-            env: { ...process.env, VIPS_CONCURRENCY: '1' } });
-        /** @type {any} */
-        let result;
-        let timedOut = false;
-        const timer = setTimeout(() => { timedOut = true; child.kill(); }, timeoutMs ?? (args.fitSheets ? 600_000 : 120_000));
-        child.on('message', message => { if (!timedOut) result ??= message; });
-        child.once('error', () => { clearTimeout(timer); resolve({ ok: false, stage: 'packaging', code: 'packaging-worker-start-failed' }); });
-        child.once('exit', () => { clearTimeout(timer); resolve(result ?? { ok: false, stage: 'packaging',
-          code: timedOut ? 'packaging-timeout' : 'packaging-worker-failed',
-          next: 'Inspect the new output directory before retrying. No generation was dispatched.' }); });
-      });
+      const run = await forkWorker(new URL('./packaging-worker.mjs', import.meta.url),
+        [input.planFile, JSON.stringify({ inspectOnly, fitSheets: args.fitSheets ?? false, outputScale: args.outputScale, out: input.out })],
+        { timeoutMs: timeoutMs ?? (args.fitSheets ? 600_000 : 120_000), heapMb: 256, graceMs });
+      if (!run.started) return { ok: false, stage: 'packaging', code: 'packaging-worker-start-failed' };
+      return /** @type {any} */ (run.message) ?? { ok: false, stage: 'packaging', code: run.timedOut ? 'packaging-timeout' : 'packaging-worker-failed',
+        next: 'Inspect the new output directory before retrying. No generation was dispatched.' };
     } catch (/** @type {any} */ error) {
       return { ok: false, stage: 'packaging', code: /^[a-z][a-z-]+$/.test(error.message) ? error.message : 'packaging-input-unavailable' };
-    } finally { busy = false; }
+    }
   };
+  /** @param {{ planPath: string, outputPath?: string, fitSheets?: boolean, outputScale?: number }} args @param {boolean} inspectOnly */
+  return (args, inspectOnly) => queue(() => packOnce(args, inspectOnly), () => ({ ok: false, stage: 'packaging', code: 'packaging-busy' }));
 }
 
 /** @param {import('@modelcontextprotocol/sdk/server/mcp.js').McpServer} server
- * @param {{ root: string, respond: import('./server.mjs').Respond }} options */
-export function registerPackagingTools(server, { root, respond }) {
-  const run = makePackagingRunner(root);
+ * @param {{ root: string, respond: import('./server.mjs').Respond, queue?: SerialQueue }} options */
+export function registerPackagingTools(server, { root, respond, queue }) {
+  const run = makePackagingRunner(root, { queue });
   const inputSchema = { planPath: z.string().min(1).max(512), outputPath: z.string().min(1).max(512).optional(),
     fitSheets: z.boolean().default(false), outputScale: z.number().min(.25).max(1).optional() };
   for (const inspectOnly of [true, false]) {

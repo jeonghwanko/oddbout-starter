@@ -36,7 +36,19 @@ const styleSchema = z.object({
   temper: z.object(Object.fromEntries(style.temper.map(key => [key, range(style.grade).optional()]))).strict().optional(),
   exchanges: z.object(Object.fromEntries(style.exchanges.keys.map(key => [key, range(style.exchanges).optional()]))).strict().optional(),
 }).strict();
-const HISTORY_KEPT = 100;
+// The session keeps its newest history entries, so it stays under the 2 MB read limit; the full trail is in creation-history.jsonl.
+// Entries are about 0.5 KB (three real sessions, 2026-11-03), but changeSchema allows one of about 110 KB (64 long paths).
+const HISTORY_KEPT = 100, HISTORY_BYTES = 256 * 1024;
+/** The newest entries: at most HISTORY_KEPT, and HISTORY_BYTES of JSON unless the newest alone is larger. @param {object[]} history */
+function recentHistory(history) {
+  let start = history.length, bytes = 0;
+  while (start > 0 && history.length - start < HISTORY_KEPT) {
+    bytes += Buffer.byteLength(JSON.stringify(history[start - 1]));
+    if (bytes > HISTORY_BYTES && start < history.length) break;
+    start--;
+  }
+  return history.slice(start);
+}
 const versionId = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/);
 const note = z.string().trim().min(1).max(4000);
 const files = z.array(z.string().min(1).max(512)).min(1).max(64);
@@ -150,6 +162,10 @@ export function createCreationStore(root, { contextRequest, validatePackage = ma
   /** @type {(id: string, file: string) => Promise<string>} */
   const fileFor = (id, file) => localPath(root, `${prefix(id)}/${file}`);
   const latestContext = () => fetchCreationContext({ request: contextRequest });
+  /** Fetch the context before taking a session lock: its fetch takes up to 15 s, longer than other callers wait for the lock.
+   * The returned function rethrows a failed fetch where the context is needed, so lock-guarded checks still come first.
+   * @returns {Promise<() => CreationContext>} */
+  const contextBeforeLock = () => latestContext().then(context => () => context, error => () => { throw error; });
   // Parallel tool calls on one session queue here; a lock left by a killed process is reclaimed once stale.
   /** @template T @param {string} id @param {() => Promise<T>} action @param {{ waitMs?: number }} [options] @returns {Promise<T>} */
   async function lock(id, action, { waitMs } = {}) {
@@ -245,11 +261,11 @@ export function createCreationStore(root, { contextRequest, validatePackage = ma
   }
   /** @param {string} id @param {number} revision @param {unknown} input */
   async function change(id, revision, input) {
-    const event = changeSchema.parse(input);
+    const event = changeSchema.parse(input), latest = await contextBeforeLock();
     return lock(id, async () => {
       const state = await read(id);
       if (state.revision !== revision) fail('session-revision-conflict');
-      const context = await latestContext();
+      const context = latest();
       if (event.type !== 'refresh-context' && context.revision !== state.contextRevision) fail('context-changed');
       // One handler per changeSchema type; changeSchema.parse above has rejected any other.
       /** @type {{ [T in ChangeEvent['type']]: (event: Extract<ChangeEvent, { type: T }>) => Promise<void> }} */
@@ -366,10 +382,13 @@ export function createCreationStore(root, { contextRequest, validatePackage = ma
       };
       await /** @type {(event: ChangeEvent) => Promise<void>} */ (apply[event.type])(event);
       const entry = { ...event, at: new Date().toISOString(), revision: ++state.revision };
-      // The full trail is append-only beside the session; the session keeps recent entries so it stays under the 2 MB read limit.
-      await appendFile(await fileFor(id, 'creation-history.jsonl'), JSON.stringify(entry) + '\n', { mode: 0o600 });
-      state.history = [...state.history, entry].slice(-HISTORY_KEPT);
-      await save(id, state); return state;
+      state.history = recentHistory([...state.history, entry]);
+      await save(id, state);
+      // The full trail is append-only beside the session and holds saved changes only. Once saved the change stands,
+      // so a failed append says that instead of a generic failure.
+      await appendFile(await fileFor(id, 'creation-history.jsonl'), JSON.stringify(entry) + '\n', { mode: 0o600 })
+        .catch(() => fail('change-saved-history-append-failed'));
+      return state;
     });
   }
   async function list() {
@@ -385,6 +404,6 @@ export function createCreationStore(root, { contextRequest, validatePackage = ma
     }
     return sessions.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
-  return { root, prefix, fileFor, read, create, change, inspect, effective, latestContext, lock, list, snapshots };
+  return { root, prefix, fileFor, read, create, change, inspect, effective, latestContext, contextBeforeLock, lock, list, snapshots };
 }
 /** @typedef {ReturnType<typeof createCreationStore>} CreationStore */

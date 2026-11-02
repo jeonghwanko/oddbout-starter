@@ -1,6 +1,7 @@
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { access, mkdtemp, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises';
+import fsp, { access, mkdtemp, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -54,6 +55,21 @@ test('the holder keeps its lock fresh while it works, so a long task is not recl
     other = await withFileLock(`${file}`, async () => {}, { staleMs: 300, waitMs: 0 }).then(() => 'acquired', error => error.message);
   }, { staleMs: 300 });
   assert.equal(other, 'lock-busy', 'not reclaimed and not re-entrant');
+});
+
+test('a lock that cannot be deleted on release keeps the finished task\'s result and is reclaimed once stale', async () => {
+  const file = path.join(temporary, 'scanned.lock'), original = fsp.rm;
+  // What a Windows scanner holding the file causes: the delete fails with EPERM.
+  fsp.rm = async (target, options) => {
+    if (target === file) throw Object.assign(new Error(`EPERM: operation not permitted, unlink '${file}'`), { code: 'EPERM' });
+    return original(target, options);
+  };
+  syncBuiltinESMExports();
+  try { assert.equal(await withFileLock(file, async () => 'done'), 'done'); }
+  finally { fsp.rm = original; syncBuiltinESMExports(); }
+  assert.equal(await exists(file), true, 'left behind');
+  await backdate(file, 5000);
+  assert.equal(await withFileLock(file, async () => 'next', { staleMs: 1000, waitMs: 500 }), 'next');
 });
 
 test('release never deletes a lock that now belongs to another holder', async () => {

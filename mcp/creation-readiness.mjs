@@ -46,7 +46,7 @@ export function runGit(args, { cwd = kitRoot, timeout = 30000 } = {}) {
 }
 
 /**
- * A character is in progress once any version or non-cancelled job exists. Updating then would change the
+ * A character is in progress once any version or non-cancelled (or unreadable) job exists. Updating then would change the
  * engine under recorded attempts and reviews (docs/EXECUTION-HOST.md). Without a workspace it is unknown.
  * @param {{ store?: CreationStore, jobs?: JobStore, sessionId?: string }} [options]
  */
@@ -57,7 +57,8 @@ export async function creationProgress({ store, jobs, sessionId } = {}) {
   for (const id of ids) {
     const state = await store.read(id);
     const versions = Object.values(state.items ?? {}).some(item => Object.keys(item.versions ?? {}).length);
-    const work = (await /** @type {JobStore} */ (jobs).list(id)).some(job => job.status !== 'cancelled'); // jobs come with the store
+    // An unreadable job record may be work in progress too. Jobs come with the store.
+    const work = (await /** @type {JobStore} */ (jobs).list(id)).some(job => 'unreadable' in job || job.status !== 'cancelled');
     if (versions || work) active.push(id);
   }
   return { known: true, inProgress: active.length > 0, sessions: active };

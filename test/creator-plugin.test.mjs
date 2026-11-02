@@ -231,6 +231,58 @@ test('session history keeps recent entries; the full trail is append-only beside
   assert.deepEqual(trail.slice(-100), state.history);
 });
 
+test('the session keeps recent history within a byte budget; the trail holds every saved change', async t => {
+  const f = await fixture(t), feedback = '가'.repeat(4000); // about 12 KB of UTF-8, the longest note changeSchema takes
+  for (let n = 0; n < 30; n++) await f.change({ type: 'revision', item: 'idle', feedback });
+  const state = await f.store.read(sessionId);
+  assert.ok(state.history.length < 30, String(state.history.length));
+  assert.ok(Buffer.byteLength(JSON.stringify(state.history)) <= 256 * 1024);
+  assert.equal(state.history.at(-1).revision, state.revision);
+  const trailFile = await f.store.fileFor(sessionId, 'creation-history.jsonl');
+  const trail = (await readFile(trailFile, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+  assert.equal(trail.length, 30);
+  assert.deepEqual(trail.slice(-state.history.length), state.history);
+  // The trail is appended after the save: when the append fails, the saved change says so instead of a generic failure.
+  await rm(trailFile); await mkdir(trailFile);
+  await assert.rejects(f.change({ type: 'revision', item: 'idle', feedback: 'Saved before the trail' }), /^Error: change-saved-history-append-failed$/);
+  assert.equal((await f.store.read(sessionId)).history.at(-1).feedback, 'Saved before the trail');
+});
+
+test('the game context is fetched before the session lock, so a slow fetch never holds other callers', async t => {
+  let waiting = null;
+  const f = await fixture(t, { contextRequest: async () => { await waiting?.(); return new Response(JSON.stringify(context)); } });
+  const starts = [() => f.change({ type: 'profile', name: 'Slow', description: 'D', feedback: 'Chosen while the context loads' }),
+    async () => f.jobs.prepare(sessionId, (await f.store.read(sessionId)).revision, randomUUID(), plan())];
+  for (const start of starts) {
+    let fetching, release;
+    const fetched = new Promise(resolve => { fetching = resolve; });
+    waiting = () => { fetching(); return new Promise(resolve => { release = resolve; }); };
+    const pending = start();
+    await fetched;
+    assert.equal(await f.store.lock(sessionId, async () => 'free', { waitMs: 0 }), 'free', 'the lock is free while the context loads');
+    waiting = null; release();
+    await pending;
+  }
+  assert.equal((await f.jobs.list(sessionId)).length, 1);
+});
+
+test('an unreadable job record is listed as such: inspection and readiness still work, and new jobs wait for it', async t => {
+  const f = await fixture(t), good = randomUUID(), broken = randomUUID();
+  await f.jobs.prepare(sessionId, 1, good, plan());
+  await writeFile(await f.store.fileFor(sessionId, `jobs/${broken}.json`), '{"status": "running", trunc');
+  assert.deepEqual(await f.jobs.list(sessionId).then(jobs => jobs.map(job => job.unreadable ? job : job.jobId)),
+    [good, { jobId: broken, unreadable: true, code: 'job-record-unreadable' }]);
+  const call = (name, args) => creationTool({ workspace: f.root, name, args, contextRequest: request });
+  const listed = (await call('get_creation_job', { sessionId })).structuredContent;
+  assert.equal(listed.ok, true, JSON.stringify(listed));
+  assert.deepEqual(listed.data.map(job => job.unreadable ?? job.observedStatus), ['prepared', true]);
+  const readiness = (await call('check_creation_readiness', { sessionId, purpose: 'connection' })).structuredContent;
+  assert.deepEqual([readiness.ok, readiness.data.progress.inProgress], [true, true]);
+  // It may be running work on any motion, so no new job starts until someone inspects it.
+  for (const jobId of [randomUUID(), broken])
+    await assert.rejects(f.jobs.prepare(sessionId, 1, jobId, plan()), /unreadable-job-needs-inspection/);
+});
+
 test('unknown outcome blocks even a new request ID; resolving requires evidence and never reruns', async t => {
   const f = await fixture(t), jobId = randomUUID();
   await f.jobs.prepare(sessionId, 1, jobId, plan());

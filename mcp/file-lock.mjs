@@ -63,9 +63,10 @@ export async function withFileLock(file, task, { busy = 'lock-busy', waitMs = 10
     beat.unref();
     try { return await task(); } finally {
       clearInterval(beat);
-      // Release only our own lock; after a reclaim the file may belong to another holder.
+      // Release only our own lock; after a reclaim the file may belong to another holder. A delete that fails (a Windows
+      // scanner holding the file) must not fail the finished task: the beat has stopped, so the lock goes stale and is reclaimed.
       const held = await readFile(file, 'utf8').then(text => JSON.parse(text).token, () => null);
-      if (held === token) await rm(file, { force: true });
+      if (held === token) await rm(file, { force: true }).catch(() => {});
     }
   } finally {
     /** @type {() => void} */ (done)(); // set by the Promise executor above

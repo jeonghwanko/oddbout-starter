@@ -15,8 +15,11 @@ import { identifier } from './creation-store.mjs';
 import { accountChoice, registerEnvironmentTools } from './creation-environment.mjs';
 import { errorCode } from './error-code.mjs';
 import { registerPackagingTools } from './packaging-tools.mjs';
+import { serialQueue } from './serial-worker.mjs';
 
 const annotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+// These read the game's current creation context over the network.
+const contextAnnotations = { ...annotations, openWorldHint: true };
 // The required motions, then the optional clips (skill, entrance, victory) a package may add.
 const MOTIONS = /** @type {[string, ...string[]]} */ ([...Object.keys(spec.motions), ...Object.keys(spec.optionalClips)]);
 const outputSchema = { ok: z.boolean(), stage: z.string(), data: z.unknown().optional(), errors: z.array(z.unknown()).optional(),
@@ -71,30 +74,36 @@ export function createServer({ root, contextRequest } = {}) {
     description: 'Read context first for game-owned current motions, frames, controls, timing and group gates; refresh at each new group and preserve its revision. Optional group narrows context motions. Read overview and creation for the package workflow and sprite-gen setup. Read guide, schema and example for the package contract; motion narrows schema/example (the optional clips skill, entrance and victory have no example clip). Example art is a format fixture.',
     inputSchema: { section: z.enum(['overview', 'creation', 'guide', 'schema', 'example', 'context']).default('overview'),
       group: z.enum(['appearance', 'locomotion', 'attacks', 'defense', 'style', 'final']).optional(),
-      motion: z.enum(MOTIONS).optional() }, outputSchema, annotations,
+      motion: z.enum(MOTIONS).optional() }, outputSchema, annotations: contextAnnotations,
   }, async ({ section, motion, group }) => {
     if (section === 'context') {
       try { return respond({ ok: true, stage: 'game-creation-context', data: await fetchCreationContext({ request: contextRequest, group }) }); }
       catch (error) { return respond({ ok: false, stage: 'game-creation-context', code: errorCode(error, 'creation-context-unavailable', { prefix: 'creation-context-' }), pending: ['fetch-current-game-context'] }); }
     }
-    if (motion && section === 'schema')
-      return respond({ ok: true, stage: 'public-contract', data: { motion, clip: /** @type {Record<string, unknown>} */ (schema.properties.clips.properties)[motion], definitions: schema.definitions } });
-    if (motion && section === 'example') {
-      const clip = /** @type {Record<string, { assetId: string } | undefined>} */ (example.clips)[motion] ?? null;
-      return respond({ ok: true, stage: 'public-contract', data: { motion, clip, asset: clip && example.assets.find(asset => asset.id === clip.assetId) } });
+    try {
+      if (motion && section === 'schema')
+        return respond({ ok: true, stage: 'public-contract', data: { motion, clip: /** @type {Record<string, unknown>} */ (schema.properties.clips.properties)[motion], definitions: schema.definitions } });
+      if (motion && section === 'example') {
+        const clip = /** @type {Record<string, { assetId: string } | undefined>} */ (example.clips)[motion] ?? null;
+        return respond({ ok: true, stage: 'public-contract', data: { motion, clip, asset: clip && example.assets.find(asset => asset.id === clip.assetId) } });
+      }
+      if (section === 'creation') return respond({ ok: true, stage: 'creation-kit', data: {
+        tool: await spriteStatus(), packageRoot: root ?? null, registrationMode: 'cloud',
+        guide: await readFile(new URL('../docs/DOT-CREATION.md', import.meta.url), 'utf8'),
+        interactionGuide: await readFile(new URL('../docs/CREATION-UX.md', import.meta.url), 'utf8'),
+      } });
+      const data = section === 'schema' ? schema : section === 'example' ? example : section === 'guide'
+        ? await readFile(new URL('../docs/AUTHORING.md', import.meta.url), 'utf8') : spec;
+      return respond({ ok: true, stage: 'public-contract', data });
+    } catch (error) {
+      // A kit missing its docs or engine status: report a code, never a path.
+      return respond({ ok: false, stage: section === 'creation' ? 'creation-kit' : 'public-contract',
+        code: errorCode(error, 'fighter-spec-unavailable', { missing: 'kit-file-missing' }) });
     }
-    if (section === 'creation') return respond({ ok: true, stage: 'creation-kit', data: {
-      tool: await spriteStatus(), packageRoot: root ?? null, registrationMode: 'cloud',
-      guide: await readFile(new URL('../docs/DOT-CREATION.md', import.meta.url), 'utf8'),
-      interactionGuide: await readFile(new URL('../docs/CREATION-UX.md', import.meta.url), 'utf8'),
-    } });
-    const data = section === 'schema' ? schema : section === 'example' ? example : section === 'guide'
-      ? await readFile(new URL('../docs/AUTHORING.md', import.meta.url), 'utf8') : spec;
-    return respond({ ok: true, stage: 'public-contract', data });
   });
   server.registerTool('review_creation_progress', {
     description: 'Check the current group against the latest game context. Supply only selections actually stated in this conversation, by item/version. Hypothetical reviews work only in dialogue-only mode. Never grants registration permission.',
-    inputSchema: { stateJson: z.string().max(32768) }, outputSchema, annotations,
+    inputSchema: { stateJson: z.string().max(32768) }, outputSchema, annotations: contextAnnotations,
   }, async ({ stateJson }) => {
     try {
       const context = await fetchCreationContext({ request: contextRequest });
@@ -106,12 +115,15 @@ export function createServer({ root, contextRequest } = {}) {
     description: 'Validate raw fighter.json text. Reject duplicates, unknown fields, invalid references and over-budget data. Does not read files or grant registration.',
     inputSchema: { manifestJson: z.string().max(spec.limits.jsonBytes) }, outputSchema, annotations,
   }, async ({ manifestJson }) => {
-    const parsed = parseFighterJson(manifestJson);
-    return respond(parsed.ok ? validateFighter(parsed.data) : { ...parsed, stage: 'json' });
+    try {
+      const parsed = parseFighterJson(manifestJson);
+      return respond(parsed.ok ? validateFighter(parsed.data) : { ...parsed, stage: 'json' });
+    } catch (error) { return respond({ ok: false, stage: 'json', code: errorCode(error, 'manifest-check-failed') }); }
   });
-  // One validator for all file tools, so they share the single serial decoder.
-  const validatePackage = root ? makePackageValidator(root) : undefined;
-  if (root) registerPackagingTools(server, { root, respond });
+  // Package validation (all file tools use this one validator) and packaging share one serial worker queue.
+  const queue = serialQueue();
+  const validatePackage = root ? makePackageValidator(root, { queue }) : undefined;
+  if (root) registerPackagingTools(server, { root, respond, queue });
   const records = root ? registerCreatorTools(server, { root, contextRequest, respond, outputSchema, validatePackage }) : {};
   const environment = root ? registerEnvironmentTools(server, { root, respond, outputSchema }) : undefined;
   server.registerTool('check_creation_readiness', {
@@ -136,7 +148,7 @@ export function createServer({ root, contextRequest } = {}) {
   });
   if (validatePackage) {
     server.registerTool('validate_fighter_package', {
-      description: 'Local-only: fully decode and check WebP files under the configured workspace. Pass a relative path such as output/my-fighter/fighter.json. Serial worker, 20-second timeout; never uploads or approves.',
+      description: 'Local-only: fully decode and check WebP files under the configured workspace. Pass a relative path such as output/my-fighter/fighter.json. Serial worker shared with packaging, 20-second timeout; never uploads or approves.',
       inputSchema: { manifestPath: z.string().min(1).max(512) }, outputSchema, annotations,
     }, async ({ manifestPath }) => respond(await validatePackage(manifestPath)));
   }
