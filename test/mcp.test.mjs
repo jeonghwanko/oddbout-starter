@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cp, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import fsp, { cp, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -118,4 +119,29 @@ test('one motion of the schema or example is a small read', async () => {
     const victory = (await client.callTool({ name: 'get_fighter_spec', arguments: { section: 'example', motion: 'victory' } })).structuredContent;
     assert.equal(victory.ok, true); assert.equal(victory.data.clip, null);
   } finally { await client.close(); }
+});
+test('annotations say which tools reach the network: the game context does, local file checks do not', async () => {
+  const client = await connectInProcess();
+  try {
+    const hints = Object.fromEntries((await client.listTools()).tools.map(t => [t.name, t.annotations.openWorldHint]));
+    for (const name of ['get_fighter_spec', 'review_creation_progress', 'check_creation_readiness', 'get_creation_session',
+      'create_creation_session', 'update_creation_session', 'prepare_creation_job']) assert.equal(hints[name], true, name);
+    for (const name of ['validate_fighter_manifest', 'validate_fighter_package', 'inspect_fighter_packaging', 'pack_fighter_package',
+      'list_creation_sessions', 'get_creation_job', 'cancel_creation_job', 'resolve_creation_job']) assert.equal(hints[name], false, name);
+  } finally { await client.close(); }
+});
+test('a kit file the spec cannot read is reported by code, never with its path', async () => {
+  const client = await connectInProcess(), original = fsp.readFile;
+  fsp.readFile = async (file, options) => {
+    if (String(file).includes('AUTHORING.md'))
+      throw Object.assign(new Error(`ENOENT: no such file or directory, open '${fileURLToPath(file)}'`), { code: 'ENOENT' });
+    return original(file, options);
+  };
+  syncBuiltinESMExports();
+  try {
+    const result = await client.callTool({ name: 'get_fighter_spec', arguments: { section: 'guide' } });
+    assert.equal(result.isError, true);
+    assert.deepEqual([result.structuredContent.stage, result.structuredContent.code], ['public-contract', 'kit-file-missing']);
+    assert.ok(!JSON.stringify(result).includes('AUTHORING'));
+  } finally { fsp.readFile = original; syncBuiltinESMExports(); await client.close(); }
 });

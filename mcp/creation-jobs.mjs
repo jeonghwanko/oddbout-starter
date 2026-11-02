@@ -9,6 +9,7 @@ import { atomicJson, digest, fail, localPath, readJson, unchanged } from './crea
 import { reviewCreationProgress } from './creation-context.mjs';
 import { guardDotsExecution } from '../scripts/dots-provider.mjs';
 import { judgeOutcome, outcomeReportPath, readOutcome } from '../host/sprite-outcome.mjs';
+import { errorCode } from './error-code.mjs';
 
 const generating = new Set(['gen', 'gen-set', 'video', 'video-set']);
 const recovering = new Set(['video-resume']);
@@ -41,6 +42,8 @@ const terminal = new Set(['succeeded', 'failed', 'needs-input', 'resolved', 'can
  * A job record. A running job carries runnerPid; a finished one its stage, exit and, for a failed paid run, the engine's outcome.
  * @typedef {import('./creation-store.mjs').CreationStore} CreationStore
  * @typedef {import('./creation-store.mjs').FileRecord} FileRecord
+ * @typedef {import('./creation-context.mjs').CreationContext} CreationContext
+ * @typedef {{ jobId: string, unreadable: true, code: string }} UnreadableJob
  * @typedef {z.infer<typeof jobPlanSchema>} JobPlan
  * @typedef {'prepared' | 'running' | 'succeeded' | 'failed' | 'needs-input' | 'unknown' | 'resolved' | 'cancelled'} JobStatus
  * @typedef {{ jobId: string, sessionId: string, requestHash: string, plan: JobPlan, inputs: FileRecord[], sessionRevision: number,
@@ -59,15 +62,25 @@ export function createJobStore(store) {
   async function read(id, jobId) { return readJson(await jobFile(id, jobId)); }
   /** @param {string} id @param {Job} job */
   async function write(id, job) { job.updatedAt = new Date().toISOString(); await atomicJson(await jobFile(id, job.jobId), job); return job; }
-  /** @param {string} id */
+  /** Every job record. One that cannot be read is listed as unreadable instead of failing the list, so inspection still works.
+   * @param {string} id @returns {Promise<(Job | UnreadableJob)[]>} */
   async function list(id) {
     await store.read(id);
     const dir = await store.fileFor(id, 'jobs');
     const names = await readdir(dir).catch(e => { if (e.code === 'ENOENT') return []; throw e; });
+    /** @type {Job[]} */
     const jobs = [];
-    for (const name of names) if (name.endsWith('.json') && jobIdSchema.safeParse(name.slice(0, -5)).success)
-      jobs.push(await read(id, name.slice(0, -5)));
-    return jobs.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    /** @type {UnreadableJob[]} */
+    const unreadable = [];
+    for (const name of names) if (name.endsWith('.json') && jobIdSchema.safeParse(name.slice(0, -5)).success) {
+      const jobId = name.slice(0, -5);
+      try {
+        const job = await read(id, jobId);
+        if (typeof job?.createdAt !== 'string' || typeof job.status !== 'string' || !Array.isArray(job.plan?.targets)) fail('job-record-invalid');
+        jobs.push(job);
+      } catch (error) { unreadable.push({ jobId, unreadable: true, code: errorCode(error, 'job-record-unreadable') }); }
+    }
+    return [...jobs.sort((a, b) => a.createdAt.localeCompare(b.createdAt)), ...unreadable];
   }
   /** @param {JobPlan} plan */
   function validatePlan(plan) {
@@ -102,12 +115,13 @@ export function createJobStore(store) {
     } else if (plan.args.length !== 1 || plan.args[0].startsWith('-') || plan.groupId !== 'final') fail('invalid-pack-plan');
     if (plan.workflowArgs && (plan.workflowArgs[0] !== 'workflow' || plan.engine !== 'sprite')) fail('invalid-workflow-preflight');
   }
-  /** @param {import('./creation-store.mjs').Session} state @param {JobPlan} plan */
-  async function gate(state, plan) {
+  /** `latest` comes from store.contextBeforeLock when the caller holds the session lock; without it the context is fetched here.
+   * @param {import('./creation-store.mjs').Session} state @param {JobPlan} plan @param {() => CreationContext} [latest] */
+  async function gate(state, plan, latest) {
     validatePlan(jobPlanSchema.parse(plan));
     if (plan.engine === 'sprite') await guardDotsExecution(fileURLToPath(new URL('../', import.meta.url)), store.root, plan.args);
     if (state.mode !== 'creation') fail('dialogue-only-no-execution');
-    const context = await store.latestContext();
+    const context = latest ? latest() : await store.latestContext();
     if (context.revision !== state.contextRevision) fail('context-changed');
     if (state.groupId !== plan.groupId) fail('job-group-not-current');
     const index = context.workflow.groups.findIndex(g => g.id === plan.groupId), group = context.workflow.groups[index];
@@ -144,14 +158,20 @@ export function createJobStore(store) {
   async function prepare(id, revision, jobId, input) {
     jobIdSchema.parse(jobId);
     const plan = jobPlanSchema.parse(input); validatePlan(plan);
-    const requestHash = digest(JSON.stringify(plan));
+    const requestHash = digest(JSON.stringify(plan)), latest = await store.contextBeforeLock();
     return store.lock(id, async () => {
       const jobs = await list(id), existing = jobs.find(j => j.jobId === jobId);
-      if (existing) { if (existing.requestHash !== requestHash) fail('job-key-conflict'); return existing; }
+      if (existing) {
+        if ('unreadable' in existing) fail('unreadable-job-needs-inspection');
+        if (existing.requestHash !== requestHash) fail('job-key-conflict');
+        return existing;
+      }
       const state = await store.read(id);
       if (state.revision !== revision) fail('session-revision-conflict');
-      await gate(state, plan);
-      if (jobs.some(j => !terminal.has(j.status) && plan.targets.some(t => j.plan.targets.some(x => x.item === t.item))))
+      await gate(state, plan, latest);
+      // An unreadable record may be running work on any motion: it blocks until someone inspects it.
+      if (jobs.some(j => 'unreadable' in j)) fail('unreadable-job-needs-inspection');
+      if (jobs.some(j => !('unreadable' in j) && !terminal.has(j.status) && plan.targets.some(t => j.plan.targets.some(x => x.item === t.item))))
         fail('existing-job-needs-inspection');
       for (const target of plan.targets) if (state.items[target.item]?.versions[target.version] && plan.engine !== 'fighter-pack')
         fail('target-version-already-exists');
@@ -272,14 +292,14 @@ export function executeEngine(root, engine, argv, { signal } = {}) {
 
 /** @param {CreationStore} store @param {string} id @param {string} jobId @param {{ execute?: typeof executeEngine, timeoutMs?: number }} [options] */
 export async function runCreationJob(store, id, jobId, { execute = executeEngine, timeoutMs } = {}) {
-  const jobs = createJobStore(store);
+  const jobs = createJobStore(store), latest = await store.contextBeforeLock();
   let job = await store.lock(id, async () => {
     const current = await jobs.read(id, jobId);
     if (current.status !== 'prepared') return current;
     if (digest(JSON.stringify(current.plan)) !== current.requestHash) fail('job-plan-changed');
     const state = await store.read(id);
     if (state.revision !== current.sessionRevision) fail('session-changed-reprepare-job');
-    await jobs.gate(state, current.plan);
+    await jobs.gate(state, current.plan, latest);
     if (!await unchanged(store.root, current.inputs)) fail('job-inputs-changed');
     for (const output of current.plan.outputs) {
       const filename = await localPath(store.root, output, { createParents: true });

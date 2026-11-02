@@ -124,11 +124,13 @@ test('Dots readiness verifies the immutable workspace pin without fetching or tr
 });
 
 test('progress counts recorded versions and non-cancelled jobs only', async () => {
-  const states = { fresh: { items: {} }, made: { items: { idle: { versions: { v1: {} } } } }, cancelled: { items: {} } };
-  const jobLists = { fresh: [], made: [], cancelled: [{ status: 'cancelled' }] };
+  const states = { fresh: { items: {} }, made: { items: { idle: { versions: { v1: {} } } } }, cancelled: { items: {} }, unreadable: { items: {} } };
+  const jobLists = { fresh: [], made: [], cancelled: [{ status: 'cancelled' }],
+    unreadable: [{ status: 'cancelled' }, { jobId: 'broken', unreadable: true, code: 'job-record-unreadable' }] };
   const store = { list: async () => Object.keys(states).map(sessionId => ({ sessionId })), read: async id => states[id] };
   const jobs = { list: async id => jobLists[id] };
-  assert.deepEqual(await creationProgress({ store, jobs }), { known: true, inProgress: true, sessions: ['made'] });
+  // A job record that cannot be read may be running work: the character counts as in progress.
+  assert.deepEqual(await creationProgress({ store, jobs }), { known: true, inProgress: true, sessions: ['made', 'unreadable'] });
   assert.equal((await creationProgress({ store, jobs, sessionId: 'fresh' })).inProgress, false);
   assert.equal((await creationProgress({ store, jobs, sessionId: 'cancelled' })).inProgress, false);
   assert.deepEqual(await creationProgress({}), { known: false, inProgress: null, sessions: [] });

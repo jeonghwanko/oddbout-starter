@@ -13,8 +13,10 @@ import { errorCode } from './error-code.mjs';
  */
 export function registerCreatorTools(server, { root, contextRequest, respond, outputSchema, validatePackage }) {
   const store = createCreationStore(root, { contextRequest, validatePackage }), jobs = createJobStore(store);
+  // Session reads and changes check the game's current context over the network; job records are local files only.
   const read = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true };
   const write = { ...read, readOnlyHint: false, idempotentHint: false };
+  const localRead = { ...read, openWorldHint: false }, localWrite = { ...write, openWorldHint: false };
   const session = { sessionId: identifier }, revision = z.number().int().positive();
   const job = { ...session, jobId: z.string().uuid() };
   /**
@@ -30,7 +32,7 @@ export function registerCreatorTools(server, { root, contextRequest, respond, ou
       catch (error) { return respond({ ok: false, stage: name,
         code: errorCode(error, 'invalid-input-or-local-operation-failed', { missing: 'record-or-file-not-found' }) }); }
     });
-  register('list_creation_sessions', 'List local fighter projects to resume. Does not create or generate anything.', {}, read, () => store.list());
+  register('list_creation_sessions', 'List local fighter projects to resume. Does not create or generate anything.', {}, localRead, () => store.list());
   register('create_creation_session', 'Start a local project from actual user intent; dialogue-only sessions cannot execute jobs. Does not generate or confirm provider access.',
     { ...session, brief: z.string().min(1).max(4000), mode: z.enum(['creation', 'dialogue-only']).default('creation') }, write, input => store.create(input));
   register('get_creation_session', 'Read preserved versions and selections, check file fingerprints and current game context, and return remaining group blockers.', session, read, ({ sessionId }) => store.inspect(sessionId));
@@ -44,16 +46,16 @@ export function registerCreatorTools(server, { root, contextRequest, respond, ou
         args: [fileURLToPath(new URL('../scripts/run-creation-job.mjs', import.meta.url)), sessionId, jobId],
         cwd: root, env: { AI_FIGHTER_ROOT: root } } };
     });
-  register('get_creation_job', 'Inspect an existing job or list jobs. Never retries generation. succeeded is process/output evidence only; visual review remains separate.',
-    { ...session, jobId: z.string().uuid().optional() }, read,
+  register('get_creation_job', 'Inspect an existing job or list jobs. Never retries generation. succeeded is process/output evidence only; visual review remains separate. An unreadable record is listed as such and blocks new jobs until inspected.',
+    { ...session, jobId: z.string().uuid().optional() }, localRead,
     async ({ sessionId, jobId }) => jobId ? jobs.inspect(sessionId, jobId)
-      : Promise.all((await jobs.list(sessionId)).map(job => jobs.inspect(sessionId, job.jobId))));
+      : Promise.all((await jobs.list(sessionId)).map(job => 'unreadable' in job ? job : jobs.inspect(sessionId, job.jobId))));
   register('cancel_creation_job', 'Cancel an unstarted reservation, for example after changing its inputs. For a running job, ask its runner to stop the engine (within seconds); the job then ends unknown for generation, since a provider request may already be billed, or failed for packing. Never erases evidence or reruns.',
-    job, { ...write, idempotentHint: true }, ({ sessionId, jobId }) => jobs.cancel(sessionId, jobId));
+    job, { ...localWrite, idempotentHint: true }, ({ sessionId, jobId }) => jobs.cancel(sessionId, jobId));
   // Readiness reads the same records to tell whether a character is already in progress.
   const stores = { store, jobs };
   register('resolve_creation_job', 'Resolve an unknown outcome only after inspecting provider records and outputs. Record evidence; duplicate-risk-accepted requires the user’s explicit choice acknowledging possible duplicate usage. Resolution never reexecutes a job or approves art.',
-    { ...job, outcome: z.enum(['recovered', 'not-started', 'duplicate-risk-accepted']), evidence: z.array(z.string()).min(1).max(32), note: z.string().min(1).max(4000) }, write,
+    { ...job, outcome: z.enum(['recovered', 'not-started', 'duplicate-risk-accepted']), evidence: z.array(z.string()).min(1).max(32), note: z.string().min(1).max(4000) }, localWrite,
     ({ sessionId, jobId, ...resolution }) => jobs.resolve(sessionId, jobId, resolution));
   return stores;
 }
