@@ -3,6 +3,7 @@ import { Problem, UUID, jsonResponse, readBody, rpcCaller, verifiedUserId } from
 import { cleanupPublicFiles, profileSetKey, publishProfileSet, removePublicFiles } from './profile-sets.mjs';
 import { BUCKET } from './submissions.mjs';
 import { ADMIN_EDIT_CORS, adminFighterEditRoute, createAdminFighterEdits } from './admin-fighter-edits.mjs';
+import { adminStorageRoute, createAdminStorage } from './admin-storage.mjs';
 import { GENERATION_BUCKET, GENERATION_LIMITS, artifactPath } from './generations.mjs';
 
 // The fighter edits (`admin-fighter-edits.mjs`) add PUT, PATCH and the idempotency key; every admin route answers one preflight.
@@ -105,6 +106,7 @@ async function generationDetail(db, id) {
 export function createAdminHandler({ db, present }) {
   const rpc = rpcCaller(db, statuses, { unavailable: 'admin-unavailable' });
   const edits = present ? createAdminFighterEdits({ db, present }) : null;
+  const storage = createAdminStorage({ db, rpc });
   return async (request, parts) => {
     try {
       if (request.method === 'OPTIONS') return reply({ ok: true });
@@ -114,6 +116,8 @@ export function createAdminHandler({ db, present }) {
       if (parts.length === 2 && parts[1] === 'me' && request.method === 'GET') return reply({ ok: true, admin: true });
       // 운영자 선수 수정 (2026-11-02): a package, a profile or a style for someone's fighter, under the owner's own checks.
       if (edits && adminFighterEditRoute(parts)) return edits(request, parts, actor);
+      // 저장 용량 정리 (2026-11-02): the upload budget and the package folders nothing uses, removed only as the operator names them.
+      if (adminStorageRoute(parts)) return reply({ ok: true, ...await storage(request, parts, actor) });
       if (parts.length === 2 && parts[1] === 'fighters' && request.method === 'GET') {
         const query = new URL(request.url).searchParams, page = query.get('page') ?? '0', status = query.get('status') ?? 'active', search = (query.get('search') ?? '').trim();
         if (!/^(0|[1-9][0-9]{0,4})$/.test(page) || Number(page)>10000 || search.length>200 || search.includes('\0')

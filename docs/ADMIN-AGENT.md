@@ -31,6 +31,8 @@
 | `fighter <id>` | 선수 한 명: 주인, 패키지 해시, 출전, 전투 스타일, 최근 운영자 수정 5개 | (화면 없음) |
 | `replace-package <id> <패키지 폴더 또는 fighter.json> --reason <글>` | 그 선수의 원화·애니메이션 패키지 교체. 출전 중이면 출전 유지 | (화면 없음) |
 | `edit-profile <id> --reason <글> [--profile <JSON 또는 @파일>] [--style <JSON, null 또는 @파일>]` | 프로필 문구·전투 스타일 고치기. 출전 유지 | (화면 없음) |
+| `storage` | 업로드 예약 사용량·한도와 안 쓰는 패키지 폴더(오래된 순 200개: 주인, 이름, 이유, 크기) | (화면 없음) |
+| `storage-remove <제출>… \| --oldest <n>` | 안 쓰는 패키지 폴더의 파일을 지워 예약에서 뺌. 되돌릴 수 없음 | (화면 없음) |
 
 `--version`은 `fighters` 답의 그 선수 `version`이다. 그사이 상태가 바뀌었으면 `review-conflict`가 온다.
 
@@ -59,9 +61,27 @@ API는 `api/admin-fighter-edits.mjs`(`GET admin/fighters/<id>`, `POST admin/figh
 `POST admin/submissions/<id>/submit`, `GET admin/submissions/<id>`, `PATCH admin/fighters/<id>/profile`), 데이터베이스는
 `supabase/migrations/20261102100000_oddbout_admin_fighter_edits.sql`, 시험은 `test/admin-fighter-edits.test.mjs`다.
 
+## 저장 용량 정리 (2026-11-02)
+
+새 제출은 서비스 전체 업로드 예약(`af_settings.max_reserved_bytes`, 최대 400 MB)에 걸린다. 예약은 지금까지 올라온 패키지 폴더를 모두 센다.
+거절된 제출과 새 버전으로 교체된 옛 버전도 파일이 남아 있는 동안 센다. 예약이 차면 모든 제작자의 새 제출이 `storage-budget-full`로 막힌다.
+그때 `storage`로 안 쓰는 폴더를 보고, 사용자에게 무엇을 지울지 물은 뒤 `storage-remove`로 지운다. 보통 `--oldest <n>`으로 오래된 것부터 지운다.
+
+- 안 쓰는 폴더: 거절된 제출(`rejected`), 한 시간 넘게 지난 업로드(`upload-expired`), 새 버전으로 교체된 옛 버전(`replaced`).
+- 목록에 나오지 않는 폴더: 열린 제출, 어느 선수든 지금 패키지(주인이 지운 선수와 운영자가 내린 선수도 포함), 지금 패키지나 열린 제출이
+  파일을 빌려 쓰는 폴더(프로필·스타일 수정은 원래 폴더의 파일을 그대로 쓴다). 지금 대결, 로스터, 검증, 프로필 세트는 이 폴더들만 읽는다.
+- 서버는 지우기 직전에 각 폴더가 아직 안 쓰는지 다시 확인한다. 그사이 쓰이게 된 폴더나 이미 지운 폴더는 `skipped`로 남긴다.
+  파일을 지운 폴더만 비공개 기록(`af_asset_removals`: 운영자, 크기, 이유)에 남고, 그때부터 예약에서 빠진다.
+  Storage 오류로 못 지운 폴더는 `failed`로 돌아오고 예약에 그대로 남는다. 같은 명령을 다시 부르면 된다.
+- `--oldest <n>`은 실행하는 순간의 오래된 순 n개다(최대 50). 시험 실행 뒤 다른 선수가 패키지를 바꾸면 더 오래된 폴더가 새로 생겨
+  `--yes` 때 고르는 폴더가 달라질 수 있다. 정확히 그 폴더만 지우려면 시험 실행의 `request.body.submissionIds`를 id로 넘긴다.
+
+API는 `api/admin-storage.mjs`(`GET admin/storage`, `POST admin/storage/removals`), 데이터베이스는
+`supabase/migrations/20261102130000_oddbout_storage_cleanup.sql`, 시험은 `test/storage-cleanup.test.mjs`다.
+
 ## 바꾸는 명령은 두 번 부른다
 
-`retry`, `cancel`, `host-*`, `profile-approve`, `profile-reject`, `fighter-*`, `replace-package`, `edit-profile`은 처음에 보내지 않는다. 할 일을 문장으로 돌려준다
+`retry`, `cancel`, `host-*`, `profile-approve`, `profile-reject`, `fighter-*`, `replace-package`, `edit-profile`, `storage-remove`는 처음에 보내지 않는다. 할 일을 문장으로 돌려준다
 (`dryRun: true`, `change`). 에이전트는 그 문장을 사용자에게 보이고 승인을 받은 뒤 같은 명령에 `--yes`를 붙여 다시 부른다.
 제작자에게 보이는 이유·사유는 사용자가 정한 말만 쓴다.
 
@@ -69,5 +89,5 @@ API는 `api/admin-fighter-edits.mjs`(`GET admin/fighters/<id>`, `POST admin/figh
 
 - 세션 파일의 토큰을 출력하거나 대화·로그에 옮기지 않는다. 명령은 토큰을 출력하지 않는다.
 - 이 명령은 플러그인 묶음과 creator-kit ZIP에 들어가지 않는다(`scripts/build-plugin-bundle.mjs`의 목록 밖). 운영자 저장소에서만 쓴다.
-- API는 `api/admin.mjs`(선수 고치기는 `api/admin-fighter-edits.mjs`), 명령은 `scripts/admin.mjs`, 시험은 `test/admin-cli.test.mjs`·
-  `test/admin-fighter-edits.test.mjs`·`test/generation-hosts.test.mjs`다.
+- API는 `api/admin.mjs`(선수 고치기는 `api/admin-fighter-edits.mjs`, 저장 용량 정리는 `api/admin-storage.mjs`), 명령은 `scripts/admin.mjs`,
+  시험은 `test/admin-cli.test.mjs`·`test/admin-fighter-edits.test.mjs`·`test/storage-cleanup.test.mjs`·`test/generation-hosts.test.mjs`다.
