@@ -20,13 +20,13 @@ before(async () => {
 after(async () => { globalThis.fetch = realFetch; await rm(directory, { recursive: true, force: true }); });
 
 /** A claimed job served by a stub API. `download(id)` returns the asset response or throws. */
-async function serve(download, text = manifestText, { finishFailures = 0, release = 200, finishRefusal = null } = {}) {
+async function serve(download, text = manifestText, { finishFailures = 0, release = 200, finishRefusal = null, claim = {} } = {}) {
   const calls = { finish: null, finishAttempts: 0, release: null, inFlight: 0, maxInFlight: 0 };
   const manifestSha256 = await sha256(new TextEncoder().encode(text));
   globalThis.fetch = async (target, init) => {
     const route = String(target);
     if (route.endsWith('/worker/claim')) return Response.json({ ok: true, stage: 'validating', submissionId: crypto.randomUUID(), leaseToken: crypto.randomUUID(),
-      manifestText: text, manifestSha256, files: manifest.assets.map(a => ({ ...a, downloadUrl: `${url}/storage/v1/object/sign/ai-fighter-beta/${a.id}.webp?token=t` })) });
+      manifestText: text, manifestSha256, files: manifest.assets.map(a => ({ ...a, downloadUrl: `${url}/storage/v1/object/sign/ai-fighter-beta/${a.id}.webp?token=t` })), ...claim });
     if (route.endsWith('/worker/finish')) {
       if (calls.finishAttempts++ < finishFailures) return Response.json({ ok: false, code: 'service-unavailable' }, { status: 503 });
       if (finishRefusal) return Response.json({ ok: false, stage: 'api', code: finishRefusal.code }, { status: finishRefusal.status });
@@ -62,6 +62,14 @@ test('infrastructure failures leave the job for a retry instead of rejecting the
     // Handed back under its own lease, so the failure does not spend one of the package's attempts.
     assert.deepEqual([calls.release.code, calls.release.submissionId.length, calls.release.leaseToken.length], [expected, 36, 36]);
   }
+});
+test('an unexpected error hands the job back as worker-error instead of letting its lease spend an attempt (리뷰 2026-11-02)', async () => {
+  // A claim the worker cannot read throws a plain TypeError, not RetryLater. Left to expire, three such leases rejected a valid package.
+  const calls = await serve(ok, manifestText, { claim: { files: null } });
+  const result = await runOnce(config);
+  assert.deepEqual([result.stage, result.code, result.requeued], ['retry-later', 'worker-error', true]);
+  assert.equal(calls.finish, null);
+  assert.deepEqual([calls.release.code, calls.release.submissionId, calls.release.leaseToken.length], ['worker-error', result.submissionId, 36]);
 });
 test('if the hand-back fails, the job still waits for its lease to expire', async () => {
   const calls = await serve(id => id === 'walk' ? new Response('server error', { status: 500 }) : ok(id), manifestText, { release: 404 });
