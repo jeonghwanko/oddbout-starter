@@ -88,7 +88,9 @@ export async function runtimeFileList({ sourceRoot = root } = {}) {
   const { files: closure } = await importClosure(sourceRoot, declared.filter(file => !edgeOnly(file)));
   const leaked = closure.filter(edgeOnly);
   if (leaked.length) throw Error(`The local runtime imports Edge-only modules: ${leaked.join(', ')}`);
-  return closure;
+  // The runtime's package.json is its own, written by buildPluginBundle with the kit's version: a module that reads the version
+  // (mcp/server.mjs, scripts/creation-tool.mjs since #281) reads that one. Copied as well, it made the runtime's own write fail (0.6.12).
+  return closure.filter(file => file !== 'package.json');
 }
 /**
  * The kit must be reproducible from its recorded commit: refuse uncommitted, untracked or deleted shipped paths.

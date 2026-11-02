@@ -39,7 +39,7 @@ SLICE_MEMORY=${SLICE_MEMORY:-8G}
 SLOTS=${SLOTS:-3}
 KIT=$G/kit
 KIT_URL=https://github.com/jeonghwanko/oddbout-starter.git
-KIT_REF=${OG_KIT_REF:-b0d521911795df7f714b9520f8de1cbbb58cc0fe}
+KIT_REF=${OG_KIT_REF:-523083c66b432e9bc93a5221a7fa4ea4c580ecc6}
 CODEX_VERSION=0.165.0
 GROK_VERSION=1.0.52
 RUN_TIMEOUT=${OG_RUN_TIMEOUT:-5400}
@@ -414,6 +414,8 @@ cmd_explain() {
 # count each other's sessions, so per-run numbers are approximate; `og deliver` records the exact per-job total.
 # codex 0.157 keeps sessions in ~/.codex/state_<n>.sqlite (threads: cwd, created_at) and no rollout files;
 # older codex wrote one rollout-*.jsonl per session with the cwd in its first line.
+# Its returns say 0: a stopped run's trap calls it (finish_run), where a bare `return` gives the status from before the trap — the
+# interrupted wait's 143 — and set -e then ended og before the run's ledger end line (2026-11-02, bash 5.2 on the generation PC).
 codex_sessions() {
   local jobdir=$1 marker=${2:-} newer=() db
   db=$(ls "$G"/.codex/state_*.sqlite 2>/dev/null | sort -V | tail -n1)
@@ -426,9 +428,9 @@ con = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=10)
 rows = con.execute("select cwd from threads where created_at >= ?", (since,)).fetchall()
 print(sum(any((cwd + "/").startswith(p) for p in prefixes) for (cwd,) in rows))
 PY
-    return
+    return 0
   fi
-  [ -d "$G/.codex/sessions" ] || { echo 0; return; }
+  [ -d "$G/.codex/sessions" ] || { echo 0; return 0; }
   [ -n "$marker" ] && newer=(-newer "$marker")
   find "$G/.codex/sessions" -name 'rollout-*.jsonl' "${newer[@]}" -print0 2>/dev/null | "$NODE" -e '
     const fs = require("fs"), prefixes = [process.argv[1], fs.realpathSync(process.argv[1])].map(p => p + "/");

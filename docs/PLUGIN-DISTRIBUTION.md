@@ -1,49 +1,51 @@
 # ODDBOUT distribution
 
-**Current source-kit release: 0.6.11** (2026-11-03 KST: workspace tool calls without the 60 s timeout).
+**Current source-kit release: 0.6.12** (2026-11-03 KST: compact workspace results and the MCP structure cleanup).
 
-In 0.6.10 the in-process workspace tools ran under the SDK client's 60-second request timeout. A fitted
-`pack_fighter_package` that took longer was reported as `workspace-command-failed` while it went on to finish (#272).
-0.6.11 calls them without that limit. Built from `main` after #275, it also carries the workspace MCP's shared worker
-queue for package validation and packaging, lock release that tolerates a busy file, job lists that report an
-unreadable record instead of failing, and history appended only after its session is saved. Playwright is a
-development dependency only (#267). The contract, validators and sprite-gen pin are unchanged.
+0.6.11's workspace tools printed every result twice: once as text, once as `structuredContent`, which `creation:tool` prints as well. 0.6.12 keeps
+the full result in `structuredContent` and makes a large success's text one line naming its fields (#279). With that,
+`get_fighter_spec(creation)` no longer repeats its guides and no longer probes ffmpeg, img2webp and RIFE, which readiness
+owns. A blocked kit fetch in readiness waits five minutes before the next attempt, and the state is kept across processes.
+The tools share one review-group list, and the server and `creation:tool` report the kit's own version (#281). The bundle
+writes the runtime's own `package.json`, which those modules read for the version (#285). The contract, validators and
+sprite-gen pin are unchanged.
 
-Cloud `prepare_fighter_packaging` points to the reviewed 0.6.11 runtime once `ai-fighter-mcp` is deployed with
-this pin, and supplies workspace execution instructions; the cloud cannot read Dots files. Install locked Node
-dependencies in the extracted `plugin/runtime/`, then use its `inspect_fighter_packaging` and `pack_fighter_package`
+Cloud `prepare_fighter_packaging` points to the reviewed 0.6.12 runtime once `ai-fighter-mcp` is deployed with
+this pin. It also supplies the workspace execution instructions; the cloud cannot read Dots files. Install the locked Node
+dependencies in the extracted `plugin/runtime/`, then run its `inspect_fighter_packaging` and `pack_fighter_package`
 tools on the existing plan. There is no new generation or generation login.
 
-- [Download the 0.6.11 ZIP](https://oddbout.com/creator-kit/0.6.11/4ba719daf0b84131325e654d3fdfe1a2362b9b88881df793a9d462b09f7125f5/oddbout-0.6.11.zip)
-- [Release manifest](https://oddbout.com/creator-kit/0.6.11/4ba719daf0b84131325e654d3fdfe1a2362b9b88881df793a9d462b09f7125f5/release.json)
-- [Download helper](https://oddbout.com/creator-kit/0.6.11/4ba719daf0b84131325e654d3fdfe1a2362b9b88881df793a9d462b09f7125f5/fetch-creator-kit.py)
+- [Download the 0.6.12 ZIP](https://oddbout.com/creator-kit/0.6.12/8e9adcf2c942e4959697f2fd9297970bc3c6e5f1d0f96245855482d6f8cec3d5/oddbout-0.6.12.zip)
+- [Release manifest](https://oddbout.com/creator-kit/0.6.12/8e9adcf2c942e4959697f2fd9297970bc3c6e5f1d0f96245855482d6f8cec3d5/release.json)
+- [Download helper](https://oddbout.com/creator-kit/0.6.12/8e9adcf2c942e4959697f2fd9297970bc3c6e5f1d0f96245855482d6f8cec3d5/fetch-creator-kit.py)
 
 | Verified item | Value |
 | --- | --- |
-| ZIP size | 4,201,010 bytes |
-| ZIP SHA-256 | `848365c831b0373e88438078474dcda4d0555177a800734b9985f99ee9381223` |
-| Release manifest SHA-256 | `ec6a435e1ddccecf479c07871c6d898b66d27b62cd1d5b685c9e36c736382bf7` |
-| Runtime manifest SHA-256 | `faccf72053efe94b7704356959079b71fff2d746b7ba4e15b23201ae169789ae` |
+| ZIP size | 4,203,815 bytes |
+| ZIP SHA-256 | `323aa2f267ce6f7897cedae935bfde61b94be7d6478325f8cdfec6baaebb275b` |
+| Release manifest SHA-256 | `6535c3d05e8dbd47d5ca3bc7086c0e2afd6b7fcab3bbf9b11618d035614ffeb5` |
+| Runtime manifest SHA-256 | `34c54c6fc9e085665d2f15332a558d81b6f0ec39ce0b98c2fc4f6a80649a8942` |
 | Helper SHA-256 | `b66c31ff833816dfa74c90d9155359d3fdd484dff8c12759e48addde01707592` (unchanged) |
-| Archive build source | `a67a10bd0d5288a7c20516af49e7ff85e1d8f3aa` (the main merge) |
-| Tested PR head | `530031badd90dc430d860e0c7bd0e7732ab9fbe3` ([PR #277](https://github.com/jeonghwanko/oddbout-starter/pull/277)) |
-| Main merge | `a67a10bd0d5288a7c20516af49e7ff85e1d8f3aa` |
+| Archive build source | `042eef30ddae0d7378c02b4ee3f1602106a6c2e1` (main after [PR #285](https://github.com/jeonghwanko/oddbout-starter/pull/285)) |
+| Tested PR head | `bad4d09b46c12d0161ba4e1148188584ed43da3c` ([PR #284](https://github.com/jeonghwanko/oddbout-starter/pull/284)) |
+| Main merge | `9e06aebf7164ae540924e7ece7e753317720f857` (version), `042eef30ddae0d7378c02b4ee3f1602106a6c2e1` (bundle fix) |
 | sprite-gen pin | `704cb9e5a34f16a0340e7fc6e46709a047ab02d4` (unchanged) |
-| Kit Pages publication | `717c743ed53f8d18a942909698950ea4f5d5ac77` |
+| Kit Pages publication | `97e8ab16813027679cece13368450f232894c11a` |
 
-Full PR CI passed. The archive was built from a clean worktree at the main merge, so its content id differs from
-the PR's dry run (`fc41779f…`), which predates #274 and #275 on `main`. The trusted helper verified and extracted all
-738 archive files; locked production Node dependencies installed (no vulnerabilities reported), and the extracted
-runtime's `creation:tool` listed all 18 workspace tools and carries #272's in-process timeout. No Python engine ran.
+Full PR CI passed for #284 and #285. The first build after #284 stopped with `EEXIST` on the runtime `package.json`. #281's
+version import had put a copy of it into the runtime file list; #285 leaves that copy out and tests for it. The archive was built
+from a clean worktree at the main merge. The trusted helper verified and extracted all 739 archive files. Locked production Node
+dependencies installed with no vulnerabilities reported. The extracted runtime reports version 0.6.12, its `creation:tool` lists all
+18 workspace tools, and `get_fighter_spec` answers with a one-line text. No Python engine ran.
 
-Publication added only three release files, preserved 6,400 existing files without changes or deletions,
-and verified HTTP 200 and exact release bytes plus 12 unchanged site files at 2026-11-02T19:12:17.858Z. The three
-public files, downloaded again afterwards, have the hashes above. This release requires no game/API/site build.
+Publication added only three release files, preserved 6,403 existing files without changes or deletions,
+and verified HTTP 200 and exact release bytes plus 12 unchanged site files at 2026-11-02T20:52:30.627Z. The three
+public files were downloaded again afterwards and have the hashes above. This release requires no game, API or site build.
 
-The Dots source pin is `a67a10bd0d5288a7c20516af49e7ff85e1d8f3aa` (0.6.11), still a candidate with
-saved-VM acceptance pending. No animation was generated and no registration was submitted during this release verification.
+The Dots source pin is `042eef30ddae0d7378c02b4ee3f1602106a6c2e1` (0.6.12). It is still a candidate, with saved-VM acceptance pending. No animation
+was generated and no registration was submitted during this release verification.
 
-Earlier releases (0.6.10 back to 0.4.0) and their verification records are in [records/KIT-RELEASES.md](records/KIT-RELEASES.md).
+Earlier releases (0.6.11 back to 0.4.0) and their verification records are in [records/KIT-RELEASES.md](records/KIT-RELEASES.md).
 When a new release becomes current, move the entry above there.
 
 For installation and migration use [ODDBOUT-PLUGIN.md](ODDBOUT-PLUGIN.md). `plugin:bundle` now produces a
