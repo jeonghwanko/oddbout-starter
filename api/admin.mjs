@@ -1,8 +1,8 @@
 // @ts-check
 import { Problem, UUID, jsonResponse, logFailure, readBody, rpcCaller, verifiedUserId } from './http.mjs';
-import { cleanupPublicFiles, profileSetKey, publishProfileSet, removePublicFiles } from './profile-sets.mjs';
+import { PROFILE_SET_LIMITS, addOperatorSheet, cleanupPublicFiles, profileSetKey, publishProfileSet, removePublicFiles } from './profile-sets.mjs';
 import { BUCKET } from './submissions.mjs';
-import { ADMIN_EDIT_CORS, adminFighterEditRoute, createAdminFighterEdits } from './admin-fighter-edits.mjs';
+import { ADMIN_EDIT_CORS, adminFighterEditRoute, createAdminFighterEdits, reasonOf } from './admin-fighter-edits.mjs';
 import { adminStorageRoute, createAdminStorage } from './admin-storage.mjs';
 import { GENERATION_BUCKET, GENERATION_LIMITS, artifactPath } from './generations.mjs';
 
@@ -24,7 +24,8 @@ async function smallBody(request, keys) {
 }
 /**
  * The operator's review list (선수 프로필 세트, 2026-10-31): each set with its files signed for ten minutes in one Storage call — the front
- * painting, the validator's card and face, and his current package's idle sheet to compare with. A file Storage cannot sign is null.
+ * painting, the validator's card, face and arena expression sheet (when he sent one, 2026-11-03), and his current package's idle sheet to
+ * compare with. A file Storage cannot sign is null.
  * @param {any} db @param {any[]} sets
  */
 async function reviewList(db, sets) {
@@ -34,7 +35,8 @@ async function reviewList(db, sets) {
   const want = path => (typeof path === 'string' && path ? paths.push(path) - 1 : -1);
   const wanted = sets.map(set => ({ front: want(profileSetKey(set.ownerId, set.id, 'front')),
     card: set.derived?.card ? want(profileSetKey(set.ownerId, set.id, 'card')) : -1,
-    face: set.derived?.face ? want(profileSetKey(set.ownerId, set.id, 'face')) : -1, preview: want(set.previewKey) }));
+    face: set.derived?.face ? want(profileSetKey(set.ownerId, set.id, 'face')) : -1,
+    sheet: set.derived?.sheet ? want(profileSetKey(set.ownerId, set.id, 'sheet')) : -1, preview: want(set.previewKey) }));
   /** @type {Map<string, string>} */
   const signed = new Map();
   if (paths.length) {
@@ -44,11 +46,12 @@ async function reviewList(db, sets) {
   /** @type {(index: number) => string | null} */
   const url = index => (index >= 0 ? signed.get(paths[index]) ?? null : null);
   return sets.map((set, index) => {
-    const card = set.derived?.card, face = set.derived?.face, at = wanted[index];
+    const card = set.derived?.card, face = set.derived?.face, sheet = set.derived?.sheet, at = wanted[index];
     return { id: set.id, fighterId: set.fighterId, fighterName: set.name ?? '', ownerEmail: set.email ?? '', status: set.status,
       submittedAt: set.submittedAt ?? set.createdAt, front: { url: url(at.front), width: set.manifest?.front?.width ?? null, height: set.manifest?.front?.height ?? null },
       card: card ? { url: url(at.card), width: card.width, height: card.height, face: card.face } : null,
-      face: face ? { url: url(at.face), size: face.size } : null, previewUrl: url(at.preview),
+      face: face ? { url: url(at.face), size: face.size } : null,
+      expressions: sheet ? { url: url(at.sheet), width: sheet.width, height: sheet.height, cell: sheet.cell } : null, previewUrl: url(at.preview),
       reason: set.reason ?? null, current: set.current === true, entered: set.entered === true, validatedAt: set.validatedAt ?? null, reviewedAt: set.reviewedAt ?? null };
   });
 }
@@ -185,6 +188,16 @@ export function createAdminHandler({ db, present }) {
         const status = new URL(request.url).searchParams.get('status') ?? 'review';
         if (!['review', 'approved', 'rejected'].includes(status)) throw new Problem(400, 'invalid-query');
         return reply({ ok: true, profileSets: await reviewList(db, await rpc('af_admin_profile_sets', { p_actor: actor, p_status: status })) });
+      }
+      // 운영자의 표정 시트 (2026-11-03): a sheet for a fighter's current approved set, as a new set under his owner (profile-sets.mjs).
+      if (parts.length === 4 && parts[1] === 'profile-sets' && parts[3] === 'expressions' && request.method === 'POST') {
+        if (!UUID.test(parts[2])) throw new Problem(400, 'invalid-review');
+        const reason = reasonOf(request), key = request.headers.get('idempotency-key') ?? '', fighter = request.headers.get('x-admin-fighter') ?? '';
+        if (!UUID.test(key) || !UUID.test(fighter)) throw new Problem(400, 'invalid-id');
+        if (request.headers.get('content-type') !== 'image/webp') throw new Problem(415, 'webp-required');
+        const bytes = await readBody(request, PROFILE_SET_LIMITS.expressionsBytes);
+        return reply({ ok: true, profileSet: await addOperatorSheet(db, { actor, setId: parts[2].toLowerCase(), fighterId: fighter.toLowerCase(),
+          key: key.toLowerCase(), reason, bytes }) });
       }
       if (parts.length === 4 && parts[1] === 'profile-sets' && ['approve', 'reject'].includes(parts[3]) && request.method === 'POST') {
         if (!UUID.test(parts[2])) throw new Problem(400, 'invalid-review');

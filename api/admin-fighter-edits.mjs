@@ -26,7 +26,7 @@ export function adminFighterEditRoute(parts) {
 /** @type {(value: any) => string} */
 const requireId = value => { if (!UUID.test(value ?? '')) throw new Problem(400, 'invalid-id'); return value.toLowerCase(); };
 /** The edit's reason from `X-Admin-Reason` (percent-encoded UTF-8): trimmed, 1-500 characters of well-formed text. @param {Request} request */
-function reasonOf(request) {
+export function reasonOf(request) {
   let reason;
   try { reason = decodeURIComponent(request.headers.get('x-admin-reason') ?? '').trim(); } catch { throw new Problem(400, 'invalid-reason'); }
   if (!reason || reason.length > 500 || reason.includes('\0') || !reason.isWellFormed()) throw new Problem(400, 'invalid-reason');

@@ -5,8 +5,9 @@ import { migratedDatabase } from './helpers/fighter-database.mjs';
 import example from '../contracts/ai-fighter/v1/example.fighter.json' with { type: 'json' };
 import { createHandler, sha256, VALIDATOR_VERSION } from '../api/handler.mjs';
 import { createAdminHandler } from '../api/admin.mjs';
-import { PROFILE_SET_SPEC, PROFILE_SET_VALIDATOR_VERSION, PROFILE_SET_VERSION, parseProfileSet, profileSetKey, rosterProfileSet } from '../api/profile-sets.mjs';
-import { checkProfileSet } from '../worker/profile-set-check.mjs';
+import { PROFILE_SET_EXPRESSIONS, PROFILE_SET_SPEC, PROFILE_SET_VALIDATOR_VERSION, PROFILE_SET_VERSION, parseProfileSet, profileSetKey, rosterProfileSet }
+  from '../api/profile-sets.mjs';
+import { checkExpressionSheet, checkProfileSet } from '../worker/profile-set-check.mjs';
 
 const set = (front = {}, face = {}) => ({ version: PROFILE_SET_VERSION,
   front: { path: 'front.webp', bytes: 1000, sha256: 'a'.repeat(64), width: 1024, height: 1536, ...front }, face: { x: 402, y: 108, side: 220, ...face } });
@@ -30,6 +31,52 @@ test('the set file names one WebP front painting within the size limits and a fa
   // The spec carries the house colouring and its anchor (사용자 2026-10-31: 담백한 채색).
   assert.match(PROFILE_SET_SPEC.style.colouring, /flat clean cel colours with\none soft shadow tone/);
   assert.equal(PROFILE_SET_SPEC.style.anchor.url, 'https://oddbout.com/art/oddbout/style-anchor-front.webp');
+});
+
+const sheetFile = (more = {}) => ({ path: 'expressions.webp', bytes: 2000, sha256: 'e'.repeat(64), width: 1536, height: 1024, ...more });
+test('the set file may name an expression sheet (2026-11-03): 1536 × 1024 WebP in the arena\'s cell order, its KO face last', () => {
+  const codes = value => { const result = parseProfileSet(JSON.stringify(value)); return result.ok ? [] : result.errors.map(e => e.code); };
+  assert.deepEqual(codes({ ...set(), expressions: sheetFile() }), []);
+  assert.deepEqual(codes({ ...set(), expressions: sheetFile({ width: 1024 }) }), ['EXPRESSIONS_DIMENSIONS']);
+  assert.deepEqual(codes({ ...set(), expressions: sheetFile({ path: 'front.webp' }) }), ['EXPRESSIONS_PATH']);
+  assert.deepEqual(codes({ ...set(), expressions: sheetFile({ bytes: 4000001 }) }), ['EXPRESSIONS_BYTES']);
+  assert.deepEqual(codes({ ...set(), expressions: sheetFile({ sha256: 'x' }) }), ['EXPRESSIONS_SHA256']);
+  assert.deepEqual(codes({ ...set(), expressions: { ...sheetFile(), extra: 1 } }), ['EXPRESSIONS_KEYS']);
+  assert.deepEqual(codes({ ...set(), expressions: null }), ['EXPRESSIONS_KEYS']);
+  // The game's ARENA_FACE_EXPRESSIONS order (kaito_web/src/assets/ArenaFaceArtCatalog.ts): the KO card shows the sixth cell.
+  assert.deepEqual(PROFILE_SET_EXPRESSIONS, ['default', 'hit', 'smug', 'danger', 'sideeye', 'ko']);
+  assert.match(PROFILE_SET_SPEC.expressions.prompt, /6\. Knocked out: dizzy spiral eyes/);
+  assert.match(PROFILE_SET_SPEC.expressions.prompt, /FIRST image is this fighter's approved front painting/);
+  assert.match(PROFILE_SET_SPEC.build, /npm run fighter:profile-set/);
+});
+
+/**
+ * An expression sheet (1536 × 1024 unless given): a bust in each cell, `empty` cells left clear, or on an opaque `background` (with one clear
+ * pixel, so it keeps its alpha channel).
+ */
+async function sheetPicture({ empty = [], background = false, width = 1536, height = 1024 } = {}) {
+  const rgba = Buffer.alloc(width * height * 4);
+  if (background) { rgba.fill(255); rgba.set([0, 0, 0, 0], 0); }
+  for (let cell = 0; cell < 6; cell++) {
+    if (empty.includes(cell)) continue;
+    const left = (cell % 3) * (width / 3), top = Math.floor(cell / 3) * (height / 2), margin = Math.floor(height / 12);
+    for (let y = top + margin; y < top + height / 2; y++) for (let x = left + margin; x < left + width / 4; x++) rgba.set([90, 120, 200, 255], (y * width + x) * 4);
+  }
+  return sharp(rgba, { raw: { width, height, channels: 4 } }).webp({ lossless: true }).toBuffer();
+}
+
+test('the validator decodes the sheet and makes the arena\'s 1152 × 768 copy; no alpha, a wrong size, no clear pixels or an empty cell fail', async () => {
+  const good = await checkExpressionSheet(await sheetPicture());
+  assert.equal(good.ok, true, JSON.stringify(good.errors));
+  assert.deepEqual(good.derived, { width: 1152, height: 768, cell: 384 });
+  const meta = await sharp(good.sheet).metadata();
+  assert.deepEqual([meta.format, meta.width, meta.height, meta.hasAlpha], ['webp', 1152, 768, true]);
+  const codes = async bytes => { const result = await checkExpressionSheet(bytes); return result.ok ? [] : result.errors.map(e => e.code); };
+  assert.deepEqual(await codes(await sharp({ create: { width: 1536, height: 1024, channels: 3, background: '#ffffff' } }).webp().toBuffer()), ['EXPRESSIONS_ENCODING']);
+  assert.deepEqual(await codes(await sheetPicture({ width: 1152, height: 768 })), ['EXPRESSIONS_DIMENSIONS']);
+  assert.deepEqual(await codes(await sheetPicture({ background: true })), ['EXPRESSIONS_BACKGROUND']);
+  assert.deepEqual(await codes(await sheetPicture({ empty: [5] })), ['EXPRESSIONS_EMPTY_CELL'], 'a sheet without its KO face');
+  assert.deepEqual(await codes(Buffer.from('not an image at all')), ['EXPRESSIONS_ENCODING']);
 });
 
 /**
@@ -167,6 +214,77 @@ test('Postgres: upload → validation → review → approval names the set on t
   } finally { await db.close(); }
 });
 
+test('Postgres (2026-11-03): a set with an expression sheet needs its upload, a 0.2.0 verdict and the stored arena sheet; the roster and cleanup carry it', async () => {
+  const db = await migratedDatabase();
+  try {
+    const owner = crypto.randomUUID(), admin = crypto.randomUUID();
+    await db.query('insert into auth.users(id,email) values($1,$2),($3,$4)', [owner, 'o@example.com', admin, 'a@example.com']);
+    await db.query('insert into public.af_creators(owner_id) values($1)', [owner]);
+    await db.query('insert into af_admins(owner_id) values($1)', [admin]);
+    const value = result => result.rows[0].value;
+    const text = JSON.stringify(example), sha = await sha256(new TextEncoder().encode(text)), bytes = example.assets.reduce((sum, a) => sum + a.bytes, 0);
+    const submission = value(await db.query('select to_jsonb(public.af_create_submission($1,$2,$3,$4,$5)) as value', [owner, crypto.randomUUID(), text, sha, bytes]));
+    for (const a of example.assets) await db.query('insert into storage.objects values($1,$2,$3)', ['ai-fighter-beta', `${owner}/${submission.id}/${a.id}.webp`, { size: a.bytes }]);
+    await db.query('select public.af_submit($1,$2)', [owner, submission.id]);
+    const leased = value(await db.query('select to_jsonb(public.af_claim($1)) as value', [submission.id]));
+    const fighter = value(await db.query('select to_jsonb(public.af_finish($1,$2,$3,true,$4)) as value',
+      [submission.id, leased.lease_token, sha, { validatorVersion: VALIDATOR_VERSION, stage: 'bytes-hashes-and-full-decode', errors: [] }])).fighter_id;
+    const object = (id, name, size) => db.query('insert into storage.objects values($1,$2,$3)', ['ai-fighter-beta', profileSetKey(owner, id, name), { size }]);
+    const created = async (file, sheetHash) => {
+      const body = JSON.stringify(file);
+      const row = value(await db.query('select to_jsonb(public.af_profile_set_create($1,$2,$3,$4,$5,$6)) as value',
+        [owner, fighter, crypto.randomUUID(), body, await sha256(new TextEncoder().encode(body)), file.front.bytes]));
+      return { row, derived: { card: { sha256: 'c'.repeat(64), bytes: 300, width: 135, height: 600, face: { x: 18, y: 0, side: 98 } },
+        face: { sha256: 'f'.repeat(64), bytes: 200, size: 192 }, ...(sheetHash ? { sheet: { sha256: sheetHash, bytes: 500, width: 1152, height: 768, cell: 384 } } : {}) } };
+    };
+    const claim = async id => value(await db.query('select to_jsonb(public.af_profile_set_claim($1)) as value', [id]));
+    const finish = (row, derived, version = PROFILE_SET_VALIDATOR_VERSION) => db.query('select to_jsonb(public.af_profile_set_finish($1,$2,$3,true,$4,$5)) as value',
+      [row.id, row.lease_token, row.manifest_sha, { validatorVersion: version, stage: 'profile-set-full-decode', errors: [] }, derived]).then(value);
+
+    const { row: first, derived } = await created({ ...set(), expressions: sheetFile() }, 'd'.repeat(64));
+    await object(first.id, 'front', 1000);
+    await assert.rejects(db.query('select public.af_profile_set_submit($1,$2)', [owner, first.id]), /assets-incomplete/, 'the sheet must be uploaded too');
+    await object(first.id, 'expressions', 2000);
+    assert.equal(value(await db.query('select to_jsonb(public.af_profile_set_submit($1,$2)) as value', [owner, first.id])).status, 'queued');
+    const lease = await claim(first.id);
+    await object(first.id, 'card', 300); await object(first.id, 'face', 200);
+    await assert.rejects(finish(lease, derived, 'oddbout-profile-set-validator-0.1.0'), /validator-version/, 'a validator from before the sheet cannot pass it');
+    await assert.rejects(finish(lease, { card: derived.card, face: derived.face }), /validation-incomplete/, 'the arena sheet is required');
+    await assert.rejects(finish(lease, derived), /validation-incomplete/, 'the arena sheet must be stored');
+    await assert.rejects(finish(lease, { ...derived, sheet: { ...derived.sheet, width: 1536 } }), /validation-incomplete/);
+    const finishWith = (row, derivedFiles, more) => db.query('select to_jsonb(public.af_profile_set_finish($1,$2,$3,true,$4,$5)) as value',
+      [row.id, row.lease_token, row.manifest_sha, { validatorVersion: PROFILE_SET_VALIDATOR_VERSION, stage: 'profile-set-full-decode', errors: [], ...more },
+        derivedFiles]).then(value);
+    await assert.rejects(finishWith(lease, { card: derived.card, face: derived.face }, { sheetErrors: [] }), /validation-incomplete/);
+    await object(first.id, 'sheet', 500);
+    assert.equal((await finish(lease, derived)).status, 'review');
+    await db.query('select public.af_admin_profile_set_approve($1,$2)', [admin, first.id]);
+    assert.deepEqual((await db.query('select profile_set from public.af_roster_entries where id=$1', [fighter])).rows[0].profile_set, { id: first.id, derived });
+
+    // A sheet the validator left out (its reasons in sheetErrors): the set passes without it, the front's files as always.
+    const { row: dropped } = await created({ ...set(), expressions: sheetFile() }, null);
+    await object(dropped.id, 'front', 1000); await object(dropped.id, 'expressions', 2000);
+    await db.query('select public.af_profile_set_submit($1,$2)', [owner, dropped.id]);
+    const droppedLease = await claim(dropped.id);
+    await object(dropped.id, 'card', 300); await object(dropped.id, 'face', 200);
+    const passed = await finishWith(droppedLease, { card: derived.card, face: derived.face }, { sheetErrors: [{ code: 'EXPRESSIONS_EMPTY_CELL', path: '/expressions' }] });
+    assert.deepEqual([passed.status, 'sheet' in passed.derived], ['review', false]);
+    await db.query("update public.af_profile_sets set status = 'rejected' where id = $1", [dropped.id]);
+
+    // A set without a sheet still passes from a 0.1.0 validator (deployed before this one), never with a sheet it was not sent.
+    const { row: second, derived: plain } = await created(set(), null);
+    await object(second.id, 'front', 1000);
+    await db.query('select public.af_profile_set_submit($1,$2)', [owner, second.id]);
+    const secondLease = await claim(second.id);
+    await object(second.id, 'card', 300); await object(second.id, 'face', 200); await object(second.id, 'sheet', 500);
+    await assert.rejects(finish(secondLease, { ...plain, sheet: derived.sheet }), /validation-incomplete/);
+    assert.equal((await finish(secondLease, plain, 'oddbout-profile-set-validator-0.1.0')).status, 'review');
+    await db.query('select public.af_admin_profile_set_approve($1,$2)', [admin, second.id]);
+    // The superseded set's sheet leaves the public bucket with it; the card and face the new set shares stay.
+    assert.deepEqual(value(await db.query('select public.af_profile_set_stale_public($1) as value', [fighter])), [{ id: first.id, shas: ['d'.repeat(64)] }]);
+  } finally { await db.close(); }
+});
+
 test('the roster names an approved set by this project\'s public bucket only', () => {
   const db = { storage: { from: bucket => ({ getPublicUrl: path => ({ data: { publicUrl: `https://ref.supabase.co/storage/v1/object/public/${bucket}/${path}` } }) }) } };
   const fighter = crypto.randomUUID(), id = crypto.randomUUID();
@@ -179,6 +297,14 @@ test('the roster names an approved set by this project\'s public bucket only', (
   assert.deepEqual(rosterProfileSet({}, { id: fighter, profile_set: { id, derived } }), {});
   // A card wider than its slot is not named (리뷰 P2-5).
   assert.deepEqual(rosterProfileSet(db, { id: fighter, profile_set: { id, derived: { ...derived, card: { ...derived.card, width: 601 } } } }), {});
+  // His expression sheet (2026-11-03) as the arena reads it; a sheet that does not read leaves his card and face.
+  const sheet = { sha256: 'd'.repeat(64), bytes: 500, width: 1152, height: 768, cell: 384 };
+  assert.deepEqual(rosterProfileSet(db, { id: fighter, profile_set: { id, derived: { ...derived, sheet } } }).profileSet?.expressions,
+    { url: `https://ref.supabase.co/storage/v1/object/public/af-profile-sets/${fighter}/${'d'.repeat(64)}.webp`, width: 1152, height: 768, cell: 384 });
+  for (const bad of [{ ...sheet, cell: 512 }, { ...sheet, width: 1536 }, { ...sheet, sha256: '../x' }, 'sheet']) {
+    const named = rosterProfileSet(db, { id: fighter, profile_set: { id, derived: { ...derived, sheet: bad } } });
+    assert.equal(named.profileSet?.card.width, 135); assert.equal('expressions' in (named.profileSet ?? {}), false);
+  }
 });
 
 test('the owner routes: a bad set file is 422 before the database; the spec names the profile set', async () => {
@@ -197,10 +323,11 @@ test('the owner routes: a bad set file is 422 before the database; the spec name
 
 test('the operator\'s review list and approval: the shape admin.html reads, files copied to the public bucket before the roster names them', async () => {
   const actor = crypto.randomUUID(), owner = crypto.randomUUID(), fighter = crypto.randomUUID(), id = crypto.randomUUID();
-  const card = Buffer.from('RIFF0000WEBPcard'), face = Buffer.from('RIFF0000WEBPface');
+  const card = Buffer.from('RIFF0000WEBPcard'), face = Buffer.from('RIFF0000WEBPface'), sheet = Buffer.from('RIFF0000WEBPsheet');
   const derived = { card: { sha256: await sha256(card), bytes: card.length, width: 135, height: 600, face: { x: 18, y: 0, side: 98 } },
-    face: { sha256: await sha256(face), bytes: face.length, size: 192 } };
-  const objects = new Map([[`ai-fighter-beta/${profileSetKey(owner, id, 'card')}`, card], [`ai-fighter-beta/${profileSetKey(owner, id, 'face')}`, face]]);
+    face: { sha256: await sha256(face), bytes: face.length, size: 192 }, sheet: { sha256: await sha256(sheet), bytes: sheet.length, width: 1152, height: 768, cell: 384 } };
+  const objects = new Map([[`ai-fighter-beta/${profileSetKey(owner, id, 'card')}`, card], [`ai-fighter-beta/${profileSetKey(owner, id, 'face')}`, face],
+    [`ai-fighter-beta/${profileSetKey(owner, id, 'sheet')}`, sheet]]);
   const calls = [], cleanupFailures = [], unpublished = [], cache = new Map();
   let status = 'review', removeFailures = 0;
   // What af_profile_set_stale_public lists: an older approved set's copy after an approval, this set's copies after its rejection.
@@ -239,12 +366,14 @@ test('the operator\'s review list and approval: the shape admin.html reads, file
     status: 'review', submittedAt: '2026-10-31T00:00:00Z', front: { url: 'string', width: 1024, height: 1536 },
     card: { url: `https://ref.supabase.co/storage/v1/object/sign/ai-fighter-beta/${profileSetKey(owner, id, 'card')}?token=t`, width: 135, height: 600, face: { x: 18, y: 0, side: 98 } },
     face: { url: `https://ref.supabase.co/storage/v1/object/sign/ai-fighter-beta/${profileSetKey(owner, id, 'face')}?token=t`, size: 192 },
+    expressions: { url: `https://ref.supabase.co/storage/v1/object/sign/ai-fighter-beta/${profileSetKey(owner, id, 'sheet')}?token=t`, width: 1152, height: 768, cell: 384 },
     previewUrl: `https://ref.supabase.co/storage/v1/object/sign/ai-fighter-beta/${owner}/sub/idle.webp?token=t`,
     reason: null, current: false, entered: true, validatedAt: null, reviewedAt: null });
   assert.equal((await ask('admin/profile-sets?status=open')).status, 400);
   const approved = await ask(`admin/profile-sets/${id}/approve`, { method: 'POST' });
   assert.deepEqual(await approved.json(), { ok: true, status: 'approved' });
   assert.ok(objects.has(`af-profile-sets/${fighter}/${derived.card.sha256}.webp`)); assert.ok(objects.has(`af-profile-sets/${fighter}/${derived.face.sha256}.webp`));
+  assert.ok(objects.has(`af-profile-sets/${fighter}/${derived.sheet.sha256}.webp`), 'his expression sheet is published with them');
   // A day, not a year: a public copy leaves when its set does (리뷰 P2-3).
   assert.equal(cache.get(`af-profile-sets/${fighter}/${derived.card.sha256}.webp`), '86400');
   assert.ok(calls.indexOf('af_admin_profile_set_approve') > calls.indexOf('af_admin_profile_set'));

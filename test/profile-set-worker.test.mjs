@@ -19,17 +19,29 @@ async function painting() {
   paint(412, 110, 612, 310); paint(362, 300, 662, 1450);
   return sharp(rgba, { raw: { width, height, channels: 4 } }).webp({ lossless: true }).toBuffer();
 }
+/** An expression sheet: 1536 × 1024, a bust in each of its six cells (`empty`: the last cell left clear). */
+async function expressionSheet({ empty = false } = {}) {
+  const width = 1536, height = 1024, rgba = Buffer.alloc(width * height * 4);
+  for (let cell = 0; cell < (empty ? 5 : 6); cell++) {
+    const left = (cell % 3) * 512, top = Math.floor(cell / 3) * 512;
+    for (let y = top + 80; y < top + 512; y++) for (let x = left + 120; x < left + 392; x++) rgba.set([90 + cell * 20, 120, 200, 255], (y * width + x) * 4);
+  }
+  return sharp(rgba, { raw: { width, height, channels: 4 } }).webp({ lossless: true }).toBuffer();
+}
 
-/** A claimed set served by a stub API: the claim, the signed download, the derived uploads, finish and release. */
-async function serve(bytes, face = { x: 402, y: 108, side: 220 }, { download = true, claim = {} } = {}) {
+/** A claimed set served by a stub API: the claim, the signed downloads, the derived uploads, finish and release. `sheet`: his expression sheet. */
+async function serve(bytes, face = { x: 402, y: 108, side: 220 }, { download = true, claim = {}, sheet = null } = {}) {
   const text = JSON.stringify({ version: PROFILE_SET_VERSION,
-    front: { path: 'front.webp', bytes: bytes.length, sha256: await sha256(bytes), width: 1024, height: 1536 }, face });
+    front: { path: 'front.webp', bytes: bytes.length, sha256: await sha256(bytes), width: 1024, height: 1536 }, face,
+    ...(sheet ? { expressions: { path: 'expressions.webp', bytes: sheet.length, sha256: await sha256(sheet), width: 1536, height: 1024 } } : {}) });
   const calls = { derived: {}, finish: null, release: null }, id = crypto.randomUUID(), lease = crypto.randomUUID();
   globalThis.fetch = async (target, init = {}) => {
     const route = String(target);
     if (route.endsWith('/worker/profile-sets/claim')) return Response.json({ ok: true, stage: 'validating', profileSetId: id, leaseToken: lease,
       manifestText: text, manifestSha256: await sha256(new TextEncoder().encode(text)), face,
-      front: { ...JSON.parse(text).front, downloadUrl: `${url}/storage/v1/object/sign/ai-fighter-beta/o/profile-sets/${id}/front.webp?token=t` }, ...claim });
+      front: { ...JSON.parse(text).front, downloadUrl: `${url}/storage/v1/object/sign/ai-fighter-beta/o/profile-sets/${id}/front.webp?token=t` },
+      ...(sheet ? { expressions: { ...JSON.parse(text).expressions, downloadUrl: `${url}/storage/v1/object/sign/ai-fighter-beta/o/profile-sets/${id}/expressions.webp?token=t` } } : {}),
+      ...claim });
     if (route.includes(`/worker/profile-sets/${id}/derived/`)) {
       assert.equal(init.headers['x-profile-set-lease'], lease);
       const body = new Uint8Array(init.body), name = route.split('/').at(-1);
@@ -38,7 +50,7 @@ async function serve(bytes, face = { x: 402, y: 108, side: 220 }, { download = t
     }
     if (route.endsWith('/worker/profile-sets/finish')) { calls.finish = JSON.parse(init.body); return Response.json({ ok: true, stage: calls.finish.passed ? 'review' : 'rejected' }); }
     if (route.endsWith('/worker/profile-sets/release')) { calls.release = JSON.parse(init.body); return Response.json({ ok: true, stage: 'requeued' }); }
-    if (route.startsWith(`${url}/storage/v1/object/sign/`)) return download ? new Response(bytes) : Response.json({}, { status: 500 });
+    if (route.startsWith(`${url}/storage/v1/object/sign/`)) return download ? new Response(route.includes('/expressions.webp') ? sheet : bytes) : Response.json({}, { status: 500 });
     throw new Error(`unexpected ${route}`);
   };
   return calls;
@@ -54,6 +66,28 @@ test('a passing painting: the card and face are stored under the lease, then fin
   assert.equal(card.sha256, await sha256(calls.derived.card)); assert.equal(card.bytes, calls.derived.card.length);
   assert.deepEqual([card.height, face.size, face.sha256], [600, 192, await sha256(calls.derived.face)]);
   assert.deepEqual((await sharp(Buffer.from(calls.derived.card)).metadata()).height, 600);
+});
+
+test('an expression sheet (2026-11-03): downloaded with the front, the arena\'s 1152 × 768 copy stored as `sheet`; a failing sheet is left out, never the front', async () => {
+  const calls = await serve(await painting(), undefined, { sheet: await expressionSheet() });
+  assert.equal((await runProfileSetWithConfig(config)).stage, 'review');
+  const { sheet } = calls.finish.derived;
+  assert.deepEqual(sheet, { sha256: await sha256(calls.derived.sheet), bytes: calls.derived.sheet.length, width: 1152, height: 768, cell: 384 });
+  const stored = await sharp(Buffer.from(calls.derived.sheet)).metadata();
+  assert.deepEqual([stored.format, stored.width, stored.height, stored.hasAlpha], ['webp', 1152, 768, true]);
+  // A sheet without its KO face (리뷰 2026-11-03: a hosted sheet nobody checked took the front's set down): the set passes without it.
+  const empty = await serve(await painting(), undefined, { sheet: await expressionSheet({ empty: true }) });
+  assert.equal((await runProfileSetWithConfig(config)).stage, 'review');
+  assert.deepEqual([empty.finish.passed, empty.finish.result.errors, empty.finish.result.sheetErrors], [true, [], [{ code: 'EXPRESSIONS_EMPTY_CELL', path: '/expressions' }]]);
+  assert.deepEqual(Object.keys(empty.derived).sort(), ['card', 'face']); assert.equal('sheet' in empty.finish.derived, false);
+  // A front that fails takes the set down with both reasons.
+  const both = await serve(await painting(), { x: 402, y: 700, side: 220 }, { sheet: await expressionSheet({ empty: true }) });
+  assert.equal((await runProfileSetWithConfig(config)).stage, 'rejected');
+  assert.deepEqual(both.finish.result.errors.map(e => e.code), ['FACE_POSITION', 'EXPRESSIONS_EMPTY_CELL']);
+  // A claim without the sheet's link is the server's fault: the set goes back, no attempt spent.
+  const unlinked = await serve(await painting(), undefined, { sheet: await expressionSheet(), claim: { expressions: undefined } });
+  const result = await runProfileSetWithConfig(config);
+  assert.deepEqual([result.stage, unlinked.release.code, unlinked.finish], ['retry-later', 'server-expressions-link', null]);
 });
 
 test('a failing painting is a verdict (rejected with the reasons); a failed download hands the set back', async () => {

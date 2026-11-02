@@ -44,6 +44,9 @@ CODEX_VERSION=0.165.0
 GROK_VERSION=1.0.52
 RUN_TIMEOUT=${OG_RUN_TIMEOUT:-5400}
 SLOT_WAIT=${OG_SLOT_WAIT:-1800}
+# The model og health asks codex with: the hosted stages' (host/generation-stages.mjs MODELS.text — generation-stages.test.mjs keeps the two
+# the same), so a login that refuses it fails health and the worker takes no job (2026-11-03, gpt-6.1-sol).
+CODEX_MODEL=${OG_CODEX_MODEL:-gpt-6.1-sol}
 LEDGER=$G/ledger.jsonl
 PINS=$G/accounts.json
 # sprite-gen-agent 3.4 tools that never reach a provider, and the Grok video/audio ones. Any other sprite tool may call
@@ -359,7 +362,7 @@ cmd_health() {
     t=$(now_ms); rc=0
     if [ $p = codex ]; then
       if ! acquire_slots 1; then echo "og: codex NOT READY — no free codex slot within ${SLOT_WAIT}s"; continue; fi
-      out=$(in_slice "${SVC_ENV[@]}" timeout 180 codex exec --skip-git-repo-check --sandbox read-only \
+      out=$(in_slice "${SVC_ENV[@]}" timeout 180 codex exec --skip-git-repo-check --sandbox read-only -m "$CODEX_MODEL" \
         "Reply with the single word ok." 2>"$err") || rc=$?
       release_slots
     else

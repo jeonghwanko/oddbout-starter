@@ -146,3 +146,44 @@ test('storage-remove shows which unused folders go and what the budget becomes u
   for (const argv of [['storage-remove'], ['storage-remove', a, '--oldest', '1'], ['storage-remove', '--oldest', '0'], ['storage-remove', '--oldest', '51']])
     await assert.rejects(runAdmin({ argv, connect: async () => { throw Error('no call expected'); }, env: {} }), /missing-value:submission|invalid-value:--oldest/);
 });
+
+test('profile-expressions: every sheet is checked before anything is sent; each goes on its own with its reason and a key per set and sheet', async () => {
+  const { mkdtemp, writeFile } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const path = (await import('node:path')).default;
+  const { createHash } = await import('node:crypto');
+  const { webp } = await import('./helpers/generation-database.mjs');
+  const sharp = (await import('sharp')).default;
+  // A sheet the validator's check passes: a bust in each of the six cells on a clear background.
+  const rgba = Buffer.alloc(1536 * 1024 * 4);
+  for (let cell = 0; cell < 6; cell++) for (let y = Math.floor(cell / 3) * 512 + 80; y < Math.floor(cell / 3) * 512 + 512; y++)
+    for (let x = (cell % 3) * 512 + 120; x < (cell % 3) * 512 + 392; x++) rgba.set([90, 120, 200, 255], (y * 1536 + x) * 4);
+  const sheet = new Uint8Array(await sharp(rgba, { raw: { width: 1536, height: 1024, channels: 4 } }).webp({ lossless: true }).toBuffer());
+  const dir = await mkdtemp(path.join(tmpdir(), 'sheets-')), set = JOB, other = 'a242bcce-997e-4248-b57b-16fab1bf2109';
+  await writeFile(path.join(dir, `${set}.webp`), sheet);
+  const entry = { fighterId: other, profileSetId: set, name: '꿈순이', file: `${set}.webp`, sha256: createHash('sha256').update(sheet).digest('hex') };
+  await writeFile(path.join(dir, 'sheets.json'), JSON.stringify({ sheets: [entry] }));
+  const list = path.join(dir, 'sheets.json');
+  const calls = [];
+  const connect = async () => ({ request: async (route, options = {}) => { calls.push({ route, ...options }); return { ok: true, profileSet: { profileSetId: other, stage: 'queued' } }; } });
+  const dry = await runAdmin({ argv: ['profile-expressions', list, '--reason', '패배 표정 추가'], connect, env: {} });
+  assert.equal(dry.dryRun, true); assert.match(dry.change, /꿈순이/); assert.equal(calls.length, 0);
+  const done = await runAdmin({ argv: ['profile-expressions', list, '--reason', '패배 표정 추가', '--yes'], connect, env: {} });
+  assert.deepEqual(done.results, [{ fighterId: other, name: '꿈순이', ok: true, profileSetId: other, stage: 'queued' }]);
+  assert.equal(calls[0].route, `admin/profile-sets/${set}/expressions`);
+  assert.deepEqual([calls[0].headers['content-type'], decodeURIComponent(calls[0].headers['x-admin-reason']), calls[0].headers['idempotency-key'],
+    calls[0].headers['x-admin-fighter']], ['image/webp', '패배 표정 추가', dry.sheets[0].idempotencyKey, other]);
+  // --attempt 2: new keys for the same sheets (after an upload-expired).
+  const again = await runAdmin({ argv: ['profile-expressions', list, '--reason', 'x', '--attempt', '2'], connect, env: {} });
+  assert.notEqual(again.sheets[0].idempotencyKey, dry.sheets[0].idempotencyKey);
+  assert.deepEqual(new Uint8Array(calls[0].body), sheet);
+  // A sheet that is not what the list says stops the whole run before any call.
+  await writeFile(path.join(dir, 'sheets.json'), JSON.stringify({ sheets: [{ ...entry, sha256: 'a'.repeat(64) }] }));
+  await assert.rejects(runAdmin({ argv: ['profile-expressions', list, '--reason', 'x', '--yes'], connect, env: {} }), /sheet-mismatch/);
+  for (const bad of [webp(1024, 1024), webp(1536, 1024)]) {   // another size; the right size that does not decode
+    await writeFile(path.join(dir, `${set}.webp`), bad);
+    await writeFile(path.join(dir, 'sheets.json'), JSON.stringify({ sheets: [{ ...entry, sha256: createHash('sha256').update(bad).digest('hex') }] }));
+    await assert.rejects(runAdmin({ argv: ['profile-expressions', list, '--reason', 'x', '--yes'], connect, env: {} }), /sheet-mismatch/);
+  }
+  assert.equal(calls.length, 1);
+});

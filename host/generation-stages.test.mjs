@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ALIGN_AGAIN, BEAT_LIMIT, GROK_LIMITED, BRIEF_SCHEMA, ONE_STRIDE_OF, GAIT_EVENT_BYTES, GAIT_OWN_FEATURE, gaitEvent, gaitRanges, GAIT_RETAKES, CODEX_TOOLS_OFF, EVEN_BEAT, PREVIEW_CLIPS, RUN_FROM_WALK, RUN_FROM_WALK_PACE, SCALE_ROUNDS, SCALE_WIDE, appearancePrompt, briefCommand, briefPrompt, characterPhrase, checkedBrief, checkedVerdict, createStages, lookPick, namedFeet, feetAlternate, lowMarginFeet, ENGINE_CUE_RHYTHM, ogJobId, retakeReasons,
   submissionOutcome, withProfile, EXTRACT_REDRAWS, extractFailedRows, ENGINE_SEAM_MAX, loopTaken, HOUSE_COLOURING, LOOK_CHECKS, SIDE_CHECKS, SIDE_COLOURING, SIDE_TAKES,
-  lookJudgePrompt, sideJudgePrompt, sidePrompt } from './generation-stages.mjs';
+  lookJudgePrompt, sideJudgePrompt, sidePrompt, EXPRESSION_CELLS, expressionsPrompt, expressionsName, MODELS } from './generation-stages.mjs';
 import { ENGINE_SEAM_MAX as REVIEW_SEAM_MAX, ENGINE_CUE_RHYTHM as REVIEW_CUE_RHYTHM, lowMarginFeet as reviewLowMarginFeet } from '../tools/ai-fighter/gait.mjs';
 import { parseEnv, parseHealth } from './generation-worker.mjs';
 import { ASKS } from './generation-stages.mjs';
@@ -1195,7 +1195,8 @@ test('the motions start from a side still drawn from the chosen front: judged ag
   const pass = Object.fromEntries(SIDE_CHECKS.map(check => [check, 'pass']));
   verdicts.push({ checks: { ...pass, match: 'fail' }, notes: 'Different gloves from the front.' }, { checks: pass, notes: 'The same boxer, facing right.' });
   await stages.motions(job, dir);
-  const sides = calls.filter(c => c.args.includes('gen'));
+  // Side drawings only (the expression sheet is drawn beside them, without a view).
+  const sides = calls.filter(c => c.args.includes('gen') && c.args.includes('--direction'));
   assert.equal(sides.length, 2);
   for (const side of sides) {
     assert.deepEqual([flag(side.args, '--direction'), flag(side.args, '--facing')], ['side', 'right']);
@@ -1209,7 +1210,8 @@ test('the motions start from a side still drawn from the chosen front: judged ag
   // The motions were given the side still that passed, not the front.
   const after = calls.slice(calls.indexOf(judged[1]) + 1);
   assert.ok(after.some(c => c.args.includes(path.join(dir, 'looks', 'side-0-b', 'take-1.png'))), 'the motions take the side still');
-  assert.ok(!after.some(c => c.args.includes(path.join(dir, 'looks', 'front-b-0.png'))));
+  // (The expression sheet beside them is drawn from the front: 2026-11-03.)
+  assert.ok(!after.some(c => !c.args.includes('--aspect-ratio') && c.args.includes(path.join(dir, 'looks', 'front-b-0.png'))));
   // A stage run again draws and judges nothing it has: the passing take is reused.
   calls.length = 0;
   await stages.motions(job, dir);
@@ -1240,6 +1242,134 @@ test('the motions start from a side still drawn from the chosen front: judged ag
   calls.length = 0;
   await stages.motions({ ...job, choice: 'a' }, legacy);
   assert.ok(!calls.some(c => c.args.includes('gen')));
+});
+
+// 표정 시트 (2026-11-03 — 사용자: "무투장에서 패배했을때 결과창에서 표정이 생성되는지 점검하고, 안되고 있다면 생성되게 개선해줘").
+/** A PNG's first 24 bytes at `width` × `height`: enough for pngSize. */
+const pngHeader = (width, height) => {
+  const bytes = Buffer.alloc(24);
+  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]); bytes.write('IHDR', 12, 'latin1');
+  bytes.writeUInt32BE(width, 16); bytes.writeUInt32BE(height, 20);
+  return bytes;
+};
+test('og health asks codex with the hosted stages\' model (a login that refuses it takes no job)', async () => {
+  const og = await readFile(path.join(path.dirname(fileURLToPath(import.meta.url)), 'og'), 'utf8');
+  assert.equal(og.match(/^CODEX_MODEL=\$\{OG_CODEX_MODEL:-([^}]+)\}$/m)?.[1], MODELS.text);
+  assert.match(og, /codex exec --skip-git-repo-check --sandbox read-only -m "\$CODEX_MODEL"/);
+  assert.deepEqual(MODELS, { text: 'gpt-6.1-sol', image: 'gpt-6.1-sol' });
+});
+
+test('the expression sheet says the creators\' agents\' cells, colours as the front and keeps the arena\'s order (KO last)', async () => {
+  const { PROFILE_SET_EXPRESSIONS_PROMPT } = await import('../api/profile-sets.mjs');
+  const agents = PROFILE_SET_EXPRESSIONS_PROMPT.split('\n');
+  for (const line of EXPRESSION_CELLS) assert.ok(agents.includes(line), `the agents' sheet text misses: ${line}`);
+  assert.match(EXPRESSION_CELLS[5], /^6\. Knocked out/);
+  const prompt = expressionsPrompt(brief);
+  for (const line of [...EXPRESSION_CELLS, ...SIDE_COLOURING, ...HOUSE_COLOURING]) assert.ok(prompt.includes(line));
+  assert.match(prompt, /1536 x 1024 landscape image, 3 columns x 2 rows/);
+  assert.match(prompt, /blue armoured cat/);
+  assert.equal(expressionsName(1, 'b'), 'expressions-1-b');
+});
+
+test('beside the motions, the sheet is drawn once from the chosen front, goes up for the creator and goes to the job with the front', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'gen-faces-')), calls = [], uploads = [], events = [], webps = [];
+  await mkdir(path.join(dir, 'looks'), { recursive: true });
+  await writeFile(path.join(dir, 'looks', 'front-b-0.png'), 'front');
+  const flag = (args, name) => args[args.indexOf(name) + 1];
+  let sheetCode = 0, sheetSize = [1536, 1024], sheetReport = null;
+  const og = async (args, { stdin } = {}) => {
+    calls.push({ args, stdin });
+    if (args.includes('gen') && args.includes('--aspect-ratio')) {
+      if (sheetReport) await writeFile(flag(args, '--report'), JSON.stringify(sheetReport));
+      if (sheetCode !== 0) return { code: sheetCode };
+      await writeFile(flag(args, '--out'), pngHeader(...sheetSize)); await writeFile(flag(args, '--report'), JSON.stringify({ ok: true })); return { code: 0 };
+    }
+    if (args.includes('gen')) { await writeFile(flag(args, '--out'), 'side'); await writeFile(flag(args, '--report'), JSON.stringify({ ok: true })); return { code: 0 }; }
+    if (args[0] === 'codex') { await writeFile(flag(args, '-o'), JSON.stringify({ checks: Object.fromEntries(SIDE_CHECKS.map(c => [c, 'pass'])), notes: 'The same boxer.' })); return { code: 0 }; }
+    return { code: 1 };
+  };
+  const fronts = [];
+  const api = { artifact: async (job, name) => { uploads.push(name); return { ok: true }; }, progress: async (job, progress, event) => { events.push(event); return { ok: true }; },
+    profileFront: async (job, front) => { fronts.push(front); return { ok: true }; },
+    submission: async () => ({ ok: true, stage: 'uploading', submissionId: 'sub-1' }), asset: async () => ({ ok: true }), submit: async () => ({ ok: true }) };
+  const motionsPy = async ([command, , out]) => {
+    if (command === 'face-box') { await writeFile(out, JSON.stringify({ x: 400, y: 30, side: 250 })); return { code: 0 }; }
+    return { code: 1 };
+  };
+  const stages = createStages({ og, api, motionsPy, fetchBytes: async () => new Uint8Array(),
+    toWebp: async (png, webp, side) => { webps.push([path.basename(webp), side]); await writeFile(webp, 'webp'); },
+    styleAnchor: '/kit/style-anchor-front.webp', gaitStaggerMs: 0, alignPauseMs: 0 });
+  const job = { id: '0123abcd-0003', language: 'ko', brief, choice: 'b', appearanceRound: 0, candidates: [], motionNote: null, motionRound: 0,
+    profile: { name: 'Blue', description: 'Boxer.' } };
+  await stages.motions(job, dir);
+  const sheets = calls.filter(c => c.args.includes('gen') && c.args.includes('--aspect-ratio'));
+  assert.equal(sheets.length, 1);
+  const [sheet] = sheets;
+  assert.equal(flag(sheet.args, '--aspect-ratio'), '3:2'); assert.equal(sheet.args.includes('--direction'), false);
+  assert.deepEqual(sheet.args.filter((a, i) => sheet.args[i - 1] === '--ref'), [path.join(dir, 'looks', 'front-b-0.png'), '/kit/style-anchor-front.webp']);
+  assert.match(await readFile(flag(sheet.args, '--prompt-file'), 'utf8'), /6\. Knocked out/);
+  assert.ok(uploads.includes('expressions-0-b'));
+  assert.deepEqual(webps.find(([name]) => name === 'expressions-0-b.webp'), ['expressions-0-b.webp', '1536x1024'], 'the sheet keeps the set\'s exact size');
+  assert.deepEqual(events.filter(e => e?.kind === 'expressions'), [{ kind: 'expressions', outcome: 'chosen', artifact: 'expressions-0-b' }]);
+  // A stage run again draws no second sheet.
+  calls.length = 0;
+  await stages.motions(job, dir);
+  assert.equal(calls.filter(c => c.args.includes('--aspect-ratio')).length, 0);
+  // The package goes in after the front and the sheet.
+  await mkdir(path.join(dir, 'package', 'assets'), { recursive: true });
+  await writeFile(path.join(dir, 'package', 'assets', 'idle.webp'), 'idle-bytes');
+  await writeFile(path.join(dir, 'package', 'fighter.json'), JSON.stringify({ profile: { name: 'old', description: 'old' },
+    assets: [{ id: 'idle', path: 'assets/idle.webp', sha256: createHash('sha256').update('idle-bytes').digest('hex') }] }));
+  assert.equal((await stages.submitting(job, dir)).outcome, 'ok');
+  assert.deepEqual(fronts, [{ artifact: 'front-b-0', face: { x: 400, y: 30, side: 250 }, expressions: 'expressions-0-b' }]);
+
+  // A drawing that did not finish is never drawn again (it may have been paid for): he registers with his front only.
+  const failed = await mkdtemp(path.join(tmpdir(), 'gen-faces-fail-'));
+  await mkdir(path.join(failed, 'looks'), { recursive: true });
+  await writeFile(path.join(failed, 'looks', 'front-a-0.png'), 'front');
+  sheetCode = 1; calls.length = 0; events.length = 0;
+  await stages.motions({ ...job, choice: 'a' }, failed);
+  await stages.motions({ ...job, choice: 'a' }, failed);
+  assert.equal(calls.filter(c => c.args.includes('--aspect-ratio')).length, 1);
+  assert.deepEqual(events.filter(e => e?.kind === 'expressions').map(e => e.code), ['expressions-exit-1', 'expressions-unfinished']);
+  await cp(path.join(dir, 'package'), path.join(failed, 'package'), { recursive: true });
+  fronts.length = 0;
+  await stages.submitting({ ...job, choice: 'a' }, failed);
+  assert.deepEqual(fronts, [{ artifact: 'front-a-0', face: { x: 400, y: 30, side: 250 } }]);
+
+  // og refused it before it ran (no slot: exit 3, the allowance: 75, no report of this run): nothing was sent, so a later run draws it.
+  const refused = await mkdtemp(path.join(tmpdir(), 'gen-faces-refused-'));
+  await mkdir(path.join(refused, 'looks'), { recursive: true });
+  await writeFile(path.join(refused, 'looks', 'front-a-0.png'), 'front');
+  for (const code of [3, 75]) {
+    sheetCode = code; calls.length = 0; events.length = 0;
+    await stages.motions({ ...job, choice: 'a' }, refused);
+    assert.deepEqual(events.filter(e => e?.kind === 'expressions').map(e => e.code), [`expressions-not-started-${code}`]);
+  }
+  // A run that failed with its own report saying nothing reached the provider: the same.
+  sheetCode = 1; sheetReport = { ok: false, provider_submitted: false, errors: [{ code: 'bad-arguments' }] }; events.length = 0;
+  await stages.motions({ ...job, choice: 'a' }, refused);
+  assert.deepEqual(events.filter(e => e?.kind === 'expressions').map(e => e.code), ['expressions-not-started-1']);
+  sheetReport = null;
+  sheetCode = 0; sheetSize = [1530, 1020]; calls.length = 0; events.length = 0;
+  await stages.motions({ ...job, choice: 'a' }, refused);
+  // codex sized it a little off 1536 × 1024: a 3:2 sheet is fitted, not thrown away.
+  assert.deepEqual(events.filter(e => e?.kind === 'expressions').map(e => e.outcome), ['chosen']);
+  assert.deepEqual(webps.at(-1), ['expressions-0-a.webp', '1536x1024']);
+  // Another shape goes without (no drawing again).
+  const square = await mkdtemp(path.join(tmpdir(), 'gen-faces-square-'));
+  await mkdir(path.join(square, 'looks'), { recursive: true });
+  await writeFile(path.join(square, 'looks', 'front-a-0.png'), 'front');
+  sheetSize = [1024, 1024]; events.length = 0;
+  await stages.motions({ ...job, choice: 'a' }, square);
+  assert.deepEqual(events.filter(e => e?.kind === 'expressions').map(e => e.code), ['expressions-size']);
+
+  // An API from before the sheet refuses the field (invalid-body): the front goes again, alone.
+  fronts.length = 0;
+  api.profileFront = async (job, front) => { fronts.push(front); return front.expressions ? { ok: false, code: 'invalid-body' } : { ok: true }; };
+  await rm(path.join(dir, 'looks', 'front-b-0.face.json'), { force: true });
+  await stages.submitting(job, dir);
+  assert.deepEqual(fronts.map(f => 'expressions' in f), [true, false]);
 });
 
 test('the chosen front and its face square go to the job before the package; a front that cannot be measured never stops it', async () => {

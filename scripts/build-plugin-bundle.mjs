@@ -18,7 +18,7 @@ const runtimeFiles = [
   'deploy/creation-context-source.json', 'deploy/creator-site.json',
   'scripts/check-cloud-discovery.mjs', 'plugins/ai-fighter/mcp.json',
   'deploy/creation-environments.json', 'deploy/creation-environment-trust.json', 'scripts/connect-generation.mjs', 'docs/ENVIRONMENT-ONBOARDING.md',
-  'scripts/sprite-gen.mjs', 'scripts/pack-fighter.mjs', 'scripts/run-creation-job.mjs', 'scripts/creation-tool.mjs',
+  'scripts/sprite-gen.mjs', 'scripts/pack-fighter.mjs', 'scripts/profile-set.mjs', 'scripts/run-creation-job.mjs', 'scripts/creation-tool.mjs',
   'scripts/sprite-tools.mjs',
   'scripts/dots-workspace.mjs', 'scripts/dots-start.mjs', 'scripts/dots-source.mjs',
   'docs/DOTS-QUICKSTART.md', 'docs/DOTS-START.md',
@@ -37,7 +37,7 @@ const edgeOnlyFiles = ['mcp/cloud.mjs', 'mcp/file-input-probe.mjs', 'mcp/creator
 /** @type {(file: string) => boolean} */
 const edgeOnly = file => edgeOnlyFiles.includes(file) || file.startsWith('mcp/cloud/');
 const runtimeScripts = ['login', 'logout', 'sprite:setup', 'sprite:status', 'sprite',
-  'fighter:pack', 'fighter:gait', 'fighter:contact', 'validate', 'creation:context', 'creation:delivery', 'creation:run', 'creation:tool',
+  'fighter:pack', 'fighter:gait', 'fighter:contact', 'fighter:profile-set', 'validate', 'creation:context', 'creation:delivery', 'creation:run', 'creation:tool',
   'dots:doctor', 'dots:bootstrap', 'dots:resume', 'dots:start', 'dots:source', 'mcp:check'];
 
 // Presentation media in the upstream documentation is not runtime/package data.

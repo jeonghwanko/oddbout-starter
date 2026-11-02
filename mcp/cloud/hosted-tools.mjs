@@ -21,7 +21,7 @@ import { TICKET_UPLOAD_URL } from './resources.mjs';
  *   submission?: { stage: string, fighterId?: string | null } | null,
  *   host?: { choice: string, requested?: { name?: string } | null, assigned?: unknown },
  *   queue?: { position: number, reason?: 'turn' | 'usage' | 'paused', usedPercent?: number, resetsAt?: string, dailyLimit: number, startedToday: number } | null,
- *   profileSetId?: string | null, tokens?: number | null }} HostedJob
+ *   profileSetId?: string | null, tokens?: number | null, expressions?: { url: string | null } | null }} HostedJob
  */
 
 /**
@@ -92,11 +92,13 @@ export function hostedNext(job) {
         + `Then choose_hosted_look with his pick, or with one sentence to change both (${left.appearance ?? 0} changes left).`;
     case 'motions':
       return `ODDBOUT is drawing ${job.delegate ? 'the look it picked' : 'the chosen look'} from the side (job.side once it is drawn) and making the eleven motions `
-        + 'from that side view (about 15 to 30 minutes). Each motion shows in job.drafts as soon as it is made; a walk or run with a state '
+        + 'from that side view (about 15 to 30 minutes), and his six arena faces from the front (job.expressions once drawn; the last is his '
+        + 'knocked-out face on the KO card). Each motion shows in job.drafts as soon as it is made; a walk or run with a state '
         + 'is still being checked and may be filmed again. Tell the user, and check later with get_hosted_fighter.';
     case 'motion_ready':
       return `${job.preview?.some(p => p.note === 'run-from-walk') ? RUN_FROM_WALK_NEXT : ''}`
-        + `Show the user ${job.delegate ? `the look ODDBOUT picked (candidate ${job.choice}), ` : ''}the motion previews as images, and the profile draft. `
+        + `Show the user ${job.delegate ? `the look ODDBOUT picked (candidate ${job.choice}), ` : ''}the motion previews as images, `
+        + `${job.expressions?.url ? 'his six arena faces (job.expressions: the last one is his face when he is knocked out), ' : ''}and the profile draft. `
         + 'If he likes them, register_hosted_fighter (change only what he asks in the profile). '
         + `To fix one motion, revise_hosted_motion (${left.motions ?? 0} changes left).`;
     case 'submitting':
@@ -106,7 +108,8 @@ export function hostedNext(job) {
       if (job.submission?.stage === 'registered') return `Registered: fighter ${job.submission.fighterId}, in production. Tell the user: he can watch `
         + 'every motion on his fighter page and enter him there (출전); other people meet him only after that. enter_fighter does it here '
         + 'once he confirmed each of the eleven motions. '
-        + (job.profileSetId ? `His chosen front went in as his profile set (${job.profileSetId}): the home shows him once an operator approves it.`
+        + (job.profileSetId ? `His chosen front went in as his profile set (${job.profileSetId}): the home and the arena show it once an operator approves it. `
+          + (job.expressions?.url ? 'His six arena faces were sent with it; get_profile_set says whether they passed the check (sheetErrors when not).' : '')
           : 'His profile set (front picture) did not go in with it: prepare_profile_set can upload one.');
       if (job.submission?.stage === 'rejected') return `The server check refused the package. A person at ODDBOUT will look at it.${spent(job)}`;
       return 'The server is checking the package. Call get_hosted_fighter with waitSeconds.';
@@ -292,7 +295,8 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
     + 'Pass an id as request_hosted_fighter\'s host.',
     {}, () => invoke('generations/hosts'), { publicTool: true });
   register('get_hosted_fighter', 'ODDBOUT이 만드는 선수', `Read or resume the connected user's hosted fighter after a timeout or disconnection: its state, `
-    + `the two front-view looks, the side view drawn from the chosen one (side) or the motion previews as fresh image URLs (ten minutes), `
+    + `the two front-view looks, the side view drawn from the chosen one (side), his six arena faces (expressions: 3 × 2, the last his KO face) `
+    + `or the motion previews as fresh image URLs (ten minutes), `
     + `the profile draft, the profile set made at registration (profileSetId) and next. `
     + `Supply either jobId or the original request's idempotencyKey, never both. `
     + `Key lookup only reads an existing job under this account, even when new generation is disabled; `
