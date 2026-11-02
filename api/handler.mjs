@@ -15,9 +15,7 @@ import { BUCKET, SUBMISSION_STATUS, checkedManifest, objectKey, storeAsset } fro
 import { PROFILE_SET_SPEC, createProfileSetHandler, profileSetRoute, profileSetWorkerRoute, rosterProfileSet } from './profile-sets.mjs';
 
 export { Problem, readBody, sha256 } from './http.mjs';
-export { BUCKET, objectKey } from './submissions.mjs';
-// The worker stamps this on every receipt. af_settings.validator_versions lists the versions af_finish accepts.
-export const VALIDATOR_VERSION = 'ai-fighter-validator-0.2.0';
+export { BUCKET, VALIDATOR_VERSION, objectKey } from './submissions.mjs';
 const ROSTER_CORS = { methods: 'GET, OPTIONS' };
 /**
  * A row of af_submissions, as `select('*')` or a submission function returns it. `validation` is the worker's result as af_finish stored it.

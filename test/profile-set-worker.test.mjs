@@ -21,7 +21,7 @@ async function painting() {
 }
 
 /** A claimed set served by a stub API: the claim, the signed download, the derived uploads, finish and release. */
-async function serve(bytes, face = { x: 402, y: 108, side: 220 }, { download = true } = {}) {
+async function serve(bytes, face = { x: 402, y: 108, side: 220 }, { download = true, claim = {} } = {}) {
   const text = JSON.stringify({ version: PROFILE_SET_VERSION,
     front: { path: 'front.webp', bytes: bytes.length, sha256: await sha256(bytes), width: 1024, height: 1536 }, face });
   const calls = { derived: {}, finish: null, release: null }, id = crypto.randomUUID(), lease = crypto.randomUUID();
@@ -29,7 +29,7 @@ async function serve(bytes, face = { x: 402, y: 108, side: 220 }, { download = t
     const route = String(target);
     if (route.endsWith('/worker/profile-sets/claim')) return Response.json({ ok: true, stage: 'validating', profileSetId: id, leaseToken: lease,
       manifestText: text, manifestSha256: await sha256(new TextEncoder().encode(text)), face,
-      front: { ...JSON.parse(text).front, downloadUrl: `${url}/storage/v1/object/sign/ai-fighter-beta/o/profile-sets/${id}/front.webp?token=t` } });
+      front: { ...JSON.parse(text).front, downloadUrl: `${url}/storage/v1/object/sign/ai-fighter-beta/o/profile-sets/${id}/front.webp?token=t` }, ...claim });
     if (route.includes(`/worker/profile-sets/${id}/derived/`)) {
       assert.equal(init.headers['x-profile-set-lease'], lease);
       const body = new Uint8Array(init.body), name = route.split('/').at(-1);
@@ -64,6 +64,13 @@ test('a failing painting is a verdict (rejected with the reasons); a failed down
   const unreachable = await serve(await painting(), undefined, { download: false });
   const result = await runProfileSetWithConfig(config);
   assert.deepEqual([result.stage, result.code, unreachable.release.code, unreachable.finish], ['retry-later', 'download-failed', 'download-failed', null]);
+});
+
+test('an unexpected error hands the set back as worker-error instead of letting its lease spend an attempt (리뷰 2026-11-02)', async () => {
+  const calls = await serve(await painting(), undefined, { claim: { front: null } });
+  const result = await runProfileSetWithConfig(config);
+  assert.deepEqual([result.stage, result.code, result.requeued, calls.finish], ['retry-later', 'worker-error', true, null]);
+  assert.deepEqual([calls.release.code, calls.release.profileSetId], ['worker-error', result.profileSetId]);
 });
 
 test('an idle queue answers idle', async () => {

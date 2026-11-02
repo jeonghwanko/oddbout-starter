@@ -6,6 +6,8 @@ import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/valid
 import { Problem, readBody, sha256, unstorableTextPath } from './http.mjs';
 
 export const BUCKET = 'ai-fighter-beta';
+// The Render validator (worker/run.mjs) stamps this on every receipt. af_settings.validator_versions lists the versions af_finish accepts.
+export const VALIDATOR_VERSION = 'ai-fighter-validator-0.2.0';
 /**
  * The submission path's refusals (`af_create_submission`, `af_submit`, `af_finish`, profile edits) and their statuses, for every route
  * that calls it. The hosted worker's routes kept their own copy: an expired upload came back to it as a database fault (503, which it
