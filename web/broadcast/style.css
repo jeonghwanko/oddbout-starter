@@ -307,7 +307,6 @@ h1 span {
 }
 .fighter-poster {
   position: relative;
-  transform: rotate(-3deg);
   width: 445px;
   text-align: center;
   flex-shrink: 1;
@@ -334,9 +333,6 @@ h1 span {
   background: #cbd6c4;
   margin-left: -7px;
   box-shadow: 0 0 0 1px #678076;
-}
-.poster-faces img:nth-child(even) {
-  transform: translateY(10px);
 }
 .poster-rule {
   display: block;
@@ -963,7 +959,6 @@ summary:hover {
     width: 176px;
     right: -32px;
     top: 27px;
-    transform: rotate(-10deg);
     opacity: 0.3;
   }
   .poster-caption,
@@ -981,9 +976,6 @@ summary:hover {
     width: 100%;
     border-width: 3px;
     margin: 0;
-  }
-  .poster-faces img:nth-child(even) {
-    transform: translateY(14px);
   }
   .section-heading {
     align-items: start;
