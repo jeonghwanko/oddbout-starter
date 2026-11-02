@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createCloudHandler, scopedDatabase, authenticateCloud, EXPIRED_TOKEN_GRACE_MS, SIGN_IN_PROBLEMS, allowedFileUrl, downloadHostFile, compactText, timedFetch, CLOUD_RESOURCE, CLOUD_ISSUER, PUBLIC_RESOURCE, LEGACY_PUBLIC_RESOURCE, SIGN_IN_RESOURCE, PUBLIC_SIGN_IN_RESOURCE, DIRECTORY_RESOURCE, PUBLIC_DIRECTORY_RESOURCE, DIRECTORY_DOCUMENTATION } from '../mcp/cloud.mjs';
+import { createCloudHandler, scopedDatabase, authenticateCloud, GROK_RECONNECT_PAGE, SIGN_IN_PROBLEMS, allowedFileUrl, downloadHostFile, compactText, timedFetch, CLOUD_RESOURCE, CLOUD_ISSUER, PUBLIC_RESOURCE, LEGACY_PUBLIC_RESOURCE, SIGN_IN_RESOURCE, PUBLIC_SIGN_IN_RESOURCE, DIRECTORY_RESOURCE, PUBLIC_DIRECTORY_RESOURCE, DIRECTORY_DOCUMENTATION } from '../mcp/cloud.mjs';
 import { DIRECTORY_INSTRUCTIONS, DIRECTORY_TITLES } from '../mcp/cloud/directory-edition.mjs';
 import { verifiedUserId } from '../api/http.mjs';
 import { safeClientRedirect, authorizationId } from '../web/cloud-connect/connect.mjs';
@@ -83,7 +83,7 @@ test('an expired connector token works while it is its live session\'s newest, t
   const req=new Request(SIGN_IN_RESOURCE,{headers:{authorization:`Bearer ${token}`}});
   const expired=now-6*hour;
   assert.equal((await authenticateCloud(dbAt(expired),req)).identity.owner,owner);
-  assert.deepEqual(seen,[{allowExpired:true},['af_mcp_session_state',{p_owner:owner,p_session:session,p_client:client,p_edition:'full',p_issued_at:expired-hour}]]);
+  assert.deepEqual(seen,[{allowExpired:true},['af_mcp_session_state',{p_owner:owner,p_session:session,p_client:client,p_edition:'full',p_issued_at:expired-hour,p_expires_at:expired}]]);
   seen.length=0;
   assert.equal((await authenticateCloud(dbAt(now+hour),req)).identity.owner,owner);
   assert.deepEqual(seen,[{allowExpired:true},['af_mcp_session_state',{p_owner:owner,p_session:session,p_client:client,p_edition:'full'}]]);
@@ -94,33 +94,41 @@ test('an expired connector token works while it is its live session\'s newest, t
   // Other clients keep the plain expiry; a client that refreshed holds a newer token; a revoked or signed-out connection ends every token;
   // a session bound to the other edition is refused there.
   for(const [state,problem] of [['strict','token-expired'],['refreshed','token-superseded'],['ended','connection-ended'],[null,'connection-ended'],
-    ['other-edition','other-address']])
+    ['other-edition','other-address'],['lapsed','sign-in-lapsed']])
     assert.deepEqual(await authenticateCloud(dbAt(expired,{state}),req),{identity:null,problem},state);
-  // Past the grace, or without an issue time to compare, the database is not asked.
-  for(const db of [dbAt(now-EXPIRED_TOKEN_GRACE_MS/1000),dbAt(expired,{iat:null})]){
-    seen.length=0;
-    assert.deepEqual(await authenticateCloud(db,req),{identity:null,problem:'token-expired'});
-    assert.deepEqual(seen,[{allowExpired:true}]);
-  }
-  assert.equal((await authenticateCloud(dbAt(now-EXPIRED_TOKEN_GRACE_MS/1000+60),req)).identity.owner,owner);
+  // Without an issue time to compare, the database is not asked.
+  seen.length=0;
+  assert.deepEqual(await authenticateCloud(dbAt(expired,{iat:null}),req),{identity:null,problem:'token-expired'});
+  assert.deepEqual(seen,[{allowExpired:true}]);
+  // How long is the database's: 7 days after the session's last use (2026-11-02), so a token a month past its expiry still works for a
+  // bot in use, and the same token of a session idle for 7 days is lapsed.
+  const month=now-30*24*hour;
+  seen.length=0;
+  assert.equal((await authenticateCloud(dbAt(month),req)).identity.owner,owner);
+  assert.deepEqual(seen[1][1],{p_owner:owner,p_session:session,p_client:client,p_edition:'full',p_issued_at:month-hour,p_expires_at:month});
+  assert.deepEqual(await authenticateCloud(dbAt(month,{state:'lapsed'}),req),{identity:null,problem:'sign-in-lapsed'});
 
   const post=db=>createCloudHandler({db})(new Request(SIGN_IN_RESOURCE,{method:'POST',headers:{'content-type':'application/json',
     accept:'application/json, text/event-stream',authorization:`Bearer ${token}`},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list',params:{}})}));
   assert.equal((await post(dbAt(expired))).status,200);
   // The challenge keeps its earlier start and adds the reason after it.
   const metadata=`Bearer resource_metadata="${SIGN_IN_RESOURCE}/.well-known/oauth-protected-resource", scope="openid email profile"`;
-  for(const [db,problem] of [[dbAt(now-8*24*hour),'token-expired'],[dbAt(expired,{state:'strict'}),'token-expired'],[dbAt(expired,{state:'refreshed'}),'token-superseded'],
+  for(const [db,problem] of [[dbAt(now-8*24*hour,{state:'lapsed'}),'sign-in-lapsed'],[dbAt(expired,{state:'strict'}),'token-expired'],[dbAt(expired,{state:'refreshed'}),'token-superseded'],
     [dbAt(now+hour,{active:false}),'connection-ended'],[dbAt(expired,{state:'other-edition'}),'other-address'],[{auth:{getClaims:async()=>({data:null,error:{name:'AuthInvalidJwtError',status:400}})}},'invalid-token'],
     [{auth:{getClaims:async()=>{throw new TypeError('Invalid UTF-8 sequence')}}},'invalid-token']]){
     const refused=await post(db);
     assert.equal(refused.status,401,problem);
-    assert.equal(refused.headers.get('www-authenticate'),`${metadata}, error="invalid_token", error_description="${SIGN_IN_PROBLEMS[problem]}"`);
-    assert.deepEqual(await refused.json(),{error:'invalid_token',code:problem,error_description:SIGN_IN_PROBLEMS[problem]});
+    // A lapsed sign-in also names the page its user reconnects from.
+    const page=problem==='sign-in-lapsed'?GROK_RECONNECT_PAGE:null;
+    assert.equal(refused.headers.get('www-authenticate'),
+      `${metadata}, error="invalid_token", error_description="${SIGN_IN_PROBLEMS[problem]}"${page?`, error_uri="${page}"`:''}`);
+    assert.deepEqual(await refused.json(),{error:'invalid_token',code:problem,error_description:SIGN_IN_PROBLEMS[problem],...(page?{reconnect_url:page}:{})});
   }
+  assert.ok(SIGN_IN_PROBLEMS['sign-in-lapsed'].endsWith(GROK_RECONNECT_PAGE));
   assert.match(SIGN_IN_PROBLEMS['token-expired'],/ODDBOUT reconnected in the connector settings/);
   // A quoted-string's characters, without the commas and semicolons a naive challenge parser splits on.
   for(const text of Object.values(SIGN_IN_PROBLEMS)) assert.match(text,/^[\x20\x21\x23-\x2b\x2d-\x3a\x3c-\x5b\x5d-\x7e]+$/);
-  const probe=await createCloudHandler({db:dbAt(now-8*24*hour)})(new Request(SIGN_IN_RESOURCE,{headers:{authorization:`Bearer ${token}`}}));
+  const probe=await createCloudHandler({db:dbAt(now-8*24*hour,{state:'strict'})})(new Request(SIGN_IN_RESOURCE,{headers:{authorization:`Bearer ${token}`}}));
   assert.equal(probe.status,401); assert.equal(probe.headers.get('www-authenticate'),
     `${metadata}, error="invalid_token", error_description="${SIGN_IN_PROBLEMS['token-expired']}"`);
   // The database, the network or the Auth server failing is not a refused sign-in: the client is told to retry, not to sign in again.
@@ -291,6 +299,25 @@ test('native OAuth hook isolates connector tokens and live-session checks enforc
     assert.equal(await edition('full',null,other),'usable');assert.equal(await edition('directory',null,other),'other-edition');
     assert.deepEqual(await bound(),[{session_id:session,edition:'directory'},{session_id:other,edition:'full'}]);
     await assert.rejects(edition('admin'),/invalid-edition/);await assert.rejects(edition(null),/invalid-edition/);
+    // The last use (2026-11-02): an expired token the grace takes works until 7 days after its session's last use, the later of the
+    // token's expiry and the last call let through. The last use is written at most once an hour, and only by a call let through.
+    const at=(e,iat,exp)=>db.query('select public.af_mcp_session_state($1,$2,$3,$4,$5,$6) value',[owner,session,client,e,iat,exp]).then(r=>r.rows[0].value);
+    const idle=()=>db.query('select extract(epoch from now()-last_used_at)::int age from public.af_mcp_session_editions where session_id=$1',[session]).then(r=>r.rows[0].age);
+    const lastUsed=ago=>db.query('update public.af_mcp_session_editions set last_used_at=now()-$1::interval where session_id=$2',[ago,session]);
+    const day=86400, nowS=Math.floor(Date.now()/1000), live=issued+3600;
+    await lastUsed('8 days');
+    assert.equal(await at('directory',live,nowS-8*day),'lapsed');assert.ok(await idle()>=8*day-5,'a lapsed call writes nothing');
+    assert.equal(await at('directory',live,nowS-6*day),'usable');assert.ok(await idle()<5,'within 7 days of its expiry, and now used');
+    assert.equal(await at('directory',live,nowS-30*day),'usable');
+    await lastUsed('6 days 23 hours');assert.equal(await at('directory',live,nowS-30*day),'usable');
+    await lastUsed('7 days 1 minute');assert.equal(await at('directory',live,nowS-30*day),'lapsed');
+    // The MCP before this sends no expiry: nothing lapses here then.
+    assert.equal(await at('directory',live,null),'usable');
+    await lastUsed('30 minutes');assert.equal(await at('directory',null,null),'usable');assert.ok(await idle()>=30*60-5,'once an hour');
+    await lastUsed('2 hours');assert.equal(await at('directory',null,null),'usable');assert.ok(await idle()<5);
+    await lastUsed('2 hours');assert.equal(await at('full',null,null),'other-edition');assert.ok(await idle()>=2*3600-5,'a refused call writes nothing');
+    // The connection's own answer comes before the lapse.
+    await lastUsed('8 days');assert.equal(await at('directory',issued,nowS-30*day),'refreshed');
     await db.exec("update auth.sessions set scopes='openid'");assert.equal(await active(),false);assert.equal(await state(issued+3600),'ended');
     await db.exec("update auth.sessions set scopes='openid email profile';update auth.oauth_consents set revoked_at=now()");assert.equal(await active(),false);
     assert.equal(await state(issued+3600),'ended');
