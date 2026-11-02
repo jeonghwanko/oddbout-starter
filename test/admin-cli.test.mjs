@@ -187,3 +187,52 @@ test('profile-expressions: every sheet is checked before anything is sent; each 
   }
   assert.equal(calls.length, 1);
 });
+
+test('profile-front: the kit\'s set folder is checked before anything is sent; the dry run reads the fighter; one form carries the set', async () => {
+  const { mkdtemp, readFile, writeFile } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const path = (await import('node:path')).default;
+  const sharp = (await import('sharp')).default;
+  const { buildProfileSet } = await import('../scripts/profile-set.mjs');
+  /** A PNG with filled rectangles [x0, y0, x1, y1] on a clear background. */
+  const picture = (width, height, rects) => {
+    const data = Buffer.alloc(width * height * 4);
+    for (const [x0, y0, x1, y1] of rects) for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) data.set([200, 120, 90, 255], (y * width + x) * 4);
+    return sharp(data, { raw: { width, height, channels: 4 } }).png().toBuffer();
+  };
+  const dir = await mkdtemp(path.join(tmpdir(), 'front-')), front = path.join(dir, 'front.png'), sheet = path.join(dir, 'sheet.png'), out = path.join(dir, 'set');
+  await writeFile(front, await picture(800, 1200, [[350, 100, 449, 199], [300, 200, 500, 1000]]));
+  await writeFile(sheet, await picture(1536, 1024, [0, 1, 2, 3, 4, 5].map(c => [(c % 3) * 512 + 80, Math.floor(c / 3) * 512 + 60, (c % 3) * 512 + 430, Math.floor(c / 3) * 512 + 511])));
+  assert.equal((await buildProfileSet({ front, expressions: sheet, out })).ok, true);
+  const fighter = 'b138c92b-9e89-4cd6-888d-6b882bcf433c', calls = [];
+  const connect = async () => ({ request: async (route, options = {}) => {
+    calls.push({ route, ...options });
+    return route === `admin/fighters/${fighter}` ? { ok: true, fighter: { name: '서리엘', ownerId: 'owner-1', manifestSha256: SHA } }
+      : { ok: true, profileSet: { profileSetId: JOB, stage: 'queued' } };
+  } });
+  const dry = await runAdmin({ argv: ['profile-front', fighter, out, '--reason', '정면 추가'], connect, env: {} });
+  assert.equal(dry.dryRun, true); assert.match(dry.change, /「서리엘」.*주인 owner-1.*표정 시트 있음.*사유: 정면 추가/);
+  assert.deepEqual(calls.map(call => call.route), [`admin/fighters/${fighter}`], 'a dry run only reads the fighter');
+  const done = await runAdmin({ argv: ['profile-front', fighter, out, '--reason', '정면 추가', '--yes'], connect, env: {} });
+  assert.deepEqual([done.profileSet.stage, done.done], ['queued', dry.change]);
+  const sent = calls.at(-1);
+  assert.deepEqual([sent.route, sent.method, sent.headers['idempotency-key'], decodeURIComponent(sent.headers['x-admin-reason'])],
+    [`admin/fighters/${fighter}/profile-sets`, 'POST', dry.request.idempotencyKey, '정면 추가']);
+  assert.equal(sent.headers['content-type'], undefined, 'fetch writes the multipart boundary');
+  const set = JSON.parse(await readFile(path.join(out, 'profile-set.json'), 'utf8'));
+  assert.deepEqual([...sent.body.keys()], ['profile-set', 'front', 'expressions']);
+  for (const [name, file] of [['profile-set', 'profile-set.json'], ['front', set.front.path], ['expressions', set.expressions.path]])
+    assert.deepEqual(Buffer.from(await sent.body.get(name).arrayBuffer()), await readFile(path.join(out, file)), name);
+  // --attempt 2: a new key for the same set (after an upload-expired).
+  const again = await runAdmin({ argv: ['profile-front', fighter, out, '--reason', 'x', '--attempt', '2'], connect, env: {} });
+  assert.notEqual(again.request.idempotencyKey, dry.request.idempotencyKey);
+  // A picture that is not what the set file says, or a set file the server does not read, stops before any call.
+  const count = calls.length, bytes = await readFile(path.join(out, set.front.path));
+  await writeFile(path.join(out, set.front.path), Buffer.concat([bytes, Buffer.from([0])]));
+  await assert.rejects(runAdmin({ argv: ['profile-front', fighter, out, '--reason', 'x', '--yes'], connect, env: {} }), /asset-mismatch/);
+  await writeFile(path.join(out, set.front.path), bytes);
+  await writeFile(path.join(out, 'profile-set.json'), JSON.stringify({ ...set, face: { x: 0, y: 0, side: 1 } }));
+  await assert.rejects(runAdmin({ argv: ['profile-front', fighter, out, '--reason', 'x', '--yes'], connect, env: {} }), /profile-set-invalid/);
+  await assert.rejects(runAdmin({ argv: ['profile-front', fighter, out, '--yes'], connect, env: {} }), /missing-value:--reason/);
+  assert.equal(calls.length, count);
+});

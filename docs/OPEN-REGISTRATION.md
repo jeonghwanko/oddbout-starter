@@ -89,6 +89,13 @@ ODDBOUT 통합 플러그인은 연결된 Google 계정을 PC와 Dots 등록에 �
   세트·바탕(`based_on`)·사건은 한 트랜잭션(`af_admin_profile_set_expressions`)이고, 요청은 대상 선수(`X-Admin-Fighter`)를 함께 보내 다른 선수의 세트를
   거절한다. 바탕 세트가 더 이상 그 선수의 지금 세트가 아니면(주인이 그 사이 새 정면을 승인받으면) 승인이 거절된다. 만든 뒤 저장이 실패한 세트는 바로
   닫혀 주인의 업로드를 막지 않는다(같은 키는 `upload-expired` — CLI `--attempt 2`).
+- 운영자의 정면(2026-11-03): 승인된 세트가 없는 선수에게 운영자가 세트 전체(정면·얼굴 칸·시트)를 올린다. 표정 시트 경로는 승인된 정면이 있어야 해서
+  그런 선수에게 쓸 수 없다. `npm run admin -- profile-front <선수> <세트 폴더> --reason <text>`가 키트의 `npm run fighter:profile-set` 폴더를 읽고, 보내기 전에
+  세트 파일·크기·해시와 검증기의 픽셀 검사를 돌린다. 요청은 `POST admin/fighters/<선수>/profile-sets` 하나다(`multipart/form-data`: `profile-set`·`front`·
+  `expressions`, `Idempotency-Key`, `X-Admin-Reason`). 서버(`api/admin-profile-front.mjs`)가 파일을 세트 파일과 맞춰 본 뒤 주인 이름으로 세트를 만든다.
+  만들기는 주인의 `af_profile_set_create`와 같은 검사(계정·선수·열린 세트·하루 10개)다. 사건(`admin-front`)과 한 트랜잭션(`af_admin_profile_set_front`)이다.
+  그다음 파일을 주인 저장 경로에 넣고 검사에 보낸다. 운영자의 id와 사유는 사건 표에만 남는다. 승인된 세트가 있는 선수는 `approved-profile-set-exists`로
+  거절한다. 승인은 그 선수에게 아직 지금 세트가 없을 때만 된다(주인이 그 사이 자기 세트를 승인받으면 `review-conflict`). 저장 실패와 같은 키는 표정 시트 경로와 같다.
 - 화풍: 우리 게임의 담백한 셀 채색이다. 규격의 `style.colouring` 문구를 모든 생성에 붙이고, `style.anchor.url`의 기준 그림을 마지막 참조로 붙인다.
 - API(주인): `POST /fighters/:id/profile-sets`(UUID `Idempotency-Key`, 본문 = 세트 파일) → `PUT /profile-sets/:id/assets/front`(`image/webp`)
   (시트가 있으면 `PUT /profile-sets/:id/assets/expressions`도) → `POST /profile-sets/:id/submit`. 상태는 `GET /profile-sets/:id`(자기 파일의 10분 서명 주소 포함), 선수별 최근 10개는 `GET /fighters/:id/profile-sets`.
