@@ -11,11 +11,43 @@ A Git URL identifies software. It does not grant generation, registration, accou
 An explicit request to make a fighter authorizes the normal preparation and requested creation steps;
 do not ask again for every command. Keep the agreed review groups, provider, billing and retry boundaries.
 
+[DOTS-START.md](DOTS-START.md) holds the saved environment's Start instructions. This guide covers the saved VM path,
+its preparation and checks, private source transfer, recovery and acceptance.
+
+## The saved VM path
+
+The supported product path is Dots orchestration with **the user's Grok subscription on a saved Linux VM**.
+Images, video, extraction, review artifacts and packaging run in that VM. A local PC or parent-container
+execution is not an acceptance-test substitute. Codex rollout scraping and API-key fallback are excluded.
+
+### One entry point
+
+The repository front door carries a release descriptor with the exact Git source commit and version.
+`node dots.mjs --install` fetches that commit once and delegates to `dots:start`, which binds a
+workspace to it, then checks and resumes that same workspace. The agent handles commands after receiving
+the repository URL and the user's creation request. Merely sharing a URL never starts generation.
+An active workspace retains its original release. A newer front-door revision cannot silently migrate it.
+For source bundles, the separate existing manifest SHA-256 trust anchor remains required. The descriptor
+labels release-candidate VM acceptance explicitly; pinning a commit is integrity, not proof of creation.
+
+### Separate checks, one next action
+
+The check result separates installation, subscription credential availability, image/video capability,
+VM file receipt, conversation display, recovery and ODDBOUT registration. It selects one next action:
+repair the environment, connect Grok, receive a source, reconcile an unknown attempt, show a preview,
+or continue the next creation group. Credential presence never certifies entitlement or generation.
+The first authorized output supplies live generation evidence; a readiness check never generates a test image.
+
 ## Choose the right environment and source
 
-Use a per-user **saved Codex cloud environment** for this repository, with Node 22.12+, Git,
-Python 3.11+ and venv, ffmpeg and ffprobe. Start from `main`, then record the exact
-commit. The ordinary main checkout inspected on 2026-10-27 was kit 0.2.0; service commit
+Use a per-user **saved Codex cloud environment** for this repository. Its environment preparer installs Node 22.12+,
+Python 3.11+ with venv, Git, ffmpeg/ffprobe, exact-alpha WebP tools, the pinned sprite engine and the selected
+Grok CLI before publishing the environment ([the preparation recipe](../deploy/dots-environment/README.md)).
+Credentials, personal source files and generation attempts never enter the published image. First use connects
+only that user's Grok subscription through its supported device login. Expiry requests reconnection, never a
+billing switch.
+
+Start from `main`, then record the exact commit. The ordinary main checkout inspected on 2026-10-27 was kit 0.2.0; service commit
 `5cddc786bc7ca4d41a06c1e2ed10a0160b081a44` was 0.5.4. A delivered 0.5.2 plugin and the preserved
 0.4.0 validation runtime are separate artifacts. Read their manifests; never rename a version to imply an upgrade.
 These new commands require the Dots runtime contract in this change. They do not retrofit an older kit.
@@ -36,7 +68,8 @@ Retain sessions, jobs, selected versions and original outputs. Review the new ki
 or an update after the current creation work finishes.
 
 In the official saved environment setup, install common tools and locked dependencies, review the report,
-then Publish. Set [DOTS-START.md](DOTS-START.md) as the Start skill/instructions. Republish updates the
+then Publish. Set [DOTS-START.md](DOTS-START.md) as the Start skill/instructions; they run the entry point
+against the user's persistent workspace. Republish updates the
 prepared filesystem for **new tasks**; existing tasks keep their own files and installed tools. Continue a
 fighter in its original task. Save its output separately through a supported private artifact route;
 temporary files and dependency caches are not a durability guarantee.
@@ -201,6 +234,11 @@ evidence of a particular host block. Never retry an unknown transfer or switch u
 
 ## Storage, evidence and resume
 
+Persist the brief, Grok route, selected versions, original pixels, request IDs, outcomes, reviews and
+delivery receipts under one workspace. Every invocation reads recovery records before installation or
+dispatch. Complete each agreed review group and return actual VM previews to the original conversation.
+All eleven motions, measured gait and final package validation remain required for a fighter.
+
 `AI_FIGHTER_ROOT` selects the workspace; `AI_FIGHTER_CREATOR_HOME` selects writable bundled runtimes.
 Default bootstrap caches are `<workspace>/.cache/oddbout/{npm,pip}`; `--cache <absolute-user-directory>`
 changes that base using `npm_config_cache` and `PIP_CACHE_DIR`. HOME and CODEX_HOME are not changed.
@@ -215,8 +253,9 @@ node scripts/dots-workspace.mjs resume --workspace /workspace/my-fighter --repor
 Resume emits only session/job identifiers, revisions, verified input/output byte hashes and blockers.
 It omits prompts, argv, tokens, signed URLs and raw provider output. It never dispatches or resolves jobs.
 Preserve the whole project (including attempt records and raw files), not just this inventory.
-Use the normal session/job tools afterward. Unknown or running jobs require original-run inspection,
-never another generation because the UI stopped waiting. Lost output is not permission to regenerate.
+Use the normal session/job tools afterward. Unknown or running jobs require original-run inspection: an unknown
+generation outcome is reconciled with the original job, never automatically resubmitted or generated again because
+the UI stopped waiting. Lost output is not permission to regenerate.
 
 Start a prepared job through the official host exec tool with an initial wait of **30000 ms**. If it
 returns a running session/cell identifier, wait/poll that same identifier; do not start another command.
@@ -240,6 +279,73 @@ separate observations. Doctor verifies only the declared file bytes; decode/disp
 The delivery workflow must inspect actual media and target-conversation display before asking for feedback.
 An attachment ID string, child-only preview or queued message is insufficient. See [DELIVERY.md](DELIVERY.md).
 
+## Private source transfer
+
+Official host file inputs enter the existing authenticated ODDBOUT connector. Server-measured size/hash
+bind immutable per-owner source records in a private bucket. The VM creates a local temporary keypair and
+exposes only its public request; the connector authorizes the source for that account and seals a short-lived
+download grant to that VM key. The signed URL and private key never appear in chat, command arguments or normal
+logs. This route is for authorized file transport, not an alternate network-policy bypass.
+
+This is file delivery, independent of generation, Library persistence and conversation display.
+An existing original must be recovered before retrying a generation. Do not make a screenshot or re-encode
+a downloaded PNG and call it the original. Retain the original size/hash and the same idempotency key.
+
+1. In the selected VM, run `npm run dots:source -- request <absolute-workspace>` from its pinned runtime.
+   The returned public request contains `version`, `requestId`, `publicKey`. The private key stays in
+   `.oddbout-private/transfers/<requestId>/key.json` with mode 0600. Never read it into chat or commit it.
+2. Call connected ODDBOUT `store_creator_source` with the native host file input, the measured original
+   `expectedBytes`, `expectedSha256`, and a fresh UUID `idempotencyKey`. On uncertain outcome, reuse that
+   key and bytes. `get_creator_source` retrieves a known source receipt. These calls check the connected
+   owner and store only in private `af-creator-sources`; they do not register or publish a fighter.
+3. Call `prepare_creator_source_download(sourceId, vmRequest)` for the selected VM public request.
+   Save **only its envelope object** into a JSON file inside that workspace using supported VM execution.
+   Neither a signed Storage URL nor a login token is exposed to the agent. Do not substitute another VM key.
+4. Run `npm run dots:source -- receive <absolute-workspace> <relative-envelope.json>`. The VM decrypts
+   locally, downloads from the exact approved Storage origin without redirects, checks size and SHA-256,
+   fully decodes the PNG, then atomically admits the unchanged bytes under `input/sources/<id>/<sha>.png`.
+5. Retain the immutable receipt under `output/source-delivery/`. On grant expiry repeat step 3 for the
+   same source and VM request; never regenerate or reupload just because a grant expired. Existing valid
+   bytes are reused. Changed bytes, wrong owner, altered envelope and unsafe local paths stop the transfer.
+
+The transfer grant lasts five minutes. Server quotas are 16 MiB per PNG, 8192 per dimension, 32 Mi pixels,
+64 originals / 128 MiB per owner. Sources are retained privately for resume; no deletion or public URL
+is implemented by this feature. Per-owner authorization remains mandatory even when an id is known.
+The connector service role exists only on the server, never in the VM image or an output envelope.
+
+The source receipt proves stored bytes; the VM receipt proves received and decoded bytes. Neither proves
+Grok access, an actual media call, Library save, conversation display, visual acceptance or registration.
+If the host cannot deliver its native file input, report that limitation. Do not bypass the host's network
+policy, scrape protected sessions, extract browser credentials or regenerate an existing image.
+
+### VM previews through a private Page
+
+When local view_image cannot render in the parent conversation, use the host's supported Pages file
+bridge if available. It persists VM previews in an owner-only personal review Page whose native reference the
+target conversation can read through its supported Page-file tool. This preserves originals across chats without
+credentials, public URLs, a public bucket or a signed URL in chat.
+
+1. Reuse the user's existing authorized private review Page, or create one private personal Page for
+   this creation. Read its content/guidance and verify owner-only access with get_page_sharing. Do not
+   change sharing or infer that a Page is private merely from its title.
+2. In the VM, call Pages write_page_reference with the actual local PNG/JPEG/GIF/WebP path and Page ID.
+   The host file-input bridge uploads it. Verify file_access_confirmed, byte_size and sha256 against
+   the local original; retain the returned reference and receipt. No synthetic file IDs or URLs.
+3. Insert only the returned native image Markdown using the Page's fresh edit guards, then read it
+   back and inspect the rendered Page. An uncertain upload must be reconciled using its receipt/existing
+   reference before retrying.
+4. Use the returned Page/reference with the host's read_page_reference in the target conversation and
+   emit its image content. Inspect the actual target UI. Page rendering, a returned image block and
+   current-conversation rendering are separate observations; record each honestly. A Page render is not
+   automatically a current-conversation render.
+5. For appearance review, upload the unchanged full-body image and an actual crop of that same version.
+   A TEST fixture may establish transport only. It never establishes generation or character quality.
+
+The PNG route was exercised on the selected saved VM: 3,589 unchanged bytes, owner-only Page, native
+file reference, full Page image visibly loaded in the browser, and image content recovered in the
+parent conversation. A queued panel is not display evidence. Animation formats/playback still need
+separate verification when that review group is reached. Missing Pages capability is a delivery blocker, not
+permission for public storage, credential extraction or repeated generation.
 
 ## File-only packaging repair (0.6.8)
 
@@ -284,3 +390,14 @@ pixel, frame, timing and anchor. When the actual single-format intermediate stil
 file/size limits do not change. Never trim approved frames, resize artwork or regenerate to fit.
 This intermediate-repack step needs the new kit's pinned Python engine installed in its own venv;
 it does not need a generation login or a provider call. Preserve the original runtime and source files.
+
+## Acceptance evidence
+
+1. Fresh saved VM: the repository front door selects one pinned release and reuses installed tools.
+2. No credentials: one Grok device-login action; no API request or generated image.
+3. Existing PNG: native file input → private storage → VM bytes and decode; another owner is denied.
+4. Restart: recover the same workspace and bytes; expired transfer grants renew without a new source.
+5. Authorized Grok creation: actual request/output traces, original files, group previews and user review.
+6. Completion: eleven motions, pixel-bound gait review, game-pack and fighter validation; registration only
+   after the user's final registration request. Local mocks, file-only checks and direct parent generation
+   are reported separately from this end-to-end result.

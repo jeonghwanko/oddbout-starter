@@ -1,33 +1,108 @@
 # ODDBOUT plugin and workspace tools
 
-For the Git-installable Codex skill that reuses an existing MCP without adding a server, follow [CODEX-PLUGIN.md](CODEX-PLUGIN.md). The full developer kit below is a separate optional workflow.
+This guide covers ODDBOUT's local Codex plugins and the creator kit's workspace tools:
+
+- [the Codex skill installed from Git](#install-the-codex-skill-from-git), which reuses an existing MCP without adding a server;
+- [the optional full developer kit](#optional-local-development-installation-on-this-computer), a separate workflow;
+- [the workspace tools](#project-tools-and-evidence) that the kit runs through the `creation:tool` CLI.
 
 **Reuse the existing available ODDBOUT cloud App in ChatGPT/Dots.** Select it in the intended chat and verify native `get_profile`.
 Find `create-fighter` in the host's actual skill list and read that same App's skill or linked support document; metadata alone does not verify skill access.
-This does not establish public availability; private App links are not public distribution links.
-The separately reviewed creator-kit provides optional local tooling and an `mcp.json` client for the hosted MCP;
-its build or ZIP does not establish cloud App installation or connection. Follow
-[ODDBOUT-PLUGIN.md](ODDBOUT-PLUGIN.md) for installation and migration. Registration uses the existing
-connected ODDBOUT account only after native `get_profile` verifies the intended account in the current conversation.
-Local filesystem and workspace tools run through the `creation:tool` CLI; cloud account operations use the hosted MCP
-only when its tools are actually exposed in that conversation.
-
-For the source ZIP and distribution boundaries, see [ODDBOUT-PLUGIN.md](ODDBOUT-PLUGIN.md).
+[ODDBOUT-PLUGIN.md](ODDBOUT-PLUGIN.md) covers the cloud App and the separately reviewed creator-kit: the source ZIP and its
+distribution boundaries, installation, migration and registration. The kit's build or ZIP does not establish cloud App
+installation or connection. Registration uses the existing connected ODDBOUT account only after native `get_profile`
+verifies the intended account in the current conversation; missing tools, an empty listing, 404 or `not-found` is
+inconclusive and never a reason to switch to local CLI login. Local filesystem and workspace tools run through the
+`creation:tool` CLI; cloud account operations use the hosted MCP only when its tools are actually exposed in that conversation.
 
 This version packages the creation skill, desktop `mcp.json` client configuration and workspace command tools. It retains persistent projects,
 immutable version snapshots, group gates, and a managed CLI job ledger. Generation, gait inspection
 and packaging continue to use the pinned sprite-gen and existing fighter tools. Credentials are not
 included in the plugin; each creator uses their own accounts.
 
-The kit source's `mcp.json` runs the hosted HTTPS endpoint from an imported desktop plugin. It does not create or connect a cloud app in Dots.
-The official [plugin management guidance](https://learn.chatgpt.com/docs/enterprise/plugin-management#desktop-only-plugins) says imported plugins
-declaring remote HTTPS MCP may be desktop-only; an `.app.json` reference alone does not change that. Check the existing App and its skill first.
+Check the existing App and its skill first.
 Only if the skill is actually missing may a maintainer add it through supported Plugin Creator functionality, preserving the same App's identity and OAuth settings.
 Custom MCP OAuth provisioning is for first-time setup or maintainer repair when no existing App is available, not routine repeat setup.
-Do not create a second wrapper plugin. Server deployment, ZIP release,
-plugin import/update, selection in a conversation, tool exposure and account verification are separate steps. Preserve existing OAuth connections and sessions
-during migration. The legacy stdio server remains for older clients, but its full-session handoff across the permission boundary is not part of this route.
-Missing tools, an empty listing, 404 or `not-found` is inconclusive; do not switch to local CLI login for cloud registration.
+Do not create a second wrapper plugin.
+
+## Install the Codex skill from Git
+
+This is a local custom plugin distributed through this public Git repository, not an
+OpenAI directory listing or a Dots cloud App. It adds the `create-fighter` skill and
+reuses your existing ODDBOUT MCP connection. No public-directory approval is needed.
+Installation does not log in, generate a fighter, or install the generation engine.
+
+With Git and a current Codex CLI installed, run in a terminal:
+
+```sh
+codex plugin marketplace add https://github.com/jeonghwanko/oddbout-starter --ref main --sparse .agents/plugins --sparse plugins/oddbout-codex
+codex plugin add oddbout@oddbout
+```
+
+Open the desktop app's **Plugins** page, clear the search, then search for **ODDBOUT**.
+If the app still shows its earlier list, restart it after saving ongoing work.
+Start a new chat to load the installed `create-fighter` skill.
+`codex plugin list --json` also reports the installed package as `oddbout@oddbout`.
+
+### Connect once, without duplicate servers
+
+This package intentionally has no `mcp.json`, `.mcp.json` or cloud App binding.
+Adding a bundled MCP alongside an existing server can create two connections, so the
+skill and the account connection are configured separately.
+
+Inspect **Settings → MCP servers**, or run `codex mcp list`.
+If any existing server uses `https://mcp.oddbout.com/mcp`, reuse its name and settings.
+Do not add another server, remove it, or log out just to install this plugin.
+Only if that endpoint is absent, add it once:
+
+```sh
+codex mcp add oddbout-mcp --url https://mcp.oddbout.com/mcp
+```
+
+When ready to sign in (use the existing server's name if different):
+
+```sh
+codex mcp login oddbout-mcp
+```
+
+Complete Google sign-in and ODDBOUT consent in your browser. Do not paste callback
+URLs, codes or tokens into chat. For a recording, leave this step until recording starts.
+Installing the skill does not change stored OAuth credentials.
+
+After login, ask in the intended Codex chat:
+
+> Use the ODDBOUT create-fighter skill to check my connected account. Show only my nickname and connection status. Do not create a fighter.
+
+Verify an actual `get_profile` response separately from skill installation. A tool listing,
+plugin card or login success alone is not account verification. This does not verify Dots:
+Dots needs its own supported cloud App connection and skill in that conversation.
+
+### Updates and local development
+
+```sh
+codex plugin marketplace upgrade oddbout
+codex plugin add oddbout@oddbout
+```
+
+Restart the app if needed and use a new chat. Preserve active creator workspaces and
+selected assets; updating the skill does not update a generation runtime.
+
+To test an unmerged branch, replace `--ref main` with its exact branch name. To use a
+local checkout instead of Git, register its absolute root with
+`codex plugin marketplace add /absolute/path/to/oddbout-starter`, then use the same
+`codex plugin add oddbout@oddbout` command. Keep that checkout in place. Do not register
+both sources under the same marketplace name; inspect `codex plugin marketplace list` first.
+
+The lightweight package lives in `plugins/oddbout-codex`. Its creation workflow and icon
+are copied from `plugins/ai-fighter` by `node scripts/sync-codex-plugin.mjs`; its workspace
+adapter uses a separate user-owned creator kit, without a bundled launcher. After changing
+the canonical skill, run that command and commit the generated files. Bump the local
+plugin version for published changes. CI checks synchronization and the absence of MCP
+declarations, App bindings, hooks, credentials and machine-specific runtime pointers.
+
+This Git install route is independent of the optional full creator-kit ZIP and the private
+ChatGPT/Dots plugin. Neither a private plugin link nor a Codex Cloud environment is the
+installation source for this local package.
 
 ## Optional local development installation on this computer
 
@@ -57,12 +132,10 @@ For updates, build into a fresh directory (`npm run plugin:build -- output/ai-fi
 register that source and refresh/reinstall the plugin. Existing build output is never overwritten.
 After changing a plugin, open a new chat for its updated skill. Use the workspace CLI for local creation and
 the connected ODDBOUT MCP for cloud operations. Find the needed cloud tools through the host's tool discovery/catalog, then
-verify native `get_profile` in the intended conversation (Codex or Dots) matches the intended registration account. Generation uses
-the user's own explicitly chosen generation account. Before removing any existing MCP/plugin connection, require
-the user's explicit request and successful same-account `get_profile` through the replacement in that same conversation.
-An empty listing, 404 or `not-found` does not establish that an old entry was deleted or replaced. `creation:tool list`
-and fixture validation check local CLI discovery and fixture format only; they do not verify cloud registration.
-Preserve current OAuth state, sessions and project data. Locks protect local writers across connections.
+verify native `get_profile` in the intended conversation (Codex or Dots) matches the intended registration account; removing an
+existing MCP/plugin connection follows the [migration rules](ODDBOUT-PLUGIN.md#빌드와-전환). Generation uses
+the user's own explicitly chosen generation account. Preserve current OAuth state, sessions and project data. Locks protect
+local writers across connections.
 
 Generation runtime setup is separate: `npm run sprite:setup` needs Python 3.11+ and installs the pinned
 source in its venv. `npm run sprite:status` reports installation, not login or quota. Public plugin

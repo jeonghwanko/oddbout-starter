@@ -10,7 +10,7 @@ description: Create, revise, resume, validate or register an ODDBOUT fighter in 
 This package provides the creation skill only and deliberately declares no MCP server.
 Reuse the configured ODDBOUT HTTPS MCP at https://mcp.oddbout.com/mcp (normally oddbout-mcp).
 Do not add another server, log in, or generate merely because this skill was installed.
-If no connection exists, follow this repository's docs/CODEX-PLUGIN.md; let the user
+If no connection exists, follow this repository's docs/LOCAL-PLUGIN.md (Install the Codex skill from Git); let the user
 complete OAuth in their browser, never ask for a callback URL or token. Honor a request
 to leave login pending for recording. The local installation does not install a Dots cloud App.
 This package has no bundled launcher or generation runtime. For workspace creation,

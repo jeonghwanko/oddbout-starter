@@ -61,7 +61,7 @@
 
 | 우선순위 | 발견 | 개선과 근거 |
 | --- | --- | --- |
-| P1 | 업로드가 24시간 안에 끝나지 않으면 그 사용자는 다시 제출할 수 없었다. 새 제출은 `open-submission-exists`, 기존 제출은 `upload-expired`로 막혔다 | [새 migration](../supabase/migrations/20261020120000_ai_fighter_upload_expiry.sql)이 만료 업로드를 `rejected`로 닫는다. 수정 전 실패한 PGlite 시험이 수정 후 통과 |
+| P1 | 업로드가 24시간 안에 끝나지 않으면 그 사용자는 다시 제출할 수 없었다. 새 제출은 `open-submission-exists`, 기존 제출은 `upload-expired`로 막혔다 | [새 migration](../../supabase/migrations/20261020120000_ai_fighter_upload_expiry.sql)이 만료 업로드를 `rejected`로 닫는다. 수정 전 실패한 PGlite 시험이 수정 후 통과 |
 | P1 | 검증기는 `"bytes": 5258.0`을 정수로 통과시키지만 DB의 bigint 변환이 실패해 503을 반환했다 | 같은 migration이 numeric으로 합산한다. 같은 시험에서 등록 대기까지 확인 |
 | P2 | 이름에 `\u0000`이나 짝 없는 서로게이트가 있으면 jsonb 변환이 실패해 503을 반환했다 | API가 저장 전에 `UNSUPPORTED_TEXT` 422로 거절한다 |
 | P2 | `validate_fighter_package`와 `submit_fighter_package`가 각자 검사기를 만들어 디코더 두 개가 동시에 돌았다 | MCP 서버가 검사기 하나를 공유한다. 동시 호출은 `VALIDATOR_BUSY` |

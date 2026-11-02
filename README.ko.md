@@ -10,7 +10,7 @@ ODDBOUT은 직접 만든 캐릭터로 플레이하는 대전 게임입니다. �
 
 ## Codex 플러그인 설치
 
-이 Git 저장소에서 로컬 커스텀 플러그인을 설치할 수 있습니다: [설치 안내](docs/CODEX-PLUGIN.md). 제작 스킬을 추가하고 기존 ODDBOUT MCP를 재사용합니다. 공개 디렉터리 심사나 creator-kit ZIP은 필요하지 않으며 로그인은 사용자가 별도로 진행합니다.
+이 Git 저장소에서 로컬 커스텀 플러그인을 설치할 수 있습니다: [설치 안내](docs/LOCAL-PLUGIN.md#install-the-codex-skill-from-git). 제작 스킬을 추가하고 기존 ODDBOUT MCP를 재사용합니다. 공개 디렉터리 심사나 creator-kit ZIP은 필요하지 않으며 로그인은 사용자가 별도로 진행합니다.
 
 ## 플레이 미리보기
 
@@ -56,7 +56,7 @@ Grok, Claude 등 지원되는 다른 클라이언트는 각자의 커넥터 설�
 **Dots 저장 VM 제작 경로**: 환경 준비자는 [설치 절차](deploy/dots-environment/README.md)를
 한 번 실행하고, 이후 사용자는 Git 주소와 제작 요청을 전달합니다. Dots가 `node dots.mjs --install`로
 고정 버전을 준비한 뒤 `node dots.mjs`로 같은 작업을 재개합니다. 생성은 본인의 Grok 구독을 사용합니다.
-[시작 지침](docs/DOTS-START.md)과 [비공개 원본 전달](docs/DOTS-PRIVATE-SOURCES.md)을 따릅니다.
+[시작 지침](docs/DOTS-START.md)과 [비공개 원본 전달](docs/DOTS-QUICKSTART.md#private-source-transfer)을 따릅니다.
 아직 실제 저장 VM의 생성·미리보기 전달까지 승인된 릴리스는 아닙니다. 설치·단위 테스트 통과와 구분합니다.
 
 이미지 생성·미리보기·최종 검토는 선택한 실행 환경과 본인의 생성 계정을 사용합니다.
@@ -144,7 +144,7 @@ npm run sprite:setup
 
 설치 도구는 sprite-gen이 쓰는 외부 도구도 sudo 없이 받습니다. `-exact`를 지원하는 `img2webp`(libwebp 1.6.0, SHA-256 고정 — 시스템에 없거나 Ubuntu 24.04의 1.3.x처럼 오래되면 키트 전용 환경에 넣습니다)와 걷기·달리기 루프를 매끄럽게 잇는 RIFE(`sprite-gen rife install`, 약 430MB 다운로드)입니다. `ffmpeg`는 먼저 직접 설치하세요: `sudo apt install ffmpeg`(Ubuntu·Debian), `brew install ffmpeg`(macOS), `winget install --id Gyan.FFmpeg -e`(Windows). 설치와 `sprite:status`가 도구마다 `ok`·`missing`·`broken`과 고치는 명령을 보여줍니다. GPU가 없는 Linux에서는 RIFE용으로 `sudo apt install libvulkan1 mesa-vulkan-drivers`도 필요합니다. RIFE가 없으면 루프는 촬영된 그대로 잘리고 경고가 남습니다. 캐릭터를 제작 중이라면 작업 폴더를 유지하고 저장소 업데이트를 받지 마세요.
 
-도구 연결은 [Codex 로컬 플러그인 안내](docs/LOCAL-PLUGIN.md)를 따릅니다: `npm run plugin:build` 뒤 출력된 `codex plugin marketplace add …`와 `codex plugin add oddbout@ai-fighter-local`. 예전 MCP 직접 연결(`node scripts/print-install.mjs`)은 호환용으로 남아 있습니다. 다른 로컬 호스트는 `AI_FIGHTER_ROOT`를 이 저장소 경로로 지정하고 `mcp/stdio.mjs`를 연결합니다.
+도구 연결은 [Codex 로컬 플러그인 안내](docs/LOCAL-PLUGIN.md#optional-local-development-installation-on-this-computer)를 따릅니다: `npm run plugin:build` 뒤 출력된 `codex plugin marketplace add …`와 `codex plugin add oddbout@ai-fighter-local`. 예전 MCP 직접 연결(`node scripts/print-install.mjs`)은 호환용으로 남아 있습니다. 다른 로컬 호스트는 `AI_FIGHTER_ROOT`를 이 저장소 경로로 지정하고 `mcp/stdio.mjs`를 연결합니다.
 
 검토된 소스 키트의 구성과 배포 기록은 [배포 안내](https://github.com/jeonghwanko/oddbout-starter/blob/main/docs/PLUGIN-DISTRIBUTION.md)를 참고하세요. 로컬 플러그인 설치와 클라우드 앱 연결은 별개입니다.
 

@@ -1,6 +1,6 @@
 # 이전 초대 베타 운영 기록
 
-> 이 문서는 이전 설계·시험 기록이다. 2026-10-21부터 초대와 사전 승인은 폐지했다. 현재 설치·등록·사후 조치는 [공개 이용 정책](OPEN-REGISTRATION.md)을 따른다. 아래 초대·승인 절차를 신규 사용자에게 적용하지 않는다.
+> 이 문서는 이전 설계·시험 기록이다. 2026-10-21부터 초대와 사전 승인은 폐지했다. 현재 설치·등록·사후 조치는 [공개 이용 정책](../OPEN-REGISTRATION.md)을 따른다. 아래 초대·승인 절차를 신규 사용자에게 적용하지 않는다.
 
 
 v0.2는 초대된 사용자의 업로드 → 서버 파일 검사 → 선수 레지스트리 등록을 구현한다.
@@ -43,11 +43,11 @@ sequenceDiagram
 
 원천 파일:
 
-- [DB 마이그레이션](../supabase/migrations/20261019090136_ai_fighter_beta_registration.sql),
-  [업로드 만료 수정](../supabase/migrations/20261020120000_ai_fighter_upload_expiry.sql),
-  [안정성 수정](../supabase/migrations/20261020150000_ai_fighter_stability.sql)(둘 다 2026-10-20 운영 반영)
-- [Edge 진입점](../supabase/functions/ai-fighter/index.ts), [공유 HTTP 처리기](../api/handler.mjs)
-- [검증 작업자](../worker/run.mjs), [MCP 제출 도구](../mcp/remote-tools.mjs)
+- [DB 마이그레이션](../../supabase/migrations/20261019090136_ai_fighter_beta_registration.sql),
+  [업로드 만료 수정](../../supabase/migrations/20261020120000_ai_fighter_upload_expiry.sql),
+  [안정성 수정](../../supabase/migrations/20261020150000_ai_fighter_stability.sql)(둘 다 2026-10-20 운영 반영)
+- [Edge 진입점](../../supabase/functions/ai-fighter/index.ts), [공유 HTTP 처리기](../../api/handler.mjs)
+- [검증 작업자](../../worker/run.mjs), [MCP 제출 도구](../../mcp/remote-tools.mjs)
 
 프로젝트 운영자만 마이그레이션을 적용한다. 새 테이블은 `af_` 접두사를 쓰고,
 Storage bucket은 비공개 `ai-fighter-beta`다. 기존 게임 테이블·로그인·Storage 정책은 수정하지 않는다.
@@ -104,7 +104,7 @@ API 기본 경로는 `https://YOUR_PROJECT_REF.supabase.co/functions/v1/ai-fight
 
 ## 승인과 게임 로딩
 
-[두 번째 마이그레이션](../supabase/migrations/20261019093527_ai_fighter_arena_runtime.sql)은 승인 상태를
+[두 번째 마이그레이션](../../supabase/migrations/20261019093527_ai_fighter_arena_runtime.sql)은 승인 상태를
 `runtime_scope`, `runtime_manifest_sha`, `review_evidence`에 결합한다. 승인에는 동일 manifest 해시,
 `arena-player-v1` 범위, 승인 사유와 검증 근거가 필요하다. 클라이언트의 직접 수정 권한은 없다.
 일반 제출·작업자 검증만으로 출전 승인 상태가 되지 않는다. `/spec`의 runtimeApproved=false는 새 등록의 기본값이다.
@@ -127,7 +127,7 @@ API 기본 경로는 `https://YOUR_PROJECT_REF.supabase.co/functions/v1/ai-fight
 브라우저는 서버 시드로 경기를 재생하고 결과 지문·승패·시간·접촉·체력을 대조한다.
 재생 중 창을 닫거나 나가도 서버 결과는 유지된다. 불일치하면 서버 확정 결과를 표시한다.
 
-[전적 마이그레이션](../supabase/migrations/20261019113808_ai_fighter_server_duels.sql)의 `af_duels`가 결과 원천이다.
+[전적 마이그레이션](../../supabase/migrations/20261019113808_ai_fighter_server_duels.sql)의 `af_duels`가 결과 원천이다.
 POST /duels는 정확히 `{a, b, idempotencyKey}`만 받는다. 클라이언트가 시드·승자·결과를 보내면 422다.
 동일 키·동일 순서의 두 선수로 재요청하면 같은 경기 ID와 결과를 반환한다. 다른 선수 조합이면 409다.
 DB 고유 키와 트랜잭션 잠금이 동시 요청을 직렬화한다. 완료 결과를 다른 결과로 바꿀 수 없다.
@@ -259,7 +259,7 @@ Dot에서 첫 실제 등록:
 
 `open_creator_homepage`는 `POST /creator-handoffs`로 이 계정 전용 일회용 토큰을 받아
 `https://jeonghwanko.github.io/oddbout-starter/creator.html#handoff=<tokenHash>` 링크를 만든다. 어느 기기의 브라우저에서나 열린다.
-홈페이지는 무료 GitHub Pages에서 제공하고 기존 Supabase를 사용한다. [호스팅·재배포 안내](CREATOR-HOSTING.md)를 따른다.
+홈페이지는 무료 GitHub Pages에서 제공하고 기존 Supabase를 사용한다. [호스팅·재배포 안내](../CREATOR-HOSTING.md)를 따른다.
 
 - 서버는 `auth.admin.generateLink({ type: 'magiclink' })`로 토큰을 만든다. 메일은 보내지 않으며 해시만 돌려준다.
   발급된 토큰의 사용자 ID가 요청한 사용자와 다르면 거부한다. 이메일이 없는 계정은 `handoff-email-required`(422).
@@ -347,9 +347,9 @@ npm run worker:watch
 **검사기 버전.** 작업자는 `VALIDATOR_VERSION`을 영수증에 적고 서버는 `af_settings.validator_versions`에 있는 값만 받는다.
 새 검사기를 배포할 때는 먼저 새 버전을 목록에 추가하고, 모든 작업자를 바꾼 뒤 옛 버전을 지운다.
 결과가 즉시 나타나지 않을 수 있다. PC에서 실행하면 PC가 꺼진 동안 제출은 대기한다.
-현재 운영은 [독립 무료 호스팅](CREATOR-HOSTING.md)의 Render Free 웹 작업자다.
+현재 운영은 [독립 무료 호스팅](../CREATOR-HOSTING.md)의 Render Free 웹 작업자다.
 Supabase가 대기 제출이 있을 때만 인증된 HTTP 요청으로 깨우고, 중단된 임대는 다시 시도한다.
-기존 FindThem의 systemd 작업자는 중지·비활성화했다. [systemd 유닛](../deploy/ai-fighter-worker.service)은 별도 서버 운영을 위한 참고 예시다.
+기존 FindThem의 systemd 작업자는 중지·비활성화했다. [systemd 유닛](../../deploy/ai-fighter-worker.service)은 별도 서버 운영을 위한 참고 예시다.
 작업자를 옮길 때는 새 토큰 해시를 먼저 등록하고, 새 작업자가 큐를 정상 조회하는지 확인한 뒤 옛 작업자를 멈추고 옛 토큰을 끈다.
 작업자 토큰은 큐를 검사·확정할 권한이다. 이를 Dot에 제공하지 않는다.
 
@@ -492,7 +492,7 @@ Edge가 `auth.getClaims()`로 사용자 ID를 검증한 뒤 그 ID와 선수 ID�
 21위 이후도 반환한다. 승패가 같은 선수는 같은 순위를 쓴다. 승인 철회 후에도 전적을 유지하고 rank만 null로 반환한다.
 0전은 0/0/0으로 반환하며 오류나 없는 선수를 0전으로 대체하지 않는다. 조회는 경기나 호출 카운터를 쓰지 않는다.
 
-[선수별 전적 migration](../supabase/migrations/20261020090000_ai_fighter_owned_statistics.sql)의
+[선수별 전적 migration](../../supabase/migrations/20261020090000_ai_fighter_owned_statistics.sql)의
 `af_duel_statistics()`가 전체 집계를 소유한다. 공개 랭킹은 같은 집계에서 기존 순서로 20명만 반환한다.
 새 함수도 SECURITY INVOKER, 빈 search_path, service_role 전용 EXECUTE를 사용한다.
 브라우저에 경기 원시 테이블 권한이나 서비스 키를 주지 않는다. 새 테이블·중복 전적 카운터는 없다.

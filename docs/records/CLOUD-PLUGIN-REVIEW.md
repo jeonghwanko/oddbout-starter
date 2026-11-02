@@ -107,7 +107,7 @@ Submission `131d7814-2c24-4a82-9707-1ebff7978f67` became registered fighter
 The public MCP gateway independently returned the same immutable manifest hash
 and `runtimeApproved: true`; seven read-only checks passed and their temporary
 OAuth grant was revoked. The review account now contains that one test fighter.
-No new artwork was generated. See [the registration record](CLOUD-MCP.md#실제-파일-등록-검증--2026-10-24).
+No new artwork was generated. See [the registration record](../CLOUD-MCP.md#실제-파일-등록-검증--2026-10-24).
 
 MCP function v7 clarifies intended-account checks, absolute host file inputs,
 original-byte recovery from Library/Page files, and the distinction between VM

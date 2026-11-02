@@ -338,11 +338,11 @@ Grok 상태를 알리고 원화용 `workflow --kind image`를 별도로 확인�
 | U15 | 다른 채팅에서 넘어온 테스트 캐릭터 | 실제 사용자 선택으로 간주하지 않음 |
 | U16 | 최종 파일 변경·재개·등록 | 변경 파일 재검수, 선택 버전 복구, 요청된 등록만 실행 |
 
-16개 범주의 실제 모의 응답 관찰과 35개 정답·반례 예시를 구분한 [대화 점검 기록](CREATION-UX-DIALOGUE-TEST.md),
+16개 범주의 실제 모의 응답 관찰과 35개 정답·반례 예시를 구분한 [대화 점검 기록](records/CREATION-UX-DIALOGUE-TEST.md),
 실행 가능한 기록 검사기(`node scripts/evaluate-creation-dialogue.mjs --responses test/fixtures/creation-dialogue/responses-reference.json`)가 있다.
 검사기는 저장된 응답의 구조화된 결정과 기대값을 대조한다. 실제 에이전트 실행·언어 의미·이미지 품질을 자동 검증하지 않는다.
 
-별도 대화에서 실제 받은 [추가 15개 모의 응답](CREATION-UX-REGRESSION-RESPONSES.md)은 위의 수작업 정답 자료와
+별도 대화에서 실제 받은 [추가 15개 모의 응답](records/CREATION-UX-REGRESSION-RESPONSES.md)은 위의 수작업 정답 자료와
 구분한다. 전달된 가상 입력과 응답·예정 범위를 보존하며, 실제 이미지 분석·생성·등록 검증으로 확대하지 않는다.
 두 자료의 세부 ID는 별도 표기 체계다. 예를 들어 추가 응답의 U16b는 외형 v2 변경이고,
 정답 예시의 U16-b는 이름 수정 후 등록이므로 같은 시험으로 합치지 않는다.
