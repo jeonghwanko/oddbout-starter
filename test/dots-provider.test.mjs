@@ -58,6 +58,9 @@ test('direct CLI reaches a mock engine for Grok, preserves non-Dots behavior and
   await mkdir(path.join(root, 'scripts'));
   for (const file of ['sprite-gen.mjs', 'sprite-tools.mjs', 'dots-provider.mjs', 'dots-safety.mjs'])
     await cp(new URL(`../scripts/${file}`, import.meta.url), path.join(root, 'scripts', file));
+  // dots-safety's path and hash helpers, shared with the kit launcher.
+  await mkdir(path.join(root, 'plugins/ai-fighter'), { recursive: true });
+  await cp(new URL('../plugins/ai-fighter/local-files.mjs', import.meta.url), path.join(root, 'plugins/ai-fighter/local-files.mjs'));
   // sprite-tools fetches through api/runtime-fetch (cloud proxy settings), which imports undici.
   await mkdir(path.join(root, 'api'));
   for (const file of ['runtime-fetch.mjs', 'connection-errors.mjs'])
