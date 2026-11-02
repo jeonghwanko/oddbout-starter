@@ -95,6 +95,15 @@ test('a host install runs og as its own account: providers signed in inside the 
       const last = (await readFile(path.join(root, 'ledger.jsonl'), 'utf8')).trim().split('\n').map(line => JSON.parse(line)).at(-1);
       assert.deepEqual([last.kind, last.phase, last.exit], ['run', 'end', 3]);
     } finally { delete process.env.OG_SLOT_WAIT; for (const holder of holders) holder.kill(); }
+    // Signed out after its pin (2026-11-03): the account's refusal exits 75, sprite-gen's "the provider cannot run here now", before any
+    // ledger line, so the worker marks codex down instead of running the job again into `stage-attempts`.
+    const ledgerLines = async () => (await readFile(path.join(root, 'ledger.jsonl'), 'utf8')).trim().split('\n').length;
+    const before = await ledgerLines();
+    await rm(path.join(root, '.codex', 'auth.json'));
+    const signedOut = og(['run', job, '--', 'codex', 'exec', 'hello']);
+    assert.equal(signedOut.status, 75, signedOut.stderr); assert.match(signedOut.stderr, /codex is not signed in/);
+    assert.equal(await ledgerLines(), before);
+    assert.equal(og(['login', 'codex', '--replace']).status, 0);
 
     // The worker: its key on stdin (mode 600), codex locked first, a user unit in the host's own systemd.
     assert.notEqual(og(['worker', 'key', 'https://example.supabase.co/functions/v1/ai-fighter'], 'not-a-key').status, 0);

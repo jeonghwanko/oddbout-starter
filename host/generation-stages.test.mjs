@@ -12,6 +12,7 @@ import { ALIGN_AGAIN, BEAT_LIMIT, GROK_LIMITED, BRIEF_SCHEMA, ONE_STRIDE_OF, GAI
   lookJudgePrompt, sideJudgePrompt, sidePrompt } from './generation-stages.mjs';
 import { ENGINE_SEAM_MAX as REVIEW_SEAM_MAX, ENGINE_CUE_RHYTHM as REVIEW_CUE_RHYTHM, lowMarginFeet as reviewLowMarginFeet } from '../tools/ai-fighter/gait.mjs';
 import { parseEnv, parseHealth } from './generation-worker.mjs';
+import { ASKS } from './generation-stages.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 /** motions.py's face-box needs Pillow and NumPy (the kit's sprite-gen venv has them; a bare CI runner may not). */
@@ -1083,6 +1084,30 @@ test('a video request xAI answered with 429 after its own waits is Grok to be as
   const taken = await scaleStage({ videoReport: { ok: 0, provider_submitted: true, request_id: 'req-1', errors: [limited] } });
   assert.equal(taken.done.outcome, 'review');
   assert.deepEqual(taken.done.result.requestIds, ['req-1']);
+});
+
+// og's account refusal (2026-11-03): signed out, never pinned or another account exits 75, sprite-gen's "the provider cannot run here
+// now". The stage names that provider so the worker stops claiming until health passes; as a plain retry the job failed after three leases.
+test('a run og refused for its account names the provider down: codex for the brief, grok for a video, codex when the report asks it', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'gen-ask-'));
+  let exit = 75;
+  const stages = createStages({ og: async () => ({ code: exit }), api: {}, fetchBytes: async () => new Uint8Array(), toWebp: async () => {} });
+  const job = { id: 'j', description: '고양이', language: 'ko', refs: [], candidates: [], appearanceRound: 0, appearanceNote: null };
+  assert.deepEqual(await stages.queued(job, dir), { outcome: 'retry', result: { code: ASKS } });
+  exit = 1;
+  assert.deepEqual(await stages.queued(job, dir), { outcome: 'retry', result: { code: 'brief-exit-1' } });
+  // A video run og refused before it ran (no report): grok cannot film here now, not codex.
+  const refused = await scaleStage({ hooks: { og: async (args, flag, tool) => (tool === 'video-set' ? { code: 75 } : null) } });
+  assert.deepEqual(refused.done, { outcome: 'retry', result: { code: GROK_LIMITED } });
+  // The same exit with this run's report asking the codex question (its still redraw): codex, as before.
+  const asks = { state: 'walk', code: 'provider-asks', retryable: false, message: 'codex asked' };
+  const asked = await scaleStage({ hooks: { og: async (args, flag, tool) => {
+    if (tool !== 'video-set') return null;
+    await mkdir(flag(args, '--out-dir'), { recursive: true });
+    await writeFile(path.join(flag(args, '--out-dir'), 'set.report.json'), JSON.stringify({ ok: 0, provider_submitted: false, errors: [asks] }));
+    return { code: 75 };
+  } } });
+  assert.deepEqual(asked.done, { outcome: 'retry', result: { code: ASKS } });
 });
 
 test('a failed extract names the rows to draw again: only the request\'s, once each, none without a record', async () => {

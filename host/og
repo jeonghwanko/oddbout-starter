@@ -481,13 +481,18 @@ cmd_run() {
   local job=${1:-} dir c k t1 rc=0; shift || true
   [ "${1:-}" = -- ] && shift
   [ $# -gt 0 ] || die "usage: og run <job> -- <command...>"
-  # A refusal from here until the command starts (job, account, slots, memory slice) exits 3, sprite-gen's own
-  # "nothing was sent": the worker may run it again, where a run that ended without a report is never re-sent unseen.
+  # A refusal from here until the command starts (job, slots, memory slice) exits 3, sprite-gen's own "nothing was sent": the worker
+  # may run it again, where a run that ended without a report is never re-sent unseen. The account's refusal exits 75 (below).
   DIE_EXIT=3
   dir=$(job_dir "$job")
   c=$(classify "$@"); RUN_PROVIDER=${c% *}; k=${c#* }
   RUN_ACCOUNT=none
+  # The provider's account refusing (signed out, never pinned, another account, a grok token that will not refresh) is not this run's to
+  # retry: it exits 75, sprite-gen's "the provider cannot run here now", and the worker stops claiming until `og health` passes. As a
+  # plain exit 3 the next runs met it again and the server failed each job after three leases, about six minutes (2026-11-03).
+  DIE_EXIT=75
   case $RUN_PROVIDER in codex) guard_account codex ;; grok) guard_account grok; refresh_grok ;; esac
+  DIE_EXIT=3
   RUN_JOB=$job RUN_DIR=$dir RUN_ID=$(date +%s%N) RUN_TOOL=$(tool_label "$@")
   RUN_MARK=$(mktemp)
   rm -f "$dir/.delivered"   # the package may change; deliver again
