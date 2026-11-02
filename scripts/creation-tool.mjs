@@ -8,6 +8,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createServer } from '../mcp/server.mjs';
 import { writeCliJson } from '../dots.mjs';
 import { fileContextRequest, parseContextFileArgs } from './creation-context-file.mjs';
+import kit from '../package.json' with { type: 'json' };
 
 // The server runs in this process and its tools ignore cancellation, so the SDK's 60 s request timeout never stopped one: it
 // reported a fitted pack that went on to finish as failed (74 s on CI, 2026-11-02). A tool's own limits decide how long it runs.
@@ -21,7 +22,7 @@ export async function creationTool({ workspace, name, args = {}, contextRequest 
   // Registration belongs to the connected ODDBOUT account. Never inherit a CLI login or its tokens.
   const server = createServer({ root, contextRequest });
   const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
-  const client = new Client({ name: 'oddbout-workspace', version: '0.5.4' });
+  const client = new Client({ name: 'oddbout-workspace', version: kit.version });
   try {
     await server.connect(serverSide);
     await client.connect(clientSide);

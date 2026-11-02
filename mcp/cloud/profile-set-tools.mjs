@@ -4,7 +4,7 @@
 import { z } from 'zod';
 import { Problem, sha256 } from '../../api/http.mjs';
 import { PROFILE_SET_LIMITS } from '../../api/profile-sets.mjs';
-import { FILE, UUID_ARG, downloadHostFile } from './common.mjs';
+import { FILE, UUID_ARG, downloadHostFile, unavailable } from './common.mjs';
 /**
  * @typedef {import('./common.mjs').Identity} Identity
  * @typedef {import('./common.mjs').Invoke} Invoke
@@ -28,7 +28,7 @@ export function registerProfileSetTools({ register, db, identity, invoke, fetche
     { profileSetId: UUID_ARG(), file: FILE }, async ({ profileSetId, file }) => {
       const { data: row, error } = await db.from('af_profile_sets').select('manifest,status,expires_at').eq('id', profileSetId.toLowerCase())
         .eq('owner_id', /** @type {Identity} */ (identity).owner).maybeSingle();
-      if (error) throw new Problem(503, 'database-unavailable'); if (!row) throw new Problem(404, 'not-found');
+      if (error) throw unavailable('database-unavailable', error); if (!row) throw new Problem(404, 'not-found');
       if (row.status !== 'uploading' || Date.parse(row.expires_at) <= Date.now()) throw new Problem(409, 'upload-closed');
       const front = row.manifest.front, bytes = await downloadHostFile(file, front.bytes, fetcher);
       if (bytes.length !== front.bytes || await sha256(bytes) !== front.sha256) throw new Problem(422, 'asset-hash-or-size');

@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { atomicJson, digest, fail, localPath, readJson, unchanged } from './creation-store.mjs';
-import { reviewCreationProgress } from './creation-context.mjs';
+import { GROUP_IDS, reviewCreationProgress } from './creation-context.mjs';
 import { guardDotsExecution } from '../scripts/dots-provider.mjs';
 import { judgeOutcome, outcomeReportPath, readOutcome } from '../host/sprite-outcome.mjs';
 import { errorCode } from './error-code.mjs';
@@ -24,7 +24,7 @@ export function spends(argv) {
 const args = z.array(z.string().max(16000).refine(s => !s.includes('\0'))).min(1).max(128);
 export const jobPlanSchema = z.object({
   engine: z.enum(['sprite', 'fighter-pack']), args,
-  groupId: z.enum(['appearance', 'locomotion', 'attacks', 'defense', 'style', 'final']),
+  groupId: z.enum(GROUP_IDS),
   targets: z.array(z.object({ item: z.string().min(1).max(64), version: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/) }).strict()).min(1).max(12),
   inputs: z.array(z.string().min(1).max(512)).max(64),
   outputs: z.array(z.string().min(1).max(512)).min(1).max(64),

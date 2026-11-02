@@ -4,8 +4,8 @@ import { z } from 'zod';
 import { Problem } from '../../api/http.mjs';
 import spec from '../../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { profileLimits } from '../../contracts/ai-fighter/profile-limits.mjs';
-import { CUP_WAIT_MS, UUID_ARG, arenaCall, pause, timeLeft } from './common.mjs';
-import { ENTRY_CLIPS, entryRequest } from '../../api/fighter-entry.mjs';
+import { CUP_WAIT_MS, UUID_ARG, arenaCall, pause, timeLeft, unavailable } from './common.mjs';
+import { ENTRY_CLIPS } from '../../api/fighter-entry.mjs';
 /**
  * @typedef {import('./common.mjs').Identity} Identity
  * @typedef {import('./common.mjs').Arena} Arena
@@ -123,7 +123,7 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
   const currentSha = async fighterId => {
     const { data: fighter, error } = await db.from('af_fighters').select('manifest_sha').eq('id', fighterId).eq('owner_id', /** @type {Identity} */ (identity).owner)
       .is('deleted_at', null).maybeSingle();
-    if (error) throw new Problem(503, 'database-unavailable');
+    if (error) throw unavailable('database-unavailable', error);
     if (!fighter) throw new Problem(404, 'fighter-not-found');
     return fighter.manifest_sha;
   };
@@ -134,11 +134,11 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
   const baseSha = async (fighterId, idempotencyKey) => {
     const { data: previous, error } = await db.from('af_submissions').select('validation').eq('owner_id', /** @type {Identity} */ (identity).owner)
       .eq('idempotency_key', idempotencyKey).maybeSingle();
-    if (error) throw new Problem(503, 'database-unavailable');
+    if (error) throw unavailable('database-unavailable', error);
     const base = previous?.validation?.profileBaseSubmission;
     if (!base) return currentSha(fighterId);
     const { data, error: baseError } = await db.from('af_submissions').select('manifest_sha').eq('id', base).eq('owner_id', /** @type {Identity} */ (identity).owner).maybeSingle();
-    if (baseError) throw new Problem(503, 'database-unavailable');
+    if (baseError) throw unavailable('database-unavailable', baseError);
     return data?.manifest_sha ?? currentSha(fighterId);
   };
   /** @param {string} fighterId @param {object} change @param {string} idempotencyKey */
@@ -165,24 +165,12 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
     { fighterId: UUID_ARG(), style: z.union([z.record(z.string(), z.unknown()), z.null()]), idempotencyKey: UUID_ARG() },
     ({ fighterId, style, idempotencyKey }) => edit(fighterId, { style }, idempotencyKey), { write: true, publish: true, openWorld: true, idempotent: true });
   // 출전 (2026-10-30): a validated fighter is 제작 중 until his owner enters him; only then do other people meet him. Both calls answer the
-  // same when repeated (supabase/migrations/20261030130000_ai_fighter_entry.sql).
-  /** @type {Readonly<Record<string, number>>} */
-  const ENTRY_STATUS = { 'account-disabled': 403, 'rate-limit': 429, 'not-found': 404, 'fighter-changed': 409, 'fighter-not-ready': 409, 'profile-set-required': 409, 'invalid-entry': 422 };
-  // The account first, as the site's route does (`af_authorize`: a disabled account, the per-minute budget) — 적대적 리뷰 2026-10-30: a
-  // disabled account entered its fighter here while the site refused it.
-  /** @param {string} name @param {Record<string, unknown>} args */
-  const entryCall = async (name, args) => {
-    const { data, error } = await db.rpc(name, args);
-    if (!error) return data;
-    const status = ENTRY_STATUS[error.message];
-    throw status ? new Problem(status, error.message) : new Problem(503, 'database-unavailable');
-  };
-  /** @param {string} name @param {Record<string, unknown>} args */
-  const entry = async (name, args) => {
-    const owner = /** @type {Identity} */ (identity).owner;
-    await entryCall('af_authorize', { p_owner: owner });
-    return entryCall(name, { p_owner: owner, ...args });
-  };
+  // same when repeated (supabase/migrations/20261030130000_ai_fighter_entry.sql). They are the site's own route (`api/fighter-entry.mjs`),
+  // its account check first (`af_authorize` — 적대적 리뷰 2026-10-30: a disabled account entered its fighter here while the site refused it).
+  // This file once kept a copy of that route's calls and codes (MCP 점검 2026-11-03).
+  /** @param {string} fighterId @param {'POST' | 'DELETE'} method @param {object} [body] */
+  const entry = (fighterId, method, body) => invoke(`fighters/${fighterId}/entry`, method, body === undefined ? undefined : JSON.stringify(body),
+    body === undefined ? {} : { 'content-type': 'application/json' });
   register('enter_fighter', '출전하기', 'Enter the connected user\'s registered fighter (출전): other people then meet him in the roster, '
     + 'ranked duels, cups and their rankings. A validated fighter starts in production (제작 중): out of other people\'s cups, ranked duels and lists while his owner previews and practises him. '
     + 'First show the user each of the eleven required motions; enter only on his request once he confirmed every one. '
@@ -190,12 +178,10 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
     + 'profile-set-required: submit his profile set first (submit_profile_set) and enter once it passed validation.',
     { fighterId: UUID_ARG(), expectedManifestSha256: z.string().regex(/^[a-f0-9]{64}$/),
       reviewedClips: z.array(z.enum(/** @type {[string, ...string[]]} */ ([...ENTRY_CLIPS]))).length(ENTRY_CLIPS.length) },
-    ({ fighterId, expectedManifestSha256, reviewedClips }) => {
-      const { sha, clips } = entryRequest({ expectedManifestSha256, reviewedClips });
-      return entry('af_enter_fighter', { p_fighter: fighterId, p_sha: sha, p_clips: clips });
-    }, { write: true, publish: true, openWorld: true, idempotent: true });
+    ({ fighterId, expectedManifestSha256, reviewedClips }) => entry(fighterId, 'POST', { expectedManifestSha256, reviewedClips }),
+    { write: true, publish: true, openWorld: true, idempotent: true });
   register('withdraw_fighter', '출전 취소', 'Return the connected user\'s entered fighter to production (제작 중): other people stop meeting him '
     + 'in the roster, ranked duels and cups; his record stays. Requires the user\'s request.',
-    { fighterId: UUID_ARG() }, ({ fighterId }) => entry('af_withdraw_fighter', { p_fighter: fighterId }),
+    { fighterId: UUID_ARG() }, ({ fighterId }) => entry(fighterId, 'DELETE'),
     { write: true, publish: true, openWorld: true, idempotent: true });
 }
