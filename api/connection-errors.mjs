@@ -31,8 +31,8 @@ export function connectionAction(code) {
     message: '클라우드 연결 프록시가 CONNECT 요청을 차단했다. 환경 준비자가 해당 호스트의 공식 네트워크 설정·관리자 정책을 확인한다. Work 기본 클라우드와 사용자 지정 Codex 환경을 구분하고, Republish는 해당 환경이 지원할 때만 안내한다. 키트는 네트워크 설정을 변경할 수 없다. Google 재로그인으로 해결하지 않는다.' };
   if (isTransportCode(code)) return { actor: 'environment-preparer', code: 'check-workspace-connectivity',
     message: 'VM에서 서비스까지 연결하지 못했다. 네트워크·DNS·시간 제한을 확인하고 복구 후 기존 작업을 다시 조회한다. 원인이 불명확하면 허용목록 누락이나 계정 오류로 단정하지 않는다.' };
-  if (['authentication-required', 'client-sign-in-required', 'api-http-401'].includes(code)) return { actor: 'user', code: 'connect-oddbout',
-    message: 'ODDBOUT 연결에서 본인 Google 계정으로 로그인하고 이 작업 공간의 연결 요청을 승인한다.' };
+  if (['authentication-required', 'client-sign-in-required', 'api-http-401'].includes(code)) return { actor: 'user', code: 'sign-in-again',
+    message: '본인 Google 계정으로 다시 로그인한다: npm run login (브라우저가 다른 기기에 있으면 npm run login -- --device). 콜백 주소나 토큰을 대화로 보내지 않는다.' };
   if (['forbidden', 'access-denied', 'api-http-403'].includes(code)) return { actor: 'service-operator', code: 'check-service-access',
     message: '서비스가 요청을 거부했다. VM CONNECT 차단과 구분하여 계정·서비스 정책을 확인한다. 자동 재로그인이나 보안 설정 우회는 하지 않는다.' };
   return { actor: 'agent', code: 'recheck-connection', message: '응답을 확인한 뒤 같은 작업 공간의 연결 상태를 다시 조회한다. 새 생성이나 등록으로 연결을 시험하지 않는다.' };

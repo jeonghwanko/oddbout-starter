@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { transportCode, connectionAction } from '../api/connection-errors.mjs';
-import { probePublic, probeConnections, checkAccount, readProject } from '../mcp/connection-readiness.mjs';
+import { readProject } from '../mcp/connection-readiness.mjs';
 import { apiRequest } from '../api/client.mjs';
 
 test('public config yields safe login arguments; missing or malformed values never produce a login command', async t => {
@@ -24,30 +24,13 @@ test('public config yields safe login arguments; missing or malformed values nev
 
 test('CONNECT 403 is infrastructure failure, while a service HTTP 403 is not reclassified as proxy denial', async () => {
   const denied = new TypeError('fetch failed', { cause: new Error('Tunnel connection failed: 403 Forbidden; token=do-not-echo') });
-  const proxy = await probePublic('https://example.test/spec', { spec: true, fetchImpl: async () => { throw denied; } });
-  assert.deepEqual([proxy.reason, proxy.nextAction.actor], ['network-connect-forbidden', 'environment-preparer']);
-  assert.ok(!JSON.stringify(proxy).includes('do-not-echo'));
-  const service = await probePublic('https://example.test/spec', { spec: true, fetchImpl: async () => new Response('Forbidden', { status: 403 }) });
-  assert.deepEqual([service.reason, service.httpStatus, service.nextAction.actor], ['api-http-403', 403, 'service-operator']);
-  const privateSpec = await probePublic('https://example.test/spec', { spec: true, fetchImpl: async () => new Response('Unauthorized', { status: 401 }) });
-  assert.equal(privateSpec.nextAction.actor, 'service-operator');
+  const proxy = transportCode(denied);
+  assert.deepEqual([proxy, connectionAction(proxy).actor], ['network-connect-forbidden', 'environment-preparer']);
+  assert.ok(!JSON.stringify(connectionAction(proxy)).includes('do-not-echo'));
+  assert.equal(connectionAction('api-http-403').actor, 'service-operator');
   assert.equal(transportCode(new Error('fetch failed')), 'api-unreachable');
   assert.equal(transportCode(Object.assign(new Error('timeout'), { name: 'TimeoutError' })), 'network-timeout');
   assert.equal(transportCode(new Error('fetch failed', { cause: Object.assign(new Error('host'), { code: 'ENOTFOUND' }) })), 'network-dns-failed');
-});
-
-test('public capability evidence requires a valid spec and cannot prove an account, image tool or delivery', async () => {
-  const run = body => probePublic('https://example.test/spec', { spec: true,
-    fetchImpl: async () => new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } }) });
-  assert.equal((await run({ ok: true, data: { registration: { deviceLogin: 'v1' } } })).deviceLogin, 'available');
-  assert.equal((await run({ ok: true, data: { registration: {} } })).deviceLogin, 'unsupported');
-  assert.equal((await run({ ok: true })).status, 'unverified');
-  assert.equal((await run({ ok: false, data: { registration: { deviceLogin: 'v1' } } })).status, 'unverified');
-  const skipped = await probeConnections({ apiBase: 'https://example.test/api', siteUrl: 'https://example.test/' },
-    { checkServer: false, probe: async () => assert.fail('no probe') });
-  assert.equal(skipped.api.reason, 'server-not-checked');
-  assert.equal((await checkAccount({ hasSession: true, remoteActive: true, checkServer: true,
-    request: async () => ({ ok: true, account: {} }) })).status, 'unverified');
 });
 
 test('API client preserves safe transport codes and distinguishes non-JSON HTTP failures', async t => {

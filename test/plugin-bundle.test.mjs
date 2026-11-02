@@ -11,7 +11,7 @@ const repository = fileURLToPath(new URL('../', import.meta.url));
 // Side-effect-free entry modules (CLI mains are guarded); importing them evaluates the whole shipped graph.
 const entries = ['scripts/pack-fighter.mjs', 'scripts/gait.mjs', 'scripts/sprite-gen.mjs', 'scripts/run-creation-job.mjs',
   'scripts/dots-workspace.mjs', 'scripts/dots-start.mjs', 'scripts/dots-source.mjs',
-  'scripts/creation-tool.mjs', 'scripts/check-connection.mjs', 'scripts/check-creation-delivery.mjs', 'scripts/connect-generation.mjs',
+  'scripts/creation-tool.mjs', 'scripts/check-creation-delivery.mjs', 'scripts/connect-generation.mjs',
   'tools/ai-fighter/gait.mjs', 'server/ai-fighter-package.mjs', 'mcp/server.mjs'];
 const shippedDocs = ['README.md', 'README.ko.md', 'docs/README.md', 'docs/START-HERE.md', 'docs/CLOUD-MCP.md',
   'docs/LOCAL-PLUGIN.md', 'docs/ODDBOUT-PLUGIN.md'];
@@ -22,7 +22,7 @@ after(async () => { await rm(temporary, { recursive: true, force: true }); });
 test('the runtime file list is closed over imports and keeps the Edge-only cloud MCP out', async () => {
   const files = await runtimeFileList();
   for (const required of ['tools/ai-fighter/projected-ground.mjs', 'tools/ai-fighter/gait.mjs', 'scripts/pack-fighter.mjs',
-    'mcp/stdio.mjs', 'mcp/server.mjs', 'contracts/ai-fighter/v1/spec.json', 'server/ai-fighter-package.mjs',
+    'mcp/server.mjs', 'contracts/ai-fighter/v1/spec.json', 'server/ai-fighter-package.mjs',
     'scripts/check-cloud-discovery.mjs', 'plugins/ai-fighter/mcp.json', 'plugins/ai-fighter/local-files.mjs', ...shippedDocs])
     assert.ok(files.includes(required), required);
   for (const serverOnly of ['mcp/cloud.mjs', 'mcp/cloud/common.mjs', 'mcp/cloud/hosted-tools.mjs', 'mcp/file-input-probe.mjs', 'mcp/creator-sources.mjs', 'api/handler.mjs', 'api/http.mjs'])

@@ -53,10 +53,10 @@ ODDBOUT 통합 플러그인은 연결된 Google 계정을 PC와 Dots 등록에 �
 ## 등록한 선수 수정
 
 제작자 페이지의 선수 상세 화면에서 이름과 소개를 저장할 수 있다. 그림을 다시 올리지 않는다.
-제작 도구에서는 `get_registered_fighter`로 현재 버전을 읽고 `update_fighter_profile`을 호출한다.
+연결된 ODDBOUT 도구에서는 `get_registered_fighter`로 현재 버전을 읽고 `update_fighter_profile`을 호출한다.
 이 경로는 로컬 패키지나 이미지 파일이 없어도 동작한다. 이름·언어별 이름·소개·언어·컨셉·기술 설명·경기 대사만 바꿀 수 있다.
 언어별 이름(`names`)과 경기 대사(`lines`)는 `null`을 보내면 지운다. 서버 `/spec`에 각각 `profile-names-1`·`profile-lines-1`이 있어야 한다.
-그림·애니메이션·능력치·싸우는 성격 수정은 기존 `submit_fighter_package(fighterId)` 검증 경로를 사용한다.
+그림·애니메이션·능력치·싸우는 성격 수정은 `prepare_fighter_registration(fighterId)`로 시작하는 패키지 검증 경로를 사용한다.
 
 - API: `PATCH /fighters/:id/profile`, 인증 헤더와 UUID `Idempotency-Key`가 필요하다.
 - 본문: `{ "expectedManifestSha256": "현재 해시", "profile": { "name": "새 이름" } }`. 생략한 필드는 유지한다.

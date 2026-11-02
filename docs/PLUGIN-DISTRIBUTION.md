@@ -137,11 +137,11 @@ When `ai-fighter-local` is already configured from a different build directory, 
 `codex plugin add ai-fighter-creator@ai-fighter-local` to refresh the installed version.
 
 The builder uses the pinned clean sprite-gen-agent tree (`vendor/sprite-gen`), retains its Apache-2.0 LICENSE and NOTICE,
-and installs Node production dependencies from the lockfile with lifecycle scripts disabled.
-It never copies the source checkout's output, venv, user home, credentials or npm configuration.
-The ZIP contains `plugin.json` at its root, one stdio server in `mcp.json`, the creation skill, an icon,
-the launcher, runtime source and Node dependencies. `${PLUGIN_ROOT}` resolves installation paths;
-no maintainer path is embedded in MCP configuration. Existing output is never overwritten.
+and ships source only: install locked Node dependencies in the extracted writable runtime.
+It never copies the source checkout's output, venv, user home, credentials, node_modules or npm configuration.
+The ZIP contains `plugin.json` at its root, the hosted ODDBOUT MCP configuration in `mcp.json` (streamable HTTP,
+`https://mcp.oddbout.com/mcp`), the creation skill, an icon, the launcher and runtime source. MCP configuration
+names no local command or path. Existing output is never overwritten.
 
 On first use the launcher verifies the bundled runtime bytes and copies them into
 `~/.ai-fighter/creator/runtimes/<bundle-hash>/`. This writable copy holds its own sprite-gen venv.

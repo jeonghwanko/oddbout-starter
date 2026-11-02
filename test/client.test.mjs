@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readdir, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { createLazyRemoteClient, createRemoteClient } from '../api/client.mjs';
+import { createRemoteClient } from '../api/client.mjs';
 
 const url = 'https://abcdefghijklmnopqrst.supabase.co';
 const jwt = secondsFromNow => `header.${Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + secondsFromNow })).toString('base64url')}.signature`;
@@ -32,13 +32,12 @@ test('a valid access token is reused without an auth round trip', async () => {
   assert.deepEqual(refreshes, []); assert.deepEqual(sentTokens, [token, token]);
 });
 
-test('a running client discovers a later login, adopts reauthentication, and stops after logout', async () => {
+test('a running client adopts reauthentication and stops after logout', async () => {
   const file = path.join(directory, 'late-login.json');
-  const client = createLazyRemoteClient(file, { createAuthClient: () => ({ auth: { refreshSession: () => assert.fail('fresh token') } }) });
-  sentTokens = [];
-  await assert.rejects(client.request('me'), /client-sign-in-required/);
   const config = { url, publishableKey: 'sb_publishable_test', accessToken: jwt(3600), refreshToken: 'first' };
   await writeFile(file, JSON.stringify(config));
+  const client = await createRemoteClient(file, { createAuthClient: () => ({ auth: { refreshSession: () => assert.fail('fresh token') } }) });
+  sentTokens = [];
   await client.request('me');
   const replacement = jwt(1800);
   await writeFile(file, JSON.stringify({ ...config, accessToken: replacement, refreshToken: 'second' }));

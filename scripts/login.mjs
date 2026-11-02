@@ -61,7 +61,7 @@ export async function projectSettings({ argv = [], env = process.env, sessionPat
   const url = flag('--url') ?? env.AI_FIGHTER_SUPABASE_URL ?? saved.url;
   const publishableKey = flag('--key') ?? env.AI_FIGHTER_PUBLISHABLE_KEY ?? saved.publishableKey;
   if (!validProjectUrl(url)) throw new Error('project-url-required');
-  // Never accept a secret key here: the file is readable by every MCP process on this account.
+  // Never accept a secret key here: the file is readable by every process on this account.
   if (!isPublishableKey(publishableKey)) throw new Error('publishable-key-required');
   const portText = flag('--port') ?? env.AI_FIGHTER_LOGIN_PORT;
   const port = portText === undefined ? DEFAULT_LOGIN_PORT : Number(portText);
@@ -199,7 +199,7 @@ async function saveSignIn({ session, link = false, linkedUser = null, replace, p
     log(problem.message === 'route-not-found' ? '서버가 계정 상태 조회를 지원하지 않습니다. 제출할 때 다시 확인합니다.'
       : '계정 상태를 확인하지 못했습니다. 제출할 때 다시 확인합니다.');
   }
-  log('ODDBOUT 연결 상태를 다시 확인하면 현재 MCP에서 바로 이어서 사용할 수 있습니다.');
+  log('이 컴퓨터의 ODDBOUT 명령(npm run host, npm run admin)이 이 세션을 씁니다. 대화에 연결한 ODDBOUT 도구의 계정과는 별개입니다.');
   return { sessionPath, userId: session.user.id };
 }
 
@@ -395,7 +395,7 @@ export async function finishPasteLogin({ pasted, log = console.error, createAuth
 }
 
 /**
- * End this session on the server, then delete the file. A running MCP process still holds the refresh token in
+ * End this session on the server, then delete the file. A running process still holds the refresh token in
  * memory; revoking the session on the server is what stops it from refreshing and writing the file back.
  * @param {{ log?: (message: string) => void, createAuthClient?: typeof createClient }} [options]
  */
@@ -420,8 +420,8 @@ export async function logout({ log = console.error, createAuthClient = createCli
     return ended;
   });
   log(`${sessionPath}를 지웠습니다.`);
-  log(revoked ? '서버의 세션도 끝냈습니다. 다음 MCP 요청부터 로그아웃이 반영됩니다.'
-    : '서버의 세션을 끝내지 못했습니다. 로컬 연결은 해제했으며 다음 MCP 요청부터 로그인이 필요합니다.');
+  log(revoked ? '서버의 세션도 끝냈습니다. 다음 요청부터 로그아웃이 반영됩니다.'
+    : '서버의 세션을 끝내지 못했습니다. 로컬 연결은 해제했으며 다음 요청부터 로그인이 필요합니다.');
 }
 
 /** @type {Record<string, string>} */
