@@ -7,11 +7,17 @@
 //   profiles [--status review|approved|rejected] | profile-approve <set> | profile-reject <set> --reason <text>
 //   fighters [--status active|removed|all] [--search <text>] [--page <n>] | fighter-remove <fighter> --version <n> --reason <text>
 //   fighter-restore <fighter> --version <n> --reason <text>
+//   fighter <fighter> | replace-package <fighter> <package dir or fighter.json> --reason <text>
+//   edit-profile <fighter> --reason <text> [--profile <json or @file>] [--style <json, null or @file>]
 // Every answer is one JSON object on stdout. A command that changes something only shows what it would do (`dryRun: true`) until it is
 // run again with --yes: the agent shows that to its user and asks first.
+import { createHash } from 'node:crypto';
 import { realpathSync } from 'node:fs';
+import { readFile, stat } from 'node:fs/promises';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRemoteClient } from '../api/client.mjs';
+import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/validate.mjs';
 import { defaultSessionPath } from './login.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -86,6 +92,7 @@ export function planCall([command, target], flags) {
       if (!/^(0|[1-9][0-9]{0,4})$/.test(page)) throw new Error('invalid-value:--page');
       return { method: 'GET', route: `fighters?${query({ status, search: typeof flags.search === 'string' ? flags.search : '', page })}` };
     }
+    case 'fighter': return { method: 'GET', route: `fighters/${id(target, 'fighter')}` };
     case 'fighter-remove': case 'fighter-restore': {
       const version = Number(text(flags.version, 'version')), reason = text(flags.reason, 'reason');
       if (!Number.isSafeInteger(version) || version < 0) throw new Error('invalid-value:--version');
@@ -99,20 +106,106 @@ export function planCall([command, target], flags) {
 
 /**
  * Run one command. A change without --yes is not sent: the answer says what it would do.
- * @param {{ argv?: string[], connect?: (sessionPath: string) => Promise<Client>, env?: NodeJS.ProcessEnv }} [options]
+ * @param {{ argv?: string[], connect?: (sessionPath: string) => Promise<Client>, env?: NodeJS.ProcessEnv, wait?: (ms: number) => Promise<unknown> }} [options]
+ *   `wait`: the pause between polls of a replaced package's validation.
  */
-export async function runAdmin({ argv = process.argv.slice(2), connect = createRemoteClient, env = process.env } = {}) {
+export async function runAdmin({ argv = process.argv.slice(2), connect = createRemoteClient, env = process.env,
+  wait = (/** @type {number} */ ms) => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {
   const { positional, flags } = parseArgs(argv);
   if (flags.help || !positional.length) return { ok: true, usage: USAGE };
+  const signIn = async () => {
+    const sessionPath = typeof flags.session === 'string' ? flags.session : env.ODDBOUT_ADMIN_SESSION || defaultSessionPath();
+    return connect(sessionPath).catch(error => { throw error?.code === 'ENOENT' ? new Error('client-sign-in-required') : error; });
+  };
+  if (positional[0] === 'replace-package') return replacePackage(positional, flags, signIn, wait);
+  if (positional[0] === 'edit-profile') return editProfile(positional, flags, signIn);
   const call = planCall(positional, flags);
   if (call.change && flags.yes !== true) return { ok: true, dryRun: true, change: call.change, request: { method: call.method, route: `admin/${call.route}`, body: call.body } };
-  const sessionPath = typeof flags.session === 'string' ? flags.session : env.ODDBOUT_ADMIN_SESSION || defaultSessionPath();
-  const client = await connect(sessionPath).catch(error => {
-    throw error?.code === 'ENOENT' ? new Error('client-sign-in-required') : error;
-  });
+  const client = await signIn();
   const result = await client.request(`admin/${call.route}`, call.method === 'POST'
     ? { method: 'POST', body: JSON.stringify(call.body ?? {}), headers: { 'content-type': 'application/json' } } : {});
   return call.change ? { ...result, done: call.change } : result;
+}
+
+/** One idempotency key per (fighter, content): a rerun after a dropped connection resumes the same submission. @param {string[]} parts */
+export function editKey(...parts) {
+  const hex = createHash('sha256').update(parts.join('\n')).digest('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-${(8 | parseInt(hex[16], 16) & 3).toString(16)}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
+const sha256 = (/** @type {Uint8Array} */ bytes) => createHash('sha256').update(bytes).digest('hex');
+
+/**
+ * A package on disk (a directory with fighter.json, or the fighter.json itself) as the contract checks it, with every asset's bytes
+ * matching the manifest. Throws `package-invalid` (with the contract's errors) or `asset-mismatch:<id>`.
+ * @param {string} where
+ */
+export async function readPackage(where) {
+  const manifestPath = (await stat(where)).isDirectory() ? path.join(where, 'fighter.json') : where;
+  const text = await readFile(manifestPath, 'utf8'), parsed = parseFighterJson(text);
+  const checked = parsed.ok ? validateFighter(parsed.data) : parsed;
+  if (!parsed.ok || !checked.ok) throw Object.assign(new Error('package-invalid'), { errors: (checked.errors ?? []).slice(0, 10) });
+  /** @type {{ id: string, path: string, bytes: number, sha256: string }[]} */
+  const assets = parsed.data.assets, files = [];
+  for (const asset of assets) {
+    const bytes = await readFile(path.join(path.dirname(manifestPath), asset.path));
+    if (bytes.length !== asset.bytes || sha256(bytes) !== asset.sha256) throw new Error(`asset-mismatch:${asset.id}`);
+    files.push({ id: asset.id, bytes });
+  }
+  return { text, sha: sha256(Buffer.from(text, 'utf8')), name: parsed.data.profile?.name ?? '', files };
+}
+
+/** A value of --profile or --style: JSON, or `@file` holding JSON. @param {string | true | undefined} value @param {string} name */
+async function jsonFlag(value, name) {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string') throw new Error(`missing-value:--${name}`);
+  try { return JSON.parse(value.startsWith('@') ? await readFile(value.slice(1), 'utf8') : value); }
+  catch { throw new Error(`invalid-value:--${name}`); }
+}
+
+/**
+ * replace-package: the owner's create → upload → submit, as the operator, then the validation's answer (polled up to ten minutes).
+ * @param {string[]} positional @param {Record<string, string | true>} flags @param {() => Promise<Client>} signIn
+ * @param {(ms: number) => Promise<unknown>} wait
+ */
+async function replacePackage([, target, where], flags, signIn, wait) {
+  const fighter = id(target, 'fighter'), reason = text(flags.reason, 'reason');
+  if (!where) throw new Error('missing-value:package');
+  const pkg = await readPackage(where), key = typeof flags.key === 'string' ? id(flags.key, 'key') : editKey('package', fighter, pkg.sha);
+  const change = `선수 ${fighter}의 패키지를 ${pkg.sha.slice(0, 12)}…(파일 ${pkg.files.length}개)로 바꿉니다. 출전 중이면 출전을 유지합니다. 사유: ${reason}`;
+  if (flags.yes !== true) return { ok: true, dryRun: true, change, request: { method: 'POST', route: `admin/fighters/${fighter}/submissions`, manifestSha256: pkg.sha, idempotencyKey: key } };
+  const client = await signIn(), query = new URLSearchParams({ reason }).toString();
+  let state = await client.request(`admin/fighters/${fighter}/submissions?${query}`, { method: 'POST',
+    headers: { 'content-type': 'application/json', 'idempotency-key': key }, body: pkg.text });
+  if (state.stage === 'uploading' && state.code !== 'upload-expired') {
+    for (const file of pkg.files) await client.request(`admin/submissions/${state.submissionId}/assets/${file.id}`, { method: 'PUT',
+      headers: { 'content-type': 'image/webp' }, body: file.bytes });
+    state = await client.request(`admin/submissions/${state.submissionId}/submit`, { method: 'POST' });
+  }
+  for (let polls = 0; !['registered', 'rejected'].includes(state.stage) && state.code !== 'upload-expired' && polls < 60; polls++) {
+    await wait(10000);
+    state = await client.request(`admin/submissions/${state.submissionId}`);
+  }
+  return { ...state, done: change };
+}
+
+/**
+ * edit-profile: the owner's profile or style edit, as the operator, from the fighter's current package.
+ * @param {string[]} positional @param {Record<string, string | true>} flags @param {() => Promise<Client>} signIn
+ */
+async function editProfile([, target], flags, signIn) {
+  const fighter = id(target, 'fighter'), reason = text(flags.reason, 'reason');
+  const profile = await jsonFlag(flags.profile, 'profile'), style = await jsonFlag(flags.style, 'style');
+  if (profile === undefined && style === undefined) throw new Error('missing-value:--profile');
+  const edit = { ...(profile === undefined ? {} : { profile }), ...(style === undefined ? {} : { style }) };
+  const change = `선수 ${fighter}의 ${[profile === undefined ? null : `프로필(${Object.keys(profile ?? {}).join(', ')})`,
+    style === undefined ? null : style === null ? '전투 스타일 지우기' : '전투 스타일'].filter(Boolean).join('·')}을 고칩니다. 출전은 그대로입니다. 사유: ${reason}`;
+  if (flags.yes !== true) return { ok: true, dryRun: true, change, request: { method: 'PATCH', route: `admin/fighters/${fighter}/profile`, body: edit } };
+  const client = await signIn();
+  const { fighter: current } = await client.request(`admin/fighters/${fighter}`);
+  const body = JSON.stringify({ ...edit, expectedManifestSha256: current.manifestSha256 });
+  const result = await client.request(`admin/fighters/${fighter}/profile?${new URLSearchParams({ reason })}`, { method: 'PATCH',
+    headers: { 'content-type': 'application/json', 'idempotency-key': editKey('profile', fighter, current.manifestSha256, body) }, body });
+  return { ...result, done: change };
 }
 
 export const USAGE = [
@@ -121,6 +214,8 @@ export const USAGE = [
   'npm run admin -- profiles [--status review|approved|rejected] | profile-approve <set> --yes | profile-reject <set> --reason <text> --yes',
   'npm run admin -- fighters [--status active|removed|all] [--search <text>] [--page <n>]',
   'npm run admin -- fighter-remove|fighter-restore <fighter> --version <n> --reason <text> --yes',
+  'npm run admin -- fighter <fighter> | replace-package <fighter> <package dir|fighter.json> --reason <text> [--key <uuid>] --yes',
+  'npm run admin -- edit-profile <fighter> --reason <text> [--profile <json|@file>] [--style <json|null|@file>] --yes',
   'Session: --session <file>, else ODDBOUT_ADMIN_SESSION, else the npm run login session file.',
 ];
 
@@ -130,6 +225,11 @@ const HINTS = /** @type {Record<string, string>} */ ({
   'client-sign-in-required': '세션 파일이 없거나 만료됐습니다. npm run login (VM이면 npm run login -- --device) 하세요.',
   'review-conflict': '상태가 이미 바뀌었습니다. 목록을 다시 읽으세요.',
   'not-found': '대상을 찾지 못했습니다.',
+  'fighter-not-found': '선수를 찾지 못했습니다(지운 선수이거나 id가 틀렸습니다).',
+  'fighter-unchanged': '운영 패키지와 같은 내용입니다. 바꿀 것이 없습니다.',
+  'open-submission-exists': '그 선수 주인의 다른 제출이 아직 열려 있습니다. 끝난 뒤 다시 하세요.',
+  'idempotency-conflict': '같은 키의 다른 제출이 있습니다. --key 로 새 UUID 를 주세요.',
+  'package-invalid': '패키지가 계약 검사를 통과하지 못했습니다(errors).',
 });
 
 function isEntry() {
@@ -138,7 +238,9 @@ function isEntry() {
 if (isEntry()) {
   runAdmin().then(answer => { console.log(JSON.stringify(answer, null, 2)); }, error => {
     const code = error instanceof Error ? error.message : String(error);
-    console.log(JSON.stringify({ ok: false, code, hint: HINTS[code] ?? (code.startsWith('unknown-command') ? USAGE.join('\n') : undefined) }, null, 2));
+    const errors = /** @type {any} */ (error)?.errors;
+    console.log(JSON.stringify({ ok: false, code, ...(errors ? { errors } : {}),
+      hint: HINTS[code] ?? (code.startsWith('unknown-command') ? USAGE.join('\n') : undefined) }, null, 2));
     process.exitCode = 1;
   });
 }

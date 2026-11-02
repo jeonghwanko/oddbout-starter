@@ -2,9 +2,11 @@
 import { Problem, UUID, jsonResponse, readBody, rpcCaller, verifiedUserId } from './http.mjs';
 import { cleanupPublicFiles, profileSetKey, publishProfileSet, removePublicFiles } from './profile-sets.mjs';
 import { BUCKET } from './submissions.mjs';
+import { ADMIN_EDIT_CORS, adminFighterEditRoute, createAdminFighterEdits } from './admin-fighter-edits.mjs';
 import { GENERATION_BUCKET, GENERATION_LIMITS, artifactPath } from './generations.mjs';
 
-const CORS = { methods: 'GET, POST, OPTIONS', headers: 'Authorization, Content-Type' };
+// The fighter edits (`admin-fighter-edits.mjs`) add PUT, PATCH and the idempotency key; every admin route answers one preflight.
+const CORS = ADMIN_EDIT_CORS;
 /** @type {(body: any, status?: number) => Response} */
 const reply = (body, status = 200) => jsonResponse(body, status, CORS);
 /** @type {Record<string, number>} */
@@ -96,9 +98,13 @@ async function generationDetail(db, id) {
     preview: preview.map(/** @param {any} p */ p => ({ clip: typeof p.clip === 'string' ? p.clip : null, name: p.name, url: urls.get(artifactPath(id, p.name)) ?? null })),
     events: (events.data ?? []).map(/** @param {any} e */ e => ({ at: e.at, kind: e.kind, data: e.data ?? {} })) };
 }
-/** @param {{ db: any }} options @returns {import('./http.mjs').Route} */
-export function createAdminHandler({ db }) {
+/**
+ * @param {{ db: any, present?: (row: any) => Promise<object> }} options  `present` (the creator routes' submission view) opens the fighter edits.
+ * @returns {import('./http.mjs').Route}
+ */
+export function createAdminHandler({ db, present }) {
   const rpc = rpcCaller(db, statuses, { unavailable: 'admin-unavailable' });
+  const edits = present ? createAdminFighterEdits({ db, present }) : null;
   return async (request, parts) => {
     try {
       if (request.method === 'OPTIONS') return reply({ ok: true });
@@ -106,6 +112,8 @@ export function createAdminHandler({ db }) {
       if (!actor) throw new Problem(401, 'authentication-required');
       if (await rpc('af_admin_account', { p_actor: actor }) !== true) throw new Problem(403, 'admin-required');
       if (parts.length === 2 && parts[1] === 'me' && request.method === 'GET') return reply({ ok: true, admin: true });
+      // 운영자 선수 수정 (2026-11-02): a package, a profile or a style for someone's fighter, under the owner's own checks.
+      if (edits && adminFighterEditRoute(parts)) return edits(request, parts, actor);
       if (parts.length === 2 && parts[1] === 'fighters' && request.method === 'GET') {
         const query = new URL(request.url).searchParams, page = query.get('page') ?? '0', status = query.get('status') ?? 'active', search = (query.get('search') ?? '').trim();
         if (!/^(0|[1-9][0-9]{0,4})$/.test(page) || Number(page)>10000 || search.length>200 || search.includes('\0')
