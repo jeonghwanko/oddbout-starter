@@ -9,6 +9,7 @@
 //   fighter-restore <fighter> --version <n> --reason <text>
 //   fighter <fighter> | replace-package <fighter> <package dir or fighter.json> --reason <text> [--key <uuid>]
 //   edit-profile <fighter> --reason <text> [--profile <json or @file>] [--style <json, null or @file>]
+//   storage | storage-remove (<submission>... | --oldest <n>)
 // Every answer is one JSON object on stdout. A command that changes something only shows what it would do (`dryRun: true`) until it is
 // run again with --yes: the agent shows that to its user and asks first.
 import { createHash } from 'node:crypto';
@@ -93,6 +94,7 @@ export function planCall([command, target], flags) {
       return { method: 'GET', route: `fighters?${query({ status, search: typeof flags.search === 'string' ? flags.search : '', page })}` };
     }
     case 'fighter': return { method: 'GET', route: `fighters/${id(target, 'fighter')}` };
+    case 'storage': return { method: 'GET', route: 'storage' };
     case 'fighter-remove': case 'fighter-restore': {
       const version = Number(text(flags.version, 'version')), reason = text(flags.reason, 'reason');
       if (!Number.isSafeInteger(version) || version < 0) throw new Error('invalid-value:--version');
@@ -119,6 +121,7 @@ export async function runAdmin({ argv = process.argv.slice(2), connect = createR
   };
   if (positional[0] === 'replace-package') return replacePackage(positional, flags, signIn, wait);
   if (positional[0] === 'edit-profile') return editProfile(positional, flags, signIn);
+  if (positional[0] === 'storage-remove') return storageRemove(positional, flags, signIn);
   const call = planCall(positional, flags);
   if (call.change && flags.yes !== true) return { ok: true, dryRun: true, change: call.change, request: { method: call.method, route: `admin/${call.route}`, body: call.body } };
   const client = await signIn();
@@ -223,6 +226,39 @@ async function editProfile([, target], flags, signIn) {
   return { ...result, done: change };
 }
 
+const megabytes = (/** @type {number} */ bytes) => `${(bytes / 1e6).toFixed(1)} MB`;
+/**
+ * storage-remove: the named unused package folders, or the oldest n, lose their files and leave the upload budget. The dry run reads the
+ * list (storage) so the user sees whose folders they are and what the budget becomes; --oldest takes the oldest unused ones at the time
+ * it runs. The server deletes only folders that are still unused.
+ * @param {string[]} positional @param {Record<string, string | true>} flags @param {() => Promise<Client>} signIn
+ */
+async function storageRemove([, ...targets], flags, signIn) {
+  const oldest = flags.oldest === undefined ? null : Number(text(flags.oldest, 'oldest'));
+  if (oldest !== null && (targets.length || !Number.isSafeInteger(oldest) || oldest < 1 || oldest > 50)) throw new Error('invalid-value:--oldest');
+  if (oldest === null && (!targets.length || targets.length > 50)) throw new Error('missing-value:submission');
+  const ids = [...new Set(targets.map(target => id(target, 'submission')))];
+  const client = await signIn(), report = await client.request('admin/storage');
+  /** @type {{ submissionId: string, email?: string, name?: string, reason: string, createdAt: string, bytes: number }[]} */
+  const unused = report.unused;
+  const chosen = oldest !== null ? unused.slice(0, oldest) : ids.map(wanted => {
+    const folder = unused.find(row => row.submissionId === wanted);
+    if (!folder) throw Object.assign(new Error('not-unused'), { errors: [wanted] });
+    return folder;
+  });
+  if (!chosen.length) return { ok: true, nothing: true, usedBytes: report.usedBytes, limitBytes: report.limitBytes };
+  const bytes = chosen.reduce((sum, folder) => sum + folder.bytes, 0);
+  const since = chosen.map(folder => folder.createdAt).sort()[0].slice(0, 10);
+  const change = `안 쓰는 패키지 폴더 ${chosen.length}개(${megabytes(bytes)}, ${since}부터)의 파일을 지웁니다. 되돌릴 수 없습니다. `
+    + `업로드 예약 ${megabytes(report.usedBytes)} → ${megabytes(report.usedBytes - bytes)} / ${megabytes(report.limitBytes)}`;
+  const folders = chosen.map(({ submissionId, email, name, reason, createdAt, bytes: size }) => ({ submissionId, email, name, reason, createdAt, bytes: size }));
+  const submissionIds = chosen.map(folder => folder.submissionId);
+  if (flags.yes !== true) return { ok: true, dryRun: true, change, folders, request: { method: 'POST', route: 'admin/storage/removals', body: { submissionIds } } };
+  const result = await client.request('admin/storage/removals', { method: 'POST', body: JSON.stringify({ submissionIds }),
+    headers: { 'content-type': 'application/json' } });
+  return { ...result, done: change };
+}
+
 export const USAGE = [
   'npm run admin -- whoami | review | open | show <job> | retry <job> --yes | cancel <job> --yes',
   'npm run admin -- hosts | host-approve <host> --yes | host-withdraw <host> --yes',
@@ -231,6 +267,7 @@ export const USAGE = [
   'npm run admin -- fighter-remove|fighter-restore <fighter> --version <n> --reason <text> --yes',
   'npm run admin -- fighter <fighter> | replace-package <fighter> <package dir|fighter.json> --reason <text> [--key <uuid>] --yes',
   'npm run admin -- edit-profile <fighter> --reason <text> [--profile <json|@file>] [--style <json|null|@file>] --yes',
+  'npm run admin -- storage | storage-remove (<submission>... | --oldest <n>) --yes',
   'Session: --session <file>, else ODDBOUT_ADMIN_SESSION, else the npm run login session file.',
 ];
 
@@ -248,6 +285,7 @@ const HINTS = /** @type {Record<string, string>} */ ({
   'validation-timeout': '10분 안에 검사가 끝나지 않았습니다. fighter <id> 로 상태를 다시 보세요.',
   'package-superseded': '이 패키지는 이미 다른 패키지로 대체됐습니다. 선수는 지금 패키지 그대로입니다.',
   'package-invalid': '패키지가 계약 검사를 통과하지 못했습니다(errors).',
+  'not-unused': '그 제출(errors)은 안 쓰는 목록에 없습니다: 지금 쓰는 패키지이거나, 이미 지웠거나, 오래된 순 200개 밖입니다. storage 로 다시 보세요.',
 });
 
 function isEntry() {
