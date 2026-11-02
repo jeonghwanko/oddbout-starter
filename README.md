@@ -45,7 +45,7 @@ In this kit, "sprite-gen" means the sprite-gen engine and CLI pinned at `vendor/
 ## Ways to make a fighter
 
 Every way registers the fighter to your own Google account, up to three fighters per account. The first two need nothing installed;
-the third installs the generator from this repository on your PC; the last runs this whole kit. The [site guide](https://oddbout.com/docs.html?lang=en)
+the third installs the generator from this repository on your PC; the last two make the package yourself. The [site guide](https://oddbout.com/docs.html?lang=en)
 walks through each.
 
 | Way | What you do | Good for |
@@ -53,6 +53,7 @@ walks through each.
 | **Leave it to ODDBOUT** | On [My fighters](https://oddbout.com/creator.html?lang=en), say in one line what fighter you want (pictures you may use are optional). ODDBOUT draws the look and the motions; you check them, ask for a change if you like, and register. | The quickest start. One fighter per account is free; it is used once its looks are drawn (our own failures give it back). On a full day your request waits its turn. |
 | **Talk to your agent** | Connect the hosted ODDBOUT MCP in your agent's connector settings ([cloud connection guide](docs/CLOUD-MCP.md)), then select it in your conversation. ChatGPT/Dots users should follow the separate app setup below. | Making and editing fighters from a conversation. Pictures can be attached from ChatGPT only. |
 | **Your own PC** | On My agents → My PC, create a host and run the three-line command it gives on a Linux PC with your ChatGPT and SuperGrok subscriptions ([generation host guide](docs/GENERATION-HOST.md)). | More fighters on your own subscriptions: no approval and no limit of one. |
+| **Make it with any tool, upload on the site** | Make the package with any tool, following the [package contract](contracts/ai-fighter/v1/README.md), and check it with `npm run validate`. Then on [My fighters](https://oddbout.com/creator.html?lang=en) choose New fighter → Other ways → Upload a finished package. | A fighter you already made elsewhere, or a tool of your own. |
 | **Make it yourself** | Run this kit with an assistant that can use local tools, and choose every concept and motion ([below](#create-with-the-local-kit)). | Full control over each frame. |
 
 ## Register from Dots without a PC

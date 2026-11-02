@@ -456,6 +456,28 @@ ChatGPT 밖의 에이전트(Grok·Claude·Gemini CLI·Codex CLI·Cursor의 Grok 
 성공한 작업 응답에는 `next`(`hostedNext`)가 있다(목록은 각 `jobs[].next`): 사용자에게 무엇을 보이고 물을지, 또는 얼마나 기다릴지.
 한 선수는 대략 신청 → 외형 두 장(몇 분) → 고르기 → 동작 11개(15~30분) → 확인 → 등록이다.
 
+### 사이트 바로가기 `siteUrl` (2026-11-03)
+
+호스팅 도구(`request_hosted_fighter`·`get_hosted_fighter`·`choose_hosted_look`·`revise_hosted_motion`·`register_hosted_fighter`·`cancel_hosted_fighter`)와
+등록 도구(`prepare_fighter_registration`·`submit_fighter_registration`·`get_fighter_submission`·`get_registered_fighter`)의 결과에는 `siteUrl`이 있다
+(`get_hosted_fighter`의 최근 목록은 `jobs[].siteUrl`). 에이전트가 사용자에게 줄 수 있는 `https://oddbout.com/creator.html`의 바로가기다.
+`next`의 한 문장이 그 쓰임을 알려 준다. 주소는 `mcp/cloud/common.mjs`의 `siteUrl`이 만든다.
+
+| 바로가기 | 열리는 화면 |
+| --- | --- |
+| `creator.html#job=<작업 id>` | 맡긴 선수 신청: 진행, 외형 고르기, 동작 확인 |
+| `creator.html#submission=<제출 id>` | 패키지 제출: 검사 중이거나 거절 사유 |
+| `creator.html#fighter=<선수 id>&view=motions` | 열한 동작을 한꺼번에 확인하고 출전시키는 화면 |
+
+등록은 선수를 출전시키지 않는다. 출전은 주인이 동작을 보고 하는 별도 단계다. 그래서 등록된 선수(`submission.stage`가 `registered`이고 `fighterId`가 있는 작업, 등록된 제출,
+`get_registered_fighter`)는 동작 확인 화면을, 그 밖에는 작업·제출 화면을 가리킨다. 삭제된 선수와 실패한 호출에는 없다.
+큰 결과를 줄여 쓰는 호스트(`compactText`)도 `siteUrl`은 자르지 않는다.
+
+**신청한 에이전트(2026-11-03).** 호스팅 신청(`af_generation_jobs.agent_client`·`agent_name`)은 신청한 에이전트의 OAuth 클라이언트 이름(40자까지)을 기록한다.
+작업 보기(`GET generations`, `GET generations/:id`)의 `agent`가 그 이름(없으면 null)이다. 사이트·키트로 낸 신청과 body의 값에는 없다. 클라우드 MCP가 검증한 토큰의
+클라이언트 id만 `agentClient`로 API에 들어가기 때문이다(`api/handler.mjs`). 워커가 그 작업의 제출을 만들면 같은 트랜잭션에서 `af_submission_agents`에 같은 에이전트가
+기록되어(`af_job_submission_agent` 트리거), 선수의 "made with"(`af_fighter_agents`)가 된다. 이 라벨은 제출을 막지 않는다.
+
 ### 호스팅 작업의 중단과 미리보기 복구
 
 1. 신청 전에 `get_profile`로 확인한 계정 ID, UUID `idempotencyKey`와 원래 인자를 보존하고 응답의 `job.id`를 기록한다.
