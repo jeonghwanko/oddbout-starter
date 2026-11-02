@@ -16,15 +16,3 @@ export function creatorPage(value = PUBLIC_CREATOR_PAGE) {
   if (!allowed || url.username || url.password || url.search || url.hash) throw new Error('creator-page-not-allowed');
   return { origin: url.origin, href: url.href };
 }
-
-/**
- * The server mints a one-use Supabase Auth token for the signed-in user; the link carries only its hash, in the fragment,
- * so it never reaches server logs or link-preview fetchers. The page redeems it on a click, in any browser on any device.
- * @param {{ page?: string, request: import('../api/client.mjs').RemoteClient['request'] }} options
- */
-export async function creatorLink({ page = PUBLIC_CREATOR_PAGE, request }) {
-  const { href } = creatorPage(page);
-  const { tokenHash, expiresAt } = await request('creator-handoffs', { method: 'POST' });
-  if (typeof tokenHash !== 'string' || !/^[a-f0-9]{40,128}$/.test(tokenHash) || !Number.isFinite(Date.parse(expiresAt))) throw new Error('invalid-api-response');
-  return { loginUrl: `${href}#handoff=${tokenHash}`, expiresAt };
-}

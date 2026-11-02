@@ -6,17 +6,12 @@ import path from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { ElicitRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { accountItem, checkKit, checkLogin, checkReadiness, creationProgress, elicitAccount, KIT_BRANCH } from '../mcp/creation-readiness.mjs';
-import { pendingLoginPath, pendingDeviceLoginPath } from '../scripts/login.mjs';
+import { accountItem, checkKit, checkReadiness, creationProgress, elicitAccount, KIT_BRANCH } from '../mcp/creation-readiness.mjs';
 import { createServer } from '../mcp/server.mjs';
 import { createEnvironmentStore } from '../mcp/creation-environment.mjs';
 
 const installed = { source: true, environment: true };
 const workingTools = { inspect: async () => ({ ffmpeg: { status: 'ok' }, ffprobe: { status: 'ok' }, img2webp: { status: 'ok' }, rife: { status: 'ok' } }) };
-const jwt = payload => `e30.${Buffer.from(JSON.stringify(payload)).toString('base64url')}.sig`;
-const publicProbe = supported => async (_url, { spec = false } = {}) => spec
-  ? { status: 'reachable', deviceLogin: supported ? 'available' : 'unsupported' }
-  : { status: 'reachable' };
 
 /** A scripted git: answers by the first arguments and records every call. */
 function fakeGit({ branch = KIT_BRANCH, dirty = '', vendorDirty = '', fetch = 0, counts = '0\t3', merge = 0, changed = '' } = {}) {
@@ -159,134 +154,31 @@ test('the account item offers fixed options, never infers, and does not claim di
     { method: 'unsupported', choice: null });
 });
 
-test('login offers device connection only when the server advertises it; otherwise another device is blocked', async t => {
-  const dir = await mkdtemp(path.join(tmpdir(), 'fighter-readiness-')); t.after(() => rm(dir, { recursive: true, force: true }));
-  const sessionPath = path.join(dir, 'client.json');
-  const probed = [];
-  const probe = answer => async (url, options) => { probed.push(url); return publicProbe(answer)(url, options); };
-  const none = await checkLogin({ remoteActive: false, sessionPath, probe: probe(false) });
-  assert.equal(none.status, 'blocked'); assert.equal(none.accountStatus, 'sign-in-required');
-  assert.match(none.routes.sameDevice.command, /^npm run login -- --url https:\/\/[a-z0-9]+\.supabase\.co --key sb_publishable_/);
-  assert.deepEqual([none.routes.otherDevice.status, none.routes.otherDevice.secureRoute, none.routes.otherDevice.reason],
-    ['blocked-no-secure-route', null, 'server-without-device-login']);
-  assert.match(probed[0], /^https:\/\/[a-z0-9]+\.supabase\.co\/functions\/v1\/ai-fighter\/spec$/);
-  // No paste or finish command is offered anywhere, and nothing calls a pasted callback safe.
-  assert.ok(!/--paste|--finish/.test(JSON.stringify(none)));
-  assert.match(none.note, /대화에 붙여 넣도록 요청하지 않고/);
-  for (const [options, reason] of [[{ probe: async () => ({ status: 'unverified', reason: 'invalid-api-response' }) }, 'invalid-api-response'],
-    [{ checkServer: false, probe: async () => assert.fail('no network requested') }, 'server-not-checked']])
-    assert.equal((await checkLogin({ remoteActive: false, sessionPath, ...options })).routes.otherDevice.reason, reason);
-  const device = await checkLogin({ remoteActive: false, sessionPath, probe: probe(true) });
-  assert.deepEqual([device.routes.otherDevice.status, device.routes.otherDevice.secureRoute], ['available', 'device-connection']);
-  assert.match(device.routes.otherDevice.start, /^npm run login -- --device --url https:\/\/[a-z0-9]+\.supabase\.co --key /);
-  assert.equal(device.routes.otherDevice.wait, 'npm run login -- --device-wait');
-  assert.deepEqual([device.action.label, device.action.status], ['ODDBOUT 연결', 'available']);
-  assert.ok(!/--paste|--finish/.test(JSON.stringify(device)));
-  // A leftover manual exchange file does not turn into a chat route.
-  await writeFile(pendingLoginPath(sessionPath), JSON.stringify({ version: 1, createdAt: new Date().toISOString() }));
-  assert.equal((await checkLogin({ remoteActive: false, sessionPath, probe: probe(false) })).status, 'blocked');
-  await writeFile(sessionPath, JSON.stringify({ accessToken: jwt({ sub: 'user-9' }), refreshToken: 'refresh-secret' }));
-  const restart = await checkLogin({ remoteActive: false, sessionPath, probe: probe(true) });
-  assert.deepEqual([restart.status, restart.accountMatch], ['restart-required', 'unknown']);
-  assert.equal(restart.userId, undefined);
-  assert.ok(!JSON.stringify(restart).includes('refresh-secret'));
-  assert.equal((await checkLogin({ remoteActive: true, sessionPath, probe: probe(true) })).status, 'session-present-unverified');
-});
-
-test('saved sessions need GET /me; network denial, expired authentication and service denial have different owners', async t => {
-  const dir = await mkdtemp(path.join(tmpdir(), 'fighter-connection-')); t.after(() => rm(dir, { recursive: true, force: true }));
-  const sessionPath = path.join(dir, 'client.json');
-  await writeFile(sessionPath, JSON.stringify({ accessToken: jwt({ sub: 'unverified-user' }), refreshToken: 'secret' }));
-  const options = { sessionPath, remoteActive: true, probe: publicProbe(true) };
-  const connected = await checkLogin({ ...options, request: async route => {
-    assert.equal(route, 'me'); return { ok: true, account: { invited: true, canSubmit: true } }; } });
-  assert.equal(connected.status, 'connected'); assert.equal(connected.canSubmit, true);
-  assert.equal(connected.accountMatch, 'unknown');
-  assert.ok(!/secret|unverified-user/.test(JSON.stringify(connected)));
-  for (const [reason, status, actor] of [['network-connect-forbidden', 'blocked', 'environment-preparer'],
-    ['authentication-required', 'sign-in-required', 'user'], ['api-http-403', 'blocked', 'service-operator']]) {
-    const result = await checkLogin({ ...options, request: async () => { throw new Error(reason); } });
-    assert.deepEqual([result.status, result.nextAction.actor], [status, actor]);
-    assert.equal(result.action.actor, actor);
-    assert.equal(result.canSubmit, null);
-  }
-  const offline = await checkLogin({ ...options, checkServer: false, request: async () => assert.fail('offline must not query') });
-  assert.equal(offline.status, 'session-present-unverified');
-});
-
-test('pending approval resumes without a new request; a blocked VM never tells the creator to sign in again', async t => {
-  const dir = await mkdtemp(path.join(tmpdir(), 'fighter-pending-')); t.after(() => rm(dir, { recursive: true, force: true }));
-  const sessionPath = path.join(dir, 'client.json');
-  await writeFile(pendingDeviceLoginPath(sessionPath), JSON.stringify({ version: 1, deviceCode: 'secret-device-code', expiresAt: new Date(Date.now() + 60000).toISOString() }));
-  const waiting = await checkLogin({ sessionPath, probe: publicProbe(true) });
-  assert.equal(waiting.action.status, 'awaiting-approval');
-  assert.equal(waiting.action.command, undefined); assert.equal(waiting.action.resumeCommand, 'npm run login -- --device-wait');
-  assert.ok(!JSON.stringify(waiting).includes('secret-device-code'));
-  const blocked = await checkLogin({ sessionPath, probe: async () => ({ status: 'blocked', reason: 'network-connect-forbidden',
-    nextAction: { actor: 'environment-preparer', code: 'prepare-workspace-network' } }) });
-  assert.equal(blocked.action.status, 'blocked'); assert.equal(blocked.action.command, undefined);
-  assert.equal(blocked.nextAction.actor, 'environment-preparer');
-  assert.equal(blocked.infrastructure.networkSettingsManagedByKit, false);
-  const recovered = await checkLogin({ sessionPath, probe: publicProbe(true) });
-  assert.equal(recovered.action.status, 'awaiting-approval');
-});
-
-test('a server without device login goes to its operator; unknown pending and unverified sessions are checked, a live one awaits approval', async t => {
-  const dir = await mkdtemp(path.join(tmpdir(), 'fighter-outcomes-')); t.after(() => rm(dir, { recursive: true, force: true }));
-  const sessionPath = path.join(dir, 'client.json'), pendingPath = pendingDeviceLoginPath(sessionPath);
-  const undeployed = await checkLogin({ sessionPath, probe: publicProbe(false) });
-  assert.deepEqual([undeployed.status, undeployed.action.status, undeployed.action.actor, undeployed.nextAction.actor, undeployed.nextAction.code],
-    ['blocked', 'blocked', 'service-operator', 'service-operator', 'device-login-deployment-required']);
-  await writeFile(pendingPath, '{');
-  const unknown = await checkLogin({ sessionPath, probe: publicProbe(true) });
-  assert.deepEqual([unknown.status, unknown.pendingConnection, unknown.action.status, unknown.action.actor, unknown.nextAction.code],
-    ['sign-in-required', 'unknown', 'check-required', 'user', 'check-required']);
-  assert.deepEqual([unknown.action.command, unknown.action.resumeCommand], [undefined, undefined]);
-  await writeFile(pendingPath, JSON.stringify({ version: 1, expiresAt: new Date(Date.now() - 60000).toISOString() }));
-  const expired = await checkLogin({ sessionPath, probe: publicProbe(true) });
-  assert.deepEqual([expired.status, expired.pendingConnection, expired.action.status, expired.action.resumeCommand], ['sign-in-required', 'expired', 'available', undefined]);
-  assert.equal(expired.action.command, expired.routes.otherDevice.start);
-  await writeFile(pendingPath, JSON.stringify({ version: 1, expiresAt: new Date(Date.now() + 60000).toISOString() }));
-  const pending = await checkLogin({ sessionPath, probe: publicProbe(true) });
-  assert.deepEqual([pending.status, pending.accountStatus, pending.action.status, pending.nextAction.actor, pending.nextAction.code],
-    ['pending-approval', 'sign-in-required', 'awaiting-approval', 'user', 'awaiting-approval']);
-  await writeFile(sessionPath, JSON.stringify({ accessToken: 'token', refreshToken: 'refresh' }));
-  const unverified = await checkLogin({ sessionPath, remoteActive: true, probe: publicProbe(true) });
-  assert.deepEqual([unverified.status, unverified.action.status, unverified.action.actor, unverified.nextAction.code],
-    ['session-present-unverified', 'check-required', 'agent', 'check-required']);
-  assert.deepEqual([unverified.action.command, unverified.action.resumeCommand], [undefined, undefined]);
-});
-
-test('ODDBOUT and kit success never verify generation or parent display, and existing work survives recovery', async t => {
-  const dir = await mkdtemp(path.join(tmpdir(), 'fighter-ready-')); t.after(() => rm(dir, { recursive: true, force: true }));
-  const sessionPath = path.join(dir, 'client.json');
-  await writeFile(sessionPath, JSON.stringify({ accessToken: 'token', refreshToken: 'refresh' }));
+test('kit success never verifies generation or parent display, and existing work survives recovery', async () => {
   const state = { items: { idle: { versions: { v1: {} } } } }, work = [{ status: 'unknown' }];
   const result = await checkReadiness({ store: { list: async () => [{ sessionId: 'existing' }], read: async () => state },
-    jobs: { list: async () => work }, account: 'gpt', remoteActive: true,
+    jobs: { list: async () => work }, account: 'gpt',
     kit: { installed, git: fakeGit({ counts: '0\t0' }).git, inspectEngine: engineState(true) },
-    tools: workingTools,
-    login: { sessionPath, probe: publicProbe(true), request: async () => ({ ok: true, account: { invited: true, canSubmit: true } }) } });
-  assert.equal(result.readyForRegistration, true); assert.equal(result.kitAndAccountReady, true);
+    tools: workingTools });
+  assert.equal(result.readyForRegistration, false); assert.equal(result.kitAndAccountReady, true);
   assert.equal(result.readyForGeneration, false); assert.equal(result.items.generation.status, 'unverified');
   assert.equal(result.items.delivery.parentDisplay, 'unverified');
-  assert.equal(result.items.infrastructure.targets.library.status, 'unverified');
+  assert.equal(result.items.login.status, 'connector-verification-required');
   assert.deepEqual(result.resume.sessionIds, ['existing']); assert.equal(result.resume.automaticGeneration, false);
   assert.deepEqual(work, [{ status: 'unknown' }]); assert.ok(state.items.idle.versions.v1);
 });
 
 test('a missing required system tool keeps generation from being ready and names who installs it', async () => {
-  const result = await checkReadiness({ account: 'gpt', remoteActive: false,
+  const result = await checkReadiness({ account: 'gpt',
     kit: { installed, git: fakeGit({ counts: '0\t0' }).git, inspectEngine: engineState(true), fetchRemote: false },
     tools: { inspect: async () => ({ ffmpeg: { status: 'missing', install: { actor: 'user', command: 'sudo apt install ffmpeg' } },
       ffprobe: { status: 'missing', install: { actor: 'user', command: 'sudo apt install ffmpeg' } },
-      img2webp: { status: 'broken', install: { actor: 'agent', command: 'npm run sprite:setup' } }, rife: { status: 'ok' } }) },
-    login: { checkServer: false } });
+      img2webp: { status: 'broken', install: { actor: 'agent', command: 'npm run sprite:setup' } }, rife: { status: 'ok' } }) } });
   assert.equal(result.kitAndAccountReady, false);
   assert.deepEqual([result.items.tools.status, result.items.tools.missing], ['action-required', ['ffmpeg', 'ffprobe', 'img2webp']]);
   assert.deepEqual(result.items.tools.nextCommands, ['npm run sprite:setup']);
   assert.deepEqual([result.items.tools.nextAction.actor, result.items.tools.nextAction.commands], ['user', ['sudo apt install ffmpeg']]);
-  const connection = await checkReadiness({ purpose: 'connection', tools: { inspect: () => assert.fail('no tool probe') }, login: { checkServer: false } });
+  const connection = await checkReadiness({ purpose: 'connection', tools: { inspect: () => assert.fail('no tool probe') } });
   assert.equal(connection.items.tools.status, 'not-required');
 });
 
@@ -309,9 +201,9 @@ test('the MCP tool asks the account through a host form when the client supports
   assert.deepEqual([stated.data.elicitation, stated.data.items.account.status, stated.data.readyForGeneration], ['not-needed', 'stopped', false]);
 });
 
-test('cloud workspace readiness does not read or suggest a local registration account', async t => {
+test('workspace readiness does not read or suggest a local registration account', async t => {
   const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
-  await createServer({ registrationMode: 'cloud' }).connect(serverSide);
+  await createServer({}).connect(serverSide);
   const client = new Client({ name: 'cloud-readiness-test', version: '1' });
   await client.connect(clientSide); t.after(() => client.close());
   const result = (await client.callTool({ name: 'check_creation_readiness', arguments: { account: 'stop', checkRemote: false } })).structuredContent;
@@ -321,12 +213,12 @@ test('cloud workspace readiness does not read or suggest a local registration ac
   assert.equal(result.data.items.login.routes, undefined);
   assert.equal(result.data.readyForRegistration, false);
   assert.deepEqual(result.data.items.login.nextTools, ['get_profile', 'check_creation_readiness']);
-  assert.throws(() => createServer({ registrationMode: 'cloud', remote: { request: () => assert.fail('must not use CLI account') } }), /inconsistent-registration-route/);
+  assert.deepEqual(result.data.items.infrastructure, { status: 'not-required', reason: 'cloud-registration-route' });
 });
 
 test('a saved environment keeps the stated provider and reports its preconditions without certifying generation', async () => {
   const kit = { installed, git: fakeGit({ counts: '0\t0' }).git, inspectEngine: engineState(true) };
-  const base = { account: 'gpt', kit, tools: workingTools, registrationMode: 'cloud' };
+  const base = { account: 'gpt', kit, tools: workingTools };
   const noEnvironment = await checkReadiness(base);
   assert.equal(noEnvironment.readyForGeneration, false);
   assert.equal(noEnvironment.items.environment.status, 'workspace-required');
@@ -350,34 +242,20 @@ test('a workspace moved to another host keeps its stated provider and reports th
     confirmedAccess: ['gpt-image'], feedback: '내 GPT 이미지 기능을 사용할 수 있어요. 이 VM에서 연결해줘.' });
   const moved = createEnvironmentStore(root, { hostId: 'host-b', loginProbe });
   const result = await checkReadiness({ kit: { installed, git: fakeGit({ counts: '0\t0' }).git, inspectEngine: engineState(true) }, tools: workingTools,
-    registrationMode: 'cloud', environment: moved, lowLevelServer: { getClientCapabilities: () => { assert.fail('must reuse the stated choice'); } } });
+    environment: moved, lowLevelServer: { getClientCapabilities: () => { assert.fail('must reuse the stated choice'); } } });
   assert.equal(result.items.account.choice, 'gpt');
   assert.equal(result.items.environment.status, 'host-changed-reconnect-required');
   assert.equal(result.readyForGeneration, false);
 });
 
-test('connection and registration never ask generation questions or touch the engine', async t => {
-  const dir = await mkdtemp(path.join(tmpdir(), 'fighter-stage-')); t.after(() => rm(dir, { recursive: true, force: true }));
-  const sessionPath = path.join(dir, 'client.json');
-  await writeFile(sessionPath, JSON.stringify({ accessToken: 'token', refreshToken: 'refresh' }));
+test('connection and registration never ask generation questions or touch the engine', async () => {
   for (const purpose of ['connection', 'registration']) {
-    const result = await checkReadiness({ purpose, remoteActive: true,
+    const result = await checkReadiness({ purpose,
       lowLevelServer: { getClientCapabilities: () => assert.fail('no generation prompt') },
-      kit: { git: () => assert.fail('no git or install'), inspectEngine: () => assert.fail('no engine read') },
-      login: { sessionPath, probe: publicProbe(true), request: async () => ({ ok: true, account: { canSubmit: true } }) } });
-    assert.equal(result.purpose, purpose); assert.equal(result.readyForRegistration, true);
+      kit: { git: () => assert.fail('no git or install'), inspectEngine: () => assert.fail('no engine read') } });
+    assert.equal(result.purpose, purpose); assert.equal(result.readyForRegistration, false);
+    assert.equal(result.items.login.status, 'connector-verification-required');
     assert.equal(result.elicitation, 'not-needed'); assert.equal(result.items.account.status, 'not-required');
     assert.equal(result.items.kit.status, 'not-required'); assert.equal(result.readyForGeneration, false);
   }
-});
-
-test('homepage failure does not redirect an already connected creator away from registration', async t => {
-  const dir = await mkdtemp(path.join(tmpdir(), 'fighter-homepage-')); t.after(() => rm(dir, { recursive: true, force: true }));
-  const sessionPath = path.join(dir, 'client.json');
-  await writeFile(sessionPath, JSON.stringify({ accessToken: 'token', refreshToken: 'refresh' }));
-  const result = await checkLogin({ sessionPath, remoteActive: true,
-    probe: async (_url, { spec } = {}) => spec ? { status: 'reachable', deviceLogin: 'available' }
-      : { status: 'blocked', reason: 'network-connect-forbidden' },
-    request: async () => ({ ok: true, account: { canSubmit: true } }) });
-  assert.equal(result.status, 'connected'); assert.equal(result.nextAction.actor, 'agent');
 });

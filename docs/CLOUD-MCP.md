@@ -284,7 +284,7 @@ creator-kit 소스는 계정·등록에 호스팅 ODDBOUT MCP 하나를 쓰도�
 1. `get_fighter_spec`의 overview/schema/creation을 읽고 기존 제작·검토 규칙을 따른다.
    첫 생성 전·작업 공간 재시작 뒤·등록 전에는 이 클라우드 커넥터의 `check_creation_readiness`를 호출한다.
    연결 확인만 할 때는 `purpose: "connection"`, 등록에는 `purpose: "registration"`, 허가된 생성 준비에는 `purpose: "generation"`을 명시한다.
-   등록 계정 접근과 실제 생성·전달·패키지 검토 상태를 구분하며 로컬 stdio 로그인은 요구하지 않는다.
+   등록 계정 접근과 실제 생성·전달·패키지 검토 상태를 구분하며 로컬 CLI 로그인은 요구하지 않는다.
 2. 최종 패키지 승인과 등록 요청을 받은 실제 fighter.json을 `prepare_fighter_registration`에 파일로 전달한다.
    기존 소유 파이터를 교체하라는 요청이면 `fighterId`를 지정해 ID와 이력을 유지하고, 생략하면 새 파이터를 준비한다.
    변경한 그림·동작은 필요한 묶음 검토와 최종 패키지 검증을 거친다. 새 패키지는 제작 중으로 돌아가며 출전 전 동작 확인이 필요하다.
@@ -449,7 +449,7 @@ ChatGPT 밖의 에이전트(Grok·Claude·Gemini CLI·Codex CLI·Cursor의 Grok 
 
 1. 신청 전에 `get_profile`로 확인한 계정 ID, UUID `idempotencyKey`와 원래 인자를 보존하고 응답의 `job.id`를 기록한다.
    연결 직후에는 `get_profile`로 계정을 확인하고 `check_creation_readiness(purpose: "connection")`로 계정 접근을 읽는다.
-   호스팅 경로에 로컬 stdio 로그인이나 사용자 PC 생성기 설치를 요구하지 않는다.
+   호스팅 경로에 로컬 CLI 로그인이나 사용자 PC 생성기 설치를 요구하지 않는다.
 2. 시간 초과·대화 중단·연결 재설정은 작업 실패의 증거가 아니다. 재연결 후 같은 계정인지 확인하고
    `get_hosted_fighter({jobId})`로 기존 상태부터 읽는다. ID를 잃었다면 원래 `idempotencyKey`로 조회한다.
    둘 다 없으면 인자 없이 최근 **다섯** 작업을 확인한다.

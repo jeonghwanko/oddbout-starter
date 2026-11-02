@@ -23,11 +23,10 @@ OAuth 계정 검증은 서로 다른 단계다. 한 단계의 성공으로 나�
 - 새 launcher의 `--status`: 소스·기존 runtime 해시를 검증하고 경로만 보고한다. 파일을 만들지 않는다.
 - `launcher.mjs --install --manifest-sha256 <검토된-runtime-manifest-SHA256>`: 명시적으로 사용자 runtime에 복사한다.
   기존 릴리스의 명령 의미와 구분하며 [Dots 준비 안내](DOTS-QUICKSTART.md)를 따른다.
-- `scripts/creation-tool.mjs`: 기존 MCP 도구를 같은 스키마 검증과 잠금으로 한 번씩 호출한다.
+- `scripts/creation-tool.mjs`: 작업 공간 MCP 도구(`mcp/server.mjs`)를 같은 스키마 검증과 잠금으로 프로세스 안에서 한 번씩 호출한다.
   등록용 로컬 세션을 읽지 않고 클라우드 계정 확인을 안내한다. 준비와 실행은 기존처럼 분리된다.
-- 로컬 stdio MCP는 예전 클라이언트 호환용으로 남는다. 통합 플러그인은 이를 자동 실행하지 않는다.
 
-클라우드 플러그인에 `requires_local_executor`나 로컬 stdio MCP를 넣지 않는다. 등록·조회는 클라우드 연결만으로 가능하다.
+클라우드 플러그인에 `requires_local_executor`나 로컬 명령으로 실행하는 MCP 서버를 넣지 않는다. 등록·조회는 클라우드 연결만으로 가능하다.
 ODDBOUT에 맡기는 제작은 호스팅 작업자에서 실행된다. 사용자가 직접 제작하는 경로를 선택한 경우에만
 전체 동작 제작·패키징을 위한 실행·파일 저장·대화 전달 기능이 있는 PC 또는 Dots 작업 공간이 필요하다.
 플러그인 설치만으로 그런 작업 공간이나 생성 구독이 생기는 것은 아니다.
@@ -76,7 +75,7 @@ Dots 대화에서의 MCP 연결을 뜻하지 않는다. 새 대화에서 현재 
 
 소스의 클라우드 도구에는 `prepare_fighter_registration`의 선택 인자 `fighterId`가 있어 기존 소유 선수의 패키지 갱신을
 지정할 수 있고, 생략하면 새 선수를 준비한다. `open_creator_homepage`는 고정된 공개 사이트 URL을 돌려준다.
-사이트 로그인은 별도이며 사용자가 MCP와 같은 계정인지 확인해야 한다. legacy stdio의 자동 일회용 로그인과 전체
+사이트 로그인은 별도이며 사용자가 MCP와 같은 계정인지 확인해야 한다. 자동 일회용 로그인 링크와 전체
 세션 전달은 권한 경계를 넘어가므로 통합 경로에 포함하지 않는다. 이 소스 변경은 `ai-fighter-mcp` 배포 후에만
 운영 서버에서 사용할 수 있다. 기능을 안내하기 전 실제 서버 `tools/list`에서 `open_creator_homepage`와 선택 인자
 `fighterId`가 노출되는지 확인한다. 소스에 있다는 사실만으로 배포나 서버 지원을 주장하지 않는다.

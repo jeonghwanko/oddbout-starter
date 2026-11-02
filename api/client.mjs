@@ -75,7 +75,7 @@ export async function writeSessionFile(configPath, config) {
 }
 
 /**
- * Several MCP processes may share one session file (desktop app, CLI, IDE). Supabase rotates the refresh
+ * Several processes may share one session file (generation host, admin, CLI). Supabase rotates the refresh
  * token on every refresh and ends the whole session when a token two rotations old is used. So a process
  * first adopts a newer session another process saved, and refreshes only under a lock file.
  * @param {string} configPath
@@ -125,23 +125,4 @@ export async function createRemoteClient(configPath, { createAuthClient = create
   return {
     request: async (route, options) => apiRequest(config.url, await token(), route, options),
   };
-}
-
-/**
- * A stable MCP tool catalog can start before login. Resolve the user's session on first use, without a restart.
- * @param {string} configPath
- * @param {{ createAuthClient?: typeof createClient }} [options]
- * @returns {RemoteClient}
- */
-export function createLazyRemoteClient(configPath, options = {}) {
-  let client;
-  return { request: async (route, requestOptions) => {
-    try {
-      client ??= createRemoteClient(configPath, options).catch(error => { client = undefined; throw error; });
-      return await (await client).request(route, requestOptions);
-    } catch (/** @type {any} */ error) {
-      if (error.code === 'ENOENT') throw new Error('client-sign-in-required');
-      throw error;
-    }
-  } };
 }

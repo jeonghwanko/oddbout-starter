@@ -2,14 +2,12 @@
 // Separate workspace setup, ODDBOUT connection, provider choice, generation access and parent delivery.
 // It never generates, never switches providers, and never proves that a preview was displayed.
 import { execFile } from 'node:child_process';
-import { access, readFile } from 'node:fs/promises';
+import { access } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { inspectSpriteEngine } from '../scripts/sprite-gen.mjs';
 import { checkTools } from '../scripts/sprite-tools.mjs';
-import { defaultSessionPath } from '../scripts/login.mjs';
-import { connectionAction } from '../api/connection-errors.mjs';
-import { readProject, probeConnections, checkAccount, pendingConnection, infrastructureItem, unverifiedCreation } from './connection-readiness.mjs';
+import { unverifiedCreation } from './connection-readiness.mjs';
 import { createEnvironmentStore } from './creation-environment.mjs';
 import { doctor as inspectDotsRuntime } from '../scripts/dots-workspace.mjs';
 import { readRecord, safePath } from '../scripts/dots-safety.mjs';
@@ -186,86 +184,6 @@ async function checkKitCore({ progress, present, fetchRemote = true, git = runGi
   return { ...result, reason: result.remoteChecked ? null : 'remote-unreachable-current-unknown' };
 }
 
-/**
- * Inspect saved/pending session presence, public routes and authenticated GET /me separately.
- * No new login request is started. The existing device login commands are offered only after public probes pass.
- * @param {{ remoteActive?: boolean, request?: import('../api/client.mjs').RemoteClient['request'], sessionPath?: string, root?: string,
- *   probe?: typeof import('./connection-readiness.mjs').probePublic, checkServer?: boolean }} [options]
- */
-export async function checkLogin({ remoteActive, request, sessionPath = defaultSessionPath(), root = kitRoot, probe, checkServer = true } = {}) {
-  /** @type {(file: string) => Promise<any>} */
-  const read = async file => { try { return JSON.parse(await readFile(file, 'utf8')); } catch { return null; } };
-  const saved = await read(sessionPath);
-  const hasSession = Boolean(saved && typeof saved.accessToken === 'string' && saved.accessToken && typeof saved.refreshToken === 'string' && saved.refreshToken);
-  const project = await readProject(root), flags = project ? ` ${project.flags}` : '';
-  const connections = await probeConnections(project, { checkServer, probe });
-  const account = await checkAccount({ hasSession, remoteActive, request, checkServer: checkServer && connections.api.status === 'reachable' });
-  const pending = await pendingConnection(sessionPath);
-  const available = connections.api.status === 'reachable' && connections.api.deviceLogin === 'available' && connections.homepage.status === 'reachable';
-  const routeReason = secureRouteReason(connections);
-  const otherDevice = available
-    ? { status: 'available', secureRoute: 'device-connection', start: `npm run login -- --device${flags}`, wait: 'npm run login -- --device-wait',
-        when: '봇 VM처럼 사용자 브라우저가 다른 기기에 있을 때. start가 보여주는 링크와 공개 확인 코드를 사용자에게 전하고,'
-          + ' 사용자가 홈페이지에서 본인 Google 로그인 후 코드가 같은지 확인해 승인하면 wait를 실행한다.' }
-    : { status: 'blocked-no-secure-route', secureRoute: null,
-        reason: routeReason, when: '연결 가능 여부를 확인하기 전에는 새 로그인이나 콜백 주소 전달을 시작하지 않는다.' };
-  const routeAction = connections.api.nextAction ?? connections.homepage.nextAction
-    ?? (routeReason === 'server-without-device-login' ? { actor: 'service-operator', code: 'device-login-deployment-required',
-      message: '서비스 운영자가 기존 기기 로그인 API와 홈페이지 승인 화면의 배포를 확인해야 한다. 일반 제작 사용자에게 배포를 요구하지 않는다.' }
-      : connectionAction(/** @type {string} */ (routeReason))); // null gets its default action
-  const needsSignIn = account.status === 'sign-in-required', offersSignIn = needsSignIn && available;
-  const action = { id: 'connect-oddbout', label: 'ODDBOUT 연결', status: connectActionStatus(account.status, available, pending.status),
-    actor: offersSignIn ? 'user' : routeAction.actor,
-    steps: ['ODDBOUT 연결', '본인 Google 계정 로그인', '화면의 공개 확인 코드 확인 및 연결 승인'],
-    ...(offersSignIn && ['none', 'expired'].includes(pending.status) ? { command: otherDevice.start } : {}),
-    ...(offersSignIn && pending.status === 'pending' ? { resumeCommand: otherDevice.wait } : {}) };
-  const nextAction = loginNextAction(account, available, routeAction, action.status);
-  let status = account.status;
-  if (needsSignIn && !available) status = 'blocked';
-  else if (needsSignIn && pending.status === 'pending') status = 'pending-approval';
-  return { ...account, status, accountStatus: account.status, label: 'ODDBOUT 계정 연결', savedSessionPresent: hasSession, pendingConnection: pending.status,
-    remoteToolsActive: Boolean(remoteActive), infrastructure: infrastructureItem(project, connections), action: { ...action, actor: nextAction.actor }, nextAction,
-    routes: {
-      sameDevice: connections.api.status === 'reachable'
-        ? { status: 'available', command: `npm run login --${flags}`, when: '사용자 브라우저가 작업 공간과 같은 기기에 있을 때만 사용한다. VM 작업을 PC로 옮기지 않는다.' }
-        : { status: 'blocked', reason: connections.api.reason },
-      otherDevice,
-    },
-    note: '키트는 연결 행동·상태와 기존 CLI 명령을 제공한다. Dots 자체 버튼을 설치하지 않는다. 호스트가 버튼을 지원하지 않으면 같은 이름의 선택지와 공식 링크로 안내한다.'
-      + ' 콜백 주소나 토큰을 대화에 붙여 넣도록 요청하지 않고, 안전하다고 안내하지 않는다.' };
-}
-
-/** @param {Awaited<ReturnType<typeof probeConnections>>} connections */
-function secureRouteReason({ api, homepage }) {
-  if (api.status !== 'reachable') return api.reason;
-  if (api.deviceLogin !== 'available') return 'server-without-device-login';
-  return homepage.status !== 'reachable' ? homepage.reason : null;
-}
-
-/** @param {string} accountStatus @param {boolean} available @param {string} pending */
-function connectActionStatus(accountStatus, available, pending) {
-  if (accountStatus === 'connected') return 'connected';
-  if (accountStatus === 'restart-required') return 'restart-required';
-  if (!available) return 'blocked';
-  if (accountStatus !== 'sign-in-required') return 'check-required';
-  if (pending === 'pending') return 'awaiting-approval';
-  return pending === 'unknown' ? 'check-required' : 'available';
-}
-
-/**
- * @param {Awaited<ReturnType<typeof checkAccount>>} account @param {boolean} available
- * @param {{ actor: string, code: string, message: string }} routeAction @param {string} actionStatus
- */
-function loginNextAction(account, available, routeAction, actionStatus) {
-  if (account.status === 'restart-required') return { actor: 'agent', code: 'restart-mcp',
-    message: '저장된 세션을 보존하고 MCP를 다시 시작해 계정 상태를 조회한다. 다시 로그인하거나 캐릭터를 재생성하지 않는다.' };
-  if (!available && account.status !== 'connected') return routeAction;
-  const needsSignIn = account.status === 'sign-in-required';
-  return account.nextAction ?? { actor: needsSignIn ? 'user' : 'agent', code: actionStatus,
-    message: needsSignIn ? '본인이 시작한 요청과 코드가 같은지 확인하고 연결을 승인한다. 기존 승인 대기는 새로 시작하지 않고 이어간다.'
-      : '계정 상태를 확인한 뒤 기존 제작 기록에서 재개한다. 연결 확인은 생성·등록 실행 승인이 아니다.' };
-}
-
 /** The generation-account choice: options to show; the user's stated or elicited answer only. Never inferred. @param {string | null} [choice] */
 export function accountItem(choice) {
   const option = ACCOUNT_OPTIONS.find(o => o.id === choice);
@@ -298,13 +216,11 @@ export async function elicitAccount(lowLevelServer) {
 }
 
 /**
- * @param {{ store?: CreationStore, jobs?: JobStore, sessionId?: string, account?: string, purpose?: string, remoteActive?: boolean,
+ * @param {{ store?: CreationStore, jobs?: JobStore, sessionId?: string, account?: string, purpose?: string,
  *   lowLevelServer?: import('@modelcontextprotocol/sdk/server/index.js').Server, kit?: Omit<KitOptions, 'progress'>,
- *   tools?: Parameters<typeof checkTools>[0], login?: Parameters<typeof checkLogin>[0], registrationMode?: string,
- *   environment?: EnvironmentStore }} [options]
+ *   tools?: Parameters<typeof checkTools>[0], environment?: EnvironmentStore }} [options]
  */
-export async function checkReadiness({ store, jobs, sessionId, account, purpose = 'generation', remoteActive, lowLevelServer, kit = {}, tools = {}, login = {},
-  registrationMode = 'local', environment } = {}) {
+export async function checkReadiness({ store, jobs, sessionId, account, purpose = 'generation', lowLevelServer, kit = {}, tools = {}, environment } = {}) {
   if (!['generation', 'connection', 'registration'].includes(purpose)) throw new Error('invalid-readiness-purpose');
   const needsGeneration = purpose === 'generation';
   const progress = await creationProgress({ store, jobs, sessionId });
@@ -316,15 +232,13 @@ export async function checkReadiness({ store, jobs, sessionId, account, purpose 
   let choice = account ?? savedChoice, elicitation = savedChoice && !account ? 'saved-environment' : 'not-needed';
   if (needsGeneration && !choice) ({ method: elicitation, choice } = await elicitAccount(lowLevelServer));
   const notRequired = { status: 'not-required', reason: 'no-generation-in-this-step', nextCommands: [] };
-  // A cloud workspace registers through the connected ODDBOUT tools; it never reads or offers a local account.
-  const loginItem = registrationMode === 'cloud'
-    ? { infrastructure: { status: 'not-required', reason: 'cloud-registration-route' }, status: 'connector-verification-required', userId: null,
-      route: 'oddbout-cloud', nextTools: ['get_profile', 'check_creation_readiness'],
-      note: 'Use the connected ODDBOUT tools in this conversation. Verify its account and readiness there. Do not run workspace login or transfer credentials. This result does not verify that connection.' }
-    : checkLogin({ remoteActive, ...login });
+  // The workspace registers through the connected ODDBOUT tools; it never reads or offers a local account.
+  const infrastructure = { status: 'not-required', reason: 'cloud-registration-route' };
+  const login = { status: 'connector-verification-required', userId: null, route: 'oddbout-cloud', nextTools: ['get_profile', 'check_creation_readiness'],
+    note: 'Use the connected ODDBOUT tools in this conversation. Verify its account and readiness there. Do not run workspace login or transfer credentials. This result does not verify that connection.' };
   const spriteRoot = kit.spriteRoot ?? path.join(kit.root ?? kitRoot, 'vendor', 'sprite-gen');
-  // The kit, its tools, the login and the workspace record are independent checks: run them together.
-  const [{ infrastructure, ...connection }, kitItem, toolsItem, environmentItem] = await Promise.all([loginItem,
+  // The kit, its tools and the workspace record are independent checks: run them together.
+  const [kitItem, toolsItem, environmentItem] = await Promise.all([
     needsGeneration ? checkKit({ progress, workspaceRoot: store?.root, ...kit }) : notRequired,
     // ffmpeg, ffprobe and img2webp -exact are required; RIFE only warns (loops cut as filmed).
     needsGeneration ? checkTools({ spriteRoot, python: path.join(spriteRoot, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'), ...tools }) : notRequired,
@@ -333,12 +247,12 @@ export async function checkReadiness({ store, jobs, sessionId, account, purpose 
       ? workspace.inspect().then(found => ({ ...found, matchesChoice: saved?.account === choice, certifiesGeneration: false }))
       : { status: 'workspace-required', readyForGeneration: false, certifiesGeneration: false },
   ]);
-  const items = { kit: kitItem, tools: toolsItem, infrastructure, login: connection,
+  const items = { kit: kitItem, tools: toolsItem, infrastructure, login,
     account: needsGeneration ? accountItem(choice) : notRequired, ...unverifiedCreation(choice), environment: environmentItem };
   const ready = ['ready', 'updated'].includes(items.kit.status) && !/** @type {KitResult} */ (items.kit).restartRequired && items.kit.nextCommands.length === 0 // a kit status
     && items.tools.status === 'ready' && items.account.status === 'chosen-unverified';
   return { purpose, kitAndAccountReady: ready, readyForGeneration: false,
-    readyForRegistration: items.login.status === 'connected' && /** @type {{ canSubmit?: boolean | null }} */ (items.login).canSubmit === true, progress, elicitation, items, // none on the cloud route
+    readyForRegistration: false, progress, elicitation, items, // the connected ODDBOUT tools check registration access
     resume: { preserveWorkspace: true, sessionIds: progress.sessions, automaticGeneration: false, automaticSubmission: false,
       nextAction: { actor: 'agent', code: 'resume-existing-work', message: '연결 복구 뒤 같은 작업 공간에서 check_creation_readiness를 다시 호출하고 get_creation_session·get_creation_job으로 기존 버전·선택·pending/unknown 결과를 회수한다. 새 폴더·재생성·재등록으로 우회하지 않는다.' } },
     meaning: 'kitAndAccountReady covers the kit, its required system tools (ffmpeg, ffprobe, img2webp with -exact) and provider choice only. Generation and parent display remain unverified by this tool; readyForGeneration stays false. Registration readiness means authenticated API access, not package approval or submission authorization.' };

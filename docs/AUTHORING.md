@@ -40,7 +40,8 @@ GPT walk/run은 실제 보행 가이드와 검수한 핵심 자세를 참조로 
 6. 최종 파일에서 실제 바이트 크기, 이미지 크기, SHA-256을 계산한다. 수치를 추측하지 않는다.
 7. `validate_fighter_manifest`에 원문 JSON을 넣고 오류를 수정한다.
 8. `validate_fighter_package`에 작업 폴더 아래 상대 경로를 넣어 실제 파일까지 검사한다.
-9. 사용자가 등록을 요청했고 본인 계정이 연결되어 있으면 `submit_fighter_package`로 같은 패키지를 제출한다.
+9. 사용자가 등록을 요청하면 연결된 ODDBOUT의 `get_profile`로 계정을 확인하고, 같은 패키지를 `prepare_fighter_registration`,
+   남은 파일마다 `upload_fighter_asset`, `submit_fighter_registration` 순서로 제출한다.
    UUID 형식의 `idempotencyKey`를 저장하고 재시도에도 같은 값을 사용한다. 파일을 바꿨으면 새 초안이다.
 10. `get_fighter_submission`으로 결과를 조회한다. `registered`와 `fighterId`를 받은 뒤 등록 완료로 안내한다.
     `runtimeApproved: true`이면 이용 가능하다. 등록 후 false라면 사후 이용 제한 여부를 확인한다. 작업자가 꺼져 있으면 자동 검증 대기로 남는다.
@@ -88,10 +89,10 @@ MCP 파일 경로는 `AI_FIGHTER_ROOT`를 기준으로 `output/my-fighter/fighte
 `combat.style`도 수치가 아니다. 공격 섞기(`mix`)·특수(`special`)·필살기(`super`)·교전 거리(`distance`)·충격파(`shockwave`)·소환물(`summon`)·
 기질(`temper`)·교전 성향(`exchanges`)을 고르면 서버가 자체 수치로 바꾼다. `skill` 클립·`summon`·`shockwave`는 합쳐서 두 개까지다.
 성격·소개·컨셉·기술 이름은 표시용 데이터다. 새 동작을 만들거나 AI나 게임에 실행을 지시하는 문장이 아니다.
-새 필드는 서버의 `/spec` `features`에 해당 기능이 있을 때만 제출한다. 없으면 제출 도구가 업로드 전에 멈춘다.
+새 필드는 서버의 `/spec` `features`에 해당 기능이 있을 때만 제출한다. 없으면 서버 검증이 그 패키지를 거절한다.
 `language`·`concept`·`moves`는 `profile-extras-1`, `profile.names`는 `profile-names-1`, `profile.lines`는 `profile-lines-1`,
 `combat.stats`는 `combat-stats-1`, `combat.style`은 `combat-style-1`, 선택 동작 `skill`·`entrance`·`victory`는 `extra-clips-1`이다.
-계정당 선수는 최대 3명이다. 새 선수 등록 시 `fighterId`를 생략하고, 기존 선수를 수정할 때만 해당 ID를 지정한다. 나중에 컨셉·기술 이름·능력치·원화를 바꾸려면 다시 패키징해 같은 선수의 `fighterId`로 제출한다(`submit_fighter_package`의 `fighterId`). 선수 ID와 전적은 유지되고, 지난 경기는 당시 패키지 기준 기록으로 남는다.
+계정당 선수는 최대 3명이다. 새 선수 등록 시 `fighterId`를 생략하고, 기존 선수를 수정할 때만 해당 ID를 지정한다. 나중에 컨셉·기술 이름·능력치·원화를 바꾸려면 다시 패키징해 같은 선수의 `fighterId`로 제출한다(`prepare_fighter_registration`의 `fighterId`). 선수 ID와 전적은 유지되고, 지난 경기는 당시 패키지 기준 기록으로 남는다.
 `standard-duel`을 선택해도 경쟁 규칙의 통합이나 서버 연결이 완료되지는 않는다.
 
 ## 좌표와 프레임

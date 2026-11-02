@@ -238,7 +238,7 @@ test('prepared connection command is revision-bound and executes no generation',
 test('MCP connection tools are discoverable and configure without logging in or granting a permission', async t => {
   const root = await mkdtemp(path.join(tmpdir(), 'fighter-environment-mcp-'));
   t.after(() => rm(root, { recursive: true, force: true }));
-  const server = createServer({ root, registrationMode: 'cloud' });
+  const server = createServer({ root });
   const client = new Client({ name: 'environment-test', version: '1' });
   const [a, b] = InMemoryTransport.createLinkedPair(); await server.connect(a); await client.connect(b);
   t.after(async () => { await client.close(); await server.close(); });

@@ -23,7 +23,7 @@ const runtimeFiles = [
   'scripts/dots-workspace.mjs', 'scripts/dots-start.mjs', 'scripts/dots-source.mjs',
   'docs/DOTS-QUICKSTART.md', 'docs/DOTS-START.md',
   'scripts/login.mjs', 'scripts/gait.mjs', 'scripts/contact.mjs', 'scripts/creation-context.mjs',
-  'scripts/check-creation-delivery.mjs', 'scripts/check-connection.mjs', 'docs/DELIVERY.md',
+  'scripts/check-creation-delivery.mjs', 'docs/DELIVERY.md',
   'tools/ai-fighter/gait.mjs', 'tools/ai-fighter/contact_evidence.py', 'tools/ai-fighter/validate-package.mjs',
   'docs/DOT-CREATION.md', 'docs/AUTHORING.md', 'docs/CREATION-UX.md', 'docs/GAIT-REVIEW.md',
   'docs/FOOT-EVIDENCE.md', 'docs/LOCAL-PLUGIN.md', 'docs/GAME-CREATION-CONTEXT.md', 'docs/OPEN-REGISTRATION.md',
@@ -36,8 +36,8 @@ const runtimeDirectories = ['mcp', 'contracts/ai-fighter'];
 const edgeOnlyFiles = ['mcp/cloud.mjs', 'mcp/file-input-probe.mjs', 'mcp/creator-sources.mjs'];
 /** @type {(file: string) => boolean} */
 const edgeOnly = file => edgeOnlyFiles.includes(file) || file.startsWith('mcp/cloud/');
-const runtimeScripts = ['start', 'login', 'logout', 'sprite:setup', 'sprite:status', 'sprite',
-  'fighter:pack', 'fighter:gait', 'fighter:contact', 'validate', 'creation:context', 'creation:delivery', 'creation:check', 'creation:run', 'creation:tool',
+const runtimeScripts = ['login', 'logout', 'sprite:setup', 'sprite:status', 'sprite',
+  'fighter:pack', 'fighter:gait', 'fighter:contact', 'validate', 'creation:context', 'creation:delivery', 'creation:run', 'creation:tool',
   'dots:doctor', 'dots:bootstrap', 'dots:resume', 'dots:start', 'dots:source', 'mcp:check'];
 
 // Presentation media in the upstream documentation is not runtime/package data.

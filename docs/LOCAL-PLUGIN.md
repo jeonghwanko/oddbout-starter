@@ -144,7 +144,7 @@ media must be shown in the current conversation; a dedicated comparison UI is no
 
 ## Project tools and evidence
 
-A configured `AI_FIGHTER_ROOT` enables these local tools:
+The `creation:tool` CLI's absolute workspace argument enables these local tools:
 
 | Tool | Purpose |
 | --- | --- |
@@ -290,9 +290,9 @@ interrupted lock.
 node --test test/creator-plugin.test.mjs test/creation-context.test.mjs test/mcp.test.mjs
 ```
 
-Tests cover real MCP startup from the built plugin, preserved selections, dependency freshness, group
-gates, concurrent edits, idempotent execution, unknown outcomes, preflight, path safety and existing
-validation/registration behavior. Generation calls are stubbed and labeled as such. Tests do not use
+Tests cover the workspace MCP tools in process and through the built plugin's `creation:tool`, preserved
+selections, dependency freshness, group gates, concurrent edits, idempotent execution, unknown outcomes,
+preflight, path safety and package validation. Generation calls are stubbed and labeled as such. Tests do not use
 generation accounts, register fighters, or run CI.
 
 Packaging follows the official [plugin format](https://developers.openai.com/plugins/build/plugins)

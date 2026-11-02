@@ -1,14 +1,14 @@
 # ODDBOUT 연결과 제작 준비
 
-먼저 현재 대화에 연결한 MCP 종류를 확인한다. **클라우드 OAuth 연결**과 **작업 공간의 로컬 stdio 기기 연결**은
-서로 다른 인증 경로이며, 도구 이름이 같아도 준비 응답의 구조가 다르다.
+ODDBOUT 계정 연결과 등록은 대화에 연결한 **호스팅 ODDBOUT MCP**가 맡는다. 작업 공간 도구(`creation:tool`)는 제작과 검증만
+하며 등록용 로그인을 읽거나 제안하지 않는다. 두 도구에 같은 이름(`check_creation_readiness`)이 있어도 준비 응답의 구조가 다르다.
 
 | 사용 경로 | 연결과 첫 확인 | 중단 후 재개 |
 | --- | --- | --- |
 | Dots/Grok의 호스팅 ODDBOUT MCP (`mcp/cloud.mjs`) | Dots는 기존 ODDBOUT 앱을 선택·재사용하고, 다른 호스트의 최초 연결은 [CLOUD-MCP.md](CLOUD-MCP.md)를 따른다. 대상 대화에서 `get_profile`과 cloud `check_creation_readiness(purpose: "connection")` 확인 | 같은 계정의 `get_hosted_fighter`로 저장된 작업 조회. 아래 클라우드 절과 [호스팅 복구](CLOUD-MCP.md#호스팅-작업의-중단과-미리보기-복구) 참고 |
-| PC 또는 준비된 VM의 로컬 stdio MCP (`mcp/stdio.mjs`) | 로컬 `check_creation_readiness(purpose: "connection")` → **ODDBOUT 연결** → 본인 Google 로그인·공개 기기 코드 확인·승인 | 기존 기기 요청과 로컬 제작 세션·작업 조회. 아래 로컬 절 참고 |
+| PC 또는 준비된 VM의 작업 공간 도구 (`npm run creation:tool`, `scripts/creation-tool.mjs`) | 작업 공간 `check_creation_readiness`로 키트·도구·생성 경로를 확인한다. 계정과 등록은 위 클라우드 연결로 확인 | 로컬 제작 세션·작업 조회. 아래 작업 공간 절 참고 |
 
-클라우드 연결에 `connect_oddbout`, 로컬 로그인, PC 설치를 요구하지 않는다. 로컬 연결에서도 등록 계정, 생성 접근과
+클라우드 연결에 로컬 로그인, PC 설치를 요구하지 않는다. 작업 공간에서도 등록 계정, 생성 접근과
 결과 전달은 서로 다른 상태다. VM 설치와 네트워크 준비는 초기 환경 준비자가 처리하고 준비된 작업 공간을 재사용한다.
 
 ChatGPT/Dots에서 가져온 플러그인의 `mcp.json`은 클라우드 앱 연결과 다르다. 원격 HTTPS MCP가 있는 플러그인도 데스크톱 전용일 수 있으며
@@ -26,49 +26,33 @@ ChatGPT/Dots에서 가져온 플러그인의 `mcp.json`은 클라우드 앱 연�
 기존 플러그인/연결 제거는 사용자의 명시 요청이 있고, 같은 Dots 대화의 대체 연결에서 `get_profile`이 성공해
 동일한 의도된 계정을 확인한 뒤에만 한다. 기본 동작은 제거하지 않는 것이다.
 
-## 로컬 stdio 사용자가 보는 연결
+## 작업 공간 도구의 연결 확인
 
-1. 에이전트는 `check_creation_readiness(purpose: "connection")`으로 연결 상태만 읽는다.
-   완성된 패키지를 등록할 때는 `purpose: "registration"`이다. 이 두 단계에서는 생성 구독을 묻거나 Python 설치·키트 업데이트를 하지 않는다.
+1. 에이전트는 작업 공간 `check_creation_readiness`를 캐릭터의 첫 생성 전, 작업 공간 재시작 뒤, 등록 전에 부른다.
+   연결만 확인할 때 `purpose: "connection"`, 완성된 패키지를 등록할 때 `purpose: "registration"`이다.
+   이 두 단계에서는 생성 구독을 묻거나 Python 설치·키트 업데이트를 하지 않는다.
    새로운 생성 준비에만 기본 `purpose: "generation"`을 사용하고 `account`는 사용자가 실제 선택한 경우에만 넘긴다.
-2. `items.login.action`의 이름은 **ODDBOUT 연결**이다. 호스트가 버튼을 지원하면 이 행동을 연결하고,
-   지원하지 않으면 같은 이름의 선택지와 공식 링크로 안내한다. 키트가 Dots 자체 UI를 설치하거나 제어하지는 않는다.
-3. 사용자가 연결 또는 등록을 요청하고 `action.status: "available"`이면 `connect_oddbout(action: "start")`를 호출한다.
-   기존 기기 로그인 경로를 MCP에서 직접 실행하며, 에이전트가 셸 명령·프로젝트 키를 조립할 필요가 없다.
-   사용자는 반환된 `verificationUrl`에서 Google 로그인 후 `userCode`가 같은지 확인하고 승인한다.
-   본인이 시작하지 않은 요청은 승인하지 않는다. 콜백 주소·토큰을 대화로 복사하지 않는다.
-4. `awaiting-approval`이면 이미 시작된 요청이다. 다시 `start`해도 같은 공개 링크를 반환한다.
-   사용자가 승인하면 `connect_oddbout(action: "wait")`로 한 번 조회한다. 아직 대기 중이면 `retryAfterSeconds`를 지켜 조회한다.
-   긴 폴링으로 대화를 붙잡거나 새 요청을 만들지 않는다. 네트워크 오류에도 기존 요청을 보존한다.
-5. 로그인 전부터 등록 도구가 노출되며 실제 호출 시 현재 세션을 확인한다. 로그인·같은 사용자 재로그인·로그아웃 때문에
-   MCP를 재시작할 필요가 없다. 다른 사용자로 세션이 바뀌면 진행 중 제출을 차단한다.
-   연결 도구는 승인 교환 뒤 인증된 `GET /me`를 확인한다. 공개 `/spec` 응답이나 로컬 세션 파일만으로
-   계정 연결 완료를 표시하지 않는다. 생성 계정과 같은 계정인지 역시 별도 근거가 없으면 `unknown`이다.
+2. 응답의 `items.login`은 `status: "connector-verification-required"`, `route: "oddbout-cloud"`,
+   `nextTools: ["get_profile", "check_creation_readiness"]`다. 작업 공간은 저장된 등록 세션을 읽지 않고 로그인을 제안하지 않으며,
+   `readyForRegistration`은 항상 `false`다. 계정은 대화에 연결한 ODDBOUT의 `get_profile`과 `check_creation_readiness`로 확인한다.
+3. 사용자가 최종 패키지의 등록을 요청하면 클라우드 `prepare_fighter_registration` → `upload_fighter_asset` →
+   `submit_fighter_registration` → `get_fighter_submission` 순서로 진행한다. 클라우드 도구가 없거나 실패해도 작업 공간에서
+   로그인하거나 다른 계정으로 바꾸지 않는다. 기존 제출과 작업을 먼저 조회한다.
 
-`action.status: "blocked"` / `check-required`이면 새 로그인을 시작하지 않고 `nextAction`의 담당자·이유를 안내한다.
-정상 연결된 사용자는 캐릭터마다 다시 로그인하지 않는다. 실제 인증 만료와 VM 네트워크 실패를 구분한다.
-이미 인증된 등록 API가 정상이라면 홈페이지 장애가 별도로 있어도 등록 연결을 차단하지 않는다.
-
-구형 호스트에 `connect_oddbout` 도구가 없다면 반환된 CLI `command`와 `resumeCommand`를 쓴다.
-준비 도구 자체가 보이지 않을 때는 에이전트가 키트 디렉터리에서 `npm run creation:check -- connection`을 실행한다.
-등록만 점검하려면 `npm run creation:check -- registration`이다. 이 명령은 생성·등록·로그인 시작·키트 업데이트를 하지 않는다.
-이미 해당 실행 호스트에 연결된 MCP라면 새 코드를 설치한 뒤 한 번 재시작해 도구 목록을 갱신한다.
-구형 프로세스가 반환하는 `restart-required`는 이 런타임 갱신 문제이며 Google 로그인을 반복해서 해결하지 않는다.
-호스트 연결 자체가 없을 때의 조치는 다음 절과 다르다. VM 안에서 stdio 서버의 `tools/list`가 성공한 것만으로
-Dots 대화에 도구가 연결됐다고 보고하지 않는다.
+VM 안에서 작업 공간 도구 목록(`creation:tool list`)이 조회된 것만으로 Dots 대화에 ODDBOUT 도구가 연결됐다고 보고하지 않는다.
 
 ## Dots/Grok 클라우드의 MCP 연결 조건
 
 이 저장소에는 HTTPS MCP 구현(`mcp/cloud.mjs`)과 공개 주소 `https://mcp.oddbout.com/mcp`가 있다.
 클라우드 OAuth 연결 주소·Grok의 로그인 먼저 주소·플러그인 포함 여부는 [CLOUD-MCP.md](CLOUD-MCP.md)를 따른다.
 `deploy/creator-site.json`의 등록 REST API는 MCP URL이 아니므로 그 주소에 임의로 `/mcp`를 붙이지 않는다.
-PC의 stdio 설치·`config.toml`·로그인 세션은 Dots/Grok에 자동 설치되거나 공유되지 않는다.
+PC의 `config.toml`·CLI 로그인 세션은 Dots/Grok에 자동 설치되거나 공유되지 않는다.
 로컬 서버를 인증 없이 공개하거나 다른 사용자의 작업 공간으로 공유하는 방식은 이 클라우드 연결의 대안이 아니다.
 
 1. 현재 호스트에서 실제 ODDBOUT 커넥터를 선택하고 `get_profile`로 의도한 등록 계정인지 확인한다.
    도구 목록·공개 `/spec`만 조회된 상태는 사용자 인증 완료가 아니다.
 2. 이 커넥터의 `check_creation_readiness(purpose: "connection")`를 읽는다. 응답은
-   `scope: "cloud-registration-connection"`, `account`, `registration`이며 아래 로컬 `items.*` 표와 다르다.
+   `scope: "cloud-registration-connection"`, `account`, `registration`이며 아래 작업 공간 `items.*` 표와 다르다.
    연결이 정상이더라도 `generation`, `delivery`, `package`는 실제 증거가 생기기 전까지 `unverified`다.
 3. 호스팅 생성을 이어갈 때는 저장된 `jobId`로 `get_hosted_fighter`를 호출한다. ID가 없으면 원래 `idempotencyKey`로 읽기만 하는 조회를 한다.
    둘 다 없으면 최근 다섯 작업부터 확인한다. 키 조회의 `not-found`는 원래 신청이 아직 실행 중일 때도 나오므로 재신청 근거가 아니다.
@@ -78,32 +62,32 @@ PC의 stdio 설치·`config.toml`·로그인 세션은 Dots/Grok에 자동 설�
 4. 인증 만료라면 지원되는 OAuth 연결을 복구하고 `get_profile`을 다시 확인한다. 다른 계정이면 기존 작업이 안 보일 수 있다.
    같은 계정으로 돌아온 뒤 기존 작업의 상태와 미리보기를 회수하며 새 신청·수정·취소를 자동 실행하지 않는다.
 
-VM 셸의 CONNECT 403과 네이티브 커넥터 실패를 구분한다. VM에서 stdio `tools/list`가 성공한 것만으로
+VM 셸의 CONNECT 403과 네이티브 커넥터 실패를 구분한다. VM에서 작업 공간 도구 목록이 조회된 것만으로
 대화의 커넥터 연결을 증명할 수도 없다. 실제 Dots/Grok 도구 호출·계정 확인·대화 표시를 각각 기록한다.
 [CLOUD-MCP.md](CLOUD-MCP.md)의 과거 Dots 검증 기록은 해당 시점의 증거이며 현재 Grok 연결·호스팅 생성·복구 성공을 대신하지 않는다.
 
-## 로컬 준비 도구가 분리해서 보고하는 상태
+## 작업 공간 준비 도구가 분리해서 보고하는 상태
 
 | 응답 | 의미와 한계 |
 | --- | --- |
 | `items.kit` | 체크아웃·패치·설치 상태. 캐릭터 작업 중에는 업데이트하지 않음 |
-| `items.infrastructure.targets.registrationApi` | 공개 `/spec` 도달 여부와 서버의 기기 로그인 지원 광고. 사용자 인증·등록 성공은 아님 |
-| `items.infrastructure.targets.homepage` | 홈페이지 HTTP 도달 여부. Google 로그인·승인 화면의 실제 동작 완료는 아님 |
-| `items.infrastructure.targets.library` | 선택한 VM Library helper에 필요한 호스트 안내. 키트가 helper를 호출하지 않으므로 `unverified` |
-| `items.login` | 저장된 세션 존재, 기기 승인 대기, 인증된 `/me` 결과와 제출 허용 여부. 원문 토큰·기기 비밀 코드는 반환하지 않음 |
+| `items.tools` | ffmpeg·ffprobe·img2webp(`-exact`)·RIFE 상태와 설치 명령. RIFE는 경고만 함 |
+| `items.infrastructure` | `status: "not-required"`, `reason: "cloud-registration-route"`. 작업 공간은 등록 API·홈페이지에 접속하지 않음 |
+| `items.login` | `connector-verification-required`: 계정·등록 접근은 연결된 클라우드 도구로 확인. 저장된 세션을 읽지 않음 |
 | `items.account` | 사용자가 고른 GPT/Grok 경로. 구독·한도·생성 성공을 보증하지 않음 |
 | `items.generation` | readiness가 실제 생성 도구를 호출하지 않으므로 `unverified`(사용자가 멈춤을 선택하면 `stopped`) |
 | `items.delivery` | 로컬 저장, Library 저장, 부모 대화 표시, 사용자 선택을 분리. 이 도구는 실제 전달을 관찰하지 않음 |
+| `items.environment` | 이 작업 공간에 기록된 생성 환경과 사전 조건. 기록일 뿐 생성 가능을 보증하지 않음 |
 
 `kitAndAccountReady`는 키트와 생성 경로 선택만 확인한다. 기존 `readyForGeneration`은 실제 생성·전달을 확인하는
 기능이 이 도구에 없으므로 `false`다. 이 값으로 사용자 요청을 거부하거나 확인용 생성을 하지 않는다.
 요청된 첫 생성은 [DELIVERY.md](DELIVERY.md)의 실제 도구·환경·계정·모델·비용·전달 사전 조건을 별도로 확인한 뒤 진행한다.
-`readyForRegistration`도 인증된 API 접근과 `canSubmit`만 뜻한다. 최종 패키지 검수·사용자 등록 요청을 대신하지 않는다.
+작업 공간의 `readyForRegistration`은 항상 `false`다. 등록 접근은 클라우드 `check_creation_readiness`가 보고하며, 그것도 최종 패키지 검수·사용자 등록 요청을 대신하지 않는다.
 
 생성 모델 문자열, 로그인, 도구 목록, `creation:delivery` 기록 검사로 라이브 생성이나 부모 화면 전달 성공을 만들지 않는다.
 기존 결과가 있으면 회수·표시하고, `pending`·`unknown`을 재생성 허가로 바꾸지 않는다.
 
-## 로컬/VM 실행 공간의 초기 환경 준비자 단계
+## 초기 환경 준비자 단계
 
 먼저 **어떤 클라우드 실행 환경인지** 확인한다. 아래 설정은 서로 대체하지 않는다.
 
@@ -127,14 +111,14 @@ VM 셸의 CONNECT 403과 네이티브 커넥터 실패를 구분한다. VM에서
 시각·채팅 식별자·Work 스위치 상태·CONNECT 결과를 플랫폼 지원에 전달할 근거로 정리한다.
 
 웹 검색·연결된 앱의 성공은 VM 셸의 네트워크 허용을 뜻하지 않는다. 실패한 바로 그 환경에서 재검사해야 한다.
-키트의 공개 진단·등록 API·Google 세션 교환/갱신은 `api/runtime-fetch.mjs`로 환경의 HTTP_PROXY/HTTPS_PROXY와
+키트의 게임 제작 맥락·도구 내려받기와 키트 로그인(`npm run login`)의 등록 API·Google 세션 교환/갱신은 `api/runtime-fetch.mjs`로 환경의 HTTP_PROXY/HTTPS_PROXY와
 NO_PROXY를 사용한다. Node 22.12에서도 동작하도록 Undici EnvHttpProxyAgent를 포함하며 별도 실행 옵션을 사용자에게
 요구하지 않는다. 상속된 CA 신뢰와 TLS 검증을 유지하고, 프록시 오류 때 직접 연결로 재시도하지 않는다.
 이 전송 호환성은 프록시의 허용 정책을 변경하지 않는다.
 설정을 변경할 수 있는 공식 도구가 없으면 확인된 실패 호스트와 환경별 설정 경로를 한 번 안내한다.
 서버 방화벽·DNS·인증 정책을 추정해서 바꾸거나 별도 프록시를 만들어 우회하지 않는다.
 
-`networkSettingsManagedByKit: false`가 명시되어 있다. 이 저장소의 도구에는 공식 VM 네트워크 허용목록이나 Republish를
+이 저장소의 도구에는 공식 VM 네트워크 허용목록이나 Republish를
 변경하는 기능이 없다. 에이전트가 자동 처리했다고 말하거나 우회 프록시·업로드를 만들지 않는다.
 
 준비자는 선택한 VM의 공식 관리 화면에서 다음 호스트와 설치·선택한 생성 도구의 요구 주소를 확인한다.
@@ -155,14 +139,13 @@ NO_PROXY를 사용한다. Node 22.12에서도 동작하도록 Undici EnvHttpProx
 | --- | --- |
 | `network-connect-forbidden` | `environment-preparer`: CONNECT/tunnel 403은 서비스에 도달하기 전 연결 차단. VM 허용·게시 상태를 확인. Google 재로그인으로 해결하려 하지 않음 |
 | `network-timeout`, `network-dns-failed`, `api-unreachable` | `environment-preparer`: 네트워크를 확인하되 정보가 없으면 허용목록 누락·인증 오류로 단정하지 않음 |
-| 인증된 계정 조회의 `authentication-required`, `client-sign-in-required`, HTTP 401 | `user`: 지원되는 ODDBOUT 연결로 본인 계정 재인증. 네트워크가 막혔으면 먼저 복구. 공개 준비 주소의 401은 `service-operator`가 경로 설정 확인 |
+| 키트 로그인 세션의 `authentication-required`, `client-sign-in-required`, HTTP 401 | `user`: `npm run login`(다른 기기의 브라우저면 `--device`)으로 본인 계정 재인증. 네트워크가 막혔으면 먼저 복구. 클라우드 도구의 인증 오류는 그 연결의 지원되는 복구 절차를 따름 |
 | 서비스 HTTP 403 | `service-operator`: 계정·서비스 정책을 확인. HTTP 403 자체를 CONNECT 403으로 바꾸지 않음 |
-| `server-without-device-login` | `service-operator`: 기존 기기 로그인 API와 홈페이지 승인 화면의 배포 확인. 키트가 자동 배포하지 않음 |
-| `server-not-checked`, 잘못된 공개 설정·응답 | 미검증으로 유지하고 필요한 설정·읽기 전용 검사를 수행 |
+| `device-login-unavailable` | `service-operator`: 기존 기기 로그인 API와 홈페이지 승인 화면의 배포 확인. 키트가 자동 배포하지 않음 |
 
 로컬/VM 복구 후 새 작업 폴더를 만들지 않는다. `resume.sessionIds`와 `get_creation_session`, `get_creation_job`으로 기존 버전·선택·시도 기록을
-읽고 중단한 단계에서 재개한다. 남은 기기 승인도 기존 요청에서 이어간다. readiness는 생성·업로드·등록을 자동 실행하지 않는다.
+읽고 중단한 단계에서 재개한다. 키트 로그인의 남은 기기 승인도 기존 요청에서 이어간다(`--device-wait`). readiness는 생성·업로드·등록을 자동 실행하지 않는다.
 
-로컬 경로에서는 키트의 상태 응답, 기존 CLI 연결, 오류 분류와 복구 안내를 검증한다. 클라우드 구현·검증 범위는 [CLOUD-MCP.md](CLOUD-MCP.md)를 따른다.
-실서비스 기기 로그인 API·홈페이지 승인 화면 배포, Dots 버튼 렌더링, VM 네트워크 설정 변경은 각각 해당 서비스·호스트의 범위다.
+작업 공간 경로에서는 키트의 상태 응답, 오류 분류와 복구 안내를 검증한다. 클라우드 구현·검증 범위는 [CLOUD-MCP.md](CLOUD-MCP.md)를 따른다.
+실서비스 기기 로그인 API·홈페이지 승인 화면 배포, VM 네트워크 설정 변경은 각각 해당 서비스·호스트의 범위다.
 로컬 모의 응답 테스트를 그 배포나 라이브 사용자 연결 성공으로 보고하지 않는다.

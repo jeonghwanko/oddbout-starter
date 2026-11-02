@@ -15,7 +15,7 @@ export async function creationTool({ workspace, name, args = {}, contextRequest 
   const root = await realpath(workspace);
   if (!(await stat(root)).isDirectory()) throw Error('workspace-directory-required');
   // Registration belongs to the connected ODDBOUT account. Never inherit a CLI login or its tokens.
-  const server = createServer({ root, contextRequest, registrationMode: 'cloud' });
+  const server = createServer({ root, contextRequest });
   const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'oddbout-workspace', version: '0.5.4' });
   try {
