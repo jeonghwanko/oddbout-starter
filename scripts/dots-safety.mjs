@@ -4,28 +4,22 @@ import { access, lstat, readFile, readdir } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
+import { absoluteParts, fileSha256, isProtected, pathWithoutLinks, relativeParts } from '../plugins/ai-fighter/local-files.mjs';
 
 /** @type {(value: string | Uint8Array) => string} */
 export const sha256 = value => createHash('sha256').update(value).digest('hex');
 /** @type {(code: string) => never} */
 export const fail = code => { throw Error(code); };
 export const INSTALL_OUTCOME_UNKNOWN = 79;
-const protectedPart = /^(?:\.codex|\.grok|\.aws|\.ssh|sessions|auth\.json|client\.json|pending-login\.json)$/i;
 /** @param {unknown} value checked here @param {{ root?: string }} [options] */
 export async function safePath(value, { root } = {}) {
   if (typeof value !== 'string' || !value || /[\x00-\x1f]/.test(value)) fail('path-not-allowed');
-  if (root && (path.isAbsolute(value) || /[\\:?=#]/.test(value) || value.split('/').some(p => !p || p === '.' || p === '..'))) fail('path-not-allowed');
+  if (root && !relativeParts(value, /[\\:?=#]/)) fail('path-not-allowed');
   if (!root && !path.isAbsolute(value)) fail('absolute-path-required');
-  const target = root ? path.join(root, value) : path.resolve(value);
-  const parsed = path.parse(target), parts = target.slice(parsed.root.length).split(path.sep);
-  if (parts.some((p, i) => protectedPart.test(p) &&
-    !(p.toLowerCase() === '.codex' && parts[i + 1] === 'worktrees' && parts.length > i + 3))) fail('protected-path-not-allowed');
-  let current = parsed.root;
-  for (const part of parts) {
-    current = path.join(current, part);
-    const info = await lstat(current).catch(e => { if (e.code !== 'ENOENT') throw e; return null; });
-    if (info?.isSymbolicLink()) fail('symlink-not-allowed');
-  }
+  const target = root ? path.join(root, value) : path.resolve(value), { base, parts } = absoluteParts(target);
+  // Every component from the filesystem root, the root's own included; nothing is looked at once one is protected.
+  if (isProtected(parts)) fail('protected-path-not-allowed');
+  if (!await pathWithoutLinks(base, parts)) fail('symlink-not-allowed');
   return target;
 }
 /** @param {string} file */
@@ -60,7 +54,7 @@ export async function fingerprint(root, record) {
       return { status: 'invalid-record' };
     const file = await safePath(record.path, { root }), info = await lstat(file);
     if (!info.isFile() || info.size !== record.bytes || info.size > 128 * 1024 * 1024) return { status: 'missing-or-changed' };
-    const actual = sha256(await readFile(file));
+    const actual = await fileSha256(file);
     return { path: record.path, bytes: info.size, sha256: actual, status: actual === record.sha256 ? 'verified-bytes' : 'missing-or-changed' };
   } catch { return { status: 'missing-or-unsafe' }; }
 }

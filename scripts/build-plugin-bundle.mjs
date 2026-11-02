@@ -110,6 +110,16 @@ export async function checkRuntimeImports(runtime) {
   const missing = bare.map(packageName).filter(name => name && !(name in dependencies));
   if (missing.length) throw Error(`Runtime imports packages it does not depend on: ${[...new Set(missing)].join(', ')}`);
 }
+/**
+ * The launcher runs before npm install and before it has verified runtime/ against the reviewed manifest, so it may
+ * import only Node built-ins and the plugin directory's own files (local-files.mjs), never runtime/ or a package.
+ * @param {string} plugin
+ */
+export async function checkLauncherImports(plugin) {
+  const { files, bare } = await importClosure(plugin, ['launcher.mjs']);
+  const outside = [...bare.filter(packageName), ...files.filter(file => file.startsWith('runtime/'))];
+  if (outside.length) throw Error(`The launcher must import only Node built-ins and its own plugin directory: ${outside.join(', ')}`);
+}
 
 /** @param {string} destination */
 export async function buildPluginBundle(destination) {
@@ -132,6 +142,7 @@ export async function buildPluginBundle(destination) {
   const plugin = path.join(out, 'plugins', 'ai-fighter');
   await mkdir(path.dirname(plugin), { recursive: true });
   await cp(path.join(root, 'plugins', 'ai-fighter'), plugin, { recursive: true, force: false, errorOnExist: true });
+  await checkLauncherImports(plugin);
   const runtime = path.join(plugin, 'runtime'); await mkdir(runtime);
   for (const file of shipped) await copy(file, root, runtime);
   const omittedVendorFiles = [];

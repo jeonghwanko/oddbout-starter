@@ -12,7 +12,7 @@ async function fixture(t) {
   const scratch = path.join(root, 'output', `portable-test-${randomUUID()}`);
   const plugin = path.join(scratch, 'plugin'); await mkdir(path.join(plugin, 'runtime'), { recursive: true });
   t.after(() => rm(scratch, { recursive: true, force: true }));
-  await cp(path.join(root, 'plugins', 'ai-fighter', 'launcher.mjs'), path.join(plugin, 'launcher.mjs'));
+  for (const file of ['launcher.mjs', 'local-files.mjs']) await cp(path.join(root, 'plugins', 'ai-fighter', file), path.join(plugin, file));
   const data = 'export const fixture = true;\n';
   await writeFile(path.join(plugin, 'runtime', 'entry.mjs'), data);
   const manifest = { platform: process.platform, arch: process.arch, files: { 'entry.mjs': sha(data) } };

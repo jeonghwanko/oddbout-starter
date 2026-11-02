@@ -1,10 +1,10 @@
 // @ts-check
 import { createHash, randomUUID } from 'node:crypto';
-import { appendFile, copyFile, lstat, mkdir, open, readdir, realpath, rename, rm } from 'node:fs/promises';
+import { appendFile, copyFile, lstat, mkdir, open, readdir, realpath, rm } from 'node:fs/promises';
 import { constants } from 'node:fs';
-import { setTimeout as delay } from 'node:timers/promises';
 import path from 'node:path';
 import { z } from 'zod';
+import { fileSha256, pathWithoutLinks, relativeParts, renameRetrying } from '../plugins/ai-fighter/local-files.mjs';
 import { fetchCreationContext, itemBlockers, reviewCreationProgress } from './creation-context.mjs';
 import { makePackageValidator } from './package-access.mjs';
 import { withFileLock } from './file-lock.mjs';
@@ -83,21 +83,17 @@ const device = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\.|$)/i;
  * @param {string} root @param {string} relative @param {{ createParents?: boolean, directory?: boolean }} [options]
  */
 export async function localPath(root, relative, { createParents = false, directory = false } = {}) {
-  if (typeof relative !== 'string' || relative.length > 1024 || /[\\:\x00-\x1f]/.test(relative) || path.isAbsolute(relative) ||
-      relative.split('/').some(p => !p || p === '.' || p === '..' || /[. ]$/.test(p) || device.test(p))) fail('path-not-allowed');
-  const base = await realpath(root), parts = relative.split('/');
-  let target = base;
-  for (let i = 0; i < parts.length; i++) {
-    target = path.join(target, parts[i]);
-    let info = await lstat(target).catch(e => { if (e.code !== 'ENOENT') throw e; });
+  const parts = relativeParts(relative, /[\\:\x00-\x1f]/);
+  if (!parts || relative.length > 1024 || parts.some(p => /[. ]$/.test(p) || device.test(p))) fail('path-not-allowed');
+  return await pathWithoutLinks(await realpath(root), parts, { visit: async (target, info, i) => {
     const needsDirectory = i < parts.length - 1 || directory;
     if (!info && createParents && needsDirectory) {
       await mkdir(target).catch(e => { if (e.code !== 'EEXIST') throw e; });
       info = await lstat(target);
     }
-    if (info?.isSymbolicLink() || (info && needsDirectory && !info.isDirectory())) fail('path-not-allowed');
-  }
-  return target;
+    if (info && needsDirectory && !info.isDirectory()) fail('path-not-allowed');
+    return info;
+  } }) ?? fail('path-not-allowed');
 }
 
 /** @param {string} file @returns {Promise<any>} parsed JSON: callers check its fields */
@@ -115,17 +111,9 @@ export async function atomicJson(file, data) {
   if (Buffer.byteLength(bytes) > 2 * 1024 * 1024) fail('record-too-large');
   const handle = await open(temp, 'wx', 0o600);
   try { await handle.writeFile(bytes); await handle.sync(); } finally { await handle.close(); }
-  try {
-    // Windows virus scanners may briefly hold a just-written JSON file without delete sharing.
-    // Retry the same atomic rename; never unlink the valid prior snapshot as a workaround.
-    for (let attempt = 0; ; attempt++) {
-      try { await rename(temp, file); break; }
-      catch (/** @type {any} */ error) {
-        if (process.platform !== 'win32' || !['EPERM', 'EACCES', 'EBUSY'].includes(error.code) || attempt >= 6) throw error;
-        await delay(25 * (attempt + 1));
-      }
-    }
-  } finally { await rm(temp, { force: true }); }
+  // Windows virus scanners may briefly hold a just-written JSON file without delete sharing: retry the same atomic
+  // rename, never unlink the valid prior snapshot as a workaround.
+  try { await renameRetrying(temp, file); } finally { await rm(temp, { force: true }); }
 }
 
 // Inspecting a session re-checks every version, evidence and output file. A file whose size, mtime, ctime and inode are
@@ -140,9 +128,7 @@ export async function fingerprint(root, relative) {
     if (!info.isFile() || info.size > 256 * 1024 * 1024) fail('asset-not-regular-or-too-large');
     const stamp = `${info.size}:${info.mtimeMs}:${info.ctimeMs}:${info.ino}`, cached = hashCache.get(file);
     if (cached?.stamp === stamp) return { path: relative, bytes: info.size, sha256: cached.sha256 };
-    const hash = createHash('sha256');
-    for await (const chunk of handle.createReadStream({ autoClose: false })) hash.update(chunk);
-    const sha256 = hash.digest('hex');
+    const sha256 = await fileSha256(handle);
     hashCache.delete(file); hashCache.set(file, { stamp, sha256 });
     if (hashCache.size > HASH_CACHE_LIMIT) hashCache.delete(/** @type {string} */ (hashCache.keys().next().value)); // not empty
     return { path: relative, bytes: info.size, sha256 };
