@@ -75,7 +75,6 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
   const statisticsHandler = createFighterStatisticsHandler({ db });
   const accountHandler = createAccountHandler({ db, creatorLink });
   const deviceLoginHandler = createDeviceLoginHandler({ db, creatorLink, limiter });
-  const adminHandler = createAdminHandler({ db });
   /** @param {string} name @param {Record<string, unknown>} args */
   async function rpc(name, args) { const { data, error } = await db.rpc(name, args); check(error); return data; }
   /** @param {Submission} row */
@@ -115,6 +114,8 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
     await rpc('af_authorize', { p_owner: owner });
     return owner;
   }
+  // The operator's routes, his fighter edits shown as the creator's own (`present`).
+  const adminHandler = createAdminHandler({ db, present });
   const workshopHandler = createWorkshopHandler({ db, authenticate: request => authenticate(request, false), rpc, agentClient });
   const generationHandler = createGenerationHandler({ db, authenticate, present, decisionsReviewer, responsesReviewer, cascadeReviewer });
   const deletionHandler = createFighterDeletionHandler({ db });

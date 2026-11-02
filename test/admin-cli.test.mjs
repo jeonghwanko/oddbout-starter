@@ -39,3 +39,88 @@ test('a missing session file asks for a sign-in', async () => {
   const connect = async () => { throw Object.assign(new Error('ENOENT: no such file'), { code: 'ENOENT' }); };
   await assert.rejects(runAdmin({ argv: ['whoami'], connect, env: {} }), /client-sign-in-required/);
 });
+
+// 운영자 선수 수정 (2026-11-02): a package on disk as the CLI reads it, written here (the example's own files are not in the repository).
+async function packageDir() {
+  const { mkdtemp, mkdir, writeFile } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os'), path = await import('node:path'), { createHash } = await import('node:crypto');
+  const example = (await import('../contracts/ai-fighter/v1/example.fighter.json', { with: { type: 'json' } })).default;
+  const dir = await mkdtemp(path.join(tmpdir(), 'admin-package-')), manifest = structuredClone(example);
+  await mkdir(path.join(dir, 'assets'));
+  for (const asset of manifest.assets) {
+    const bytes = Buffer.alloc(asset.bytes, 7); bytes.write('RIFF', 0); bytes.write('WEBP', 8);
+    asset.sha256 = createHash('sha256').update(bytes).digest('hex');
+    await writeFile(path.join(dir, asset.path), bytes);
+  }
+  await writeFile(path.join(dir, 'fighter.json'), JSON.stringify(manifest));
+  return { dir, manifest };
+}
+
+const SHA = 'a'.repeat(64);
+const DETAIL = { ok: true, fighter: { name: 'Example Fighter', ownerId: 'owner-1', enteredAt: '2026-11-02T00:00:00Z', manifestSha256: SHA } };
+
+test('replace-package shows whose fighter changes until --yes, then creates, uploads, submits and waits for the validation', async () => {
+  const { dir, manifest } = await packageDir(), calls = [];
+  const answers = [DETAIL, DETAIL, { stage: 'uploading', submissionId: JOB }, ...manifest.assets.map(() => ({ ok: true })), { stage: 'queued', submissionId: JOB },
+    { stage: 'validating', submissionId: JOB }, { stage: 'registered', availability: 'active', submissionId: JOB, keepEntry: true }];
+  const connect = async () => ({ request: async (route, options = {}) => { calls.push({ route, ...options }); return answers[calls.length - 1]; } });
+  const dry = await runAdmin({ argv: ['replace-package', JOB, dir, '--reason', '다운 모션 교체'], connect, env: {} });
+  assert.equal(dry.dryRun, true); assert.match(dry.change, /출전 중 — 유지/); assert.match(dry.change, /owner-1/);
+  assert.equal(dry.warning, manifest.profile.name === 'Example Fighter' ? undefined : 'name-differs');
+  assert.deepEqual(calls.map(c => c.route), [`admin/fighters/${JOB}`], 'a dry run only reads the fighter');
+  const waits = [];
+  const done = await runAdmin({ argv: ['replace-package', JOB, `${dir}/fighter.json`, '--reason', '다운 모션 교체', '--yes'], connect, env: {},
+    wait: async ms => { waits.push(ms); } });
+  assert.equal(done.stage, 'registered'); assert.ok(done.done); assert.equal(waits.length, 2);
+  const [, , create, ...rest] = calls;
+  assert.equal(create.route, `admin/fighters/${JOB}/submissions`);
+  assert.equal(decodeURIComponent(create.headers['x-admin-reason']), '다운 모션 교체');
+  assert.equal(create.headers['idempotency-key'], dry.request.idempotencyKey, 'the dry run names the key the change will use');
+  assert.equal(create.body, JSON.stringify(manifest));
+  assert.deepEqual(rest.slice(0, manifest.assets.length).map(c => [c.route, c.method, c.headers['content-type'], c.body.length]),
+    manifest.assets.map(a => [`admin/submissions/${JOB}/assets/${a.id}`, 'PUT', 'image/webp', a.bytes]));
+  assert.deepEqual(rest.slice(manifest.assets.length).map(c => c.route), [`admin/submissions/${JOB}/submit`, `admin/submissions/${JOB}`, `admin/submissions/${JOB}`]);
+});
+
+test('replace-package is not done when its package is not the fighter\'s: superseded, rejected or still waiting', async () => {
+  const { dir } = await packageDir();
+  const run = async last => {
+    const answers = [DETAIL, last];
+    const connect = async () => ({ request: async () => answers.shift() ?? last });
+    return runAdmin({ argv: ['replace-package', JOB, dir, '--reason', 'x', '--yes'], connect, env: {}, wait: async () => {} });
+  };
+  const superseded = await run({ stage: 'registered', availability: 'superseded', submissionId: JOB });
+  assert.deepEqual([superseded.ok, superseded.code, superseded.done], [false, 'package-superseded', undefined]);
+  assert.equal((await run({ stage: 'rejected', submissionId: JOB })).code, 'validation-rejected');
+  assert.equal((await run({ stage: 'validating', submissionId: JOB })).code, 'validation-timeout');
+  // The key names the package it replaces: the same package over a newer one is a new submission.
+  const keys = [];
+  for (const sha of ['c'.repeat(64), 'd'.repeat(64)]) {
+    const connect = async () => ({ request: async () => ({ ...DETAIL, fighter: { ...DETAIL.fighter, manifestSha256: sha } }) });
+    keys.push((await runAdmin({ argv: ['replace-package', JOB, dir, '--reason', 'x'], connect, env: {} })).request.idempotencyKey);
+  }
+  assert.notEqual(keys[0], keys[1]);
+});
+
+test('replace-package refuses a package whose file differs from its manifest, before any call', async () => {
+  const { dir, manifest } = await packageDir(), { writeFile } = await import('node:fs/promises');
+  await writeFile(`${dir}/${manifest.assets[0].path}`, Buffer.from('changed'));
+  await assert.rejects(runAdmin({ argv: ['replace-package', JOB, dir, '--reason', 'x', '--yes'], connect: async () => { throw Error('no call'); }, env: {} }),
+    new RegExp(`asset-mismatch:${manifest.assets[0].id}`));
+});
+
+test('edit-profile reads the current package hash and sends the edit with the reason', async () => {
+  const calls = [], sha = 'b'.repeat(64);
+  const connect = async () => ({ request: async (route, options = {}) => { calls.push({ route, ...options });
+    return options.method === 'PATCH' ? { ok: true, stage: 'registered' } : { ...DETAIL, fighter: { ...DETAIL.fighter, manifestSha256: sha } }; } });
+  const dry = await runAdmin({ argv: ['edit-profile', JOB, '--reason', '오타', '--profile', '{"description":"고친 소개"}', '--style', 'null'], connect, env: {} });
+  assert.equal(dry.dryRun, true); assert.deepEqual(dry.request.body, { profile: { description: '고친 소개' }, style: null });
+  assert.match(dry.change, /Example Fighter/); assert.deepEqual(calls.map(c => c.method ?? 'GET'), ['GET']);
+  await runAdmin({ argv: ['edit-profile', JOB, '--reason', '오타', '--profile', '{"description":"고친 소개"}', '--yes'], connect, env: {} });
+  assert.equal(calls[1].route, `admin/fighters/${JOB}`);
+  assert.equal(calls[2].method, 'PATCH'); assert.equal(calls[2].route, `admin/fighters/${JOB}/profile`);
+  assert.equal(decodeURIComponent(calls[2].headers['x-admin-reason']), '오타');
+  assert.deepEqual(JSON.parse(calls[2].body), { profile: { description: '고친 소개' }, expectedManifestSha256: sha });
+  await assert.rejects(runAdmin({ argv: ['edit-profile', JOB, '--reason', 'x'], connect, env: {} }), /missing-value:--profile/);
+  await assert.rejects(runAdmin({ argv: ['edit-profile', JOB, '--reason', 'x', '--style', '{bad'], connect, env: {} }), /invalid-value:--style/);
+});
