@@ -27,6 +27,8 @@ test('the runtime file list is closed over imports and keeps the Edge-only cloud
     assert.ok(files.includes(required), required);
   for (const serverOnly of ['mcp/cloud.mjs', 'mcp/cloud/common.mjs', 'mcp/cloud/hosted-tools.mjs', 'mcp/file-input-probe.mjs', 'mcp/creator-sources.mjs', 'api/handler.mjs', 'api/http.mjs'])
     assert.ok(!files.includes(serverOnly), `${serverOnly} stays out of the local kit`);
+  // Imported for its version since #281, yet the runtime writes its own (the 0.6.12 build failed on the copy).
+  assert.ok(!files.includes('package.json'), 'the runtime writes its own package.json');
 });
 
 test('a runtime staged from the file list imports every entry module', { timeout: 60_000 }, async () => {
@@ -36,7 +38,8 @@ test('a runtime staged from the file list imports every entry module', { timeout
     await cp(path.join(repository, file), path.join(runtime, file));
   }
   const pkg = JSON.parse(await readFile(path.join(repository, 'package.json'), 'utf8'));
-  await writeFile(path.join(runtime, 'package.json'), JSON.stringify({ type: 'module', dependencies: pkg.dependencies }));
+  // As the bundle's own: a new file (the list must not have staged one) with the kit's version, which the server reads.
+  await writeFile(path.join(runtime, 'package.json'), JSON.stringify({ type: 'module', version: pkg.version, dependencies: pkg.dependencies }), { flag: 'wx' });
   await checkRuntimeImports(runtime);
   // The kit installs its locked dependencies on the user's host; link this checkout's instead.
   await symlink(path.join(repository, 'node_modules'), path.join(runtime, 'node_modules'), 'junction');
