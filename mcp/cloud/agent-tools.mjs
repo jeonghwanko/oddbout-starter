@@ -102,9 +102,12 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
     + 'The server draws the other fifteen from the built-in roster and fights every bout; '
     + 'the results count in the cup rankings. Only an entered fighter (enter_fighter) enters. Requires the user\'s request. '
     + 'Returns the finished cup (a few seconds); '
-    + 'if it is still running, read it with get_cup.',
-    { fighterId: UUID_ARG() }, async ({ fighterId }, { signal, deadline: due }) => {
-      const issued = await arenaCall(arena, 'agent/cup', { owner: /** @type {Identity} */ (identity).owner, fighter: fighterId }, undefined, timeLeft(due, 20000));
+    + 'if it is still running, read it with get_cup. Use a new UUID per cup and the same UUID to retry it: '
+    + 'a retry after an unknown outcome returns the cup it made (replayed), never a second cup.',
+    // The key names the cup at the arena (2026-11-03): a gateway once cut off a call whose cup was made, and the retry made a second one.
+    { fighterId: UUID_ARG(), idempotencyKey: UUID_ARG() }, async ({ fighterId, idempotencyKey }, { signal, deadline: due }) => {
+      const issued = await arenaCall(arena, 'agent/cup', { owner: /** @type {Identity} */ (identity).owner, fighter: fighterId,
+        idempotencyKey: idempotencyKey.toLowerCase() }, undefined, timeLeft(due, 20000));
       if (!issued.ok) return issued;
       // A cup is fought in about seven seconds: wait for it here so the agent needs no second call (MCP 점검 2026-10-27).
       // The wait ends by the call's deadline (counted from its request, the issue included: 2026-11-03) or CUP_WAIT_MS, each read bounded by
@@ -117,7 +120,7 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
         if (cup?.ok && cup.cup && cup.cup.state !== 'open') return { ...issued, cup: cup.cup };
       }
       return { ...issued, state: 'open', next: 'get_cup' };
-    }, { write: true, openWorld: true, idempotent: false });
+    }, { write: true, openWorld: true, idempotent: true });
   // The owner's current registered package hash (the version an edit is made on), or a 404.
   /** @param {string} fighterId */
   const currentSha = async fighterId => {
