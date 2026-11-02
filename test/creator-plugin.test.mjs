@@ -501,6 +501,14 @@ test('workspace CLI preserves projects and revision guards across calls and reje
   await assert.rejects(creationTool({ workspace: '.' }), /absolute-workspace-required/);
 });
 
+test('workspace CLI calls have no 60 s client timeout: the tool runs on in this process, so a timeout only hid a finished pack', async t => {
+  const f = await fixture(t);
+  const callTool = t.mock.method(Client.prototype, 'callTool'), listTools = t.mock.method(Client.prototype, 'listTools');
+  await creationTool({ workspace: f.root, name: 'list_creation_sessions' });
+  await creationTool({ workspace: f.root });
+  for (const call of [callTool.mock.calls[0], listTools.mock.calls[0]]) assert.equal(call.arguments[call.arguments.length - 1].timeout, 2 ** 31 - 1);
+});
+
 test('a version whose copy was interrupted can be recorded again instead of failing on leftover files', async t => {
   const f = await fixture(t);
   const file = await f.put('input/idle-v1.txt', 'new bytes');
@@ -514,16 +522,6 @@ test('a version whose copy was interrupted can be recorded again instead of fail
   assert.equal(await readFile(copied, 'utf8'), 'new bytes');
   await assert.rejects(readFile(await localPath(f.root, `output/${sessionId}-work/versions/idle/v1/files/stray.txt`)), /ENOENT/);
   await assert.rejects(f.change({ type: 'version', item: 'idle', version: 'v1', files: [file], note: 'again' }), /version-already-exists/);
-});
-
-test('a workspace call past its time limit reports an unknown outcome, never a failure', async t => {
-  const f = await fixture(t);
-  const result = await creationTool({ workspace: f.root, name: 'get_fighter_spec', args: { section: 'context' },
-    contextRequest: () => new Promise(() => {}), timeoutMs: 100 });
-  assert.equal(result.isError, true);
-  assert.deepEqual([result.structuredContent.code, result.structuredContent.tool, result.structuredContent.timeoutMs],
-    ['workspace-call-timeout', 'get_fighter_spec', 100]);
-  assert.match(result.structuredContent.next, /unknown, not a failure/);
 });
 
 // An engine stub that runs until the runner's signal stops it, as executeEngine reports a stop.

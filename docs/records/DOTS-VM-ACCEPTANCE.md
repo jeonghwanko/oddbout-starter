@@ -1,5 +1,10 @@
 # Dots VM acceptance record — 0.5.5 candidate
 
+The proxy transport, locomotion, attacks and RIFE preparation sections were recorded on the unmerged branch
+`codex/dots-vm-file-bridge` (tip aa2689a, committed 2026-10-28 04:53 UTC) and copied here on 2026-11-03
+before that branch was deleted. Main never adopted that branch's RIFE install step: RIFE stays optional
+([DOTS-QUICKSTART.md](../DOTS-QUICKSTART.md)).
+
 ## Implemented scope
 
 - A small Git front door resolves an immutable source commit, delegates installation/check/recovery,
@@ -170,6 +175,25 @@ generation, secret setup, publish or CI occurred in this isolated test. Evidence
 /workspace/oddbout-published-image-evidence/auth-candidate-*. This confirms the new candidate installer
 and resume path, not saved-image publication of the candidate. The active character keeps runtime52.
 
+## Default creation-context proxy transport
+
+Actual generation on Node 22 had required a process-level proxy helper for creation jobs: the store
+used a default global fetch for its public game-context request. Runtime
+f8eb6b5ca7ed14ce77c0a06e9ab5e513bf918346 changes that default to the existing runtimeFetch transport.
+It follows the inherited proxy/CA rules, redacts transport errors and never retries with direct access.
+Windows creation-context/creator-plugin/bundle tests passed 40/40. A separate clean Linux checkout
+passed all 8 creation-context tests and one real default fetchCreationContext() call without a
+NODE_OPTIONS helper. The validated response was contextVersion 1, revision
+6e78a912c3f0500e9030ee444f82fbd98f2763997edfb69d2bb05503e0100203. Existing runtime52/runtime0ac
+and binding/receipt hashes and mtimes remained unchanged. Evidence:
+/workspace/oddbout-published-image-evidence/auth-candidate-context-*.
+
+The new front-door candidate selects f8eb6b5 for new workspaces. The preceding 0ac full installer
+evidence and this focused transport verification remain separate; no new saved image or character
+upgrade is claimed. The environment editor currently rejects saving its changed Install script and
+Start instructions without identifying a bad field. The prepared edits are retained for recovery,
+and publication remains pending.
+
 ## Actual private file transfer and display boundary
 
 A clearly labeled TEST PNG (not generated character artwork) completed official native file input,
@@ -189,7 +213,7 @@ file_access_confirmed: true, matching byte_size and sha256. The exact native Mar
 read back; the browser screenshot showed the complete yellow TEST / TRANSFER FIXTURE image. The parent's
 read_page_reference returned actual PNG pixels, and the user explicitly confirmed seeing that image
 in the parent conversation. Target-conversation still-image display is verified through this route.
-Animation playback remains unverified. Private transfer or a source receipt alone does not prove display.
+Animation playback was not verified in this TEST-only trial; subsequent character evidence is recorded below. Private transfer or a source receipt alone does not prove display.
 
 ## Official Grok authentication storage
 
@@ -240,8 +264,104 @@ through read_page_reference, but the user explicitly reported that these charact
 visible in this conversation. A browser subsequently opened the actual Page full-body preview successfully and preserved a screenshot.
 The user then explicitly confirmed seeing the Page preview and selected this appearance. This verifies
 the Page-preview review route; the earlier read_page_reference-only inline failure remains recorded.
-Locomotion was authorized next. Video playback, all eleven motions and full creation acceptance remain
+Locomotion was authorized next; its subsequent results are recorded below. All eleven motions and full creation acceptance remain
 unverified until their own observed results.
+
+## Actual locomotion generation and review
+
+The same runtime 52db965 / engine 0dc264b generated real Grok subscription videos for fightIdle,
+walk and run. The initial three loop checks failed and all original outputs/reports were retained.
+Walk and run were recovered through the official non-generative motion-auto cutting workflow:
+walk has 16 distinct frames / 960 ms; run has 12 distinct frames / 720 ms after rejecting a
+shorter conversion that repeated frames. FightIdle v2 was generated once after the confirmed v1
+failure and passed its numeric loop check. These are draft previews, not a validated game package.
+
+The three GIFs were uploaded to the same owner-private Page and read back. The parent browser
+opened the actual previews and captured changing walk/run poses. The user then explicitly confirmed
+that the three GIFs move and chose to retain the current poses, including the two-front-paw blaster
+grip while running. This confirms the Page animation delivery/review route. It does not repair the
+earlier native inline display failure or certify gameplay, grounding or anatomy.
+
+The walk near/far-foot ROI checks did not establish stride_verified. Walk/run game timing, contact
+and final pixel-bound gait review remain open gates; user aesthetic selection does not override them.
+Original videos, request evidence, failed loop reports and previews remain in
+/workspace/oddbout-gun-meme-cat/output/gun-meme-cat-work/locomotion/.
+The next attacks group was authorized after the user's locomotion selection. Defense, all eleven
+validated motions, final packaging and registration are not established by this partial result.
+
+## Actual attacks and review-only GIF repair
+
+The same user VM completed combo v1 and slam v1 with one provider request each. Dash v1 was rejected
+because the character left the video frame; that original and failure report remain intact. A separately
+recorded dash v2 request with more forward canvas space passed edge/return checks. The review GIFs are
+combo 33 frames / 2970 ms, slam 44 / 2640 ms and dash 26 / 2860 ms, with a common 400 px standing-height
+reference. Three strikes/recoveries, one slam and one dash were observed; final game contact indices and
+timing are still a packaging gate. This does not complete all eleven motions.
+
+Actual Page review found that the first single-play combo and slam GIFs appeared briefly and then
+disappeared. Every decoded frame, including the last, retained nonempty alpha. All three files had no
+loop extension and disposal 2; a host end-of-animation clearing interaction is the likely explanation,
+not a confirmed browser implementation diagnosis. No provider request was repeated for this issue.
+
+The official compose-gif exporter created separate repeating review GIFs with loop-count 0 and the
+original alpha threshold 128. Frame RGBA, order, dimensions and durations all match; each binary differs
+only by the added 19-byte infinite-loop extension. Original single-play GIFs, game strips and once-return
+metadata are unchanged. Evidence is attacks/gif-display-diagnostic.json and
+attacks/review-loop-preservation.json in the character workspace. The new private Page references were
+read back, and the parent browser observed all three continuing to display different poses beyond one
+full cycle. The user then explicitly confirmed playback and selected the attack set. Automatic approval
+review initially blocked the defense instruction. The user subsequently explicitly authorized the
+defense/reaction group, and that instruction was delivered to the existing VM. Completion and user
+selection of that group remain unverified.
+
+The existing foot-evidence v2 extension was also reviewed. Initial walk ROIs touched a horizontal edge,
+which the extension cannot waive. A whole-foot ROI correction removed those warnings, but both walk
+feet still failed speed consistency. Walk 3-4 and run 2/8/9 include overlapping feet that limit complete
+anatomical-foot identification. No v2 pass is claimed, and these results do not establish that the
+artwork itself fails or justify weakening the gait gate.
+
+Source correspondence found zero alpha pixels below the official crop in walk 8-9: touching the final
+bottom boundary does not by itself prove lost sole pixels. The intermediate canonical strips select
+source frames at alternating one/two-frame intervals but retain one uniform delay. Diagnostic visible
+sole-edge tracks became more consistent when evaluated at the corresponding source times; they are not
+certified anatomical contact points. A follow-up verified the actual selected Page GIFs against their
+upload receipt hashes: both use 60 ms per frame, walk 16/960 ms and run 12/720 ms. The 41.67 ms analysis
+applies only to the intermediate canonical strips. Any final package must be measured on its own pixels
+and durations. Run contact/flight remains unverified because of overlapping feet and missing established
+ground evidence. Reports and source comparisons are preserved under locomotion/whole-foot-followup/,
+including completion-report.json. The separate official ncnn auto alignment attempts both finished:
+walk exited 0 after about 31 minutes, retained 8 interpolated frames with 4 official retimings, and
+improved jolt from 0.469 to 0.079 with no retake flag. Run exited 0 after about 49 minutes, rejected
+9 interpolated frames and retained 2, but still reported jolt 0.568 and broken-beat / recut-or-retake.
+A successful process exit did not make run a successful repair. Neither candidate is a contact/v2
+pass or a user-selected replacement. Original files and selected GIFs remain intact; no provider clip
+was regenerated. Actual results and comparison-report.json/.md are in locomotion/rife-repair-attempt/.
+
+## RIFE preparation in the saved-image recipe
+
+Front cdd0034013a99bf364c2a3e981ca394d37f9e757 keeps runtime
+f8eb6b5ca7ed14ce77c0a06e9ab5e513bf918346 and prepares its official RIFE 20221029 release after the
+basic bootstrap. It exports SPRITE_GEN_DATA_DIR in env.sh to a release-specific ordinary tools folder,
+then requires the pinned download and actual interpolation check to succeed before preparation ends.
+This closes the observed omission: basic Dots bootstrap uses --skip-rife, so successful installation did
+not previously establish that video frame alignment could run in the saved VM.
+
+The separate clean verification VM ran the full updated recipe once, exit 0. In a new shell, the
+exported data path, official Python check (disc centre x=48.0), and sprite tools report all passed;
+RIFE was ok with no tool warnings. New user install and ordinary resume both exited 0 with valid JSON,
+reused installation steps [], and no subsequent download/fetch. Existing runtime52, tools, templates,
+workspaces, bindings and receipts retained their recorded hashes/mtime. Auth presence checks passed and
+recovery sessions were empty. There was no login, character generation, CI or publication. One attempted
+unsupported rife check CLI invocation returned exit 2; the supported Python check passed without
+repeating installation. Evidence is /workspace/oddbout-published-image-evidence/rife-preparation-*.
+
+In the character VM, the official default backend also passed installation and its check. Absence of
+familiar Vulkan driver paths was not evidence of execution failure. An earlier alternative-preparation
+instruction installed torch 2.13.0+cpu, but no torch inference or backend switch occurred; the original
+ncnn alignment process continued. Model/code settings and selected originals remained unchanged.
+Installation/check success does not certify the candidate animation's quality or a finished fighter.
+The saved-environment editor was checked again and remains starting/offline, desired running,
+failureReason null. Latest recipe publication and a fresh task from that new publication remain pending.
 
 ## Related animation change
 
@@ -259,7 +379,7 @@ before a new immutable pin, without upgrading a character already in progress.
 
 The reviewed release remains a candidate. Prepared-image publication and fresh-task verification passed; an actual VM restart remains unverified;
 official Grok login and one actual still generation passed in the existing VM. Remaining gates are
-video entitlement/playback, all remaining motion groups and final package. The user reviewed and
+final gait/contact validation, remaining motion groups and final package. Actual locomotion videos and Page playback subsequently passed; the user reviewed and
 selected the appearance through the actual Page preview. One generated appearance is not a completed fighter.
 
 ## Saved-VM acceptance checklist (remaining gates noted above)
