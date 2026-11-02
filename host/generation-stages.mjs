@@ -8,7 +8,8 @@
 //   image, transparent, our plain cel colouring with the house style anchor as a reference), as WebP. The creator chooses the front: it is
 //   his profile painting too. 맡기기 (a job its creator left to us): a look judge (codex, tools off) picks one, and the job goes on without him.
 // motions (P2, 2026-10-28): first the side still (2026-10-31): the chosen front as the character reference → one side view facing right in
-//   the same colouring, a judge comparing it with the front, at most SIDE_TAKES drawings, else an operator. Then the side still → six GPT
+//   the same colouring, a judge comparing it with the front, at most SIDE_TAKES drawings, else an operator. Beside the motions, his expression
+//   sheet (2026-11-03): six arena faces from the chosen front, one drawing, never a second; without it he still registers. Then the side still → six GPT
 //   keypose rows (prepare → gen-set → extract, assembled by motions.py) and a Grok walk
 //   and run (video-set → the engine's cut and cycle alignment, its retake reasons and a vision judge as the gate; a retake films from a relaxed,
 //   depth-shaded still of the look, and one alignment runs at a time on the GPU; a run the gate refused is made from the walk that passed,
@@ -18,8 +19,8 @@
 //   A seventh, optional row (2026-10-28) draws the entrance and the victory beside the six; when it fails the fighter goes without them.
 //   The action clips' previews go up as the rows finish (2026-10-30): gen-set's finished rows are extracted in a scratch run while it still draws the rest.
 // submitting: the package the motions stage left in the job folder, with the profile the creator confirmed, submitted under his account;
-//   before it, the chosen front and its face square (measured here, `motions.py face-box`) go to the job: the server makes them his profile
-//   set when the package is registered.
+//   before it, the chosen front and its face square (measured here, `motions.py face-box`) and his expression sheet go to the job: the server
+//   makes them his profile set when the package is registered.
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { appendFile, copyFile, cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
@@ -299,6 +300,41 @@ export const gaitStillCommand = ({ promptFile, out, report, look }) => ['npm', '
   '--ref', look];
 
 /**
+ * The expression sheet's cells (2026-11-03 — 사용자: "무투장에서 패배했을때 결과창에서 표정이 생성되는지 점검하고, 안되고 있다면 생성되게"): the arena's
+ * six faces in its order (default, hit, smug, danger, sideeye, ko). The KO card shows the sixth on the loser. The words are the house sheets'
+ * (api/profile-sets.mjs PROFILE_SET_EXPRESSIONS_PROMPT gives them to creators' agents; generation-stages.test.mjs keeps the two the same).
+ */
+export const EXPRESSION_CELLS = Object.freeze([
+  '1. Confident default: calm, cocky half smile.',
+  '2. Just got hit: face squished sideways by an impact, eyes squeezed shut, cheek pushed in, mouth twisted in pain.',
+  '3. Smug while comboing: big toothy grin, eyebrows raised, eyes narrowed with glee.',
+  '4. In danger: heavy sweat drops, worried eyebrows, wide nervous eyes, clenched teeth.',
+  '5. Winning side-eye: eyes looking sideways toward the viewer, smug and unimpressed (the meme side-eye).',
+  '6. Knocked out: dizzy spiral eyes, tongue hanging out, slumped.',
+]);
+/** The sheet's size: the profile set takes exactly this (api/profile-sets.mjs PROFILE_SET_LIMITS.expressions). */
+export const EXPRESSIONS_SIZE = Object.freeze({ width: 1536, height: 1024 });
+/** The expression sheet: the chosen front as the character reference, six busts facing right in the same colouring. */
+export function expressionsPrompt(brief) {
+  return [
+    'Expression sheet for a fighting-game HUD portrait. The first reference picture is this character from the front: the approved design.',
+    'Draw the SAME character — the same face, hair, outfit, accessories, colours and proportions. Do not redesign him.',
+    `The character, as the design brief describes it: ${brief.look.subject}`,
+    colours(brief),
+    `Layout: one ${EXPRESSIONS_SIZE.width} x ${EXPRESSIONS_SIZE.height} landscape image, 3 columns x 2 rows, six equal square cells. Each cell holds the same`,
+    'head-and-shoulders bust, same size and same framing (the head fills about 70% of the cell height), turned to the right in a three-quarter',
+    'view (he faces the right edge). Fully transparent background, no cell borders, no text, no numbers, no speech bubbles, no extra effects.',
+    'Cells, left to right, top to bottom:',
+    ...EXPRESSION_CELLS,
+    ...SIDE_COLOURING,
+    ...styleLines(),
+  ].join('\n');
+}
+/** The sprite-gen command of the expression sheet: the chosen front first, then the style anchor; landscape 3:2 where the provider takes a ratio. */
+export const expressionsCommand = ({ promptFile, out, report, front, anchor }) => ['npm', 'run', 'sprite', '--', 'gen', '--provider', 'codex', '--model', MODELS.image,
+  '--prompt-file', promptFile, '--out', out, '--transparent', '--aspect-ratio', '3:2', '--report', report, '--ref', front, '--ref', anchor];
+
+/**
  * 맡기기 (2026-10-28): a creator who left the look to us answers once, at the motions. codex with every tool off checks both candidates
  * against the look brief and picks one that passes every check, or none (then the creator is asked as before). Since 2026-10-31 the
  * candidates are fronts: the judge checks the view and our colouring against the style anchor (image 3) too.
@@ -384,6 +420,8 @@ export const lookNames = round => [`front-a-${round}`, `front-b-${round}`];
 const sideLookNames = round => [`look-a-${round}`, `look-b-${round}`];
 /** The side still's artifact (the creator sees it with his motions): one per chosen front. */
 export const sideName = (round, choice) => `side-${round}-${choice}`;
+/** The expression sheet's artifact: one per chosen front (api/generations.mjs takes only this name for the profile set). */
+export const expressionsName = (round, choice) => `expressions-${round}-${choice}`;
 export const previewName = (clip, round) => `motion-${clip.toLowerCase()}-${round}`;
 
 /** The confirmed profile over the package's fighter.json: names, description, lines and stats the creator chose; the concept from the brief. */
@@ -821,6 +859,38 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
     return { still: png };
   }
 
+  /**
+   * His expression sheet (2026-11-03): six arena faces drawn once from the chosen front, beside the motions. A drawing that was started and
+   * did not finish is never drawn again (it may have been paid for): he then registers without a sheet, and the arena shows his face square
+   * for every mood. The sheet goes up as an artifact (`expressionsName`) and an `expressions` event for the creator; `uploaded.json` tells
+   * the submitting stage to send it with his front. Never throws: a sheet is a courtesy here.
+   */
+  async function expressionSheet(job, dir, front) {
+    const name = expressionsName(job.appearanceRound, job.choice), folder = path.join(dir, 'looks', name);
+    const event = data => Promise.resolve(api.progress?.(job, undefined, { kind: 'expressions', ...data })).catch(() => {});
+    try {
+      await mkdir(folder, { recursive: true });
+      const png = path.join(folder, 'sheet.png'), report = path.join(folder, 'sheet.report.json'), started = path.join(folder, 'started');
+      const webp = path.join(folder, `${name}.webp`), uploaded = path.join(folder, 'uploaded.json');
+      if (existsSync(uploaded)) return;
+      if (!existsSync(png) || !await finishedLook(report)) {
+        if (existsSync(started)) return event({ outcome: 'failed', code: 'expressions-unfinished' });
+        await writeFile(started, new Date().toISOString());
+        const promptFile = path.join(folder, 'prompt.txt');
+        await writeFile(promptFile, expressionsPrompt(job.brief));
+        const { code } = await og(expressionsCommand({ promptFile, out: png, report, front, anchor: styleAnchor }));
+        if (code !== 0 || !existsSync(png)) return event({ outcome: 'failed', code: `expressions-exit-${code}` });
+      }
+      // The profile set takes the sheet at exactly its size: another one goes without (no drawing again).
+      const size = pngSize(await readFile(png));
+      if (size?.width !== EXPRESSIONS_SIZE.width || size?.height !== EXPRESSIONS_SIZE.height) return event({ outcome: 'failed', code: 'expressions-size' });
+      if (!existsSync(webp)) await toWebp(png, webp, EXPRESSIONS_SIZE.width);
+      await api.artifact(job, name, await readFile(webp));
+      await writeFile(uploaded, JSON.stringify({ artifact: name }));
+      await event({ outcome: 'chosen', artifact: name });
+    } catch { await event({ outcome: 'failed', code: 'expressions-error' }); }
+  }
+
   /** One loop (walk or run) the engine cut without a retake reason and the judge passed, or the reason none was. */
   /** RUN_FROM_WALK: the walk's cut (before its alignment) aligned to the run's frames and judged as a run, or null. Its folder names the
    * walk's strip, so a walk made again makes the run again; a stage run again with the same walk reuses the alignment and the verdict. */
@@ -1085,6 +1155,8 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
     // A front (2026-10-31) is the profile painting: the motions are made from the side still drawn from it.
     const side = chosen.front ? await sideStill(job, dir, chosen.file) : { still: chosen.file };
     if (!side.still) return asOutcome(side);
+    // His expression sheet is drawn beside the motions; the stage waits for it before it ends (`screened`), whatever its outcome.
+    if (chosen.front) screening.push(expressionSheet(job, dir, chosen.file));
     const look = side.still;
     const brief = path.join(m, 'brief.json');
     await writeFile(brief, JSON.stringify({ language: job.language, ...job.brief }));
@@ -1456,9 +1528,10 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
   }
 
   /**
-   * His profile set (선수 프로필 세트, 2026-10-31): the chosen front and its face square, measured on its pixels (`motions.py face-box`), go to
-   * the job before the package does, so the server has them when the validator registers him and makes them his set. A front that cannot
-   * be measured or that the server refuses leaves him without a set (his owner can upload one); it never stops his registration.
+   * His profile set (선수 프로필 세트, 2026-10-31): the chosen front and its face square, measured on its pixels (`motions.py face-box`), and
+   * his expression sheet when the motions stage made one (2026-11-03), go to the job before the package does, so the server has them when the
+   * validator registers him and makes them his set. A front that cannot be measured or that the server refuses leaves him without a set (his
+   * owner can upload one); it never stops his registration.
    */
   async function profileFront(job, dir) {
     try {
@@ -1466,9 +1539,12 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       if (!chosen?.front || typeof api.profileFront !== 'function') return;
       const out = path.join(dir, 'looks', `${chosen.name}.face.json`);
       if (!existsSync(out) && (await motionsPy(['face-box', chosen.file, out])).code !== 0) return;
-      const reply = await api.profileFront(job, { artifact: chosen.name, face: await readJson(out) });
+      const sheet = await readJson(path.join(dir, 'looks', expressionsName(job.appearanceRound, job.choice), 'uploaded.json')).catch(() => null);
+      const reply = await api.profileFront(job, { artifact: chosen.name, face: await readJson(out),
+        ...(typeof sheet?.artifact === 'string' ? { expressions: sheet.artifact } : {}) });
       await Promise.resolve(api.progress?.(job, undefined, { kind: 'profile-front', outcome: reply?.ok ? 'ok' : 'refused',
-        ...(reply?.ok ? {} : { code: String(reply?.code ?? 'refused').slice(0, 60) }) })).catch(() => {});
+        ...(reply?.ok ? {} : { code: String(reply?.code ?? 'refused').slice(0, 60) }),
+        ...(reply?.ok && reply.expressionsRefused ? { expressionsRefused: String(reply.expressionsRefused).slice(0, 60) } : {}) })).catch(() => {});
     } catch { /* a set is a courtesy here */ }
   }
 

@@ -295,6 +295,11 @@ creator-kit 소스는 계정·등록에 호스팅 ODDBOUT MCP 하나를 쓰도�
    `upload_profile_set_asset` → `submit_profile_set`으로 올리고 `get_profile_set`으로 확인한다. `review`는 운영자 승인 대기이고, `approved`가 되어야
    홈·명단에 정면이 나온다. 규격과 담백한 채색 문구·화풍 기준 그림은 `get_fighter_spec` overview의 `profileSet`에 있다
    ([가입 후 바로 이용하기](OPEN-REGISTRATION.md#프로필-세트정면-원화얼굴-칸-2026-10-31)).
+   표정 시트(2026-11-03, 선택): 고른 정면으로 그린 무투장 얼굴 여섯 칸(1536 × 1024, `profileSet.expressions`의 순서·문구, 마지막 칸이 KO
+   컷인의 패배 얼굴)을 세트 파일의 `expressions`로 넣고 `upload_profile_set_asset`의 `assetId: "expressions"`로 올린다. 검증기가 무투장용
+   1152 × 768 사본(`derived.sheet`)을 만들고, 승인되면 명단의 `profileSet.expressions`가 그것을 가리킨다. 세트 파일과 그림은 키트의
+   `npm run fighter:profile-set`이 만든다. 호스팅 생성은 정면을 고른 뒤 동작과 함께 시트를 한 번 그리고(`get_hosted_fighter`의
+   `expressions`), 등록 때 정면과 함께 세트로 올린다. 시트를 못 그려도 등록은 그대로 된다.
 
 ### 실제 파일과 연결 계정 확인
 

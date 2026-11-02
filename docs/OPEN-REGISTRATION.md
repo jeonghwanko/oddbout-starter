@@ -79,17 +79,23 @@ ODDBOUT 통합 플러그인은 연결된 Google 계정을 PC와 Dots 등록에 �
   `{ version: "oddbout-profile-set-v1", front: { path, bytes, sha256, width, height }, face: { x, y, side } }`다. 정면 원화는 알파가 있는 WebP,
   4,000,000바이트 이하, 세로가 가로보다 긴 그림(긴 변 1024~2048, 짧은 변 512 이상)이다. 캐릭터는 키보다 넓지 않다(카드 폭 600 이하).
   `registration.profileSet: "v1"`이 지원 여부를 표시한다.
+- 표정 시트(선택, 2026-11-03): 세트 파일의 `expressions: { path, bytes, sha256, width: 1536, height: 1024 }`. 알파가 있는 WebP, 4,000,000바이트
+  이하, 3 × 2칸에 무투장 얼굴 여섯(기본·맞음·으스댐·위기·옆눈질·KO 순서, 모두 화면 오른쪽을 보는 3/4 측면)이다. 체력바 얼굴이 경기 따라 바뀌고,
+  KO 컷인은 진 선수의 KO 얼굴과 이긴 선수의 옆눈질을 보인다. 없으면 무투장은 모든 상황에 얼굴 칸 한 장을 쓴다. 생성 문구는 규격의
+  `expressions.prompt`, 키트의 `npm run fighter:profile-set`이 세트 파일과 그림을 만든다.
 - 화풍: 우리 게임의 담백한 셀 채색이다. 규격의 `style.colouring` 문구를 모든 생성에 붙이고, `style.anchor.url`의 기준 그림을 마지막 참조로 붙인다.
-- API(주인): `POST /fighters/:id/profile-sets`(UUID `Idempotency-Key`, 본문 = 세트 파일) → `PUT /profile-sets/:id/assets/front`(`image/webp`) →
-  `POST /profile-sets/:id/submit`. 상태는 `GET /profile-sets/:id`(자기 파일의 10분 서명 주소 포함), 선수별 최근 10개는 `GET /fighters/:id/profile-sets`.
+- API(주인): `POST /fighters/:id/profile-sets`(UUID `Idempotency-Key`, 본문 = 세트 파일) → `PUT /profile-sets/:id/assets/front`(`image/webp`)
+  (시트가 있으면 `PUT /profile-sets/:id/assets/expressions`도) → `POST /profile-sets/:id/submit`. 상태는 `GET /profile-sets/:id`(자기 파일의 10분 서명 주소 포함), 선수별 최근 10개는 `GET /fighters/:id/profile-sets`.
   선수마다 열린 세트는 하나, 계정마다 하루 10개다.
 - 검증: 검증 작업자가 전체 디코드·실제 크기·세로 그림·투명한 가장자리·캐릭터 영역(그림 높이의 60 % 이상, 카드 폭 600 이하)·얼굴 칸(캐릭터 안,
   키의 10~30 %, 중심이 위쪽 40 % 안)을 본다. 통과하면 카드(캐릭터 영역, 높이 600)와 얼굴(192×192)을 만들고 `review`가 된다.
   디코드 뒤의 실패(자르기·인코딩·파생본 1 MB 초과)와 검사 프로세스의 죽음·30초 초과도 그 그림의 판정(`rejected`, 이유는 첫 오류 코드)이다.
-  다운로드·API 같은 기반 장애만 다시 시도한다.
+  다운로드·API 같은 기반 장애만 다시 시도한다. 시트가 있으면 검증기 0.2.0이 크기·알파·투명한 부분(5 % 이상)·여섯 칸 모두의 그림(칸의 10 % 이상)을
+  보고 무투장 사본 `sheet`(1152 × 768, 칸 384)를 만든다. 시트가 있는 세트는 0.2.0 판정만 통과한다.
 - 승인: 운영자가 `admin/profile-sets`에서 승인하거나 이유를 달아 돌려보낸다. 승인하면 카드·얼굴을 공개 버킷 `af-profile-sets/<선수>/<sha256>.webp`
   (캐시 하루)로 복사하고, 같은 선수의 이전 승인본은 `superseded`가 된다. 명단(`GET /roster`, `/roster/:id`)은 승인본만
-  `profileSet: { id, card: { url, width, height, face: { x, y, side } }, face: { url, size } }`로 보인다.
+  `profileSet: { id, card: { url, width, height, face: { x, y, side } }, face: { url, size } }`로 보인다. 시트가 있으면
+  `expressions: { url, width: 1152, height: 768, cell: 384 }`가 더 붙는다.
 - 내리기: 이전 승인본·거절된 승인본, 선수 삭제·운영자 내리기로 `withdrawn`이 된 세트의 공개 사본은 그 변경이 확정된 뒤 API가 지운다
   (`af_profile_set_stale_public` → Storage 삭제 → `af_profile_set_unpublished`). Storage 오류는 한 번 다시 시도하고, 그래도 실패하면
   `af_profile_set_events`에 `public-cleanup-failed`로 남긴다. 그 선수의 다음 정리가 다시 시도한다. 운영자가 선수를 복원해도 세트는 돌아오지 않는다.

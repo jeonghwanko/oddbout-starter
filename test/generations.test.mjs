@@ -533,11 +533,18 @@ test('a hosted fighter\'s chosen front becomes his profile set when his package 
     assert.equal((await call('GET', `generations/${job.id}`)).body.job.side, null);
     await work('POST', 'progress', { jobId: held.id, leaseToken: held.leaseToken, event: { kind: 'side', artifact: 'side-0-b', outcome: 'chosen', take: 1 } });
     assert.match((await call('GET', `generations/${job.id}`)).body.job.side.url, /jobs\/.*side-0-b\.webp/);
+    // His expression sheet (2026-11-03) shows the same way: once the worker names it for this round and choice.
+    const sheet = webp(1536, 1024);
+    assert.equal((await call('GET', `generations/${job.id}`)).body.job.expressions, null);
+    await work('PUT', `jobs/${held.id}/artifacts/expressions-0-b`, sheet, lease());
+    await work('PUT', `jobs/${held.id}/artifacts/expressions-0-a`, webp(1024, 1024), lease());
+    await work('POST', 'progress', { jobId: held.id, leaseToken: held.leaseToken, event: { kind: 'expressions', artifact: 'expressions-0-b', outcome: 'chosen' } });
+    assert.match((await call('GET', `generations/${job.id}`)).body.job.expressions.url, /jobs\/.*expressions-0-b\.webp/);
     await finish(held, 'ok', { preview: [{ clip: 'idle', name: 'motion-idle-0' }] });
     assert.equal((await call('POST', `generations/${job.id}/register`, { profile: { name: 'Blue Cat', description: 'A blue boxer.' } })).body.job.status, 'submitting');
     held = await step('submitting');
     const json = { 'x-generation-lease': held.leaseToken, 'content-type': 'application/json' };
-    const front = (artifact, face) => work('POST', `jobs/${held.id}/profile-front`, { artifact, face }, json);
+    const front = (artifact, face, expressions) => work('POST', `jobs/${held.id}/profile-front`, { artifact, face, ...(expressions ? { expressions } : {}) }, json);
     // Only the chosen front, and a face square inside it.
     assert.equal((await front('front-a-0', { x: 400, y: 30, side: 250 })).body.code, 'invalid-artifact');
     assert.equal((await front('front-b-0', { x: 900, y: 30, side: 250 })).body.code, 'invalid-profile-set');
@@ -545,6 +552,15 @@ test('a hosted fighter\'s chosen front becomes his profile set when his package 
     assert.equal(kept.status, 200);
     assert.deepEqual(kept.body.profileFront, { artifact: 'front-b-0', path: 'front.webp', bytes: 64, sha256: await sha256(fronts['front-b-0']),
       width: 1024, height: 1536, face: { x: 400, y: 30, side: 250 } });
+    // A sheet that is not this front's, or not the set's size, is left out; the front stays.
+    const otherSheet = await front('front-b-0', { x: 400, y: 30, side: 250 }, 'expressions-0-a');
+    assert.deepEqual([otherSheet.status, otherSheet.body.expressionsRefused, 'expressions' in otherSheet.body.profileFront], [200, 'invalid-artifact', false]);
+    await work('PUT', `jobs/${held.id}/artifacts/expressions-0-b`, webp(1024, 1024), { 'x-generation-lease': held.leaseToken, 'content-type': 'image/webp' });
+    assert.equal((await front('front-b-0', { x: 400, y: 30, side: 250 }, 'expressions-0-b')).body.expressionsRefused, 'EXPRESSIONS_DIMENSIONS');
+    await work('PUT', `jobs/${held.id}/artifacts/expressions-0-b`, sheet, { 'x-generation-lease': held.leaseToken, 'content-type': 'image/webp' });
+    const withSheet = await front('front-b-0', { x: 400, y: 30, side: 250 }, 'expressions-0-b');
+    assert.deepEqual(withSheet.body.profileFront.expressions, { artifact: 'expressions-0-b', path: 'expressions.webp', bytes: 64, sha256: await sha256(sheet),
+      width: 1536, height: 1024 });
     // The package goes in and the validator registers it: the set is made from the kept front and queued for its own check.
     const created = await work('POST', `jobs/${held.id}/submission`, JSON.stringify(example), json);
     const submission = (await sql.query('select id from public.af_submissions where idempotency_key = $1', [held.id])).rows[0].id;
@@ -561,6 +577,8 @@ test('a hosted fighter\'s chosen front becomes his profile set when his package 
     const fighter = (await sql.query('select fighter_id from public.af_submissions where id = $1', [submission])).rows[0].fighter_id;
     assert.deepEqual([set[0].status, set[0].fighter_id, set[0].idempotency_key, set[0].manifest.face], ['queued', fighter, held.id, { x: 400, y: 30, side: 250 }]);
     assert.deepEqual(objects.get(`ai-fighter-beta/${owner}/profile-sets/${set[0].id}/front.webp`)?.bytes, fronts['front-b-0']);
+    assert.deepEqual(set[0].manifest.expressions, { path: 'expressions.webp', bytes: 64, sha256: await sha256(sheet), width: 1536, height: 1024 });
+    assert.deepEqual(objects.get(`ai-fighter-beta/${owner}/profile-sets/${set[0].id}/expressions.webp`)?.bytes, sheet);
     const read = (await call('GET', `generations/${job.id}`)).body.job;
     assert.equal(read.profileSetId, set[0].id);
   } finally { await sql.close(); }

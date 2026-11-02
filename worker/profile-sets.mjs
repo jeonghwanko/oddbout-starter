@@ -1,6 +1,6 @@
 // @ts-check
-// The validator's second queue (선수 프로필 세트, 2026-10-31): claim a submitted profile set, download its front painting, check it in a child
-// process (profile-set-check.mjs), store the derived card and face under the lease and finish. The same Render worker drains the package
+// The validator's second queue (선수 프로필 세트, 2026-10-31): claim a submitted profile set, download its front painting (and expression
+// sheet), check them in a child process (profile-set-check.mjs), store the derived card and face (and the arena's sheet) under the lease and finish. The same Render worker drains the package
 // queue first (server.mjs). Both queues share the leased-job loop (leased-jobs.mjs): an infrastructure failure hands the set back without
 // spending one of its attempts.
 import { fork } from 'node:child_process';
@@ -17,7 +17,8 @@ const CHECK_TIMEOUT_MS = 30000;
 /**
  * A set worker/profile-sets/claim leases (api/profile-sets.mjs).
  * @typedef {{ profileSetId: string, leaseToken: string, manifestText: string, manifestSha256: string,
- *   front: { bytes: number, sha256: string, width: number, height: number, downloadUrl: string }, face: { x: number, y: number, side: number } }} ClaimedSet
+ *   front: { bytes: number, sha256: string, width: number, height: number, downloadUrl: string }, face: { x: number, y: number, side: number },
+ *   expressions?: { bytes: number, sha256: string, width: number, height: number, downloadUrl: string } }} ClaimedSet
  */
 /** @typedef {{ ok: boolean, stage?: string, errors: { code: string, path: string }[], derived?: any }} ChildVerdict */
 
@@ -61,8 +62,27 @@ export async function runProfileSetWithConfig(config, profileSetId, check = {}) 
 }
 
 /**
- * Download a leased set's front painting into its job folder, check it and store the derived card and face under the lease. Returns the
- * verdict; an infrastructure failure throws RetryLater.
+ * Download one of a leased set's uploads (signed by the API on this project's private bucket) into its job folder, checked against the set
+ * file. Any failure is the infrastructure's: upload already checked these bytes.
+ * @param {string} project @param {{ bytes: number, sha256: string }} file @param {string} downloadUrl @param {string} target @param {AbortSignal} deadline
+ */
+async function download(project, file, downloadUrl, target, deadline) {
+  const url = new URL(downloadUrl);
+  if (url.origin !== project || !url.pathname.startsWith('/storage/v1/object/sign/ai-fighter-beta/')) throw new RetryLater('invalid-download-origin');
+  let bytes;
+  try {
+    const response = await fetch(url, { redirect: 'error', signal: AbortSignal.any([AbortSignal.timeout(transferTimeoutMs(file.bytes)), deadline]) });
+    if (!response.ok) throw new RetryLater('download-failed');
+    bytes = await readBody(response, file.bytes);
+  } catch (error) { throw error instanceof RetryLater ? error : new RetryLater(deadline.aborted ? 'job-deadline' : 'download-failed'); }
+  // A mismatch now is a storage fault, not the creator's painting.
+  if (bytes.length !== file.bytes || await sha256(bytes) !== file.sha256) throw new RetryLater('download-integrity');
+  await writeFile(target, bytes, { flag: 'wx', mode: 0o600 });
+}
+
+/**
+ * Download a leased set's front painting (and expression sheet) into its job folder, check them and store the derived files under the lease.
+ * Returns the verdict; an infrastructure failure throws RetryLater.
  * @param {string} project @param {string} token @param {ClaimedSet} job @param {string} directory @param {AbortSignal} deadline
  * @param {{ childModule?: string, timeoutMs?: number }} check
  */
@@ -75,24 +95,19 @@ async function validateProfileSet(project, token, job, directory, deadline, chec
   const parsed = parseProfileSet(job.manifestText);
   if (!parsed.ok) verdict = { ok: false, stage: 'server-manifest', errors: [{ code: 'invalid-server-manifest', path: '' }] };
   else {
-    const front = parsed.data.front, url = new URL(job.front.downloadUrl);
-    if (url.origin !== project || !url.pathname.startsWith('/storage/v1/object/sign/ai-fighter-beta/')) throw new RetryLater('invalid-download-origin');
-    let bytes;
-    try {
-      const response = await fetch(url, { redirect: 'error', signal: AbortSignal.any([AbortSignal.timeout(transferTimeoutMs(front.bytes)), deadline]) });
-      if (!response.ok) throw new RetryLater('download-failed');
-      bytes = await readBody(response, front.bytes);
-    } catch (error) { throw error instanceof RetryLater ? error : new RetryLater(deadline.aborted ? 'job-deadline' : 'download-failed'); }
-    // Upload already checked these bytes; a mismatch now is a storage fault, not the creator's painting.
-    if (bytes.length !== front.bytes || await sha256(bytes) !== front.sha256) throw new RetryLater('download-integrity');
-    await writeFile(path.join(directory, 'front.webp'), bytes, { flag: 'wx', mode: 0o600 });
+    const { front, expressions } = parsed.data;
+    await download(project, front, job.front.downloadUrl, path.join(directory, 'front.webp'), deadline);
+    if (expressions) {
+      if (typeof job.expressions?.downloadUrl !== 'string') throw new RetryLater('server-expressions-link');
+      await download(project, expressions, job.expressions.downloadUrl, path.join(directory, 'expressions.webp'), deadline);
+    }
     await writeFile(path.join(directory, 'set.json'), JSON.stringify(parsed.data), { flag: 'wx', mode: 0o600 });
     verdict = await checkInChild(directory, check);
     if (deadline.aborted) throw new RetryLater('job-deadline');
     if (verdict.ok) {
       /** @type {Record<string, { sha256: string, bytes: number }>} */
       const stored = {};
-      for (const name of ['card', 'face']) {
+      for (const name of ['card', 'face', ...(verdict.derived.sheet ? ['sheet'] : [])]) {
         const file = await readFile(path.join(directory, `${name}.webp`)), hash = await sha256(file);
         let answer;
         try {
@@ -102,7 +117,8 @@ async function validateProfileSet(project, token, job, directory, deadline, chec
         if (answer.sha256 !== hash || answer.bytes !== file.length) throw new RetryLater('derived-upload-integrity');
         stored[name] = { sha256: hash, bytes: file.length };
       }
-      derived = { card: { ...stored.card, ...verdict.derived.card }, face: { ...stored.face, ...verdict.derived.face } };
+      derived = { card: { ...stored.card, ...verdict.derived.card }, face: { ...stored.face, ...verdict.derived.face },
+        ...(stored.sheet ? { sheet: { ...stored.sheet, ...verdict.derived.sheet } } : {}) };
     }
   }
   const result = { validatorVersion: PROFILE_SET_VALIDATOR_VERSION, stage: verdict.ok ? 'profile-set-full-decode' : verdict.stage ?? 'profile-set-check',

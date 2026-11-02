@@ -112,7 +112,11 @@ The same worker drains a second queue: profile sets (2026-10-31,
 `worker/profile-sets.mjs`). When no package is waiting it claims a submitted set,
 decodes its front painting in a child process (`worker/profile-set-check.mjs`),
 stores the derived card and face under the lease and finishes it for the
-operator's review. `20261031100100_oddbout_profile_set_dispatch.sql` makes the
+operator's review. A set with an expression sheet (2026-11-03) has the sheet
+decoded too and its arena copy (1152 × 768, `sheet`) stored beside them; only a
+0.2.0 validator may pass such a set
+(`20261103100000_oddbout_profile_set_expressions.sql`), so deploy the migration
+and Render before the Edge functions that accept the sheet. `20261031100100_oddbout_profile_set_dispatch.sql` makes the
 same wake function and cron fire for queued sets.
 
 Free instances sleep after inactivity; the first subsequent submission can

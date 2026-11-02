@@ -105,14 +105,26 @@ The appearance group starts with the fighter's **front** (the profile set, `get_
 view, the user's approval of it, then the side view and the motions drawn from it. The front is his profile picture on the site and
 his face in the arena, and the home lists him only once his profile set is approved.
 
-1. Draw two front candidates with the user's account. Every generation of this fighter (fronts, the side view, later edits) carries
-   the spec's `profileSet.style.colouring` text and attaches `profileSet.style.anchor.url` (the house style anchor) as the LAST
-   reference image: our plain cel colouring, never the user's references' rendering. His pictures give the character, not the style.
-2. Show both and take the user's pick or change. Measure the face square on the pick (`profileSet.face`) and show it as a round crop.
-3. Draw the side view (facing right) from the approved front as the first reference, same colouring; check it is the same character.
+1. Draw two front candidates with the user's account. Every generation of this fighter (fronts, the expression sheet, the side view,
+   later edits) carries the spec's `profileSet.style.colouring` text and attaches `profileSet.style.anchor.url` (the house style anchor)
+   as the LAST reference image: our plain cel colouring, never the user's references' rendering. His pictures give the character, not the style.
+2. Show both and take the user's pick or change.
+3. Draw his expression sheet from the approved front: one generation with `profileSet.expressions.prompt`, the colouring text, the
+   approved front as the FIRST reference and the style anchor LAST. It holds his six arena faces; the sixth is the face the KO card shows
+   when he loses. Without it the arena shows one face for every mood, his defeat included. A sheet that is not transparent goes through
+   `npm run sprite -- cutout <sheet> --out <sheet>-cutout.png` first; never generate it again only for a delivery or format problem.
+4. Build the set with `npm run fighter:profile-set -- --front <pick> --expressions <sheet> --out <new folder>`. It frames the front,
+   measures the face square, checks both pictures as the server will and writes `profile-set.json`, `front.webp`, `expressions.webp`,
+   `face-preview.png` and `ko-preview.png`. Never type sizes, hashes or the face square. Show the face as a round crop and the sheet with
+   its KO face, in the appearance group's review.
+5. Draw the side view (facing right) from the approved front as the first reference, same colouring; check it is the same character.
    Continue the appearance group (concept/idle) from that side view; the motions follow it.
-4. After registration, upload the approved front with `prepare_profile_set` (fighter id, its `profile-set.json`),
-   `upload_profile_set_asset` and `submit_profile_set`, and follow `get_profile_set`. The front is not part of the package.
+6. After registration, upload the set with `prepare_profile_set` (fighter id, its `profile-set.json`), `upload_profile_set_asset` for
+   `front` and then `expressions`, and `submit_profile_set`, and follow `get_profile_set`. The set is not part of the package.
+
+A registered fighter without a sheet (made before 2026-11-03) gets one the same way: draw the sheet from his approved front, build a new
+set from the same front and the sheet, and upload it. His package, entry and record do not change; his current set stays until an
+operator approves the new one.
 
 ## Work in review groups
 
@@ -211,7 +223,7 @@ paths on another machine. Materialize supported Library files with their origina
 Preserve the submission ID and idempotency key across identical retries; inspect status before retrying
 an unknown response. Changed package bytes need a new key. A metadata-only final edit followed by an
 explicit registration request requires fresh validation, not repeated approval of unchanged animations.
-Then upload the approved front as his profile set ([Front first](#front-first) step 4).
+Then upload the approved front and expression sheet as his profile set ([Front first](#front-first) step 6).
 Report registration only after the response confirms it. A registered fighter starts in production (제작 중): it stays out of
 other people's cups, ranked duels and lists. Tell the user to check each required motion on the fighter page's All motions and enter it there; call
 `enter_fighter` only on the user's request after showing every required motion and hearing each confirmed.

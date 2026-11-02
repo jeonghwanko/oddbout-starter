@@ -24,7 +24,8 @@ async function smallBody(request, keys) {
 }
 /**
  * The operator's review list (선수 프로필 세트, 2026-10-31): each set with its files signed for ten minutes in one Storage call — the front
- * painting, the validator's card and face, and his current package's idle sheet to compare with. A file Storage cannot sign is null.
+ * painting, the validator's card, face and arena expression sheet (when he sent one, 2026-11-03), and his current package's idle sheet to
+ * compare with. A file Storage cannot sign is null.
  * @param {any} db @param {any[]} sets
  */
 async function reviewList(db, sets) {
@@ -34,7 +35,8 @@ async function reviewList(db, sets) {
   const want = path => (typeof path === 'string' && path ? paths.push(path) - 1 : -1);
   const wanted = sets.map(set => ({ front: want(profileSetKey(set.ownerId, set.id, 'front')),
     card: set.derived?.card ? want(profileSetKey(set.ownerId, set.id, 'card')) : -1,
-    face: set.derived?.face ? want(profileSetKey(set.ownerId, set.id, 'face')) : -1, preview: want(set.previewKey) }));
+    face: set.derived?.face ? want(profileSetKey(set.ownerId, set.id, 'face')) : -1,
+    sheet: set.derived?.sheet ? want(profileSetKey(set.ownerId, set.id, 'sheet')) : -1, preview: want(set.previewKey) }));
   /** @type {Map<string, string>} */
   const signed = new Map();
   if (paths.length) {
@@ -44,11 +46,12 @@ async function reviewList(db, sets) {
   /** @type {(index: number) => string | null} */
   const url = index => (index >= 0 ? signed.get(paths[index]) ?? null : null);
   return sets.map((set, index) => {
-    const card = set.derived?.card, face = set.derived?.face, at = wanted[index];
+    const card = set.derived?.card, face = set.derived?.face, sheet = set.derived?.sheet, at = wanted[index];
     return { id: set.id, fighterId: set.fighterId, fighterName: set.name ?? '', ownerEmail: set.email ?? '', status: set.status,
       submittedAt: set.submittedAt ?? set.createdAt, front: { url: url(at.front), width: set.manifest?.front?.width ?? null, height: set.manifest?.front?.height ?? null },
       card: card ? { url: url(at.card), width: card.width, height: card.height, face: card.face } : null,
-      face: face ? { url: url(at.face), size: face.size } : null, previewUrl: url(at.preview),
+      face: face ? { url: url(at.face), size: face.size } : null,
+      expressions: sheet ? { url: url(at.sheet), width: sheet.width, height: sheet.height, cell: sheet.cell } : null, previewUrl: url(at.preview),
       reason: set.reason ?? null, current: set.current === true, entered: set.entered === true, validatedAt: set.validatedAt ?? null, reviewedAt: set.reviewedAt ?? null };
   });
 }
