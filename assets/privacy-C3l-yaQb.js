@@ -1,1 +1,0 @@
-import"./_oddbout-analytics-DfJ7iKZO.js";import{t as e}from"./localePreference-HuvMxWYS.js";import{r as t}from"./siteChrome-Bj_w2vQA.js";t(`en`,`privacy`,{linkLocale:e()});
