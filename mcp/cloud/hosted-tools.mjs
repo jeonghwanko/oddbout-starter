@@ -5,7 +5,7 @@ import { GENERATION_LIMITS, UPLOAD_TICKET_HEADER } from '../../api/generations.m
 import { Problem } from '../../api/http.mjs';
 import spec from '../../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { profileLimits } from '../../contracts/ai-fighter/profile-limits.mjs';
-import { FILE, LIBRARY_FILE_HOSTS, UUID_ARG, downloadHostFile, pause, timeLeft, unavailable, within } from './common.mjs';
+import { CREATOR_PAGE, FILE, LIBRARY_FILE_HOSTS, SITE_URL_NEXT, UUID_ARG, downloadHostFile, pause, siteUrl, timeLeft, unavailable, within } from './common.mjs';
 import { TICKET_UPLOAD_URL } from './resources.mjs';
 /**
  * @typedef {import('./common.mjs').Identity} Identity
@@ -16,7 +16,7 @@ import { TICKET_UPLOAD_URL } from './resources.mjs';
  */
 /**
  * A job as the API shows it (api/generations.mjs), the fields hostedNext reads.
- * @typedef {{ status: string, delegate?: boolean, error?: string | null, choice?: string | null,
+ * @typedef {{ id: string, status: string, delegate?: boolean, error?: string | null, choice?: string | null,
  *   revisionsLeft?: { appearance?: number, motions?: number }, preview?: { note?: string }[],
  *   submission?: { stage: string, fighterId?: string | null } | null,
  *   host?: { choice: string, requested?: { name?: string } | null, assigned?: unknown },
@@ -40,7 +40,8 @@ export const HOSTED_INSTRUCTIONS = 'When the user wants ODDBOUT to make the figh
   + 'not-found may mean the original call has not saved its job yet. '
   + 'Preserve the unknown outcome and inspect the original call, rather than replaying request_hosted_fighter to recover it. '
   + 'Never create a new key or repeat a look/motion revision merely to recover an unknown outcome. '
-  + 'Read the same job again for fresh preview URLs; a URL is not proof that the user saw the image. ';
+  + 'Read the same job again for fresh preview URLs; a URL is not proof that the user saw the image. '
+  + 'A result\'s siteUrl is the user\'s page for that request (or, once registered, for his fighter) on the ODDBOUT website. ';
 /** States the worker is on; an answer from the user is not awaited. */
 const HOSTED_WORKING = new Set(['queued', 'appearance', 'motions', 'submitting']);
 /** A submission still on its way to the registry (`af_submissions`). */
@@ -63,8 +64,18 @@ const RUN_FROM_WALK_NEXT = 'The run preview is the walk played faster: no filmed
  * @param {HostedJob} job
  */
 const spent = job => Number.isSafeInteger(job.tokens) && /** @type {number} */ (job.tokens) > 0 ? ` It used ${job.tokens} of the user's tokens.` : '';
-/** @param {HostedJob} job */
+/** The states the user can follow on the site and answer there; a job over, a refused package and a registered fighter (whose text names his page) say nothing of it. */
+const HOSTED_FOLLOWED = new Set(['queued', 'appearance', 'appearance_ready', 'motions', 'motion_ready', 'submitting', 'needs_review']);
+/**
+ * What the agent does next with a job, and (siteUrl, 2026-11-03) where the user can follow it on the site.
+ * @param {HostedJob} job
+ */
 export function hostedNext(job) {
+  const step = hostedStep(job);
+  return HOSTED_FOLLOWED.has(job.status) || (job.status === 'submitted' && !['registered', 'rejected'].includes(job.submission?.stage ?? '')) ? `${step} ${SITE_URL_NEXT}` : step;
+}
+/** @param {HostedJob} job */
+function hostedStep(job) {
   const left = job.revisionsLeft ?? {}, error = job.error ? ` (${job.error})` : '';
   switch (job.status) {
     case 'queued': case 'appearance':
@@ -106,7 +117,7 @@ export function hostedNext(job) {
     case 'submitted':
       // 출전 (2026-10-30): a registered fighter is in production until the user watches his motions and enters him.
       if (job.submission?.stage === 'registered') return `Registered: fighter ${job.submission.fighterId}, in production. Tell the user: he can watch `
-        + 'every motion on his fighter page and enter him there (출전); other people meet him only after that. enter_fighter does it here '
+        + 'every motion on his fighter page (give him siteUrl) and enter him there (출전); other people meet him only after that. enter_fighter does it here '
         + 'once he confirmed each of the eleven motions. '
         + (job.profileSetId ? `His chosen front went in as his profile set (${job.profileSetId}): the home and the arena show it once an operator approves it. `
           + (job.expressions?.url ? 'His six arena faces were sent with it; get_profile_set says whether they passed the check (sheetErrors when not).' : '')
@@ -119,15 +130,21 @@ export function hostedNext(job) {
     default: return `This request is ${job.status}; it is over.`;
   }
 }
+/**
+ * Where the user follows a job on the site: his fighter's all-motions page once registered (that is where he checks the motions and
+ * enters him), else the request's page.
+ * @param {HostedJob} job
+ */
+const jobSite = job => siteUrl({ fighterId: job.submission?.stage === 'registered' ? job.submission.fighterId : null, jobId: job.id });
 /** @param {any} result  The API's JSON. */
-const withNext = result => result?.ok && result.job ? { ...result, next: hostedNext(result.job) } : result;
+const withNext = result => result?.ok && result.job ? { ...result, next: hostedNext(result.job), siteUrl: jobSite(result.job) } : result;
 
 /**
  * 그림 올리기 표 (2026-11-01, 사용자: "grok, gemini도 이미지 생성해서 붙일 수 있어야지"): where a ticket's pictures go in. The page is the
  * site's, for the signed-in owner (the ticket's id); the terminal route is the API's own address, not mcp.oddbout.com, whose gateway takes
  * 64 KB bodies (`worker/cloud-gateway.mjs`).
  */
-export const PICTURE_PAGE = 'https://oddbout.com/creator.html#view=upload&ticket=';
+export const PICTURE_PAGE = `${CREATOR_PAGE}#view=upload&ticket=`;
 export { TICKET_UPLOAD_URL };
 /** The schemes an agent's file addresses use, named in the log; any other is `other`. */
 const FILE_SCHEMES = new Set(['file:', 'sandbox:', 'attachment:', 'content:', 'cid:', 'file-service:', 'ftp:']);
@@ -313,7 +330,7 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
       }
       if (!jobId) {
         const list = await invoke('generations');
-        return list.ok ? { ...list, jobs: list.jobs.map(/** @param {HostedJob} job */ job => ({ ...job, next: hostedNext(job) })) } : list;
+        return list.ok ? { ...list, jobs: list.jobs.map(/** @param {HostedJob} job */ job => ({ ...job, next: hostedNext(job), siteUrl: jobSite(job) })) } : list;
       }
       // Wait on the state alone (no signed URLs per look), then read the job once: the wait leaves the call's last seconds to that read,
       // and stops when the client went away.

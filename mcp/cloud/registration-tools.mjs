@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { Problem, rpcProblem, sha256 } from '../../api/http.mjs';
 import spec from '../../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import schema from '../../contracts/ai-fighter/v1/fighter.schema.json' with { type: 'json' };
-import { FILE, UUID_ARG, downloadHostFile, unavailable } from './common.mjs';
+import { CREATOR_PAGE, FILE, UUID_ARG, downloadHostFile, siteUrl, unavailable } from './common.mjs';
 import { cleanupPublicFiles } from '../../api/profile-sets.mjs';
 /**
  * @typedef {import('./common.mjs').Identity} Identity
@@ -14,6 +14,18 @@ import { cleanupPublicFiles } from '../../api/profile-sets.mjs';
  * @typedef {{ id: string, path: string, bytes: number, sha256: string }} ManifestAsset  An asset as the stored fighter.json lists it.
  */
 
+/**
+ * A submission's or fighter's result with where the user follows it on the site (siteUrl, 2026-11-03): the fighter's all-motions page once
+ * registered (registering does not enter him; his owner does, after watching), else the submission's page — a refused one too, where
+ * the site lists why. A failed call and a deleted fighter point nowhere.
+ * @param {any} result  The API's JSON.
+ */
+export function withSiteLink(result) {
+  if (!result?.ok || result.stage === 'deleted') return result;
+  const url = siteUrl({ fighterId: result.fighter?.id ?? (result.stage === 'registered' ? result.fighterId : null), submissionId: result.submissionId });
+  return url ? { ...result, siteUrl: url, next: result.next ?? 'The user can also follow this on the ODDBOUT website: give him siteUrl to see its progress or why it was refused, '
+    + 'and once registered to review the eleven motions and enter the fighter (출전).' } : result;
+}
 /**
  * Registers the tools every connection lists. `invoke` calls the in-process API as the verified owner; `recordAgent` labels a submission.
  * `identity` is null only on a signed-out call, which register lets reach the public tools alone: the account tools cast it.
@@ -55,7 +67,7 @@ export function registerRegistrationTools({ register, db, identity, invoke, fetc
     async () => ({ id: /** @type {Identity} */ (identity).owner, ...(/** @type {Identity} */ (identity).email ? { email: /** @type {Identity} */ (identity).email } : {}), nickname: 'ODDBOUT' }), { profile: true });
   register('open_creator_homepage', '제작자 홈페이지', 'Get the creator website address. Sign in normally on the website and ensure its account matches get_profile; '
     + 'the cloud connection does not sign in to the website.', {},
-    async () => ({ url: 'https://oddbout.com/creator.html', signIn: 'Sign in normally on the website with the same account as get_profile.' }));
+    async () => ({ url: CREATOR_PAGE, signIn: 'Sign in normally on the website with the same account as get_profile.' }));
   register('check_creation_readiness', '클라우드 제작·등록 연결 점검', 'Use before first generation, after a workspace restart and before registration. '
     + 'Checks this cloud account’s registration access without a PC or CLI login. '
     + 'Generation, conversation display and package review remain unverified until actual evidence exists; '
@@ -115,10 +127,10 @@ export function registerRegistrationTools({ register, db, identity, invoke, fetc
       const bytes = await downloadHostFile(manifest, spec.limits.jsonBytes, fetcher);
       const result = await invoke(fighterId ? `submissions?fighter=${encodeURIComponent(fighterId)}` : 'submissions', 'POST', bytes, { 'content-type': 'application/json', 'idempotency-key': idempotencyKey });
       if (result.ok) await recordAgent(result.submissionId);
-      if (!result.ok || result.stage !== 'uploading') return result;
+      if (!result.ok || result.stage !== 'uploading') return withSiteLink(result);
       const { data, error } = await db.from('af_submissions').select('manifest').eq('id', result.submissionId).eq('owner_id', /** @type {Identity} */ (identity).owner).single();
       if (error) throw unavailable('database-unavailable', error);
-      return { ...result, assets: data.manifest.assets.map(/** @param {ManifestAsset} asset */ ({ id, path, bytes, sha256 }) => ({ id, path, bytes, sha256 })) };
+      return withSiteLink({ ...result, assets: data.manifest.assets.map(/** @param {ManifestAsset} asset */ ({ id, path, bytes, sha256 }) => ({ id, path, bytes, sha256 })) });
     }, { write: true, openWorld: true, idempotent: true, files: ['manifest'] });
   register('upload_fighter_asset', '캐릭터 파일 전달', 'Upload one actual WebP file to your private submission. Its size and SHA-256 must match fighter.json. '
     + 'Repeat safely with identical bytes; never regenerate for a delivery failure.',
@@ -136,10 +148,10 @@ export function registerRegistrationTools({ register, db, identity, invoke, fetc
     + 'Requires the user’s explicit registration request and selected final package. All asset uploads and required file checks must be complete; quality diagnostics are deferred. '
     + 'A registered fighter starts in production; other people meet him after his owner enters him. '
     + 'Queued/validating is not registered; follow get_fighter_submission until final.',
-    { submissionId: UUID_ARG() }, ({ submissionId }) => invoke(`submissions/${submissionId}/submit`, 'POST'), { write: true, publish: true, openWorld: true, idempotent: true });
+    { submissionId: UUID_ARG() }, async ({ submissionId }) => withSiteLink(await invoke(`submissions/${submissionId}/submit`, 'POST')), { write: true, publish: true, openWorld: true, idempotent: true });
   register('get_fighter_submission', '등록 진행 상태', 'Read your submission. Only registered confirms registration; rejected contains the validation failure. '
     + 'Do not regenerate automatically.',
-    { submissionId: UUID_ARG() }, ({ submissionId }) => invoke(`submissions/${submissionId}`));
+    { submissionId: UUID_ARG() }, async ({ submissionId }) => withSiteLink(await invoke(`submissions/${submissionId}`)));
   register('get_registered_fighter', '등록된 캐릭터 확인', 'Read your registered fighter and immutable package identity.',
-    { fighterId: UUID_ARG() }, ({ fighterId }) => invoke(`fighters/${fighterId}`));
+    { fighterId: UUID_ARG() }, async ({ fighterId }) => withSiteLink(await invoke(`fighters/${fighterId}`)));
 }

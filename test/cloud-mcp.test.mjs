@@ -209,6 +209,33 @@ test('manifest registration binds owner/idempotency and does not report queued a
   const status=await call(handle,'get_fighter_submission',{submissionId:id});
   assert.equal(status.structuredContent.stage,'queued');assert.equal(status.structuredContent.fighterId,null);
 });
+// siteUrl (2026-11-03): where the user follows a submission on the site; registering does not enter a fighter, so a registered one points at
+// his all-motions page (where his owner watches the motions and enters him).
+test('registration results carry siteUrl: the submission\'s page, then his fighter\'s motions page once registered', async () => {
+  const id = crypto.randomUUID(), fighter = crypto.randomUUID(), key = crypto.randomUUID();
+  let row = { id, status: 'queued', manifest_sha: 'a'.repeat(64), fighter_id: null };
+  // The submission's table answers the submission, the fighters' the fighter (what the lookup and the submission's admission read).
+  const query = table => ({ select(){return this}, eq(){return this}, async single(){return{data:{manifest:example}}},
+    async maybeSingle(){return{data:table === 'af_fighters' ? { id: fighter, submission_id: id, profile: {}, status: 'production' } : row}} });
+  const db = { ...dbFor(), from: query, rpc: async (name, args) => ({ data: name === 'af_create_submission' ? { id, status: 'uploading', manifest_sha: args.p_sha }
+    : name === 'af_submit' ? row : name === 'af_mcp_session_state' ? 'usable' : true }) };
+  const handle = createCloudHandler({ db, fetcher: async () => new Response(JSON.stringify(example)) });
+  const page = `https://oddbout.com/creator.html#submission=${id}`, motions = `https://oddbout.com/creator.html#fighter=${fighter}&view=motions`;
+  const prepared = (await call(handle, 'prepare_fighter_registration', { manifest: { download_url: 'https://files.oaiusercontent.com/f.json', file_id: 'file_json' }, idempotencyKey: key })).structuredContent;
+  assert.equal(prepared.siteUrl, page); assert.match(prepared.next, /give him siteUrl to see its progress or why it was refused/);
+  assert.equal((await call(handle, 'submit_fighter_registration', { submissionId: id })).structuredContent.siteUrl, page);
+  assert.equal((await call(handle, 'get_fighter_submission', { submissionId: id })).structuredContent.siteUrl, page);
+  row = { ...row, status: 'registered', fighter_id: fighter };
+  const registered = (await call(handle, 'get_fighter_submission', { submissionId: id })).structuredContent;
+  assert.deepEqual([registered.stage, registered.siteUrl], ['registered', motions]);
+  assert.equal((await call(handle, 'submit_fighter_registration', { submissionId: id })).structuredContent.siteUrl, motions);
+  // The fighter's own lookup, and nowhere for a failed call.
+  const found = (await call(handle, 'get_registered_fighter', { fighterId: fighter })).structuredContent;
+  assert.equal(found.siteUrl, motions);
+  const refused = createCloudHandler({ db: { ...db, from: table => ({ ...query(table), async maybeSingle() { return { data: null }; } }) } });
+  const missing = (await call(refused, 'get_fighter_submission', { submissionId: id })).structuredContent;
+  assert.equal(missing.ok, false); assert.equal(missing.siteUrl, undefined);
+});
 test('registration update forwards only a valid optional fighter ID and preserves API refusals', async () => {
   const calls = [], id = crypto.randomUUID(), fighter = crypto.randomUUID(), key = crypto.randomUUID(), updateKey = crypto.randomUUID();
   let refusal = null, downloads = 0;
@@ -535,6 +562,13 @@ test('one request checks its account once for all its in-process routes; a faile
 test('a large result\'s short text survives a field with no JSON form', () => {
   const text = compactText({ ok: true, rules: undefined, fighters: Array.from({ length: 40 }, (_, i) => ({ id: `f${i}`, name: `Fighter ${i}` })) });
   assert.match(text, /^Full result in structuredContent \(\d+ characters\): ok=true, rules=undefined, fighters\[40\]$/);
+});
+
+test('a large result\'s short text keeps siteUrl whole, and cuts other long values', () => {
+  const siteUrl = `https://oddbout.com/creator.html#fighter=${crypto.randomUUID()}&view=motions`;
+  const text = compactText({ ok: true, siteUrl, next: 'x'.repeat(100), jobs: Array.from({ length: 80 }, (_, i) => ({ id: `job-${i}` })) });
+  assert.ok(text.includes(`siteUrl="${siteUrl}"`), text); assert.ok(text.includes(`next="${'x'.repeat(39)}`) && !text.includes('x'.repeat(41)), text);
+  assert.equal(compactText({ ok: true, siteUrl }), JSON.stringify({ ok: true, siteUrl }));
 });
 
 test('a signed-out read is marked as one, so the arena also counts it on every signed-out agent\'s pool (2026-10-30)', async () => {
