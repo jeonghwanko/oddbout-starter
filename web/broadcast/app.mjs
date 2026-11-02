@@ -4,6 +4,17 @@ let client, session, catalog, journal, config;
 let walletSpendingBlocked = false;
 let refreshRevision = 0;
 const busyActions = new Set();
+const budgetErrors = {
+  'invalid-channel': 'Use 1–64 letters, numbers, spaces, hyphens or underscores for the session name.',
+  'invalid-budget': 'Set a credit limit between 25 and 1,000,000.',
+  'invalid-end-time': 'Choose a time limit from 1 to 24 hours and review again.',
+  'invalid-fighters': 'Choose 4–9 different fighters from the available lineup.',
+  'unknown-host': 'Choose a configured broadcast host.',
+};
+function budgetFeedback(message, error = false) {
+  $('budget-feedback').textContent = message;
+  $('budget-feedback').classList.toggle('is-error', error);
+}
 const show = value => {
   $('status').textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
   $('activity-summary').textContent = typeof value === 'string' ? value
@@ -44,6 +55,7 @@ function action(id, callback, event = 'click', exclusive = false) {
   $(id).addEventListener(event, async e => {
     e.preventDefault();
     if (busyActions.has(id)) return;
+    if (id === 'budget-form') budgetFeedback('');
     busyActions.add(id);
     const buttons = [...$(id).querySelectorAll('button'), ...($(id).tagName === 'BUTTON' ? [$(id)] : [])];
     buttons.forEach(button => button.disabled = true);
@@ -56,7 +68,9 @@ function action(id, callback, event = 'click', exclusive = false) {
         });
       } else await callback();
     } catch (error) {
-      show(error.message);
+      const message = id === 'budget-form' ? budgetErrors[error.code] ?? error.message : error.message;
+      show(message);
+      if (id === 'budget-form') budgetFeedback(message, true);
       if (id === 'google-signin') $('login-status').textContent = error.message;
     }
     finally { busyActions.delete(id); buttons.forEach(button => button.disabled = false); updateControls(); }
@@ -144,10 +158,13 @@ action('budget-form', async () => {
     if (existing && error.code === 'invalid-end-time' && Date.parse(existing.input.endsAt) <= Date.now()) saved.complete('approval', existing.requestKey);
     throw error;
   }
+  budgetFeedback('Budget reviewed: ' + quote.cupCredits + ' credits per cup · Up to ' + quote.maxCups + ' cups. Nothing approved yet.');
   if (!confirm('Approve up to ' + quote.maxCredits + ' Sandbox credits on ' + quote.hostId + ' for ' + quote.channelId + '?\n' + quote.cupCredits + ' credits per completed cup.\nEnds ' + quote.endsAt + '.\nLive streaming has not been verified.')) return;
   const { op, result: approved } = await mutate(saved, 'approval', input, 'approvals', { confirmed: true });
   saved.select('approvalId', approved.id); saved.complete('approval', op.requestKey); $('approvalId').value = approved.id; show({ approved });
+  budgetFeedback('Budget approved. You can start your rehearsal.');
 }, 'submit', true);
+$('budget-form').addEventListener('input', () => budgetFeedback(''));
 action('broadcast-form', async () => {
   const saved = requireJournal(), { op, result } = await mutate(saved, 'start', { approvalId: $('approvalId').value.trim() }, 'broadcasts');
   saved.select('broadcastId', result.id); saved.complete('start', op.requestKey); $('broadcastId').value = result.id; show(result); await refresh();
@@ -164,7 +181,7 @@ $('broadcastId').addEventListener('input', () => {
 action('stop', async () => { const result = await call('broadcasts/' + encodeURIComponent($('broadcastId').value.trim()) + '/stop', {}); show(result); await refresh(); });
 function authChanged(value) {
   const previousOwner = session?.user.id;
-  if (previousOwner !== value?.user.id) { refreshRevision++; walletSpendingBlocked = false; $('wallet-status').textContent = ''; }
+  if (previousOwner !== value?.user.id) { refreshRevision++; walletSpendingBlocked = false; $('wallet-status').textContent = ''; budgetFeedback(''); }
   session = value; $('signout').hidden = !value;
   $('google-signin').hidden = Boolean(value);
   $('account-identity').hidden = !value;
