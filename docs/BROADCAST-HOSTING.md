@@ -50,7 +50,10 @@ See [port binding](https://render.com/docs/web-services#port-binding),
    Sandbox SQL file. Never apply it to the game's production project.
 2. Put its `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_PUBLISHABLE_KEY`
    in API secret settings. Allow Auth redirect `https://<console-host>/broadcast/`.
-   Test email login with the intended judge account; SMTP/delivery are separate checks.
+   Enable the Google provider with the ODDBOUT OAuth web client. Add this isolated
+   project's `/auth/v1/callback` to the Google client's authorized redirect URIs,
+   preserving existing callbacks. Test Google login with the intended judge account.
+   The console offers Google only; it does not use email login links or SMTP.
 3. Create/select a PayPal Sandbox REST app, business account and separate personal
    buyer test account. Set `PAYPAL_SANDBOX_CLIENT_ID`, `PAYPAL_SANDBOX_CLIENT_SECRET`,
    `PAYPAL_SANDBOX_MERCHANT_ID` on the API service only.
