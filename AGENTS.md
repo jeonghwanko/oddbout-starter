@@ -333,7 +333,7 @@ Procedures: `docs/CREATOR-HOSTING.md`.
 | `ai-fighter` Edge function | `supabase/functions/ai-fighter/` and its imports | the game repository's `npm run fighter:edge` |
 | `ai-fighter-mcp` Edge function | `supabase/functions/ai-fighter-mcp/` and its imports, with its own copy of `api/` | the game repository's `npm run fighter:mcp` |
 | Database | `supabase/migrations/` | a migration applied on its own, never by a merge |
-| Render validator and `mcp.oddbout.com` gateway | `worker/` and its imports, including `api/handler.mjs` | `npm run worker:deploy -- <full commit sha>` with the deploy hook from the user |
+| Render validator and `mcp.oddbout.com` gateway | `worker/` and its imports (`api/http.mjs`, `client.mjs`, `submissions.mjs`, `profile-sets.mjs` and the modules under them, the package checks in `mcp/`, `contracts/`, `server/`; not `api/handler.mjs`), and `package.json` `dependencies` only (`npm ci --omit=dev`) | `npm run worker:deploy -- <full commit sha>` with the deploy hook from the user |
 | Creator site | the game's private source, `website/`, `web/` and what `scripts/build-creator-site.mjs` imports | `npm run site:build`, then `npm run site:publish` |
 | Creator kit and plugin | `plugins/ai-fighter/`, the runtime list and import graph in `scripts/build-plugin-bundle.mjs`, `vendor/sprite-gen` | the next kit release (`docs/PLUGIN-DISTRIBUTION.md`) |
 | Generation PCs | the host files (`HOST_FILES` in `scripts/host.mjs`) and this repository at `KIT_REF` in `host/og` | a pull request moving `KIT_REF`; then the operator's `og self-update` and `og setup` on the official PC, and `npm run host:setup` after a pull on community hosts |
