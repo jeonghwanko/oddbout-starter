@@ -8,7 +8,7 @@ import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { profileLimits } from '../contracts/ai-fighter/profile-limits.mjs';
 import { text } from './canon.mjs';
 import { probeImage } from './image-probe.mjs';
-import { Problem, UUID, jsonResponse, readBody, rpcCaller, rpcProblem, sha256 } from './http.mjs';
+import { Problem, UUID, jsonResponse, logFailure, readBody, rpcCaller, rpcProblem, sha256 } from './http.mjs';
 import { SUBMISSION_STATUS, checkedManifest, storeAsset } from './submissions.mjs';
 import { DECISIONS, reviewEvidence } from './decisions-review.mjs';
 import { benchmarkReview } from './decisions-benchmark.mjs';
@@ -729,6 +729,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       }
       return json(await creator(request, parts, owner));
     } catch (error) {
+      logFailure('generation', request, error);
       if (error instanceof Problem) return json({ ok: false, stage: 'generation', code: error.message, ...(error.errors ? { errors: error.errors } : {}) }, error.status);
       return json({ ok: false, stage: 'generation', code: 'service-unavailable' }, 503);
     }

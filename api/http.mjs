@@ -97,7 +97,39 @@ export function rpcProblem(error, statuses, { contains = false, unavailable = 'd
   const code = contains ? Object.keys(statuses).sort((x, y) => y.length - x.length).find(known => message.includes(known))
     : Object.hasOwn(statuses, message) ? message : undefined;
   if (code) return new Problem(statuses[code], code);
-  return otherwise?.(error) ?? new Problem(503, typeof unavailable === 'function' ? unavailable(error) : unavailable);
+  const problem = otherwise?.(error) ?? new Problem(503, typeof unavailable === 'function' ? unavailable(error) : unavailable);
+  // The database's own error stays behind the route's code, for the server log (logFailure).
+  if (problem.status >= 500 && problem.cause === undefined) problem.cause = error;
+  return problem;
+}
+
+/** @param {any} value @returns {Record<string, string> | undefined} name, message and Postgres code and hint; never `details`, which can hold row values. */
+function describeError(value) {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'object') return { message: String(value).slice(0, 500) };
+  /** @type {Record<string, string>} */
+  const out = {};
+  for (const key of ['name', 'message', 'code', 'hint']) if (value[key] !== undefined && value[key] !== null && value[key] !== '') out[key] = String(value[key]).slice(0, key === 'message' ? 500 : 120);
+  return out;
+}
+
+/**
+ * One JSON line on the server log (Supabase function logs, the Render log) for an answer a route could not give: a 5xx — anything not a
+ * Problem, or a Problem of 500 and up. It names the route (method and path), the code the caller got, what failed (name, message, Postgres
+ * code; for a 503 rpcProblem made, the database's own error) and, for a bug, the first stack frames. A 4xx is the caller's and logs nothing.
+ * Never the query, headers or body: they can carry tokens (API 점검 2026-11-03 — a 503 used to leave no trace).
+ * @param {string} scope  the route family, e.g. 'api' or 'admin'
+ * @param {Request} request
+ * @param {unknown} error
+ */
+export function logFailure(scope, request, error) {
+  const problem = error instanceof Problem ? error : null, status = problem?.status ?? 503;
+  if (status < 500) return;
+  let path = '';
+  try { path = new URL(request.url).pathname; } catch { /* a request without a URL logs no path */ }
+  const stack = !problem && error instanceof Error ? error.stack?.split('\n').slice(1, 4).map(line => line.trim()) : undefined;
+  console.error(JSON.stringify({ stage: 'api-failure', scope, method: request.method, path, status, ...(problem ? { code: problem.message } : {}),
+    error: describeError(problem ? problem.cause : error), ...(stack ? { stack } : {}) }));
 }
 
 /**

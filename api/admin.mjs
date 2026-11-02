@@ -1,5 +1,5 @@
 // @ts-check
-import { Problem, UUID, jsonResponse, readBody, rpcCaller, verifiedUserId } from './http.mjs';
+import { Problem, UUID, jsonResponse, logFailure, readBody, rpcCaller, verifiedUserId } from './http.mjs';
 import { cleanupPublicFiles, profileSetKey, publishProfileSet, removePublicFiles } from './profile-sets.mjs';
 import { BUCKET } from './submissions.mjs';
 import { ADMIN_EDIT_CORS, adminFighterEditRoute, createAdminFighterEdits } from './admin-fighter-edits.mjs';
@@ -218,6 +218,7 @@ export function createAdminHandler({ db, present }) {
       }
       return reply({ ok: false, code: 'not-found' }, 404);
     } catch (error) {
+      logFailure('admin', request, error);
       return reply({ ok: false, code: error instanceof Problem ? error.message : 'admin-unavailable' }, error instanceof Problem ? error.status : 503);
     }
   };

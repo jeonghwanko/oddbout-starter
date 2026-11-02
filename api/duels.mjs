@@ -1,5 +1,5 @@
 // @ts-check
-import { Problem, UUID, jsonResponse, readBody, rpcProblem, sha256 } from './http.mjs';
+import { Problem, UUID, jsonResponse, logFailure, readBody, rpcProblem, sha256 } from './http.mjs';
 import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/validate.mjs';
 import { CLIENT_LIMITS } from './client-limit.mjs';
 const CORS = {methods:'GET, POST, OPTIONS',headers:'Content-Type'};
@@ -84,12 +84,12 @@ export function createDuelHandler({db,simulateDuel,engineVersion,engines=null,re
         result=await run(row.a,ma,row.b,mb,row.seed);
       } catch(e) {
         await fail(e instanceof Problem ? e.message : 'engine-error');
-        throw e instanceof Problem ? e : new Problem(503,'duel-engine-failed');
+        throw e instanceof Problem ? e : Object.assign(new Problem(503,'duel-engine-failed'),{cause:e});
       }
       let completed;
       try { completed=await rpc('af_complete_duel',{p_id:row.id,p_engine:engine,p_result:result}); }
       catch(e) { if (e instanceof Problem && ['invalid-result','duel-not-approved'].includes(e.message)) await fail(e.message); throw e; }
       return reply({ok:true,match:present(completed)});
-    } catch(e) { return reply({ok:false,code:e instanceof Problem ? e.message:'duel-service-unavailable'},e instanceof Problem ? e.status:503); }
+    } catch(e) { logFailure('duels',request,e); return reply({ok:false,code:e instanceof Problem ? e.message:'duel-service-unavailable'},e instanceof Problem ? e.status:503); }
   };
 }

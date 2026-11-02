@@ -1,5 +1,5 @@
 // @ts-check
-import { Problem, bearerToken, jsonResponse, readBody, rpcCaller, verifiedUserId } from './http.mjs';
+import { Problem, bearerToken, jsonResponse, logFailure, readBody, rpcCaller, verifiedUserId } from './http.mjs';
 
 const CORS = { methods: 'GET, POST, OPTIONS', headers: 'Authorization, Content-Type' };
 /** @type {(body: any, status?: number) => Response} */
@@ -88,6 +88,7 @@ export function createAccountHandler({ db, creatorLink = null }) {
       }
       return reply({ ok: true, account: await call('af_request_access', { p_owner: owner, p_note: note }) });
     } catch (error) {
+      logFailure('account', request, error);
       if (error instanceof Problem) return reply({ ok: false, code: error.message }, error.status);
       return reply({ ok: false, code: 'account-unavailable' }, 503);
     }

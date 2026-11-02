@@ -4,7 +4,7 @@
 // deletes nothing. `POST fighters/<id>/deletion/confirm` deletes with that confirmation and the name typed back. Both are bound to the
 // signed-in session; the database rechecks the owner, the session, the expiry and the fighter's version under its lock, and a lost answer
 // is safe to retry with the same confirmation (`supabase/migrations/20261030120000_ai_fighter_site_deletion.sql`).
-import { Problem, UUID, jsonResponse, readBody, rpcCaller, verifiedUser } from './http.mjs';
+import { Problem, UUID, jsonResponse, logFailure, readBody, rpcCaller, verifiedUser } from './http.mjs';
 import { cleanupPublicFiles } from './profile-sets.mjs';
 
 /** The client a site sign-in stands for in af_fighter_deletions, which has no OAuth client; the database reads this value as the site. */
@@ -49,6 +49,7 @@ export function createFighterDeletionHandler({ db }) {
       await cleanupPublicFiles(db, identity.p_fighter);
       return json(deleted);
     } catch (error) {
+      logFailure('fighter-deletion', request, error);
       if (error instanceof Problem) return json({ ok: false, stage: 'api', code: error.message }, error.status);
       return json({ ok: false, stage: 'api', code: 'service-unavailable' }, 503);
     }

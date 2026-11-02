@@ -1,5 +1,5 @@
 // @ts-check
-import { Problem, bearerToken, jsonResponse, readBody, rpcCaller, sha256, verifiedUserId } from './http.mjs';
+import { Problem, bearerToken, jsonResponse, logFailure, readBody, rpcCaller, sha256, verifiedUserId } from './http.mjs';
 import { CLIENT_LIMITS } from './client-limit.mjs';
 
 // Device-connection sign-in (RFC 8628 style) for a workspace the user's browser cannot reach.
@@ -108,6 +108,7 @@ export function createDeviceLoginHandler({ db, creatorLink = null, limiter = nul
       const [value, status] = await token(request);
       return reply(value, status);
     } catch (error) {
+      logFailure('device-login', request, error);
       if (error instanceof Problem) return reply({ ok: false, code: error.message }, error.status);
       return reply({ ok: false, code: 'device-login-unavailable' }, 503);
     }

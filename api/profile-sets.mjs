@@ -4,7 +4,7 @@
 // `profile-sets/<id>/submit`); the Render validator decodes it and stores a 600-px card and a 192-px face (`worker/profile-sets/*`); an
 // operator approves it (admin.mjs), which copies the derived files to the public bucket; the roster names them (`rosterProfileSet`).
 // No Node-only imports: Deno and Node.
-import { Problem, UUID, jsonResponse, readBody, rpcProblem, sha256 } from './http.mjs';
+import { Problem, UUID, jsonResponse, logFailure, readBody, rpcProblem, sha256 } from './http.mjs';
 import { BUCKET } from './submissions.mjs';
 
 export const PROFILE_SET_VERSION = 'oddbout-profile-set-v1';
@@ -279,6 +279,7 @@ export function createProfileSetHandler({ db, authenticate }) {
       }
       throw new Problem(404, 'route-not-found');
     } catch (error) {
+      logFailure('profile-sets', request, error);
       if (error instanceof Problem) return json({ ok: false, stage: 'api', code: error.message, ...(error.errors ? { errors: error.errors } : {}) }, error.status);
       return json({ ok: false, stage: 'api', code: 'service-unavailable' }, 503);
     }

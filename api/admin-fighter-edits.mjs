@@ -11,7 +11,7 @@
 //   POST  admin/submissions/<id>/submit               to the validator queue
 //   PATCH admin/fighters/<id>/profile                 a profile or style edit (Idempotency-Key, X-Admin-Reason), as PATCH fighters/<id>/profile
 import { updateFighterProfile } from './fighter-profile.mjs';
-import { Problem, UUID, jsonResponse, rpcProblem } from './http.mjs';
+import { Problem, UUID, jsonResponse, logFailure, rpcProblem } from './http.mjs';
 import { SUBMISSION_STATUS, checkedManifest, storeAsset } from './submissions.mjs';
 
 export const ADMIN_EDIT_CORS = { methods: 'GET, POST, PUT, PATCH, OPTIONS', headers: 'Authorization, Content-Type, Idempotency-Key, X-Admin-Reason' };
@@ -117,6 +117,7 @@ export function createAdminFighterEdits({ db, present }) {
       }
       throw new Problem(404, 'route-not-found');
     } catch (error) {
+      logFailure('admin', request, error);
       if (error instanceof Problem) return json({ ok: false, stage: 'api', code: error.message, ...(error.errors ? { errors: error.errors } : {}) }, error.status);
       return json({ ok: false, stage: 'api', code: 'admin-unavailable' }, 503);
     }

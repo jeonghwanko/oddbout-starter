@@ -68,6 +68,13 @@ A rejected key shows as `queue.status: "credential-rejected"` in `/health` and a
 `worker-credential-rejected` log line. `/health` itself stays 200 because this instance
 also serves the MCP gateway; watch the `queue` field, not the HTTP status.
 
+Every API answer of 500 or more writes one JSON line to stderr (`logFailure` in `api/http.mjs`, 2026-11-03): the
+`ai-fighter` and `ai-fighter-mcp` function logs in Supabase, and the Render log for the routes the worker serves.
+Search for `"stage":"api-failure"`. The line names the route family (`scope`), method, path, status and the code the
+caller got, and what failed: the error's name and message, and for a database failure the Postgres code and hint
+behind the route's `…-unavailable` code. It never holds the query string, headers, body or Postgres `details`, which can
+carry tokens or row values. A 4xx is the caller's and writes nothing.
+
 Startup runs the real child-process WebP validator against the existing
 geometric test fixture. Health is available only after it passes. No fighter
 registration or gameplay approval is created by this readiness check.

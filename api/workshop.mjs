@@ -5,7 +5,7 @@
 // `20261027210000_oddbout_open_worlds.sql`). Another person's text is returned as data in its own field, never mixed into instructions.
 import { validateFighter } from '../contracts/ai-fighter/validate.mjs';
 import { applyFighterEdit } from './fighter-profile.mjs';
-import { Problem, UUID, jsonResponse, readBody, rpcCaller } from './http.mjs';
+import { Problem, UUID, jsonResponse, logFailure, readBody, rpcCaller } from './http.mjs';
 import { WORLD_COVERS, canonSheet, factionId, factions, nickname, note, text, worldCover, worldId, worldText, WORLD_LIMITS,
   RELATION_KINDS } from './canon.mjs';
 
@@ -235,6 +235,7 @@ export function createWorkshopHandler({ db, authenticate, rpc: profileRpc, agent
       }
       throw new Problem(404, 'route-not-found');
     } catch (error) {
+      logFailure('workshop', request, error);
       if (error instanceof Problem) return json({ ok: false, stage: 'workshop', code: error.message, ...(error.errors ? { errors: error.errors } : {}) }, error.status);
       return json({ ok: false, stage: 'workshop', code: 'service-unavailable' }, 503);
     }
