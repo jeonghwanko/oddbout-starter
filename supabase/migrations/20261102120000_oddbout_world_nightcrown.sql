@@ -2,9 +2,11 @@
 -- The site carries the world's lore in three languages (crashbang-heroes kaito_web/src/platform/worldLore.ts and its string tables) and the art
 -- under /art/worlds/nightcrown/; this row is the Korean name, tagline, place and short description, like Kkumssi's seed.
 -- No factions: the lore tells the rival group, and a faction name would show untranslated on the English and Japanese pages.
+-- Apply after the site that ships /art/worlds/nightcrown/ is live: published at once, the world leads the operator worlds in the list, and an
+-- older site would show its card without a cover, Korean names on the English and Japanese pages and no lore tab.
 insert into public.af_worlds(id, name, description, tagline, place, cover_path, published) values
  ('nightcrown', '나이트크라운',
-  '마왕성의 간부 네 마녀가 순회 공연을 떠났다. 한눈에는 곧 싸움이 날 것 같지만, 꺼내는 것은 정확한 화음과 군무다. 명령으로 얻는 복종과 스스로 보내는 박수가 다르다는 것을, 이들은 무대에서 처음 배운다.',
+  '마왕성의 간부 네 마녀가 순회 공연을 떠났다. 마왕성 간부라는 말에 객석은 싸움부터 각오하지만, 꺼내는 것은 정확한 화음과 군무다. 명령으로 얻는 복종과 스스로 보내는 박수가 다르다는 것을, 이들은 무대에서 처음 배운다.',
   E'무릎 말고 박수,\n네가 원할 때.', '마왕성 순회 공연', '/art/worlds/nightcrown/cover.webp', true);
 
 -- The cast, placed by the operator (placed_by null locks them in the world). A fighter missing from this database (a fresh test database) is
@@ -18,4 +20,4 @@ from (values
   ('47ba0ae7-664d-45f7-8f7f-7b0250f8192f'::uuid, '루비아', '/art/worlds/nightcrown/rubia-face.webp', 3),
   ('b3578706-48d5-4c0a-bcee-f7e84f74d584'::uuid, '모른', '/art/worlds/nightcrown/morne-face.webp', 4)
 ) v(id, name, portrait, place)
-join public.af_fighters f on f.id = v.id;
+join public.af_fighters f on f.id = v.id and f.deleted_at is null;
