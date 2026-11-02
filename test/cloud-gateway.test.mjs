@@ -162,3 +162,17 @@ test('each forwarded call carries a fresh request id of the gateway\'s, returned
     assert.deepEqual([first.headers.get('x-request-id'),second.headers.get('x-request-id')],seen);
   });
 });
+// SDK v2 (2026-11-03): a 2026-07-28 client goes through the gateway, whose Mcp-* headers reach the function (the SDK refuses a request without them).
+test('a 2026-07-28 client reaches the function through the gateway with its Mcp-* headers',async()=>{
+  const { Client, StreamableHTTPClientTransport } = await import('@modelcontextprotocol/client');
+  const handle=createCloudHandler({db:{auth:{getClaims:async()=>({data:null})},rpc:async()=>({data:null})}}), methods=[];
+  await serverFor(async(url,options)=>{methods.push(options.headers.get('mcp-method'));return handle(new Request(url,options));},async base=>{
+    const client=new Client({name:'gateway-2026',version:'1'},{versionNegotiation:{mode:{pin:'2026-07-28'}}});
+    await client.connect(new StreamableHTTPClientTransport(new URL(base+'/mcp')));
+    try {
+      assert.equal(client.getNegotiatedProtocolVersion(),'2026-07-28');
+      assert.ok((await client.listTools()).tools.some(tool=>tool.name==='get_fighter_spec'));
+    } finally { await client.close(); }
+  });
+  assert.deepEqual(methods,['server/discover','tools/list']);
+});

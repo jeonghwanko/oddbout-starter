@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { Client } from '@modelcontextprotocol/client';
+import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server';
+import { z } from 'zod';
 import { createCommerceHandler } from '../api/commerce/handler.mjs';
 import { verifiedUserId } from '../api/http.mjs';
 import { createCommerceService } from '../api/commerce/service.mjs';
@@ -97,7 +97,7 @@ async function fixture(t) {
     const invoke = async (path, method = 'GET', body, headers = {}) =>
       (await api(new Request(`${ORIGIN}/${path}`, { method, headers, ...(body === undefined ? {} : { body }) }))).json();
     registerCommerceTools({ invoke, register: (name, title, description, inputSchema, run, { write = false, idempotent = !write } = {}) =>
-      server.registerTool(name, { title, description, inputSchema, annotations: { readOnlyHint: !write, idempotentHint: idempotent } }, async args => output(await run(args))) });
+      server.registerTool(name, { title, description, inputSchema: z.object(inputSchema), annotations: { readOnlyHint: !write, idempotentHint: idempotent } }, async args => output(await run(args))) });
     const client = new Client({ name: 'commerce-integration', version: '1.0.0' });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);

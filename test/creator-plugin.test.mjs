@@ -4,8 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { cp, lstat, mkdtemp, mkdir, readFile, realpath, rm, symlink, utimes, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { creationTool } from '../scripts/creation-tool.mjs';
 import { createCreationStore, localPath } from '../mcp/creation-store.mjs';
 import { createJobStore, executeEngine, runCreationJob } from '../mcp/creation-jobs.mjs';
@@ -496,7 +495,8 @@ test('workspace CLI preserves projects and revision guards across calls and reje
   const stale = await call('update_creation_session', { sessionId, expectedRevision: 1, change: { type: 'advance' } });
   assert.equal(stale.isError, true);
   assert.equal(stale.structuredContent.code, 'session-revision-conflict');
-  assert.equal((await call('submit_fighter_package', { manifestPath: 'fixture/fighter.json', idempotencyKey: randomUUID() })).isError, true);
+  // The workspace has no registration tool: since SDK v2 an unknown tool is a protocol error, which the CLI names.
+  await assert.rejects(call('submit_fighter_package', { manifestPath: 'fixture/fighter.json', idempotencyKey: randomUUID() }), /^Error: unknown-tool$/);
   assert.equal((await call('validate_fighter_package', { manifestPath: '../outside/fighter.json' })).isError, true);
   await assert.rejects(creationTool({ workspace: '.' }), /absolute-workspace-required/);
 });

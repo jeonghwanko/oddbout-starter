@@ -4,9 +4,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { ElicitRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { accountItem, checkKit, checkReadiness, creationProgress, elicitAccount, FETCH_INTERVAL_MS, FETCH_RECORD, KIT_BRANCH } from '../mcp/creation-readiness.mjs';
 import { createServer } from '../mcp/server.mjs';
 import { createEnvironmentStore } from '../mcp/creation-environment.mjs';
@@ -188,12 +186,13 @@ test('the account item offers fixed options, never infers, and does not claim di
   assert.ok(!gpt.nextCommands.join(' ').includes('--confirmed-access'));
   assert.equal(accountItem('both').motionMethod, 'grok-video');
   assert.equal(accountItem('stop').status, 'stopped');
-  assert.deepEqual(await elicitAccount({ getClientCapabilities: () => ({}) }), { method: 'unsupported', choice: null });
-  const answering = content => ({ getClientCapabilities: () => ({ elicitation: { form: {} } }), elicitInput: async () => content });
+  assert.deepEqual(await elicitAccount(), { method: 'unsupported', choice: null });
+  const answering = content => async () => content;
   assert.deepEqual(await elicitAccount(answering({ action: 'accept', content: { account: 'grok' } })), { method: 'elicited', choice: 'grok' });
   assert.deepEqual(await elicitAccount(answering({ action: 'accept', content: { account: 'openai-api' } })), { method: 'accept', choice: null });
   assert.deepEqual(await elicitAccount(answering({ action: 'decline' })), { method: 'decline', choice: null });
-  assert.deepEqual(await elicitAccount({ getClientCapabilities: () => ({ elicitation: {} }), elicitInput: async () => { throw new Error('no form'); } }),
+  // The SDK refuses before sending when the client declared no form elicitation, or on a 2026-07-28 request.
+  assert.deepEqual(await elicitAccount(async () => { throw new Error('Client does not support form elicitation.'); }),
     { method: 'unsupported', choice: null });
 });
 
@@ -230,7 +229,7 @@ test('the MCP tool asks the account through a host form when the client supports
   await createServer({}).connect(serverSide);
   const client = new Client({ name: 'readiness-test', version: '1' }, { capabilities: { elicitation: { form: {} } } });
   let asked;
-  client.setRequestHandler(ElicitRequestSchema, request => { asked = request.params; return { action: 'accept', content: { account: 'gpt' } }; });
+  client.setRequestHandler('elicitation/create', request => { asked = request.params; return { action: 'accept', content: { account: 'gpt' } }; });
   await client.connect(clientSide); t.after(() => client.close());
   const result = (await client.callTool({ name: 'check_creation_readiness', arguments: { checkRemote: false } })).structuredContent;
   assert.equal(result.ok, true);
@@ -257,6 +256,9 @@ test('workspace readiness does not read or suggest a local registration account'
   assert.equal(result.data.readyForRegistration, false);
   assert.deepEqual(result.data.items.login.nextTools, ['get_profile', 'check_creation_readiness']);
   assert.deepEqual(result.data.items.infrastructure, { status: 'not-required', reason: 'cloud-registration-route' });
+  // A client without elicitation gets the numbered choices, not a form.
+  const unstated = (await client.callTool({ name: 'check_creation_readiness', arguments: { checkRemote: false } })).structuredContent;
+  assert.deepEqual([unstated.data.elicitation, unstated.data.items.account.status], ['unsupported', 'choice-required']);
 });
 
 test('a saved environment keeps the stated provider and reports its preconditions without certifying generation', async () => {
@@ -267,7 +269,7 @@ test('a saved environment keeps the stated provider and reports its precondition
   assert.equal(noEnvironment.items.environment.status, 'workspace-required');
   const environment = { read: async () => ({ account: 'gpt' }), inspect: async () => ({ status: 'preconditions-recorded', account: 'gpt', readyForGeneration: true }) };
   const saved = await checkReadiness({ ...base, account: undefined, environment,
-    lowLevelServer: { getClientCapabilities: () => { assert.fail('must reuse the stated choice'); } } });
+    elicitInput: () => assert.fail('must reuse the stated choice') });
   assert.equal(saved.elicitation, 'saved-environment');
   assert.equal(saved.items.account.choice, 'gpt');
   assert.equal(saved.items.environment.status, 'preconditions-recorded');
@@ -285,7 +287,7 @@ test('a workspace moved to another host keeps its stated provider and reports th
     confirmedAccess: ['gpt-image'], feedback: '내 GPT 이미지 기능을 사용할 수 있어요. 이 VM에서 연결해줘.' });
   const moved = createEnvironmentStore(root, { hostId: 'host-b', loginProbe });
   const result = await checkReadiness({ kit: { installed, git: fakeGit({ counts: '0\t0' }).git, inspectEngine: engineState(true) }, tools: workingTools,
-    environment: moved, lowLevelServer: { getClientCapabilities: () => { assert.fail('must reuse the stated choice'); } } });
+    environment: moved, elicitInput: () => assert.fail('must reuse the stated choice') });
   assert.equal(result.items.account.choice, 'gpt');
   assert.equal(result.items.environment.status, 'host-changed-reconnect-required');
   assert.equal(result.readyForGeneration, false);
@@ -294,7 +296,7 @@ test('a workspace moved to another host keeps its stated provider and reports th
 test('connection and registration never ask generation questions or touch the engine', async () => {
   for (const purpose of ['connection', 'registration']) {
     const result = await checkReadiness({ purpose,
-      lowLevelServer: { getClientCapabilities: () => assert.fail('no generation prompt') },
+      elicitInput: () => assert.fail('no generation prompt'),
       kit: { git: () => assert.fail('no git or install'), inspectEngine: () => assert.fail('no engine read') } });
     assert.equal(result.purpose, purpose); assert.equal(result.readyForRegistration, false);
     assert.equal(result.items.login.status, 'connector-verification-required');

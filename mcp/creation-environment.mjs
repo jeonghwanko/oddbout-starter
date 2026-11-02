@@ -232,10 +232,10 @@ export function createEnvironmentStore(root, { loginProbe = inspectGenerationLog
 }
 /** @typedef {ReturnType<typeof createEnvironmentStore>} EnvironmentStore */
 
-/** @typedef {import('@modelcontextprotocol/sdk/types.js').CallToolResult} CallToolResult */
+/** @typedef {import('@modelcontextprotocol/server').CallToolResult} CallToolResult */
 /**
- * @param {import('@modelcontextprotocol/sdk/server/mcp.js').McpServer} server
- * @param {{ root: string, respond: import('./server.mjs').Respond, outputSchema: z.ZodRawShape }} options
+ * @param {import('@modelcontextprotocol/server').McpServer} server
+ * @param {{ root: string, respond: import('./server.mjs').Respond, outputSchema: import('./server.mjs').OutputSchema }} options
  */
 export function registerEnvironmentTools(server, { root, respond, outputSchema }) {
   const store = createEnvironmentStore(root);
@@ -247,16 +247,16 @@ export function registerEnvironmentTools(server, { root, respond, outputSchema }
   };
   server.registerTool('get_creation_environment', {
     description: 'Inspect this workspace connection and its missing steps. No generation or permission change. Auth, user consent, host-reported permission, bootstrap reachability and delivery records are separate. Unknown stays unknown.',
-    inputSchema: {}, outputSchema, annotations: readonly,
+    inputSchema: z.object({}), outputSchema, annotations: readonly,
   }, handle(() => store.inspect()));
   server.registerTool('update_creation_environment', {
     description: 'Configure only user-stated provider/capability choices; record the user’s exact network approval for the displayed plan hash. report-host-network requires actual host permission evidence, never inferred from a click or network probe. No firewall change. check-network sends bounded HEAD requests only after approval and host evidence. Revoke clears local consent and requires a separate host revocation. Refresh accepts bundled-identical or trusted signed profiles only. Delivery is a record check, never proof of display.',
-    inputSchema: { expectedRevision: z.number().int().min(0), change: environmentChange }, outputSchema,
+    inputSchema: z.object({ expectedRevision: z.number().int().min(0), change: environmentChange }), outputSchema,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   }, handle(({ expectedRevision, change }) => store.update(expectedRevision, change)));
   server.registerTool('prepare_generation_login', {
     description: 'Prepare the official GPT device login command for the configured environment after host network approval. Does not execute or authenticate. Run only within a user-requested account connection, through the normal host tool. Tokens and callback URLs never go through chat. Grok onboarding is not implemented here.',
-    inputSchema: {}, outputSchema, annotations: readonly,
+    inputSchema: z.object({}), outputSchema, annotations: readonly,
   }, handle(() => store.prepareLogin()));
   return store;
 }

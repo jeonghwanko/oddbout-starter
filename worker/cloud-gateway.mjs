@@ -51,7 +51,9 @@ export async function cloudGateway(req, res, fetcher = fetch, { headerTimeoutMs 
     const requestId = randomUUID();
     const headers = new Headers({'x-oddbout-public-resource':resource,'x-request-id':requestId});
     // The client's user-agent too: without it the function's logs show only this gateway's, and which client called is what a sign-in diagnosis needs.
-    for (const name of ['authorization','content-type','accept','mcp-protocol-version','origin','user-agent']) if (typeof req.headers[name] === 'string') headers.set(name,req.headers[name]);
+    for (const name of ['authorization','content-type','accept','origin','user-agent']) if (typeof req.headers[name] === 'string') headers.set(name,req.headers[name]);
+    // Every Mcp-* header too: 2026-07-28 requests carry Mcp-Method and Mcp-Name beside MCP-Protocol-Version, and the SDK refuses one without them.
+    for (const [name,value] of Object.entries(req.headers)) if (name.startsWith('mcp-') && typeof value === 'string') headers.set(name,value);
     const chunks=[]; let bytes=0;
     for await (const part of req) { bytes += part.length; if (bytes > 65536) { reply(413,'{"error":"body_limit"}'); return true; } chunks.push(part); }
     const response = await fetcher(UPSTREAM+path,{method:req.method,headers,redirect:'error',signal:control.signal,...(req.method==='POST'?{body:Buffer.concat(chunks)}:{})});
@@ -59,6 +61,7 @@ export async function cloudGateway(req, res, fetcher = fetch, { headerTimeoutMs 
     /** @type {Record<string, string>} */
     const responseHeaders = {'cache-control':'no-store','x-content-type-options':'nosniff','x-request-id':requestId};
     for (const name of ['content-type','www-authenticate','retry-after','allow','access-control-allow-origin','access-control-allow-methods','access-control-allow-headers','access-control-expose-headers']) if(response.headers.has(name)) responseHeaders[name]=/** @type {string} */ (response.headers.get(name));
+    for (const [name,value] of response.headers) if (name.startsWith('mcp-')) responseHeaders[name]=value;
     res.writeHead(response.status,responseHeaders);
     for await (const part of response.body ?? []) res.write(part);
     res.end();

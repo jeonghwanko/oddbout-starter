@@ -1,7 +1,6 @@
 // @ts-check
 import { randomUUID, createHash } from 'node:crypto';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { buildBroadcastProgramContext } from './program.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -113,7 +112,7 @@ export async function createProducerMcp({url,token,fetchImpl=fetch}) {
   return {close:()=>client.close(),async callTool(name,args,{signal}={}) {
     if (!PRODUCER_TOOLS.includes(name)) throw new Error('producer_tool_not_allowed');
     try {
-      const result=await client.callTool({name,arguments:args},undefined,{signal,timeout:20_000,maxTotalTimeout:20_000});
+      const result=await client.callTool({name,arguments:args},{signal,timeout:20_000,maxTotalTimeout:20_000});
       /** @type {any} */ let body=result.structuredContent;
       if (!body) {
         const parts=/** @type {any[]} */ (result.content??[]).filter(part=>part.type==='text');

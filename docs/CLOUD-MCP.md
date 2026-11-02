@@ -603,7 +603,7 @@ DB RPC/확인 기록은 service_role 전용이고, 일반 사용자와 MCP 토�
   일반 로그인은 그대로 유지하고 OAuth client 토큰만 전용 audience와 `af_mcp` role로 제한한다.
   이 role은 Postgres에 생성하지 않는다. 일반 API도 OAuth 토큰을 거부한다.
 - migration `20261024053500_ai_fighter_cloud_mcp_oauth.sql`을 먼저 적용한다.
-- Deno: `npx deno@2.7.5 check --config supabase/functions/ai-fighter-mcp/deno.json supabase/functions/ai-fighter-mcp/index.ts`.
+- Deno: `npx deno@2.9.6 check --frozen --config supabase/functions/ai-fighter-mcp/deno.json supabase/functions/ai-fighter-mcp/index.ts` (the version CI runs; without `--frozen` after an import-map change, to rewrite `deno.lock`).
 - `scripts/edge-bundle.mjs`의 `edgeFiles`에 새 함수의 entry/importMap/lock을 넘겨 배포 파일을 수집한다.
 - 승인 페이지 소스: `web/cloud-connect/`. `scripts/build-cloud-connect.mjs <site-dir>`가
   페이지와 고정 버전 Supabase 브라우저 SDK를 복사한다. 전체 사이트 빌드에도 포함된다.

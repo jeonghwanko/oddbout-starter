@@ -64,7 +64,8 @@
     "mcp:check": "node scripts/check-cloud-discovery.mjs"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.32.1",
+    "@modelcontextprotocol/client": "2.4.0",
+    "@modelcontextprotocol/server": "2.4.0",
     "@supabase/supabase-js": "2.117.3",
     "ajv": "6.15.0",
     "sharp": "0.35.5",

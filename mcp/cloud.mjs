@@ -1,6 +1,5 @@
 // @ts-check
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { createHandler } from '../api/handler.mjs';
 import { Problem, UUID, bearerToken, failureDetail, readBody } from '../api/http.mjs';
@@ -14,6 +13,7 @@ import { registerProfileSetTools } from './cloud/profile-set-tools.mjs';
 import { registerWorkshopTools } from './cloud/workshop-tools.mjs';
 import { HOSTED_INSTRUCTIONS, registerHostedTools } from './cloud/hosted-tools.mjs';
 import { DIRECTORY_DESCRIPTIONS, DIRECTORY_INSTRUCTIONS, DIRECTORY_TITLES } from './cloud/directory-edition.mjs';
+import { mcpServing } from './cloud/serve.mjs';
 import { CLOUD_ISSUER, CLOUD_RESOURCE, DIRECTORY_DOCUMENTATION, DIRECTORY_RESOURCE, LEGACY_PUBLIC_RESOURCE, PUBLIC_DIRECTORY_RESOURCE, PUBLIC_RESOURCE,
   PUBLIC_SIGN_IN_RESOURCE, SIGN_IN_RESOURCE } from './cloud/resources.mjs';
 // The cloud MCP's tool families live in ./cloud/ (Edge-only, as this file); these names are this module's as before.
@@ -233,16 +233,16 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
     idempotent = write ? undefined : true, files = [], profile = false, publicTool = false, diagnostic = false } = {}) => {
     if (typeof idempotent !== 'boolean') throw Error(`${name}: a write tool states idempotent`);
     // Register types each tool's args; the SDK parses them with inputSchema before run sees them.
-    server.registerTool(name, { title, description, inputSchema: /** @type {z.ZodRawShape} */ (inputSchema),
+    server.registerTool(name, { title, description, inputSchema: z.object(/** @type {z.ZodRawShape} */ (inputSchema)),
       ...(profile ? { outputSchema: z.object({ id: z.string().min(1), email: z.string().optional(), nickname: z.string().optional() }).strict() } : {}),
       // The directory edition repeats the title among the annotations, where Anthropic's tool checklist looks for it with the hints.
       annotations: { ...(directory ? { title } : {}), ...READ, readOnlyHint: !write, openWorldHint: openWorld, destructiveHint: publish, idempotentHint: idempotent },
       _meta: { securitySchemes: publicTool ? [{ type: 'noauth' }] : AUTH,
         ...(files.length ? { 'openai/fileParams': files } : {}), ...(profile ? { 'openai/profile': true } : {}) } },
-    async (/** @type {Record<string, unknown>} */ args, /** @type {{ signal?: AbortSignal } | undefined} */ extra) => {
+    async (/** @type {Record<string, unknown>} */ args, /** @type {import('@modelcontextprotocol/server').ServerContext | undefined} */ ctx) => {
       if (!publicTool && !identity) return { ...output({ ok: false, code: 'authentication-required' }),
         _meta: { 'mcp/www_authenticate': [`Bearer resource_metadata="${CLOUD_RESOURCE}/.well-known/oauth-protected-resource"`] } };
-      const started = Date.now(), signals = [extra?.signal, call.signal].filter(signal => signal !== undefined);
+      const started = Date.now(), signals = [ctx?.mcpReq?.signal, call.signal].filter(signal => signal !== undefined);
       // The SDK's signal ends with a cancellation; the request's, when the client goes away (2026-07-28 reads a closed stream as one).
       /** @type {import('./cloud/common.mjs').ToolContext} */
       const context = { signal: signals.length ? AbortSignal.any(signals) : new AbortController().signal, deadline: call.deadline ?? started + CALL_BUDGET_MS };
@@ -335,7 +335,7 @@ async function hostOf(body) {
 }
 
 /**
- * The tool list as hosts read it. SDK 1.32 serializes custom auth metadata only in _meta: publish the current host's top-level contract too.
+ * The tool list as hosts read it. The SDK serializes custom auth metadata only in _meta: publish the current host's top-level contract too.
  * Every schema names its JSON Schema draft (1.1 KB of each list, every conversation); hosts do not need it.
  * @param {any} result
  */
@@ -359,6 +359,7 @@ function publishedToolList(result) {
  * @returns {(request: Request) => Promise<Response>}
  */
 export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted = null, budgetMs = CALL_BUDGET_MS }) {
+  const serve = mcpServing(65536);
   return async request => {
     const started = Date.now();
     const { route, signInFirst, edition, resource } = routeOf(request);
@@ -371,7 +372,9 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted =
     if (origin !== null && !ALLOWED_ORIGINS.has(origin)) return json({ error: 'origin_not_allowed' }, 403);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: {
       'access-control-allow-origin': origin ?? 'https://chatgpt.com',
-      'access-control-allow-methods': 'POST, GET, OPTIONS', 'access-control-allow-headers': 'Authorization, Content-Type, MCP-Protocol-Version',
+      'access-control-allow-methods': 'POST, GET, OPTIONS',
+      // Mcp-Method and Mcp-Name: every 2026-07-28 request carries them.
+      'access-control-allow-headers': 'Authorization, Content-Type, MCP-Protocol-Version, Mcp-Method, Mcp-Name',
       'access-control-expose-headers': 'WWW-Authenticate' } });
     /**
      * A call without a sign-in says why (RFC 6750): a token it refused is named `invalid_token` with the reason, so the agent can tell its
@@ -413,11 +416,10 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted =
     /** @type {Call} */
     const call = { requestId: UUID.test(given) ? given.toLowerCase() : crypto.randomUUID(),
       protocol: /^\d{4}-\d{2}-\d{2}$/.test(version) ? version : null, signal: request.signal, deadline: started + budgetMs };
-    const server = cloudServer({ db, identity, fetcher, arena, hosted, host: await hostOf(body), edition, call });
-    const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+    /** @type {Parameters<typeof cloudServer>[0]} */
+    const options = { db, identity, fetcher, arena, hosted, host: await hostOf(body), edition, call };
     try {
-      await server.connect(transport);
-      const response = await transport.handleRequest(request, { parsedBody: body });
+      const response = await serve(cloudServer(options), request, body);
       if (body.method === 'tools/list' && response.status === 200) return json(publishedToolList(await response.json()));
       return response;
     } catch (error) {
@@ -425,6 +427,5 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted =
         ms: Date.now() - started, ok: false, code: 'mcp_unavailable', ...failureDetail(error) }));
       return json({ error: 'mcp_unavailable' }, 503);
     }
-    finally { await server.close(); }
   };
 }

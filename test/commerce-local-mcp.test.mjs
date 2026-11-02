@@ -1,8 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { createCommerceMcpHandler } from '../mcp/cloud/commerce-handler.mjs';
 import { createCommerceHandler } from '../api/commerce/handler.mjs';
 import { verifiedUserId } from '../api/http.mjs';
@@ -78,7 +77,8 @@ test('only unique valid server-provisioned opaque session credentials authentica
 test('only producer allowlist is exposed; paid mutation is bound to exact grant session despite same-owner or cross-owner inputs', async t => {
   const f = await setup(t); const owner = await clientFor(t, f.handle); const other = await clientFor(t, f.handle, OTHER_TOKEN);
   assert.deepEqual((await owner.listTools()).tools.map(item => item.name).sort(), ['get_credit_balance', 'get_broadcast_prices', 'get_broadcast', 'get_broadcast_job', 'get_broadcast_report', 'host_cup'].sort());
-  for (const name of ['approve_broadcast', 'create_topup_checkout', 'confirm_topup', 'quote_broadcast', 'start_broadcast', 'stop_broadcast']) assert.equal((await owner.callTool({ name, arguments: {} })).isError, true);
+  // A tool the producer does not list is unknown to it: SDK v2 answers the spec's -32602, not a tool result.
+  for (const name of ['approve_broadcast', 'create_topup_checkout', 'confirm_topup', 'quote_broadcast', 'start_broadcast', 'stop_broadcast']) await assert.rejects(owner.callTool({ name, arguments: {} }), new RegExp(`Tool ${name} not found`));
   for (const broadcastId of [f.sibling.id, f.foreign.id]) {
     const requestKey = randomUUID();
     const refused = await tool(owner, 'host_cup', { requestKey, broadcastId, fighterIds: FIGHTERS });
