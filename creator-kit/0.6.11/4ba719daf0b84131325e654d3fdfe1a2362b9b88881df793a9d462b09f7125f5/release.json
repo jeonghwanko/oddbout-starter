@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "name": "oddbout",
+  "version": "0.6.11",
+  "artifact": {
+    "url": "https://oddbout.com/creator-kit/0.6.11/4ba719daf0b84131325e654d3fdfe1a2362b9b88881df793a9d462b09f7125f5/oddbout-0.6.11.zip",
+    "bytes": 4201010,
+    "sha256": "848365c831b0373e88438078474dcda4d0555177a800734b9985f99ee9381223"
+  },
+  "bootstrap": {
+    "url": "https://oddbout.com/creator-kit/0.6.11/4ba719daf0b84131325e654d3fdfe1a2362b9b88881df793a9d462b09f7125f5/fetch-creator-kit.py",
+    "bytes": 16593,
+    "sha256": "b66c31ff833816dfa74c90d9155359d3fdd484dff8c12759e48addde01707592"
+  },
+  "runtimeManifestSha256": "faccf72053efe94b7704356959079b71fff2d746b7ba4e15b23201ae169789ae"
+}
