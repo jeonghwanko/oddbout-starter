@@ -13,6 +13,11 @@
     "url": "https://github.com/jeonghwanko/oddbout-starter.git"
   },
   "scripts": {
+    "broadcast:dev": "node scripts/broadcast-demo.mjs",
+    "broadcast:doctor": "node scripts/broadcast-host.mjs --doctor",
+    "broadcast:runner": "node scripts/broadcast-runner.mjs",
+    "broadcast:producer": "node scripts/broadcast-producer.mjs",
+    "broadcast:check-ui": "node --test test/browser/broadcast-console.test.mjs",
     "site:build": "node scripts/build-creator-site.mjs",
     "site:publish": "node scripts/publish-creator-site.mjs",
     "worker:deploy": "node scripts/deploy-render.mjs",
@@ -59,6 +64,7 @@
     "@modelcontextprotocol/sdk": "1.32.1",
     "@supabase/supabase-js": "2.117.3",
     "ajv": "6.15.0",
+    "playwright": "1.64.1",
     "sharp": "0.35.5",
     "undici": "7.30.1",
     "zod": "4.6.7"

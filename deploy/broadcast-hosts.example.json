@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "hosts": [
+    {
+      "id": "current-pc",
+      "transport": "local",
+      "platform": "win32",
+      "obsUrl": "",
+      "obsPasswordEnv": "ODDBOUT_OBS_PASSWORD",
+      "scene": ""
+    },
+    {
+      "id": "office-stable",
+      "transport": "ssh",
+      "platform": "linux",
+      "sshTarget": "office-stable",
+      "repoRoot": "",
+      "nodeExecutable": "node",
+      "remoteEnvFile": ".env.broadcast.local",
+      "obsUrl": "",
+      "obsPasswordEnv": "ODDBOUT_OBS_PASSWORD",
+      "scene": ""
+    },
+    {
+      "id": "svl-mac-01",
+      "transport": "ssh",
+      "platform": "darwin",
+      "sshTarget": "svl-mac-01",
+      "repoRoot": "",
+      "nodeExecutable": "node",
+      "remoteEnvFile": ".env.broadcast.local",
+      "obsUrl": "",
+      "obsPasswordEnv": "ODDBOUT_OBS_PASSWORD",
+      "scene": ""
+    }
+  ]
+}
