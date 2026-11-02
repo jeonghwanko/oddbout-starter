@@ -2,6 +2,58 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { createBroadcastDemo } from '../../scripts/broadcast-demo.mjs';
+import { createCommerceService } from '../../api/commerce/service.mjs';
+import { createCommerceStore } from '../../api/commerce/store.mjs';
+import { createCommerceHandler } from '../../api/commerce/handler.mjs';
+
+test('budget review accepts spaces and Korean, shows errors beside the button and never approves on cancel', { timeout: 30_000 }, async t => {
+  const origin = 'http://127.0.0.1:5191';
+  const { server } = createBroadcastDemo({ ODDBOUT_BROADCAST_PORT: '5191' });
+  await new Promise(resolve => server.listen(5191, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  const browser = await chromium.launch({ channel: process.env.ODDBOUT_TEST_BROWSER_CHANNEL ?? 'chrome', headless: true });
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  await page.route('**/broadcast/config', route => route.fulfill({ json: { commerceEnabled: true, authConfigured: true, supabaseUrl: 'https://isolated.example', publishableKey: 'test-public' } }));
+  await page.route('**/broadcast/supabase.js', route => route.fulfill({ contentType: 'text/javascript', body: `
+    globalThis.supabase={createClient(){const session={access_token:'fixture',user:{id:'budget-review-fixture'}};
+      return {auth:{onAuthStateChange(){},async getSession(){return {data:{session}};}}};}};` }));
+  await page.route('**/commerce/wallet', route => route.fulfill({ json: { ok: true, data: { balanceCredits: 1000, availableCredits: 1000, reservedCredits: 0 } } }));
+  const service = createCommerceService({ publicOrigin: origin, hosts: [{ id: 'svl-mac-01' }], paypal: null,
+    store: createCommerceStore({ rpc: async () => { throw new Error('Review must not touch the ledger.'); } }) });
+  const handle = createCommerceHandler({ service, publicOrigin: origin, authenticate: async () => 'owner' });
+  const quotes = [], dialogs = []; let approvals = 0;
+  await page.route('**/commerce/quote', async route => {
+    const input = route.request().postDataJSON(); quotes.push(input);
+    const response = await handle(new Request(origin + '/commerce/quote', { method: 'POST',
+      headers: { origin, 'content-type': 'application/json' }, body: JSON.stringify(input) }));
+    await route.fulfill({ status: response.status, json: await response.json() });
+  });
+  await page.route('**/commerce/approvals', route => { approvals++; return route.abort(); });
+  page.on('dialog', async dialog => { dialogs.push(dialog.message()); await dialog.dismiss(); });
+  await page.goto(origin + '/broadcast/');
+  await page.locator('#signout').waitFor();
+  await page.locator('#hostId').selectOption('svl-mac-01');
+  await page.locator('#maxCredits').fill('250');
+  await page.locator('#channelId').fill('bad/name');
+  await page.getByRole('button', { name: 'Review budget', exact: true }).click();
+  await page.locator('#budget-feedback').filter({ hasText: 'Use 1–64 letters' }).waitFor();
+  assert.equal(dialogs.length, 0);
+  assert.equal(await page.locator('#budget-feedback').evaluate(el => el.classList.contains('is-error')), true);
+  for (const name of ['Friday Night', '금요일 밤']) {
+    await page.locator('#channelId').fill(name);
+    assert.equal(await page.locator('#budget-feedback').textContent(), '');
+    await page.getByRole('button', { name: 'Review budget', exact: true }).click();
+    await page.waitForFunction(() => !document.querySelector('#budget-form button').disabled);
+    await page.locator('#budget-feedback').filter({ hasText: '25 credits per cup · Up to 10 cups' }).waitFor();
+    assert.match(dialogs.at(-1), new RegExp(name));
+    assert.equal(quotes.at(-1).channelId, name);
+    assert.equal(await page.locator('#budget-feedback').evaluate(el => el.classList.contains('is-error')), false);
+  }
+  assert.equal(approvals, 0);
+  assert.equal(await page.locator('#approvalId').inputValue(), '');
+  assert.equal(await page.locator('#available').textContent(), '1,000');
+});
 
 test('Google-only account flow recovers from OAuth errors and clears identity on sign-out', { timeout: 30_000 }, async t => {
   const { server } = createBroadcastDemo({ ODDBOUT_BROADCAST_PORT: '5190' });

@@ -541,6 +541,13 @@ h1 span {
   margin-top: 10px;
   color: #7e3929;
 }
+.budget-feedback {
+  color: var(--muted);
+  margin: 0 0 12px;
+}
+.budget-feedback.is-error {
+  color: #9b342c;
+}
 .notice {
   font-size: 13px;
   line-height: 1.55;

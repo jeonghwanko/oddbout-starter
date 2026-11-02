@@ -105,7 +105,9 @@ export function createCommerceService({ store, paypal, merchantId = '', publicOr
     quote(input) {
       const body = record(input);
       if (!configuredHosts.has(body.hostId)) throw new Problem(422, 'unknown-host');
-      if (typeof body.channelId !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(body.channelId)) throw new Problem(422, 'invalid-channel');
+      // This is an operator's session label, not a verified Twitch login or URL.
+      if (typeof body.channelId !== 'string' || !body.channelId.trim() || body.channelId.length > 64
+        || /[^\p{L}\p{N} _-]/u.test(body.channelId)) throw new Problem(422, 'invalid-channel');
       if (!Number.isSafeInteger(body.maxCredits) || body.maxCredits < 25 || body.maxCredits > 1_000_000) throw new Problem(422, 'invalid-budget');
       if (typeof body.endsAt !== 'string' || !Number.isFinite(Date.parse(body.endsAt)) || Date.parse(body.endsAt) <= now() || Date.parse(body.endsAt) > now() + 86_400_000) throw new Problem(422, 'invalid-end-time');
       if (!Array.isArray(body.fighterIds) || body.fighterIds.length < 4 || body.fighterIds.length > 9 || new Set(body.fighterIds).size !== body.fighterIds.length
