@@ -21,7 +21,6 @@
     "site:build": "node scripts/build-creator-site.mjs",
     "site:publish": "node scripts/publish-creator-site.mjs",
     "worker:deploy": "node scripts/deploy-render.mjs",
-    "start": "node mcp/stdio.mjs",
     "login": "node scripts/login.mjs",
     "logout": "node scripts/login.mjs logout",
     "admin": "node scripts/admin.mjs",
@@ -43,7 +42,6 @@
     "mcp:smoke": "node scripts/mcp-smoke.mjs",
     "creation:context": "node scripts/creation-context.mjs",
     "creation:delivery": "node scripts/check-creation-delivery.mjs",
-    "creation:check": "node scripts/check-connection.mjs",
     "creation:run": "node scripts/run-creation-job.mjs",
     "creation:tool": "node scripts/creation-tool.mjs",
     "dots:doctor": "node scripts/dots-workspace.mjs doctor",
@@ -58,7 +56,6 @@
     "host:setup": "node scripts/host.mjs setup",
     "host:login": "node scripts/host.mjs login",
     "host:start": "node scripts/host.mjs start",
-    "test:live": "node scripts/live-registration-test.mjs",
     "dots:start": "node scripts/dots-start.mjs",
     "dots:source": "node scripts/dots-source.mjs",
     "mcp:check": "node scripts/check-cloud-discovery.mjs"

@@ -129,13 +129,14 @@ generation and the live AI Fighter spec before creating a package, and use the b
   generation subscriptions or install/update the engine.
 - Run the readiness result's kit `nextCommands` (restart when told). Pass `account` only as the user stated it;
   otherwise let the conversation host's form or numbered options ask.
-- Follow `docs/CONNECTION-READINESS.md`: present the ODDBOUT connection action, then the user's Google sign-in and
-  device approval. Reuse the existing device flow: `connect_oddbout` start/wait; retain pending requests and adopt
-  the new session without a login-only restart.
-- Use login commands only with a supported secure handoff or the device connection ([hard rule 4](#hard-rules)).
-  For a browser on another device, use the device connection (`--device`, then `--device-wait`) only when readiness
-  reports `routes.otherDevice` available, which requires the deployed server to advertise `registration.deviceLogin`
-  "v1". The link and pairing code are public: tell the user to approve only a request they started and whose code matches.
+- Follow `docs/CONNECTION-READINESS.md`: the account and registration belong to the connected ODDBOUT cloud tools
+  (`get_profile`, then `prepare_fighter_registration`, `upload_fighter_asset`, `submit_fighter_registration` and
+  `get_fighter_submission`). The workspace tools never read a CLI login; a missing or failing cloud tool is not a
+  reason to sign in locally.
+- The kit's own login (`npm run login`, used to join a generation host or run admin commands) runs only with a supported
+  secure handoff or the device connection ([hard rule 4](#hard-rules)): for a browser on another device, `--device`,
+  then `--device-wait`. The link and pairing code are public: tell the user to approve only a request they started and
+  whose code matches.
 - If no secure route is supported, report the authentication blocker. Do not implement a bypass or assume a planned flow already exists.
 - Keep ODDBOUT API/account, generation access and parent delivery separate. A saved session is not a server-verified account.
 - VM CONNECT/network blocks belong to the initial environment preparer; ordinary creators reuse that workspace. The
@@ -256,7 +257,7 @@ Both routes:
 | --- | --- |
 | `api/` | Server API (registration, accounts, generations) for the Edge functions and the Render worker, plus the client modules the kit ships |
 | `supabase/functions/` | Edge functions `ai-fighter` (API), `ai-fighter-mcp` (hosted MCP) and the temporary `client-ip-probe`; `supabase/migrations/` is the database |
-| `mcp/` | MCP tools: `stdio.mjs` is the workspace server the kit ships; `cloud.mjs`, `cloud/` and the other `edgeOnlyFiles` in `scripts/build-plugin-bundle.mjs` run only in the hosted MCP; the Render worker imports a few |
+| `mcp/` | MCP tools: `server.mjs` holds the workspace tools, which `scripts/creation-tool.mjs` runs in process; `cloud.mjs`, `cloud/` and the other `edgeOnlyFiles` in `scripts/build-plugin-bundle.mjs` run only in the hosted MCP; the Render worker imports a few |
 | `worker/` | Render validator worker and the `mcp.oddbout.com` gateway |
 | `scripts/` | The CLIs behind `npm run`: creation tools, packing, gait, Dots, plugin build and release, deploy helpers |
 | `host/` | Generation-host tools that make hosted fighters on a generation PC ([host/README.md](host/README.md)) |

@@ -362,7 +362,6 @@ ODDBOUT 통합 플러그인은 PC와 Dots 모두 현재 대화의 연결된 계�
 클라우드 `check_creation_readiness`, `prepare_fighter_registration`, `upload_fighter_asset`,
 `submit_fighter_registration`, `get_fighter_submission`의 실제 스키마와 응답을 따른다.
 작업 공간에 등록용 CLI 로그인을 요구하지 않는다. [통합 경로](ODDBOUT-PLUGIN.md)를 참고한다.
-예전 독립 stdio 클라이언트에만 `AI_FIGHTER_CLIENT_CONFIG`와 `submit_fighter_package` 경로가 남아 있다.
 연결된 클라우드 등록 실패를 다른 로컬 계정으로 자동 대체하지 않는다.
 `registered`와 `fighterId`를 실제로 확인한다. 등록한 선수는 제작 중이다. 주인이 선수 페이지의 "모든 동작"에서 필수 동작 11개를 확인하고
 출전해야 다른 사람의 컵·랭크 대결·공개 명단에 나온다. 에이전트는 동작을 보여주고 사용자가 요청할 때만 `enter_fighter`를 부른다.

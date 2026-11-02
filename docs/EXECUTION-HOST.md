@@ -87,7 +87,7 @@ npm run sprite:status
 - **MCP `check_creation_readiness`** 를 캐릭터의 첫 생성 전, 작업 공간 재시작 뒤, 등록 전에 부른다. 상태별 의미는 [연결 안내](CONNECTION-READINESS.md)를 따른다.
   연결만 확인할 때 `purpose: "connection"`, 완성된 패키지 등록 때 `purpose: "registration"`을 지정한다.
   두 목적은 생성 구독 질문·키트 업데이트·Python 설치를 생략한다. 새 생성 준비만 기본 `purpose: "generation"`이다.
-  연결 실행은 `connect_oddbout`의 `start` → 사용자 Google 승인 → `wait` 순서다. 로그인 후 MCP 재시작은 필요 없다.
+  계정과 등록은 대화에 연결한 ODDBOUT 클라우드 도구가 확인한다(7절). 작업 공간은 등록용 로그인을 읽거나 제안하지 않는다.
   - **kit:** 버전·작업 기록이 아직 하나도 없을 때만 이 브랜치를 fast-forward한다. 고정된 엔진(`vendor/sprite-gen`)이 바뀌었거나 없으면
     `nextCommands`에 `npm run sprite:setup`이 들어간다. 예전의 해시 고정 동작 패치는 엔진 고정으로 대체되어 더 적용하지 않는다.
     추적 파일에 로컬 변경이 있거나, 다른 브랜치이거나, 원격과 갈라졌으면 바꾸지 않고 `blocked`로 알린다.
@@ -97,8 +97,8 @@ npm run sprite:status
     RIFE는 `warnings`로만 알린다. `nextCommands`는 에이전트가 실행하고, `nextAction`(actor `user`)의 sudo 명령은 준비자에게 전한다.
   - **account:** 사용자가 대화에서 실제로 말한 계정만 넘긴다. 없으면 호스트가 지원할 때 선택 양식(MCP elicitation)을 띄우고,
     지원하지 않으면 돌려준 고정 선택지를 번호로 보여준다.
-  - **infrastructure:** 등록 API·홈페이지 접속과 환경 준비자 조치를 분리한다. Library helper는 실제 점검 전까지 미검증이다.
-  - **login:** ODDBOUT 연결 행동, 저장된 세션·승인 대기와 인증된 서버 계정 조회를 구분한다(7절).
+  - **infrastructure / login:** 작업 공간은 등록 API·홈페이지에 접속하거나 저장된 세션을 읽지 않는다
+    (`not-required`, `connector-verification-required`). 계정은 클라우드 `get_profile`·`check_creation_readiness`로 확인한다(7절).
   - **generation / delivery:** 실제 생성 접근과 부모 대화 전달을 별도로 보고한다. 이 도구에서는 호출·표시하지 않으므로 미검증이다.
 
   `kitAndAccountReady`는 키트와 생성 계정 선택만 확인한다. 이 도구는 생성·전달을 확인하지 않아 `readyForGeneration`은 false다.
@@ -152,7 +152,7 @@ npm run sprite:status
   sprite-gen의 run 폴더 잠금(`.sprite-gen.lock`)이 걸려 있으면 강제로 풀지 않는다.
   먼저 실행 중인 작업이 있는지 확인한다.
 - 같은 사용자 계정으로 생성 호출을 동시에 여러 개 보내지 않는다. 한도 소진과 결과 혼동을 막기 위해서다.
-- 사용자에게 기본 작업 공간 위치(`AI_FIGHTER_ROOT`)를 하나 정해 두고, MCP 연결도 그 위치를 가리키게 한다.
+- 사용자에게 기본 작업 공간 위치(`AI_FIGHTER_ROOT`)를 하나 정해 두고, 작업 공간 도구(`creation:tool`)도 그 위치를 쓰게 한다.
 
 ## 5. 보존과 재개
 
@@ -182,20 +182,23 @@ npm run sprite:status
 **ODDBOUT 통합 플러그인(0.4.0 이상)의 기본 경로:** PC·Dots 모두 현재 대화의 클라우드 ODDBOUT
 `get_profile`, `check_creation_readiness`로 연결 계정을 확인하고 prepare/upload/submit/status 도구로 등록한다.
 작업 공간의 `creation:tool`은 제작·검증만 담당하고 등록용 로컬 세션을 읽지 않는다.
-따라서 연결된 클라우드 등록에는 아래 독립 CLI 로그인/기기 연결 절차를 적용하지 않는다.
-클라우드 접속 장애를 다른 로컬 계정으로 대체하지 않는다. [통합 플러그인](ODDBOUT-PLUGIN.md)을 참고한다.
+등록에는 아래 키트 로그인을 쓰지 않는다. 클라우드 접속 장애를 다른 로컬 계정으로 대체하지 않는다.
+[통합 플러그인](ODDBOUT-PLUGIN.md)을 참고한다.
 
-아래 내용은 기존 독립 CLI/stdio 등록 경로의 호환 안내다.
-
-- 등록은 사용자가 요청할 때만 한다.
-  `deploy/creator-site.json`의 공개 설정으로 사용자 본인의 Google 로그인을 진행한 뒤 제출한다([OPEN-REGISTRATION.md](OPEN-REGISTRATION.md)).
+- 등록은 사용자가 요청할 때만 한다([OPEN-REGISTRATION.md](OPEN-REGISTRATION.md)).
 - 같은 패키지를 다시 시도할 때는 같은 idempotencyKey를 쓴다. 실제 응답의 `registered`, `fighterId`, 이용 가능 상태를 대화에 알린다.
-- 등록에 쓴 로그인 세션도 생성 계정과 같은 방식으로 다룬다: 그 사용자 작업 공간 안에만 두고, 공유하거나 기록하지 않는다.
+
+### 키트 로그인 (생성 호스트·관리자)
+
+`npm run login`은 이 키트의 등록 API 세션을 만든다. 생성 호스트 참여(`npm run host`)와 관리자 명령(`npm run admin`)이 쓰며,
+제작과 등록에는 쓰지 않는다.
+
+- 로그인 세션도 생성 계정과 같은 방식으로 다룬다: 그 사용자 작업 공간 안에만 두고, 공유하거나 기록하지 않는다.
 - **봇 VM의 로그인:** 기본 로그인은 작업 공간의 `127.0.0.1`로 돌아오는 콜백을 기다린다.
   다른 기기의 사용자 브라우저에서 그 VM의 loopback 주소에 직접 닿는다고 가정하지 않는다.
   - 현재 CLI의 `--paste` / `--finish`는 수동 콜백 교환 기능이며 보안 전달 채널 자체가 아니다.
     `--finish`는 인자가 없으면 이 작업 공간의 터미널에서 주소를 읽는다. 그 터미널에 사용자가 직접 입력할 수 있을 때만 쓴다.
-    `check_creation_readiness`는 이 명령을 제안하지 않는다. 다른 기기 브라우저는 아래 기기 연결 지원이 확인되지 않으면 `blocked-no-secure-route`로 보고한다.
+    다른 기기의 브라우저에는 아래 기기 연결만 쓴다.
     **콜백 주소를 대화에 붙여넣도록 요청하지 않는다**.
     주소에는 인증 코드·토큰이 포함될 수 있다. PKCE·일회성·만료는 대화 기록에 남겨도 안전하다는 뜻이 아니다.
   - VM에서는 공식적으로 지원되는 secure handoff 또는 기기 연결 경로가 있는지 먼저 확인한다.
@@ -204,9 +207,8 @@ npm run sprite:status
   - 사용자 브라우저가 작업 공간과 같은 기기라면 기본 loopback 로그인을 쓸 수 있다.
     VM으로 작업을 지정한 사용자를 대신해 PC에서 실행하지 않는다.
   - **기기 연결 로그인**(`npm run login -- --device`, 그다음 `--device-wait`)이 봇 VM의 보안 경로다.
-    단, 배포된 서버가 `/spec`의 `registration.deviceLogin: "v1"`로 지원을 알릴 때만 쓴다.
-    `check_creation_readiness`가 이를 확인해 `routes.otherDevice.status: "available"`일 때만 명령을 준다.
-    알리지 않거나 확인할 수 없으면 위처럼 막힘으로 보고한다.
+    서버에 기기 로그인 경로가 없으면 `--device`가 `device-login-unavailable`로 멈춘다. 그때는 막힘으로 보고하고
+    콜백 주소 붙여넣기로 대신하지 않는다.
     1. `--device`는 비밀 기기 코드를 이 작업 공간의 0600 파일에만 저장한다. 출력은 링크(`https://oddbout.com/creator.html#device=XXXX-XXXX`)와 공개 확인 코드뿐이다.
        이 둘은 비밀이 아니므로 대화로 전해도 된다.
     2. 사용자가 링크를 열고 Google로 로그인한 뒤, 화면의 코드가 대화의 코드와 같은지 확인하고 승인한다.
@@ -264,7 +266,7 @@ npm run sprite:status
   [DELIVERY.md](DELIVERY.md)의 `creation:delivery` 통과는 별도의 기록 일관성 점검이며 라이브 표시 증거가 아니다.
 - [ ] 작업 공간 재시작 뒤 작업 폴더를 복원해 기존 결과를 다시 보여줄 수 있다.
 - [ ] 보존 기간과 삭제 절차가 정해져 있고, 사용자에게 안내된다.
-- [ ] 등록용 Google 로그인은 지원되는 보안 경로로 확인했다. 봇 VM에서는 콜백 주소를 대화에 복사하지 않으며,
-  지원 경로가 없거나 실제 로그인을 실행하지 않았다면 미검증·차단 상태로 남긴다.
-- [ ] `check_creation_readiness`가 kit·infrastructure·account·login·generation·delivery를 분리하고,
-  호스트가 ODDBOUT 연결 선택을 표시하는지(버튼 미지원이면 선택지·링크로 대체) 확인했다. 키트 검사만으로 Dots UI 검증을 대신하지 않는다.
+- [ ] 등록 계정은 대상 대화의 클라우드 `get_profile`로 확인했다. 키트 로그인(생성 호스트·관리자)을 쓴다면 지원되는 보안 경로이며,
+  봇 VM에서는 콜백 주소를 대화에 복사하지 않는다. 지원 경로가 없거나 실제 로그인을 실행하지 않았다면 미검증·차단 상태로 남긴다.
+- [ ] 작업 공간 `check_creation_readiness`가 kit·tools·account·generation·delivery를 분리하고, 계정 확인을 클라우드 도구로
+  넘기는지 확인했다. 키트 검사만으로 Dots 대화의 커넥터 연결을 대신하지 않는다.

@@ -144,13 +144,13 @@ npm run sprite:setup
 
 설치 도구는 sprite-gen이 쓰는 외부 도구도 sudo 없이 받습니다. `-exact`를 지원하는 `img2webp`(libwebp 1.6.0, SHA-256 고정 — 시스템에 없거나 Ubuntu 24.04의 1.3.x처럼 오래되면 키트 전용 환경에 넣습니다)와 걷기·달리기 루프를 매끄럽게 잇는 RIFE(`sprite-gen rife install`, 약 430MB 다운로드)입니다. `ffmpeg`는 먼저 직접 설치하세요: `sudo apt install ffmpeg`(Ubuntu·Debian), `brew install ffmpeg`(macOS), `winget install --id Gyan.FFmpeg -e`(Windows). 설치와 `sprite:status`가 도구마다 `ok`·`missing`·`broken`과 고치는 명령을 보여줍니다. GPU가 없는 Linux에서는 RIFE용으로 `sudo apt install libvulkan1 mesa-vulkan-drivers`도 필요합니다. RIFE가 없으면 루프는 촬영된 그대로 잘리고 경고가 남습니다. 캐릭터를 제작 중이라면 작업 폴더를 유지하고 저장소 업데이트를 받지 마세요.
 
-도구 연결은 [Codex 로컬 플러그인 안내](docs/LOCAL-PLUGIN.md#optional-local-development-installation-on-this-computer)를 따릅니다: `npm run plugin:build` 뒤 출력된 `codex plugin marketplace add …`와 `codex plugin add oddbout@ai-fighter-local`. 예전 MCP 직접 연결(`node scripts/print-install.mjs`)은 호환용으로 남아 있습니다. 다른 로컬 호스트는 `AI_FIGHTER_ROOT`를 이 저장소 경로로 지정하고 `mcp/stdio.mjs`를 연결합니다.
+도구 연결은 [Codex 로컬 플러그인 안내](docs/LOCAL-PLUGIN.md#optional-local-development-installation-on-this-computer)를 따릅니다: `npm run plugin:build` 뒤 출력된 `codex plugin marketplace add …`와 `codex plugin add oddbout@ai-fighter-local`. 작업 공간 도구는 `npm run creation:tool`로 실행되고, 계정과 등록은 호스팅 ODDBOUT MCP가 맡습니다.
 
 검토된 소스 키트의 구성과 배포 기록은 [배포 안내](https://github.com/jeonghwanko/oddbout-starter/blob/main/docs/PLUGIN-DISTRIBUTION.md)를 참고하세요. 로컬 플러그인 설치와 클라우드 앱 연결은 별개입니다.
 
 ## 등록하고 플레이하기
 
-최종 결과를 선택하고 등록을 요청하면 AI가 패키지를 검사한 뒤 확인된 본인 ODDBOUT 계정으로 등록합니다. 클라우드 연결은 현재 대화에서 `get_profile`로 계정을 확인합니다. 예전 로컬 도구는 연결 준비 상태를 확인하고 필요하면 `npm run login`으로 로그인합니다. 직접 서버를 만들거나 서비스 API 키를 발급받을 필요는 없습니다.
+최종 결과를 선택하고 등록을 요청하면 AI가 패키지를 검사한 뒤 확인된 본인 ODDBOUT 계정으로 등록합니다. 클라우드 연결은 현재 대화에서 `get_profile`로 계정을 확인합니다. 직접 서버를 만들거나 서비스 API 키를 발급받을 필요는 없습니다.
 
 서버가 업로드된 파일을 검사해 선수를 **제작 중**으로 등록합니다. 이때는 아레나에서 연습할 수 있고, 다른 사람의 컵·랭크 대결·공개 목록에는 나오지 않습니다. AI가 처리 결과까지 확인해 실제로 등록됐는지 알려줍니다. 대기열 상황에 따라 시간이 걸릴 수 있습니다. 다른 사람들이 컵과 랭크 대결에서 겨룰 수 있게 하려면 선수 페이지의 **모든 동작**에서 필수 동작 11개를 확인하고 **출전하기**를 누르세요.
 

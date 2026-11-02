@@ -2,7 +2,7 @@
 
 This is an invite-only registration beta. Technical registration is separate from visual review and gameplay approval.
 
-- The desktop MCP uses STDIO. Cloud tools are enabled only with an explicit user-session config; uploads go to that configured Supabase project.
+- Workspace tools run in process (`npm run creation:tool`) and never read a login. Account and registration tools are the hosted ODDBOUT MCP, which authenticates each user; uploads go to its Supabase project.
 - File tools require an explicit trusted `AI_FIGHTER_ROOT`. Inputs are relative manifest paths.
 - Keep untrusted processes from modifying that directory during validation. Path checks are not an OS filesystem sandbox.
 - Native image decoding runs serially in a child process with a deadline. V8's heap limit does not constrain all native memory.

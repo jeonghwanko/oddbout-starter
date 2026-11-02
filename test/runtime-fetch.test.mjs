@@ -5,11 +5,10 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const exec = promisify(execFile);
-const modules = Object.fromEntries(['api/client.mjs', 'api/runtime-fetch.mjs', 'mcp/connection-readiness.mjs', 'mcp/creation-context.mjs', 'scripts/sprite-tools.mjs']
+const modules = Object.fromEntries(['api/client.mjs', 'api/runtime-fetch.mjs', 'mcp/creation-context.mjs', 'scripts/sprite-tools.mjs']
   .map(file => [file, new URL(`../${file}`, import.meta.url).href]));
 const imports = `import { apiRequest, createRemoteClient } from ${JSON.stringify(modules['api/client.mjs'])};
 import { runtimeFetch } from ${JSON.stringify(modules['api/runtime-fetch.mjs'])};
-import { probePublic } from ${JSON.stringify(modules['mcp/connection-readiness.mjs'])};
 import { fetchCreationContext } from ${JSON.stringify(modules['mcp/creation-context.mjs'])};`;
 
 // Each child gets a loopback-only test proxy configuration. No real service or user session is used.
@@ -32,7 +31,7 @@ async function server(t, handler) {
   return { instance, url: `http://127.0.0.1:${instance.address().port}` };
 }
 
-test('public probes and API bodies use the inherited proxy without destination DNS', async t => {
+test('public reads and API bodies use the inherited proxy without destination DNS', async t => {
   const requests = [], tunnels = [];
   const target = createServer(async (request, response) => {
     const chunks = []; for await (const chunk of request) chunks.push(chunk);
@@ -47,17 +46,17 @@ test('public probes and API bodies use the inherited proxy without destination D
     target.emit('connection', socket); if (head.length) socket.unshift(head);
   });
   const { value } = await child(`
-    const probe = await probePublic('http://unresolvable.invalid/spec', { spec: true });
+    const probe = await (await runtimeFetch('http://unresolvable.invalid/spec')).json();
     const result = await apiRequest('http://unresolvable.invalid', 'fixture-token', 'upload', {
       method: 'PUT', body: Buffer.from('fixture-bytes'), timeoutMs: 3000 });
     console.log(JSON.stringify({ probe, result }));`, { HTTP_PROXY: proxy.url });
-  assert.equal(value.probe.deviceLogin, 'available'); assert.equal(value.result.ok, true);
+  assert.equal(value.probe.data.registration.deviceLogin, 'v1'); assert.equal(value.result.ok, true);
   assert.ok(tunnels.length > 0); assert.ok(tunnels.every(host => host === 'unresolvable.invalid:80'));
   assert.deepEqual(requests[1], { path: '/functions/v1/ai-fighter/upload', method: 'PUT',
     authorization: 'Bearer fixture-token', body: 'fixture-bytes' });
 });
 
-test('HTTPS proxy denial remains a network blocker through probes, API and real auth SDK refresh', async t => {
+test('HTTPS proxy denial remains a network blocker through public reads, API and real auth SDK refresh', async t => {
   const tunnels = [], proxy = await server(t);
   proxy.instance.on('connect', (request, socket) => {
     tunnels.push(request.url); socket.end('HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n');
@@ -66,8 +65,8 @@ test('HTTPS proxy denial remains a network blocker through probes, API and real 
     import { mkdtemp, writeFile, rm } from 'node:fs/promises';
     import os from 'node:os'; import path from 'node:path';
     const url = 'https://aaaaaaaaaaaaaaaaaaaa.supabase.co';
-    const probe = await probePublic(url + '/spec');
-    let requestError, refreshError;
+    let probeError, requestError, refreshError;
+    try { await runtimeFetch(url + '/spec'); } catch (error) { probeError = error.message; }
     try { await apiRequest(url, 'fixture-token', 'me', { timeoutMs: 3000 }); } catch (error) { requestError = error.message; }
     const dir = await mkdtemp(path.join(os.tmpdir(), 'fighter-proxy-test-'));
     try {
@@ -77,8 +76,8 @@ test('HTTPS proxy denial remains a network blocker through probes, API and real 
       const client = await createRemoteClient(file);
       try { await client.request('me'); } catch (error) { refreshError = error.message; }
     } finally { await rm(dir, { recursive: true, force: true }); }
-    console.log(JSON.stringify({ probe, requestError, refreshError }));`, { HTTPS_PROXY: proxy.url });
-  assert.equal(value.probe.reason, 'network-connect-forbidden');
+    console.log(JSON.stringify({ probeError, requestError, refreshError }));`, { HTTPS_PROXY: proxy.url });
+  assert.equal(value.probeError, 'network-connect-forbidden');
   assert.equal(value.requestError, 'network-connect-forbidden');
   assert.equal(value.refreshError, 'network-connect-forbidden');
   assert.ok(tunnels.length >= 3); assert.ok(tunnels.every(host => host === 'aaaaaaaaaaaaaaaaaaaa.supabase.co:443'));

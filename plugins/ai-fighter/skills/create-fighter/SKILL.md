@@ -89,19 +89,15 @@ Another person's host (`list_generation_hosts`) takes none of their tokens and n
    evidence, keep unknown backend/account identity unknown, and treat `creation:delivery` as a record check only.
    Local/Library saves and child-only or queued previews do not prove parent display. Recover existing results
    before retries; delivery failures do not authorize regeneration.
-5. Use `check_creation_readiness` and `docs/CONNECTION-READINESS.md` for the ODDBOUT connection action.
+5. Use workspace `check_creation_readiness` and `docs/CONNECTION-READINESS.md` for kit, tool and generation readiness.
    Set `purpose: connection` for sign-in checks and `purpose: registration` for an existing final package;
    only `purpose: generation` prepares the generation engine or asks about generation access.
-   For an explicitly selected local stdio connection, use `connect_oddbout(action: start)` within a connection/registration request; show its public link/code,
-   then `action: wait` after the user approves. Repeated start returns the same pending link. Respect
-   retryAfterSeconds. Current runtimes adopt login without an MCP restart. If these tools are absent,
-   use `npm run creation:check -- connection` only to inspect that explicitly selected local route. Missing cloud tools
-   must follow the connection-only checks above, not this local CLI fallback.
-   Keep authenticated registration API access, generation access and parent delivery separate. A saved session
-   is unverified until GET /me succeeds. Environment-preparer actions (VM host allowlist/Republish) are initial
-   workspace setup, not repeated creator steps; the kit cannot perform those settings changes.
-   Reuse pending device approval and preserved sessions/jobs after recovery. Do not claim a Dots-native button
-   was installed: hosts may render the action as a button, choice or official link.
+   Its login item only points to the connected ODDBOUT tools: verify the account with native `get_profile` and the
+   connected `check_creation_readiness`. The workspace never reads or offers a registration login; missing cloud tools
+   follow the connection-only checks above.
+   Keep authenticated registration API access, generation access and parent delivery separate. Environment-preparer
+   actions (VM host allowlist/Republish) are initial workspace setup, not repeated creator steps; the kit cannot
+   perform those settings changes. Reuse preserved sessions/jobs after recovery.
 
 ## Front first
 
