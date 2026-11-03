@@ -475,6 +475,15 @@ Grok(grok.com, Cursor의 Grok Bot)이 받는 안내만으로 호스팅 생성까
   `purpose`가 `generation`·`connection`이면 `nextAction`이 `hosted`를 가리킨다. `generation`은 그대로 `unverified`다.
 - 대화에서 만든 그림은 사용자가 저장한 뒤 표의 페이지에서 올린다(`start_picture_upload`의 `next`).
 
+실제 Grok Bot 대화(2026-11-03 08:43~09:40Z, Cursor의 Grok Bot, 작업 `5cf1bf54`): 내 선수 목록 → 그림 표(`terminal: true`, 봇이 자기 VM에서 curl로
+911 KB 한 장) → 그림 확인 → `request_hosted_fighter`까지 막히지 않았다. 외형 고르기는 1분 반 만에 지나갔고(사이트에서 고름), 달리기가 검사를 못 넘겨
+`needs_review`(`run-not-clean`)가 됐다. 봇은 자기 루틴으로 10분 남짓마다 `get_hosted_fighter`를 읽었다.
+
+**그림 보이기**: 이 채팅은 그림 주소를 그리지 않는다. 마크다운으로 쓰든 봇의 `<image-card>`로 쓰든 글자로 나왔고, 봇이 서명 주소(10분)로 파일을
+받아 첨부하자 그림이 보였다. 봇의 말로는 A/B 카드와 첨부는 봇이 띄우고, MCP는 `candidates`의 주소, 비어 있는 `choice`(고를 차례), `next`의 할 일만
+주면 된다. 그래서 그림이 있는 상태(`appearance_ready`·`motions`·`needs_review`·`motion_ready`)의 `next`가 "주소로 그림이 안 보이는 채팅이면 파일을 받아
+(주소는 10분) 첨부하라"고 적는다. `motions`·`needs_review`도 "지금까지 만든 것을 보여 주라"고 적는다(전에는 "기다려라"만 있어 봇이 아무것도 올리지 않았다).
+
 ### 사이트 바로가기 `siteUrl` (2026-11-03)
 
 호스팅 도구(`request_hosted_fighter`·`get_hosted_fighter`·`choose_hosted_look`·`revise_hosted_motion`·`register_hosted_fighter`·`cancel_hosted_fighter`)와

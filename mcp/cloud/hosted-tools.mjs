@@ -67,6 +67,11 @@ const hostedSettled = (status, submission) => !HOSTED_WORKING.has(status) && !(s
 const RUN_FROM_WALK_NEXT = 'The run preview is the walk played faster: no filmed run passed the checks. Tell the user so; '
   + 'if he wants a real run, revise_hosted_motion with clip run and his words. ';
 /**
+ * How an agent puts a job's pictures in its chat (Grok 점검 2026-11-03): Cursor's Grok Bot chat printed a picture's address as text, markdown
+ * or its own image card, and showed the picture once the bot downloaded the file and attached it.
+ */
+const IMAGES_NEXT = 'where this chat shows no picture from its url, download each file (the url lasts ten minutes) and attach it';
+/**
  * The tokens a job took off the user's balance (보유 토큰, 2026-10-31: every token ODDBOUT's making spends, whatever the outcome).
  * @param {HostedJob} job
  */
@@ -106,16 +111,16 @@ function hostedStep(job) {
         : 'ODDBOUT is writing the profile and painting two front-view looks (a few minutes). Call get_hosted_fighter with waitSeconds to wait.';
     case 'appearance_ready':
       return `${job.delegate ? 'ODDBOUT could not pick a look by itself. ' : ''}Show the user both looks (candidates a and b, his fighter from the front) as images `
-        + 'and ask which one: the one he picks is also his profile picture on the site and in the arena. '
+        + `(${IMAGES_NEXT}) and ask which one: the one he picks is also his profile picture on the site and in the arena. `
         + `Then choose_hosted_look with his pick, or with one sentence to change both (${left.appearance ?? 0} changes left).`;
     case 'motions':
       return `ODDBOUT is drawing ${job.delegate ? 'the look it picked' : 'the chosen look'} from the side (job.side once it is drawn) and making the eleven motions `
         + 'from that side view (about 15 to 30 minutes), and his six arena faces from the front (job.expressions once drawn; the last is his '
         + 'knocked-out face on the KO card). Each motion shows in job.drafts as soon as it is made; a walk or run with a state '
-        + 'is still being checked and may be filmed again. Tell the user, and check later with get_hosted_fighter.';
+        + `is still being checked and may be filmed again. Tell the user and show him what is made so far (${IMAGES_NEXT}); check later with get_hosted_fighter.`;
     case 'motion_ready':
       return `${job.preview?.some(p => p.note === 'run-from-walk') ? RUN_FROM_WALK_NEXT : ''}`
-        + `Show the user ${job.delegate ? `the look ODDBOUT picked (candidate ${job.choice}), ` : ''}the motion previews as images, `
+        + `Show the user ${job.delegate ? `the look ODDBOUT picked (candidate ${job.choice}), ` : ''}the motion previews as images (${IMAGES_NEXT}), `
         + `${job.expressions?.url ? 'his six arena faces (job.expressions: the last one is his face when he is knocked out), ' : ''}and the profile draft. `
         + 'If he likes them, register_hosted_fighter (change only what he asks in the profile). '
         + `To fix one motion, revise_hosted_motion (${left.motions ?? 0} changes left).`;
@@ -131,7 +136,8 @@ function hostedStep(job) {
           : 'His profile set (front picture) did not go in with it: prepare_profile_set can upload one.');
       if (job.submission?.stage === 'rejected') return `The server check refused the package. A person at ODDBOUT will look at it.${spent(job)}`;
       return 'The server is checking the package. Call get_hosted_fighter with waitSeconds.';
-    case 'needs_review': return `A person at ODDBOUT is checking this step. Nothing to do now; check later.${spent(job)}`;
+    case 'needs_review': return `A person at ODDBOUT is checking this step; nothing to answer now. Tell the user and show him what is made so far `
+      + `(${IMAGES_NEXT}); check later.${spent(job)}`;
     case 'rejected': return `ODDBOUT declined this request${error}.${spent(job)} A different request may be made while his balance is above zero.`;
     case 'failed': return `This request failed${error}.${spent(job)} He may ask again while his balance is above zero.`;
     default: return `This request is ${job.status}; it is over.`;
