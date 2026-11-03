@@ -33,8 +33,8 @@ export function createCommerceService({ store, paypal, merchantId = '', publicOr
     catalog: () => ({ ...COMMERCE_CATALOG, hosts, paypalConfigured: Boolean(paypal && merchantId) }),
     /** @param {string} owner */
     wallet: owner => store.wallet(owner),
-    /** @param {string} owner @param {unknown} input */
-    async checkout(owner, input) {
+    /** @param {string} owner @param {unknown} input @param {string} [operationId] Trusted server linkage only. */
+    async checkout(owner, input, operationId) {
       const body = record(input), requestKey = key(body.requestKey);
       const product = COMMERCE_CATALOG.products.find(item => item.id === body.productId);
       if (!product) throw new Problem(422, 'unknown-product');
@@ -52,7 +52,8 @@ export function createCommerceService({ store, paypal, merchantId = '', publicOr
       // Never blindly replay an unknown create after the documented provider deduplication window.
       // A short recovery window also keeps a retained local key from turning into a new provider order later.
       if (now() - Date.parse(intent.createdAt) > 5 * 60_000) throw new Problem(409, 'checkout-needs-reconciliation');
-      const callback = `${origin}/broadcast/?intent=${encodeURIComponent(intent.id)}`;
+      const callback = operationId ? `${origin}/broadcast/tasks/?operation=${key(operationId)}`
+        : `${origin}/broadcast/?intent=${encodeURIComponent(intent.id)}`;
       const order = await provider.createOrder({ requestId: `o-${intent.id}`, referenceId: intent.id,
         amountMinor: intent.amountCents, currency: intent.currency, returnUrl: callback, cancelUrl: `${callback}&cancelled=1` });
       await store.attachOrder(owner, intent.id, order.id);
@@ -90,6 +91,14 @@ export function createCommerceService({ store, paypal, merchantId = '', publicOr
         const adjustment=await store.recordPaymentAdjustment({eventId:event.id,eventType:event.event_type,captureId,
           ...(related?.order_id===undefined?{}:{providerOrderId:related.order_id})});
         return {received:true,recorded:true,applied:adjustment.status==='needs_reconciliation',needsReconciliation:true};
+      }
+      // Approval can arrive after the phone/browser has closed. Verify and capture the SAME persisted order.
+      if (event.event_type === 'CHECKOUT.ORDER.APPROVED') {
+        if (typeof event.resource?.id !== 'string') throw new Problem(422, 'webhook-order-missing');
+        const intent = await store.lookupOrder(event.resource.id);
+        if (!intent) throw new Problem(409, 'webhook-order-unlinked');
+        await this.capture(intent.owner, intent.id);
+        return { received: true, applied: true };
       }
       if (event.event_type !== 'PAYMENT.CAPTURE.COMPLETED') return { received: true, applied: false };
       const orderId = event.resource?.supplementary_data?.related_ids?.order_id;

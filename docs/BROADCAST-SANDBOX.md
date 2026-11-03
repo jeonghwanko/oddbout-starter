@@ -4,6 +4,9 @@
 
 외부 HTTPS 데모의 구성·배포·실행 순서는 [BROADCAST-HOSTING](BROADCAST-HOSTING.md)을 따른다.
 
+VM 요청 → 휴대폰 승인·결제 → PC 복구는 [PAID-TASK-RECOVERY](PAID-TASK-RECOVERY.md)를 따른다.
+추가 Sandbox SQL, `ODDBOUT_PAID_OPERATIONS=1`, Auth redirect와 webhook 설정이 필요하며 기본값은 꺼짐이다.
+
 ## 1. 설치와 UI 미리보기
 
 필요 조건은 Node.js 22.12 이상과 npm이다.

@@ -7,6 +7,8 @@ import { createClient } from '@supabase/supabase-js';
 import { createCommerceService } from '../api/commerce/service.mjs';
 import { commerceFromEnvironment } from '../api/commerce/config.mjs';
 import { createCommerceStore } from '../api/commerce/store.mjs';
+import { createPaidOperations } from '../api/commerce/paid-operations.mjs';
+import { createPaidOperationHandler } from '../api/commerce/paid-handler.mjs';
 import { createCommerceHandler } from '../api/commerce/handler.mjs';
 import { verifiedUserId } from '../api/http.mjs';
 import { createCommerceMcpHandler, createIssuedProducerGrants } from '../mcp/cloud/commerce-handler.mjs';
@@ -38,6 +40,12 @@ export function createBroadcastDemo(env = process.env) {
   const db = url && secret ? createClient(url, secret, { auth: { persistSession: false, autoRefreshToken: false } }) : null;
   const get = (/** @type {string} */ name) => name === 'ODDBOUT_COMMERCE_ORIGIN' ? publicOrigin : env[name];
   const commerce = db ? commerceFromEnvironment({ db, get }) : null;
+  if (env.ODDBOUT_PAID_OPERATIONS && !['0', '1'].includes(env.ODDBOUT_PAID_OPERATIONS)) throw new Error('invalid-paid-operations-setting');
+  if (env.ODDBOUT_PAID_OPERATIONS === '1' && !commerce) throw new Error('paid-operations-commerce-required');
+  const paidOperations = commerce && env.ODDBOUT_PAID_OPERATIONS === '1'
+    ? createPaidOperations({ store: commerce.store, commerce: commerce.service, publicOrigin }) : null;
+  const paidApi = paidOperations && commerce && db ? createPaidOperationHandler({ service: paidOperations, store: commerce.store,
+    publicOrigin, authenticate: request => verifiedUserId(db, request) }) : null;
   const previewService = createCommerceService({ store: createCommerceStore({ rpc: async () => ({ data: null, error: { message: 'unconfigured' } }) }),
     paypal: null, publicOrigin, hosts: [{ id: 'current-pc' }, { id: 'office-stable' }, { id: 'svl-mac-01' }] });
   const producers = env.ODDBOUT_BROADCAST_PRODUCERS_JSON ? JSON.parse(env.ODDBOUT_BROADCAST_PRODUCERS_JSON) : [];
@@ -45,7 +53,7 @@ export function createBroadcastDemo(env = process.env) {
   const mcp = db && commerce ? createCommerceMcpHandler({ db, commerce, producers, issued }) : null;
   const supervisor = mcp && commerce ? autoProducerFromEnvironment(env, { commerce, issued, mcp }) : null;
   const payouts = commerce ? payoutsFromEnvironment(env, commerce) : null;
-  const concierge = commerce ? conciergeFromEnvironment(env, payouts ? { ...commerce.service, payouts } : commerce.service) : null;
+  const concierge = commerce ? conciergeFromEnvironment(env, { ...commerce.service, ...(payouts ? { payouts } : {}), ...(paidOperations ? { paidOperations } : {}) }) : null;
   const reconciler = commerce ? reconcilerFromEnvironment(env, commerce) : null;
   const service = commerce && (supervisor || concierge || reconciler || payouts) ? { ...commerce.service, ...(payouts ? { payouts } : {}),
     // A started session gets its producer right away; the start response never waits for it.
@@ -68,6 +76,9 @@ export function createBroadcastDemo(env = process.env) {
     ['/broadcast/style.css', ['web/broadcast/style.css', 'text/css; charset=utf-8']],
     ['/broadcast/app.mjs', ['web/broadcast/app.mjs', 'text/javascript; charset=utf-8']],
     ['/broadcast/operations.mjs', ['web/broadcast/operations.mjs', 'text/javascript; charset=utf-8']],
+    ['/broadcast/tasks/', ['web/broadcast/tasks.html', 'text/html; charset=utf-8']],
+    ['/broadcast/tasks/app.mjs', ['web/broadcast/tasks.mjs', 'text/javascript; charset=utf-8']],
+    ['/broadcast/tasks/style.css', ['web/broadcast/tasks.css', 'text/css; charset=utf-8']],
     ['/broadcast/supabase.js', ['node_modules/@supabase/supabase-js/dist/umd/supabase.js', 'text/javascript; charset=utf-8']],
   ]);
   // Explicit asset allowlist: never turn this into an arbitrary filesystem route.
@@ -94,7 +105,7 @@ export function createBroadcastDemo(env = process.env) {
       if (req.method === 'GET' && address.pathname === '/broadcast/config') {
         res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
         res.end(JSON.stringify({ supabaseUrl: url ?? null, publishableKey: publishableKey ?? null, authConfigured: Boolean(db && publishableKey),
-          commerceEnabled: Boolean(commerce), autoProducer: Boolean(supervisor), concierge: Boolean(concierge), reconciliation: Boolean(reconciler), payouts: payouts ? { feeCents: payouts.feeCents } : null, publicOrigin, mode: commerce ? 'sandbox' : 'preview-unconfigured' })); return;
+          commerceEnabled: Boolean(commerce), paidOperations: Boolean(paidOperations), autoProducer: Boolean(supervisor), concierge: Boolean(concierge), reconciliation: Boolean(reconciler), payouts: payouts ? { feeCents: payouts.feeCents } : null, publicOrigin, mode: commerce ? 'sandbox' : 'preview-unconfigured' })); return;
       }
       const file = files.get(address.pathname);
       if (req.method === 'GET' && file) {
@@ -108,6 +119,7 @@ export function createBroadcastDemo(env = process.env) {
       const request = new Request(address, { method: req.method, headers, ...(['GET', 'HEAD'].includes(req.method ?? '') ? {} : { body }) });
       let response;
       if (address.pathname.startsWith('/commerce/')) response = await api(request);
+      else if ((address.pathname.startsWith('/paid-operations/') || address.pathname.startsWith('/paid-agent/')) && paidApi) response = await paidApi(request);
       else if ((address.pathname === '/mcp' || address.pathname === '/mcp/.well-known/oauth-protected-resource') && mcp) response = await mcp(request);
       else if (address.pathname.startsWith('/commerce-worker/') && worker) response = await worker(request);
       else response = new Response(JSON.stringify({ ok: false, code: 'not-configured-or-not-found' }), { status: 404, headers: { 'content-type': 'application/json' } });

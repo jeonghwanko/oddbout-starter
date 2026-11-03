@@ -32,6 +32,12 @@ export function createCommerceStore(db) {
     return row(data);
   }
   return {
+    /** Durable paid-task commands; owner is verified by the web/device handler.
+     * @param {string} owner @param {string} action @param {any} [input] */
+    operation: (owner, action, input = {}) => command(owner, action, input, 'commerce_operation'),
+    /** Server-only device pairing. Secrets are hashed before persistence.
+     * @param {string|null} owner @param {string} action @param {any} [input] */
+    operationDevice: (owner, action, input = {}) => command(owner, action, input, 'commerce_operation_device'),
     /** @param {string} owner @param {any} input */
     createTopup: (owner, input) => command(owner, 'create_topup', input),
     /** @param {string} owner @param {string} intentId */

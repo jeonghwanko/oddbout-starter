@@ -8,13 +8,23 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const CONCIERGE_TOOLS = Object.freeze(['get_credit_balance', 'get_broadcast_prices', 'quote_broadcast', 'create_topup_checkout', 'confirm_topup']);
 /** Offered only when the server pays creators. Proposing moves no money; the owner approves in the console. */
 export const PAYOUT_TOOL = 'propose_creator_payouts';
+const PAID_TOOLS = ['list_my_operations', 'prepare_paid_operation'];
 /** @typedef {{type:string,[key:string]:any}} ResponseItem */
 /** @typedef {(input:any[],tools:any[],options?:{signal?:AbortSignal})=>Promise<{output:ResponseItem[],observation:any}>} ConciergeModelCall */
 
 const empty = { type: 'object', properties: {}, required: [], additionalProperties: false };
-/** @param {readonly string[]} productIds @param {{payouts?:boolean}} [options] */
-export function conciergeToolDefinitions(productIds, { payouts = false } = {}) {
+/** @param {readonly string[]} productIds @param {{payouts?:boolean,paidOperations?:boolean}} [options] */
+export function conciergeToolDefinitions(productIds, { payouts = false, paidOperations = false } = {}) {
   return [
+    ...(paidOperations ? [
+      { type: 'function', name: 'list_my_operations', strict: true, parameters: empty,
+        description: 'Find the account’s saved paid tasks before preparing new work or recovering an interrupted conversation. Returns links; never executes or approves.' },
+      { type: 'function', name: 'prepare_paid_operation', strict: true,
+        description: 'Save one cup for phone approval and recovery from another device. No spending, payment approval or execution. List existing tasks first after an interruption.',
+        parameters: { type: 'object', additionalProperties: false, required: ['hostId','channelId','durationMinutes','fighterIds'],
+          properties: { hostId: {type:'string'}, channelId: {type:'string'}, durationMinutes: {type:'integer',description:'10 to 1440 minutes until approval expires.'},
+            fighterIds: {type:'array',items:{type:'string'},description:'Exactly four different configured fighters.'} } } },
+    ] : []),
     ...(payouts ? [{ type: 'function', name: PAYOUT_TOOL, strict: true,
       description: "Propose paying each fighter's creator an appearance fee for the session's completed, not yet paid cups. It moves no money: the owner reviews and approves the PayPal payout in the console.",
       parameters: { type: 'object', additionalProperties: false, required: ['broadcastId'], properties: { broadcastId: { type: 'string', description: 'The selected session id from the context.' } } } }] : []),
@@ -92,10 +102,10 @@ function replyOf(output) {
  *   ttlMs?:number,dailyModelCalls?:number,turnTimeoutMs?:number}} options */
 export function createConcierge({ service, modelCall, now = Date.now, maxSteps = 6, maxTurns = 20, maxConversations = 200,
   ttlMs = 2 * 3_600_000, dailyModelCalls = 300, turnTimeoutMs = 120_000 }) {
-  const catalog = service.catalog(), payouts = Boolean(service.payouts);
-  const tools = conciergeToolDefinitions(catalog.products.map((/** @type {any} */ product) => product.id), { payouts });
-  const allowed = payouts ? [...CONCIERGE_TOOLS, PAYOUT_TOOL] : CONCIERGE_TOOLS;
-  /** @type {Map<string,{owner:string,items:any[],checkouts:Map<string,{requestKey:string,intentId?:string}>,turns:number,updatedAt:number,busy:boolean}>} */
+  const catalog = service.catalog(), payouts = Boolean(service.payouts), paidOperations = Boolean(service.paidOperations);
+  const tools = conciergeToolDefinitions(catalog.products.map((/** @type {any} */ product) => product.id), { payouts, paidOperations });
+  const allowed = [...CONCIERGE_TOOLS, ...(payouts ? [PAYOUT_TOOL] : []), ...(paidOperations ? PAID_TOOLS : [])];
+  /** @type {Map<string,{owner:string,items:any[],checkouts:Map<string,{requestKey:string,intentId?:string}>,operations:Map<string,any>,turns:number,updatedAt:number,busy:boolean}>} */
   const conversations = new Map();
   let day = '', used = 0;
 
@@ -105,6 +115,24 @@ export function createConcierge({ service, modelCall, now = Date.now, maxSteps =
     try { args = JSON.parse(raw); if (!args || typeof args !== 'object' || Array.isArray(args)) throw new Error(); }
     catch { return { ok: false, code: 'invalid-arguments' }; }
     try {
+      if (name === 'list_my_operations' && service.paidOperations) {
+        const operations = await service.paidOperations.list(owner);
+        for (const operation of operations.slice(0,6)) actions.push({type:'paid_task',operationId:operation.id,name:operation.input.channelId,state:operation.state});
+        return {ok:true,operations:operations.map((/** @type {any} */ item)=>({id:item.id,state:item.state,task:item.input.channelId,hostId:item.input.hostId,createdAt:item.createdAt}))};
+      }
+      if (name === 'prepare_paid_operation' && service.paidOperations) {
+        if (!Number.isSafeInteger(args.durationMinutes) || args.durationMinutes<10 || args.durationMinutes>1440) return {ok:false,code:'invalid-duration'};
+        const parameters={hostId:args.hostId,channelId:args.channelId,fighterIds:args.fighterIds,durationMinutes:args.durationMinutes};
+        const signature=JSON.stringify(parameters);
+        let input=conversation.operations.get(signature);
+        if (!input) {
+          input={hostId:args.hostId,channelId:args.channelId,fighterIds:args.fighterIds,requestKey:randomUUID(),endsAt:new Date(now()+args.durationMinutes*60_000-1000).toISOString()};
+          conversation.operations.set(signature,input);
+        }
+        const operation=await service.paidOperations.prepare(owner,input);
+        actions.push({type:'paid_task',operationId:operation.id,name:operation.input.channelId,state:operation.state});
+        return {ok:true,operation:{id:operation.id,state:operation.state,credits:operation.input.maxCredits,approvalLinkShown:true}};
+      }
       if (name === 'get_credit_balance') {
         const wallet = await service.wallet(owner);
         return { ok: true, wallet: { balanceCredits: wallet.balanceCredits, reservedCredits: wallet.reservedCredits,
@@ -181,7 +209,7 @@ export function createConcierge({ service, modelCall, now = Date.now, maxSteps =
       if (!conversation) {
         if (conversations.size >= maxConversations) conversations.delete(/** @type {string} */ (conversations.keys().next().value));
         conversationId = randomUUID();
-        conversation = { owner, items: [], checkouts: new Map(), turns: 0, updatedAt: now(), busy: false };
+        conversation = { owner, items: [], checkouts: new Map(), operations: new Map(), turns: 0, updatedAt: now(), busy: false };
         conversations.set(conversationId, conversation);
       }
       if (conversation.busy) throw new Problem(409, 'concierge-busy');
@@ -200,7 +228,7 @@ export function createConcierge({ service, modelCall, now = Date.now, maxSteps =
           if (used >= dailyModelCalls) throw new Problem(429, 'concierge-daily-limit');
           used++;
           let output;
-          const context = `${INSTRUCTIONS}${payouts ? PAYOUT_INSTRUCTIONS : ''} Current time: ${new Date(now()).toISOString()}.`
+          const context = `${INSTRUCTIONS}${payouts ? PAYOUT_INSTRUCTIONS : ''}${paidOperations ? ' For one paid task that survives device changes, use list_my_operations before preparing it. Use prepare_paid_operation and its review link instead of a separate top-up or broadcast plan. Never create replacement work to recover a lost reply. This path has separate phone task consent and PayPal funding; the PC resumes the original task.' : ''} Current time: ${new Date(now()).toISOString()}.`
             + (body.broadcastId ? ` Selected session id: ${body.broadcastId.toLowerCase()}.` : ' No session is selected.');
           try { ({ output } = await modelCall([{ role: 'developer', content: context }, ...items], tools, { signal })); }
           catch { throw new Problem(503, 'concierge-model-unavailable'); }

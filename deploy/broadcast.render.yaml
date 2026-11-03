@@ -22,6 +22,8 @@ services:
         sync: false
       - key: ODDBOUT_COMMERCE_ENABLED
         value: "0"
+      - key: ODDBOUT_PAID_OPERATIONS
+        value: "0"
       - key: ODDBOUT_BROADCAST_HOST_IDS
         value: current-pc
       # Set to 1 together with the model and key to run producers automatically / serve the concierge.

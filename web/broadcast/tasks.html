@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer"><title>ODDBOUT · Paid tasks</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <header><a href="/broadcast/">ODDBOUT</a><span>Paid tasks</span><button id="signin" disabled>Sign in with Google</button><button id="signout" hidden>Sign out</button></header>
+  <main>
+    <p class="eyebrow">PAYPAL SANDBOX · NO REAL MONEY MOVES</p>
+    <h1>Your task stays.<br>Your device can change.</h1>
+    <p class="intro">Approve on your phone. Pick up the same task from your PC, even after the agent disconnects.</p>
+    <p id="account"></p><p id="message" role="status" aria-live="polite">Connecting…</p>
+    <section id="pairing" hidden aria-labelledby="pair-title">
+      <h2 id="pair-title">Connect your agent</h2><p>Only approve a connection you started. Check that this code matches the code in your agent.</p>
+      <strong id="pair-code" class="pair-code"></strong>
+      <p>This connection can find your tasks and resume work you approved. Payment and task approval stay here. It expires after 24 hours.</p>
+      <button id="pair-approve" disabled>Approve this connection</button>
+    </section>
+    <div class="columns">
+      <section aria-labelledby="tasks-title"><div class="section-head"><h2 id="tasks-title">My tasks</h2><button id="refresh" disabled>Refresh</button></div>
+        <p>Saved to your account across devices. Latest 50 tasks.</p><div id="tasks"></div>
+      </section>
+      <section id="detail" hidden aria-labelledby="task-title">
+        <p id="state" class="state"></p><h2 id="task-title"></h2><dl id="summary"></dl>
+        <div id="approval" hidden><label class="consent"><input type="checkbox" id="consent">I approve this one cup on the host and before the deadline shown above, for up to 25 credits.</label>
+          <button id="approve" disabled>Approve task</button></div>
+        <p id="next-step"></p>
+        <div class="actions"><button id="checkout" hidden>Add $10 Sandbox credits</button>
+          <a id="paypal" class="button" hidden target="_blank" rel="noopener noreferrer">Open PayPal Sandbox</a>
+          <button id="verify" hidden>Check payment</button><button id="resume" hidden>Resume this task</button>
+          <button id="cancel" class="secondary" hidden>Cancel task</button></div>
+        <p class="muted">Cancelling a task does not refund a credit purchase. Confirmed credits stay in your wallet.</p>
+        <div id="result" hidden><h3>Saved result</h3><p id="winner"></p><details><summary>Payment and execution evidence</summary><pre id="evidence"></pre></details></div>
+      </section>
+    </div>
+    <section id="devices-section" hidden><h2>Connected agents</h2><div id="devices"></div></section>
+  </main>
+  <script src="/broadcast/supabase.js"></script><script type="module" src="./app.mjs"></script>
+</body>
+</html>

@@ -617,8 +617,18 @@ function planAction(item) {
   return card;
 }
 function conciergeActions(actions) {
-  const builders = { checkout: checkoutAction, topup: topupAction, plan: planAction, payout: payoutAction };
+  const builders = { checkout: checkoutAction, topup: topupAction, plan: planAction, payout: payoutAction, paid_task: paidTaskAction };
   return actions.slice(0, 6).filter(item => item && typeof item.type === 'string' && Object.hasOwn(builders, item.type)).map(item => builders[item.type](item));
+}
+function paidTaskAction(item) {
+  const card = textElement('div', 'chat-action');
+  if (typeof item.operationId !== 'string' || !UUID_PATTERN.test(item.operationId)) return card;
+  const link = textElement('a', 'button button-secondary', 'Review saved task');
+  link.href = '/broadcast/tasks/?operation=' + encodeURIComponent(item.operationId);
+  link.target = '_blank'; link.rel = 'noopener noreferrer';
+  card.append(textElement('p','chat-action-title',plain(item.name,64)),link,
+    textElement('p','chat-action-note','Your task is saved across devices. Review and approve it on your phone; resume it from your PC.'));
+  return card;
 }
 function conciergeError(error) {
   return typeof error?.code === 'string' && Object.hasOwn(CONCIERGE_ERRORS, error.code) ? CONCIERGE_ERRORS[error.code] : CONCIERGE_FALLBACK_ERROR;
