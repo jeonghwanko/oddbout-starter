@@ -17,7 +17,9 @@ const executionPanel=createExecutionPanel({api,getOwner:()=>session?.user.id,get
   if(hostOrderId)$('host-status').textContent=`${plannedState(order)} · ${formattedTime(order.startedAt)}`;
   if(order.executionStatus==='completed'&&$('shop-status').textContent==='Broadcast started.')message('');
 }});
-const returnedIntent = new URLSearchParams(location.search).get('intent') ?? '';
+const TOPUP_RETURN_KEY='oddbout-topup-return';
+const requestedIntent=new URLSearchParams(location.search).get('intent')??sessionStorage.getItem(TOPUP_RETURN_KEY)??'';
+const returnedIntent=/^[a-f0-9]{8}-([a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(requestedIntent)?requestedIntent:'';
 const requestedHost=new URLSearchParams(location.search).get('host');
 const hostOrderId=/^[a-f0-9]{8}-([a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(requestedHost??'')?requestedHost:null;
 const localZone=Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -402,6 +404,7 @@ async function captureReturnedPayment() {
     const result=await api('/topups/'+encodeURIComponent(returnedIntent)+'/capture',{base:'/commerce',body:{}});
     if(session?.user.id!==owner||accountEpoch!==epoch)return;
     if(result.status==='credited'){
+      sessionStorage.removeItem(TOPUP_RETURN_KEY);
       const pending=journal.get('topup');if(pending?.result?.intentId===returnedIntent)journal.complete('topup',pending.requestKey);
       checkoutLink(null);walletMessage(`${Number(result.credits??0).toLocaleString()} ${creditName()} added. Your balance is ready.`);await loadWallet();
     }else walletMessage('PayPal has not confirmed this top-up yet. Your balance is unchanged.');
@@ -507,7 +510,9 @@ async function initialize() {
 }
 async function signIn(){
   if(!client)return;
-  const {error}=await client.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+'/broadcast/'+(hostOrderId?'?host='+encodeURIComponent(hostOrderId):'')}});
+  if(returnedIntent)sessionStorage.setItem(TOPUP_RETURN_KEY,returnedIntent);
+  const returnQuery=hostOrderId?'?host='+encodeURIComponent(hostOrderId):returnedIntent?'?intent='+encodeURIComponent(returnedIntent):'';
+  const {error}=await client.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+'/broadcast/'+returnQuery}});
   if(error)message(error.message,true);
 }
 function openCredits(open){$('credit-options').hidden=!open;$('add-credits').setAttribute('aria-expanded',String(open));}

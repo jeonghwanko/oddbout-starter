@@ -92,3 +92,17 @@ This run ended early: about 20 minutes 17 seconds from Start to stop request, 21
 through the final cup's completion. It did not verify a full hour or the 30-minute sponsor slot in the
 deployed environment. Scheduled ad transitions were covered by browser fixtures. The graphical
 runner remains connected for subsequent tickets; Twitch ingest remains disabled. Render Free was retained.
+
+## Follow-up: buyer login and pending top-up completion
+
+After the user completed developer login, the existing USD 10 Sandbox order
+`9LN44979Y2904773C` was approved with the existing Sandbox buyer. Intent
+`58204a3d-d3e2-4fa5-99a3-f69c35334ba2` was credited at 2026-11-04 07:10:33 KST,
+capture `35B4527045122981V`. The original account balance changed from 0 to 1,000 DON;
+the database contained exactly one top-up ledger entry. No new order, ticket or payout was created.
+
+The PayPal checkout opens a separate tab, while login storage is scoped to a tab. Its signed-out
+return exposed a missing top-up intent in the Google OAuth destination. Sign-in now preserves only
+the validated intent UUID, with a tab-local fallback when the provider returns to the base URL.
+It clears that fallback after confirmed credit; PayPal token and payer parameters are not forwarded.
+The focused browser regression passed both exact-return and base-URL fallback cases.
