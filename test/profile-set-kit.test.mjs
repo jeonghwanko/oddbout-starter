@@ -16,6 +16,8 @@ function pixels(width, height, rects, background = null) {
 }
 const png = ({ data, width, height }, channels = 4) => sharp(data, { raw: { width, height, channels: 4 } })
   .toColourspace('srgb')[channels === 3 ? 'removeAlpha' : 'ensureAlpha']().png().toBuffer();
+// Read from its bytes: libvips' cache keeps a WebP it opened by path open, and Windows will not delete an open file (the cleanup's EBUSY).
+const metadata = async file => sharp(await readFile(file)).metadata();
 
 test('faceBox measures as host/motions.py face-box does: the head\'s square, 17 % of the figure, at its top', () => {
   // The host test's figure (generation-stages.test.mjs) with a square head: 801 px tall from y 100, the head over x 150–249.
@@ -40,12 +42,12 @@ test('fighter:profile-set frames the chosen front, measures its face, fits the s
     const set = JSON.parse(manifest);
     // The 901-px figure fits unscaled: 86 % of a 1048-px portrait canvas.
     assert.deepEqual([set.front.width, set.front.height], [699, 1048]);
-    const meta = await sharp(path.join(out, 'front.webp')).metadata();
+    const meta = await metadata(path.join(out, 'front.webp'));
     assert.deepEqual([meta.format, meta.width, meta.height, meta.hasAlpha], ['webp', 699, 1048, true]);
     assert.deepEqual([set.expressions.width, set.expressions.height], [1536, 1024]);
     assert.equal(set.face.side, Math.round(901 * 0.17));
-    assert.deepEqual((await sharp(path.join(out, 'ko-preview.png')).metadata()).width, 512);
-    assert.deepEqual((await sharp(path.join(out, 'face-preview.png')).metadata()).width, 192);
+    assert.deepEqual((await metadata(path.join(out, 'ko-preview.png'))).width, 512);
+    assert.deepEqual((await metadata(path.join(out, 'face-preview.png'))).width, 192);
     assert.deepEqual(result.upload, ['prepare_profile_set: manifest profile-set.json', 'upload_profile_set_asset: assetId front, file front.webp',
       'upload_profile_set_asset: assetId expressions, file expressions.webp', 'submit_profile_set']);
     // Never over an existing folder.

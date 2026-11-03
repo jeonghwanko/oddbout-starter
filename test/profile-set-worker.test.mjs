@@ -117,9 +117,11 @@ test('a check child that dies or runs out of time is the painting\'s verdict (re
   try {
     const crash = path.join(directory, 'crash.mjs'), hang = path.join(directory, 'hang.mjs');
     await writeFile(crash, 'process.exit(1);\n'); await writeFile(hang, 'setInterval(() => {}, 1000);\n');
-    for (const [childModule, code] of [[crash, 'CHECK_CRASHED'], [hang, 'CHECK_TIMEOUT']]) {
+    // Only the hang gets a short deadline: the clock starts at fork, and on a loaded Windows run a child's start alone can pass 300 ms,
+    // which turned the crash into CHECK_TIMEOUT (2026-11-03). The crash keeps the worker's own deadline.
+    for (const [check, code] of [[{ childModule: crash }, 'CHECK_CRASHED'], [{ childModule: hang, timeoutMs: 300 }, 'CHECK_TIMEOUT']]) {
       const calls = await serve(await painting());
-      assert.equal((await runProfileSetWithConfig(config, undefined, { childModule, timeoutMs: 300 })).stage, 'rejected');
+      assert.equal((await runProfileSetWithConfig(config, undefined, check)).stage, 'rejected');
       assert.equal(calls.finish.passed, false); assert.deepEqual(calls.finish.result.errors, [{ code, path: '' }]);
       assert.equal(calls.release, null);
     }
