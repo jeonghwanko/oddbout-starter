@@ -220,11 +220,25 @@ async function selectPaidOperation(id, { autoSession = true, userSelected = fals
   const operation = await paidCall('operations/' + encodeURIComponent(id));
   if (revision !== paidRevision) return;
   renderPaidOperation(operation);
-  const broadcastId = operation.broadcastId ?? operation.broadcast?.id;
-  if (autoSession && !manualSessionSelection && typeof broadcastId === 'string' && broadcastId) {
-    $('broadcastId').value = broadcastId; journal?.select('broadcastId', broadcastId); refresh().catch(error => show(error.message));
-  }
+  if (autoSession && operation.kind === 'broadcast' && applyPaidOperationSession(operation) && $('broadcastId').value.trim())
+    refresh().catch(error => show(error.message));
   $('paid-broadcast-review').scrollIntoView({ block: 'nearest' });
+}
+/** Select the session owned by this saved broadcast, or clear stale session data before it starts. */
+function applyPaidOperationSession(operation) {
+  if (manualSessionSelection) return false;
+  const broadcastId = operation.broadcastId ?? operation.broadcast?.id;
+  const current = $('broadcastId').value.trim();
+  if (typeof broadcastId === 'string' && broadcastId) {
+    if (current === broadcastId) return false;
+    $('broadcastId').value = broadcastId; journal?.select('broadcastId', broadcastId); return true;
+  }
+  if (!current) return false;
+  $('broadcastId').value = ''; journal?.select('broadcastId', '');
+  refreshRevision++; clearTimeout(pollTimer);
+  $('active-jobs').replaceChildren(); $('report').textContent = 'This saved broadcast has not started yet.';
+  clearProducer(); clearPayouts();
+  return true;
 }
 async function refreshPaidOperations({ loadMore = false } = {}) {
   if (!session || !config?.paidOperations) return;
@@ -252,11 +266,8 @@ async function refreshPaidOperations({ loadMore = false } = {}) {
     const operation = await paidCall('operations/' + encodeURIComponent(selectedId));
     if (revision !== paidRevision) return;
     if (operation.kind === 'broadcast') renderPaidOperation(operation);
-    const broadcastId = operation.broadcastId ?? operation.broadcast?.id;
-    if (operation.kind === 'broadcast' && !manualSessionSelection && typeof broadcastId === 'string' && broadcastId
-      && $('broadcastId').value.trim() !== broadcastId) {
-      $('broadcastId').value = broadcastId; journal?.select('broadcastId', broadcastId); refresh().catch(error => show(error.message));
-    }
+    if (operation.kind === 'broadcast' && applyPaidOperationSession(operation) && $('broadcastId').value.trim())
+      refresh().catch(error => show(error.message));
   }
   if (!loadMore) schedulePaidPoll();
 }

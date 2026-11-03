@@ -74,6 +74,11 @@ test('ordinary concierge plan survives checkout closure and returns to the same 
   assert.equal((await f.store.wallet(OWNER)).balanceCredits,950);assert.equal(f.orders.size,1);
   assert.equal((await f.db.query('select count(*)::int n from commerce.broadcasts')).rows[0].n,1);
   await pc.screenshot({path:fileURLToPath(new URL('../../output/paid-recovery-tests/studio-pc-fixture.png',import.meta.url)),fullPage:true});
+  await pc.locator('#channelId').fill('Aftershow');await pc.locator('#maxCredits').fill('25');await pc.getByRole('button',{name:'Review budget',exact:true}).click();
+  await pc.locator('#paid-review-title').filter({hasText:'Aftershow'}).waitFor();
+  await pc.waitForFunction(()=>document.getElementById('broadcastId').value==='');
+  assert.equal(await pc.locator('#producer-card').isVisible(),false);
+  assert.equal(await pc.locator('#payouts-list').isVisible(),false);
   await pc.evaluate(id=>globalThis.testAccount(id),OTHER);
   await pc.waitForFunction(()=>document.getElementById('broadcastId').value==='');
   assert.equal(await pc.locator('#paid-broadcast-review').isVisible(),false);assert.equal(await pc.locator('#producer-card').isVisible(),false);
