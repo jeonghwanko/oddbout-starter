@@ -1381,7 +1381,7 @@ test('beside the motions, the sheet is drawn once from the chosen front, goes up
   // An API from before the sheet refuses the field (invalid-body): the front goes again, alone.
   fronts.length = 0;
   api.profileFront = async (job, front) => { fronts.push(front); return front.expressions ? { ok: false, code: 'invalid-body' } : { ok: true }; };
-  await rm(path.join(dir, 'looks', 'front-b-0.face.json'), { force: true });
+  await rm(path.join(dir, 'looks', 'front-b-0.artifact.face.json'), { force: true });
   await stages.submitting(job, dir);
   assert.deepEqual(fronts.map(f => 'expressions' in f), [true, false]);
 });
@@ -1402,18 +1402,28 @@ test('the chosen front and its face square go to the job before the package; a f
   const motionsPy = async ([command, image, out]) => {
     if (command !== 'face-box') return { code: 0 };
     measured += 1;
-    assert.equal(image, path.join(dir, 'looks', 'front-a-0.png'));
+    // The WebP the server holds, never the PNG it was made from (2026-11-03, 레온: a square 1.5 times off, FACE_OUTSIDE_FIGURE).
+    assert.equal(image, path.join(dir, 'looks', 'front-a-0.webp'));
     await writeFile(out, JSON.stringify({ x: 400, y: 30, side: 250 }));
     return { code: 0 };
   };
-  const stages = createStages({ og: async () => ({ code: 0 }), api, motionsPy, fetchBytes: async () => new Uint8Array(), toWebp: async () => {} });
+  const made = [];
+  const toWebp = async (png, webp) => { made.push([path.basename(png), path.basename(webp)]); await writeFile(webp, 'webp'); };
+  const stages = createStages({ og: async () => ({ code: 0 }), api, motionsPy, fetchBytes: async () => new Uint8Array(), toWebp });
   const job = { id: 'j', brief, choice: 'a', appearanceRound: 0, candidates: [], profile: { name: 'Blue', description: 'Boxer.' } };
   assert.deepEqual(await stages.submitting(job, dir), { outcome: 'ok', result: { submissionId: 'sub-1' } });
   assert.deepEqual(order, ['front', 'submission', 'submit']);
   assert.deepEqual(fronts, [{ artifact: 'front-a-0', face: { x: 400, y: 30, side: 250 } }]);
-  // Measured once: a stage run again sends the same square.
+  // A folder with the PNG alone gets its WebP made as the appearance stage made the artifact; one that has it keeps it.
+  assert.deepEqual(made, [['front-a-0.png', 'front-a-0.webp']]);
+  // Measured once: a stage run again sends the same square. A square measured on the PNG before this is not reused.
   await stages.submitting(job, dir);
   assert.equal(measured, 1);
+  await writeFile(path.join(dir, 'looks', 'front-a-0.face.json'), JSON.stringify({ x: 1, y: 1, side: 300 }));
+  await rm(path.join(dir, 'looks', 'front-a-0.artifact.face.json'));
+  fronts.length = 0;
+  await stages.submitting(job, dir);
+  assert.deepEqual([measured, made.length, fronts[0].face], [2, 1, { x: 400, y: 30, side: 250 }]);
   // Refused by the server, or not measurable: the package still goes in.
   api.profileFront = async () => ({ ok: false, code: 'invalid-profile-set' });
   assert.equal((await stages.submitting(job, dir)).outcome, 'ok');
