@@ -103,12 +103,18 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
     + 'the results count in the cup rankings. Only an entered fighter (enter_fighter) enters. Requires the user\'s request. '
     + 'Returns the finished cup (a few seconds); '
     + 'if it is still running, read it with get_cup. Use a new UUID per cup and the same UUID to retry it: '
-    + 'a retry after an unknown outcome returns the cup it made (replayed), never a second cup.',
+    + 'a retry after an unknown outcome returns the cup it made (replayed), never a second cup. '
+    + 'career: true makes it the user\'s career cup (fight money to the account, the fighter\'s fans and upgrades grow; not ranked) — '
+    + 'its prep between bouts is get_career then choose_career_prep.',
     // The key names the cup at the arena (2026-11-03): a gateway once cut off a call whose cup was made, and the retry made a second one.
-    { fighterId: UUID_ARG(), idempotencyKey: UUID_ARG() }, async ({ fighterId, idempotencyKey }, { signal, deadline: due }) => {
+    // 파이트머니 2판 (2026-11-03): `career` makes it the user's career cup — the fighter's money, fans and upgrades go on with every bout,
+    // the account's gold is paid, and between his bouts the cup waits for the prep (get_career, choose_career_prep; or the auto manager).
+    { fighterId: UUID_ARG(), idempotencyKey: UUID_ARG(), career: z.boolean().optional() }, async ({ fighterId, idempotencyKey, career }, { signal, deadline: due }) => {
       const issued = await arenaCall(arena, 'agent/cup', { owner: /** @type {Identity} */ (identity).owner, fighter: fighterId,
-        idempotencyKey: idempotencyKey.toLowerCase() }, undefined, timeLeft(due, 20000));
+        idempotencyKey: idempotencyKey.toLowerCase(), ...(career ? { career: true } : {}) }, undefined, timeLeft(due, 20000));
       if (!issued.ok) return issued;
+      // A career cup stops at his next bout for the prep: the agent reads it with get_career.
+      if (issued.career === true) return { ...issued, state: 'open', next: 'get_career' };
       // A cup is fought in about seven seconds: wait for it here so the agent needs no second call (MCP 점검 2026-10-27).
       // The wait ends by the call's deadline (counted from its request, the issue included: 2026-11-03) or CUP_WAIT_MS, each read bounded by
       // the time left; a client that went away ends it at once. The cup is made either way: an open one is read with get_cup.
@@ -121,6 +127,23 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
       }
       return { ...issued, state: 'open', next: 'get_cup' };
     }, { write: true, openWorld: true, idempotent: true });
+  const CARD = z.enum(['light', 'heavy', 'skill']);
+  register('get_career', '커리어 준비', 'Read the user\'s career of a fighter (fight money): fans, stamina, upgrade levels, the account\'s gold, '
+    + 'and the newest career cup with the prep it owes — the situation, the open choices (upgrade, stamina story, rest), the three story cards. '
+    + 'Then choose_career_prep.',
+    { fighterId: ID }, ({ fighterId }) => read(`agent/career?fighter=${encodeURIComponent(fighterId)}`));
+  register('choose_career_prep', '커리어 준비 고르기', 'Make the prep a career cup owes (get_career): an upgrade card (light, heavy, skill — its price '
+    + 'from the account\'s gold), a story card from the three offered, or rest. The cup goes on to his next bout. Requires the user\'s request.',
+    { cupId: UUID_ARG(), kind: z.enum(['upgrade', 'story', 'rest']), card: CARD.optional(), storyId: z.string().regex(/^[a-z0-9-]{1,40}$/).optional() },
+    ({ cupId, kind, card, storyId }) => {
+      const choice = kind === 'upgrade' ? (card ? { kind, card } : null) : kind === 'story' ? (storyId ? { kind, id: storyId } : null) : { kind };
+      if (!choice) return { ok: false, code: 'invalid-choice' };
+      return call('agent/career/manage', { owner: /** @type {Identity} */ (identity).owner, ticket: cupId.toLowerCase(), choice });
+    }, { write: true, idempotent: false });
+  register('set_career_auto', '자동 매니저', 'Turn the auto manager of the user\'s career of a fighter on or off (open after four prep steps): '
+    + 'on, every prep is made at once without waiting. Requires the user\'s request.',
+    { fighterId: ID, on: z.boolean() },
+    ({ fighterId, on }) => call('agent/career/auto', { owner: /** @type {Identity} */ (identity).owner, fighter: fighterId, on }), { write: true, idempotent: true });
   // The owner's current registered package hash (the version an edit is made on), or a 404.
   /** @param {string} fighterId */
   const currentSha = async fighterId => {
