@@ -1,4 +1,13 @@
 {
+  "../../../../../../../home/ubuntu/crashbang-heroes/kaito_web/node_modules/@supabase/supabase-js/dist/index.mjs": {
+    "file": "assets/dist-BziIhgZ3.js",
+    "name": "dist",
+    "src": "../../../../../../../home/ubuntu/crashbang-heroes/kaito_web/node_modules/@supabase/supabase-js/dist/index.mjs",
+    "isDynamicEntry": true,
+    "imports": [
+      "_dist-CuSK8MRy.js"
+    ]
+  },
   "_ArenaArtCatalog-B6kfQEyk.js": {
     "file": "assets/ArenaArtCatalog-B6kfQEyk.js",
     "name": "ArenaArtCatalog",
@@ -408,15 +417,11 @@
       "_fighterApiBase-CeB_1v89.js"
     ],
     "dynamicImports": [
-      "node_modules/@supabase/supabase-js/dist/index.mjs"
+      "../../../../../../../home/ubuntu/crashbang-heroes/kaito_web/node_modules/@supabase/supabase-js/dist/index.mjs"
     ]
   },
-  "_packageChecker-DKaXO0QP.css": {
-    "file": "assets/packageChecker-DKaXO0QP.css",
-    "src": "_packageChecker-DKaXO0QP.css"
-  },
-  "_packageChecker-DdKaPibC.js": {
-    "file": "assets/packageChecker-DdKaPibC.js",
+  "_packageChecker-CmHU4WvM.js": {
+    "file": "assets/packageChecker-CmHU4WvM.js",
     "name": "packageChecker",
     "imports": [
       "_catalog-CEcV9Fij.js",
@@ -437,6 +442,10 @@
     "css": [
       "assets/packageChecker-DKaXO0QP.css"
     ]
+  },
+  "_packageChecker-DKaXO0QP.css": {
+    "file": "assets/packageChecker-DKaXO0QP.css",
+    "src": "_packageChecker-DKaXO0QP.css"
   },
   "_pageScrollLock-DVA9zYeZ.js": {
     "file": "assets/pageScrollLock-DVA9zYeZ.js",
@@ -966,7 +975,7 @@
     ]
   },
   "contracts/ai-fighter/v1/example.fighter.json": {
-    "file": "assets/example.fighter-OCFYqmYG.json",
+    "file": "assets/example.fighter-Bz-exq6f.json",
     "src": "contracts/ai-fighter/v1/example.fighter.json"
   },
   "contracts/ai-fighter/validate.mjs": {
@@ -979,7 +988,7 @@
     ]
   },
   "creator.html": {
-    "file": "assets/creator-CfhFguaF.js",
+    "file": "assets/creator-CupxgoU9.js",
     "name": "creator",
     "src": "creator.html",
     "isEntry": true,
@@ -1003,7 +1012,7 @@
       "_OddboutCommunity-CLWy8SdF.js",
       "_arenaRankings-BkVcmw0r.js",
       "_UtcTime-BFPbMiHs.js",
-      "_packageChecker-DdKaPibC.js",
+      "_packageChecker-CmHU4WvM.js",
       "_arena-concept-runtime-BHN1CmLz.js",
       "_fighterFace-CR4nbOBD.js",
       "_rankedDuels-Dv4oR-s5.js",
@@ -1035,7 +1044,7 @@
     ]
   },
   "docs.html": {
-    "file": "assets/docs-DWijreFn.js",
+    "file": "assets/docs-C6UmF2cu.js",
     "name": "docs",
     "src": "docs.html",
     "isEntry": true,
@@ -1055,7 +1064,7 @@
       "assets/info-MB1OWjGx.css"
     ],
     "assets": [
-      "assets/example.fighter-OCFYqmYG.json"
+      "assets/example.fighter-Bz-exq6f.json"
     ]
   },
   "fighter.html": {
@@ -1136,15 +1145,6 @@
       "assets/league-DysZ4K0S.css"
     ]
   },
-  "node_modules/@supabase/supabase-js/dist/index.mjs": {
-    "file": "assets/dist-BziIhgZ3.js",
-    "name": "dist",
-    "src": "node_modules/@supabase/supabase-js/dist/index.mjs",
-    "isDynamicEntry": true,
-    "imports": [
-      "_dist-CuSK8MRy.js"
-    ]
-  },
   "privacy.html": {
     "file": "assets/privacy-B0sk26R8.js",
     "name": "privacy",
@@ -1216,7 +1216,7 @@
     ]
   },
   "src/app/i18n/namespaces/site/en.ts": {
-    "file": "assets/en-BmZzHT2J.js",
+    "file": "assets/en-tH6lXSmA.js",
     "name": "en",
     "src": "src/app/i18n/namespaces/site/en.ts",
     "isDynamicEntry": true,
@@ -1225,7 +1225,7 @@
     ]
   },
   "src/app/i18n/namespaces/site/ja.ts": {
-    "file": "assets/ja-DOnG2ztm.js",
+    "file": "assets/ja-B84O3XBg.js",
     "name": "ja",
     "src": "src/app/i18n/namespaces/site/ja.ts",
     "isDynamicEntry": true,
@@ -1234,7 +1234,7 @@
     ]
   },
   "src/app/i18n/namespaces/site/ko.ts": {
-    "file": "assets/ko-CHze6YX8.js",
+    "file": "assets/ko-GOjrjaH-.js",
     "name": "ko",
     "src": "src/app/i18n/namespaces/site/ko.ts",
     "isDynamicEntry": true,
@@ -2225,12 +2225,12 @@
     "isDynamicEntry": true
   },
   "src/creator/packageChecker.ts": {
-    "file": "assets/packageChecker-BmvPAHlx.js",
+    "file": "assets/packageChecker-DgHjlzrH.js",
     "name": "packageChecker",
     "src": "src/creator/packageChecker.ts",
     "isDynamicEntry": true,
     "imports": [
-      "_packageChecker-DdKaPibC.js"
+      "_packageChecker-CmHU4WvM.js"
     ]
   },
   "src/creator/worldLore.ts": {
