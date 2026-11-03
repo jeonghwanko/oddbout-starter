@@ -1,6 +1,8 @@
 # ODDBOUT Showrunner · Spotlight
 
 The customer flow is **choose a broadcast card → add sponsor video and URL → preview and publish → My broadcasts**.
+Available credits and the top-up action appear above the products. Each card has its own purchase
+button; uncertain purchases resume from that same card while other products stay disabled.
 This is the existing isolated PayPal Sandbox service, not live-money billing.
 
 ## Broadcast products

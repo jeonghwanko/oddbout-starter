@@ -22,12 +22,17 @@ function money(cents,currency='USD') {
 }
 function updateControls() {
   $('google-signin').disabled = !client || busy || topupBusy;
-  $('spotlight-purchase').disabled = !campaignProduct || busy || !config?.commerceEnabled;
   const pendingCampaign=journal?.get('campaignOrder');
-  const purchaseLabel=pendingCampaign?.result?.id?'Open saved purchase':pendingCampaign?'Continue purchase':orders.length?'Buy another broadcast':'Buy broadcast';
-  $('spotlight-purchase').textContent=purchaseLabel;
-  $('spotlight-purchase').setAttribute('aria-label',campaignProduct?`${purchaseLabel} · ${campaignProduct.durationSeconds/3600} hours · ${Number(campaignProduct.priceCredits).toLocaleString()} Credits`:purchaseLabel);
-  for(const button of $('duration-options').querySelectorAll('button'))button.disabled=busy||Boolean(journal?.get('campaignOrder'));
+  for(const button of $('duration-options').querySelectorAll('[data-buy-product-id]')){
+    const product=campaignProducts.find(item=>item.id===button.dataset.buyProductId);
+    const pendingThis=pendingCampaign?.input?.productId===product?.id;
+    const label=!session?'Sign in to buy':pendingThis?(pendingCampaign.result?.id?'Open purchase':'Continue purchase'):'Buy broadcast';
+    button.textContent=label;
+    const hours=product?.durationSeconds/3600;
+    button.setAttribute('aria-label',`${label} · ${hours} ${hours===1?'hour':'hours'} · ${product?.priceCredits} Credits`);
+    button.disabled=busy||topupBusy||!config?.commerceEnabled||!client||Boolean(pendingCampaign&&!pendingThis);
+  }
+  $('add-credits').disabled=!client||busy||topupBusy;
   $('broadcasts-refresh').disabled = !session || busy;
   $('media-upload').disabled = !session || busy || !selectedOrder || campaignState(selectedOrder)!=='awaiting_media' || !selectedFile || !validDestination($('destination-url').value);
   $('publish-broadcast').disabled = !session || busy || !selectedOrder || campaignState(selectedOrder)!=='ready' || !$('publish-consent').checked;
@@ -59,20 +64,20 @@ function renderProduct() {
   const pending=journal?.get('campaignOrder');
   if(pending?.input?.productId)selectedProductId=pending.input.productId;
   campaignProduct=campaignProducts.find(product=>product.id===selectedProductId)??campaignProducts[0]??null;
-  if (!campaignProduct) { message('Prices unavailable. Please refresh.',true); $('spotlight-purchase').disabled=true; $('duration-options').replaceChildren(); return; }
+  if (!campaignProduct) { message('Prices unavailable. Please refresh.',true); $('duration-options').replaceChildren(); return; }
   selectedProductId=campaignProduct.id;
   $('duration-options').replaceChildren(...[...campaignProducts].sort((a,b)=>a.durationSeconds-b.durationSeconds).map(product=>{
-    const button=document.createElement('button');button.type='button';button.className='duration-option';button.dataset.campaignProductId=product.id;
-    button.setAttribute('aria-pressed',String(product.id===selectedProductId));
+    const card=document.createElement('article');card.className='duration-option';card.dataset.campaignProductId=product.id;
     const hours=Math.round(product.durationSeconds/3600),durationLabel=`${hours} ${hours===1?'hour':'hours'}`;
-    const name=document.createElement('strong');name.textContent=durationLabel;
+    const name=document.createElement('h3');name.textContent=durationLabel;name.id='product-'+product.id;card.setAttribute('aria-labelledby',name.id);
     const specs=document.createElement('span');specs.className='duration-ads';specs.textContent=`${Math.round(product.adSeconds/60)} min of ads`;
     const cost=document.createElement('span');cost.className='duration-price';
     const amount=document.createElement('b');amount.textContent=Number(product.priceCredits).toLocaleString();
     const unit=document.createElement('span');unit.textContent='Credits';cost.append(amount,unit);
-    button.append(name,specs,cost);
-    button.addEventListener('click',()=>{if(journal?.get('campaignOrder'))return;selectedProductId=product.id;renderProduct();});
-    return button;
+    const buy=document.createElement('button');buy.type='button';buy.className='button button-primary';buy.dataset.buyProductId=product.id;
+    buy.addEventListener('click',()=>purchaseSpotlight(product.id));
+    card.append(name,specs,cost,buy);
+    return card;
   }));
   $('purchase-title').textContent=plain(campaignProduct.name,80)||'Spotlight';
   updateControls();
@@ -90,14 +95,12 @@ function renderCreditPacks() {
 async function loadWallet() {
   const wallet=await api('/wallet',{base:'/commerce'});
   $('wallet-available').textContent=Number(wallet.availableCredits??0).toLocaleString();
-  $('wallet-reserved').textContent=Number(wallet.reservedCredits??0).toLocaleString();
-  $('wallet-total').textContent=Number(wallet.balanceCredits??0).toLocaleString();
   if(wallet.spendingBlocked) walletMessage('Spending is temporarily blocked while a payment adjustment is reviewed.',true);
 }
 function checkoutLink(result) {
   const anchor=$('credit-paypal');
   if(!result?.approvalUrl) { anchor.hidden=true;anchor.removeAttribute('href');return; }
-  try { const url=new URL(result.approvalUrl);if(url.origin!=='https://www.sandbox.paypal.com')throw new Error();anchor.href=url.href;anchor.hidden=false; }
+  try { const url=new URL(result.approvalUrl);if(url.origin!=='https://www.sandbox.paypal.com')throw new Error();anchor.href=url.href;anchor.hidden=false;openCredits(true); }
   catch { anchor.hidden=true;anchor.removeAttribute('href');message('PayPal returned an invalid approval address.',true); }
 }
 async function purchaseCreditPack(productId,button) {
@@ -205,8 +208,14 @@ async function loadOrders({more=false}={}) {
   $('broadcasts-status').textContent='';
   updateControls();
 }
-async function purchaseSpotlight() {
-  if(busy)return;if(!session){message(`Sign in with Google to purchase ${plain(campaignProduct?.name,80)||'Spotlight'}.`);return;}
+async function purchaseSpotlight(productId) {
+  if(busy||topupBusy)return;
+  if(!session){await signIn();return;}
+  const pending=journal?.get('campaignOrder');
+  if(pending&&pending.input.productId!==productId)return;
+  campaignProduct=campaignProducts.find(product=>product.id===productId);
+  if(!campaignProduct)return;
+  selectedProductId=productId;$('purchase-title').textContent=campaignProduct.name;
   const owner=session.user.id,epoch=accountEpoch;
   busy=true;updateControls();let purchaseOp=null,previouslyDispatched=true;
   try {
@@ -224,7 +233,7 @@ async function purchaseSpotlight() {
       if(error.code==='insufficient-credits'&&error.status===402&&error.responseOk===false){
         const canRelease=!previouslyDispatched&&purchaseOp;
         if(canRelease&&journal?.get('campaignOrder')?.requestKey===purchaseOp.requestKey)journal.complete('campaignOrder',purchaseOp.requestKey);
-        $('wallet').scrollIntoView({block:'center'});$('wallet').querySelector('details').open=true;
+        openCredits(true);$('wallet').scrollIntoView({block:'center'});
         message(canRelease?'Not enough Studio Credits for this length. Add credits or choose a shorter broadcast. No order was created.':'Not enough Studio Credits on this attempt. An earlier request may have reached the server, so its key is retained. Add credits or retry the same length.');
         if(canRelease)renderProduct();
       }
@@ -302,7 +311,7 @@ async function captureReturnedPayment() {
 }
 function renderAccount(value) {
   const previous=session?.user.id;session=value;
-  if(previous!==value?.user.id){accountEpoch++;orderRevision++;selectionRevision++;clearTimeout(orderTimer);orders=[];selectedOrder=null;nextCursor=null;checkoutLink(null);walletMessage('');renderOrders();renderOrder(null);}
+  if(previous!==value?.user.id){accountEpoch++;orderRevision++;selectionRevision++;clearTimeout(orderTimer);orders=[];selectedOrder=null;nextCursor=null;checkoutLink(null);openCredits(false);$('wallet-available').textContent='—';walletMessage('');renderOrders();renderOrder(null);}
   $('google-signin').hidden=Boolean(value);$('account-identity').hidden=!value;$('signout').hidden=!value;
   const accountName=value?.user.user_metadata?.full_name||value?.user.email||'';
   $('account-name').textContent=accountName;$('account-avatar').textContent=accountName?Array.from(accountName)[0].toUpperCase():'';
@@ -319,7 +328,7 @@ function renderAccount(value) {
       });
       if(returnedIntent)setTimeout(()=>captureReturnedPayment(),0);
     }
-    else{$('wallet-available').textContent='—';$('wallet-reserved').textContent='—';$('wallet-total').textContent='—';$('broadcasts-status').textContent='';}}
+    else{$('wallet-available').textContent='—';$('broadcasts-status').textContent='';}}
   renderProduct();renderCreditPacks();updateControls();
 }
 function scheduleOrders() {
@@ -339,13 +348,15 @@ async function initialize() {
   client.auth.onAuthStateChange((_event,value)=>renderAccount(value));
   renderAccount((await client.auth.getSession()).data.session);
 }
-$('google-signin').addEventListener('click',async()=>{
+async function signIn(){
   if(!client)return;
   const {error}=await client.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+'/broadcast/'}});
   if(error)message(error.message,true);
-});
+}
+function openCredits(open){$('credit-options').hidden=!open;$('add-credits').setAttribute('aria-expanded',String(open));}
+$('google-signin').addEventListener('click',signIn);
+$('add-credits').addEventListener('click',()=>{if(!session){signIn();return;}openCredits($('credit-options').hidden);});
 $('signout').addEventListener('click',async()=>{const {error}=await client.auth.signOut();if(error)message(error.message,true);});
-$('spotlight-purchase').addEventListener('click',purchaseSpotlight);
 $('media-file').addEventListener('change',async event=>{
   const revision=++fileRevision,owner=session?.user.id,epoch=accountEpoch,orderId=selectedOrder?.id,file=event.currentTarget.files?.[0]??null;selectedFile=null;selectedFileDuration=null;
   if(previewObjectUrl)URL.revokeObjectURL(previewObjectUrl);previewObjectUrl='';
@@ -368,4 +379,4 @@ $('purchase-recover').addEventListener('click',()=>{if(selectedOrder?.id)selectO
 $('broadcasts-refresh').addEventListener('click',()=>loadOrders().catch(()=>message('Broadcast status could not be refreshed.',true)));
 $('broadcasts-more').addEventListener('click',()=>loadOrders({more:true}).catch(()=>message('Older broadcasts could not be loaded.',true)));
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&session)loadOrders().catch(()=>{});});
-initialize().catch(error=>{message(error.message||'Showrunner could not load.',true);$('spotlight-purchase').disabled=true;});
+initialize().catch(error=>{message(error.message||'Showrunner could not load.',true);for(const button of $('duration-options').querySelectorAll('button'))button.disabled=true;});
