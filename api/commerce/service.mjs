@@ -52,7 +52,8 @@ export function createCommerceService({ store, paypal, merchantId = '', publicOr
       // Never blindly replay an unknown create after the documented provider deduplication window.
       // A short recovery window also keeps a retained local key from turning into a new provider order later.
       if (now() - Date.parse(intent.createdAt) > 5 * 60_000) throw new Problem(409, 'checkout-needs-reconciliation');
-      const callback = operationId ? `${origin}/broadcast/tasks/?operation=${key(operationId)}`
+      const operation = operationId ? await store.operation(owner,'get',{operationId:key(operationId)}) : null;
+      const callback = operation ? `${origin}/broadcast/${operation.kind === 'broadcast' ? '' : 'tasks/'}?operation=${key(operationId)}`
         : `${origin}/broadcast/?intent=${encodeURIComponent(intent.id)}`;
       const order = await provider.createOrder({ requestId: `o-${intent.id}`, referenceId: intent.id,
         amountMinor: intent.amountCents, currency: intent.currency, returnUrl: callback, cancelUrl: `${callback}&cancelled=1` });

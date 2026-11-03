@@ -78,7 +78,7 @@
             height="80" /></a
         ><span class="studio-label">Broadcast Studio</span>
         <nav aria-label="Studio">
-          <a href="/broadcast/tasks/">Paid tasks</a><a href="#wallet">Wallet</a><a href="#setup">Setup</a
+          <a href="#saved-broadcasts">Saved broadcasts</a><a href="/broadcast/tasks/">Saved cups</a><a href="#wallet">Wallet</a><a href="#setup">Setup</a
           ><a href="#control">Control</a>
         </nav>
         <div class="account">
@@ -465,6 +465,33 @@
               <svg class="icon" aria-hidden="true"><use href="#i-arrow" /></svg>
             </button>
           </form>
+          <section id="paid-broadcast-review" class="paid-broadcast-review" hidden aria-labelledby="paid-review-title">
+            <h3 id="paid-review-title">Review this broadcast</h3>
+            <dl id="paid-review-summary" class="paid-review-summary"></dl>
+            <p id="paid-operation-status" class="paid-operation-status" role="status" aria-live="polite"></p>
+            <div id="paid-approval" hidden>
+              <label class="consent"><input id="paid-consent" type="checkbox"><span id="paid-consent-copy">I approve up to this credit limit for this broadcast, and authorize the producer to start automatically once funding is available.</span></label>
+              <button id="paid-approve" class="button button-primary" type="button" disabled>Approve broadcast</button>
+            </div>
+            <div id="paid-funding" class="paid-funding" hidden>
+              <p>Approve the Sandbox checkout to add credits. The approved producer will start this broadcast when funding is confirmed.</p>
+              <button id="paid-checkout" class="button button-paypal" type="button">Continue PayPal checkout</button>
+              <a id="paid-paypal-link" class="button button-paypal" hidden target="_blank" rel="noopener noreferrer">Open PayPal Sandbox</a>
+            </div>
+            <div id="paid-renewal" hidden>
+              <h4>Approve a new deadline</h4>
+              <label class="field" for="paid-new-deadline">New deadline<input id="paid-new-deadline" type="datetime-local"></label>
+              <label class="consent"><input id="paid-renew-consent" type="checkbox">I approve this same broadcast and credit limit until the new deadline, including automatic producer start when funded.</label>
+              <button id="paid-renew" class="button button-secondary" type="button" disabled>Approve new deadline</button>
+            </div>
+            <p id="paid-operation-result" class="paid-operation-result" hidden></p>
+            <button id="paid-cancel" class="button button-secondary button-small" type="button" hidden>Cancel broadcast</button>
+          </section>
+          <section id="saved-broadcasts" class="saved-broadcasts" hidden aria-labelledby="saved-broadcasts-title">
+            <div class="section-heading"><h3 id="saved-broadcasts-title">Saved broadcasts</h3><button id="paid-refresh" class="button button-secondary button-small" type="button">Refresh</button></div>
+            <div id="paid-broadcast-list" class="paid-broadcast-list" aria-live="polite"></div>
+            <button id="paid-more" class="button button-secondary button-small" type="button" hidden>Load older broadcasts</button>
+          </section>
         </section>
         <section
           id="control"

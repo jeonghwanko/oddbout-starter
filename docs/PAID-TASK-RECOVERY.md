@@ -1,36 +1,43 @@
-# Paid tasks that survive a disconnected agent
+# Broadcasts that continue after checkout closes
 
-An agent prepares a task on a VM. Its owner approves and funds it with PayPal on a phone.
-If the VM or conversation disappears, a new PC agent finds the original task and resumes it.
-No old conversation, shared browser storage or pasted PayPal order ID is needed.
+The concierge saves an ordinary broadcast plan in Broadcast Studio. Its owner reviews the budget
+and authorizes the producer to start once funding is available. If credits are needed, the owner
+uses the linked PayPal Sandbox checkout. Closing the tab or losing the requesting agent does not
+lose the plan: the server verifies the original payment and starts the original producer session.
+Signing in on another device shows that broadcast's producer, report and creator payouts.
 
-This service targets paid MCP tool developers and currently runs in PayPal Sandbox. Its first workload is one four-fighter cup:
-three rendered bouts on an existing host. It is not universal merchant checkout or a guarantee
-of exactly-once external execution. Unknown execution stays held for reconciliation.
+Recovery is part of the normal broadcast flow, not a separate tutorial or a required PC resume step.
+The existing standalone one-cup adapter remains available with its original manual-resume consent.
+This is PayPal Sandbox; it is not universal merchant checkout or a guarantee of exactly-once external
+execution. Unknown execution stays held for reconciliation.
 
 ## Implementation
 
-- A durable operation binds owner, immutable task/price/original deadline, web consent, top-up, session and job.
+- A durable operation binds owner, immutable plan/price/original deadline, web consent, top-up and session.
+  Broadcast operations use the original budget and 4–9 fighter lineup; the producer schedules its cups.
   A person can explicitly renew an expired approval before execution, retaining the original task and funding.
-- `/broadcast/tasks/` provides phone review, separate task consent and official PayPal checkout.
+- `/broadcast/` provides normal plan review, budget consent, PayPal checkout and saved broadcasts.
+  `/broadcast/tasks/` retains standalone cup details and agent connection management.
 - Local MCP clients connect through phone pairing. Their secret stays in process memory; the server
   stores its hash. The model never receives a user JWT, password, OTP or merchant key.
-- The browser concierge can prepare/find saved tasks, but cannot approve or execute them.
+- The browser concierge can prepare/find saved broadcasts, but cannot grant consent or approve payouts.
+  After explicit owner consent, server continuation starts the producer when funds are available.
 - Signed `CHECKOUT.ORDER.APPROVED` webhooks verify/capture the saved order without a browser return.
   A durable recovery queue and PC recovery check that same order if the webhook is missed. Approval alone is not payment.
 - Database leases fence recovery across server restarts and replicas. Transient failures back off; repeated
   failures and unbound orders outside the safe replay window require review. No replacement order is created.
 - Account-scoped keyset pagination, search, status filters and append-only history keep old tasks discoverable.
   The phone page uses PKCE with tab-scoped session storage and explicit account-change invalidation.
-- Session creation, queue insertion and ID binding are one transaction. A database guard refuses
-  additional jobs in that session. Confirmed completion closes it without a connected client.
+- Broadcast session creation and ID binding are one transaction. A separate continuation scan covers
+  already-funded approvals and a crash between payment confirmation and producer startup.
+  Legacy one-cup operations still bind one job and refuse replacement jobs in that session.
 - Existing PayPal validation, credit ledger, worker leases, reconciliation and creator payouts are reused.
 
 Prices remain **$10 Sandbox for 1,000 credits; 25 credits per completed cup**. Remaining credits stay
 in the wallet. Already-funded accounts need no new purchase. Cancellation/expiry does not refund
 a credit purchase. Failed jobs are not charged; uncertain jobs retain their allocation. Recovery
 never extends consent automatically or changes execution hosts. Wallet credits are shared: if other tasks
-consume them before this task starts, add credits in Broadcast Studio and resume this same task.
+consume them before this broadcast starts, add credits in Broadcast Studio; the approved broadcast continues automatically.
 
 ## Deploy to the isolated Sandbox
 
@@ -38,8 +45,9 @@ Follow [BROADCAST-HOSTING](BROADCAST-HOSTING.md) for the existing service and ru
 
 1. Confirm the dedicated Sandbox project. Apply files from `supabase/sandbox/` in this explicit order:
    ledger `20261102115107_commerce_broadcast_ledger.sql`, payouts `20261104090000_commerce_payouts.sql`,
-   then `20261103131740_commerce_paid_operations.sql`, then `20261103134354_commerce_paid_operation_recovery.sql`.
-   Existing WP5 databases need the last two files. An existing task-recovery deployment needs only the last file.
+   then `20261103131740_commerce_paid_operations.sql`, `20261103134354_commerce_paid_operation_recovery.sql`,
+   then `20261103143448_commerce_broadcast_operations.sql`.
+   Existing WP5 databases need the last three files. A deployed recovery-schema-v2 service needs only the last file.
    Never apply them to production or through production `supabase db push`.
 2. Install with `npm ci --ignore-scripts`. Deploy the reviewed commit and set `ODDBOUT_PAID_OPERATIONS=1`
    alongside existing commerce settings. Default `0` keeps old databases operational until migration.
@@ -51,7 +59,9 @@ Follow [BROADCAST-HOSTING](BROADCAST-HOSTING.md) for the existing service and ru
 5. Verify `/broadcast/config` reports `paidOperations: true` and `/readyz` returns HTTP 200 with recovery enabled.
    Readiness checks the required database schema; `/healthz` checks only process liveness.
    Use `/readyz` as the hosting health check. Keep the original renderer host and worker.
-   One-cup recovery does not launch an extra producer; ordinary broadcast sessions retain theirs.
+   Enable the existing automatic producer for the integrated flow. Operate one producer server instance:
+   its supervisor deduplicates in process; database session uniqueness does not fence model calls across replicas.
+   One-cup recovery does not launch a producer. Existing legacy approvals do not gain automatic-start consent.
 
 Rollback: disable `ODDBOUT_PAID_OPERATIONS`, restore the previous application commit if necessary,
 and retain all operation/payment/job records. Do not drop tables or reapply the original ledger.
@@ -77,6 +87,7 @@ loopback HTTP is allowed for development.
 | --- | --- |
 | `connect_paid_operations` | Public pairing link/code/QR; call again after phone approval. |
 | `get_paid_operation_catalog` | Configured hosts, fighters and server prices. |
+| `prepare_broadcast` | Save an ordinary broadcast budget/lineup for owner review in Studio. After explicit consent, funding continues the same producer automatically. |
 | `prepare_paid_operation` | Save one task; return a human approval link/QR without spending. |
 | `list_my_operations` | Paginated account tasks, with `cursor`, `limit`, `filter` and name `query`. |
 | `get_paid_operation` | Read saved payment, job and result. |
@@ -86,8 +97,9 @@ Pairing expires in 10 minutes; a grant expires 24 hours after creation. Revoke i
 agents**. Restarted MCP processes reconnect instead of loading secrets from disk. Only approve a
 connection you initiated whose code matches. Device approval is not task/payment consent.
 
-Prepare with a UUID `requestKey`, configured `hostId`, a `channelId` label, four `fighterIds` and ISO
-`endsAt` within 24 hours. Leave at least 10 minutes for approval/rendering. Reuse exact input/key
+Prepare a broadcast with a UUID `requestKey`, configured `hostId`, a `channelId` label, 4–9 `fighterIds`,
+`maxCredits` and ISO `endsAt` within 24 hours. Standalone cups require exactly four fighters.
+Leave at least 10 minutes for approval/rendering. Reuse exact input/key
 after a lost reply. After a restart, list first: a new key means new work. Use the same ODDBOUT
 Google account across devices; the PayPal buyer is a separate Sandbox account.
 
@@ -110,7 +122,8 @@ seconds it processes up to three due records. A 120-second database lease can be
 an old holder cannot overwrite its successor or a webhook-confirmed credit. Provider calls are bounded to
 ten seconds. Transient failures retry after 15 seconds up to 15 minutes, then require review after eight
 failures. Pending captures never credit a wallet. Unapproved checkouts are checked once per minute and
-move to review after 24 hours. Funding confirmation alone never starts execution.
+move to review after 24 hours. Funding alone is not consent: only broadcasts whose owner explicitly
+authorized automatic start continue. Legacy one-cup operations retain their manual resume gate.
 
 Run operator commands with the **dedicated Sandbox** environment loaded; keep keys out of shell arguments:
 
@@ -142,13 +155,16 @@ drill, and a real three-device run. The local suites do not prove these conditio
 
 Deployed physical-device rehearsal:
 
-1. Pair the VM client, prepare one task, then terminate the **requesting agent**, leaving its renderer alive.
-2. Phone: sign into the same account, approve the task and pay through PayPal Sandbox; close the return page.
-3. Fresh PC client: pair, list tasks, resume the returned original operation ID without copying an order ID.
-4. Observe actual renderer completion; recover again from another fresh client and compare the saved result.
-5. Record operation/approval/order/capture/session/job IDs, one top-up ledger entry, one job, one charge,
-   a completed session and zero reserved credits. Run existing PayPal reconciliation. Optional creator
-   payouts retain their original human approval in Broadcast Studio.
+1. Ask the concierge for a normal broadcast plan, then close the requesting browser/agent before checkout.
+2. Phone: open the same Studio plan, review its budget and approve automatic start when funded.
+   Complete the linked PayPal Sandbox checkout if needed, then close the page without a return/verify step.
+3. Confirm server continuation starts the original producer session. A fresh signed-in PC discovers the
+   saved broadcast and shows that session's producer/report, with no manual order ID or resume ritual.
+4. Let the original producer schedule cups under the approved budget. Confirm results and one charge
+   per completed cup, then stop/finish the session. Unknown work must stay held.
+5. Use existing PayPal reconciliation and creator payout controls for that same selected session.
+   Creator payouts retain separate human approval. Record operation/approval/order/capture/session/job
+   IDs, one top-up ledger entry, original session identity, final charges and zero remaining reservations.
 
 Also test duplicate webhook/recovery calls, lost capture/enqueue replies, wrong-account access, expiry,
 failure and unknown execution. Unknown work must return `needs_reconciliation`, not a replacement job.
@@ -161,11 +177,11 @@ a deployed release. Record those separately; do not reuse earlier WP5 transactio
 
 | Time | Show |
 | --- | --- |
-| 0:00–0:25 | VM prepares a paid task; show the approval link/QR. |
-| 0:25–0:55 | Terminate that agent; phone approves task and Sandbox funding. |
-| 0:55–1:30 | Fresh PC agent discovers and resumes the original task. |
-| 1:30–2:10 | Actual rendered result; label any edited wait. |
-| 2:10–2:40 | Repeat recovery; show the same result and one payment/job/charge. |
+| 0:00–0:25 | Request a broadcast in the concierge; show its ordinary budget review. |
+| 0:25–0:55 | Approve and pay on the phone, then close the page before returning. |
+| 0:55–1:30 | Open Studio on a fresh PC; the same producer is already continuing. |
+| 1:30–2:10 | Show the actual rendered result and the original session report; label any edited wait. |
+| 2:10–2:40 | Reconcile payment and review creator payout; show one funding record and correct charges. |
 
 Opening: “Your agent disconnected after you paid. Your task should not disappear with it.”
 PayPal processes payment; this application binds consent, funding and execution durably. Keep the

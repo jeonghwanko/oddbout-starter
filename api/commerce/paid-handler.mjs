@@ -67,9 +67,11 @@ export function createPaidOperationHandler({ service, store, publicOrigin, authe
         ...(url.searchParams.has('limit') ? { limit: Number(url.searchParams.get('limit')) } : {}),
         ...(url.searchParams.has('cursor') ? { cursor: url.searchParams.get('cursor') ?? '' } : {}),
         ...(url.searchParams.has('filter') ? { filter: url.searchParams.get('filter') ?? '' } : {}),
-        ...(url.searchParams.has('query') ? { query: url.searchParams.get('query') ?? '' } : {}) });
+        ...(url.searchParams.has('query') ? { query: url.searchParams.get('query') ?? '' } : {}),
+        ...(url.searchParams.has('kind') ? { kind: url.searchParams.get('kind') ?? '' } : {}) });
       else if (path === 'operations' && method === 'GET') data = await service.list(owner);
       else if (path === 'operations' && method === 'POST') data = await service.prepare(owner, input);
+      else if (path === 'broadcasts' && method === 'POST') data = await service.prepareBroadcast(owner, input);
       else if (route[0] === 'operations' && route.length >= 2 && route.length <= 3) {
         const id = operationId(route[1]), action = route[2];
         if (method === 'GET' && !action) data = await service.get(owner, id);
@@ -78,8 +80,8 @@ export function createPaidOperationHandler({ service, store, publicOrigin, authe
         else if (method === 'POST' && action === 'reconcile' && !agent) data = await service.reconcile(owner, id);
         else if (method === 'POST' && ['approve', 'cancel', 'checkout', 'renew', 'retry-payment'].includes(action)) {
           humanConsent();
-          data = action === 'renew' ? await service.renew(owner, id, input.endsAt)
-            : action === 'retry-payment' ? await service.retryPayment(owner, id) : action === 'approve' ? await service.approve(owner, id)
+          data = action === 'renew' ? await service.renew(owner, id, input.endsAt, input.startWhenFunded === true)
+            : action === 'retry-payment' ? await service.retryPayment(owner, id) : action === 'approve' ? await service.approve(owner, id, input.startWhenFunded === true)
             : action === 'cancel' ? await service.cancel(owner, id) : await service.checkout(owner, id);
         } else throw new Problem(404, 'not-found');
       } else if (!agent && path === 'devices' && method === 'GET') data = await store.operationDevice(owner, 'list');

@@ -3,6 +3,8 @@ const $ = id => document.getElementById(id);
 let client, session, catalog, journal, config;
 let walletSpendingBlocked = false;
 let refreshRevision = 0, pollTimer;
+let paidOperation = null, paidList = [], paidNextCursor = null, paidRevision = 0, paidSessionEpoch = 0, paidTimer, paidCheckoutLink = null;
+let manualSessionSelection = false, requestedOperation = new URLSearchParams(location.search).get('operation');
 const FIGHTER_NAMES = { kuma: 'Kuma', yume: 'Yume', bravow: 'Bravow', beotim: 'Beotim' };
 // The AI producer card is data-driven from the owner-only producer route. Every string it shows may
 // come from a model, so it is only ever written with textContent.
@@ -40,18 +42,35 @@ async function call(path, body) {
   if (!response.ok || !result.ok) throw Object.assign(new Error(result.code ?? 'Request failed.'), { code: result.code, status: response.status, responseOk: result.ok, outcomeUnknown: result.outcomeUnknown === true });
   return result.data;
 }
+async function paidCall(path, body) {
+  if (!session) throw new Error('Sign in to view saved broadcasts.');
+  const owner = session.user.id, accountScope = journal;
+  const response = await fetch('/paid-operations/' + path, { method: body === undefined ? 'GET' : 'POST', signal: AbortSignal.timeout(55000),
+    headers: { authorization: 'Bearer ' + session.access_token, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+  const result = await response.json();
+  if (session?.user.id !== owner || journal !== accountScope) throw new Error('Account changed. Sign in to the original account to recover the request.');
+  if (!response.ok || !result.ok) throw Object.assign(new Error(result.code ?? 'Request failed.'), { code: result.code, status: response.status, responseOk: result.ok, outcomeUnknown: result.outcomeUnknown === true });
+  return result.data;
+}
 function requireJournal() { if (!session || !journal) throw new Error('Sign in to your ODDBOUT account first.'); return journal; }
 function updateControls() {
   $('google-signin').disabled = !client || busyActions.has('google-signin');
-  for (const id of ['topup-form', 'budget-form', 'broadcast-form', 'host-cup', 'stop', 'refresh', 'verify-payment', 'payout-propose']) {
+  for (const id of ['topup-form', 'budget-form', 'broadcast-form', 'host-cup', 'stop', 'refresh', 'verify-payment', 'payout-propose', 'paid-approve', 'paid-checkout', 'paid-cancel', 'paid-refresh', 'paid-more', 'paid-renew']) {
     const disabled = busyActions.has(id) || !session || !config?.commerceEnabled
       || (walletSpendingBlocked && ['topup-form', 'budget-form', 'broadcast-form', 'host-cup'].includes(id))
       || (['topup-form', 'verify-payment'].includes(id) && !catalog?.paypalConfigured);
     for (const button of [...$(id).querySelectorAll('button'), ...($(id).tagName === 'BUTTON' ? [$(id)] : [])]) button.disabled = disabled;
   }
+  $('paid-consent').disabled = !paidBroadcastMode() || !session;
+  $('paid-renew-consent').disabled = !paidBroadcastMode() || !session;
+  $('paid-approve').disabled = busyActions.has('paid-approve') || !session || !paidBroadcastMode() || !$('paid-consent').checked;
+  $('paid-renew').disabled = busyActions.has('paid-renew') || !session || !paidBroadcastMode() || !$('paid-renew-consent').checked;
+  for (const id of ['paid-checkout','paid-cancel','paid-refresh','paid-more']) $(id).disabled = busyActions.has(id) || !session || (id === 'paid-checkout' && !paidBroadcastMode());
   updateConcierge();
   updateReconcile();
 }
+function paidBroadcastMode() { return Boolean(config?.paidOperations && config?.autoProducer); }
 async function mutate(saved, name, input, path, extra = {}) {
   const op = saved.begin(name, input);
   // Legacy journal entries without this marker may already have reached the server.
@@ -77,7 +96,7 @@ function action(id, callback, event = 'click', exclusive = false) {
         });
       } else await callback();
     } catch (error) {
-      const message = id === 'budget-form' ? budgetErrors[error.code] ?? error.message : error.message;
+      const message = id === 'budget-form' ? PAID_ERRORS[error.code] ?? budgetErrors[error.code] ?? error.message : error.message;
       show(message);
       if (id === 'budget-form') budgetFeedback(message, true);
       if (id === 'payout-propose') proposeFailed(error);
@@ -116,6 +135,201 @@ function showCheckout(result) {
   show('Open PayPal in the new tab, approve the order, then return here and verify payment.');
 }
 const plain = (value, max = 400) => typeof value === 'string' ? value.slice(0, max) : '';
+function paidOperationStatus(text, error = false) {
+  const status = $('paid-operation-status'); status.textContent = text; status.classList.toggle('is-error', error);
+}
+const PAID_STATES = { awaiting_approval: 'Review needed', awaiting_payment: 'Funding needed', ready: 'Starting', queued: 'Starting',
+  running: 'Running', completed: 'Completed', failed: 'Execution failed', cancelled: 'Cancelled', cancelling: 'Stopping after current work', stopping: 'Stopping after current work', expired: 'Approval expired',
+  blocked: 'Payment needs review', needs_reconciliation: 'Outcome unknown — held', payment_review: 'Payment needs review' };
+const PAID_MESSAGES = { awaiting_approval: 'Review the full budget below and approve it to start this broadcast.',
+  awaiting_payment: 'This broadcast is approved. Add credits through PayPal and the producer will start automatically after confirmation.',
+  ready: 'Approved and funded. The producer is starting this broadcast automatically.', queued: 'The producer is starting this broadcast automatically.',
+  running: 'The producer is running this broadcast. Status and results will update here.', completed: 'This broadcast is complete. Its result is saved to your account.',
+  expired: 'The approval window expired. Review and approve a new deadline to continue this broadcast.',
+  needs_reconciliation: 'The execution outcome is unknown. Funds remain held while the original broadcast is reconciled.',
+  payment_review: 'The original payment needs review. Keep this broadcast; no replacement payment was created.',
+  blocked: 'A payment adjustment needs reconciliation before further spending.', stopping: 'The current cup will finish, then this broadcast will stop.',
+  cancelling: 'Cancellation is recorded. The current cup will finish before this broadcast stops.',
+  cancelled: 'This broadcast was cancelled. Its payment and execution record are saved.' };
+const PAID_ERRORS = { 'automatic-producer-unavailable': 'Automatic producer start is unavailable on this console. Your saved plan is preserved.',
+  'credit-pack-shortfall-too-large': 'Your available credits changed and the saved credit pack no longer covers this budget. Add credits or prepare a lower budget.' };
+function operationTime(value) { const date = new Date(value); return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString(); }
+function paidSummary(operation) {
+  const input = operation.input ?? {}, pack = input.product, shortfall = Math.max(0,(input.maxCredits ?? 0) - (operation.availableCredits ?? 0));
+  const funding = operation.payment ? `${plain(operation.payment.status,40).replaceAll('_',' ')} · $${(operation.payment.amountCents/100).toFixed(2)} Sandbox · ${operation.payment.credits} credits`
+    : shortfall === 0 ? `Covered by ${Number(operation.availableCredits ?? 0).toLocaleString()} available credits`
+    : pack ? `${plain(pack.name,100)} · $${(pack.amountCents/100).toFixed(2)} Sandbox · ${Number(pack.credits).toLocaleString()} credits` : 'PayPal Sandbox';
+  const fields = [['Host', input.hostId], ['Session', input.channelId], ['Credit limit', Number.isSafeInteger(input.maxCredits) ? input.maxCredits.toLocaleString() + ' credits' : '—'],
+    ['Cup price', Number.isSafeInteger(input.cupCredits) ? input.cupCredits.toLocaleString() + ' credits' : '—'],
+    ['Maximum cups', Number.isSafeInteger(input.maxCups) ? input.maxCups.toLocaleString() : '—'],
+    ['Fighters', Array.isArray(input.fighterIds) ? input.fighterIds.map(fighterName).join(' · ') : '—'], ['Approval deadline', operationTime(operation.effectiveEndsAt ?? input.endsAt)],
+    ['Funding', funding]];
+  $('paid-review-summary').replaceChildren(...fields.flatMap(([label,value]) => [textElement('dt','paid-review-label',label),textElement('dd','paid-review-value',String(value ?? '—'))]));
+}
+function renderPaidOperation(operation) {
+  const resetApproval = paidOperation?.id !== operation?.id || paidOperation?.state !== operation?.state;
+  paidOperation = operation;
+  $('paid-broadcast-review').hidden = !operation;
+  if (!operation) return;
+  const state = operation.state, input = operation.input ?? {};
+  paidSummary(operation);
+  $('paid-review-title').textContent = input.channelId || 'Saved broadcast';
+  paidOperationStatus(!config?.autoProducer && ['awaiting_approval','awaiting_payment','ready'].includes(state)
+    ? 'Automatic producer start is not enabled on this console. The saved broadcast and its status are preserved.'
+    : PAID_MESSAGES[state] ?? 'This broadcast is saved. Its latest status appears here.');
+  $('paid-approval').hidden = state !== 'awaiting_approval' || !config?.autoProducer;
+  $('paid-funding').hidden = state !== 'awaiting_payment' || !config?.autoProducer;
+  $('paid-renewal').hidden = state !== 'expired' || !config?.autoProducer;
+  $('paid-consent-copy').textContent = config?.autoProducer
+    ? 'I approve up to this credit limit for this broadcast, and authorize the producer to start automatically once funding is available.'
+    : 'I approve up to this credit limit for this broadcast.';
+  $('paid-checkout').textContent = operation.payment ? 'Continue the same PayPal checkout'
+    : input.product ? `Add ${plain(input.product.name,80)} · $${(input.product.amountCents/100).toFixed(2)}` : 'Continue to PayPal Sandbox';
+  $('paid-paypal-link').hidden = !paidCheckoutLink || paidCheckoutLink.id !== operation.id;
+  if (paidCheckoutLink?.id === operation.id) $('paid-paypal-link').href = paidCheckoutLink.url;
+  const result = operation.job?.result ?? operation.result;
+  $('paid-operation-result').hidden = !result && state !== 'failed';
+  $('paid-operation-result').textContent = result ? `Saved result: ${typeof result === 'string' ? result : JSON.stringify(result)}` : state === 'failed' ? 'The original execution failed. No replacement was started.' : '';
+  $('paid-cancel').hidden = ['completed','failed','cancelled','cancelling','stopping'].includes(state);
+  if (resetApproval) {
+    $('paid-consent').checked = false; $('paid-renew-consent').checked = false;
+    const local = new Date(Date.now() + 3600000); local.setMinutes(local.getMinutes() - local.getTimezoneOffset());
+    $('paid-new-deadline').value = local.toISOString().slice(0,16);
+  }
+  updateControls();
+  renderPaidList();
+}
+function renderPaidList() {
+  const section = $('saved-broadcasts'); section.hidden = !config?.paidOperations || !session;
+  const host = $('paid-broadcast-list');
+  const seen = new Set();
+  const items = paidList.filter(item => item && item.kind === 'broadcast' && typeof item.id === 'string' && !seen.has(item.id) && seen.add(item.id));
+  host.replaceChildren(...items.map(item => {
+    const button = textElement('button','paid-broadcast-item'); button.type = 'button';
+    button.setAttribute('aria-current', String(item.id === paidOperation?.id));
+    button.append(textElement('strong','',plain(item.input?.channelId ?? item.name,64) || 'Broadcast'), textElement('span','paid-broadcast-state',`${PAID_STATES[item.state] ?? item.state} · ${Number.isSafeInteger(item.input?.maxCredits) ? item.input.maxCredits.toLocaleString() + ' credits' : ''}`));
+    button.addEventListener('click', () => selectPaidOperation(item.id,{ userSelected:true })); return button;
+  }));
+  if (!items.length) host.append(textElement('p','paid-broadcast-empty','No saved broadcasts yet. Ask the concierge to plan one or review your budget above.'));
+  let more = $('paid-more');
+  if (more) more.hidden = !paidNextCursor;
+}
+async function selectPaidOperation(id, { autoSession = true, userSelected = false } = {}) {
+  if (userSelected) manualSessionSelection = false;
+  const revision = ++paidRevision;
+  const operation = await paidCall('operations/' + encodeURIComponent(id));
+  if (revision !== paidRevision) return;
+  renderPaidOperation(operation);
+  const broadcastId = operation.broadcastId ?? operation.broadcast?.id;
+  if (autoSession && !manualSessionSelection && typeof broadcastId === 'string' && broadcastId) {
+    $('broadcastId').value = broadcastId; journal?.select('broadcastId', broadcastId); refresh().catch(error => show(error.message));
+  }
+  $('paid-broadcast-review').scrollIntoView({ block: 'nearest' });
+}
+async function refreshPaidOperations({ loadMore = false } = {}) {
+  if (!session || !config?.paidOperations) return;
+  const revision = ++paidRevision;
+  const query = new URLSearchParams({ kind: 'broadcast', filter: 'all', limit: '20', ...(loadMore && paidNextCursor ? { cursor: paidNextCursor } : {}) });
+  const page = await paidCall('operations/page?' + query);
+  if (revision !== paidRevision) return;
+  const incoming = Array.isArray(page.items) ? page.items : [];
+  if (loadMore) { const known = new Set(paidList.map(item => item.id)); paidList.push(...incoming.filter(item => !known.has(item.id))); }
+  else paidList = incoming;
+  paidNextCursor = page.nextCursor ?? null;
+  renderPaidList();
+  let selectedId = paidOperation?.id;
+  if (requestedOperation && UUID_PATTERN.test(requestedOperation)) { selectedId = requestedOperation; requestedOperation = ''; history.replaceState(null,'','/broadcast/'); }
+  if (!selectedId && !manualSessionSelection) {
+    selectedId = paidList.find(item => !['completed','failed','cancelled'].includes(item.state))?.id;
+    if (!selectedId) {
+      const active = await paidCall('operations/page?' + new URLSearchParams({ kind:'broadcast', filter:'active', limit:'20' }));
+      if (revision !== paidRevision) return;
+      selectedId = active.items?.[0]?.id;
+    }
+    selectedId ??= paidList[0]?.id;
+  }
+  if (selectedId) {
+    const operation = await paidCall('operations/' + encodeURIComponent(selectedId));
+    if (revision !== paidRevision) return;
+    if (operation.kind === 'broadcast') renderPaidOperation(operation);
+    const broadcastId = operation.broadcastId ?? operation.broadcast?.id;
+    if (operation.kind === 'broadcast' && !manualSessionSelection && typeof broadcastId === 'string' && broadcastId
+      && $('broadcastId').value.trim() !== broadcastId) {
+      $('broadcastId').value = broadcastId; journal?.select('broadcastId', broadcastId); refresh().catch(error => show(error.message));
+    }
+  }
+  if (!loadMore) schedulePaidPoll();
+}
+function schedulePaidPoll() {
+  clearTimeout(paidTimer);
+  if (!session || !config?.paidOperations) return;
+  const owner = session.user.id, epoch = paidSessionEpoch;
+  paidTimer = setTimeout(async () => {
+    try {
+      if (!document.hidden) await refreshPaidOperations();
+    } catch {
+      if (session?.user.id === owner && paidSessionEpoch === epoch) paidOperationStatus('Status could not be refreshed. Your saved broadcast is unchanged.', true);
+    } finally {
+      if (session?.user.id === owner && paidSessionEpoch === epoch) schedulePaidPoll();
+    }
+  }, PRODUCER_POLL_MS);
+}
+function paidUIAction(id, callback) {
+  $(id).addEventListener('click', async () => {
+    const button = $(id); if (button.disabled || busyActions.has(id)) return;
+    busyActions.add(id); updateControls();
+    try { await callback(); } catch (error) { paidOperationStatus(PAID_ERRORS[error?.code] ?? error.message, true); }
+    finally { busyActions.delete(id); updateControls(); }
+  });
+}
+function validPaidInput() {
+  return { hostId: $('hostId').value, channelId: $('channelId').value.trim(), maxCredits: Number($('maxCredits').value), fighterIds: fighters(),
+    endsAt: new Date(Date.now() + Number($('durationHours').value) * 3600000 - 1000).toISOString() };
+}
+async function preparePaidBroadcast() {
+  const saved = requireJournal(), input = saved.get('paidBroadcast')?.input ?? validPaidInput();
+  const op = saved.begin('paidBroadcast', input), previouslyDispatched = op.dispatched !== false;
+  saved.markDispatched('paidBroadcast', op.requestKey);
+  let response;
+  try { response = await paidCall('broadcasts', { ...input, requestKey: op.requestKey }); }
+  catch (error) {
+    if (!previouslyDispatched && isConfirmedRejection(error)) saved.complete('paidBroadcast', op.requestKey);
+    throw error;
+  }
+  saved.acknowledge('paidBroadcast', op.requestKey, response); saved.complete('paidBroadcast', op.requestKey);
+  renderPaidOperation(response); await refreshPaidOperations();
+  $('paid-broadcast-review').scrollIntoView({ block: 'nearest' });
+}
+async function approvePaidBroadcast() {
+  if (!paidOperation || !$('paid-consent').checked) return;
+  const operation = await paidCall(`operations/${encodeURIComponent(paidOperation.id)}/approve`, { confirmed: true, startWhenFunded: true });
+  renderPaidOperation(operation);
+  paidOperationStatus(PAID_MESSAGES[operation.state] ?? 'Broadcast approved. Its producer will start automatically when funding is available.');
+  await refreshPaidOperations();
+}
+async function checkoutPaidBroadcast() {
+  if (!paidOperation) return;
+  const result = await paidCall(`operations/${encodeURIComponent(paidOperation.id)}/checkout`, { confirmed: true });
+  renderPaidOperation(result.operation);
+  if (result.checkout?.approvalUrl) {
+    const url = sandboxApprovalUrl(result.checkout.approvalUrl);
+    if (!url) throw new Error('Invalid PayPal Sandbox approval address.');
+    paidCheckoutLink = { id: result.operation.id, url };
+    $('paid-paypal-link').href = url; $('paid-paypal-link').hidden = false;
+    paidOperationStatus('Approve the Sandbox checkout. The producer will start automatically after payment is confirmed.');
+  } else paidOperationStatus(PAID_MESSAGES[result.operation.state]
+    ?? (result.operation.payment?.status === 'credited' ? 'Payment confirmed. The producer will continue this broadcast automatically.' : 'The original payment is being checked. This broadcast will update when its status changes.'));
+}
+async function cancelPaidBroadcast() {
+  if (!paidOperation) return;
+  renderPaidOperation(await paidCall(`operations/${encodeURIComponent(paidOperation.id)}/cancel`, { confirmed: true }));
+}
+async function renewPaidBroadcast() {
+  if (!paidOperation || !$('paid-renew-consent').checked) return;
+  const endsAt = new Date($('paid-new-deadline').value);
+  if (!Number.isFinite(endsAt.getTime())) throw new Error('Choose a valid deadline.');
+  renderPaidOperation(await paidCall(`operations/${encodeURIComponent(paidOperation.id)}/renew`, { endsAt: endsAt.toISOString(), confirmed: true, startWhenFunded: true }));
+}
 function clearProducer() {
   clearTimeout(pollTimer);
   $('producer-card').hidden = true;
@@ -231,6 +445,7 @@ action('verify-payment', async () => {
   show(result); await refresh();
 }, 'click', true);
 action('budget-form', async () => {
+  if (paidBroadcastMode()) { await preparePaidBroadcast(); return; }
   const saved = requireJournal(), existing = saved.get('approval');
   const input = { hostId: $('hostId').value, channelId: $('channelId').value.trim(), maxCredits: Number($('maxCredits').value), fighterIds: fighters(),
     endsAt: existing?.input.endsAt ?? new Date(Date.now() + Number($('durationHours').value) * 3600000 - 1000).toISOString() };
@@ -248,6 +463,14 @@ action('budget-form', async () => {
   budgetFeedback('Budget approved. You can start your rehearsal.');
 }, 'submit', true);
 $('budget-form').addEventListener('input', () => budgetFeedback(''));
+document.getElementById('paid-consent').addEventListener('change', updateControls);
+paidUIAction('paid-approve', approvePaidBroadcast);
+paidUIAction('paid-checkout', checkoutPaidBroadcast);
+paidUIAction('paid-cancel', cancelPaidBroadcast);
+paidUIAction('paid-renew', renewPaidBroadcast);
+document.getElementById('paid-renew-consent').addEventListener('change', updateControls);
+paidUIAction('paid-refresh', () => refreshPaidOperations());
+paidUIAction('paid-more', () => refreshPaidOperations({ loadMore: true }));
 action('broadcast-form', async () => {
   const saved = requireJournal(), { op, result } = await mutate(saved, 'start', { approvalId: $('approvalId').value.trim() }, 'broadcasts');
   saved.select('broadcastId', result.id); saved.complete('start', op.requestKey); $('broadcastId').value = result.id; show(result); await refresh();
@@ -256,8 +479,9 @@ action('host-cup', async () => {
   const saved = requireJournal(), { op, result } = await mutate(saved, 'cup', { broadcastId: $('broadcastId').value.trim(), fighterIds: fighters().slice(0, 4) }, 'cups');
   saved.complete('cup', op.requestKey); show(result); await refresh();
 }, 'click', true);
-action('refresh', refresh);
+action('refresh', async () => { await refresh(); if (session && config?.paidOperations) await refreshPaidOperations(); });
 $('broadcastId').addEventListener('input', () => {
+  manualSessionSelection = true;
   refreshRevision++;
   $('active-jobs').replaceChildren(); $('report').textContent = 'Refresh to load the selected session.';
   clearProducer(); clearPayouts();
@@ -617,17 +841,33 @@ function planAction(item) {
   return card;
 }
 function conciergeActions(actions) {
-  const builders = { checkout: checkoutAction, topup: topupAction, plan: planAction, payout: payoutAction, paid_task: paidTaskAction };
+  const builders = { checkout: checkoutAction, topup: topupAction, plan: planAction, payout: payoutAction, paid_task: paidTaskAction, broadcast_plan: broadcastPlanAction };
   return actions.slice(0, 6).filter(item => item && typeof item.type === 'string' && Object.hasOwn(builders, item.type)).map(item => builders[item.type](item));
 }
 function paidTaskAction(item) {
   const card = textElement('div', 'chat-action');
   if (typeof item.operationId !== 'string' || !UUID_PATTERN.test(item.operationId)) return card;
-  const link = textElement('a', 'button button-secondary', 'Review saved task');
+  const link = textElement('a', 'button button-secondary', 'View saved cup');
   link.href = '/broadcast/tasks/?operation=' + encodeURIComponent(item.operationId);
   link.target = '_blank'; link.rel = 'noopener noreferrer';
-  card.append(textElement('p','chat-action-title',plain(item.name,64)),link,
-    textElement('p','chat-action-note','Your task is saved across devices. Review and approve it on your phone; resume it from your PC.'));
+  card.append(textElement('p','chat-action-title',plain(item.name,64)),textElement('p','chat-action-note',PAID_STATES[item.state] ?? 'Saved'),link);
+  return card;
+}
+function broadcastPlanAction(item) {
+  const card = textElement('div','chat-action'), id = typeof item.operationId === 'string' && UUID_PATTERN.test(item.operationId) ? item.operationId : '';
+  if (!id) { card.append(textElement('p','chat-action-note','The saved broadcast could not be opened. Refresh Saved broadcasts in Studio.')); return card; }
+  const open = textElement('button','button button-secondary','Review in Broadcast Studio'); open.type = 'button';
+  const phone = textElement('a','button button-secondary','Open this plan in Studio');
+  phone.href = '/broadcast/?operation=' + encodeURIComponent(id); phone.target = '_blank'; phone.rel = 'noopener noreferrer';
+  const note = textElement('p','chat-action-note');
+  open.addEventListener('click', async () => {
+    open.disabled = true; note.textContent = '';
+    try { await selectPaidOperation(id,{ userSelected:true }); }
+    catch (error) { note.textContent = plain(error?.message,200) || 'This broadcast could not be loaded.'; }
+    finally { open.disabled = false; }
+  });
+  const amount = Number.isSafeInteger(item.maxCredits) ? item.maxCredits.toLocaleString() + ' credits' : '';
+  card.append(textElement('p','chat-action-title',plain(item.name,64) || 'Saved broadcast'),textElement('p','chat-action-note',[PAID_STATES[item.state] ?? 'Saved',amount].filter(Boolean).join(' · ')),open,phone,note);
   return card;
 }
 function conciergeError(error) {
@@ -814,7 +1054,11 @@ async function runReconcile() {
 action('reconcile-run', runReconcile);
 function authChanged(value) {
   const previousOwner = session?.user.id;
-  if (previousOwner !== value?.user.id) { refreshRevision++; walletSpendingBlocked = false; $('wallet-status').textContent = ''; budgetFeedback(''); resetConcierge(); resetReconcile(); }
+  if (previousOwner !== value?.user.id) {
+    refreshRevision++; paidRevision++; paidSessionEpoch++; clearTimeout(paidTimer); paidOperation = null; paidList = []; paidNextCursor = null; paidCheckoutLink = null;
+    manualSessionSelection = false; $('paid-broadcast-review').hidden = true; $('saved-broadcasts').hidden = true; $('paid-broadcast-list').replaceChildren();
+    walletSpendingBlocked = false; $('wallet-status').textContent = ''; budgetFeedback(''); resetConcierge(); resetReconcile();
+  }
   session = value; $('signout').hidden = !value;
   $('google-signin').hidden = Boolean(value);
   $('account-identity').hidden = !value;
@@ -853,10 +1097,12 @@ function authChanged(value) {
   renderLineup();
   renderHost();
   if (value && config?.commerceEnabled) setTimeout(() => refresh().catch(error => show(error.message)), 0);
+  if (value && config?.paidOperations) setTimeout(() => refreshPaidOperations().catch(() => paidOperationStatus('Saved broadcasts could not be loaded. Use Refresh to try again.', true)), 0);
 }
 async function initialize() {
   renderLineup();
   config = await fetch('./config').then(r => r.json());
+  $('broadcast-form').hidden = paidBroadcastMode(); $('host-cup').hidden = paidBroadcastMode();
   const result = await fetch('/commerce/catalog').then(r => r.json()); catalog = result.catalog;
   $('productId').replaceChildren(...catalog.products.map(product => new Option(product.name + ' · $' + (product.amountCents / 100).toFixed(2) + ' USD', product.id)));
   $('hostId').replaceChildren(...catalog.hosts.map(host => new Option(host.id, host.id)));
@@ -869,11 +1115,12 @@ async function initialize() {
   $('configuration-status').hidden = !$('configuration-status').textContent;
   const query = new URLSearchParams(location.search), intent = query.get('intent');
   if (intent) {
-    show(query.get('cancelled') === '1' ? 'PayPal approval cancelled. No credits were added by this return.' : 'Return to your original console tab and choose Verify payment. If it was closed, sign in and recover the same checkout.');
+    show(query.get('cancelled') === '1' ? 'PayPal approval cancelled. No credits were added by this return.'
+      : config.paidOperations ? 'Payment status is updating for your saved broadcast.' : 'Return here and choose Verify payment to confirm your top-up.');
     history.replaceState(null, '', '/broadcast/');
   }
   if (!config.authConfigured) { show('No balances or successful operations are simulated.'); return; }
-  client = globalThis.supabase.createClient(config.supabaseUrl, config.publishableKey, { auth: { persistSession: false, autoRefreshToken: true, detectSessionInUrl: true } });
+  client = globalThis.supabase.createClient(config.supabaseUrl, config.publishableKey, { auth: { persistSession: true, storage: sessionStorage, storageKey: 'oddbout-paid-auth', flowType: 'pkce', autoRefreshToken: true, detectSessionInUrl: true } });
   client.auth.onAuthStateChange((_event, value) => { try { authChanged(value); } catch (error) { show(error.message); } });
   authChanged((await client.auth.getSession()).data.session);
 }

@@ -15,7 +15,7 @@
   "scripts": {
     "broadcast:dev": "node scripts/broadcast-demo.mjs",
     "paid:mcp": "node scripts/paid-operation-mcp.mjs",
-    "paid:check": "node --test --test-concurrency=2 test/paid-operations.test.mjs test/paid-recovery.test.mjs test/browser/paid-operations.test.mjs",
+    "paid:check": "node --test --test-concurrency=2 test/paid-operations.test.mjs test/paid-recovery.test.mjs test/broadcast-paid-recovery.test.mjs test/browser/paid-operations.test.mjs test/browser/broadcast-recovery.test.mjs",
     "broadcast:doctor": "node scripts/broadcast-host.mjs --doctor",
     "broadcast:runner": "node scripts/broadcast-runner.mjs",
     "broadcast:producer": "node scripts/broadcast-producer.mjs",

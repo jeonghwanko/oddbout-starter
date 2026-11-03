@@ -46,10 +46,14 @@ export function createBroadcastDemo(env = process.env) {
   if (env.ODDBOUT_PAID_OPERATIONS && !['0', '1'].includes(env.ODDBOUT_PAID_OPERATIONS)) throw new Error('invalid-paid-operations-setting');
   if (env.ODDBOUT_PAID_OPERATIONS === '1' && !commerce) throw new Error('paid-operations-commerce-required');
   const paidOperations = commerce && env.ODDBOUT_PAID_OPERATIONS === '1'
-    ? createPaidOperations({ store: commerce.store, commerce: commerce.service, publicOrigin }) : null;
+    ? createPaidOperations({ store: commerce.store, commerce: commerce.service, publicOrigin,
+      ...(env.ODDBOUT_BROADCAST_AUTO_PRODUCER === '1' ? {
+        ensureProducer: (/** @type {string} */ owner, /** @type {string} */ id) => supervisor?.ensure(owner,id),
+      } : {}) }) : null;
   const paidApi = paidOperations && commerce && db ? createPaidOperationHandler({ service: paidOperations, store: commerce.store,
     publicOrigin, authenticate: request => verifiedUserId(db, request) }) : null;
   const paymentWorker = paidOperations ? createRecoveryWorker({ recovery: paidOperations.recovery,
+    continueBroadcasts: () => paidOperations.continueBroadcasts(),
     log: event => console.error(JSON.stringify(event)) }) : null;
   const previewService = createCommerceService({ store: createCommerceStore({ rpc: async () => ({ data: null, error: { message: 'unconfigured' } }) }),
     paypal: null, publicOrigin, hosts: [{ id: 'current-pc' }, { id: 'office-stable' }, { id: 'svl-mac-01' }] });
@@ -107,7 +111,7 @@ export function createBroadcastDemo(env = process.env) {
       if (req.url === '/readyz' && req.method === 'GET') {
         let ready = true;
         if (paidOperations && commerce) {
-          try { ready = (await commerce.store.recovery(null, 'health')).schemaVersion === 2; } catch { ready = false; }
+          try { ready = (await commerce.store.recovery(null, 'health')).schemaVersion === 3; } catch { ready = false; }
         }
         res.writeHead(ready ? 200 : 503, { 'content-type': 'application/json', 'cache-control': 'no-store' });
         res.end(JSON.stringify({ ok: ready, paidTaskRecovery: Boolean(paidOperations) })); return;

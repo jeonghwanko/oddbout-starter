@@ -2,15 +2,15 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="referrer" content="no-referrer"><title>ODDBOUT · Paid tasks</title>
+  <meta name="referrer" content="no-referrer"><title>ODDBOUT · Saved cup</title>
   <link rel="stylesheet" href="./style.css">
 </head>
 <body>
-  <header><a href="/broadcast/">ODDBOUT</a><span>Paid tasks</span><button id="signin" disabled>Sign in with Google</button><button id="signout" hidden>Sign out</button></header>
+  <header><a href="/broadcast/">ODDBOUT</a><span>Saved cup</span><a href="/broadcast/">Broadcast Studio</a><button id="signin" disabled>Sign in with Google</button><button id="signout" hidden>Sign out</button></header>
   <main>
     <p class="eyebrow">PAYPAL SANDBOX · NO REAL MONEY MOVES</p>
-    <h1>Your task stays.<br>Your device can change.</h1>
-    <p class="intro">Approve on your phone. Pick up the same task from your PC, even after the agent disconnects.</p>
+    <h1>Saved cup details</h1>
+    <p class="intro">Review this cup’s approval, payment, status and result. Broadcast plans and producer updates are in <a href="/broadcast/">Broadcast Studio</a>.</p>
     <p id="account"></p><p id="message" role="status" aria-live="polite">Connecting…</p>
     <section id="pairing" hidden aria-labelledby="pair-title">
       <h2 id="pair-title">Connect your agent</h2><p>Only approve a connection you started. Check that this code matches the code in your agent.</p>
@@ -45,6 +45,7 @@
         <div id="result" hidden><h3>Saved result</h3><p id="winner"></p><details><summary>Payment and execution evidence</summary><pre id="evidence"></pre></details></div>
         <details id="history-panel"><summary>Task history</summary><ol id="history"></ol><button id="older-history" class="secondary" hidden>Earlier events</button></details>
       </section>
+      <section id="broadcast-notice" hidden><h2>Saved broadcast</h2><p id="broadcast-note">This plan and its producer status are managed in Broadcast Studio.</p><a id="broadcast-link" class="button" href="/broadcast/">Open this broadcast in Studio</a></section>
     </div>
     <section id="devices-section" hidden><h2>Connected agents</h2><div id="devices"></div></section>
   </main>

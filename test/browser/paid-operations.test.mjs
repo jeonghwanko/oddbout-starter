@@ -55,7 +55,7 @@ test('phone consent/funding and a fresh PC browser recover server state without 
   assert.match(await pc.locator('#winner').textContent(),/kuma/);
   await pc.screenshot({path:fileURLToPath(new URL('../../output/paid-recovery-tests/pc-result-fixture.png',import.meta.url)),fullPage:true});
   await pc.evaluate(id=>globalThis.testAccount(id),OTHER);
-  await pc.getByText('No saved tasks yet.').waitFor();
+  await pc.getByText('No saved cups yet.').waitFor();
   assert.equal(await pc.locator('#detail').isVisible(),false);assert.equal(await pc.locator('#paypal').isVisible(),false);
   const second=await f.service.prepare(OTHER,taskInput({channelId:'Recover after page action'}));
   await pc.locator('#refresh').click();await pc.getByRole('button',{name:/Recover after page action/}).click();

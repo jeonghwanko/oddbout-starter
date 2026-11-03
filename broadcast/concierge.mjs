@@ -33,7 +33,7 @@ export function conciergeToolDefinitions(productIds, { payouts = false, paidOper
     { type: 'function', name: 'get_broadcast_prices', strict: true, parameters: empty,
       description: 'Read the versioned Sandbox price book: credit packs, credits per completed cup, configured hosts and approvable fighters.' },
     { type: 'function', name: 'quote_broadcast', strict: true,
-      description: 'Price a broadcast plan. It creates and approves nothing: the console shows the plan, and the person reviews and approves the budget there.',
+      description: 'Price a broadcast plan and, when durable recovery is enabled, save it in Broadcast Studio. It never approves or starts execution: the person reviews and approves the budget there.',
       parameters: { type: 'object', additionalProperties: false, required: ['hostId', 'channelId', 'durationMinutes', 'maxCredits', 'fighterIds'],
         properties: { hostId: { type: 'string' }, channelId: { type: 'string', description: 'Session name: 1-64 letters, numbers, spaces, hyphens or underscores.' },
           durationMinutes: { type: 'integer', description: '10 to 1440.' }, maxCredits: { type: 'integer', description: 'Spending limit, at least one cup.' },
@@ -49,7 +49,7 @@ export function conciergeToolDefinitions(productIds, { payouts = false, paidOper
 
 const INSTRUCTIONS = 'You are the ODDBOUT broadcast concierge for one signed-in person, in a PayPal Sandbox demo: no real money moves. '
   + 'You help them fund and plan an AI-produced fighter tournament broadcast. Use tools for every number; never invent balances, prices or results. '
-  + 'If their plan needs more available credits than they have, create a checkout for the smallest credit pack that covers the shortfall; '
+  + 'For a direct wallet top-up, create a checkout for the smallest credit pack that covers the shortfall; '
   + 'the console then shows them a PayPal button. Never claim credits were added until confirm_topup returns status credited. '
   + 'Call confirm_topup only after they say they approved on PayPal. '
   + 'You cannot approve budgets, start, stop or change sessions: after quoting a plan, tell them to review and approve it in the console with the Approve budget button. '
@@ -116,8 +116,12 @@ export function createConcierge({ service, modelCall, now = Date.now, maxSteps =
     catch { return { ok: false, code: 'invalid-arguments' }; }
     try {
       if (name === 'list_my_operations' && service.paidOperations) {
-        const operations = await service.paidOperations.list(owner);
-        for (const operation of operations.slice(0,6)) actions.push({type:'paid_task',operationId:operation.id,name:operation.input.channelId,state:operation.state});
+        const broadcasts = await service.paidOperations.page(owner,{kind:'broadcast',limit:6});
+        const operations = broadcasts.items.length ? broadcasts.items : await service.paidOperations.list(owner);
+        for (const operation of operations.slice(0,6)) actions.push({type:operation.kind === 'broadcast' ? 'broadcast_plan' : 'paid_task',
+          operationId:operation.id,name:operation.input.channelId,state:operation.state,...(operation.kind === 'broadcast' ? {
+            ...operation.input,durationMinutes:Math.round((Date.parse(operation.input.endsAt)-Date.parse(operation.createdAt))/60_000),broadcastId:operation.broadcastId,
+          } : {})});
         return {ok:true,operations:operations.map((/** @type {any} */ item)=>({id:item.id,state:item.state,task:item.input.channelId,hostId:item.input.hostId,createdAt:item.createdAt}))};
       }
       if (name === 'prepare_paid_operation' && service.paidOperations) {
@@ -150,6 +154,18 @@ export function createConcierge({ service, modelCall, now = Date.now, maxSteps =
         const quote = service.quote({ hostId: args.hostId, channelId: args.channelId, endsAt, maxCredits: args.maxCredits, fighterIds: args.fighterIds });
         const plan = { hostId: quote.hostId, channelId: quote.channelId, durationMinutes: args.durationMinutes, maxCredits: quote.maxCredits,
           fighterIds: quote.fighterIds, cupCredits: quote.cupCredits, maxCups: quote.maxCups };
+        if (service.paidOperations) {
+          const signature = JSON.stringify({kind:'broadcast',...plan});
+          let input = conversation.operations.get(signature);
+          if (!input) {
+            input = {...quote,requestKey:randomUUID()};
+            conversation.operations.set(signature,input);
+          }
+          const operation = await service.paidOperations.prepareBroadcast(owner,input);
+          actions.push({type:'broadcast_plan',operationId:operation.id,name:operation.input.channelId,state:operation.state,
+            ...plan,broadcastId:operation.broadcastId});
+          return {ok:true,quote:{...plan,endsAt:operation.input.endsAt,operationId:operation.id,state:operation.state,approved:false}};
+        }
         actions.push({ type: 'plan', ...plan });
         return { ok: true, quote: { ...plan, endsAt: quote.endsAt, approved: false } };
       }
@@ -228,7 +244,7 @@ export function createConcierge({ service, modelCall, now = Date.now, maxSteps =
           if (used >= dailyModelCalls) throw new Problem(429, 'concierge-daily-limit');
           used++;
           let output;
-          const context = `${INSTRUCTIONS}${payouts ? PAYOUT_INSTRUCTIONS : ''}${paidOperations ? ' For one paid task that survives device changes, use list_my_operations before preparing it. Use prepare_paid_operation and its review link instead of a separate top-up or broadcast plan. Never create replacement work to recover a lost reply. This path has separate phone task consent and PayPal funding; the PC resumes the original task.' : ''} Current time: ${new Date(now()).toISOString()}.`
+          const context = `${INSTRUCTIONS}${payouts ? PAYOUT_INSTRUCTIONS : ''}${paidOperations ? ' Before preparing a broadcast after an interruption, use list_my_operations and show its saved status. quote_broadcast saves the ordinary broadcast plan across devices. The person reviews it and explicitly approves automatic start once funded in Broadcast Studio; the existing producer then schedules cups. Guide payment through that saved plan so PayPal and the session stay linked. Do not create a separate top-up first. Use prepare_paid_operation only when the person explicitly requests a standalone one-cup task. Never create replacement work to recover a lost reply.' : ''} Current time: ${new Date(now()).toISOString()}.`
             + (body.broadcastId ? ` Selected session id: ${body.broadcastId.toLowerCase()}.` : ' No session is selected.');
           try { ({ output } = await modelCall([{ role: 'developer', content: context }, ...items], tools, { signal })); }
           catch { throw new Problem(503, 'concierge-model-unavailable'); }

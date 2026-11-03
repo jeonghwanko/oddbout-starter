@@ -64,6 +64,13 @@ function action(id, callback) {
 function element(tag, text) { const node = document.createElement(tag); node.textContent = text; return node; }
 function render(operation) {
   selected = operation; $('detail').hidden = !operation;
+  $('broadcast-notice').hidden = !operation || operation.kind !== 'broadcast';
+  if (operation?.kind === 'broadcast') {
+    $('detail').hidden = true;
+    $('broadcast-note').textContent = `${states[operation.state] ?? operation.state}. This plan and its producer status are managed in Broadcast Studio.`;
+    $('broadcast-link').href = '/broadcast/?operation=' + encodeURIComponent(operation.id);
+    return;
+  }
   if (approvalLink?.id === operation?.id && operation?.state === 'awaiting_payment') {
     $('paypal').href=approvalLink.url; $('paypal').hidden=false;
   } else { $('paypal').hidden = true; $('paypal').removeAttribute('href'); }
@@ -140,14 +147,14 @@ function scheduleRefresh(){
   timer=setTimeout(async()=>{try{if(!document.hidden&&!busy)await refresh(false);}catch(error){message(error.message,true);}finally{scheduleRefresh();}},10000);
 }
 function renderList(){
-  $('tasks').replaceChildren(...listed.map(operation => {
+  $('tasks').replaceChildren(...listed.filter(operation => operation.kind !== 'broadcast').map(operation => {
     const button = element('button', operation.input.channelId); button.className = 'task';
     button.setAttribute('aria-current', String(operation.id === navigation.operation));
     button.append(element('span', `${states[operation.state] ?? operation.state} · ${operation.input.maxCredits} credits`));
     button.onclick = () => { if (busy) return; navigation.operation = operation.id; saveNavigation(); $('consent').checked = false; renewalId=null; render(null);$('history').replaceChildren(); refresh(false).catch(error => message(error.message, true)); };
     return button;
   }));
-  if(!listed.length)$('tasks').append(element('p',$('search').value||$('filter').value!=='all'?'No matching tasks. Clear the filters to see your other work.':'No saved tasks yet. Ask your connected agent to prepare one.'));
+  if(!listed.some(operation=>operation.kind!=='broadcast'))$('tasks').append(element('p',$('search').value||$('filter').value!=='all'?'No matching saved cups. Clear the filters to see your other work.':'No saved cups yet.'));
   $('more').hidden=!nextCursor;
 }
 function renderEvents(events,append){

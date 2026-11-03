@@ -46,7 +46,9 @@ export function createPaidOperationClient({ origin, fetchImpl = fetch }) {
     catalog: () => request('catalog'),
     /** @param {any} input */
     prepare: input => request('operations', input),
-    /** @param {{cursor?:string,filter?:string,query?:string,limit?:number}} [options] */
+    /** @param {any} input */
+    prepareBroadcast: input => request('broadcasts', input),
+    /** @param {{cursor?:string,filter?:string,query?:string,limit?:number,kind?:string}} [options] */
     list: (options = {}) => request('operations/page?' + new URLSearchParams(Object.entries(options).map(([key,value]) => [key,String(value)]))),
     /** @param {string} id */
     get: id => request(`operations/${encodeURIComponent(id)}`),
@@ -72,7 +74,7 @@ export function createPaidOperationMcp(client) {
         const data = await run(args);
         /** @type {import('@modelcontextprotocol/server').CallToolResult['content']} */
         const content = [{ type: 'text', text: JSON.stringify({ ok: true, data }) }];
-        const link = data?.verificationUrl ?? (name === 'prepare_paid_operation' ? data?.approvalUrl : null);
+        const link = data?.verificationUrl ?? (['prepare_paid_operation','prepare_broadcast'].includes(name) ? data?.approvalUrl : null);
         if (link) {
           // A preview failure must not hide an already-created durable operation.
           try {
@@ -88,13 +90,16 @@ export function createPaidOperationMcp(client) {
     });
   register('connect_paid_operations', 'Connect this VM or PC through a phone approval. Call again after approval to confirm. The link/code are public; no credentials enter the conversation.',
     { label: z.string().min(1).max(64) }, args => client.connect(args.label), true);
-  register('get_paid_operation_catalog', 'Read the configured hosts, fighters and server prices before preparing one cup.', {}, () => client.catalog());
+  register('get_paid_operation_catalog', 'Read the configured hosts, fighters and server prices before preparing a broadcast or standalone cup.', {}, () => client.catalog());
   register('prepare_paid_operation', 'Save one four-fighter cup for human approval. No payment or execution. Reuse the exact requestKey and input after reply loss; list existing tasks after restarting.',
     { requestKey: z.uuid(), hostId: z.string().max(64), channelId: z.string().min(1).max(64), endsAt: z.string().max(40), fighterIds: z.array(z.string().max(64)).length(4) }, args => client.prepare(args), true);
+  register('prepare_broadcast', 'Save the ordinary AI-produced broadcast plan in Broadcast Studio. The person explicitly approves its budget and automatic start once funded, then the existing producer schedules cups. Preparation spends nothing. Reuse the exact requestKey/input after reply loss; discover the original operation after interruption.',
+    { requestKey:z.uuid(),hostId:z.string().max(64),channelId:z.string().min(1).max(64),endsAt:z.string().max(40),
+      maxCredits:z.number().int().min(25).max(1000000),fighterIds:z.array(z.string().max(64)).min(4).max(9) },args=>client.prepareBroadcast(args),true);
   register('list_my_operations', 'Discover saved tasks across devices. Follow nextCursor to older pages; filter active, attention or completed tasks and search by name. Never replace a task because it is not on the first page.',
-    { cursor:z.string().max(256).optional(), filter:z.enum(['all','active','attention','completed']).optional(), query:z.string().max(64).optional(), limit:z.number().int().min(1).max(50).optional() }, args => client.list(args));
+    { cursor:z.string().max(256).optional(), filter:z.enum(['all','active','attention','completed']).optional(), kind:z.enum(['broadcast','one_cup']).optional(),query:z.string().max(64).optional(), limit:z.number().int().min(1).max(50).optional() }, args => client.list(args));
   register('get_paid_operation', 'Read the original task, payment evidence and saved execution result.', { operationId: z.uuid() }, args => client.get(args.operationId));
-  register('resume_paid_operation', 'Reconcile the same approved payment and queue the original approved cup once, or return its existing status/result. Unknown work stays held. This cannot grant approval.',
+  register('resume_paid_operation', 'Reconcile the same payment and recover the original broadcast session or standalone cup. Broadcasts continue automatically after explicit human consent and funding; standalone cups queue once on resume. Unknown work stays held. This cannot grant approval.',
     { operationId: z.uuid() }, args => client.resume(args.operationId), true);
   return server;
 }

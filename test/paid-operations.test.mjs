@@ -14,7 +14,7 @@ test('shipped stdio entry starts with a public origin and no user or merchant se
     env:{ODDBOUT_COMMERCE_ORIGIN:ORIGIN},stderr:'pipe'});
   const client=new Client({name:'clean-client',version:'1'});t.after(()=>client.close());
   await client.connect(transport);const tools=await client.listTools();
-  assert.deepEqual(tools.tools.map(tool=>tool.name).sort(),['connect_paid_operations','get_paid_operation','get_paid_operation_catalog','list_my_operations','prepare_paid_operation','resume_paid_operation'].sort());
+  assert.deepEqual(tools.tools.map(tool=>tool.name).sort(),['connect_paid_operations','get_paid_operation','get_paid_operation_catalog','list_my_operations','prepare_paid_operation','prepare_broadcast','resume_paid_operation'].sort());
 });
 
 test('VM disconnect → phone approval/payment without return → new PC MCP recovers one original job/result',async t=>{

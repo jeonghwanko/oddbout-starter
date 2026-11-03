@@ -98,7 +98,7 @@ test('audit is append-only and owner-scoped; duplicate payments create one credi
   for(const name of ['commerce_operation_recovery','commerce_operation_v1']){
     const p=(await f.db.query("select has_function_privilege('authenticated',$1,'EXECUTE') allowed",[`public.${name}(text,text,jsonb)`])).rows[0];assert.equal(p.allowed,false);
   }
-  assert.equal((await f.store.recovery(null,'health')).schemaVersion,2);
+  assert.equal((await f.store.recovery(null,'health')).schemaVersion,3);
   assert.ok(!JSON.stringify(await f.store.recovery(null,'metrics')).includes('secret'));
 });
 

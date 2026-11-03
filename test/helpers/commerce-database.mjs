@@ -7,6 +7,7 @@ export const COMMERCE_LEDGER_SQL = new URL('../../supabase/sandbox/2026110211510
 export const COMMERCE_PAYOUTS_SQL = new URL('../../supabase/sandbox/20261104090000_commerce_payouts.sql', import.meta.url);
 export const COMMERCE_OPERATIONS_SQL = new URL('../../supabase/sandbox/20261103131740_commerce_paid_operations.sql', import.meta.url);
 export const COMMERCE_RECOVERY_SQL = new URL('../../supabase/sandbox/20261103134354_commerce_paid_operation_recovery.sql', import.meta.url);
+export const COMMERCE_BROADCAST_OPERATIONS_SQL = new URL('../../supabase/sandbox/20261103143448_commerce_broadcast_operations.sql', import.meta.url);
 
 /** Actual PostgreSQL function/transaction adapter; no accounting rules are mocked in JavaScript. */
 export async function commerceDatabase() {
@@ -15,6 +16,7 @@ export async function commerceDatabase() {
   await db.exec(await readFile(COMMERCE_PAYOUTS_SQL, 'utf8'));
   await db.exec(await readFile(COMMERCE_OPERATIONS_SQL, 'utf8'));
   await db.exec(await readFile(COMMERCE_RECOVERY_SQL, 'utf8'));
+  await db.exec(await readFile(COMMERCE_BROADCAST_OPERATIONS_SQL, 'utf8'));
   await enforceSafeupdate(db);
   const rpc = async (name, args) => {
     if (!['commerce_command', 'commerce_payout', 'commerce_operation', 'commerce_operation_device', 'commerce_operation_recovery'].includes(name)) throw new Error(`unexpected RPC ${name}`);

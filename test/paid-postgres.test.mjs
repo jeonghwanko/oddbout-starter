@@ -27,7 +27,7 @@ test('native PostgreSQL connections race payment claims, duplicate credits, resu
   t.after(()=>run('pg_ctl',['-D',directory,'-m','fast','-w','stop']));
   const sql=statement=>run('psql',['-X','-qAt','-h','127.0.0.1','-p',String(port),'-U','postgres','-d','postgres','-v','ON_ERROR_STOP=1'],statement);
   await sql('create role anon; create role authenticated; create role service_role bypassrls;');
-  for(const file of ['20261102115107_commerce_broadcast_ledger.sql','20261104090000_commerce_payouts.sql','20261103131740_commerce_paid_operations.sql','20261103134354_commerce_paid_operation_recovery.sql'])
+  for(const file of ['20261102115107_commerce_broadcast_ledger.sql','20261104090000_commerce_payouts.sql','20261103131740_commerce_paid_operations.sql','20261103134354_commerce_paid_operation_recovery.sql','20261103143448_commerce_broadcast_operations.sql'])
     await sql(await readFile(new URL('../supabase/sandbox/'+file,import.meta.url),'utf8'));
   const literal=value=>value===null?'null':"'"+String(value).replaceAll("'","''")+"'";
   const store=createCommerceStore({rpc:async(name,args)=>{
@@ -52,4 +52,12 @@ test('native PostgreSQL connections race payment claims, duplicate credits, resu
   const final=await service.get(OWNER,operation.id),wallet=await store.wallet(OWNER);
   assert.equal(final.state,'completed');assert.equal(Number(wallet.balanceCredits),975);assert.equal(Number(wallet.reservedCredits),0);
   assert.equal((await store.report(OWNER,final.broadcastId)).broadcast.status,'completed');
+  const broadcasts=createPaidOperations({store,commerce,publicOrigin:'https://example.test',ensureProducer:()=>{}});
+  const show=await broadcasts.prepareBroadcast(OWNER,taskInput({maxCredits:50}));await broadcasts.approve(OWNER,show.id,true);
+  const recovered=await Promise.all(Array.from({length:16},()=>broadcasts.resume(OWNER,show.id)));
+  assert.equal(new Set(recovered.map(x=>x.broadcastId)).size,1);assert.ok(recovered.every(x=>x.jobId===null));
+  assert.equal(Number((await store.wallet(OWNER)).reservedCredits),50);
+  assert.equal((await sql('select count(*) from commerce.broadcasts;')).trim(),'2');
+  await commerce.stop(OWNER,recovered[0].broadcastId);
+  assert.equal(Number((await store.wallet(OWNER)).reservedCredits),0);
 });

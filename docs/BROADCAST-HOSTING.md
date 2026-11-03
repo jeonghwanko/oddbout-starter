@@ -1,6 +1,6 @@
 # Hosted PayPal Sandbox demo
 
-For durable VM → phone → PC paid-task recovery, apply the additional migration and settings in
+For broadcast plans that continue through payment and device changes, apply the additional migrations and settings in
 [PAID-TASK-RECOVERY](PAID-TASK-RECOVERY.md) after the existing Sandbox is configured.
 
 This is a separate hackathon environment. Deployment preparation does not prove a

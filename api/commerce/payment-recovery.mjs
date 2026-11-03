@@ -51,8 +51,8 @@ export function createPaymentRecovery({ store, commerce }) {
 }
 
 /** Starts only with the listening server. Replicas coordinate through fenced DB leases, not process memory.
- * @param {{recovery:ReturnType<typeof createPaymentRecovery>,intervalMs?:number,log?:(event:unknown)=>void}} options */
-export function createRecoveryWorker({ recovery, intervalMs = 10_000, log = () => {} }) {
+ * @param {{recovery:ReturnType<typeof createPaymentRecovery>,continueBroadcasts?:()=>Promise<number>,intervalMs?:number,log?:(event:unknown)=>void}} options */
+export function createRecoveryWorker({ recovery, continueBroadcasts, intervalMs = 10_000, log = () => {} }) {
   let stopped = true;
   /** @type {ReturnType<typeof setTimeout>|undefined} */ let timer;
   /** @type {Promise<void>|undefined} */ let active;
@@ -61,6 +61,10 @@ export function createRecoveryWorker({ recovery, intervalMs = 10_000, log = () =
     active = (async () => {
       try { for (let i = 0; i < 3 && !stopped; i++) if (!await recovery.runOne()) break; }
       catch { log({ event: 'paid_recovery_unavailable', at: new Date().toISOString() }); }
+      if (!stopped && continueBroadcasts) {
+        try { await continueBroadcasts(); }
+        catch { log({ event: 'broadcast_continuation_unavailable', at: new Date().toISOString() }); }
+      }
     })();
     try { await active; } finally { active = undefined; if (!stopped) timer = setTimeout(tick, intervalMs); }
   };
