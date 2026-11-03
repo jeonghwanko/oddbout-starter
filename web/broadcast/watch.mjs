@@ -3,17 +3,20 @@ import {mountExternal} from './external-player.mjs';
 const $=id=>document.getElementById(id);
 const show=new URLSearchParams(location.search).get('show');
 const arenaOrigin='https://oddbout-broadcast-arena.onrender.com';
-let manifest,clockOffset=0,current='',timer,spoken=false,disposeExternal=()=>{};
+let manifest,clockOffset=0,current='',timer,spoken=false,waitingForResult=false,disposeExternal=()=>{};
 const names={kuma:'Kuma',yume:'Yume',bravow:'Bravow',beotim:'Beotim',quickcat:'Quickcat',kungjjak:'Kungjjak',sikeundung:'Sikeundung',duldul:'Duldul',eoridung:'Eoridung'};
 function nowSeconds(){return(Date.now()+clockOffset-Date.parse(manifest.startedAt))/1000;}
 function clear(){ $('video').pause();disposeExternal();$('arena').removeAttribute('src');$('arena').hidden=true;$('sponsor').hidden=true;$('play').hidden=true;globalThis.speechSynthesis?.cancel(); }
 function tick(){
   if(!manifest)return;
-  const elapsed=nowSeconds(),slot=programSlot(elapsed,manifest.durationSeconds),bounded=Math.max(0,Math.min(manifest.durationSeconds,Math.floor(elapsed)));
+  const elapsed=nowSeconds(),stopped=manifest.execution?.stoppedAt&&Date.parse(manifest.execution.stoppedAt)<Date.parse(manifest.startedAt)+manifest.durationSeconds*1000;
+  const slot=stopped?{kind:'ended',id:'ended'}:programSlot(elapsed,manifest.durationSeconds),bounded=Math.max(0,Math.min(manifest.durationSeconds,Math.floor(elapsed)));
+  const produced=manifest.execution?.cups?.flatMap(cup=>cup.bouts.map((bout,i)=>({...bout,id:cup.id+'-'+i})))??[];
   $('clock').textContent=`${String(Math.floor(bounded/60)).padStart(2,'0')}:${String(bounded%60).padStart(2,'0')} / ${manifest.durationSeconds/60}:00`;
-  if(slot.id!==current){
+  if(slot.id!==current||(waitingForResult&&produced.length)){
+    waitingForResult=false;
     current=slot.id;clear();$('playback-error').textContent='';spoken=false;
-    if(slot.kind==='ended'){$('status').textContent='This broadcast’s scheduled time has ended.';$('player').hidden=true;return;}
+    if(slot.kind==='ended'){$('status').textContent=stopped?'The host ended this broadcast.':'This broadcast’s scheduled time has ended.';$('player').hidden=true;return;}
     if(slot.kind==='waiting'){$('status').textContent='This broadcast has not started yet.';return;}
     $('player').hidden=false;
     if(slot.kind==='advertisement'){
@@ -23,10 +26,12 @@ function tick(){
       if(manifest.media.source){disposeExternal=mountExternal($('external-video'),manifest.media.source,{autoplay:true});$('play').textContent='Hear introduction';$('play').hidden=false;}
       else{$('video').src=manifest.media.videoUrl;$('play').textContent='Play broadcast with sound';$('video').play().catch(()=>{$('play').hidden=false;});}
     }else{
+      if(manifest.execution&&!produced.length){$('status').textContent='The On-Air Agent is preparing the first cup.';waitingForResult=true;return;}
       const pairs=[[0,1],[2,3],[0,2],[1,3],[0,3],[1,2]],pair=pairs[slot.index%pairs.length];
-      const a=manifest.fighterIds[pair[0]],b=manifest.fighterIds[pair[1]];
-      $('status').textContent=`Exhibition ${slot.index+1} · ${names[a]??a} vs ${names[b]??b}`;
-      const url=new URL('/spotlight.html',arenaOrigin);url.search=new URLSearchParams({id:manifest.id+'-'+slot.index,a,b,seed:String((manifest.programSeed+slot.index)>>>0)}).toString();
+      const replay=produced.length?produced[slot.index%produced.length]:null;
+      const a=replay?.leftId??manifest.fighterIds[pair[0]],b=replay?.rightId??manifest.fighterIds[pair[1]];
+      $('status').textContent=`${replay?'Agent-produced bout · Replay':'Exhibition '+(slot.index+1)} · ${names[a]??a} vs ${names[b]??b}`;
+      const url=new URL('/spotlight.html',arenaOrigin);url.search=new URLSearchParams({id:replay?.id??manifest.id+'-'+slot.index,a,b,seed:String(replay?.seed??((manifest.programSeed+slot.index)>>>0))}).toString();
       $('arena').src=url.href;$('arena').hidden=false;
     }
   }
@@ -52,3 +57,4 @@ async function load(){
   tick();clearInterval(timer);timer=setInterval(tick,1000);
 }
 load().catch(error=>{$('status').textContent=error.message;});
+setInterval(()=>{if(manifest?.execution&&!document.hidden)load().catch(()=>{$('playback-error').textContent='Updates are unavailable. Showing the last verified program.';});},15000);

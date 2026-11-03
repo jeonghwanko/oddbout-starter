@@ -75,10 +75,10 @@ const AUDIT = 'You audit the PayPal Sandbox top-ups of one ODDBOUT account. The 
 /** Reconciles an account's ledger top-ups with PayPal's own records through the official PayPal MCP server.
  * The server fetches and compares every top-up itself; the AI auditor may investigate further with the same
  * read-only tools and explains the result, but never decides it. One run per account at a time, cached briefly.
- * @param {{listTopups:(owner:string)=>Promise<any[]>,accessToken:()=>Promise<string>,merchantId:string,entry:string,
+ * @param {{listTopups:(owner:string)=>Promise<any[]>,findTopup?:(owner:string,id:string)=>Promise<any>,accessToken:()=>Promise<string>,merchantId:string,entry:string,
  *   modelCall?:import('./concierge.mjs').ConciergeModelCall,now?:()=>number,cacheMs?:number,maxRows?:number,maxSteps?:number,
  *   dailyModelCalls?:number,connect?:typeof connectPayPalMcp}} options */
-export function createReconciler({ listTopups, accessToken, merchantId, entry, modelCall, now = Date.now, cacheMs = 120_000,
+export function createReconciler({ listTopups, findTopup, accessToken, merchantId, entry, modelCall, now = Date.now, cacheMs = 120_000,
   maxRows = 20, maxSteps = 6, dailyModelCalls = 100, connect = connectPayPalMcp }) {
   /** @type {Map<string,{at:number,report:any}>} */ const cache = new Map();
   /** @type {Map<string,Promise<any>>} */ const running = new Map();
@@ -119,9 +119,10 @@ export function createReconciler({ listTopups, accessToken, merchantId, entry, m
     } catch { return { summary: null, summaryError: 'reconciliation-model-unavailable' }; }
   }
 
-  /** @param {string} owner */
-  async function reconcile(owner) {
-    const topups = (await listTopups(owner)).slice(0, maxRows);
+  /** @param {string} owner @param {string[]|undefined} intentIds */
+  async function reconcile(owner,intentIds) {
+    if(intentIds&&(!findTopup||!intentIds.length||intentIds.length>maxRows))throw new Problem(409,'reconciliation-scope-unavailable');
+    const topups = intentIds ? await Promise.all(intentIds.map(id=>findTopup?.(owner,id))) : (await listTopups(owner)).slice(0, maxRows);
     let mcp;
     try { mcp = await connect({ entry, accessToken: await accessToken() }); }
     catch { throw new Problem(503, 'paypal-mcp-unavailable'); }
@@ -149,15 +150,16 @@ export function createReconciler({ listTopups, accessToken, merchantId, entry, m
   }
 
   return {
-    /** @param {string} owner */
-    async run(owner) {
-      const cached = cache.get(owner);
+    /** @param {string} owner @param {string[]} [intentIds] */
+    async run(owner,intentIds) {
+      const scope=owner+':'+(intentIds?[...intentIds].sort().join(','):'all');
+      const cached = cache.get(scope);
       if (cached && now() - cached.at < cacheMs) return { ...cached.report, cached: true };
-      const pending = running.get(owner);
+      const pending = running.get(scope);
       if (pending) return pending;
-      const job = reconcile(owner).then(report => { cache.set(owner, { at: now(), report }); return report; });
-      running.set(owner, job);
-      try { return await job; } finally { running.delete(owner); }
+      const job = reconcile(owner,intentIds).then(report => { cache.set(scope, { at: now(), report }); return report; });
+      running.set(scope, job);
+      try { return await job; } finally { running.delete(scope); }
     },
   };
 }

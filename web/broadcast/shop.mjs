@@ -1,6 +1,7 @@
 import { createOperationJournal } from './operations.mjs';
 import {parseMediaLink} from './media-links.mjs';
 import {mountExternal} from './external-player.mjs';
+import {createExecutionPanel} from './execution.mjs';
 
 const $ = id => document.getElementById(id);
 const AUTH_KEY = 'oddbout-paid-auth';
@@ -11,6 +12,10 @@ let config, session, client, journal, campaignProduct, campaignProducts=[], sele
 let orders = [], selectedOrder = null, nextCursor = null, orderRevision = 0, selectionRevision = 0, accountEpoch = 0, orderTimer;
 let selectedFile = null, selectedFileDuration = null, previewObjectUrl = '', fileRevision = 0, busy = false, topupBusy = false;
 let mediaMode='upload',previewedLink='',disposeExternal=()=>{};
+const executionPanel=createExecutionPanel({api,getOwner:()=>session?.user.id,getJournal:()=>journal,onStatus:order=>{
+  if(selectedOrder?.id!==order.id)return;selectedOrder={...selectedOrder,...order};$('purchase-state').textContent=plannedState(order);
+  if(hostOrderId)$('host-status').textContent=`${plannedState(order)} · ${formattedTime(order.startedAt)}`;
+}});
 const returnedIntent = new URLSearchParams(location.search).get('intent') ?? '';
 const requestedHost=new URLSearchParams(location.search).get('host');
 const hostOrderId=/^[a-f0-9]{8}-([a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(requestedHost??'')?requestedHost:null;
@@ -20,7 +25,7 @@ function localDate(value){const d=new Date(value);return `${d.getFullYear()}-${S
 function localInput(value){const d=new Date(value);return localDate(d)+`T${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;}
 function hostUrl(id){return '/broadcast/?host='+encodeURIComponent(id);}
 function formattedTime(value){return new Intl.DateTimeFormat(undefined,{dateStyle:'medium',timeStyle:'short'}).format(new Date(value));}
-function plannedState(order){return order.startedAt?(Date.now()>=Date.parse(order.startedAt)+order.durationSeconds*1000?'Ended':'Started'):order.scheduledAt?'Scheduled':ORDER_STATES[campaignState(order)]??'Needs attention';}
+function plannedState(order){return order.executionStatus==='needs_attention'?'Needs review':order.executionStatus==='completed'?'Finished':order.executionStatus==='stopping'?'Finishing':order.startedAt?(Date.now()>=Date.parse(order.startedAt)+order.durationSeconds*1000?'Ended':'Started'):order.scheduledAt?'Scheduled':ORDER_STATES[campaignState(order)]??'Needs attention';}
 function selectedDate(){const value=$('broadcast-date').value,date=new Date(value);return Number.isFinite(date.getTime())&&localInput(date)===value?date.toISOString():null;}
 
 function message(text,error=false) { $('shop-status').textContent = text; $('shop-status').classList.toggle('is-error',error); }
@@ -180,7 +185,7 @@ function safeVideoUrl(value) {
 }
 function renderOrder(order) {
   const previousId=selectedOrder?.id,previousState=campaignState(selectedOrder),previousScheduleRevision=selectedOrder?.scheduleRevision,previousMediaId=selectedOrder?.mediaId;
-  selectedOrder=order;const state=campaignState(order);
+  selectedOrder=order;const state=campaignState(order);void executionPanel.update(hostOrderId?order:null);
   $('purchase-panel').hidden=!order;
   if(!order){
     disposeExternal();previewedLink='';$('media-link').value='';setMediaMode('upload');
@@ -254,7 +259,7 @@ async function selectOrder(id) {
   try {
     const result=await api('/orders/'+encodeURIComponent(id));if(revision!==selectionRevision||session?.user.id!==owner||accountEpoch!==epoch)return;
     const order=normalizedOrder(result);
-    if(hostOrderId&&selectedOrder?.id===order.id&&selectedOrder.status===order.status&&selectedOrder.scheduleRevision===order.scheduleRevision&&JSON.stringify(selectedOrder.media)===JSON.stringify(order.media)){if(order.startedAt)$('host-status').textContent=`${plannedState(order)} · ${formattedTime(order.startedAt)}`;return;}
+    if(hostOrderId&&selectedOrder?.id===order.id&&selectedOrder.status===order.status&&selectedOrder.scheduleRevision===order.scheduleRevision&&JSON.stringify(selectedOrder.media)===JSON.stringify(order.media)){if(order.startedAt)$('host-status').textContent=`${plannedState(order)} · ${formattedTime(order.startedAt)}`;void executionPanel.update(order);return;}
     renderOrder(order);
     if(campaignState(order)==='ready'&&!selectedFile){
       const preview=await api('/orders/'+encodeURIComponent(id)+'/preview');
@@ -369,7 +374,10 @@ async function publishBroadcast() {
     const started=normalizedOrder(await api('/orders/'+encodeURIComponent(orderId)+'/start',{body:{requestKey:op.requestKey,expectedRevision:op.input.expectedRevision,expectedMediaId:op.input.expectedMediaId,confirmed:true}}));
     if(campaignState(started)==='started')journal.complete(name,op.requestKey);
     renderOrder(started);await loadOrders();
-  }catch(error){if(session?.user.id===owner&&accountEpoch===epoch){if(['schedule-changed','media-changed'].includes(error.code)&&error.responseOk){const op=journal.get(name);if(op)journal.complete(name,op.requestKey);await selectOrder(orderId);$('publish-consent').checked=false;message('The promotion or schedule changed on another device. Review it before starting.',true);}else message(error.code==='campaign-playback-unavailable'?'The broadcast setup could not be verified. Try Start again later.':'Start is not confirmed. Retry this same request; no second broadcast was created.',true);}}
+  }catch(error){if(session?.user.id===owner&&accountEpoch===epoch){if(['schedule-changed','media-changed'].includes(error.code)&&error.responseOk){const op=journal.get(name);if(op)journal.complete(name,op.requestKey);await selectOrder(orderId);$('publish-consent').checked=false;message('The promotion or schedule changed on another device. Review it before starting.',true);}else{
+    const notices={'campaign-host-offline':'The broadcast host is offline. Your ticket is saved. Try Start when it reconnects.','campaign-host-busy':'Another broadcast is using the host. Your ticket is saved; try again when it finishes.','campaign-receivers-unavailable':'Creator payment setup is incomplete. Your ticket has not started.','campaign-execution-unavailable':'The broadcast service is not ready. Your ticket has not started.','wallet-frozen':'Your payment needs review before this broadcast can start.','campaign-playback-unavailable':'The broadcast setup could not be verified. Try Start again later.'};
+    message(notices[error.code]??'Start is not confirmed. Retry this same request to recover its saved status.',true);
+  }}}
   finally{busy=false;updateControls();}
 }
 async function saveMediaLink(){

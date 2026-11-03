@@ -12,6 +12,7 @@ import { createPaidOperationHandler } from '../api/commerce/paid-handler.mjs';
 import { createRecoveryWorker } from '../api/commerce/payment-recovery.mjs';
 import { createCommerceHandler } from '../api/commerce/handler.mjs';
 import { createCampaignService, CAMPAIGN_PRODUCTS } from '../api/commerce/campaigns.mjs';
+import { createCampaignExecution } from '../api/commerce/campaign-execution.mjs';
 import { createCampaignHandler } from '../api/commerce/campaign-handler.mjs';
 import { createCampaignMedia } from '../api/commerce/campaign-media.mjs';
 import { Problem } from '../api/http.mjs';
@@ -86,7 +87,15 @@ export function createBroadcastDemo(env = process.env) {
   const worker = db && commerce ? createBroadcastWorkerHandler({ store: createCommerceStore(db), workers }) : null;
   const campaignMedia = db && paidOperations ? createCampaignMedia({db,modelCall:env.OPENAI_API_KEY && env.ODDBOUT_BROADCAST_MODEL
     ? createConciergeModel({model:env.ODDBOUT_BROADCAST_MODEL,apiKey:env.OPENAI_API_KEY,maxOutputTokens:500}) : null}) : null;
-  const campaigns = db && campaignMedia ? createCampaignService({db,...campaignMedia}) : null;
+  const campaignExecution=commerce&&campaignMedia?createCampaignExecution({store:commerce.store,supervisor,payouts,reconciler,
+    hostId:env.ODDBOUT_CAMPAIGN_HOST_ID??(workers.length===1?workers[0].hostId:null)}):null;
+  const campaigns = db && campaignMedia ? createCampaignService({db,...campaignMedia,...(campaignExecution?{execution:campaignExecution}:{})}) : null;
+  let recoveringCampaigns=false;
+  const campaignTimer=campaignExecution?setInterval(async()=>{
+    if(recoveringCampaigns)return;recoveringCampaigns=true;
+    try{await campaignExecution.recover();}catch{console.error('campaign-recovery-unavailable');}finally{recoveringCampaigns=false;}
+  },10000):null;
+  campaignTimer?.unref();
   const campaignApi = campaigns && db && campaignMedia ? createCampaignHandler({service:campaigns,publicOrigin,
     authenticate:request=>verifiedUserId(db,request),upload:async(owner,id,input)=>{
       const order=await campaigns.get(owner,id);if(order.status==='started')throw new Problem(409,'campaign-already-started');
@@ -95,6 +104,7 @@ export function createBroadcastDemo(env = process.env) {
   const files = new Map([
     ['/broadcast/', ['web/broadcast/shop.html', 'text/html; charset=utf-8']],
     ['/broadcast/shop.mjs', ['web/broadcast/shop.mjs', 'text/javascript; charset=utf-8']],
+    ['/broadcast/execution.mjs', ['web/broadcast/execution.mjs', 'text/javascript; charset=utf-8']],
     ['/broadcast/shop.css', ['web/broadcast/shop.css', 'text/css; charset=utf-8']],
     ['/broadcast/media-links.mjs', ['api/commerce/media-links.mjs', 'text/javascript; charset=utf-8']],
     ['/broadcast/external-player.mjs', ['web/broadcast/external-player.mjs', 'text/javascript; charset=utf-8']],
@@ -140,7 +150,7 @@ export function createBroadcastDemo(env = process.env) {
         if (paidOperations && commerce) {
           try { ready = (await commerce.store.recovery(null, 'health')).schemaVersion === 3; } catch { ready = false; }
         }
-        if(campaigns&&db){const {error}=await db.rpc('commerce_campaign',{p_owner:null,p_command:'health',p_input:{}});if(error)ready=false;}
+        if(campaigns&&db){for(const rpc of ['commerce_campaign','commerce_campaign_execution']){const {error}=await db.rpc(rpc,{p_owner:null,p_command:'health',p_input:{}});if(error)ready=false;}}
         res.writeHead(ready ? 200 : 503, { 'content-type': 'application/json', 'cache-control': 'no-store' });
         res.end(JSON.stringify({ ok: ready, paidTaskRecovery: Boolean(paidOperations) })); return;
       }
@@ -193,6 +203,7 @@ export function createBroadcastDemo(env = process.env) {
   server.headersTimeout = 15_000;
   server.once('listening', () => paymentWorker?.start());
   server.once('close', () => { void paymentWorker?.stop(); });
+  server.on('close',()=>{if(campaignTimer)clearInterval(campaignTimer);});
   return { server, port, publicOrigin, bindHost, supervisor, paymentWorker };
 }
 
@@ -220,7 +231,7 @@ export function reconcilerFromEnvironment(env, { store, paypal, merchantId }) {
   const entry = env.ODDBOUT_PAYPAL_MCP_ENTRY ?? fileURLToPath(new URL('../deploy/paypal-mcp/node_modules/@paypal/mcp/dist/index.js', import.meta.url));
   if (!existsSync(entry)) throw new Error('paypal-mcp-not-installed');
   const model = env.ODDBOUT_BROADCAST_MODEL, apiKey = env.OPENAI_API_KEY;
-  return createReconciler({ listTopups: owner => store.listTopups(owner), accessToken: () => paypal.accessToken(), merchantId, entry,
+  return createReconciler({ listTopups: owner => store.listTopups(owner),findTopup:(owner,id)=>store.findTopup(owner,id), accessToken: () => paypal.accessToken(), merchantId, entry,
     ...(model && apiKey ? { modelCall: createConciergeModel({ model, apiKey }) } : {}) });
 }
 

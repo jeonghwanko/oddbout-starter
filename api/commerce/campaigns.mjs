@@ -36,13 +36,14 @@ function videoPath(value,orderId){
 }
 /** @typedef {{videoPath:string,targetUrl:string,durationSeconds:number,bytes:number,mimeType:string,aiIntro:string}} CampaignMedia */
 /** Service-role persistence with explicit trusted media and playback readiness dependencies.
- * A purchased campaign is a flat charge; it never invokes the metered cup enqueue/spend commands.
+ * A purchased campaign is a flat charge. Its execution allowance never debits the wallet again.
  * @param {{db:{rpc:(name:string,args:any)=>PromiseLike<{data:any,error:any}>},store?:unknown,
  * verifyMedia?:(owner:string,orderId:string,input:{videoPath:string,targetUrl:string})=>Promise<CampaignMedia>,
  * verifyLink?:(owner:string,orderId:string,input:{source:import('./media-links.mjs').ExternalVideo,targetUrl:string})=>Promise<{aiIntro:string}>,
  * beforeStart?:(owner:string,order:any)=>Promise<boolean|void>,
+ * execution?:ReturnType<typeof import('./campaign-execution.mjs').createCampaignExecution>,
  * signMedia?:(orderId:string,media:CampaignMedia)=>Promise<{videoUrl:string,expiresAt?:string}>}} options */
-export function createCampaignService({db,verifyMedia,verifyLink,beforeStart,signMedia}){
+export function createCampaignService({db,verifyMedia,verifyLink,beforeStart,signMedia,execution}){
   /** Same-process media submits share verification. This is not a distributed provider-execution lease.
    * @type {Map<string,{signature:string,promise:Promise<any>}>} */
   const mediaInFlight=new Map();
@@ -64,6 +65,11 @@ export function createCampaignService({db,verifyMedia,verifyLink,beforeStart,sig
   return {
     catalog:()=>({products:CAMPAIGN_PRODUCTS,defaultProductId:SPOTLIGHT_HOUR.id}),
     get,
+    /** @param {string} owner @param {string} id @param {'report'|'stop'|'reconcile'|'propose'|'pay'} action @param {any} [input] */
+    async execution(owner,id,action,input={}){
+      if(!execution)throw new Problem(503,'campaign-execution-unavailable');
+      return execution[action](owner,key(id),input);
+    },
     /** Save one immutable scheduling intent; retries neither spend nor start.
      * @param {string} owner @param {string} id @param {unknown} input */
     schedule(owner,id,input){
@@ -153,7 +159,7 @@ export function createCampaignService({db,verifyMedia,verifyLink,beforeStart,sig
      * @param {string} owner @param {string} id @param {unknown} input */
     async start(owner,id,input){
       const orderId=key(id),value=body(input,['requestKey','expectedRevision','expectedMediaId']),requestKey=key(value.requestKey),order=await get(owner,orderId);
-      if(order.status==='started')return order;
+      if(order.status==='started')return execution&&order.broadcastId?execution.start(owner,orderId,{...value,requestKey},order):order;
       if(order.status!=='ready')throw new Problem(409,'campaign-media-required');
       if(!order.scheduledAt)throw new Problem(409,'campaign-schedule-required');
       const expectedRevision=value.expectedRevision??order.scheduleRevision;
@@ -161,6 +167,7 @@ export function createCampaignService({db,verifyMedia,verifyLink,beforeStart,sig
       const expectedMediaId=value.expectedMediaId??order.mediaId;
       if(expectedMediaId!==order.mediaId)throw new Problem(409,'media-changed');
       if(!beforeStart||await beforeStart(owner,order)===false)throw new Problem(503,'campaign-playback-unavailable');
+      if(execution)return execution.start(owner,orderId,{requestKey,expectedRevision,expectedMediaId},order);
       return run(owner,'host_start',{orderId,requestKey,expectedRevision,expectedMediaId});
     },
     /** Authenticated media preview after reload, including before the final Start.
@@ -181,7 +188,8 @@ export function createCampaignService({db,verifyMedia,verifyLink,beforeStart,sig
       if(!signMedia)throw new Problem(503,'campaign-media-signing-unavailable');
       const signed=await signMedia(order.id,order.media);
       if(!signed||typeof signed.videoUrl!=='string'||!signed.videoUrl.startsWith('https://'))throw new Problem(503,'campaign-media-signing-unavailable');
-      return {id:order.id,productName:order.productName,durationSeconds:order.durationSeconds,startedAt:order.startedAt,
+      const produced=execution?await execution.playback(watchToken):null;
+      return {id:order.id,productName:order.productName,durationSeconds:order.durationSeconds,startedAt:order.startedAt,execution:produced,
         serverNow:new Date().toISOString(),programSeed:parseInt(order.id.slice(0,8),16),
         fighterIds:order.fighterIds,fighterTier:order.fighterTier,playbackStatus:order.playbackStatus,
         media:{...signed,targetUrl:order.media.targetUrl,aiIntro:order.media.aiIntro,durationSeconds:order.media.durationSeconds},

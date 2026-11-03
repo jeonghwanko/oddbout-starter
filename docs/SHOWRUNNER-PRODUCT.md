@@ -1,6 +1,6 @@
 # ODDBOUT Showrunner · Spotlight
 
-The customer flow is **buy a broadcast ticket → Set Promotion → schedule → On-Air Calendar → On-Air Agent → Start**.
+The customer flow is **buy a broadcast ticket → Set Promotion → schedule → On-Air Agent → Start → check settlement → approve creator fees**.
 DON balance, top-up action and purchased broadcast tickets share the wallet above the products.
 Tickets show their four assigned fighters with portraits and names. Each product card has its own purchase
 button; uncertain purchases resume from that same card while other products stay disabled.
@@ -61,24 +61,40 @@ uncertain responses without another reservation, model call or debit.
 
 Start is always manual. The host may start earlier or later than planned, with an explicit “Starts now”
 notice; the full purchased duration runs from the actual server `startedAt`. There is no scheduled
-background execution or automatic start when the planned time passes. The **Started** and **Ended**
-labels describe the program clock, not independently verified delivery. Elapsed time does not mark a purchase fulfilled.
+background execution or automatic start when the planned time passes. The host shows verified completed
+cups, unresolved jobs and the session status. Elapsed time alone does not prove delivery.
 Unknown purchase/upload/save responses retain their original keys and paths for recovery.
 
 ## Playback boundary
 
-The watch page schedules sponsor slots and actual ODDBOUT browser-rendered exhibition bouts against
-the server start time. The arena's same-origin `spotlight.html` adapter uses the normal fighter
+For new starts, the watch page schedules sponsor slots and replays the verified Agent-produced cups,
+using their recorded fighters and seeds. It waits for the first completed cup instead of inventing
+execution results. Earlier broadcasts retain their existing exhibitions. The arena's same-origin `spotlight.html` adapter uses the normal fighter
 player protocol and validates bout identity before displaying results. Joining mid-bout starts
 local playback. This is an ODDBOUT web program, not a Twitch stream or synchronized video feed.
 No audience reach, DAU, ad impressions or uninterrupted delivery is guaranteed or inferred.
 Client-rendered results do not authorize creator payouts. AI introductions are captions with
 optional browser speech after a user gesture, not guaranteed prerecorded narration.
 
-The existing metered producer, PayPal reconciliation and creator-payout console remains at
-`/broadcast/operator/`; original operation links retain their routing. Its 25-credit completed-cup
-billing and appearance-fee approvals remain separate from Spotlight. Customer navigation does not
-expose the former “Set up your show” or “Run the ring” panels.
+## One ticket, one execution and settlement
+
+Start atomically binds the ticket to one Agent session. Its internal execution allowance comes from
+the ticket price; cups consume that allowance without another wallet debit. Ending early or expiring
+the allowance does not mint wallet credits. Legacy metered sessions keep their existing billing.
+The selected graphical host must be connected and idle, and all four fighters must have configured
+Sandbox payout receivers. A lost Start response reopens the same session. Database discovery resumes
+active ticket sessions after an API restart; job fencing prevents duplicate completion charges.
+
+The host page shows Agent decisions and completed cups. **End broadcast** stops new cups and lets a
+running cup finish. Unknown jobs remain held for review. After completion, **Check settlement** matches
+the ticket's actual FIFO-attributed wallet funding against PayPal through its official MCP. Successful
+settlement creates an appearance-fee proposal for verified cups. The owner reviews the amount and
+explicitly approves PayPal payout on this same page. Submission retries reuse the batch identity;
+paid appearances cannot be proposed again. Settlement must be successful and less than 15 minutes old;
+refund/reversal freezes prevent payment. The expandable records retain order, capture and payout IDs.
+
+The older console at `/broadcast/operator/` remains available. Its payout entry points enforce these
+same ticket settlement rules. Customer navigation does not expose its former setup panels.
 
 ## Funding and deployment
 
@@ -89,13 +105,18 @@ There is no subscription or auto-renewal. Existing orders retain their original 
 After the migrations in [PAID-TASK-RECOVERY](PAID-TASK-RECOVERY.md), apply
 `supabase/sandbox/20261103154930_commerce_campaigns.sql`, followed by
 `supabase/sandbox/20261103170232_commerce_campaign_links.sql`, then
-`supabase/sandbox/20261103180002_commerce_campaign_schedule.sql`, only to the isolated Sandbox project.
+`supabase/sandbox/20261103180002_commerce_campaign_schedule.sql`, then
+`supabase/sandbox/20261103185105_commerce_campaign_execution.sql`, only to the isolated Sandbox project.
 They create the private campaign tables/RPC, `campaign-media` bucket and service-role-only link RPC.
 These migrations preserve existing purchases and started broadcasts. New starts require a saved
 schedule; already-started records without one remain viewable. Deploy the game's
 `spotlight.html`, `spotlight-player.mjs` and `spotlight-contract.mjs` adapter before the API/UI release.
 Use the existing explicitly selected `ODDBOUT_BROADCAST_MODEL` and `OPENAI_API_KEY` for introductions.
-`/readyz` checks campaign schema access. Run `npm run campaign:check` and `npm run typecheck`.
+Enable the existing auto-producer, reconciliation and payout settings. Set `ODDBOUT_CAMPAIGN_HOST_ID`
+when more than one worker is configured; a sole configured worker is selected automatically. Start the
+normal graphical runner; authenticated claim polling records its heartbeat. No new worker credentials
+or production database access are introduced. `/readyz` checks execution schema access. Run
+`node --test test/campaign-execution.test.mjs test/browser/campaign-shop.test.mjs` and `npm run typecheck`.
 
 Render remains Free at the owner's request and may sleep. Always-on hosting, production payments,
 commercial refund terms and independently measured delivery remain separate launch decisions.

@@ -32,6 +32,9 @@ export function createCommerceStore(db) {
     return row(data);
   }
   return {
+    /** Ticket execution and settlement; owner is verified by the campaign handler.
+     * @param {string|null} owner @param {string} action @param {any} [input] */
+    campaignExecution: (owner, action, input = {}) => command(owner, action, input, 'commerce_campaign_execution'),
     /** Leased payment recovery and operator diagnostics, service-role only.
      * @param {string|null} owner @param {string} action @param {any} [input] */
     recovery: (owner, action, input = {}) => command(owner, action, input, 'commerce_operation_recovery'),

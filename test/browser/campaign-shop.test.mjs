@@ -9,6 +9,9 @@ import {createCampaignService} from '../../api/commerce/campaigns.mjs';
 import {createCampaignMedia,inspectCampaignMp4} from '../../api/commerce/campaign-media.mjs';
 import {createCampaignHandler} from '../../api/commerce/campaign-handler.mjs';
 import {createCommerceHandler} from '../../api/commerce/handler.mjs';
+import {createCampaignExecution} from '../../api/commerce/campaign-execution.mjs';
+import {createPayoutService} from '../../api/commerce/payouts.mjs';
+import {COMMERCE_CATALOG} from '../../api/commerce/catalog.mjs';
 import {paidFixture,OWNER,OTHER} from '../helpers/paid-operations.mjs';
 
 const ORIGIN='http://127.0.0.1:5197';
@@ -16,6 +19,7 @@ for(const sourceKind of ['upload','youtube','twitch'])test(`broadcast purchase, 
   const f=await paidFixture(t);await f.db.exec(await readFile(new URL('../../supabase/sandbox/20261103154930_commerce_campaigns.sql',import.meta.url),'utf8'));
   await f.db.exec(await readFile(new URL('../../supabase/sandbox/20261103170232_commerce_campaign_links.sql',import.meta.url),'utf8'));
   await f.db.exec(await readFile(new URL('../../supabase/sandbox/20261103180002_commerce_campaign_schedule.sql',import.meta.url),'utf8'));
+  await f.db.exec(await readFile(new URL('../../supabase/sandbox/20261103185105_commerce_campaign_execution.sql',import.meta.url),'utf8'));
   const topup=await f.store.createTopup(OWNER,{requestKey:randomUUID(),amountCents:1000,credits:1000,currency:'USD'});
   await f.store.attachOrder(OWNER,topup.id,'EXISTING');await f.store.creditCapture(OWNER,topup.id,{providerOrderId:'EXISTING',captureId:'CREDIT',amountCents:1000,currency:'USD',status:'COMPLETED'});
   const rpc=async(name,args)=>{try{return{data:await f.db.transaction(async tx=>{await tx.exec('set local role service_role');
@@ -27,7 +31,10 @@ for(const sourceKind of ['upload','youtube','twitch'])test(`broadcast purchase, 
     createSignedUrl:async path=>({data:{signedUrl:'https://storage.fixture/'+path}})};
   const media=createCampaignMedia({db:{storage:{from:()=>storage}},modelCall:async()=>({output:[{type:'message',content:[{type:'output_text',text:'This is a paid sponsor break. Watch this clip from oddbout.com and follow the sponsor link to learn more.'}]}],observation:{}}),
     fetchImpl:async url=>String(url).includes('spotlight.html')?new Response('spotlight-player.mjs'):new Response(files.get(new URL(url).pathname.slice(1)))});
-  const service=createCampaignService({db:{rpc},...media});
+  const payouts=createPayoutService({store:f.store,feeCents:1,receivers:Object.fromEntries(COMMERCE_CATALOG.fighters.map(id=>[id,id+'@personal.example.com'])),paypal:{createPayout:async()=>({payoutBatchId:'BROWSER_PAYOUT'}),getPayout:async()=>({status:'SUCCESS'})}});
+  const execution=createCampaignExecution({store:f.store,hostId:'svl-mac-01',payouts,supervisor:{ensure(){},status:()=>({state:'running'})},reconciler:{run:async(owner,ids)=>({checkedAt:new Date().toISOString(),source:'paypal-mcp',rows:ids.map(intentId=>({intentId,result:'matched'}))})}});
+  await f.store.claimJob('svl-mac-01:browser',{hostId:'svl-mac-01',leaseSeconds:90});
+  const service=createCampaignService({db:{rpc},...media,...(sourceKind==='upload'?{execution}:{})});
   const authenticate=async req=>req.headers.get('authorization')?.replace('Bearer fixture-','')??null;
   const campaign=createCampaignHandler({service,authenticate,publicOrigin:ORIGIN,upload:async(owner,id,input)=>media.upload(id,input)});
   const commerce=createCommerceHandler({service:f.commerce,authenticate,publicOrigin:ORIGIN});
@@ -100,6 +107,21 @@ for(const sourceKind of ['upload','youtube','twitch'])test(`broadcast purchase, 
     await viewer.locator('#sponsor').waitFor();assert.match(await viewer.locator('#status').innerText(),/Sponsor break/);await viewer.close();
   }
   assert.equal((await service.get(OWNER,order.id)).status,'started');
+  if(sourceKind==='upload'){
+    const started=await service.get(OWNER,order.id);
+    await f.commerce.cup(OWNER,{requestKey:randomUUID(),broadcastId:started.broadcastId,fighterIds:started.fighterIds});
+    const job=await f.store.claimJob('svl-mac-01:browser',{hostId:'svl-mac-01',leaseSeconds:90});
+    const result={protocolVersion:1,jobId:job.id,leaseToken:job.leaseToken,seed:job.seed,winnerId:job.fighterIds[0],bouts:[[0,1],[2,3],[0,2]].map(([a,b],i)=>({leftId:job.fighterIds[a],rightId:job.fighterIds[b],winnerId:job.fighterIds[a],winner:0,seed:(job.seed+i)>>>0,how:'decision',ms:100,hp:[1,0],contacts:[0,0],digest:'1234abcd'}))};
+    await f.store.completeJob('svl-mac-01:browser',{jobId:job.id,leaseToken:job.leaseToken,outcome:'succeeded',result});
+    await page.locator('#execution-refresh').click();await page.locator('#execution-results').getByText('1 completed cup',{exact:true}).waitFor();
+    await page.locator('#execution-stop').click();await page.locator('#execution-end').click();await page.locator('#execution-state').getByText('Finished',{exact:true}).waitFor();
+    await page.locator('#execution-reconcile').click();await page.locator('#execution-consent').waitFor();
+    assert.equal(await page.locator('#execution-pay').isDisabled(),true);await page.locator('#execution-consent').check();await page.locator('#execution-pay').click();
+    await page.locator('#execution-fees').getByText('$0.04 paid',{exact:true}).waitFor();
+    await page.screenshot({path:fileURLToPath(new URL('../../output/showrunner-tests/integrated-host-desktop.png',import.meta.url)),fullPage:true});
+    await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+    await page.screenshot({path:fileURLToPath(new URL('../../output/showrunner-tests/integrated-host-mobile.png',import.meta.url)),fullPage:true});await page.setViewportSize({width:1280,height:900});
+  }
   assert.ok(Date.parse((await service.get(OWNER,order.id)).startedAt)<Date.parse((await service.get(OWNER,order.id)).scheduledAt));
   if(sourceKind!=='upload'){
     const started=await service.get(OWNER,order.id),watch=await context.newPage();watch.on('pageerror',e=>errors.push(e.message));
@@ -120,7 +142,7 @@ for(const sourceKind of ['upload','youtube','twitch'])test(`broadcast purchase, 
     }
     await watch.close();
   }
-  await page.goto(ORIGIN+'/broadcast/');await page.locator('#broadcast-list').getByText('Started',{exact:true}).waitFor();
+  await page.goto(ORIGIN+'/broadcast/');await page.locator('#broadcast-list').getByText(sourceKind==='upload'?'Finished':'Started',{exact:true}).waitFor();
   assert.equal(await page.locator('#wallet #broadcast-list article').count(),1);
   assert.equal(await page.locator('#wallet #broadcast-list .fighter-lineup img').count(),4);
   assert.doesNotMatch(await page.locator('body').innerText(),/Studio Credits/);

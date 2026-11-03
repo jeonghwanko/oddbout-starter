@@ -52,6 +52,7 @@ export function createPayoutService({ store, paypal, receivers, feeCents }) {
   }
   return {
     feeCents,
+    eligibleFighterIds:Object.freeze(Object.keys(receivers)),
     /** @param {string} owner @param {unknown} input */
     async propose(owner, input) {
       const body = /** @type {any} */ (input);

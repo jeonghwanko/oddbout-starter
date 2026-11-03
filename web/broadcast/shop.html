@@ -107,6 +107,18 @@
         </div>
       </section>
       <section id="host-playback" class="host-playback" hidden><a id="host-watch" class="button button-primary" target="_blank" rel="noopener noreferrer">Watch broadcast ↗</a></section>
+      <section id="execution-panel" class="execution-panel" hidden aria-labelledby="execution-title">
+        <div class="section-heading"><h2 id="execution-title">Your broadcast</h2><button id="execution-refresh" class="button button-secondary button-small">Refresh</button></div>
+        <div class="execution-grid">
+          <section><h3>On-Air Agent</h3><strong id="execution-state"></strong><p id="execution-results"></p><p id="execution-agent-note"></p><button id="execution-stop" class="button button-secondary button-small">End broadcast</button></section>
+          <section><h3>Settlement</h3><p id="execution-settlement"></p><button id="execution-reconcile" class="button button-secondary button-small">Check settlement</button></section>
+          <section><h3>Creator fees</h3><strong id="execution-fees"></strong><ul id="execution-payout-list"></ul></section>
+        </div>
+        <div id="execution-stop-confirm" class="execution-actions" hidden><p>Finish the current cup and end this broadcast early?</p><button id="execution-keep" class="button button-secondary">Keep running</button><button id="execution-end" class="button button-primary">End broadcast</button></div>
+        <div id="execution-pay-row" class="execution-actions" hidden><label class="consent"><input id="execution-consent" type="checkbox" />I approve these creator fees. PayPal Sandbox · no real money.</label><button id="execution-pay" class="button button-primary" disabled>Pay with PayPal</button></div>
+        <p id="execution-message" class="section-status" role="status" aria-live="polite"></p>
+        <details><summary>Transaction records</summary><pre id="execution-records"></pre></details>
+      </section>
     </main>
     <footer class="shop-footer" aria-label="Service information">
       <p class="sandbox-notice">PayPal Sandbox · No real charges</p>
