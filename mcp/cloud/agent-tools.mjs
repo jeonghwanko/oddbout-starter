@@ -15,7 +15,7 @@ import { ENTRY_CLIPS } from '../../api/fighter-entry.mjs';
  */
 
 /**
- * How a fighter's `combat.style` reads (the game contract's README, 싸우는 성격; values in `spec.combatStyle`). An agent translates the
+ * How a fighter's `combat.style` reads (the game contract's README, 전투 스타일; values in `spec.combatStyle`). An agent translates the
  * fighter's concept into these closed choices itself; the server only checks them. Grade 3 and missing values are the standard kit.
  */
 export const STYLE_GUIDE = Object.freeze({
