@@ -4,13 +4,14 @@ This record covers the deployed customer flow, not a production-money transactio
 
 ## Deployment
 
-- API/UI: `cb41f59ae616cf0719f1425cea9380c249b6336b` on `codex/paypal-task-recovery`.
+- Final API/UI: `aab5ebb5a6b5cdab9473ed57e0050b4d4b35194d` on `codex/paypal-task-recovery`, Render `Deploy succeeded | Live`.
+- The live financial rehearsal ran on `cb41f59ae616cf0719f1425cea9380c249b6336b`; the final release adds recipient verification and player recovery.
 - Integration base: `7d9d4afce7c3b83aebd9b0561fdd5c13ca3d740c`.
 - Database recovery correction: `abc6e603`; it changes Sandbox SQL, tests and documentation only.
 - Sandbox project: `kxxhrnomfeequyujyppn`. Production database was not changed.
 - Render service: `srv-dbkgdte1egvs739542og`, Free retained, automatic deployment off.
 - Graphical runner: `svl-mac-01`, existing clean checkout `3411ef3f`, Node 24.13.0, OBS 33.0.1.
-- `/readyz` returned 200; served `shop.mjs` and `execution.mjs` matched deployed Git contents.
+- `/readyz` returned 200; final served `shop.mjs`, `execution.mjs` and `watch.mjs` matched deployed Git contents.
 
 ## Customer path and evidence
 
