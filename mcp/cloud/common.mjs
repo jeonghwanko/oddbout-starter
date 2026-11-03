@@ -103,7 +103,8 @@ export function frontNext(front, { directory = false } = {}) {
     if (/^[a-z0-9-]+$/.test(reason)) return `${cannot}: the check of its front painting could not run (front.reason). Submit the same painting `
       + `again as a new upload; do not make a new one. ${upload} ${after}`;
     if (/^[A-Z0-9_]+$/.test(reason)) return `${cannot}: the file check refused its front painting (front.reason: its format, size, background `
-      + `or face square). Fix that and submit it again; a new painting only if the user wants one. ${upload} ${after}`;
+      + `or face square). Fix that and submit it again; a new painting only if the user wants one. A front ODDBOUT drew (a hosted fighter) is `
+      + `ODDBOUT's to put in again: tell the user to ask ODDBOUT. ${upload} ${after}`;
     return `${cannot}: an ODDBOUT operator refused its front painting (front.reason gives why). Tell the user; make a new painting with him `
       + `only if he wants. ${upload} ${after}`;
   }

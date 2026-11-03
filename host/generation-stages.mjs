@@ -19,7 +19,7 @@
 //   A seventh, optional row (2026-10-28) draws the entrance and the victory beside the six; when it fails the fighter goes without them.
 //   The action clips' previews go up as the rows finish (2026-10-30): gen-set's finished rows are extracted in a scratch run while it still draws the rest.
 // submitting: the package the motions stage left in the job folder, with the profile the creator confirmed, submitted under his account;
-//   before it, the chosen front and its face square (measured here, `motions.py face-box`) and his expression sheet go to the job: the server
+//   before it, the chosen front and its face square (measured here on the uploaded WebP, `motions.py face-box`) and his expression sheet go to the job: the server
 //   makes them his profile set when the package is registered.
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -1592,8 +1592,13 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
     try {
       const chosen = await chosenLook(job, dir);
       if (!chosen?.front || typeof api.profileFront !== 'function') return;
-      const out = path.join(dir, 'looks', `${chosen.name}.face.json`);
-      if (!existsSync(out) && (await motionsPy(['face-box', chosen.file, out])).code !== 0) return;
+      // Measured on the WebP the server holds (the artifact the appearance stage made and uploaded, its long side 1024), never on the PNG it
+      // was made from: the square goes into that WebP's set as it is (2026-11-03, 레온: measured on the 1024 × 1536 PNG it lay 1.5 times
+      // too far right and too large, and the validator refused his set — FACE_OUTSIDE_FIGURE). A new name: a square measured before is not reused.
+      const webp = chosen.file.endsWith('.webp') ? chosen.file : chosen.file.replace(/\.png$/, '.webp');
+      if (!existsSync(webp)) await toWebp(chosen.file, webp);
+      const out = path.join(dir, 'looks', `${chosen.name}.artifact.face.json`);
+      if (!existsSync(out) && (await motionsPy(['face-box', webp, out])).code !== 0) return;
       const sheet = await readJson(path.join(dir, 'looks', expressionsName(job.appearanceRound, job.choice), 'uploaded.json')).catch(() => null);
       const front = { artifact: chosen.name, face: await readJson(out) };
       let reply = await api.profileFront(job, { ...front, ...(typeof sheet?.artifact === 'string' ? { expressions: sheet.artifact } : {}) });
