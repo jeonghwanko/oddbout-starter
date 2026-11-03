@@ -4,6 +4,50 @@ Earlier source-kit releases, moved here from [PLUGIN-DISTRIBUTION.md](../PLUGIN-
 release and the distribution procedures. Each entry records that release as published and verified at the time; it is not
 current procedure. Published release paths stay immutable.
 
+**Previous source-kit release: 0.6.16** (2026-11-03 KST: 전투 스타일 in the contract, 사연 for the canon in the docs).
+
+The contract names `combat.style` 전투 스타일 instead of 싸우는 성격: `spec.json`'s `combatStyle.note` and the `standard-duel` kit
+description, a byte copy of the game's file at `e9eb228d7` (game PR #38). The docs agents read use the same word, and 사연 for a
+fighter's canon sheet (#312). Only text changes: the schema, validation rules and limits, the workspace tools and the sprite-gen pin are
+unchanged. The cloud MCP changes released with it (#310, #311) are Edge-only and not in the kit.
+
+Cloud `prepare_fighter_packaging` points to the reviewed 0.6.16 runtime once `ai-fighter-mcp` is deployed with
+this pin. It also supplies the workspace execution instructions; the cloud cannot read Dots files. Install the locked Node
+dependencies in the extracted `plugin/runtime/`, then run its `inspect_fighter_packaging` and `pack_fighter_package`
+tools on the existing plan. There is no new generation or generation login.
+
+- [Download the 0.6.16 ZIP](https://oddbout.com/creator-kit/0.6.16/110e020bb13822a5f6bf268fd627d9584683cfb5e8894af0578a73b8ed4f3cef/oddbout-0.6.16.zip)
+- [Release manifest](https://oddbout.com/creator-kit/0.6.16/110e020bb13822a5f6bf268fd627d9584683cfb5e8894af0578a73b8ed4f3cef/release.json)
+- [Download helper](https://oddbout.com/creator-kit/0.6.16/110e020bb13822a5f6bf268fd627d9584683cfb5e8894af0578a73b8ed4f3cef/fetch-creator-kit.py)
+
+| Verified item | Value |
+| --- | --- |
+| ZIP size | 4,196,799 bytes |
+| ZIP SHA-256 | `c9f271db02250b992b9616e87332830842ad0ad0db85025727db1ee0f0887d92` |
+| Release manifest SHA-256 | `56235956bfa57ea71e70e3a4a71707dfd542cd33c2c5906368de2a3ffe43dd2f` |
+| Runtime manifest SHA-256 | `c5c5e01288c77a14bba99eadc604eeb82037a3f8ee07cee271a31b6afd1daa33` |
+| Helper SHA-256 | `b66c31ff833816dfa74c90d9155359d3fdd484dff8c12759e48addde01707592` (unchanged) |
+| Archive build source | `916e0d5b6d696458f270d04e02bf5ccd8e528c4d` (main after [PR #313](https://github.com/jeonghwanko/oddbout-starter/pull/313)) |
+| Tested PR heads | `57529a09497d00ec2c61d9884e3f11c64b4f843c` ([PR #312](https://github.com/jeonghwanko/oddbout-starter/pull/312)), `345703f34cd1827e262e53b2435549a24af4d6dd` ([PR #313](https://github.com/jeonghwanko/oddbout-starter/pull/313)) |
+| sprite-gen pin | `5fc42b6d2a57354f38e5c348d0bb35590a3ddcf0` |
+| Kit Pages publication | `810541fd19235be80a2ec5d89478fe0d803bae9a` |
+
+Full PR CI passed for #312 and #313. The archive was built from a clean worktree at the main merge with the sprite-gen
+submodule checked out at its pin; a trial build of the PR head before the merge gave byte-identical release files (the source commit is
+recorded only in the private build report). The trusted helper downloaded the published release, verified it and extracted all 742
+archive files. Locked production Node dependencies installed with no vulnerabilities reported. The extracted runtime reports version
+0.6.16, its `creation:tool` lists all 18 workspace tools, `get_fighter_spec` answers with a one-line text, a mistyped tool name is
+reported as `unknown-tool`, its `spec.json` says 전투 스타일 and no longer 싸우는 성격, and its `mcp:check --probe` found
+`mcp.oddbout.com` as both a 2025 and a 2026-07-28 client. No Python engine ran.
+
+Publication added only three release files, preserved 6,378 existing files without changes or deletions,
+and verified HTTP 200 and exact release bytes plus 12 unchanged site files at 2026-11-03T05:55:02.769Z. The release itself needs no
+game, API or site build; the same contract text reaches the API, the cloud MCP and the validator with their own deploys.
+
+The Dots source pin is `916e0d5b6d696458f270d04e02bf5ccd8e528c4d` (0.6.16). It is still a candidate, with saved-VM acceptance pending.
+No Dots install was run at this pin, the saved Dots environment was not republished, and Grok sign-in, generation and delivery were not
+verified. No animation was generated and no registration was submitted during this release verification.
+
 **Previous source-kit release: 0.6.15** (2026-11-03 KST: the discovery probe time limit and sprite-gen 5fc42b6).
 
 `npm run mcp:check -- --probe` gives the 2026-07-28 discovery (`server/discover`, then `tools/list`) its own time limit instead of sharing
