@@ -49,7 +49,7 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
   const read = path => identity ? arenaCall(arena, path, undefined, identity.owner)
     : arenaCall(arena, path, undefined, caller ?? 'public', undefined, { signedOut: caller !== null });
   const ID = z.string().min(1).max(64).regex(/^[a-z0-9-]+$/);
-  register('get_style_guide', '싸우는 성격 안내', 'Read how a fighter\'s combat.style choices fight, to translate the character\'s concept into them. '
+  register('get_style_guide', '전투 스타일 안내', 'Read how a fighter\'s combat.style choices fight, to translate the character\'s concept into them. '
     + 'Values and limits are the contract\'s (spec.combatStyle). This changes nothing.',
     {}, async () => ({ ok: true, contract: spec.combatStyle, guide: STYLE_GUIDE }), { publicTool: true });
   register('list_fighters', 'ODDBOUT 선수 명단', 'List ODDBOUT\'s fighters: the built-in roster and the listed, entered registered fighters (id and name). '
@@ -69,10 +69,10 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
       }
       return { ok: true, rules: builtins.rules, builtin: builtins.fighters, registered };
     }, { publicTool: true });
-  register('get_rankings', 'ODDBOUT 순위', 'Read the cup rankings: built-in fighters by cup points, '
+  register('get_rankings', 'ODDBOUT 랭킹', 'Read the cup rankings: built-in fighters by cup points, '
     + 'or registered fighters by cup win rate (a minimum number of bouts).',
     { scope: z.enum(['builtin', 'registered']).default('builtin') }, ({ scope }) => call(scope === 'registered' ? 'rankings?scope=registered' : 'rankings'), { publicTool: true });
-  register('get_fighter_record', '선수 공개 기록', 'Read a fighter\'s public cup record: wins, losses, '
+  register('get_fighter_record', '전적', 'Read a fighter\'s public cup record: wins, losses, '
     + 'recent bouts (with each cup\'s seed for read_bout) and the rivals he met most.',
     { fighterId: ID }, async ({ fighterId }) => {
       const record = await call(`fighter?id=${encodeURIComponent(fighterId)}`);
@@ -161,7 +161,7 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
       lines: z.union([z.record(z.string(), z.string()), z.null()]) }).partial().strict(), idempotencyKey: UUID_ARG() },
     ({ fighterId, profile, idempotencyKey }) => Object.keys(profile).length ? edit(fighterId, { profile }, idempotencyKey) : { ok: false, code: 'invalid-profile' },
     { write: true, publish: true, openWorld: true, idempotent: true });
-  register('update_fighter_style', '싸우는 성격 고치기', 'Change the connected user\'s registered fighter\'s fighting style (combat.style) without new art: '
+  register('update_fighter_style', '전투 스타일 고치기', 'Change the connected user\'s registered fighter\'s fighting style (combat.style) without new art: '
     + 'an object replaces it, null removes it. Checked against the contract (get_style_guide). '
     + 'His next bouts fight the new style. Requires the user\'s approval of the change. '
     + 'Use a new UUID per change and the same UUID to retry it.',

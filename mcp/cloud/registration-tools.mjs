@@ -168,6 +168,6 @@ export function registerRegistrationTools({ register, db, identity, invoke, fetc
   register('get_fighter_submission', '등록 진행 상태', 'Read your submission. Only registered confirms registration; rejected contains the validation failure. '
     + 'Do not regenerate automatically.',
     { submissionId: UUID_ARG() }, async ({ submissionId }) => withSiteLink(await invoke(`submissions/${submissionId}`)));
-  register('get_registered_fighter', '등록된 캐릭터 확인', 'Read your registered fighter and immutable package identity.',
+  register('get_registered_fighter', '등록 정보', 'Read your registered fighter and immutable package identity.',
     { fighterId: UUID_ARG() }, async ({ fighterId }) => withSiteLink(await invoke(`fighters/${fighterId}`)));
 }
