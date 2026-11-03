@@ -1332,7 +1332,7 @@ function authChanged(value) {
 }
 async function initialize() {
   renderLineup();
-  config = await fetch('./config').then(r => r.json());
+  config = await fetch('/broadcast/config').then(r => r.json());
   for (const id of ['execution-settings','session-reference']) $(id).open = !paidBroadcastMode();
   $('hosts-readiness').hidden = paidBroadcastMode();
   $('broadcast-form').hidden = paidBroadcastMode(); $('host-cup').hidden = paidBroadcastMode();
@@ -1354,7 +1354,7 @@ async function initialize() {
     returnedIntentId = UUID_PATTERN.test(intent) ? intent : '';
     returnedIntentCancelled = query.get('cancelled') === '1';
     show(returnedIntentCancelled ? 'PayPal approval was cancelled. No credits were added.' : 'Checking this purchase with PayPal. Studio Credits update only after PayPal confirms it.');
-    history.replaceState(null, '', '/broadcast/');
+    history.replaceState(null, '', location.pathname);
   }
   if (!config.authConfigured) { show('No balances or successful operations are simulated.'); return; }
   client = globalThis.supabase.createClient(config.supabaseUrl, config.publishableKey, { auth: { persistSession: true, storage: sessionStorage, storageKey: 'oddbout-paid-auth', flowType: 'pkce', autoRefreshToken: true, detectSessionInUrl: true } });

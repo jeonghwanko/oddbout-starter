@@ -11,6 +11,10 @@ import { createPaidOperations } from '../api/commerce/paid-operations.mjs';
 import { createPaidOperationHandler } from '../api/commerce/paid-handler.mjs';
 import { createRecoveryWorker } from '../api/commerce/payment-recovery.mjs';
 import { createCommerceHandler } from '../api/commerce/handler.mjs';
+import { createCampaignService, CAMPAIGN_PRODUCTS } from '../api/commerce/campaigns.mjs';
+import { createCampaignHandler } from '../api/commerce/campaign-handler.mjs';
+import { createCampaignMedia } from '../api/commerce/campaign-media.mjs';
+import { Problem } from '../api/http.mjs';
 import { verifiedUserId } from '../api/http.mjs';
 import { createCommerceMcpHandler, createIssuedProducerGrants } from '../mcp/cloud/commerce-handler.mjs';
 import { createBroadcastWorkerHandler } from '../broadcast/worker-api.mjs';
@@ -80,8 +84,23 @@ export function createBroadcastDemo(env = process.env) {
   const api = createCommerceHandler({ service: service ?? previewService, publicOrigin, authenticate: request => db ? verifiedUserId(db, request) : Promise.resolve(null) });
   const workers = env.ODDBOUT_BROADCAST_WORKERS_JSON ? JSON.parse(env.ODDBOUT_BROADCAST_WORKERS_JSON) : [];
   const worker = db && commerce ? createBroadcastWorkerHandler({ store: createCommerceStore(db), workers }) : null;
+  const campaignMedia = db && paidOperations ? createCampaignMedia({db,modelCall:env.OPENAI_API_KEY && env.ODDBOUT_BROADCAST_MODEL
+    ? createConciergeModel({model:env.ODDBOUT_BROADCAST_MODEL,apiKey:env.OPENAI_API_KEY,maxOutputTokens:500}) : null}) : null;
+  const campaigns = db && campaignMedia ? createCampaignService({db,...campaignMedia}) : null;
+  const campaignApi = campaigns && db && campaignMedia ? createCampaignHandler({service:campaigns,publicOrigin,
+    authenticate:request=>verifiedUserId(db,request),upload:async(owner,id,input)=>{
+      const order=await campaigns.get(owner,id);if(order.status==='started')throw new Problem(409,'campaign-already-started');
+      return campaignMedia.upload(id,input);
+    }}) : null;
   const files = new Map([
-    ['/broadcast/', ['web/broadcast/index.html', 'text/html; charset=utf-8']],
+    ['/broadcast/', ['web/broadcast/shop.html', 'text/html; charset=utf-8']],
+    ['/broadcast/shop.mjs', ['web/broadcast/shop.mjs', 'text/javascript; charset=utf-8']],
+    ['/broadcast/shop.css', ['web/broadcast/shop.css', 'text/css; charset=utf-8']],
+    ['/broadcast/watch/', ['web/broadcast/watch.html', 'text/html; charset=utf-8']],
+    ['/broadcast/watch.mjs', ['web/broadcast/watch.mjs', 'text/javascript; charset=utf-8']],
+    ['/broadcast/program.mjs', ['web/broadcast/program.mjs', 'text/javascript; charset=utf-8']],
+    ['/broadcast/watch.css', ['web/broadcast/watch.css', 'text/css; charset=utf-8']],
+    ['/broadcast/operator/', ['web/broadcast/index.html', 'text/html; charset=utf-8']],
     ['/broadcast/assets/showrunner.svg', ['web/broadcast/assets/showrunner.svg', 'image/svg+xml']],
     ['/broadcast/style.css', ['web/broadcast/style.css', 'text/css; charset=utf-8']],
     ['/broadcast/app.mjs', ['web/broadcast/app.mjs', 'text/javascript; charset=utf-8']],
@@ -102,6 +121,10 @@ export function createBroadcastDemo(env = process.env) {
     files.set(`/broadcast/assets/${name}.ttf`, [`web/broadcast/assets/${name}.ttf`, 'font/ttf']);
     files.set(`/broadcast/assets/${name}-OFL.txt`, [`web/broadcast/assets/${name}-OFL.txt`, 'text/plain; charset=utf-8']);
   }
+  // Preserve legacy operator links and their explicitly allowlisted relative assets.
+  for(const [path,file] of [...files]) if(path.startsWith('/broadcast/')&&!path.startsWith('/broadcast/operator/')) {
+    if(path!=='/broadcast/')files.set(path.replace('/broadcast/','/broadcast/operator/'),file);
+  }
   const server = createServer(async (req, res) => {
     try {
       // Proxy health checks may use an internal Host. This route exposes liveness only.
@@ -114,20 +137,32 @@ export function createBroadcastDemo(env = process.env) {
         if (paidOperations && commerce) {
           try { ready = (await commerce.store.recovery(null, 'health')).schemaVersion === 3; } catch { ready = false; }
         }
+        if(campaigns&&db){const {error}=await db.rpc('commerce_campaign',{p_owner:null,p_command:'health',p_input:{}});if(error)ready=false;}
         res.writeHead(ready ? 200 : 503, { 'content-type': 'application/json', 'cache-control': 'no-store' });
         res.end(JSON.stringify({ ok: ready, paidTaskRecovery: Boolean(paidOperations) })); return;
       }
       if (req.headers.host !== publicUrl.host) { res.writeHead(403); res.end('invalid-host'); return; }
       const address = new URL(req.url ?? '/', publicOrigin);
+      if(req.method==='GET'&&address.pathname==='/campaigns/catalog'){
+        res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify({ok:true,data:{products:CAMPAIGN_PRODUCTS,defaultProductId:'spotlight-hour'}}));return;
+      }
       if (address.pathname === '/') { res.writeHead(302, { location: '/broadcast/' }); res.end(); return; }
-      if (req.method === 'GET' && address.pathname === '/broadcast/config') {
+      if(req.method==='GET'&&address.pathname==='/broadcast/'&&address.searchParams.has('operation')){
+        res.writeHead(302,{location:'/broadcast/operator/'+address.search});res.end();return;
+      }
+      if (req.method === 'GET' && ['/broadcast/config','/broadcast/operator/config'].includes(address.pathname)) {
         res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
         res.end(JSON.stringify({ supabaseUrl: url ?? null, publishableKey: publishableKey ?? null, authConfigured: Boolean(db && publishableKey),
-          commerceEnabled: Boolean(commerce), paidOperations: Boolean(paidOperations), autoProducer: Boolean(supervisor), concierge: Boolean(concierge), reconciliation: Boolean(reconciler), payouts: payouts ? { feeCents: payouts.feeCents } : null, publicOrigin, mode: commerce ? 'sandbox' : 'preview-unconfigured' })); return;
+          commerceEnabled: Boolean(commerce), campaigns:Boolean(campaigns), paidOperations: Boolean(paidOperations), autoProducer: Boolean(supervisor), concierge: Boolean(concierge), reconciliation: Boolean(reconciler), payouts: payouts ? { feeCents: payouts.feeCents } : null, publicOrigin, mode: commerce ? 'sandbox' : 'preview-unconfigured' })); return;
       }
       const file = files.get(address.pathname);
       if (req.method === 'GET' && file) {
         const bytes = await readFile(new URL(file[0], root));
+        if(['/broadcast/','/broadcast/watch/'].includes(address.pathname)){
+          const authOrigin=url?new URL(url).origin:'';
+          res.setHeader('content-security-policy',`default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; media-src 'self' blob: ${authOrigin}; connect-src 'self' ${authOrigin}; frame-src https://oddbout-broadcast-arena.onrender.com; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'`);
+          res.setHeader('x-frame-options','DENY');
+        }
         if (address.pathname === '/broadcast/tasks/') {
           const authOrigin = url ? new URL(url).origin : '';
           res.setHeader('content-security-policy', `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' ${authOrigin}; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'`);
@@ -142,7 +177,8 @@ export function createBroadcastDemo(env = process.env) {
       const body = Buffer.concat(chunks);
       const request = new Request(address, { method: req.method, headers, ...(['GET', 'HEAD'].includes(req.method ?? '') ? {} : { body }) });
       let response;
-      if (address.pathname.startsWith('/commerce/')) response = await api(request);
+      if (address.pathname.startsWith('/campaigns/')&&campaignApi) response = await campaignApi(request);
+      else if (address.pathname.startsWith('/commerce/')) response = await api(request);
       else if ((address.pathname.startsWith('/paid-operations/') || address.pathname.startsWith('/paid-agent/')) && paidApi) response = await paidApi(request, { clientAddress: req.socket.remoteAddress });
       else if ((address.pathname === '/mcp' || address.pathname === '/mcp/.well-known/oauth-protected-resource') && mcp) response = await mcp(request);
       else if (address.pathname.startsWith('/commerce-worker/') && worker) response = await worker(request);

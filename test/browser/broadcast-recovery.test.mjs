@@ -41,7 +41,7 @@ test('ordinary concierge plan survives checkout closure and returns to the same 
     });
     const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));return page;
   }
-  const requester=await device({width:1280,height:900});await requester.goto(ORIGIN+'/broadcast/');
+  const requester=await device({width:1280,height:900});await requester.goto(ORIGIN + '/broadcast/operator/');
   await requester.locator('#concierge-input').fill('Plan two cups for Friday fight night.');await requester.locator('#concierge-send').click();
   await requester.locator('.chat-action').filter({hasText:'Friday fight night'}).waitFor();
   const saved=(await paid.page(OWNER,{kind:'broadcast'})).items;assert.equal(saved.length,1);const operation=saved[0];assert.equal(operation.state,'awaiting_approval');
@@ -58,7 +58,7 @@ test('ordinary concierge plan survives checkout closure and returns to the same 
   f.orders.get('ORDER1').status='APPROVED';await phone.context().close();
   await f.event('CHECKOUT.ORDER.APPROVED',{id:'ORDER1'});await paid.continueBroadcasts();
   const running=await paid.get(OWNER,operation.id);assert.ok(running.broadcastId);assert.ok(ensured.some(x=>x.owner===OWNER&&x.id===running.broadcastId));
-  const pc=await device({width:1280,height:900});await pc.goto(ORIGIN+'/broadcast/');
+  const pc=await device({width:1280,height:900});await pc.goto(ORIGIN + '/broadcast/operator/');
   await pc.waitForFunction(id=>document.getElementById('broadcastId').value===id,running.broadcastId);
   await pc.locator('#producer-card').waitFor();assert.equal(await pc.locator('#broadcast-form').isVisible(),false);
   for(let i=0;i<2;i++){

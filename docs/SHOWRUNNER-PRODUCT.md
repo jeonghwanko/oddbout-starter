@@ -1,62 +1,70 @@
-# ODDBOUT Showrunner
+# ODDBOUT Showrunner · Spotlight
 
-Productized MVP of the approved monetization plan: buy credits, let an AI producer operate
-tournaments within an approved budget, and pay creators appearance fees for completed cups.
-User confirmed this scope on 2026-11-04 (Asia/Seoul). This is the existing PayPal Sandbox service;
-it is not a launch of live-money billing.
+The customer flow is **choose a broadcast card → add sponsor video and URL → preview and publish → My broadcasts**.
+This is the existing isolated PayPal Sandbox service, not live-money billing.
 
-## Identity and offer
+## Broadcast products
 
-- Service: **ODDBOUT Showrunner**. Customer promise: run a fight night with a defined lineup and budget.
-- Currency: **Studio Credits**, a prepaid service balance separate from game gold.
-- Service icon: four entrants feeding a tournament bracket and a play button. The original SVG is
-  `web/broadcast/assets/showrunner.svg`; use the same mark in the header and favicon.
-- A cup is four fighters, two semifinals and one final. A confirmed completed cup costs **25 credits**.
-  Planning, status checks and retrieving the existing result do not consume credits.
+| Card | Program duration | Included ad time | Studio Credits |
+| --- | --- | --- | --- |
+| Spotlight · 1 hour | 60 minutes | 10 minutes | 300 |
+| Spotlight · 2 hours | 120 minutes | 20 minutes | 600 |
+| Spotlight · 3 hours | 180 minutes | 30 minutes | 900 |
 
-| Pack | Purchase | Credits | Completed cups | Icon |
-| --- | --- | --- | --- | --- |
-| Starter | USD 10 | 1,000 | Up to 40 | Opening bell |
-| Series | USD 50 | 5,000 | Up to 200 | Tournament bracket |
+Ad time is included in the program duration. Each hour contains two five-minute sponsor breaks,
+at minute 0 and minute 30. A short clip loops within its slot. Four distinct fighters are randomly
+selected once per purchase from the nine built-in ODDBOUT characters. The owner explicitly designated
+this pool as this product's SS tier; it is not a game ranking or a claim of third-party IP rights.
+The same lineup survives retries, media changes and device changes.
 
-Both are one-time purchases at the same unit rate, with no subscription, bulk discount or automatic
-renewal. Prices are Sandbox test prices. The 50,000-credit endurance pack remains compatible with
-existing orders and operator tools, but is hidden from the normal storefront. `operatorOnly` is a
-merchandising flag, not an authorization boundary.
+Names, spending limits, hosts and fighter selection are absent from the customer purchase form.
+Prices and duration come from the server catalog. Purchase atomically debits the fixed price once,
+with an append-only ledger and owner-scoped idempotency key. There is no additional per-cup charge
+for this product. An insufficient balance creates neither an order nor a debit.
 
-The original Starter product ID and all existing monetary amounts stay unchanged. The catalog's
-merchandising revision is separate from its unchanged cup price version, so renaming products does
-not invalidate approved work. Historic purchases retain their stored money and credit quantities;
-the history displays the current catalog label when the stored amount and quantity match. This label
-does not claim to reproduce a historical PayPal description.
+## Media and publication
 
-## Purchase and use
+Each owner uploads an MP4 (up to 50 MiB and five minutes) to private storage. The server checks actual
+stored bytes, container metadata and duration; browser preview checks playback. The destination is
+an HTTPS URL. The server never fetches that user-supplied URL.
 
-1. Compare packs, their prices and the number of cups they cover. Sign in with Google to buy.
-2. Review the selected pack and use PayPal checkout. The server supplies product names and prices;
-   a client or model cannot change the amount. Test mode stays visible throughout checkout.
-3. The original order is verified before credits appear. Recent purchases show the latest 50 records,
-   dates, amounts, credits and status. Continue a pending purchase using that record, never a new order.
-4. Request a show from the concierge or enter its lineup and budget. Review and approve automatic
-   producer start. Existing credits cover the budget; otherwise the same saved show links its purchase.
-5. The producer schedules cups within the approved limit. Closing the browser does not discard the show.
-   Returning to the same account restores its original state, costs and results.
-6. Completion displays verified cups and spending. Exhausted budgets close after all jobs settle;
-   unknown executions remain held. Failed jobs are not charged; unused reservations return to the wallet.
-7. Creator appearance fees are separate from the customer's credits. The current fee is USD 0.02 per
-   fighter per completed cup; only the owner's explicit payout approval sends a Sandbox batch.
+AI writes a paid-sponsor introduction using the destination hostname. It does not claim to have
+watched the clip or researched the advertiser. The owner reviews the video, introduction and URL,
+then explicitly publishes. The resulting unlisted watch link exposes those materials to its viewers.
+Video URLs are temporary signed capabilities; the storage bucket remains private.
 
-The purchase receipt and the usage report are different records. Releasing unused credits after a
-show is not a PayPal purchase refund. Do not imply cash redemption or a new refund policy.
+Order states are `awaiting_media`, `ready`, and `started`. The last state is labelled **Published**:
+it records publication, not verified delivery. Elapsed time does not mark a purchase fulfilled.
+Unknown purchase/upload/save responses retain their original keys and paths for recovery.
 
-## Shipping boundary
+## Playback boundary
 
-Keep the service promise limited to working tournament scheduling, execution and saved results.
-The MVP does not sell Twitch streaming, fighter generation, downloadable video, game advantages or
-24-hour availability. Existing Free hosting can sleep, so it does not promise unattended continuous
-operation. Production-money activation, commercial refund terms and always-on hosting remain separate
-launch decisions. The UI must clearly state Sandbox mode without naming the actual products as tests.
+The watch page schedules sponsor slots and actual ODDBOUT browser-rendered exhibition bouts against
+the server start time. The arena's same-origin `spotlight.html` adapter uses the normal fighter
+player protocol and validates bout identity before displaying results. Joining mid-bout starts
+local playback. This is an ODDBOUT web program, not a Twitch stream or synchronized video feed.
+No audience reach, DAU, ad impressions or uninterrupted delivery is guaranteed or inferred.
+Client-rendered results do not authorize creator payouts. AI introductions are captions with
+optional browser speech after a user gesture, not guaranteed prerecorded narration.
 
-See [PAID-TASK-RECOVERY](PAID-TASK-RECOVERY.md) for durable execution and recovery,
-[BROADCAST-HOSTING](BROADCAST-HOSTING.md) for deployment, and
-[PAYPAL-AGENT-BROADCAST-PLAN](PAYPAL-AGENT-BROADCAST-PLAN.md) for the original monetization design.
+The existing metered producer, PayPal reconciliation and creator-payout console remains at
+`/broadcast/operator/`; original operation links retain their routing. Its 25-credit completed-cup
+billing and appearance-fee approvals remain separate from Spotlight. Customer navigation does not
+expose the former “Set up your show” or “Run the ring” panels.
+
+## Funding and deployment
+
+Studio Credits are prepaid service units, separate from game gold. Existing PayPal Starter
+(USD 10 / 1,000 credits) and Series (USD 50 / 5,000 credits) packs remain secondary top-ups.
+There is no subscription or auto-renewal. Existing orders retain their original quantities and amounts.
+
+After the migrations in [PAID-TASK-RECOVERY](PAID-TASK-RECOVERY.md), apply
+`supabase/sandbox/20261103154930_commerce_campaigns.sql` only to the isolated Sandbox project.
+It creates the private campaign tables/RPC and `campaign-media` bucket. Deploy the game's
+`spotlight.html`, `spotlight-player.mjs` and `spotlight-contract.mjs` adapter before the API/UI release.
+Use the existing explicitly selected `ODDBOUT_BROADCAST_MODEL` and `OPENAI_API_KEY` for introductions.
+`/readyz` checks campaign schema access. Run `npm run campaign:check` and `npm run typecheck`.
+
+Render remains Free at the owner's request and may sleep. Always-on hosting, production payments,
+commercial refund terms and independently measured delivery remain separate launch decisions.
+See [BROADCAST-HOSTING](BROADCAST-HOSTING.md) for existing hosting and payment setup.

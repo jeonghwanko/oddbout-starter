@@ -1,5 +1,9 @@
 # Hosted PayPal Sandbox demo
 
+The customer storefront now uses Spotlight duration cards. See [SHOWRUNNER-PRODUCT](SHOWRUNNER-PRODUCT.md)
+for its additional Sandbox migration, arena adapter, fixed-credit billing and web playback boundary.
+The existing producer console remains available at `/broadcast/operator/`.
+
 For broadcast plans that continue through payment and device changes, apply the additional migrations and settings in
 [PAID-TASK-RECOVERY](PAID-TASK-RECOVERY.md) after the existing Sandbox is configured.
 

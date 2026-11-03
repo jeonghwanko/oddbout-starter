@@ -31,7 +31,7 @@ test('Showrunner packs, same-order purchase history and credited balance survive
     await route.fulfill({status:res.status,body:await res.text(),contentType:'application/json'});
   });
   const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
-  await page.goto(ORIGIN+'/broadcast/');await page.locator('#signout').waitFor();
+  await page.goto(ORIGIN + '/broadcast/operator/');await page.locator('#signout').waitFor();
   assert.match(await page.title(),/Showrunner/);
   assert.match(await page.locator('link[rel="icon"]').getAttribute('href'),/showrunner\.svg/);
   const icon=await page.request.get(ORIGIN+'/broadcast/assets/showrunner.svg');assert.equal(icon.status(),200);assert.match(icon.headers()['content-type'],/image\/svg\+xml/);
@@ -48,7 +48,7 @@ test('Showrunner packs, same-order purchase history and credited balance survive
   await page.locator('#purchase-list').getByRole('button',{name:/Continue/i}).first().click();
   await page.locator('#paypal-approval').waitFor();assert.equal(f.orders.size,1);
   f.orders.get('ORDER1').status='APPROVED';
-  await page.goto(ORIGIN+'/broadcast/?intent='+purchase.id);
+  await page.goto(ORIGIN+'/broadcast/operator/?intent='+purchase.id);
   await page.waitForFunction(()=>document.getElementById('available').textContent.replaceAll(',','')==='5000',null,{timeout:30000});
   await page.locator('#purchase-list').getByText(/credited|completed|added/i).first().waitFor();
   assert.equal((await f.store.wallet(OWNER)).balanceCredits,5000);assert.equal(f.orders.size,1);
