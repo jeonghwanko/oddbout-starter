@@ -408,6 +408,28 @@
                 </button>
               </div>
             </div>
+            <section
+              id="producer-card"
+              class="producer-card"
+              aria-labelledby="producer-title"
+              hidden
+            >
+              <div class="producer-head">
+                <h3 id="producer-title">AI producer</h3>
+                <span
+                  id="producer-state"
+                  class="producer-state"
+                  data-state="none"
+                  role="status"
+                ></span>
+              </div>
+              <p class="producer-meta">
+                <span id="producer-model"></span
+                ><span id="producer-calls"></span>
+              </p>
+              <p id="producer-result" class="producer-result" hidden></p>
+              <ol id="producer-decisions" class="producer-decisions"></ol>
+            </section>
             <p class="rehearsal-note">
               Rehearsal mode. Twitch streaming is not connected.
             </p>

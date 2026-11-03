@@ -711,6 +711,121 @@ h1 span {
 .button-row .button {
   flex: 1;
 }
+.producer-card {
+  border-top: 1px solid var(--line);
+  margin-top: 23px;
+  padding-top: 21px;
+  min-width: 0;
+}
+.producer-card[hidden] {
+  display: none;
+}
+.producer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.producer-head h3 {
+  font-size: 15px;
+  margin: 0;
+}
+.producer-state {
+  font:
+    700 10px "Space Grotesk",
+    sans-serif;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 3px 7px;
+  color: var(--muted);
+}
+.producer-state[data-state="running"] {
+  background: var(--lime);
+  border-color: var(--lime);
+  color: var(--ink);
+}
+.producer-state[data-state="waiting"] {
+  background: #fff2d4;
+  border-color: #fff2d4;
+  color: #805715;
+}
+.producer-state[data-state="finished"] {
+  background: var(--soft);
+  color: var(--ink);
+}
+.producer-state[data-state="unavailable"] {
+  background: #fff0ec;
+  border-color: #fff0ec;
+  color: #9b342c;
+}
+.producer-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 9px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.producer-meta span {
+  overflow-wrap: anywhere;
+}
+.producer-meta span:empty {
+  display: none;
+}
+.producer-result {
+  margin: 9px 0 0;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.producer-result[hidden] {
+  display: none;
+}
+.producer-decisions {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.producer-decisions:empty {
+  display: none;
+}
+.producer-decision {
+  background: var(--soft);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  min-width: 0;
+}
+.producer-decision p {
+  margin: 3px 0 0;
+  overflow-wrap: anywhere;
+}
+.producer-decision-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+}
+.producer-outcome {
+  font-size: 11px;
+  color: var(--muted);
+}
+.producer-outcome[data-outcome="failed"] {
+  color: #9b342c;
+}
+.producer-episode {
+  font-weight: 600;
+}
+.producer-fighters,
+.producer-reason {
+  color: var(--muted);
+}
 .rehearsal-note {
   font-size: 12px;
   color: var(--muted);

@@ -2,7 +2,8 @@
 import { Problem, logFailure, readBody } from '../http.mjs';
 import { PayPalError } from './paypal.mjs';
 
-/** @typedef {ReturnType<typeof import('./service.mjs').createCommerceService>} Service */
+/** The demo server may add `producer` (its auto-producer status); other hosts serve without it.
+ * @typedef {ReturnType<typeof import('./service.mjs').createCommerceService> & {producer?:(owner:string,id:string)=>unknown}} Service */
 /** @param {{service:Service,authenticate:(request:Request)=>Promise<string|null>,publicOrigin:string,agent?:boolean}} options */
 export function createCommerceHandler({ service, authenticate, publicOrigin, agent = false }) {
   /** @param {Request} request @param {string[]} [segments] */
@@ -44,6 +45,7 @@ export function createCommerceHandler({ service, authenticate, publicOrigin, age
         if (route[2] === 'stop' && method === 'POST') data = await service.stop(owner, route[1]);
         else if (route[2] === 'report' && method === 'GET') data = await service.report(owner, route[1]);
         else if (route[2] === 'jobs' && method === 'GET') data = await service.jobs(owner, route[1]);
+        else if (route[2] === 'producer' && method === 'GET' && service.producer) data = await service.producer(owner, route[1]);
         else throw new Problem(404, 'not-found');
       } else if (route.length === 2 && route[0] === 'jobs' && method === 'GET') data = await service.job(owner, route[1]);
       else throw new Problem(404, 'not-found');

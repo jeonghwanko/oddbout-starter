@@ -257,6 +257,9 @@ export function createBroadcastProducer({broadcastId,model,mcp,modelCall,maxMode
         return {status:'queued',jobId:job.id,requestKey,episode:decision.episode,reason:decision.reason};
       } catch {state.pending.status='unknown';await save();return {status:'unknown',requestKey,reason:'producer_mutation_outcome_unknown'};}
     } catch (/** @type {any} */ error) {
+      // A stop that interrupts a read is not a failure of the session: leave the checkpoint resumable.
+      // Uncertain model calls and mutations are recorded above, before reaching here.
+      if(signal?.aborted) return {status:'stopped',reason:'producer_stopped'};
       // Never serialize upstream diagnostics; they can include credentials or private response bodies.
       const codes=['producer_scope_mismatch','producer_approval_scope_missing','producer_catalog_scope_changed','producer_invalid_accounting',
         'producer_invalid_decision','producer_fighter_not_approved','producer_mcp_read_failed'];

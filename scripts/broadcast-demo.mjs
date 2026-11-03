@@ -8,8 +8,10 @@ import { commerceFromEnvironment } from '../api/commerce/config.mjs';
 import { createCommerceStore } from '../api/commerce/store.mjs';
 import { createCommerceHandler } from '../api/commerce/handler.mjs';
 import { verifiedUserId } from '../api/http.mjs';
-import { createCommerceMcpHandler } from '../mcp/cloud/commerce-handler.mjs';
+import { createCommerceMcpHandler, createIssuedProducerGrants } from '../mcp/cloud/commerce-handler.mjs';
 import { createBroadcastWorkerHandler } from '../broadcast/worker-api.mjs';
+import { createProducerModel } from '../broadcast/producer.mjs';
+import { createProducerSupervisor } from '../broadcast/supervisor.mjs';
 import { isPublishableKey } from './login.mjs';
 
 const root = new URL('../', import.meta.url);
@@ -33,9 +35,17 @@ export function createBroadcastDemo(env = process.env) {
   const commerce = db ? commerceFromEnvironment({ db, get }) : null;
   const previewService = createCommerceService({ store: createCommerceStore({ rpc: async () => ({ data: null, error: { message: 'unconfigured' } }) }),
     paypal: null, publicOrigin, hosts: [{ id: 'current-pc' }, { id: 'office-stable' }, { id: 'svl-mac-01' }] });
-  const api = createCommerceHandler({ service: commerce?.service ?? previewService, publicOrigin, authenticate: request => db ? verifiedUserId(db, request) : Promise.resolve(null) });
   const producers = env.ODDBOUT_BROADCAST_PRODUCERS_JSON ? JSON.parse(env.ODDBOUT_BROADCAST_PRODUCERS_JSON) : [];
-  const mcp = db && commerce ? createCommerceMcpHandler({ db, commerce, producers }) : null;
+  const issued = createIssuedProducerGrants();
+  const mcp = db && commerce ? createCommerceMcpHandler({ db, commerce, producers, issued }) : null;
+  const supervisor = mcp && commerce ? autoProducerFromEnvironment(env, { commerce, issued, mcp }) : null;
+  // A started session gets its producer right away; the start response never waits for it.
+  const service = commerce && supervisor ? { ...commerce.service,
+    /** @param {string} owner @param {unknown} input */
+    async start(owner, input) { const broadcast = await commerce.service.start(owner, input); supervisor.ensure(owner, broadcast.id); return broadcast; },
+    /** @param {string} owner @param {string} id */
+    producer: (owner, id) => supervisor.status(owner, id) } : commerce?.service;
+  const api = createCommerceHandler({ service: service ?? previewService, publicOrigin, authenticate: request => db ? verifiedUserId(db, request) : Promise.resolve(null) });
   const workers = env.ODDBOUT_BROADCAST_WORKERS_JSON ? JSON.parse(env.ODDBOUT_BROADCAST_WORKERS_JSON) : [];
   const worker = db && commerce ? createBroadcastWorkerHandler({ store: createCommerceStore(db), workers }) : null;
   const files = new Map([
@@ -69,7 +79,7 @@ export function createBroadcastDemo(env = process.env) {
       if (req.method === 'GET' && address.pathname === '/broadcast/config') {
         res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
         res.end(JSON.stringify({ supabaseUrl: url ?? null, publishableKey: publishableKey ?? null, authConfigured: Boolean(db && publishableKey),
-          commerceEnabled: Boolean(commerce), publicOrigin, mode: commerce ? 'sandbox' : 'preview-unconfigured' })); return;
+          commerceEnabled: Boolean(commerce), autoProducer: Boolean(supervisor), publicOrigin, mode: commerce ? 'sandbox' : 'preview-unconfigured' })); return;
       }
       const file = files.get(address.pathname);
       if (req.method === 'GET' && file) {
@@ -91,12 +101,33 @@ export function createBroadcastDemo(env = process.env) {
   });
   server.requestTimeout = 30_000;
   server.headersTimeout = 15_000;
-  return { server, port, publicOrigin, bindHost };
+  return { server, port, publicOrigin, bindHost, supervisor };
+}
+
+/** Opt-in: ODDBOUT_BROADCAST_AUTO_PRODUCER=1 runs the AI producer for every started session. It then
+ * requires the same explicit model and key as the CLI producer, and refuses to start without them.
+ * @param {NodeJS.ProcessEnv} env
+ * @param {{commerce:{service:any,publicOrigin:string},issued:ReturnType<typeof createIssuedProducerGrants>,mcp:(request:Request)=>Promise<Response>}} parts */
+export function autoProducerFromEnvironment(env, { commerce, issued, mcp }) {
+  if (env.ODDBOUT_BROADCAST_AUTO_PRODUCER === undefined || env.ODDBOUT_BROADCAST_AUTO_PRODUCER === '0') return null;
+  if (env.ODDBOUT_BROADCAST_AUTO_PRODUCER !== '1') throw new Error('invalid-auto-producer-setting');
+  const model = env.ODDBOUT_BROADCAST_MODEL, apiKey = env.OPENAI_API_KEY;
+  if (!model || !apiKey) throw new Error('auto-producer-model-required');
+  /** @param {string} name @param {number} fallback */
+  const integer = (name, fallback) => env[name] === undefined ? fallback : Number(env[name]);
+  return createProducerSupervisor({ grants: issued, service: commerce.service, model,
+    modelCall: createProducerModel({ model, apiKey, maxOutputTokens: integer('ODDBOUT_BROADCAST_MAX_OUTPUT_TOKENS', 600) }),
+    // MCP over an in-process transport: the same handler, grant and scope checks as any producer, without a network hop.
+    mcpUrl: `${commerce.publicOrigin}/mcp`, mcpFetch: (input, init) => mcp(new Request(input, init)),
+    stateDir: env.ODDBOUT_BROADCAST_PRODUCER_STATE_DIR ?? '.oddbout-broadcast/producers',
+    maxModelCalls: integer('ODDBOUT_BROADCAST_MAX_MODEL_CALLS', 24), maxActive: integer('ODDBOUT_BROADCAST_AUTO_PRODUCER_MAX_ACTIVE', 3),
+    dailyModelCalls: integer('ODDBOUT_BROADCAST_AUTO_PRODUCER_DAILY_CALLS', 200) });
 }
 
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
-  const { server, port, publicOrigin, bindHost } = createBroadcastDemo();
+  const { server, port, publicOrigin, bindHost, supervisor } = createBroadcastDemo();
   server.listen(port, bindHost, () => console.log(`ODDBOUT Sandbox console: ${publicOrigin}/broadcast/`));
-  const stop = () => { server.close(); server.closeIdleConnections(); };
+  if (supervisor) console.log(`AI producers resumed: ${await supervisor.resume()}`);
+  const stop = () => { server.close(); server.closeIdleConnections(); void supervisor?.close(); };
   process.once('SIGINT', stop); process.once('SIGTERM', stop);
 }

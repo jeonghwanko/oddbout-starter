@@ -1,6 +1,6 @@
 // @ts-check
 import { McpServer } from '@modelcontextprotocol/server';
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { createCommerceHandler } from '../../api/commerce/handler.mjs';
 import { Problem, UUID } from '../../api/http.mjs';
@@ -41,12 +41,33 @@ async function readProducerBody(request, expiry, now) {
   }
 }
 /** @typedef {{owner:string,broadcastId:string,token:string,expiresAt:string}} ProducerCredential */
+/** @typedef {{owner:string,broadcastId:string,digest:Buffer,expiresAt:number}} ProducerGrant */
+/** @typedef {{find:(digest:Buffer)=>ProducerGrant|undefined}} IssuedProducerGrants */
+/** Grants the demo server issues to its own producer supervisor. A token exists only in this
+ * process: it is handed to the in-process MCP client and never logged, stored or returned over HTTP.
+ * The same session checks as configured credentials apply when it is used. */
+export function createIssuedProducerGrants() {
+  /** @type {Map<string,ProducerGrant>} */ const byDigest = new Map();
+  return {
+    /** @param {string} owner @param {string} broadcastId @param {number} expiresAt */
+    issue(owner, broadcastId, expiresAt) {
+      if (!UUID.test(owner) || !UUID.test(broadcastId) || !Number.isFinite(expiresAt)) throw new Error('invalid-producer-credentials');
+      const token = `obp_${randomBytes(32).toString('base64url')}`;
+      const digest = createHash('sha256').update(token).digest(), key = digest.toString('hex');
+      byDigest.set(key, { owner: owner.toLowerCase(), broadcastId: broadcastId.toLowerCase(), digest, expiresAt });
+      return { token, revoke: () => { byDigest.delete(key); } };
+    },
+    /** @param {Buffer} digest */
+    find: digest => byDigest.get(digest.toString('hex')),
+    get size() { return byDigest.size; },
+  };
+}
 /** Isolated producer MCP. Server-provisioned opaque credentials are scoped to a
  * single already-approved session, and cannot authenticate human REST endpoints.
  * No user JWT, production connector grant, or request-supplied owner is accepted.
- * @param {{db?:any,commerce:{service:import('../../api/commerce/handler.mjs').Service,publicOrigin:string},producers?:readonly ProducerCredential[],now?:()=>number}} options
+ * @param {{db?:any,commerce:{service:import('../../api/commerce/handler.mjs').Service,publicOrigin:string},producers?:readonly ProducerCredential[],issued?:IssuedProducerGrants,now?:()=>number}} options
  * @returns {(request:Request)=>Promise<Response>} */
-export function createCommerceMcpHandler({ commerce, producers = [], now = Date.now }) {
+export function createCommerceMcpHandler({ commerce, producers = [], issued, now = Date.now }) {
   const origin = new URL(commerce.publicOrigin);
   if (origin.origin !== commerce.publicOrigin || !(origin.protocol === 'https:' || (origin.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname)))) throw new Error('invalid-commerce-mcp-origin');
   const resource = `${origin.origin}/mcp`;
@@ -64,7 +85,7 @@ export function createCommerceMcpHandler({ commerce, producers = [], now = Date.
   });
   const serve = mcpServing(65536);
   const clock = () => { const value = now(); if (!Number.isFinite(value)) throw new Problem(503, 'producer-clock-unavailable'); return value; };
-  /** @param {typeof grants[number]} grant */
+  /** @param {ProducerGrant} grant */
   async function sessionOf(grant) {
     if (grant.expiresAt <= clock()) throw new Problem(401, 'producer-credential-expired');
     const report = await commerce.service.report(grant.owner, grant.broadcastId);
@@ -90,6 +111,7 @@ export function createCommerceMcpHandler({ commerce, producers = [], now = Date.
     if (token) {
       const digest = createHash('sha256').update(token).digest();
       for (const candidate of grants) if (timingSafeEqual(candidate.digest, digest)) grant = candidate;
+      grant ??= issued?.find(digest);
     }
     const challenge = { 'www-authenticate': `Bearer resource_metadata="${resource}/.well-known/oauth-protected-resource"` };
     if (!grant) return json({ error: 'invalid_token', code: 'producer-credential-required' }, 401, challenge);

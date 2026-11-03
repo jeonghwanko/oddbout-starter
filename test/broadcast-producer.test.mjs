@@ -14,7 +14,8 @@ const json=(value,status=200)=>new Response(JSON.stringify(value),{status,header
 /** Only the external MCP/Responses HTTP boundaries are simulated. Production SDK,
  * response parsing, scope/budget checks, decisions and persistence orchestration execute. */
 async function fixture(t,{decision=hostDecision(),maxModelCalls=24}={}) {
-  const endsAt=new Date(Date.now()+3_600_000).toISOString();
+  // Mid-way through a five-minute bucket: minutesRemaining must not tick down between two quick steps.
+  const endsAt=new Date(Date.now()+3_600_000+150_000).toISOString();
   const report={broadcast:{id:broadcastId,status:'running',channelId:'channel',hostId:'current-pc',endsAt,
     reservedCredits:100,allocatedCredits:0,spentCredits:0},approval:{fighterIds:[...fighters],allowedTools:['host_cup'],priceVersion:'prices-v1',
     channelId:'channel',hostId:'current-pc',endsAt,maxCredits:100},jobs:[]};

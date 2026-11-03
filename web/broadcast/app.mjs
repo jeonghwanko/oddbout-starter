@@ -2,7 +2,14 @@ import { createOperationJournal, isConfirmedRejection } from './operations.mjs';
 const $ = id => document.getElementById(id);
 let client, session, catalog, journal, config;
 let walletSpendingBlocked = false;
-let refreshRevision = 0;
+let refreshRevision = 0, pollTimer;
+const FIGHTER_NAMES = { kuma: 'Kuma', yume: 'Yume', bravow: 'Bravow', beotim: 'Beotim' };
+// The AI producer card is data-driven from the owner-only producer route. Every string it shows may
+// come from a model, so it is only ever written with textContent.
+const PRODUCER_POLL_MS = 10_000;
+const PRODUCER_STATES = { running: 'Running', waiting: 'Waiting for a slot', finished: 'Finished', none: 'Not started' };
+const PRODUCER_ACTIONS = { host_cup: 'Queued a cup', wait: 'Waited', stop: 'Stopped the show' };
+const PRODUCER_OUTCOMES = { succeeded: 'Cup succeeded', failed: 'Cup failed' };
 const busyActions = new Set();
 const budgetErrors = {
   'invalid-channel': 'Use 1–64 letters, numbers, spaces, hyphens or underscores for the session name.',
@@ -79,14 +86,13 @@ function action(id, callback, event = 'click', exclusive = false) {
 const fighters = () => $('fighterIds').value.split(',').map(id => id.trim()).filter(Boolean);
 const renderHost = () => { $('hosts-readiness').textContent = $('hostId').value + ' · Check OBS on this host before starting.'; };
 function renderLineup() {
-  const names = { kuma: 'Kuma', yume: 'Yume', bravow: 'Bravow', beotim: 'Beotim' };
   $('fighter-lineup').replaceChildren(...fighters().map(id => {
     const chip = document.createElement('span');
-    if (Object.hasOwn(names, id)) {
+    if (Object.hasOwn(FIGHTER_NAMES, id)) {
       const image = document.createElement('img'); image.src = './assets/' + id + '.webp';
       image.alt = ''; image.width = 30; image.height = 30; chip.append(image);
     }
-    chip.append(document.createTextNode(Object.hasOwn(names, id) ? names[id] : id)); return chip;
+    chip.append(document.createTextNode(Object.hasOwn(FIGHTER_NAMES, id) ? FIGHTER_NAMES[id] : id)); return chip;
   }));
 }
 $('fighterIds').addEventListener('input', renderLineup);
@@ -102,8 +108,69 @@ function showCheckout(result) {
   $('payment-recovery').hidden = false;
   show('Open PayPal in the new tab, approve the order, then return here and verify payment.');
 }
+const plain = (value, max = 400) => typeof value === 'string' ? value.slice(0, max) : '';
+function clearProducer() {
+  clearTimeout(pollTimer);
+  $('producer-card').hidden = true;
+  for (const id of ['producer-model', 'producer-calls', 'producer-result']) $(id).textContent = '';
+  $('producer-result').hidden = true;
+  $('producer-decisions').replaceChildren();
+}
+function producerLine(tag, className, text) {
+  const node = document.createElement(tag); node.className = className; node.textContent = text; return node;
+}
+function producerDecision(item) {
+  const row = document.createElement('li'), head = document.createElement('div');
+  row.className = 'producer-decision'; head.className = 'producer-decision-head';
+  const action = plain(item?.action, 40);
+  head.append(producerLine('strong', 'producer-action', Object.hasOwn(PRODUCER_ACTIONS, action) ? PRODUCER_ACTIONS[action] : action || 'Decision'));
+  const outcome = plain(item?.outcome?.status, 40);
+  if (outcome) {
+    const badge = producerLine('span', 'producer-outcome', Object.hasOwn(PRODUCER_OUTCOMES, outcome) ? PRODUCER_OUTCOMES[outcome] : outcome);
+    if (Object.hasOwn(PRODUCER_OUTCOMES, outcome)) badge.dataset.outcome = outcome;
+    head.append(badge);
+  }
+  row.append(head);
+  const episode = plain(item?.episode, 120);
+  if (episode) row.append(producerLine('p', 'producer-episode', episode));
+  const ids = (Array.isArray(item?.fighterIds) ? item.fighterIds : []).filter(id => typeof id === 'string' && id).slice(0, 4);
+  if (ids.length) row.append(producerLine('p', 'producer-fighters', ids.map(id => Object.hasOwn(FIGHTER_NAMES, id) ? FIGHTER_NAMES[id] : id.slice(0, 64)).join(' · ')));
+  const reason = plain(item?.reason);
+  if (reason) row.append(producerLine('p', 'producer-reason', reason));
+  return row;
+}
+/** @param {any} data The producer route's data, `{ unavailable: true }` when it could not be read, or null to hide the card. */
+function renderProducer(data) {
+  if (!config?.autoProducer || !data) { clearProducer(); return; }
+  const badge = $('producer-state');
+  if (data.unavailable) {
+    clearProducer(); $('producer-card').hidden = false;
+    badge.dataset.state = 'unavailable'; badge.textContent = 'Status unavailable'; return;
+  }
+  const state = Object.hasOwn(PRODUCER_STATES, data.state) ? data.state : 'none';
+  badge.dataset.state = state; badge.textContent = PRODUCER_STATES[state];
+  $('producer-model').textContent = plain(data.model, 80);
+  const calls = Number.isSafeInteger(data.modelCalls) && Number.isSafeInteger(data.maxModelCalls);
+  $('producer-calls').textContent = calls ? 'Model calls ' + data.modelCalls + ' / ' + data.maxModelCalls : '';
+  const reason = state === 'finished' ? plain(data.result?.reason, 120).replaceAll('_', ' ') || plain(data.result?.status, 40) : '';
+  $('producer-result').textContent = reason ? 'Result: ' + reason : '';
+  $('producer-result').hidden = !reason;
+  $('producer-decisions').replaceChildren(...(Array.isArray(data.decisions) ? data.decisions.slice(-5).reverse().map(producerDecision) : []));
+  $('producer-card').hidden = false;
+}
+// A running producer changes on its own, so refresh the selected session while it is active.
+// This reuses refresh() and its revision guard; a new selection, account or refresh supersedes the timer.
+function schedulePoll(revision) {
+  clearTimeout(pollTimer);
+  pollTimer = setTimeout(() => {
+    if (revision !== refreshRevision || !session) return;
+    if (document.hidden) { schedulePoll(revision); return; }
+    refresh().catch(error => show(error.message));
+  }, PRODUCER_POLL_MS);
+}
 async function refresh() {
   const revision = ++refreshRevision, selected = $('broadcastId').value.trim();
+  clearTimeout(pollTimer);
   const wallet = await call('wallet');
   if (revision !== refreshRevision) return;
   walletSpendingBlocked = wallet.spendingBlocked === true;
@@ -116,13 +183,17 @@ async function refresh() {
   updateControls();
   const id = selected;
   if (id) {
-    const [report, jobs] = await Promise.all([call('broadcasts/' + encodeURIComponent(id) + '/report'), call('broadcasts/' + encodeURIComponent(id) + '/jobs')]);
+    const path = 'broadcasts/' + encodeURIComponent(id);
+    const [report, jobs, producer] = await Promise.all([call(path + '/report'), call(path + '/jobs'),
+      config?.autoProducer ? call(path + '/producer').catch(() => ({ unavailable: true })) : null]);
     if (revision !== refreshRevision || $('broadcastId').value.trim() !== id) return;
     $('report').textContent = JSON.stringify(report, null, 2);
+    renderProducer(producer);
+    if (['running', 'waiting'].includes(producer?.state)) schedulePoll(revision);
     $('active-jobs').replaceChildren(...jobs.map(job => {
       const row = document.createElement('p'); row.textContent = job.status + ' · ' + job.priceCredits + ' credits · ' + job.fighterIds.join(' / '); return row;
     }));
-  }
+  } else renderProducer(null);
 }
 action('google-signin', async () => {
   if (!client) throw new Error('Account connection is not configured on this development server.');
@@ -177,6 +248,7 @@ action('refresh', refresh);
 $('broadcastId').addEventListener('input', () => {
   refreshRevision++;
   $('active-jobs').replaceChildren(); $('report').textContent = 'Refresh to load the selected session.';
+  clearProducer();
 });
 action('stop', async () => { const result = await call('broadcasts/' + encodeURIComponent($('broadcastId').value.trim()) + '/stop', {}); show(result); await refresh(); });
 function authChanged(value) {
@@ -197,6 +269,7 @@ function authChanged(value) {
     show(value ? 'Account connected. Loading your current balance.' : 'Signed out.');
     for (const id of ['balance', 'available', 'reserved']) $(id).textContent = '—';
     $('active-jobs').replaceChildren(); $('report').textContent = 'No report loaded.';
+    clearProducer();
     $('approvalId').value = journal?.selected('approvalId') ?? '';
     $('broadcastId').value = journal?.selected('broadcastId') ?? '';
     $('payment-recovery').hidden = true;

@@ -89,7 +89,12 @@ renderer/validator and saves JSON under `output/`. It does not claim a worker jo
 charge a wallet, call a model or start OBS/Twitch. Inspect incomplete records before
 another run. Completion proves rendering only.
 
-After the user approves a session in the console, provision its matching expiring
+To run the producer automatically for every started session, set
+`ODDBOUT_BROADCAST_AUTO_PRODUCER=1`, `ODDBOUT_BROADCAST_MODEL` and `OPENAI_API_KEY` on the API
+service. Its daily and concurrent limits, the state directory and restart behavior are in
+[BROADCAST-SANDBOX](BROADCAST-SANDBOX.md#자동-실행-데모-서버). Put
+`ODDBOUT_BROADCAST_PRODUCER_STATE_DIR` on a persistent disk so producers resume after a restart.
+Otherwise, after the user approves a session in the console, provision its matching expiring
 `obp_` producer grant. Select model, API account and spending limit before calling
 the model. Invocation/token limits are not a dollar billing cap; API cost is
 separate from Sandbox credits. Preserve checkpoint files and request keys.

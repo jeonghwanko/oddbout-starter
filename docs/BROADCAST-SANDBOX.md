@@ -46,7 +46,10 @@ DB와 Sandbox 설정 없이 실행하면 `preview-unconfigured` 모드다. 이 �
 | `PORT` | `ODDBOUT_BROADCAST_PORT`가 없을 때 쓰는 호스팅 플랫폼 포트. |
 | `ODDBOUT_BROADCAST_BIND_HOST` | 기본 `127.0.0.1`. HTTPS 프록시 뒤의 격리 데모에서만 `0.0.0.0`을 명시한다. HTTPS origin이 없으면 외부 bind를 거부한다. |
 | `ODDBOUT_BROADCAST_WORKERS_JSON` | worker API가 허용할 호스트별 worker token 설정 JSON. 비밀 토큰을 공개 문서·브라우저·저장소에 넣지 않는다. |
-| `ODDBOUT_BROADCAST_PRODUCERS_JSON` | 이미 승인된 세션 하나에 묶는 local producer grant 목록. 비어 있으면 `/mcp` producer 인증은 fail-closed다. 형식은 아래 설명을 참고한다. |
+| `ODDBOUT_BROADCAST_PRODUCERS_JSON` | 이미 승인된 세션 하나에 묶는 local producer grant 목록. 비어 있으면 `/mcp` producer 인증은 서버가 자동 producer에 발급한 grant만 받는다. 형식은 아래 설명을 참고한다. |
+| `ODDBOUT_BROADCAST_AUTO_PRODUCER` | `1`이면 시작된 모든 세션에 AI producer를 서버 안에서 자동 실행한다. 기본값은 끔(`0`)이다. `1`인데 `ODDBOUT_BROADCAST_MODEL`·`OPENAI_API_KEY`가 없으면 서버 시작을 거부한다. 5절을 참고한다. |
+| `ODDBOUT_BROADCAST_AUTO_PRODUCER_MAX_ACTIVE`, `ODDBOUT_BROADCAST_AUTO_PRODUCER_DAILY_CALLS` | 자동 producer의 동시 실행 상한(기본 3)과 UTC 하루 모델 호출 상한(기본 200). |
+| `ODDBOUT_BROADCAST_PRODUCER_STATE_DIR` | 자동 producer checkpoint 디렉터리. 기본 `.oddbout-broadcast/producers`. 재시작 후 재개하려면 영속 디스크에 둔다. |
 
 `.env.example`은 비밀값이 없는 템플릿이다. `.env`가 아직 없을 때만 복사하고 기존 파일은 보존한다. 실제 값을 문서나 소스에 붙이지 말고 개발용 `.env` 또는 프로세스 환경에만 설정한다. `.env`는 Git에서 제외된다. npm 별칭은 `.env`를 자동 로드하지 않으므로 파일을 쓸 때는 Node `--env-file`로 명시한다.
 
@@ -133,6 +136,18 @@ producer는 승인된 broadcast ID에 대해서만 실행한다. 서버가 부�
 ```powershell
 node --env-file=.env scripts/broadcast-producer.mjs --broadcast <approved-broadcast-uuid> --once
 ```
+
+### 자동 실행 (데모 서버)
+
+`ODDBOUT_BROADCAST_AUTO_PRODUCER=1`이면 데모 서버가 세션 시작(`POST /commerce/broadcasts`) 직후 그 세션의 producer를 자동으로 실행한다. 운영자가 grant를 provision하거나 CLI를 실행하지 않아도 된다. 시작 응답은 producer를 기다리지 않는다.
+
+- 서버는 세션마다 새 `obp_` grant를 프로세스 메모리에서 발급한다. 이 grant는 owner·broadcast·세션 `endsAt`에 묶인다. 토큰은 로그·파일·HTTP 응답에 나가지 않고, producer가 끝나면 폐기한다. 설정 grant(`ODDBOUT_BROADCAST_PRODUCERS_JSON`)와 같은 세션·도구 검사를 받는다.
+- producer는 같은 `/mcp` 핸들러에 MCP로 요청한다. 네트워크 대신 프로세스 내부 transport를 쓰므로 공개 HTTPS 주소로 되돌아 나가지 않는다.
+- 동시에 최대 `ODDBOUT_BROADCAST_AUTO_PRODUCER_MAX_ACTIVE`개를 실행하고 계정당 하나만 실행한다. 나머지는 도착 순서대로 기다린다.
+- UTC 하루 모델 호출이 `ODDBOUT_BROADCAST_AUTO_PRODUCER_DAILY_CALLS`에 도달하면 요청을 보내기 전에 거절한다. 그 producer는 결과 불명확으로 멈추고, 기록에는 `producer_daily_model_limit`가 남는다. 세션별 `ODDBOUT_BROADCAST_MAX_MODEL_CALLS`도 그대로 적용된다.
+- checkpoint는 `ODDBOUT_BROADCAST_PRODUCER_STATE_DIR/producer-<broadcastId>.json`에 저장한다. 서버가 다시 시작하면 끝나지 않은 producer를 이어서 실행한다. 끝난 producer(`stopped`/`unknown` 결과가 기록된 것)는 다시 실행하지 않는다. 재시작으로 모델 호출을 새로 사지 않게 하기 위해서다. 디스크가 휘발성이면(예: Render Free) 재시작 때 checkpoint가 사라진다. 그러면 원장의 작업 상태를 근거로 새 producer가 시작되고, 세션별 호출 상한도 새로 센다.
+- 콘솔은 `GET /commerce/broadcasts/<id>/producer`로 owner 본인 세션의 상태, 모델 호출 수, 최근 결정 5개를 본다. 모델이 쓴 문장은 데이터로 취급한다. `/broadcast/config`의 `autoProducer`가 자동 실행 여부를 알린다.
+- 사용자 `Stop`이나 예산·시간 소진은 기존 규칙대로 producer를 멈춘다. `unknown` 작업은 자동으로 풀지 않으며 운영자 해제 후에도 그 producer는 다시 시작하지 않는다.
 
 `--once`를 빼면 상태가 바뀔 때까지 polling한다. 중지하려면 `Ctrl+C`를 누른다. OpenAI API 호출 비용은 PayPal Sandbox 크레딧·방송 원장에 포함되지 않으며 별도로 청구될 수 있다. 알 수 없는 모델 응답을 성공이나 작업 완료로 간주하지 않는다.
 
