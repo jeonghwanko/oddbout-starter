@@ -49,6 +49,7 @@ function updateControls() {
       || (['topup-form', 'verify-payment'].includes(id) && !catalog?.paypalConfigured);
     for (const button of [...$(id).querySelectorAll('button'), ...($(id).tagName === 'BUTTON' ? [$(id)] : [])]) button.disabled = disabled;
   }
+  updateConcierge();
 }
 async function mutate(saved, name, input, path, extra = {}) {
   const op = saved.begin(name, input);
@@ -96,15 +97,19 @@ function renderLineup() {
   }));
 }
 $('fighterIds').addEventListener('input', renderLineup);
+const PAYPAL_SANDBOX_ORIGIN = 'https://www.sandbox.paypal.com';
+/** The normalized PayPal Sandbox approval address, or null for anything else. */
+function sandboxApprovalUrl(value) {
+  try { const url = new URL(value); return url.origin === PAYPAL_SANDBOX_ORIGIN ? url.href : null; }
+  catch { return null; }
+}
 function showCheckout(result) {
+  const href = result.approvalUrl ? sandboxApprovalUrl(result.approvalUrl) : null;
+  if (result.approvalUrl && !href) throw new Error('Invalid approval address.');
   $('payment-intent').value = result.intentId;
   const link = $('paypal-approval');
-  link.hidden = !result.approvalUrl;
-  if (result.approvalUrl) {
-    const url = new URL(result.approvalUrl);
-    if (url.origin !== 'https://www.sandbox.paypal.com') throw new Error('Invalid approval address.');
-    link.href = url.href;
-  }
+  link.hidden = !href;
+  if (href) link.href = href;
   $('payment-recovery').hidden = false;
   show('Open PayPal in the new tab, approve the order, then return here and verify payment.');
 }
@@ -116,27 +121,27 @@ function clearProducer() {
   $('producer-result').hidden = true;
   $('producer-decisions').replaceChildren();
 }
-function producerLine(tag, className, text) {
+function textElement(tag, className, text = '') {
   const node = document.createElement(tag); node.className = className; node.textContent = text; return node;
 }
 function producerDecision(item) {
   const row = document.createElement('li'), head = document.createElement('div');
   row.className = 'producer-decision'; head.className = 'producer-decision-head';
   const action = plain(item?.action, 40);
-  head.append(producerLine('strong', 'producer-action', Object.hasOwn(PRODUCER_ACTIONS, action) ? PRODUCER_ACTIONS[action] : action || 'Decision'));
+  head.append(textElement('strong', 'producer-action', Object.hasOwn(PRODUCER_ACTIONS, action) ? PRODUCER_ACTIONS[action] : action || 'Decision'));
   const outcome = plain(item?.outcome?.status, 40);
   if (outcome) {
-    const badge = producerLine('span', 'producer-outcome', Object.hasOwn(PRODUCER_OUTCOMES, outcome) ? PRODUCER_OUTCOMES[outcome] : outcome);
+    const badge = textElement('span', 'producer-outcome', Object.hasOwn(PRODUCER_OUTCOMES, outcome) ? PRODUCER_OUTCOMES[outcome] : outcome);
     if (Object.hasOwn(PRODUCER_OUTCOMES, outcome)) badge.dataset.outcome = outcome;
     head.append(badge);
   }
   row.append(head);
   const episode = plain(item?.episode, 120);
-  if (episode) row.append(producerLine('p', 'producer-episode', episode));
+  if (episode) row.append(textElement('p', 'producer-episode', episode));
   const ids = (Array.isArray(item?.fighterIds) ? item.fighterIds : []).filter(id => typeof id === 'string' && id).slice(0, 4);
-  if (ids.length) row.append(producerLine('p', 'producer-fighters', ids.map(id => Object.hasOwn(FIGHTER_NAMES, id) ? FIGHTER_NAMES[id] : id.slice(0, 64)).join(' · ')));
+  if (ids.length) row.append(textElement('p', 'producer-fighters', ids.map(id => Object.hasOwn(FIGHTER_NAMES, id) ? FIGHTER_NAMES[id] : id.slice(0, 64)).join(' · ')));
   const reason = plain(item?.reason);
-  if (reason) row.append(producerLine('p', 'producer-reason', reason));
+  if (reason) row.append(textElement('p', 'producer-reason', reason));
   return row;
 }
 /** @param {any} data The producer route's data, `{ unavailable: true }` when it could not be read, or null to hide the card. */
@@ -251,9 +256,183 @@ $('broadcastId').addEventListener('input', () => {
   clearProducer();
 });
 action('stop', async () => { const result = await call('broadcasts/' + encodeURIComponent($('broadcastId').value.trim()) + '/stop', {}); show(result); await refresh(); });
+// The AI concierge is a chat with the commerce service's agent. Its reply text is model output and is
+// untrusted: it is only written with textContent and a URL inside it is never made a link. Controls come
+// only from the server's `actions` list, and the PayPal link only after its origin is checked. The agent
+// can quote a plan and start a Sandbox top-up; the person still approves every budget with the form below.
+const CONCIERGE_MAX_CHARS = 1000;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const CONCIERGE_ERRORS = {
+  'concierge-busy': 'The concierge is still answering your last message. Try again in a moment.',
+  'concierge-conversation-full': 'This conversation reached its length limit. Your next message starts a new one.',
+  'concierge-daily-limit': 'The concierge reached its daily limit on this demo. Please try again tomorrow.',
+  'concierge-model-unavailable': 'The concierge is unavailable right now. Please try again in a moment.',
+  'invalid-concierge-message': 'That message could not be sent. Use up to 1,000 characters of plain text.',
+  'authentication-required': 'Sign in again to keep chatting.',
+};
+const CONCIERGE_FALLBACK_ERROR = 'The concierge could not answer. Please try again.';
+const CONCIERGE_TOOL_NOTES = { 'paypal-not-configured': 'PayPal Sandbox is not configured on this server, so a checkout could not be created.' };
+let conciergeId = '', conciergeEpoch = 0, conciergeBusy = false;
+const conciergeNote = (text, error = false) => textElement('p', 'chat-note' + (error ? ' is-error' : ''), text);
+function conciergeCount() { $('concierge-count').textContent = $('concierge-input').value.length + ' / ' + CONCIERGE_MAX_CHARS; }
+/** Append to the transcript. A reply scrolls to its own top so its first line is never cut off. */
+function addChat(node, scrollToTop = false) {
+  const log = $('concierge-log');
+  log.append(node);
+  if (scrollToTop) log.scrollTop += node.getBoundingClientRect().top - log.getBoundingClientRect().top;
+  else log.scrollTop = log.scrollHeight;
+  return node;
+}
+function chatMessage(role, text) {
+  const bubble = textElement('div', 'chat-message chat-' + role);
+  bubble.append(textElement('p', 'chat-text', text));
+  return bubble;
+}
+function iconNode(id) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'), use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  svg.setAttribute('class', 'icon'); svg.setAttribute('aria-hidden', 'true'); use.setAttribute('href', '#' + id); svg.append(use);
+  return svg;
+}
+/** Forget the conversation: on sign-out, on an account change, or when the person starts a new chat. */
+function resetConcierge() {
+  conciergeEpoch++; conciergeId = ''; conciergeBusy = false;
+  $('concierge-log').replaceChildren(); $('concierge-log').removeAttribute('aria-busy');
+  $('concierge-input').value = ''; conciergeCount();
+}
+function updateConcierge() {
+  const available = Boolean(config?.concierge && config.commerceEnabled && session);
+  $('concierge').hidden = !available;
+  $('concierge-send').disabled = !available || conciergeBusy;
+  $('concierge-new').disabled = !available || conciergeBusy || (!conciergeId && !$('concierge-log').hasChildNodes());
+}
+function checkoutAction(item) {
+  const href = typeof item.approvalUrl === 'string' ? sandboxApprovalUrl(item.approvalUrl) : null;
+  const intentId = typeof item.intentId === 'string' && UUID_PATTERN.test(item.intentId) ? item.intentId : '';
+  const card = textElement('div', 'chat-action');
+  if (!href || !intentId) { card.append(textElement('p', 'chat-action-note', 'The PayPal link was not valid, so it was not shown. Ask for a new checkout.')); return card; }
+  const product = catalog?.products?.find(entry => entry.id === item.productId);
+  card.append(textElement('p', 'chat-action-title', 'PayPal Sandbox checkout' + (product ? ' · ' + product.name : '')));
+  const link = textElement('a', 'button button-paypal', 'Approve in PayPal');
+  link.href = href; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.append(iconNode('i-external'));
+  card.append(link, textElement('p', 'chat-action-note', 'After you approve on PayPal, tell me here or choose Verify payment under your credits. No real money moves.'));
+  try { showCheckout({ intentId, approvalUrl: href }); } catch (error) { show(error.message); }
+  return card;
+}
+function topupAction(item) {
+  const credited = item.status === 'credited', status = plain(item.status, 40).replaceAll('_', ' ');
+  if (credited) {
+    if (typeof item.intentId === 'string' && $('payment-intent').value === item.intentId) $('paypal-approval').hidden = true;
+    refresh().catch(error => show(error.message));
+  }
+  const card = textElement('div', 'chat-action');
+  card.append(textElement('p', 'chat-action-note' + (credited ? ' is-ok' : ''),
+    credited ? 'Top-up credited. Your credits are updated.' : 'Top-up not credited yet' + (status ? ' (' + status + ')' : '') + '.'));
+  return card;
+}
+/** A quoted plan from the server, or null when any field is not what the budget form accepts. */
+function conciergePlan(item) {
+  const whole = value => Number.isSafeInteger(value) && value > 0;
+  const text = (value, max) => typeof value === 'string' && value.length > 0 && value.length <= max;
+  const ids = item.fighterIds;
+  if (!text(item.hostId, 128) || !text(item.channelId, 64) || ![item.durationMinutes, item.maxCredits, item.cupCredits, item.maxCups].every(whole)
+    || !Array.isArray(ids) || ids.length < 4 || ids.length > 9 || !ids.every(id => text(id, 64) && !id.includes(','))) return null;
+  return { hostId: item.hostId, channelId: item.channelId, durationMinutes: item.durationMinutes, maxCredits: item.maxCredits,
+    cupCredits: item.cupCredits, maxCups: item.maxCups, fighterIds: [...ids] };
+}
+function durationLabel(minutes) {
+  return [Math.floor(minutes / 60) && Math.floor(minutes / 60) + ' h', minutes % 60 && (minutes % 60) + ' min'].filter(Boolean).join(' ');
+}
+/** The plan's time limit in hours, rounded up to what the time limit input accepts. */
+function planHours(minutes) {
+  const input = $('durationHours'), min = Number(input.min) || 1, max = Number(input.max) || Infinity, step = Number(input.step) > 0 ? Number(input.step) : 1;
+  return Math.min(max, Math.max(min, min + Math.ceil((minutes / 60 - min) / step - 1e-9) * step));
+}
+const fighterName = id => Object.hasOwn(FIGHTER_NAMES, id) ? FIGHTER_NAMES[id] : id;
+/** Fill the budget form with a plan. This never submits it: the person reviews and approves with the form's own button. */
+function applyPlan(plan) {
+  try { if (journal?.get('approval')) return 'A budget approval is still pending. Review budget to recover it before applying a new plan.'; }
+  catch (error) { return error.message; }
+  if (busyActions.has('budget-form')) return 'Wait for the current budget review to finish, then apply the plan.';
+  if (![...$('hostId').options].some(option => option.value === plan.hostId)) return 'This console has no host called ' + plan.hostId + ', so the plan was not applied.';
+  const hours = planHours(plan.durationMinutes);
+  $('hostId').value = plan.hostId; $('channelId').value = plan.channelId; $('maxCredits').value = String(plan.maxCredits);
+  $('fighterIds').value = plan.fighterIds.join(','); $('durationHours').value = String(hours);
+  renderHost(); renderLineup();
+  const rounded = hours * 60 === plan.durationMinutes ? '' : ' The time limit was rounded up to ' + hours + (hours === 1 ? ' hour.' : ' hours.');
+  budgetFeedback('Plan filled in.' + rounded + ' Review the budget, then approve it here. Nothing is approved yet.');
+  $('setup').scrollIntoView();
+  $('budget-form').querySelector('button[type="submit"]').focus({ preventScroll: true });
+  return 'Plan filled into Set up your show.' + rounded + ' Nothing is approved yet.';
+}
+function planAction(item) {
+  const plan = conciergePlan(item), card = textElement('div', 'chat-action chat-plan');
+  if (!plan) { card.append(textElement('p', 'chat-action-note', 'The quoted plan could not be shown. Ask again.')); return card; }
+  const grid = textElement('dl', 'chat-plan-grid');
+  for (const [label, value] of [['Host', plan.hostId], ['Session', plan.channelId], ['Time limit', durationLabel(plan.durationMinutes)],
+    ['Credit limit', plan.maxCredits.toLocaleString() + ' credits'], ['Cups', 'Up to ' + plan.maxCups.toLocaleString() + ' · ' + plan.cupCredits.toLocaleString() + ' credits each'],
+    ['Fighters', plan.fighterIds.map(fighterName).join(' · ')]]) {
+    const row = document.createElement('div');
+    row.append(textElement('dt', 'chat-plan-label', label), textElement('dd', 'chat-plan-value', value)); grid.append(row);
+  }
+  const apply = textElement('button', 'button button-primary', 'Use this plan'), result = textElement('p', 'chat-action-note');
+  apply.type = 'button'; result.setAttribute('role', 'status');
+  apply.addEventListener('click', () => { result.textContent = applyPlan(plan); });
+  card.append(textElement('p', 'chat-action-title', 'Quoted plan · nothing approved'), grid, apply, result);
+  return card;
+}
+function conciergeActions(actions) {
+  const builders = { checkout: checkoutAction, topup: topupAction, plan: planAction };
+  return actions.slice(0, 6).filter(item => item && typeof item.type === 'string' && Object.hasOwn(builders, item.type)).map(item => builders[item.type](item));
+}
+function conciergeError(error) {
+  return typeof error?.code === 'string' && Object.hasOwn(CONCIERGE_ERRORS, error.code) ? CONCIERGE_ERRORS[error.code] : CONCIERGE_FALLBACK_ERROR;
+}
+async function sendConcierge(message) {
+  const epoch = conciergeEpoch;
+  conciergeBusy = true; updateConcierge();
+  $('concierge-input').value = ''; conciergeCount();
+  addChat(chatMessage('person', message));
+  const thinking = addChat(chatMessage('agent', 'Thinking…'));
+  thinking.classList.add('is-thinking'); $('concierge-log').setAttribute('aria-busy', 'true');
+  try {
+    const data = await call('concierge', conciergeId ? { conversationId: conciergeId, message } : { message });
+    if (epoch !== conciergeEpoch) return;
+    if (typeof data?.conversationId === 'string' && UUID_PATTERN.test(data.conversationId)) conciergeId = data.conversationId;
+    thinking.remove();
+    if (data.restarted === true) addChat(conciergeNote('Your earlier conversation expired, so this is a new one.'));
+    const bubble = chatMessage('agent', typeof data.reply === 'string' && data.reply ? data.reply : '…');
+    const notes = new Set((Array.isArray(data.toolCalls) ? data.toolCalls : []).map(entry => entry?.ok === false ? entry.code : '')
+      .filter(code => typeof code === 'string' && Object.hasOwn(CONCIERGE_TOOL_NOTES, code)));
+    bubble.append(...[...notes].map(code => textElement('p', 'chat-action-note', CONCIERGE_TOOL_NOTES[code])),
+      ...conciergeActions(Array.isArray(data.actions) ? data.actions : []));
+    addChat(bubble, true);
+  } catch (error) {
+    if (epoch !== conciergeEpoch) return;
+    thinking.remove();
+    addChat(conciergeNote(conciergeError(error), true));
+    if (error?.code === 'concierge-conversation-full') conciergeId = '';
+    // Keep what the person wrote so a failed send costs no retyping.
+    if (!$('concierge-input').value) { $('concierge-input').value = message; conciergeCount(); }
+  } finally {
+    if (epoch === conciergeEpoch) { conciergeBusy = false; $('concierge-log').removeAttribute('aria-busy'); updateConcierge(); }
+  }
+}
+$('concierge-form').addEventListener('submit', event => {
+  event.preventDefault();
+  const message = $('concierge-input').value.trim();
+  if (message && !conciergeBusy && session && config?.concierge) sendConcierge(message);
+});
+$('concierge-input').addEventListener('input', conciergeCount);
+$('concierge-input').addEventListener('keydown', event => {
+  if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && event.keyCode !== 229) { event.preventDefault(); $('concierge-form').requestSubmit(); }
+});
+for (const chip of document.querySelectorAll('.chat-chip')) chip.addEventListener('click', () => {
+  $('concierge-input').value = chip.textContent.trim(); conciergeCount(); $('concierge-input').focus();
+});
+$('concierge-new').addEventListener('click', () => { resetConcierge(); updateConcierge(); $('concierge-input').focus(); });
 function authChanged(value) {
   const previousOwner = session?.user.id;
-  if (previousOwner !== value?.user.id) { refreshRevision++; walletSpendingBlocked = false; $('wallet-status').textContent = ''; budgetFeedback(''); }
+  if (previousOwner !== value?.user.id) { refreshRevision++; walletSpendingBlocked = false; $('wallet-status').textContent = ''; budgetFeedback(''); resetConcierge(); }
   session = value; $('signout').hidden = !value;
   $('google-signin').hidden = Boolean(value);
   $('account-identity').hidden = !value;

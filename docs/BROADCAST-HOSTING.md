@@ -94,6 +94,9 @@ To run the producer automatically for every started session, set
 service. Its daily and concurrent limits, the state directory and restart behavior are in
 [BROADCAST-SANDBOX](BROADCAST-SANDBOX.md#자동-실행-데모-서버). Put
 `ODDBOUT_BROADCAST_PRODUCER_STATE_DIR` on a persistent disk so producers resume after a restart.
+To offer the console's AI concierge (balance, prices, quotes and PayPal Sandbox top-up, no approval
+or start), also set `ODDBOUT_BROADCAST_CONCIERGE=1`; see
+[BROADCAST-SANDBOX](BROADCAST-SANDBOX.md#5-1-ai-컨시어지-데모-서버).
 Otherwise, after the user approves a session in the console, provision its matching expiring
 `obp_` producer grant. Select model, API account and spending limit before calling
 the model. Invocation/token limits are not a dollar billing cap; API cost is

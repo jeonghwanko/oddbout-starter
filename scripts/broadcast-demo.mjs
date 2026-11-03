@@ -12,6 +12,7 @@ import { createCommerceMcpHandler, createIssuedProducerGrants } from '../mcp/clo
 import { createBroadcastWorkerHandler } from '../broadcast/worker-api.mjs';
 import { createProducerModel } from '../broadcast/producer.mjs';
 import { createProducerSupervisor } from '../broadcast/supervisor.mjs';
+import { createConcierge, createConciergeModel } from '../broadcast/concierge.mjs';
 import { isPublishableKey } from './login.mjs';
 
 const root = new URL('../', import.meta.url);
@@ -39,12 +40,17 @@ export function createBroadcastDemo(env = process.env) {
   const issued = createIssuedProducerGrants();
   const mcp = db && commerce ? createCommerceMcpHandler({ db, commerce, producers, issued }) : null;
   const supervisor = mcp && commerce ? autoProducerFromEnvironment(env, { commerce, issued, mcp }) : null;
-  // A started session gets its producer right away; the start response never waits for it.
-  const service = commerce && supervisor ? { ...commerce.service,
-    /** @param {string} owner @param {unknown} input */
-    async start(owner, input) { const broadcast = await commerce.service.start(owner, input); supervisor.ensure(owner, broadcast.id); return broadcast; },
-    /** @param {string} owner @param {string} id */
-    producer: (owner, id) => supervisor.status(owner, id) } : commerce?.service;
+  const concierge = commerce ? conciergeFromEnvironment(env, commerce.service) : null;
+  const service = commerce && (supervisor || concierge) ? { ...commerce.service,
+    // A started session gets its producer right away; the start response never waits for it.
+    ...(supervisor ? {
+      /** @param {string} owner @param {unknown} input */
+      async start(owner, input) { const broadcast = await commerce.service.start(owner, input); supervisor.ensure(owner, broadcast.id); return broadcast; },
+      /** @param {string} owner @param {string} id */
+      producer: (owner, id) => supervisor.status(owner, id) } : {}),
+    ...(concierge ? {
+      /** @param {string} owner @param {unknown} input */
+      concierge: (owner, input) => concierge.turn(owner, input) } : {}) } : commerce?.service;
   const api = createCommerceHandler({ service: service ?? previewService, publicOrigin, authenticate: request => db ? verifiedUserId(db, request) : Promise.resolve(null) });
   const workers = env.ODDBOUT_BROADCAST_WORKERS_JSON ? JSON.parse(env.ODDBOUT_BROADCAST_WORKERS_JSON) : [];
   const worker = db && commerce ? createBroadcastWorkerHandler({ store: createCommerceStore(db), workers }) : null;
@@ -79,7 +85,7 @@ export function createBroadcastDemo(env = process.env) {
       if (req.method === 'GET' && address.pathname === '/broadcast/config') {
         res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
         res.end(JSON.stringify({ supabaseUrl: url ?? null, publishableKey: publishableKey ?? null, authConfigured: Boolean(db && publishableKey),
-          commerceEnabled: Boolean(commerce), autoProducer: Boolean(supervisor), publicOrigin, mode: commerce ? 'sandbox' : 'preview-unconfigured' })); return;
+          commerceEnabled: Boolean(commerce), autoProducer: Boolean(supervisor), concierge: Boolean(concierge), publicOrigin, mode: commerce ? 'sandbox' : 'preview-unconfigured' })); return;
       }
       const file = files.get(address.pathname);
       if (req.method === 'GET' && file) {
@@ -102,6 +108,18 @@ export function createBroadcastDemo(env = process.env) {
   server.requestTimeout = 30_000;
   server.headersTimeout = 15_000;
   return { server, port, publicOrigin, bindHost, supervisor };
+}
+
+/** Opt-in: ODDBOUT_BROADCAST_CONCIERGE=1 serves the console's chat agent with the same explicit model and key as the producer.
+ * @param {NodeJS.ProcessEnv} env @param {any} service */
+export function conciergeFromEnvironment(env, service) {
+  if (env.ODDBOUT_BROADCAST_CONCIERGE === undefined || env.ODDBOUT_BROADCAST_CONCIERGE === '0') return null;
+  if (env.ODDBOUT_BROADCAST_CONCIERGE !== '1') throw new Error('invalid-concierge-setting');
+  const model = env.ODDBOUT_BROADCAST_MODEL, apiKey = env.OPENAI_API_KEY;
+  if (!model || !apiKey) throw new Error('concierge-model-required');
+  const daily = env.ODDBOUT_BROADCAST_CONCIERGE_DAILY_CALLS === undefined ? 300 : Number(env.ODDBOUT_BROADCAST_CONCIERGE_DAILY_CALLS);
+  if (!Number.isSafeInteger(daily) || daily < 1 || daily > 100_000) throw new Error('invalid-concierge-setting');
+  return createConcierge({ service, modelCall: createConciergeModel({ model, apiKey }), dailyModelCalls: daily });
 }
 
 /** Opt-in: ODDBOUT_BROADCAST_AUTO_PRODUCER=1 runs the AI producer for every started session. It then

@@ -56,6 +56,9 @@
             d="M8 3h8v6a4 4 0 0 1-8 0Zm0 2H4v3a4 4 0 0 0 4 4m8-7h4v3a4 4 0 0 1-4 4m-4 1v7m-4 1h8"
           />
         </symbol>
+        <symbol id="i-chat" viewBox="0 0 24 24">
+          <path d="M4 5h16v11H9l-5 4Zm4 4h8m-8 3h5" />
+        </symbol>
         <symbol id="i-info" viewBox="0 0 24 24">
           <circle cx="12" cy="12" r="9" />
           <path d="M12 11v6m0-10v1" />
@@ -230,6 +233,76 @@
               ><input id="payment-intent" readonly
             /></label>
           </details>
+        </div>
+      </section>
+      <section
+        id="concierge"
+        class="section-block"
+        aria-labelledby="concierge-title"
+        hidden
+      >
+        <div class="section-heading">
+          <h2 id="concierge-title">
+            <svg class="icon" aria-hidden="true"><use href="#i-chat" /></svg>
+            Ask the AI concierge
+          </h2>
+          <span class="section-note">Sandbox only · You approve every budget</span>
+        </div>
+        <div class="panel concierge-panel">
+          <p class="concierge-intro">
+            Describe the show you want. The concierge can price a plan, start a
+            PayPal Sandbox top-up and fill in your setup. You review and
+            approve the budget yourself.
+          </p>
+          <div
+            id="concierge-log"
+            class="chat-log"
+            role="log"
+            aria-label="Concierge conversation"
+          ></div>
+          <div class="chat-chips" role="group" aria-label="Example prompts">
+            <button class="chat-chip" type="button">
+              Plan a one-hour show for 100 credits
+            </button>
+            <button class="chat-chip" type="button">
+              Add credits so I can run 8 cups
+            </button>
+          </div>
+          <form id="concierge-form" class="chat-form">
+            <label class="sr-only" for="concierge-input"
+              >Message the concierge</label
+            >
+            <textarea
+              id="concierge-input"
+              name="message"
+              rows="2"
+              maxlength="1000"
+              autocomplete="off"
+              placeholder="Ask for a plan or a top-up…"
+            ></textarea>
+            <div class="chat-form-row">
+              <span id="concierge-count" class="chat-count" aria-hidden="true"
+                >0 / 1000</span
+              ><button
+                id="concierge-new"
+                class="button button-secondary button-small"
+                type="button"
+                disabled
+              >
+                New chat</button
+              ><button
+                id="concierge-send"
+                class="button button-primary"
+                type="submit"
+                disabled
+              >
+                Send
+                <svg class="icon" aria-hidden="true">
+                  <use href="#i-arrow" />
+                </svg>
+              </button>
+            </div>
+          </form>
         </div>
       </section>
       <div class="workspace-grid">

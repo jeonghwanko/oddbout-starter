@@ -37,7 +37,8 @@ body {
 }
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 button,
@@ -58,7 +59,8 @@ a {
 }
 button,
 input,
-select {
+select,
+textarea {
   min-height: 44px;
 }
 [hidden] {
@@ -88,11 +90,13 @@ p {
 }
 button,
 select,
-input {
+input,
+textarea {
   border-radius: 10px;
 }
 input,
-select {
+select,
+textarea {
   width: 100%;
   min-width: 0;
   border: 1px solid #c9d1cc;
@@ -100,15 +104,18 @@ select {
   color: var(--ink);
   padding: 12px 13px;
 }
-input::placeholder {
+input::placeholder,
+textarea::placeholder {
   color: #78837f;
 }
 input:hover,
-select:hover {
+select:hover,
+textarea:hover {
   border-color: #87968d;
 }
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   border-color: var(--ink);
 }
 :focus-visible {
@@ -831,6 +838,171 @@ h1 span {
   color: var(--muted);
   margin-top: 16px;
 }
+.concierge-panel {
+  padding: 24px 26px;
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+.concierge-intro {
+  font-size: 13px;
+  color: var(--muted);
+}
+.chat-log {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: min(560px, 70vh);
+  overflow-y: auto;
+  min-width: 0;
+}
+.chat-log:empty {
+  display: none;
+}
+.chat-message {
+  max-width: min(100%, 560px);
+  min-width: 0;
+  padding: 10px 14px;
+  border-radius: 16px;
+  font-size: 14px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.chat-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.55;
+}
+.chat-person {
+  align-self: flex-end;
+  background: var(--ink);
+  color: #fff;
+  border-bottom-right-radius: 5px;
+}
+.chat-agent {
+  align-self: flex-start;
+  background: var(--soft);
+  border-bottom-left-radius: 5px;
+}
+.chat-agent.is-thinking {
+  color: var(--muted);
+  animation: chat-pulse 1.4s ease-in-out infinite;
+}
+@keyframes chat-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+.chat-note {
+  align-self: center;
+  max-width: 100%;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.chat-note.is-error {
+  color: #9b342c;
+}
+.chat-action {
+  display: grid;
+  gap: 9px;
+  justify-items: start;
+  margin-top: 10px;
+  padding: 12px 14px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  min-width: 0;
+}
+.chat-action-title {
+  font-size: 12px;
+  font-weight: 700;
+}
+.chat-action-note {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.chat-action-note:empty {
+  display: none;
+}
+.chat-action-note.is-ok {
+  color: #3d5a0f;
+  font-weight: 600;
+}
+.chat-agent > .chat-action-note {
+  margin-top: 8px;
+}
+.chat-action .button {
+  min-height: 42px;
+  padding: 10px 15px;
+}
+.chat-plan-grid {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 14px;
+  margin: 0;
+  width: 100%;
+  font-size: 12px;
+}
+.chat-plan-grid > div {
+  display: contents;
+}
+.chat-plan-label {
+  color: var(--muted);
+}
+.chat-plan-value {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.chat-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.chat-chip {
+  min-height: 38px;
+  padding: 7px 13px;
+  border: 1px solid #cbd3cd;
+  border-radius: 22px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+}
+.chat-chip:hover {
+  background: var(--soft);
+}
+.chat-form {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.chat-form textarea {
+  resize: vertical;
+  min-height: 70px;
+  max-height: 220px;
+  line-height: 1.5;
+}
+.chat-form-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.chat-count {
+  margin-right: auto;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.button-small {
+  min-height: 40px;
+  padding: 8px 14px;
+}
 .activity-panel {
   padding: 21px 26px;
 }
@@ -1044,6 +1216,15 @@ summary:hover {
   }
 }
 @media (max-width: 540px) {
+  .concierge-panel {
+    padding: 20px;
+  }
+  .chat-message {
+    max-width: 100%;
+  }
+  .chat-form textarea {
+    font-size: 16px;
+  }
   .brand img {
     width: 133px;
   }

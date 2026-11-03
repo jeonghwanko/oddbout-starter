@@ -23,8 +23,10 @@ services:
         value: "0"
       - key: ODDBOUT_BROADCAST_HOST_IDS
         value: current-pc
-      # Set to 1 together with the model and key to run producers automatically.
+      # Set to 1 together with the model and key to run producers automatically / serve the concierge.
       - key: ODDBOUT_BROADCAST_AUTO_PRODUCER
+        value: "0"
+      - key: ODDBOUT_BROADCAST_CONCIERGE
         value: "0"
       - key: ODDBOUT_BROADCAST_MODEL
         sync: false

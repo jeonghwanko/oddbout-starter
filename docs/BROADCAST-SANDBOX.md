@@ -50,6 +50,7 @@ DB와 Sandbox 설정 없이 실행하면 `preview-unconfigured` 모드다. 이 �
 | `ODDBOUT_BROADCAST_AUTO_PRODUCER` | `1`이면 시작된 모든 세션에 AI producer를 서버 안에서 자동 실행한다. 기본값은 끔(`0`)이다. `1`인데 `ODDBOUT_BROADCAST_MODEL`·`OPENAI_API_KEY`가 없으면 서버 시작을 거부한다. 5절을 참고한다. |
 | `ODDBOUT_BROADCAST_AUTO_PRODUCER_MAX_ACTIVE`, `ODDBOUT_BROADCAST_AUTO_PRODUCER_DAILY_CALLS` | 자동 producer의 동시 실행 상한(기본 3)과 UTC 하루 모델 호출 상한(기본 200). |
 | `ODDBOUT_BROADCAST_PRODUCER_STATE_DIR` | 자동 producer checkpoint 디렉터리. 기본 `.oddbout-broadcast/producers`. 재시작 후 재개하려면 영속 디스크에 둔다. |
+| `ODDBOUT_BROADCAST_CONCIERGE`, `ODDBOUT_BROADCAST_CONCIERGE_DAILY_CALLS` | `1`이면 콘솔의 AI 컨시어지를 켠다(기본 끔). `ODDBOUT_BROADCAST_MODEL`·`OPENAI_API_KEY`가 필요하다. 하루 모델 호출 상한 기본 300. 6절 앞의 컨시어지 절을 참고한다. |
 
 `.env.example`은 비밀값이 없는 템플릿이다. `.env`가 아직 없을 때만 복사하고 기존 파일은 보존한다. 실제 값을 문서나 소스에 붙이지 말고 개발용 `.env` 또는 프로세스 환경에만 설정한다. `.env`는 Git에서 제외된다. npm 별칭은 `.env`를 자동 로드하지 않으므로 파일을 쓸 때는 Node `--env-file`로 명시한다.
 
@@ -156,6 +157,17 @@ Producer는 checkpoint 파일과 별도 `.lock` 파일로 동일 상태 경로�
 브라우저 console은 사람 계정에 Supabase 로그인하며 access token은 메모리에만 둔다. 결제·승인·시작·컵 같은 변경 요청은 브라우저 owner journal에 request key와 입력을 먼저 기록하고, 실제 첫 fetch 직전에 dispatched 표시를 영속화한다. 첫 시도의 명시적 precondition 거절은 해당 request key를 지워 새 입력으로 다시 시작할 수 있지만, 이미 dispatch된 요청 뒤 인증 또는 precondition 거절이 와도 이전 시도가 서버에서 처리됐을 수 있어 원래 request key를 보존한다. 브라우저를 닫거나 네트워크가 끊겨도 같은 계정에서 그 key로 복구한다. 이전 journal에서 dispatched 표시가 없는 항목도 이미 시도된 것으로 취급한다. 만료된 approval draft는 quote가 `invalid-end-time`을 반환하고 브라우저 시각도 만료를 나타낼 때 approval 키만 정리한다. 만료된 approval은 새 session을 시작할 수 없으며 이 정리는 잔액을 소비하지 않는다. local `/mcp`는 일반 Supabase JWT와 production `af_mcp` grant를 거부하고, 서버 설정 `ODDBOUT_BROADCAST_PRODUCERS_JSON`에 등록된 별도 `obp_` grant만 받는다. 각 항목은 `owner` UUID, 이미 승인된 `broadcastId` UUID, `obp_`와 32개 이상의 URL-safe 난수 문자를 붙인 `token`, ISO `expiresAt`으로 구성된다. 해당 비밀은 격리 서버 설정과 producer의 비밀 환경에만 provision한다. 값이나 callback을 일반 대화에 붙여넣지 않는다. 이 local 설정은 기존 production cloud MCP connector의 `af_mcp` 권한을 바꾸지 않는다.
 
 Grant는 등록된 사용자·broadcast에 한정되고, 매 요청 때 broadcast 소유권과 상태를 확인한다. 사용 가능한 기간은 grant 만료와 세션 `endsAt` 중 먼저 도달하는 때까지이며 자동 갱신되지 않는다. Producer MCP는 6개 고정 도구(잔액·가격·세션·작업 조회, `host_cup`)만 제공한다. Checkout·승인·세션 시작·중지·다른 broadcast 접근은 허용하지 않는다. 이는 이미 승인된 Sandbox 세션의 producer 권한일 뿐 Twitch 계정 인증이나 live 송출 권한이 아니다. PayPal은 새 탭에서 승인한 뒤 원래 console 탭으로 돌아와 **Verify payment**를 선택한다. 비밀 없는 owner-scoped 작업 journal은 localStorage에서 불확실한 checkout·approval·작업을 같은 계정으로 복구하는 데 쓴다. journal에는 인증 token이 들어가지 않는다.
+
+## 5-1. AI 컨시어지 (데모 서버)
+
+`ODDBOUT_BROADCAST_CONCIERGE=1`이면 콘솔에 채팅 에이전트가 나타난다. 로그인한 사람의 목표("1시간, 100크레딧")를 받아 잔액·가격을 읽고, 견적을 내고, 크레딧이 모자라면 PayPal Sandbox 결제를 만든다.
+
+- 서버 `POST /commerce/concierge`가 OpenAI Responses API의 function calling으로 실행한다. 대화는 OpenAI에 저장하지 않는다(`store:false`). 추론 모델의 암호화된 reasoning 항목은 다음 호출에 그대로 돌려준다.
+- 도구는 `get_credit_balance`, `get_broadcast_prices`, `quote_broadcast`, `create_topup_checkout`, `confirm_topup` 다섯 개뿐이다. 예산 승인·세션 시작·중지·컵 요청 도구는 없다. 견적은 콘솔에 "Use this plan" 버튼으로 나타나고, 사람이 기존 승인 버튼으로 승인한다. `agent` 자격으로 들어온 요청(MCP)은 이 경로를 쓸 수 없다.
+- 결제 request key는 모델이 아니라 서버가 만든다. 대화 하나에서 크레딧 팩마다 key 하나를 쓰고, 그 결제가 충전될 때까지 재사용한다. 그래서 같은 요청을 반복하거나 재시도해도 PayPal 주문이 하나만 생긴다.
+- PayPal 승인 링크는 모델에게 주지 않는다. 서버가 화면에 버튼으로만 넘기고, 콘솔은 Sandbox origin을 검사한 뒤 표시한다. 사람은 PayPal에서 승인한 뒤 "승인했다"고 말하거나 기존 **Verify payment**를 누른다. `confirm_topup`은 capture 검증 후 `credited`일 때만 충전으로 알린다.
+- 대화는 서버 메모리에 2시간 보관하며 재시작하면 사라진다. 사라진 대화 ID로 요청하면 새 대화로 시작하고 `restarted: true`를 돌려준다. 이미 만든 결제는 콘솔의 결제 복구와 **Verify payment**로 이어 갈 수 있다.
+- 한도: 대화당 20턴, 턴당 모델 호출 6회, UTC 하루 모델 호출 `ODDBOUT_BROADCAST_CONCIERGE_DAILY_CALLS`(기본 300). 실패한 턴은 대화 기록에 남기지 않는다.
 
 ## 6. 아직 제공하지 않는 기능
 
