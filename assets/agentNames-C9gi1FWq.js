@@ -1,0 +1,1 @@
+var e=/\bcursor\b/i;function t(t){return e.test(t)?`Grok`:t}export{t};
