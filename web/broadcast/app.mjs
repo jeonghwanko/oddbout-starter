@@ -50,6 +50,7 @@ function updateControls() {
     for (const button of [...$(id).querySelectorAll('button'), ...($(id).tagName === 'BUTTON' ? [$(id)] : [])]) button.disabled = disabled;
   }
   updateConcierge();
+  updateReconcile();
 }
 async function mutate(saved, name, input, path, extra = {}) {
   const op = saved.begin(name, input);
@@ -220,6 +221,7 @@ action('verify-payment', async () => {
     const pending = saved.get('topup');
     if (pending?.result?.intentId === intent) saved.complete('topup', pending.requestKey);
     $('paypal-approval').hidden = true;
+    staleReconcile();
   }
   show(result); await refresh();
 }, 'click', true);
@@ -430,9 +432,143 @@ for (const chip of document.querySelectorAll('.chat-chip')) chip.addEventListene
   $('concierge-input').value = chip.textContent.trim(); conciergeCount(); $('concierge-input').focus();
 });
 $('concierge-new').addEventListener('click', () => { resetConcierge(); updateConcierge(); $('concierge-input').focus(); });
+// PayPal reconciliation compares this account's Sandbox top-ups with PayPal's own records. The server does the
+// lookups through the official PayPal MCP server; this card only shows the result. Everything in it is
+// untrusted text (ids, statuses, reason codes and the AI auditor's summary): it is written with textContent and
+// createElement only, never as markup, and never turned into a link.
+const RECONCILE_RESULTS = { matched: 'Matched', mismatched: 'Mismatched', pending: 'Pending', unavailable: 'Unavailable', 'no-order': 'No order' };
+const RECONCILE_REASONS = {
+  'capture-id-differs': 'PayPal capture differs from the credited one',
+  'capture-refunded': 'PayPal refunded this payment',
+  'paypal-record-differs': 'PayPal record differs from the ledger',
+  'paypal-completed-not-credited': 'PayPal completed it — choose Verify payment',
+  'awaiting-approval-or-capture': 'Waiting for approval or capture on PayPal',
+  'paypal_mcp_api_error': 'PayPal could not return this order',
+  'paypal_mcp_tool_error': 'The PayPal lookup failed',
+  'order-id-format': 'The stored order id is not a PayPal order id',
+  'checkout-never-reached-paypal': 'Checkout never reached PayPal',
+  'not-fetched': 'This order was not looked up',
+};
+const RECONCILE_SUMMARY_ERRORS = {
+  'reconciliation-daily-limit': 'The AI auditor reached its daily limit on this demo. The comparison above is still complete.',
+  'reconciliation-summary-empty': 'The AI auditor returned no explanation. The comparison above is still complete.',
+  'reconciliation-summary-incomplete': 'The AI auditor ran out of steps before it could explain. The comparison above is still complete.',
+  'reconciliation-model-unavailable': 'The AI auditor is unavailable right now. The comparison above is still complete.',
+};
+const RECONCILE_SUMMARY_FALLBACK = 'The AI auditor could not explain this check. The comparison above is still complete.';
+const RECONCILE_ERRORS = {
+  'paypal-mcp-unavailable': "PayPal's MCP server could not be reached right now. Please try again in a moment.",
+  'authentication-required': 'Sign in again to run the check.',
+};
+const RECONCILE_FALLBACK_ERROR = 'The PayPal check could not run. Please try again.';
+const RECONCILE_MAX_ROWS = 50;
+const RECONCILE_IDLE_LABEL = 'Check with PayPal';
+let reconcileEpoch = 0;
+function updateReconcile() {
+  const available = Boolean(config?.reconciliation && session);
+  $('reconcile').hidden = !available;
+  $('reconcile-run').disabled = !available || busyActions.has('reconcile-run');
+}
+function reconcileStatus(text, error = false) {
+  $('reconcile-status').textContent = text; $('reconcile-status').classList.toggle('is-error', error);
+}
+/** Forget the last check: on sign-out or an account change. A check still running is ignored when it finishes. */
+function resetReconcile() {
+  reconcileEpoch++;
+  $('reconcile-result').hidden = true; $('reconcile-panel').removeAttribute('aria-busy');
+  for (const id of ['reconcile-rows', 'reconcile-totals']) $(id).replaceChildren();
+  for (const id of ['reconcile-checked', 'reconcile-calls', 'reconcile-summary']) $(id).textContent = '';
+  $('reconcile-run-label').textContent = RECONCILE_IDLE_LABEL; reconcileStatus('');
+}
+/** A verified payment changes what the last check showed. */
+function staleReconcile() {
+  if (!$('reconcile-result').hidden) reconcileStatus('A payment was verified after this check. Check with PayPal again to refresh; a result from the last couple of minutes may still show the old state.');
+}
+function reconcileReason(value) {
+  const code = plain(value, 80);
+  if (!code) return '';
+  if (Object.hasOwn(RECONCILE_REASONS, code)) return RECONCILE_REASONS[code];
+  return code.startsWith('capture-') ? 'PayPal capture status: ' + code.slice('capture-'.length).replaceAll('_', ' ') : code.replace(/[_-]+/g, ' ');
+}
+function reconcileCalls(toolCalls) {
+  const calls = (Array.isArray(toolCalls) ? toolCalls : []).filter(entry => entry && typeof entry === 'object');
+  const lookups = who => { const count = calls.filter(entry => entry.by === who).length; return count + ' ' + who + ' ' + (count === 1 ? 'lookup' : 'lookups'); };
+  const failed = calls.filter(entry => entry.ok === false).length;
+  return 'PayPal MCP: ' + lookups('server') + ' · ' + lookups('auditor') + (failed ? ' · ' + failed + ' failed' : '');
+}
+/** Fill the payment reference with this top-up and press the existing Verify payment button. That action owns the capture,
+ * its journal and its refresh; this only starts it. */
+function verifyFromReconcile(intentId, note) {
+  const verify = $('verify-payment');
+  if (verify.disabled) {
+    note.textContent = busyActions.has('verify-payment') ? 'A payment check is already running. Wait for it to finish.'
+      : catalog?.paypalConfigured ? 'Verify payment is not available right now.' : 'PayPal Sandbox top-ups are unavailable on this server.';
+    return;
+  }
+  $('payment-intent').value = intentId;
+  note.textContent = 'Verifying this payment. The result appears under Activity.';
+  verify.click();
+}
+function reconcileRow(item) {
+  const row = textElement('li', 'reconcile-row'), head = textElement('div', 'reconcile-row-head');
+  const known = Object.hasOwn(RECONCILE_RESULTS, item?.result), intentId = plain(item?.intentId, 64);
+  const badge = textElement('span', 'reconcile-badge', known ? RECONCILE_RESULTS[item.result] : 'Unknown');
+  badge.dataset.result = known ? item.result : 'unknown';
+  const intent = textElement('span', 'reconcile-intent', intentId.slice(0, 8) || '—'); intent.title = intentId;
+  head.append(badge, intent);
+  if (Number.isSafeInteger(item?.credits)) head.append(textElement('span', 'reconcile-credits', item.credits.toLocaleString() + ' credits'));
+  const status = value => plain(value, 40).replaceAll('_', ' ') || '—';
+  const amount = Number.isSafeInteger(item?.amountCents) ? (item.amountCents / 100).toFixed(2) + ' ' + plain(item?.currency, 3).toUpperCase() : '';
+  row.append(head, textElement('p', 'reconcile-reason', reconcileReason(item?.reason)),
+    textElement('p', 'reconcile-detail', ['Order ' + (plain(item?.orderId, 64) || '—'), 'Ledger ' + status(item?.ledgerStatus), 'PayPal ' + status(item?.paypalStatus), amount]
+      .filter(Boolean).join(' · ')));
+  if (item?.reason === 'paypal-completed-not-credited' && UUID_PATTERN.test(intentId)) {
+    const verify = textElement('button', 'button button-primary button-small', 'Verify this payment'), note = textElement('p', 'reconcile-note');
+    verify.type = 'button'; note.setAttribute('role', 'status');
+    verify.addEventListener('click', () => verifyFromReconcile(intentId, note));
+    row.append(verify, note);
+  }
+  return row;
+}
+function renderReconcile(data) {
+  const rows = Array.isArray(data?.rows) ? data.rows.slice(0, RECONCILE_MAX_ROWS) : [];
+  const checked = new Date(typeof data?.checkedAt === 'string' ? data.checkedAt : NaN);
+  $('reconcile-checked').textContent = (Number.isNaN(checked.getTime()) ? 'Check complete' : 'Checked ' + checked.toLocaleString())
+    + (data?.cached === true ? ' · cached from a recent check' : '');
+  $('reconcile-calls').textContent = reconcileCalls(data?.toolCalls);
+  const totals = data?.totals && typeof data.totals === 'object' ? data.totals : {};
+  $('reconcile-totals').replaceChildren(...Object.keys(RECONCILE_RESULTS).filter(key => Object.hasOwn(totals, key) && Number.isSafeInteger(totals[key]) && totals[key] > 0)
+    .map(key => { const badge = textElement('li', 'reconcile-badge', totals[key].toLocaleString() + ' ' + RECONCILE_RESULTS[key]); badge.dataset.result = key; return badge; }));
+  $('reconcile-empty').hidden = rows.length > 0;
+  $('reconcile-rows').replaceChildren(...rows.map(reconcileRow));
+  const summary = plain(data?.summary, 1500).trim(), summaryError = plain(data?.summaryError, 80);
+  $('reconcile-auditor').hidden = !summary && !data?.summaryError;
+  $('reconcile-summary').textContent = summary || (Object.hasOwn(RECONCILE_SUMMARY_ERRORS, summaryError) ? RECONCILE_SUMMARY_ERRORS[summaryError] : RECONCILE_SUMMARY_FALLBACK);
+  $('reconcile-summary').classList.toggle('is-error', !summary);
+  $('reconcile-auditor-note').hidden = !summary;
+  $('reconcile-result').hidden = false;
+}
+async function runReconcile() {
+  if (!config?.reconciliation || !session) return;
+  const epoch = reconcileEpoch;
+  $('reconcile-result').hidden = true; $('reconcile-panel').setAttribute('aria-busy', 'true');
+  $('reconcile-run-label').textContent = 'Checking with PayPal…';
+  reconcileStatus('Looking up your top-ups with PayPal. This can take up to a minute.');
+  try {
+    const data = await call('reconciliation', {});
+    if (epoch !== reconcileEpoch) return;
+    reconcileStatus(''); renderReconcile(data);
+  } catch (error) {
+    if (epoch !== reconcileEpoch) return;
+    reconcileStatus(typeof error?.code === 'string' && Object.hasOwn(RECONCILE_ERRORS, error.code) ? RECONCILE_ERRORS[error.code] : RECONCILE_FALLBACK_ERROR, true);
+  } finally {
+    if (epoch === reconcileEpoch) { $('reconcile-run-label').textContent = RECONCILE_IDLE_LABEL; $('reconcile-panel').removeAttribute('aria-busy'); }
+  }
+}
+action('reconcile-run', runReconcile);
 function authChanged(value) {
   const previousOwner = session?.user.id;
-  if (previousOwner !== value?.user.id) { refreshRevision++; walletSpendingBlocked = false; $('wallet-status').textContent = ''; budgetFeedback(''); resetConcierge(); }
+  if (previousOwner !== value?.user.id) { refreshRevision++; walletSpendingBlocked = false; $('wallet-status').textContent = ''; budgetFeedback(''); resetConcierge(); resetReconcile(); }
   session = value; $('signout').hidden = !value;
   $('google-signin').hidden = Boolean(value);
   $('account-identity').hidden = !value;

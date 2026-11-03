@@ -63,6 +63,9 @@
           <circle cx="12" cy="12" r="9" />
           <path d="M12 11v6m0-10v1" />
         </symbol>
+        <symbol id="i-check" viewBox="0 0 24 24">
+          <path d="M12 3 5 6v5c0 5 3 8 7 10 4-2 7-5 7-10V6Zm-3 9 2 2 4-4" />
+        </symbol>
       </defs>
     </svg>
     <header class="topbar">
@@ -233,6 +236,72 @@
               ><input id="payment-intent" readonly
             /></label>
           </details>
+        </div>
+      </section>
+      <section
+        id="reconcile"
+        class="section-block"
+        aria-labelledby="reconcile-title"
+        hidden
+      >
+        <div class="section-heading">
+          <h2 id="reconcile-title">
+            <svg class="icon" aria-hidden="true"><use href="#i-check" /></svg>
+            PayPal reconciliation
+          </h2>
+          <span class="section-note">Sandbox only · Read-only check</span>
+        </div>
+        <div id="reconcile-panel" class="panel reconcile-panel">
+          <p class="reconcile-intro">
+            Compare your top-ups with PayPal's own records. The server looks up
+            each order through the official PayPal MCP server and an AI auditor
+            explains the result. Nothing is changed.
+          </p>
+          <div class="reconcile-controls">
+            <button
+              id="reconcile-run"
+              class="button button-secondary"
+              type="button"
+              disabled
+            >
+              <svg class="icon" aria-hidden="true"><use href="#i-check" /></svg>
+              <span id="reconcile-run-label">Check with PayPal</span>
+            </button>
+            <p
+              id="reconcile-status"
+              class="reconcile-status"
+              role="status"
+              aria-live="polite"
+            ></p>
+          </div>
+          <div id="reconcile-result" class="reconcile-result" hidden>
+            <p class="reconcile-meta">
+              <span id="reconcile-checked"></span
+              ><span id="reconcile-calls"></span>
+            </p>
+            <ul
+              id="reconcile-totals"
+              class="reconcile-totals"
+              aria-label="Results by status"
+            ></ul>
+            <p id="reconcile-empty" class="reconcile-empty" hidden>
+              No PayPal top-ups on your account yet, so there is nothing to
+              check.
+            </p>
+            <ul id="reconcile-rows" class="reconcile-rows"></ul>
+            <section
+              id="reconcile-auditor"
+              class="reconcile-auditor"
+              aria-labelledby="reconcile-auditor-title"
+              hidden
+            >
+              <h3 id="reconcile-auditor-title">AI auditor</h3>
+              <p id="reconcile-summary" class="reconcile-summary"></p>
+              <p id="reconcile-auditor-note" class="reconcile-auditor-note">
+                AI-written explanation. The list above is the record.
+              </p>
+            </section>
+          </div>
         </div>
       </section>
       <section

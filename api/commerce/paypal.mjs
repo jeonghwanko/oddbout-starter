@@ -208,6 +208,8 @@ export function createPayPalSandbox({ clientId, clientSecret, merchantId, fetch:
     },
     /** @param {string} orderId */
     async getOrder(orderId) { return api(`/v2/checkout/orders/${id(orderId)}`); },
+    /** For the official PayPal MCP server process the reconciliation starts with read-only tools only. Never log it. */
+    accessToken,
     /** Supply original UTF-8 request text to preserve signed event formatting.
      * @param {{headers:Headers|Record<string,string>,body:object|string,webhookId:string}} input */
     async verifyWebhook({ headers, body, webhookId }) {

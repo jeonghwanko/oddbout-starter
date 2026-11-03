@@ -14,6 +14,7 @@ export function commerceFromEnvironment({ db, get }) {
   const partial = [clientId, clientSecret, merchantId].filter(Boolean).length;
   if (partial && partial !== 3) throw new Error('paypal-incomplete-configuration');
   const paypal = partial === 3 ? createPayPalSandbox({ clientId: /** @type {string} */ (clientId), clientSecret: /** @type {string} */ (clientSecret), merchantId: /** @type {string} */ (merchantId) }) : null;
-  return { publicOrigin, service: createCommerceService({ store: createCommerceStore(db), paypal, merchantId, publicOrigin,
+  const store = createCommerceStore(db);
+  return { publicOrigin, store, paypal, merchantId: merchantId ?? '', service: createCommerceService({ store, paypal, merchantId, publicOrigin,
     webhookId: get('PAYPAL_SANDBOX_WEBHOOK_ID'), hosts: [...new Set(hostIds)].map(id => ({ id })) }) };
 }

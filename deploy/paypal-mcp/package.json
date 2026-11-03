@@ -1,0 +1,8 @@
+{
+  "name": "oddbout-paypal-mcp",
+  "private": true,
+  "description": "The official PayPal MCP server for the Sandbox demo's reconciliation. Kept apart from the kit's dependencies.",
+  "dependencies": {
+    "@paypal/mcp": "1.8.1"
+  }
+}

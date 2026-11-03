@@ -50,6 +50,7 @@ DB와 Sandbox 설정 없이 실행하면 `preview-unconfigured` 모드다. 이 �
 | `ODDBOUT_BROADCAST_AUTO_PRODUCER` | `1`이면 시작된 모든 세션에 AI producer를 서버 안에서 자동 실행한다. 기본값은 끔(`0`)이다. `1`인데 `ODDBOUT_BROADCAST_MODEL`·`OPENAI_API_KEY`가 없으면 서버 시작을 거부한다. 5절을 참고한다. |
 | `ODDBOUT_BROADCAST_AUTO_PRODUCER_MAX_ACTIVE`, `ODDBOUT_BROADCAST_AUTO_PRODUCER_DAILY_CALLS` | 자동 producer의 동시 실행 상한(기본 3)과 UTC 하루 모델 호출 상한(기본 200). |
 | `ODDBOUT_BROADCAST_PRODUCER_STATE_DIR` | 자동 producer checkpoint 디렉터리. 기본 `.oddbout-broadcast/producers`. 재시작 후 재개하려면 영속 디스크에 둔다. |
+| `ODDBOUT_PAYPAL_RECONCILIATION`, `ODDBOUT_PAYPAL_MCP_ENTRY` | `1`이면 공식 PayPal MCP 서버로 계정의 충전 기록을 PayPal과 대조한다(기본 끔). PayPal Sandbox 설정과 `npm ci --prefix deploy/paypal-mcp`가 필요하다. 경로를 바꿀 때만 `ODDBOUT_PAYPAL_MCP_ENTRY`를 쓴다. 5-2절을 참고한다. |
 | `ODDBOUT_BROADCAST_CONCIERGE`, `ODDBOUT_BROADCAST_CONCIERGE_DAILY_CALLS` | `1`이면 콘솔의 AI 컨시어지를 켠다(기본 끔). `ODDBOUT_BROADCAST_MODEL`·`OPENAI_API_KEY`가 필요하다. 하루 모델 호출 상한 기본 300. 6절 앞의 컨시어지 절을 참고한다. |
 
 `.env.example`은 비밀값이 없는 템플릿이다. `.env`가 아직 없을 때만 복사하고 기존 파일은 보존한다. 실제 값을 문서나 소스에 붙이지 말고 개발용 `.env` 또는 프로세스 환경에만 설정한다. `.env`는 Git에서 제외된다. npm 별칭은 `.env`를 자동 로드하지 않으므로 파일을 쓸 때는 Node `--env-file`로 명시한다.
@@ -168,6 +169,17 @@ Grant는 등록된 사용자·broadcast에 한정되고, 매 요청 때 broadcas
 - PayPal 승인 링크는 모델에게 주지 않는다. 서버가 화면에 버튼으로만 넘기고, 콘솔은 Sandbox origin을 검사한 뒤 표시한다. 사람은 PayPal에서 승인한 뒤 "승인했다"고 말하거나 기존 **Verify payment**를 누른다. `confirm_topup`은 capture 검증 후 `credited`일 때만 충전으로 알린다.
 - 대화는 서버 메모리에 2시간 보관하며 재시작하면 사라진다. 사라진 대화 ID로 요청하면 새 대화로 시작하고 `restarted: true`를 돌려준다. 이미 만든 결제는 콘솔의 결제 복구와 **Verify payment**로 이어 갈 수 있다.
 - 한도: 대화당 20턴, 턴당 모델 호출 6회, UTC 하루 모델 호출 `ODDBOUT_BROADCAST_CONCIERGE_DAILY_CALLS`(기본 300). 실패한 턴은 대화 기록에 남기지 않는다.
+
+## 5-2. PayPal 정산 대조 (데모 서버)
+
+`ODDBOUT_PAYPAL_RECONCILIATION=1`이면 콘솔에서 계정의 최근 충전 20건을 PayPal의 주문 기록과 대조한다(`POST /commerce/reconciliation`).
+
+- PayPal 공식 MCP 서버(`@paypal/mcp` 1.8.1)를 대조 한 번마다 stdio 하위 프로세스로 띄운다. `--tools=orders.get,transactions.list,payments.getRefunds`로 읽기 도구(`get_order`, `list_transactions`, `get_refund`)만 켜고, 그 밖의 도구를 내놓는 서버는 거부한다. Sandbox access token은 그 프로세스의 환경 변수로만 넘긴다.
+- 이 서버는 크리에이터 킷 의존성과 따로 `deploy/paypal-mcp/`에 잠금 파일로 고정한다. 설치: `npm ci --prefix deploy/paypal-mcp --ignore-scripts`. 설치되지 않았으면 서버 시작을 거부한다(`paypal-mcp-not-installed`).
+- 서버가 원장의 모든 충전에 대해 `get_order`를 직접 호출하고, 충전 때와 같은 검증(`validateCapturedOrder`)으로 결과를 정한다. 결과는 `matched`(일치), `mismatched`(capture ID·금액·상태 불일치, 환불, PayPal은 완료인데 미충전), `pending`(승인·capture 대기), `unavailable`(조회 실패), `no-order`(PayPal에 주문이 없음)다.
+- 모델과 키가 있으면 AI 감사자가 같은 읽기 도구로 불일치·대기 건이나 원장에 없는 PayPal 거래를 더 조사하고 설명한다. 결과는 서버 판정이 정하고, AI는 설명만 한다. Transaction Search 데이터는 몇 시간 늦을 수 있다.
+- 계정마다 한 번에 하나만 실행하고, 결과는 2분 동안 캐시한다. AI 감사자의 모델 호출은 대조당 6회, UTC 하루 100회까지다.
+- 이 기능은 원장 SQL의 `list_topups` 명령을 쓴다(2026-11-03 추가). 이전 버전 SQL을 이미 적용한 프로젝트는 `public.commerce_command` 함수만 이 파일의 정의로 바꾼다(`create function`을 `create or replace function`으로 실행).
 
 ## 6. 아직 제공하지 않는 기능
 

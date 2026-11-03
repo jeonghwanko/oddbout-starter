@@ -2,8 +2,10 @@
 import { Problem, logFailure, readBody } from '../http.mjs';
 import { PayPalError } from './paypal.mjs';
 
-/** The demo server may add `producer` (its auto-producer status) and `concierge` (its chat agent); other hosts serve without them.
- * @typedef {ReturnType<typeof import('./service.mjs').createCommerceService> & {producer?:(owner:string,id:string)=>unknown,concierge?:(owner:string,input:unknown)=>Promise<unknown>}} Service */
+/** The demo server may add `producer` (its auto-producer status), `concierge` (its chat agent) and `reconcile`
+ * (PayPal reconciliation); other hosts serve without them.
+ * @typedef {ReturnType<typeof import('./service.mjs').createCommerceService> & {producer?:(owner:string,id:string)=>unknown,
+ *   concierge?:(owner:string,input:unknown)=>Promise<unknown>,reconcile?:(owner:string)=>Promise<unknown>}} Service */
 /** @param {{service:Service,authenticate:(request:Request)=>Promise<string|null>,publicOrigin:string,agent?:boolean}} options */
 export function createCommerceHandler({ service, authenticate, publicOrigin, agent = false }) {
   /** @param {Request} request @param {string[]} [segments] */
@@ -43,6 +45,7 @@ export function createCommerceHandler({ service, authenticate, publicOrigin, age
       else if (route.join('/') === 'cups' && method === 'POST') data = await service.cup(owner, body);
       // A person's console only: an agent credential never reaches another agent.
       else if (route.join('/') === 'concierge' && method === 'POST' && service.concierge && !agent) data = await service.concierge(owner, body);
+      else if (route.join('/') === 'reconciliation' && method === 'POST' && service.reconcile && !agent) data = await service.reconcile(owner);
       else if (route.length === 3 && route[0] === 'broadcasts') {
         if (route[2] === 'stop' && method === 'POST') data = await service.stop(owner, route[1]);
         else if (route[2] === 'report' && method === 'GET') data = await service.report(owner, route[1]);

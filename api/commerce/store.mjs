@@ -36,6 +36,8 @@ export function createCommerceStore(db) {
     createTopup: (owner, input) => command(owner, 'create_topup', input),
     /** @param {string} owner @param {string} intentId */
     findTopup: (owner, intentId) => command(owner, 'find_topup', { intentId }),
+    /** @param {string} owner */
+    listTopups: owner => command(owner, 'list_topups'),
     /** Trusted webhook reverse lookup. @param {string} providerOrderId */
     lookupOrder: providerOrderId => command(null, 'lookup_order', { providerOrderId }),
     /** Verified signed refund/reversal only. Owner is resolved from persisted capture, never the payload.

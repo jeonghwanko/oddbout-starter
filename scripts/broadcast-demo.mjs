@@ -1,7 +1,8 @@
 // @ts-check
 import { createServer } from 'node:http';
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
 import { createCommerceService } from '../api/commerce/service.mjs';
 import { commerceFromEnvironment } from '../api/commerce/config.mjs';
@@ -13,6 +14,7 @@ import { createBroadcastWorkerHandler } from '../broadcast/worker-api.mjs';
 import { createProducerModel } from '../broadcast/producer.mjs';
 import { createProducerSupervisor } from '../broadcast/supervisor.mjs';
 import { createConcierge, createConciergeModel } from '../broadcast/concierge.mjs';
+import { createReconciler } from '../broadcast/reconcile.mjs';
 import { isPublishableKey } from './login.mjs';
 
 const root = new URL('../', import.meta.url);
@@ -41,7 +43,8 @@ export function createBroadcastDemo(env = process.env) {
   const mcp = db && commerce ? createCommerceMcpHandler({ db, commerce, producers, issued }) : null;
   const supervisor = mcp && commerce ? autoProducerFromEnvironment(env, { commerce, issued, mcp }) : null;
   const concierge = commerce ? conciergeFromEnvironment(env, commerce.service) : null;
-  const service = commerce && (supervisor || concierge) ? { ...commerce.service,
+  const reconciler = commerce ? reconcilerFromEnvironment(env, commerce) : null;
+  const service = commerce && (supervisor || concierge || reconciler) ? { ...commerce.service,
     // A started session gets its producer right away; the start response never waits for it.
     ...(supervisor ? {
       /** @param {string} owner @param {unknown} input */
@@ -50,7 +53,10 @@ export function createBroadcastDemo(env = process.env) {
       producer: (owner, id) => supervisor.status(owner, id) } : {}),
     ...(concierge ? {
       /** @param {string} owner @param {unknown} input */
-      concierge: (owner, input) => concierge.turn(owner, input) } : {}) } : commerce?.service;
+      concierge: (owner, input) => concierge.turn(owner, input) } : {}),
+    ...(reconciler ? {
+      /** @param {string} owner */
+      reconcile: owner => reconciler.run(owner) } : {}) } : commerce?.service;
   const api = createCommerceHandler({ service: service ?? previewService, publicOrigin, authenticate: request => db ? verifiedUserId(db, request) : Promise.resolve(null) });
   const workers = env.ODDBOUT_BROADCAST_WORKERS_JSON ? JSON.parse(env.ODDBOUT_BROADCAST_WORKERS_JSON) : [];
   const worker = db && commerce ? createBroadcastWorkerHandler({ store: createCommerceStore(db), workers }) : null;
@@ -85,7 +91,7 @@ export function createBroadcastDemo(env = process.env) {
       if (req.method === 'GET' && address.pathname === '/broadcast/config') {
         res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
         res.end(JSON.stringify({ supabaseUrl: url ?? null, publishableKey: publishableKey ?? null, authConfigured: Boolean(db && publishableKey),
-          commerceEnabled: Boolean(commerce), autoProducer: Boolean(supervisor), concierge: Boolean(concierge), publicOrigin, mode: commerce ? 'sandbox' : 'preview-unconfigured' })); return;
+          commerceEnabled: Boolean(commerce), autoProducer: Boolean(supervisor), concierge: Boolean(concierge), reconciliation: Boolean(reconciler), publicOrigin, mode: commerce ? 'sandbox' : 'preview-unconfigured' })); return;
       }
       const file = files.get(address.pathname);
       if (req.method === 'GET' && file) {
@@ -108,6 +114,21 @@ export function createBroadcastDemo(env = process.env) {
   server.requestTimeout = 30_000;
   server.headersTimeout = 15_000;
   return { server, port, publicOrigin, bindHost, supervisor };
+}
+
+/** Opt-in: ODDBOUT_PAYPAL_RECONCILIATION=1 checks an account's top-ups against PayPal through the official PayPal MCP
+ * server, installed apart from the kit (`npm ci --prefix deploy/paypal-mcp`). It needs the PayPal Sandbox settings;
+ * with ODDBOUT_BROADCAST_MODEL and OPENAI_API_KEY an AI auditor also explains the result.
+ * @param {NodeJS.ProcessEnv} env @param {{store:any,paypal:any,merchantId:string}} commerce */
+export function reconcilerFromEnvironment(env, { store, paypal, merchantId }) {
+  if (env.ODDBOUT_PAYPAL_RECONCILIATION === undefined || env.ODDBOUT_PAYPAL_RECONCILIATION === '0') return null;
+  if (env.ODDBOUT_PAYPAL_RECONCILIATION !== '1') throw new Error('invalid-reconciliation-setting');
+  if (!paypal || !merchantId) throw new Error('reconciliation-paypal-required');
+  const entry = env.ODDBOUT_PAYPAL_MCP_ENTRY ?? fileURLToPath(new URL('../deploy/paypal-mcp/node_modules/@paypal/mcp/dist/index.js', import.meta.url));
+  if (!existsSync(entry)) throw new Error('paypal-mcp-not-installed');
+  const model = env.ODDBOUT_BROADCAST_MODEL, apiKey = env.OPENAI_API_KEY;
+  return createReconciler({ listTopups: owner => store.listTopups(owner), accessToken: () => paypal.accessToken(), merchantId, entry,
+    ...(model && apiKey ? { modelCall: createConciergeModel({ model, apiKey }) } : {}) });
 }
 
 /** Opt-in: ODDBOUT_BROADCAST_CONCIERGE=1 serves the console's chat agent with the same explicit model and key as the producer.

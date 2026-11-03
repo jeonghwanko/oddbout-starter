@@ -8,7 +8,8 @@ services:
     repo: https://github.com/jeonghwanko/oddbout-starter
     branch: main
     plan: free
-    buildCommand: npm ci --omit=dev --ignore-scripts
+    # The official PayPal MCP server (reconciliation) installs apart from the kit's dependencies.
+    buildCommand: npm ci --omit=dev --ignore-scripts && npm ci --prefix deploy/paypal-mcp --omit=dev --ignore-scripts
     startCommand: node scripts/broadcast-demo.mjs
     healthCheckPath: /healthz
     autoDeployTrigger: "off"
@@ -27,6 +28,8 @@ services:
       - key: ODDBOUT_BROADCAST_AUTO_PRODUCER
         value: "0"
       - key: ODDBOUT_BROADCAST_CONCIERGE
+        value: "0"
+      - key: ODDBOUT_PAYPAL_RECONCILIATION
         value: "0"
       - key: ODDBOUT_BROADCAST_MODEL
         sync: false
