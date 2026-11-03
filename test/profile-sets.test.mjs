@@ -198,12 +198,15 @@ test('Postgres: upload → validation → review → approval names the set on t
     await db.query('select public.af_profile_set_submit($1,$2)', [owner, third.id]);
     assert.equal((await finish(await claim(third.id), false, { stage: 'profile-set-check', errors: [{ code: 'FRONT_BACKGROUND', path: '/front' }] })).status, 'rejected');
 
-    // The entry gate is off by default; on, a fighter registered after the switch enters only with a validated set.
+    // The entry gate is off by default; on, a fighter enters only with a set the validator and the front check passed (정면 판정,
+    // 2026-11-03), whenever he was made: the switch's time is after this fighter's.
     const enter = () => db.query('select public.af_enter_fighter($1,$2,$3,$4) as value', [owner, fighter, sha, ['idle']]);
-    await db.exec("update public.af_settings set profile_set_required_after = now() - interval '1 day'");
+    await db.exec("update public.af_settings set profile_set_required_after = now() + interval '1 day'");
     await db.exec("update public.af_profile_sets set status = 'rejected' where status <> 'rejected'");
     await assert.rejects(enter(), /profile-set-required/);
     await db.query("update public.af_profile_sets set status = 'review' where id = $1", [third.id]);
+    await assert.rejects(enter(), /profile-set-required/, 'a set the front check has not passed does not let him enter');
+    await db.query("update public.af_profile_sets set front_check = 'pass', front_verdict = '{}', front_checked_at = now() where id = $1", [third.id]);
     assert.equal(value(await enter()).stage, 'entered');
 
     // Owners read only their own sets.
@@ -211,6 +214,156 @@ test('Postgres: upload → validation → review → approval names the set on t
     assert.equal((await db.query('select id from public.af_profile_sets')).rows.length, 0);
     await assert.rejects(db.query('select public.af_profile_set_claim(null)'), /permission denied/);
     await db.exec('reset role');
+  } finally { await db.close(); }
+});
+
+/** 정면 판정 (2026-11-03): a registered fighter, sets the validator passed, the check's claim and verdict, his front and his entry. */
+async function frontFixture() {
+  const db = await migratedDatabase();
+  const owner = crypto.randomUUID(), admin = crypto.randomUUID();
+  await db.query('insert into auth.users(id,email) values($1,$2),($3,$4)', [owner, 'o@example.com', admin, 'a@example.com']);
+  await db.query('insert into public.af_creators(owner_id) values($1)', [owner]);
+  await db.query('insert into af_admins(owner_id) values($1)', [admin]);
+  const value = result => result.rows[0].value;
+  const text = JSON.stringify(example), sha = await sha256(new TextEncoder().encode(text)), bytes = example.assets.reduce((sum, a) => sum + a.bytes, 0);
+  const submission = value(await db.query('select to_jsonb(public.af_create_submission($1,$2,$3,$4,$5)) as value', [owner, crypto.randomUUID(), text, sha, bytes]));
+  for (const a of example.assets) await db.query('insert into storage.objects values($1,$2,$3)', ['ai-fighter-beta', `${owner}/${submission.id}/${a.id}.webp`, { size: a.bytes }]);
+  await db.query('select public.af_submit($1,$2)', [owner, submission.id]);
+  const leased = value(await db.query('select to_jsonb(public.af_claim($1)) as value', [submission.id]));
+  const fighter = value(await db.query('select to_jsonb(public.af_finish($1,$2,$3,true,$4)) as value',
+    [submission.id, leased.lease_token, sha, { validatorVersion: VALIDATOR_VERSION, stage: 'bytes-hashes-and-full-decode', errors: [] }])).fighter_id;
+  const derived = { card: { sha256: 'c'.repeat(64), bytes: 300, width: 135, height: 600, face: { x: 18, y: 0, side: 98 } },
+    face: { sha256: 'f'.repeat(64), bytes: 200, size: 192 } };
+  /** A set the validator passed: in review, its front not checked yet. */
+  const validated = async () => {
+    const body = JSON.stringify(set());
+    const row = value(await db.query('select to_jsonb(public.af_profile_set_create($1,$2,$3,$4,$5,$6)) as value',
+      [owner, fighter, crypto.randomUUID(), body, await sha256(new TextEncoder().encode(body)), 1000]));
+    for (const [name, size] of [['front', 1000], ['card', 300], ['face', 200]])
+      await db.query('insert into storage.objects values($1,$2,$3)', ['ai-fighter-beta', profileSetKey(owner, row.id, name), { size }]);
+    await db.query('select public.af_profile_set_submit($1,$2)', [owner, row.id]);
+    const lease = value(await db.query('select to_jsonb(public.af_profile_set_claim($1)) as value', [row.id]));
+    return value(await db.query('select to_jsonb(public.af_profile_set_finish($1,$2,$3,true,$4,$5)) as value',
+      [row.id, lease.lease_token, row.manifest_sha, { validatorVersion: PROFILE_SET_VALIDATOR_VERSION, stage: 'profile-set-full-decode', errors: [] }, derived]));
+  };
+  const claim = async () => value(await db.query('select to_jsonb(public.af_profile_set_front_claim()) as value'));
+  const judge = (row, verdict, lease = row.front_lease_token) => db.query('select to_jsonb(public.af_profile_set_front_finish($1,$2,$3)) as value',
+    [row.id, lease, verdict]).then(value);
+  const front = async () => value(await db.query('select public.af_fighter_front($1) as value', [fighter]));
+  const enter = () => db.query('select public.af_enter_fighter($1,$2,$3,$4) as value', [owner, fighter, sha, ['idle']]);
+  const entered = async () => (await db.query('select entered_at from public.af_fighters where id = $1', [fighter])).rows[0].entered_at !== null;
+  const pass = { checks: { whole: 'pass', front: 'pass', single: 'pass' }, notes: 'One boxer, whole, facing the viewer.' };
+  const side = { checks: { whole: 'pass', front: 'fail', single: 'pass' }, notes: 'A side view facing right.' };
+  return { db, owner, admin, fighter, sha, value, validated, claim, judge, front, enter, entered, pass, side };
+}
+
+test('Postgres (정면 판정, 2026-11-03): the PC checks each validated set once; a pass lets him enter, a fail rejects it, and losing his last front takes the entry back', async () => {
+  const { db, admin, fighter, value, validated, claim, judge, front, enter, entered, pass } = await frontFixture();
+  try {
+
+    assert.deepEqual(await front(), { required: false, ok: false, profileSetId: null, status: null });
+    await db.exec("update public.af_settings set profile_set_required_after = now()");
+    const first = await validated();
+    assert.equal(first.status, 'review'); assert.equal(first.front_check, null);
+    assert.deepEqual(await front(), { required: true, ok: false, profileSetId: first.id, status: 'review', frontCheck: null });
+    await assert.rejects(enter(), /profile-set-required/, 'the validator alone does not let him enter');
+
+    const taken = await claim();
+    assert.equal(taken.id, first.id); assert.equal(taken.front_attempts, 1);
+    assert.equal(await claim(), null, 'a set under a live lease is nobody else\'s');
+    await assert.rejects(judge(taken, pass, crypto.randomUUID()), /stale-check/);
+    for (const bad of [{ ...pass, extra: 1 }, { checks: { whole: 'pass', front: 'pass' }, notes: 'x' }, { checks: { ...pass.checks, front: 'maybe' }, notes: 'x' },
+      { checks: pass.checks, notes: '' }, { checks: { ...pass.checks, style: 'pass' }, notes: 'x' }])
+      await assert.rejects(judge(taken, bad), /invalid-verdict/);
+    const checked = await judge(taken, pass);
+    assert.deepEqual([checked.status, checked.front_check, checked.front_verdict], ['review', 'pass', pass]);
+    assert.equal((await judge(taken, { ...pass, checks: { ...pass.checks, front: 'fail' } })).front_check, 'pass', 'the same receipt answers the same');
+    assert.equal((await front()).ok, true);
+    assert.equal(value(await enter()).stage, 'entered');
+
+    // A second painting that is a side view: rejected with the judge's reason; his first still lets him stay entered.
+    const second = await validated();
+    const side = { checks: { whole: 'pass', front: 'fail', single: 'pass' }, notes: 'A side view facing right.' };
+    const refused = await judge(await claim(), side);
+    assert.deepEqual([refused.id, refused.status, refused.reason, refused.front_check], [second.id, 'rejected', 'FRONT_VIEW', 'fail']);
+    assert.equal(await entered(), true);
+    // A set an operator copied from an approved one keeps its front: never taken for a check.
+    await db.query('update public.af_profile_sets set based_on = $1 where id = $2', [first.id, (await validated()).id]);
+    assert.equal(await claim(), null);
+
+    // The operator rejects his only front that lets him enter: back to 제작 중, his record kept.
+    await db.query('select public.af_admin_profile_set_reject($1,$2,$3)', [admin, first.id, '다른 사람의 그림']);
+    assert.equal(await entered(), false);
+    assert.equal((await db.query("select count(*)::int as value from public.af_profile_set_events where kind = 'front-lost' and fighter_id = $1", [fighter])).rows[0].value, 1);
+    assert.deepEqual(await front(), { required: true, ok: false, profileSetId: second.id, status: 'rejected', frontCheck: 'fail', reason: 'FRONT_VIEW',
+      notes: 'A side view facing right.' }, 'the newest refused set says why');
+    await assert.rejects(enter(), /profile-set-required/);
+
+    // An operator's approval counts as the check: he looked at the painting.
+    const third = await validated();
+    await db.query('select public.af_admin_profile_set_approve($1,$2)', [admin, third.id]);
+    assert.deepEqual(await front(), { required: true, ok: true, profileSetId: third.id, status: 'approved', frontCheck: null });
+    assert.equal(value(await enter()).stage, 'entered');
+    // Five takes without a verdict leave a set to the operator.
+    const fourth = await validated();
+    await db.query("update public.af_profile_sets set front_attempts = 5 where id = $1", [fourth.id]);
+    assert.equal(await claim(), null);
+  } finally { await db.close(); }
+});
+
+test('Postgres (정면 판정 리뷰, 2026-11-03): only a front that let him enter takes the entry when it goes; a take the PC could not run is given back', async () => {
+  const { db, admin, fighter, value, validated, claim, judge, front, enter, entered, pass, side } = await frontFixture();
+  try {
+    const events = async kind => (await db.query('select count(*)::int as value from public.af_profile_set_events where kind = $1 and fighter_id = $2', [kind, fighter])).rows[0].value;
+    // Entered before the gate, with no front: his first painting failing the check, or an operator rejecting one never checked, takes nothing.
+    assert.equal(value(await enter()).stage, 'entered');
+    await db.query("update public.af_fighters set entered_at = now() - interval '1 hour' where id = $1", [fighter]);
+    await db.exec("update public.af_settings set profile_set_required_after = now()");
+    const first = await validated();
+    assert.equal((await judge(await claim(), side)).status, 'rejected');
+    const second = await validated();
+    await db.query('select public.af_admin_profile_set_reject($1,$2,$3)', [admin, second.id, '흐림']);
+    assert.equal(await entered(), true, 'he entered with no front and keeps his entry');
+    assert.equal(await events('front-lost'), 0);
+
+    // The rule before this one: he entered while a set was in review, unchecked. That set failing the check takes the entry it gave.
+    await db.query('update public.af_fighters set entered_at = null where id = $1', [fighter]);
+    const legacy = await validated();
+    await db.query("update public.af_fighters set entered_at = $2::timestamptz + interval '39 seconds' where id = $1", [fighter, legacy.validated_at]);
+    assert.equal(legacy.status, 'review');
+    // The newest set in flight is named before a newer refused one.
+    const refused = await validated();
+    await db.query("update public.af_profile_sets set status = 'rejected', reason = 'FRONT_BACKGROUND' where id = $1", [refused.id]);
+    assert.equal((await front()).profileSetId, legacy.id);
+    // A take the PC could not run is given back: not counted, at once in the queue again; only under its own lease.
+    const taken = await claim();
+    assert.equal(taken.id, legacy.id);
+    await assert.rejects(db.query('select public.af_profile_set_front_release($1,$2)', [legacy.id, crypto.randomUUID()]), /stale-check/);
+    const released = value(await db.query('select to_jsonb(public.af_profile_set_front_release($1,$2)) as value', [legacy.id, taken.front_lease_token]));
+    assert.deepEqual([released.front_attempts, released.front_lease_token], [0, null]);
+    await assert.rejects(judge(taken, pass), /stale-check/, 'a released take sends no verdict');
+    await assert.rejects(judge({ id: legacy.id }, pass, null), /stale-check/, 'a null lease is no lease');
+    const again = await claim();
+    await assert.rejects(judge(again, { ...pass, notes: '\u0001'.repeat(400) }), /invalid-verdict/, 'a verdict past the column\'s 2000 bytes is refused as a verdict');
+    assert.equal((await judge(again, side)).reason, 'FRONT_VIEW');
+    assert.equal(await entered(), false, 'his only front that let him enter failed: back to 제작 중');
+    assert.equal(await events('front-lost'), 1);
+
+    // Five takes with no verdict: the owner and the MCP read `stalled` (an operator decides).
+    const stuck = await validated();
+    await db.query('update public.af_profile_sets set front_attempts = 5 where id = $1', [stuck.id]);
+    assert.equal((await front()).frontCheck, 'stalled');
+    assert.equal(await claim(), null);
+
+    // An operator's removal withdraws his sets and with them the entry an approved front gave; a restore does not enter him again.
+    await db.query('select public.af_admin_profile_set_approve($1,$2)', [admin, stuck.id]);
+    assert.equal(value(await enter()).stage, 'entered');
+    const version = (await db.query('select moderation_version from public.af_fighters where id = $1', [fighter])).rows[0].moderation_version;
+    await db.query("select public.af_moderate_fighter($1,$2,$3,'remove','test')", [admin, fighter, version]);
+    assert.equal(await entered(), false);
+    await db.query("select public.af_moderate_fighter($1,$2,$3,'restore','test')", [admin, fighter, version + 1]);
+    assert.equal(await entered(), false);
+    assert.equal((await front()).ok, false, 'his withdrawn sets are gone with the removal');
   } finally { await db.close(); }
 });
 

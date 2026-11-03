@@ -76,6 +76,44 @@ export const siteUrl = ({ fighterId, jobId, submissionId }) => fighterId ? `${CR
   : jobId ? `${CREATOR_PAGE}#job=${jobId}` : submissionId ? `${CREATOR_PAGE}#submission=${submissionId}` : null;
 /** What an agent does with a `siteUrl`: one sentence, shared by every result that carries one. */
 export const SITE_URL_NEXT = 'The user can follow this on the ODDBOUT website too: give him siteUrl to watch progress, pick a look, review the motions and enter the fighter (출전).';
+/**
+ * 정면 판정 (2026-11-03 사용자: "MCP 서버에서 이거 체크해서 정면샷 제작해야 출전할 수 있다고 알려줘야"): what an agent tells the user about his
+ * fighter's front before the entry (출전), from the API's `front` (af_fighter_front). Null when the entry asks for nothing more of it.
+ * `directory`: the directory edition, which has no upload tools and keeps ODDBOUT's Korean state names out (directory-edition.mjs).
+ * @param {any} front @param {{ directory?: boolean }} [options]
+ * @returns {string | null}
+ */
+export function frontNext(front, { directory = false } = {}) {
+  if (!front?.required || front.ok) return null;
+  const cannot = directory ? 'The fighter cannot enter public play yet' : 'He cannot enter (출전) yet';
+  const after = directory ? 'It can enter once front.ok.' : 'He can enter once front.ok.';
+  const painting = 'a full-body front painting of this fighter: one character, whole from head to soles, facing the viewer straight on'
+    + (directory ? '' : ' (get_fighter_spec overview: profileSet)');
+  // The upload tools take files a host attaches (ChatGPT's); the directory edition has none (리뷰 2026-11-03).
+  const upload = directory ? 'This connector cannot upload it: the user uploads it from the ODDBOUT app in ChatGPT or with the creator kit.'
+    : 'It goes in through prepare_profile_set, upload_profile_set_asset and submit_profile_set, which take files this host attaches (as ChatGPT '
+      + 'does); otherwise the user uploads it from the ODDBOUT app in ChatGPT.';
+  const reason = String(front.reason ?? '');
+  if (!front.profileSetId) return `${cannot}: it has no front painting (profile set). Make ${painting} with the user. ${upload} ${after}`;
+  // Each refusal asks for what fixes it, never a paid new painting where the same one goes in again. The judge's and the operator's words
+  // stay data (front.notes, front.reason), out of this instruction.
+  if (front.status === 'rejected') {
+    if (front.frontCheck === 'fail') return `${cannot}: ODDBOUT's front check sent its painting back (front.reason and front.notes say what it saw). `
+      + `Tell the user, and make ${painting} with him. ${upload} ${after}`;
+    if (/^[a-z0-9-]+$/.test(reason)) return `${cannot}: the check of its front painting could not run (front.reason). Submit the same painting `
+      + `again as a new upload; do not make a new one. ${upload} ${after}`;
+    if (/^[A-Z0-9_]+$/.test(reason)) return `${cannot}: the file check refused its front painting (front.reason: its format, size, background `
+      + `or face square). Fix that and submit it again; a new painting only if the user wants one. ${upload} ${after}`;
+    return `${cannot}: an ODDBOUT operator refused its front painting (front.reason gives why). Tell the user; make a new painting with him `
+      + `only if he wants. ${upload} ${after}`;
+  }
+  if (front.status === 'uploading') return `${cannot}: its front painting was never submitted (${front.profileSetId}). `
+    + (directory ? 'Tell the user to finish it where it was started. ' : 'Finish its upload (upload_profile_set_asset) and submit_profile_set. ') + after;
+  if (front.frontCheck === 'stalled') return `${cannot}: ODDBOUT could not check its front painting (${front.profileSetId}) automatically, and an `
+    + `operator will look at it. Nothing to upload now: tell the user and read get_registered_fighter again later. ${after}`;
+  return `${cannot}: ODDBOUT is checking its front painting (${front.profileSetId}) — the file first, then whether it shows one character, `
+    + `whole, facing the viewer straight on. Tell the user; read get_registered_fighter again later. ${after}`;
+}
 export const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 export const AUTH = [{ type: 'oauth2', scopes: ['openid', 'email', 'profile'] }];
 /**

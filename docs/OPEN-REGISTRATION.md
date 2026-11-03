@@ -113,9 +113,22 @@ ODDBOUT 통합 플러그인은 연결된 Google 계정을 PC와 Dots 등록에 �
   (`af_profile_set_stale_public` → Storage 삭제 → `af_profile_set_unpublished`). Storage 오류는 한 번 다시 시도하고, 그래도 실패하면
   `af_profile_set_events`에 `public-cleanup-failed`로 남긴다. 그 선수의 다음 정리가 다시 시도한다. 운영자가 선수를 복원해도 세트는 돌아오지 않는다.
   주인이 다시 올린다.
-- 출전 조건: `af_settings.profile_set_required_after`가 비어 있으면 꺼져 있다. 값이 있으면 그 시각 뒤에 등록한 선수는 검증을 통과한 세트
-  (`review`·`approved`)가 있어야 출전한다(`profile-set-required`).
+- 정면 판정(2026-11-03): 검증을 통과한 세트(`review`)는 공식 생성 PC의 codex(도구 전부 끔)가 그림을 한 번 본다. 한 캐릭터만, 머리부터 발끝까지,
+  보는 사람을 똑바로 보는 정면인지(`whole`·`front`·`single`)다. 문항은 맡긴 선수의 외형 판정과 같은 말이다(`host/generation-stages.mjs`
+  `frontJudgePrompt`). 셋 다 통과하면 `front_check = 'pass'`, 하나라도 실패하면 세트가 `rejected`가 되고 이유는 `FRONT_VIEW`·`FRONT_WHOLE`·
+  `FRONT_SINGLE`, 판정의 한두 문장이 `front_verdict.notes`에 남는다. 생성 PC는 단계와 단계 사이에만 판정하므로(그 토큰이 제작자의 단계에
+  섞이지 않게) 긴 동작 단계가 돌면 판정이 기다린다. 판정 임대는 15분이다. PC가 돌리지 못한 시도(codex가 지금 못 돎, og가 시작하지 않음, API가 그림
+  주소에 서명하지 못함)는 돌려주어(`profile-fronts/release`) 세지 않는다. 답 없이 다섯 번 가져가면 `stalled`로 운영자 몫이 된다. 판정이 틀려도 운영자가
+  뒤집지 않는다(사용자는 PC 판정만 골랐다). 주인이 새 그림을 올린다. 승인된 세트에서 운영자가 만든 시트 세트(`based_on`)는 그 정면을 그대로 쓰므로
+  판정하지 않는다. 주인은 `GET /profile-sets/:id`의 `frontCheck`(`pending`·`stalled`·`pass`·`fail`과 판정)로 본다.
+- 출전 조건: `af_settings.profile_set_required_after`가 비어 있으면 꺼져 있다. 값이 있으면 모든 선수가(만든 시각과 상관없이, 2026-11-03부터)
+  출전하려면 승인된 세트나, 정면 판정을 통과한 `review` 세트가 있어야 한다(`profile-set-required`). 이미 출전한 선수는 그대로다.
+  판정 결과와 거절 이유는 `af_fighter_front`가 한 곳에서 답한다. 주인의 `GET /fighters/:id`가 `fighter.front`로, 출전 거절이 `front`로 싣는다.
+  출전한 선수가 그를 출전시킨 정면을 잃고(판정 실패, 운영자 거절, 운영자 내리기) 남은 정면도 없으면 제작 중으로 돌아가고 `af_profile_set_events`에
+  `front-lost`가 남는다. 출전시킨 정면은 승인된 세트, 판정을 통과한 세트, 그리고 예전 규칙으로 출전하기 전부터 `review`였던 세트다
+  (`af_profile_set_counted`). 정면 없이 출전한 선수(관문 전)는 처음 올린 그림이 떨어져도 출전한 채로 있다.
 
 변경의 소유자는 [프로필 세트 마이그레이션](../supabase/migrations/20261031100000_oddbout_profile_sets.sql)과 [프로필 세트 API](../api/profile-sets.mjs),
-검증은 `worker/profile-sets.mjs`·`worker/profile-set-check.mjs`다. 마이그레이션 두 개(`…100000`, 검증 작업자 깨우기 `…100100`)를 먼저 적용하고
+검증은 `worker/profile-sets.mjs`·`worker/profile-set-check.mjs`, 정면 판정은 [정면 판정 마이그레이션](../supabase/migrations/20261103130000_oddbout_profile_front_check.sql)과
+`host/generation-worker.mjs` `createFrontCheck`다. 마이그레이션 두 개(`…100000`, 검증 작업자 깨우기 `…100100`)를 먼저 적용하고
 API·MCP·검증 작업자를 갱신한다.

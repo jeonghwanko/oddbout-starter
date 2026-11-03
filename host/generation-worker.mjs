@@ -6,11 +6,13 @@
 // generation-stages.mjs. Config: `<root>/worker.env` (ODDBOUT_GENERATION_API, ODDBOUT_GENERATION_WORKER_KEY, optional
 // ODDBOUT_GENERATION_KEEP_DAYS), written by `og worker key`. Once a day it runs `og prune`: a finished job's request text and pictures go.
 import { execFile, spawn } from 'node:child_process';
-import { appendFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { appendFile, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { ASKS, GROK_LIMITED, MODELS, createStages, ogJobId } from './generation-stages.mjs';
+import { ASKS, FRONT_JUDGE_SCHEMA, GROK_LIMITED, MODELS, briefCommand, createStages, frontJobId, frontJudgePrompt, frontVerdict, ogJobId }
+  from './generation-stages.mjs';
 import { codexTokensSince, codexUsage } from './codex-usage.mjs';
 
 // <root>/bin holds this file in both installs (/srv/oddbout-gen on ODDBOUT's PC, a host's own folder in user mode).
@@ -176,6 +178,10 @@ export function createApi({ base, key, fetcher = fetch }) {
     // 선수 프로필 세트 (2026-10-31): the chosen front (an artifact the job already holds) and its face square, before the package goes in.
     profileFront: (job, front) => fetcher(`${base}/generation-worker/jobs/${job.id}/profile-front`, { method: 'POST',
       headers: leased(job, { 'content-type': 'application/json' }), body: JSON.stringify(front), signal: AbortSignal.timeout(60_000) }).then(json),
+    // 정면 판정 (2026-11-03): an owner's front painting to check, and the verdict under that check's lease. Only the official host gets one.
+    frontClaim: () => post('profile-fronts/claim', {}),
+    frontFinish: (set, verdict) => post('profile-fronts/finish', { profileSetId: set.id, leaseToken: set.leaseToken, verdict }),
+    frontRelease: set => post('profile-fronts/release', { profileSetId: set.id, leaseToken: set.leaseToken }),
   };
 }
 
@@ -284,6 +290,84 @@ export function run(command, args, { cwd, log, stdin, signal, graceMs = STOP_GRA
   });
 }
 
+/** A front check's limit: one picture, one codex answer (its lease is fifteen minutes). */
+export const FRONT_CHECK_MS = 5 * 60_000;
+/** After a check that could not judge, the queue waits this long, doubled each time again, at most an hour (리뷰 2026-11-03). */
+export const FRONT_RETRY_MS = 15 * 60_000;
+/** A folder of one front check (generation-stages.mjs frontJobId). */
+const FRONT_FOLDER = /^\d{8}-front-[0-9a-f]{32}$/;
+/** A verdict a folder already holds, checked again, or null. @param {string} file */
+const savedVerdict = file => readFile(file, 'utf8').then(text => frontVerdict(JSON.parse(text))).catch(() => null);
+
+/**
+ * Close every front check's folder left open (리뷰 2026-11-03: a worker stopped mid-check skipped its `finally`, and an open folder stops
+ * og setup for good — the hosted jobs' sweep never sees it). Called when no check runs: at start and with each health check.
+ * @param {string} output  The kit's output folder.
+ */
+export async function closeFrontFolders(output) {
+  const closed = [];
+  for (const name of await readdir(output).catch(() => []))
+    if (FRONT_FOLDER.test(name) && !existsSync(path.join(output, name, '.closed'))) {
+      await writeFile(path.join(output, name, '.closed'), '').catch(() => {});
+      closed.push(name);
+    }
+  return closed;
+}
+
+/**
+ * 정면 판정 (2026-11-03): one owner's front painting, checked by codex with every tool off, between the jobs' stages — never beside one, so
+ * its tokens never count in a creator's stage. Its own og folder (open while it runs, so og setup waits), closed after. A take the PC could
+ * not run (codex cannot run here now, og did not start it) is given back; a verdict the folder already holds (its finish was lost) is sent
+ * before codex is asked again. Answers `judged`, `idle` (nothing queued), `off` (this host checks none) or `failed` (the loop waits).
+ * @param {{ api: { frontClaim: () => Promise<any>, frontFinish: (set: any, verdict: any) => Promise<any>, frontRelease: (set: any) => Promise<any> },
+ *   og: string, python: string, kit: string, say: (line: string) => Promise<unknown>, providerDown: (code: string) => Promise<boolean>,
+ *   worked?: () => void, fetcher?: typeof fetch, runner?: typeof run, now?: () => Date }} deps
+ */
+export function createFrontCheck({ api, og, python, kit, say, providerDown, worked = () => {}, fetcher = fetch, runner = run, now = () => new Date() }) {
+  /** @returns {Promise<'judged' | 'idle' | 'off' | 'failed'>} */
+  return async function checkFront() {
+    const claimed = await api.frontClaim().catch(error => ({ ok: false, code: error.message }));
+    if (!claimed.ok) { await say(`front claim failed ${claimed.code ?? claimed.status}`); return 'failed'; }
+    if (claimed.frontChecks === false) return 'off';
+    const set = claimed.profileSet;
+    if (!set) return 'idle';
+    const ogId = frontJobId(set, now()), dir = path.join(kit, 'output', ogId), log = path.join(dir, 'worker.log');
+    await mkdir(dir, { recursive: true });
+    await rm(path.join(dir, '.closed'), { force: true });
+    await writeFile(path.join(dir, 'request.json'), JSON.stringify({ id: ogId, api: { profileSetId: set.id }, createdAt: now().toISOString() }, null, 2) + '\n');
+    const signal = AbortSignal.timeout(FRONT_CHECK_MS), out = path.join(dir, 'verdict.json');
+    /** @param {string} why */
+    const giveBack = async why => { await api.frontRelease(set).catch(() => null); await say(`front ${set.id} given back (${why})`); };
+    try {
+      let verdict = await savedVerdict(out);
+      if (!verdict) {
+        const response = await fetcher(set.front.downloadUrl, { signal: AbortSignal.timeout(60_000), redirect: 'error' });
+        const bytes = response.ok ? new Uint8Array(await response.arrayBuffer()) : null;
+        if (!bytes || bytes.length !== set.front.bytes || createHash('sha256').update(bytes).digest('hex') !== set.front.sha256) {
+          await say(`front ${set.id} download ${response.status}${bytes ? ' (not its bytes)' : ''}`); return 'failed';
+        }
+        const webp = path.join(dir, 'front.webp'), png = path.join(dir, 'front.png');
+        await writeFile(webp, bytes);
+        // codex takes the PNG the look judge takes; the painting's own pixels, alpha kept.
+        if (await runner(python, ['-I', '-c', 'import sys\nfrom PIL import Image\nImage.open(sys.argv[1]).save(sys.argv[2], "PNG")', webp, png], { cwd: kit, log, signal }) !== 0) {
+          await say(`front ${set.id} unreadable`); return 'failed';
+        }
+        const schema = path.join(dir, 'schema.json');
+        await writeFile(schema, JSON.stringify(FRONT_JUDGE_SCHEMA));
+        const code = await runner(og, ['run', ogId, '--', ...briefCommand({ schema, out, refs: [png] })], { cwd: kit, log, stdin: frontJudgePrompt(), signal });
+        if (code === 75) { await giveBack('codex cannot run here now'); await providerDown(ASKS); return 'failed'; }
+        if (code === 3) { await giveBack('og did not start it'); return 'failed'; }
+        verdict = code === 0 ? await savedVerdict(out) : null;
+        if (!verdict) { await say(`front ${set.id} no verdict (exit ${code})`); return 'failed'; }
+        worked();
+      }
+      const reply = await api.frontFinish(set, verdict).catch(error => ({ ok: false, code: error.message }));
+      await say(`front ${set.id} → ${reply.ok ? reply.frontCheck?.status ?? reply.stage : `finish refused ${reply.code ?? reply.status}`}`);
+      return reply.ok ? 'judged' : 'failed';
+    } finally { await writeFile(path.join(dir, '.closed'), '').catch(() => {}); }
+  };
+}
+
 /** The worker's loop. `once`: one claim, for a manual run. */
 export async function main({ once = false } = {}) {
   const env = parseEnv(await readFile(path.join(ROOT, 'worker.env'), 'utf8'));
@@ -311,6 +395,7 @@ export async function main({ once = false } = {}) {
       // A health check waits for a codex slot like any run; past ten minutes it counts as not healthy.
       health = cooldowns.apply(parseHealth(await quiet(['health'], 600_000))); checkedAt = Date.now();
       await say(`health codex=${health.codex} grok=${health.grok}`);
+      for (const name of await closeFrontFolders(path.join(kit, 'output'))) await say(`front folder ${name} closed`);
       // Jobs that ended while they waited for their requester (cancelled, expired): closed here, so og setup can update again.
       const unclosed = await unclosedJobs(path.join(kit, 'output'));
       if (unclosed.size) {
@@ -327,6 +412,32 @@ export async function main({ once = false } = {}) {
       const reply = await api.heartbeat(health, await codexUsage(sessions).catch(() => null)).catch(error => ({ ok: false, code: error.message }));
       if (reply.ok) beatAt = Date.now(); else await say(`heartbeat failed ${reply.code ?? reply.status}`);
     }
+  }
+
+  /** codex cannot run here now (exit 75: signed out, usage used up): claim nothing until a health check passes again, soon. */
+  async function providerDown(code) {
+    const down = healthAfter(health, code), provider = limitedProvider(code);
+    if (down === health) return false;
+    health = down;
+    const wait = cooldowns.limit(provider);
+    checkedAt = Date.now() - TIMING.healthMs + wait;
+    await say(`${provider} cannot run now: no claims until health passes (checked again in ${Math.round(wait / 60_000)} minutes)`);
+    return true;
+  }
+
+  const checkFront = createFrontCheck({ api, og, python, kit, say, providerDown, worked: () => cooldowns.worked(['codex']) });
+  // The front queue is asked once a minute while it is empty (a claim every idle turn would double this PC's calls), at once after a
+  // verdict, after a failure only once FRONT_RETRY_MS (doubling) has passed, and never on a host that checks none.
+  let frontDue = 0, frontWait = FRONT_RETRY_MS;
+  async function frontTurn() {
+    // A check holds the loop: the heartbeat goes on beside it, or the official host looks offline and refuses requests.
+    const beating = setInterval(() => { api.heartbeat(health).catch(() => {}); }, TIMING.heartbeatMs);
+    const outcome = await checkFront().catch(error => { say(`front check error ${error.message}`); return 'failed'; })
+      .finally(() => clearInterval(beating));
+    if (outcome === 'judged') { frontDue = 0; frontWait = FRONT_RETRY_MS; }
+    else if (outcome === 'idle') frontDue = Date.now() + TIMING.heartbeatMs;
+    else if (outcome === 'off') frontDue = Infinity;
+    else { frontDue = Date.now() + frontWait; frontWait = Math.min(frontWait * 2, TIMING.healthMs); }
   }
 
   async function work(job) {
@@ -394,14 +505,7 @@ export async function main({ once = false } = {}) {
       await reportStageTokens(api, job, await spent(), say);
       return;
     }
-    // codex cannot run here now (exit 75: signed out, usage used up): claim nothing until a health check passes again, soon.
-    const down = healthAfter(health, outcome.result?.code), provider = limitedProvider(outcome.result?.code);
-    if (down !== health) {
-      health = down;
-      const wait = cooldowns.limit(provider);
-      checkedAt = Date.now() - TIMING.healthMs + wait;
-      await say(`${provider} cannot run now: no claims until health passes (checked again in ${Math.round(wait / 60_000)} minutes)`);
-    } else if (outcome.outcome === 'ok') cooldowns.worked(STAGE_PROVIDERS[job.status] ?? []);
+    if (!await providerDown(outcome.result?.code) && outcome.outcome === 'ok') cooldowns.worked(STAGE_PROVIDERS[job.status] ?? []);
     // The stage's codex tokens beside its calls (2026-10-31): the server's daily budget and the creator's balance count them. A finish
     // refused (or lost) keeps none, so they go on their own route.
     const tokens = await spent();
@@ -418,6 +522,7 @@ export async function main({ once = false } = {}) {
   for (;;) {
     try {
       await keepAlive();
+      if (health.codex && Date.now() >= frontDue) await frontTurn();
       const claimed = health.ok ? await api.claim() : { ok: true, stage: 'idle' };
       if (claimed.ok && claimed.job) await work(claimed.job);
       else {

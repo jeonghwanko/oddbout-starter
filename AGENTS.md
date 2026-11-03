@@ -249,7 +249,9 @@ Both routes:
   approval of unchanged animations.
 - A validated fighter starts in production (제작 중): out of other people's cups, ranked duels and lists while the owner
   previews and practises it. Other people meet it after the owner watches each required motion and enters it (출전,
-  on the site's motions page or with `enter_fighter`); a new package returns it to production.
+  on the site's motions page or with `enter_fighter`); a new package returns it to production. Entry also needs its front
+  painting (profile set) to pass ODDBOUT's front check — one character, whole from head to soles, facing the viewer —
+  or an operator's approval; `get_registered_fighter`'s `front` says what is missing. Losing its last front returns it to production.
 
 ## Changing this repository
 

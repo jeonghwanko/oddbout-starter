@@ -236,8 +236,11 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
           .eq('owner_id', owner).maybeSingle();
         check(currentError);
         const manifest = current?.manifest;
+        // His front for the entry (정면 판정, 2026-11-03): whether the gate asks for one and the set that lets him enter, or why none does yet.
+        // A read that fails leaves it out, never his fighter (an API deployed before its migration).
+        const front = data.status === 'registered' ? (await Promise.resolve(db.rpc('af_fighter_front', { p_fighter: data.id })).catch(() => null))?.data ?? null : null;
         return json({ ok: true, stage: 'registered', fighter: { ...data, ...(manifest ? { combat: { stats: manifest.combat?.stats ?? null,
-          style: manifest.combat?.style ?? null, skill: manifest.clips?.skill?.skill?.kind ?? null } } : {}) } });
+          style: manifest.combat?.style ?? null, skill: manifest.clips?.skill?.skill?.kind ?? null } } : {}), ...(front ? { front } : {}) } });
       }
       if (isWorker && method === 'POST') {
         let body;

@@ -38,12 +38,15 @@ export function registerProfileSetTools({ register, db, identity, invoke, fetche
       if (bytes.length !== expected.bytes || await sha256(bytes) !== expected.sha256) throw new Problem(422, 'asset-hash-or-size');
       return invoke(`profile-sets/${profileSetId}/assets/${assetId}`, 'PUT', bytes, { 'content-type': 'image/webp' });
     }, { write: true, openWorld: true, idempotent: true, files: ['file'] });
-  register('submit_profile_set', '프로필 세트 제출', 'Submit the uploaded profile set for validation and the operator\'s review. '
-    + 'Requires the user\'s approval of the front painting, its round face crop and the expression sheet. Queued or in review is not approved: '
-    + 'follow get_profile_set. The roster and the home show the fighter\'s painting only once it is approved.',
+  register('submit_profile_set', '프로필 세트 제출', 'Submit the uploaded profile set for validation, ODDBOUT\'s front check and the operator\'s '
+    + 'review. Requires the user\'s approval of the front painting, its round face crop and the expression sheet. Queued or in review is not '
+    + 'approved: follow get_profile_set. The fighter can enter (출전) once the front check passed; the roster and the home show his painting '
+    + 'only once it is approved.',
     { profileSetId: UUID_ARG() }, ({ profileSetId }) => invoke(`profile-sets/${profileSetId}/submit`, 'POST'),
     { write: true, publish: true, openWorld: true, idempotent: true });
   register('get_profile_set', '프로필 세트 상태', 'Read your profile set: uploading, queued, validating, review (waiting for the operator), approved, '
-    + 'rejected (with the reason) or superseded. Includes short-lived links to its files. Do not regenerate automatically.',
+    + 'rejected (with the reason) or superseded. frontCheck: pending while ODDBOUT checks that the painting shows one character, whole, '
+    + 'facing the viewer straight on; pass lets the fighter enter; fail rejects the set (FRONT_VIEW, FRONT_WHOLE or FRONT_SINGLE, with the '
+    + 'judge\'s notes): tell the user why and make a new painting with him. Includes short-lived links to its files. Do not regenerate automatically.',
     { profileSetId: UUID_ARG() }, ({ profileSetId }) => invoke(`profile-sets/${profileSetId}`));
 }
