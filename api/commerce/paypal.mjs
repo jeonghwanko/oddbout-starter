@@ -86,6 +86,14 @@ function boundOrderUnit(order, expected, status) {
  * @param {unknown} order @param {OrderExpectation} expected */
 export function validateApprovedOrder(order, expected) { boundOrderUnit(order,expected,'APPROVED'); }
 
+/** Operator recovery of an unlinked provider order: verify the same merchant, intent, amount and currency.
+ * This is validation only, never a payment approval. @param {unknown} order @param {OrderExpectation} expected */
+export function validateOrderBinding(order, expected) {
+  const value = object(order);
+  if (!['CREATED','SAVED','APPROVED','VOIDED','COMPLETED','PAYER_ACTION_REQUIRED'].includes(value.status)) throw new PayPalError('paypal_capture_mismatch');
+  boundOrderUnit(order, expected, value.status);
+}
+
 /** A recovered checkout must obey the same approval-link contract as a new checkout.
  * @param {unknown} order @param {string} orderId */
 export function validatedApprovalUrl(order, orderId) {
@@ -109,6 +117,9 @@ export function validateCapturedOrder(order, expected) {
   const captures = object(unit.payments).captures;
   if (!Array.isArray(captures) || captures.length !== 1) fail();
   const capture = object(captures[0]);
+  if (!matchesMoney(capture.amount, expected.amountMinor, expected.currency)) fail();
+  if (capture.status === 'PENDING') throw new PayPalError('paypal_capture_pending', { outcomeUnknown: true });
+  if (['DECLINED', 'FAILED'].includes(capture.status)) throw new PayPalError('paypal_capture_failed');
   if (capture.status !== 'COMPLETED' || capture.final_capture !== true || !matchesMoney(capture.amount, expected.amountMinor, expected.currency)) fail();
   // Some Orders responses also include capture payee/order linkage. If present,
   // they must agree; the purchase unit remains the required merchant binding.

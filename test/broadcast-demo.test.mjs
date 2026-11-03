@@ -28,6 +28,7 @@ test('public proxy requests keep exact Host and origin checks; health is livenes
     }).on('error', reject);
   });
   assert.deepEqual(JSON.parse((await request('/healthz')).body), { ok: true, service: 'oddbout-broadcast-sandbox' });
+  assert.deepEqual(JSON.parse((await request('/readyz')).body), { ok: true, paidTaskRecovery: false });
   assert.equal((await request('/broadcast/config', { host: 'internal', 'x-forwarded-host': 'demo.example' })).status, 403);
   const config = await request('/broadcast/config', { host: 'demo.example' });
   assert.equal(config.status, 200);

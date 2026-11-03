@@ -32,6 +32,9 @@ export function createCommerceStore(db) {
     return row(data);
   }
   return {
+    /** Leased payment recovery and operator diagnostics, service-role only.
+     * @param {string|null} owner @param {string} action @param {any} [input] */
+    recovery: (owner, action, input = {}) => command(owner, action, input, 'commerce_operation_recovery'),
     /** Durable paid-task commands; owner is verified by the web/device handler.
      * @param {string} owner @param {string} action @param {any} [input] */
     operation: (owner, action, input = {}) => command(owner, action, input, 'commerce_operation'),

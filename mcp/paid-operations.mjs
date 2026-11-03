@@ -46,7 +46,8 @@ export function createPaidOperationClient({ origin, fetchImpl = fetch }) {
     catalog: () => request('catalog'),
     /** @param {any} input */
     prepare: input => request('operations', input),
-    list: () => request('operations'),
+    /** @param {{cursor?:string,filter?:string,query?:string,limit?:number}} [options] */
+    list: (options = {}) => request('operations/page?' + new URLSearchParams(Object.entries(options).map(([key,value]) => [key,String(value)]))),
     /** @param {string} id */
     get: id => request(`operations/${encodeURIComponent(id)}`),
     /** @param {string} id */
@@ -90,7 +91,8 @@ export function createPaidOperationMcp(client) {
   register('get_paid_operation_catalog', 'Read the configured hosts, fighters and server prices before preparing one cup.', {}, () => client.catalog());
   register('prepare_paid_operation', 'Save one four-fighter cup for human approval. No payment or execution. Reuse the exact requestKey and input after reply loss; list existing tasks after restarting.',
     { requestKey: z.uuid(), hostId: z.string().max(64), channelId: z.string().min(1).max(64), endsAt: z.string().max(40), fighterIds: z.array(z.string().max(64)).length(4) }, args => client.prepare(args), true);
-  register('list_my_operations', 'Discover this account’s latest 50 tasks across devices, including pending payments and completed results. No order ID or previous conversation needed.', {}, () => client.list());
+  register('list_my_operations', 'Discover saved tasks across devices. Follow nextCursor to older pages; filter active, attention or completed tasks and search by name. Never replace a task because it is not on the first page.',
+    { cursor:z.string().max(256).optional(), filter:z.enum(['all','active','attention','completed']).optional(), query:z.string().max(64).optional(), limit:z.number().int().min(1).max(50).optional() }, args => client.list(args));
   register('get_paid_operation', 'Read the original task, payment evidence and saved execution result.', { operationId: z.uuid() }, args => client.get(args.operationId));
   register('resume_paid_operation', 'Reconcile the same approved payment and queue the original approved cup once, or return its existing status/result. Unknown work stays held. This cannot grant approval.',
     { operationId: z.uuid() }, args => client.resume(args.operationId), true);

@@ -19,22 +19,24 @@ export const proof = job => ({protocolVersion:1,jobId:job.id,leaseToken:job.leas
 // Only PayPal HTTP and verified auth identity are fixtures. SQL, ledger, services, routes and MCP client are real.
 export async function paidFixture(t) {
   const database = await commerceDatabase(); t.after(()=>database.db.close());
-  const orders=new Map(),calls=[];
-  let loseCapture=false;
+  const orders=new Map(),calls=[],createdRequests=new Map();
+  let loseCapture=false,loseCreate=false,failStatus=0,pendingCapture=false;
   const paypal=createPayPalSandbox({clientId:'test',clientSecret:'test',merchantId:'MERCHANT',fetch:async(url,init)=>{
     const path=new URL(url).pathname, body=init.body&&init.body!=='grant_type=client_credentials'?JSON.parse(init.body):null;
     calls.push({path,method:init.method,requestId:new Headers(init.headers).get('paypal-request-id')});
     const json=data=>new Response(JSON.stringify(data));
     if(path==='/v1/oauth2/token')return json({access_token:'provider-test-token',token_type:'Bearer',expires_in:3600});
     if(path==='/v1/notifications/verify-webhook-signature')return json({verification_status:body.transmission_sig==='valid'?'SUCCESS':'FAILURE'});
+    if(failStatus){const status=failStatus;failStatus=0;return new Response('{}',{status});}
     if(path==='/v2/checkout/orders'){
+      const key=new Headers(init.headers).get('paypal-request-id');if(createdRequests.has(key))return json(orders.get(createdRequests.get(key)));
       const id=`ORDER${orders.size+1}`,order={id,intent:body.intent,status:'CREATED',purchase_units:body.purchase_units,links:[{rel:'payer-action',href:`https://www.sandbox.paypal.com/checkoutnow?token=${id}`}]};
-      orders.set(id,order);return json(order);
+      orders.set(id,order);createdRequests.set(key,id);if(loseCreate){loseCreate=false;throw new TypeError('lost create response');}return json(order);
     }
     const match=path.match(/^\/v2\/checkout\/orders\/([^/]+)(\/capture)?$/); if(!match)throw new Error('unexpected-provider-request');
     const order=orders.get(match[1]);if(!order)throw new Error('missing-order');
     if(match[2]){
-      order.status='COMPLETED';order.purchase_units[0].payments={captures:[{id:`CAPTURE${order.id}`,status:'COMPLETED',final_capture:true,amount:order.purchase_units[0].amount}]};
+      order.status='COMPLETED';order.purchase_units[0].payments={captures:[{id:`CAPTURE${order.id}`,status:pendingCapture?'PENDING':'COMPLETED',final_capture:true,amount:order.purchase_units[0].amount}]};
       if(loseCapture){loseCapture=false;throw new TypeError('lost capture response');}
     }
     return json(order);
@@ -64,5 +66,6 @@ export async function paidFixture(t) {
   const signedHeaders=()=>new Headers({'paypal-transmission-id':'TX','paypal-transmission-time':new Date().toISOString(),
     'paypal-transmission-sig':'valid','paypal-auth-algo':'SHA256withRSA','paypal-cert-url':'https://api.sandbox.paypal.com/v1/notifications/certs/CERT'});
   const event=(type,resource)=>commerce.webhook(signedHeaders(),JSON.stringify({id:randomUUID(),event_type:type,resource}));
-  return {...database,commerce,service,handler,fetchImpl,phone,connect,fund,orders,calls,event,loseCapture:()=>{loseCapture=true;}};
+  return {...database,commerce,service,handler,fetchImpl,phone,connect,fund,orders,calls,event,loseCapture:()=>{loseCapture=true;},loseCreate:()=>{loseCreate=true;},
+    failProvider:(status=503)=>{failStatus=status;},pendingCapture:()=>{pendingCapture=true;}};
 }

@@ -66,6 +66,7 @@ export function createCommerceService({ store, paypal, merchantId = '', publicOr
       if (intent.status === 'credited') return intent;
       if (!intent.providerOrderId) throw new Problem(409, 'checkout-outcome-unknown');
       const provider = payments(), order = await provider.getOrder(intent.providerOrderId);
+      if (order.status === 'VOIDED') throw new Problem(409, 'paypal-order-voided');
       if (order.status !== 'COMPLETED') {
         if (order.status !== 'APPROVED') throw new Problem(409, 'paypal-approval-required');
         validateApprovedOrder(order,{orderId:intent.providerOrderId,referenceId:intent.id,

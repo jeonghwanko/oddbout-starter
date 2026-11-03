@@ -9,6 +9,7 @@ import { commerceFromEnvironment } from '../api/commerce/config.mjs';
 import { createCommerceStore } from '../api/commerce/store.mjs';
 import { createPaidOperations } from '../api/commerce/paid-operations.mjs';
 import { createPaidOperationHandler } from '../api/commerce/paid-handler.mjs';
+import { createRecoveryWorker } from '../api/commerce/payment-recovery.mjs';
 import { createCommerceHandler } from '../api/commerce/handler.mjs';
 import { verifiedUserId } from '../api/http.mjs';
 import { createCommerceMcpHandler, createIssuedProducerGrants } from '../mcp/cloud/commerce-handler.mjs';
@@ -37,7 +38,9 @@ export function createBroadcastDemo(env = process.env) {
   const url = env.SUPABASE_URL, secret = env.SUPABASE_SERVICE_ROLE_KEY, publishableKey = env.SUPABASE_PUBLISHABLE_KEY;
   if (publishableKey && !isPublishableKey(publishableKey)) throw new Error('invalid-browser-publishable-key');
   if (env.ODDBOUT_COMMERCE_ENABLED === '1' && (!url || !secret || !publishableKey)) throw new Error('demo-commerce-database-required');
-  const db = url && secret ? createClient(url, secret, { auth: { persistSession: false, autoRefreshToken: false } }) : null;
+  const db = url && secret ? createClient(url, secret, { auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: (input, init) => fetch(input, { ...init,
+      signal: init?.signal ? AbortSignal.any([init.signal, AbortSignal.timeout(5000)]) : AbortSignal.timeout(5000) }) } }) : null;
   const get = (/** @type {string} */ name) => name === 'ODDBOUT_COMMERCE_ORIGIN' ? publicOrigin : env[name];
   const commerce = db ? commerceFromEnvironment({ db, get }) : null;
   if (env.ODDBOUT_PAID_OPERATIONS && !['0', '1'].includes(env.ODDBOUT_PAID_OPERATIONS)) throw new Error('invalid-paid-operations-setting');
@@ -46,6 +49,8 @@ export function createBroadcastDemo(env = process.env) {
     ? createPaidOperations({ store: commerce.store, commerce: commerce.service, publicOrigin }) : null;
   const paidApi = paidOperations && commerce && db ? createPaidOperationHandler({ service: paidOperations, store: commerce.store,
     publicOrigin, authenticate: request => verifiedUserId(db, request) }) : null;
+  const paymentWorker = paidOperations ? createRecoveryWorker({ recovery: paidOperations.recovery,
+    log: event => console.error(JSON.stringify(event)) }) : null;
   const previewService = createCommerceService({ store: createCommerceStore({ rpc: async () => ({ data: null, error: { message: 'unconfigured' } }) }),
     paypal: null, publicOrigin, hosts: [{ id: 'current-pc' }, { id: 'office-stable' }, { id: 'svl-mac-01' }] });
   const producers = env.ODDBOUT_BROADCAST_PRODUCERS_JSON ? JSON.parse(env.ODDBOUT_BROADCAST_PRODUCERS_JSON) : [];
@@ -99,6 +104,14 @@ export function createBroadcastDemo(env = process.env) {
         res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
         res.end('{"ok":true,"service":"oddbout-broadcast-sandbox"}'); return;
       }
+      if (req.url === '/readyz' && req.method === 'GET') {
+        let ready = true;
+        if (paidOperations && commerce) {
+          try { ready = (await commerce.store.recovery(null, 'health')).schemaVersion === 2; } catch { ready = false; }
+        }
+        res.writeHead(ready ? 200 : 503, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+        res.end(JSON.stringify({ ok: ready, paidTaskRecovery: Boolean(paidOperations) })); return;
+      }
       if (req.headers.host !== publicUrl.host) { res.writeHead(403); res.end('invalid-host'); return; }
       const address = new URL(req.url ?? '/', publicOrigin);
       if (address.pathname === '/') { res.writeHead(302, { location: '/broadcast/' }); res.end(); return; }
@@ -110,6 +123,12 @@ export function createBroadcastDemo(env = process.env) {
       const file = files.get(address.pathname);
       if (req.method === 'GET' && file) {
         const bytes = await readFile(new URL(file[0], root));
+        if (address.pathname === '/broadcast/tasks/') {
+          const authOrigin = url ? new URL(url).origin : '';
+          res.setHeader('content-security-policy', `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' ${authOrigin}; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'`);
+          res.setHeader('x-frame-options', 'DENY');
+          res.setHeader('permissions-policy', 'camera=(), microphone=(), geolocation=()');
+        }
         res.writeHead(200, { 'content-type': file[1], 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' }); res.end(bytes); return;
       }
       const chunks = []; let size = 0;
@@ -119,7 +138,7 @@ export function createBroadcastDemo(env = process.env) {
       const request = new Request(address, { method: req.method, headers, ...(['GET', 'HEAD'].includes(req.method ?? '') ? {} : { body }) });
       let response;
       if (address.pathname.startsWith('/commerce/')) response = await api(request);
-      else if ((address.pathname.startsWith('/paid-operations/') || address.pathname.startsWith('/paid-agent/')) && paidApi) response = await paidApi(request);
+      else if ((address.pathname.startsWith('/paid-operations/') || address.pathname.startsWith('/paid-agent/')) && paidApi) response = await paidApi(request, { clientAddress: req.socket.remoteAddress });
       else if ((address.pathname === '/mcp' || address.pathname === '/mcp/.well-known/oauth-protected-resource') && mcp) response = await mcp(request);
       else if (address.pathname.startsWith('/commerce-worker/') && worker) response = await worker(request);
       else response = new Response(JSON.stringify({ ok: false, code: 'not-configured-or-not-found' }), { status: 404, headers: { 'content-type': 'application/json' } });
@@ -128,7 +147,9 @@ export function createBroadcastDemo(env = process.env) {
   });
   server.requestTimeout = 30_000;
   server.headersTimeout = 15_000;
-  return { server, port, publicOrigin, bindHost, supervisor };
+  server.once('listening', () => paymentWorker?.start());
+  server.once('close', () => { void paymentWorker?.stop(); });
+  return { server, port, publicOrigin, bindHost, supervisor, paymentWorker };
 }
 
 /** Opt-in: ODDBOUT_PAYOUTS=1 pays creators an appearance fee per completed cup through PayPal Sandbox Payouts.
@@ -192,9 +213,9 @@ export function autoProducerFromEnvironment(env, { commerce, issued, mcp }) {
 }
 
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
-  const { server, port, publicOrigin, bindHost, supervisor } = createBroadcastDemo();
+  const { server, port, publicOrigin, bindHost, supervisor, paymentWorker } = createBroadcastDemo();
   server.listen(port, bindHost, () => console.log(`ODDBOUT Sandbox console: ${publicOrigin}/broadcast/`));
   if (supervisor) console.log(`AI producers resumed: ${await supervisor.resume()}`);
-  const stop = () => { server.close(); server.closeIdleConnections(); void supervisor?.close(); };
+  const stop = () => { server.close(); server.closeIdleConnections(); void supervisor?.close(); void paymentWorker?.stop(); };
   process.once('SIGINT', stop); process.once('SIGTERM', stop);
 }

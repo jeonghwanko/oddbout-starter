@@ -33,7 +33,7 @@ test('VM disconnect → phone approval/payment without return → new PC MCP rec
   await server.connect(left);const client=new Client({name:'fresh-pc',version:'1'});await client.connect(right);
   t.after(()=>client.close());t.after(()=>server.close());
   const result=await client.callTool({name:'list_my_operations',arguments:{}});
-  const found=JSON.parse(result.content[0].text).data[0];assert.equal(found.id,operation.id);
+  const found=JSON.parse(result.content[0].text).data.items[0];assert.equal(found.id,operation.id);
   const response=await client.callTool({name:'resume_paid_operation',arguments:{operationId:found.id}});
   const resumed=JSON.parse(response.content[0].text).data;assert.equal(resumed.state,'queued');
   // Lost enqueue reply / simultaneous retries all return this same job.
@@ -161,7 +161,7 @@ test('cancellation, expiration, payment reversals and bad provider evidence cann
   assert.equal((await client.resume(cancelled.id)).state,'cancelled');
   assert.equal((await f.store.wallet(OWNER)).balanceCredits,1000); // approved purchase still belongs to the wallet
   const expired=await client.prepare(taskInput());await f.phone(`operations/${expired.id}/approve`,{confirmed:true});
-  await f.db.query("update commerce.operations set input=jsonb_set(input,'{endsAt}',to_jsonb((clock_timestamp()-interval '1 second')::text)) where id=$1",[expired.id]);
+  await f.db.query("update commerce.operations set effective_ends_at=clock_timestamp()-interval '1 second' where id=$1",[expired.id]);
   assert.equal((await client.resume(expired.id)).state,'expired');
   const blocked=await client.prepare(taskInput());await f.phone(`operations/${blocked.id}/approve`,{confirmed:true});
   await f.event('PAYMENT.CAPTURE.REVERSED',{id:'CAPTUREORDER1',supplementary_data:{related_ids:{order_id:'ORDER1'}}});

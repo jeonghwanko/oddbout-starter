@@ -11,7 +11,7 @@ services:
     # The official PayPal MCP server (reconciliation) installs apart from the kit's dependencies.
     buildCommand: npm ci --omit=dev --ignore-scripts && npm ci --prefix deploy/paypal-mcp --omit=dev --ignore-scripts
     startCommand: node scripts/broadcast-demo.mjs
-    healthCheckPath: /healthz
+    healthCheckPath: /readyz
     autoDeployTrigger: "off"
     envVars:
       - key: NODE_VERSION
