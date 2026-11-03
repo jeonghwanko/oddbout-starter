@@ -589,3 +589,13 @@ test('siteUrl names a fighter before a request before a submission, and nothing 
   assert.equal(siteUrl({}), null);
   assert.ok(PICTURE_PAGE.startsWith(`${CREATOR_PAGE}#view=upload&ticket=`));
 });
+
+// Grok 점검 (2026-11-03): Cursor's Grok Bot chat shows a job's pictures only as files the bot downloads and attaches; next says so wherever
+// there are pictures to show, and asks for the a/b choice while choice is empty.
+test('next says to attach the downloaded pictures wherever there are pictures to show', () => {
+  const job = { id: 'x', candidates: [], host: { choice: 'oddbout' }, revisionsLeft: { appearance: 2, motions: 3 }, preview: [] };
+  for (const status of ['appearance_ready', 'motions', 'motion_ready', 'needs_review'])
+    assert.match(hostedNext({ ...job, status }), /download each file \(the url lasts ten minutes\) and attach it/, status);
+  assert.match(hostedNext({ ...job, status: 'appearance_ready' }), /Show the user both looks[\s\S]*ask which one[\s\S]*choose_hosted_look/);
+  assert.doesNotMatch(hostedNext({ ...job, status: 'queued' }), /attach/);
+});
