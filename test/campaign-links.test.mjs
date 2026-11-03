@@ -24,10 +24,11 @@ test('only official YouTube and Twitch identities become embed URLs, with no arb
 
 test('linked media is owned, immutable and recoverable without storage downloads, duplicate introduction or another debit',async t=>{
   const f=await commerceDatabase();t.after(()=>f.db.close());
-  for(const file of ['20261103154930_commerce_campaigns.sql','20261103170232_commerce_campaign_links.sql'])await f.db.exec(await readFile(new URL('../supabase/sandbox/'+file,import.meta.url),'utf8'));
+  for(const file of ['20261103154930_commerce_campaigns.sql','20261103170232_commerce_campaign_links.sql','20261103180002_commerce_campaign_schedule.sql'])await f.db.exec(await readFile(new URL('../supabase/sandbox/'+file,import.meta.url),'utf8'));
   const rpc=async(name,args)=>{try{return{data:await f.db.transaction(async tx=>{
     await tx.exec('set local role service_role');
     if(name==='commerce_campaign_link')return(await tx.query('select public.commerce_campaign_link($1,$2,$3,$4::jsonb) value',[args.p_owner,args.p_order_id,args.p_request_key,JSON.stringify(args.p_input)])).rows[0].value;
+    if(name==='commerce_campaign_planning')return(await tx.query('select public.commerce_campaign_planning($1,$2,$3::jsonb) value',[args.p_owner,args.p_command,JSON.stringify(args.p_input)])).rows[0].value;
     assert.equal(name,'commerce_campaign');return(await tx.query('select public.commerce_campaign($1,$2,$3::jsonb) value',[args.p_owner,args.p_command,JSON.stringify(args.p_input)])).rows[0].value;
   }),error:null};}catch(error){return{data:null,error};}};
   let introductions=0;
@@ -44,6 +45,7 @@ test('linked media is owned, immutable and recoverable without storage downloads
   await service.saveLink(OWNER,order.id,{...input,mediaUrl:'https://www.youtube.com/watch?v=M7lc1UVf-VE'});assert.equal(introductions,1);
   await assert.rejects(service.saveLink(OWNER,order.id,{...input,targetUrl:'https://different.example/'}),/idempotency-conflict/);
   const preview=await service.preview(OWNER,order.id);assert.equal(preview.source.kind,'youtube');
+  await service.schedule(OWNER,order.id,{requestKey:randomUUID(),scheduledAt:new Date(Date.now()+3600000).toISOString(),timezone:'Asia/Seoul',expectedRevision:0});
   const started=await service.start(OWNER,order.id,{requestKey:randomUUID()});
   const manifest=await service.manifest(started.watchToken);assert.equal(manifest.media.source.kind,'youtube');assert.equal(manifest.media.durationSeconds,undefined);
   await assert.rejects(service.saveLink(OWNER,order.id,{...input,requestKey:randomUUID()}),/campaign-already-started/);

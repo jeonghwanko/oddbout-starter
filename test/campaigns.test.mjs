@@ -8,13 +8,47 @@ import {commerceDatabase} from './helpers/commerce-database.mjs';
 import {OWNER,OTHER,ORIGIN} from './helpers/paid-operations.mjs';
 
 const SQL=new URL('../supabase/sandbox/20261103154930_commerce_campaigns.sql',import.meta.url);
+test('calendar scheduling is private, versioned, retryable and never starts or charges; explicit host Start begins the full duration',async t=>{
+  const f=await fixture(t),order=await f.service.purchase(OWNER,f.purchase());
+  await f.service.saveMedia(OWNER,order.id,f.media(order.id));
+  await assert.rejects(f.service.start(OWNER,order.id,{requestKey:randomUUID()}),/campaign-schedule-required/);
+  const at=new Date(Date.now()+3600000).toISOString();
+  const input={requestKey:randomUUID(),scheduledAt:at,timezone:'Asia/Seoul',expectedRevision:0};
+  await assert.rejects(f.service.schedule(OTHER,order.id,input),/not-found/);
+  await assert.rejects(f.service.schedule(OWNER,order.id,{...input,scheduledAt:'2020-01-01T00:00:00.000Z'}),/invalid-schedule/);
+  await assert.rejects(async()=>f.service.schedule(OWNER,order.id,{...input,timezone:'Not/A_Timezone'}),/invalid-schedule/);
+  const scheduled=await f.service.schedule(OWNER,order.id,input);
+  assert.equal(scheduled.status,'ready');assert.equal(scheduled.startedAt,null);assert.equal(scheduled.scheduleRevision,1);
+  assert.deepEqual(await f.service.schedule(OWNER,order.id,input),scheduled);
+  const range={from:new Date(Date.parse(at)-86400000).toISOString(),to:new Date(Date.parse(at)+86400000).toISOString()};
+  assert.equal((await f.service.calendar(OWNER,range)).items[0].id,order.id);
+  assert.equal((await f.service.calendar(OTHER,range)).items.length,0);
+  assert.equal((await f.request('calendar?'+new URLSearchParams(range),{owner:null})).status,401);
+  await assert.rejects(f.service.schedule(OWNER,order.id,{...input,scheduledAt:new Date(Date.parse(at)+3600000).toISOString()}),/idempotency-conflict/);
+  const next={...input,requestKey:randomUUID(),scheduledAt:new Date(Date.parse(at)+3600000).toISOString(),expectedRevision:1};
+  const updated=await f.service.schedule(OWNER,order.id,next);assert.equal(updated.scheduleRevision,2);
+  await assert.rejects(f.service.schedule(OWNER,order.id,{...next,requestKey:randomUUID(),expectedRevision:0}),/schedule-changed/);
+  await assert.rejects(f.service.start(OWNER,order.id,{requestKey:randomUUID(),expectedRevision:1}),/schedule-changed/);
+  const previousMediaId=updated.mediaId;await f.service.saveMedia(OWNER,order.id,f.media(order.id));
+  await assert.rejects(f.service.start(OWNER,order.id,{requestKey:randomUUID(),expectedRevision:2,expectedMediaId:previousMediaId}),/media-changed/);
+  assert.equal((await f.service.schedule(OWNER,order.id,input)).scheduleRevision,2);
+  const before=Date.now(),startKey=randomUUID(),started=await f.service.start(OWNER,order.id,{requestKey:startKey,expectedRevision:2});
+  assert.ok(Date.parse(started.startedAt)>=before&&Date.parse(started.startedAt)<=Date.now());
+  assert.equal(started.durationSeconds,3600);assert.ok(Date.parse(started.startedAt)<Date.parse(started.scheduledAt));
+  assert.deepEqual(await f.service.start(OWNER,order.id,{requestKey:startKey,expectedRevision:2}),started);
+  await assert.rejects(f.service.schedule(OWNER,order.id,{...next,requestKey:randomUUID(),expectedRevision:2}),/campaign-already-started/);
+  assert.equal((await f.store.wallet(OWNER)).balanceCredits,700);
+  const audit=(await f.db.query("select (select count(*)::int from commerce.ledger where kind='spend') spends,(select count(*)::int from commerce.campaign_events where kind='started') starts")).rows[0];assert.deepEqual(audit,{spends:1,starts:1});
+  assert.equal((await f.db.query("select has_function_privilege('authenticated','public.commerce_campaign_planning(text,text,jsonb)','execute') allowed")).rows[0].allowed,false);
+});
 async function fixture(t,{credits=1000,ready=true,verified={}}={}){
   const f=await commerceDatabase();t.after(()=>f.db.close());await f.db.exec(await readFile(SQL,'utf8'));
+  await f.db.exec(await readFile(new URL('../supabase/sandbox/20261103180002_commerce_campaign_schedule.sql',import.meta.url),'utf8'));
   const rpc=async(name,args)=>{
-    assert.equal(name,'commerce_campaign');
+    assert.ok(['commerce_campaign','commerce_campaign_planning'].includes(name));
     try{return{data:await f.db.transaction(async tx=>{
       await tx.exec('set local role service_role');
-      return(await tx.query('select public.commerce_campaign($1,$2,$3::jsonb) value',[args.p_owner,args.p_command,JSON.stringify(args.p_input)])).rows[0].value;
+      return(await tx.query(`select public.${name}($1,$2,$3::jsonb) value`,[args.p_owner,args.p_command,JSON.stringify(args.p_input)])).rows[0].value;
     }),error:null};}catch(error){return{data:null,error};}
   };
   let verifications=0,starts=0;
@@ -93,6 +127,7 @@ test('actual verified media is required; repeated submit reuses saved AI intro w
   assert.deepEqual(await f.service.saveMedia(OWNER,order.id,media),ready);assert.equal(f.verifications(),1);
   await assert.rejects(f.service.saveMedia(OWNER,order.id,{...media,targetUrl:'https://changed.example/'}),/idempotency-conflict/);
   assert.equal((await f.service.preview(OWNER,order.id)).videoUrl.includes('signature=fixture'),true);
+  await f.service.schedule(OWNER,order.id,{requestKey:randomUUID(),scheduledAt:new Date(Date.now()+3600000).toISOString(),timezone:'Asia/Seoul',expectedRevision:0});
   const startKey=randomUUID(),started=await f.service.start(OWNER,order.id,{requestKey:startKey});
   assert.equal(started.status,'started');assert.equal(started.playbackStatus,'unverified');assert.match(started.watchToken,/^[a-f0-9]{64}$/);
   assert.deepEqual(await f.service.start(OWNER,order.id,{requestKey:startKey}),started);assert.equal(f.starts(),1);
@@ -108,6 +143,7 @@ test('media signing/readiness failure cannot publish, and public capability mani
   const raw=(await f.db.query('select watch_token from commerce.campaign_orders where id=$1',[order.id])).rows[0];
   await assert.rejects(f.service.manifest(raw.watch_token),/not-found/);
   await f.service.saveMedia(OWNER,order.id,f.media(order.id));
+  await f.service.schedule(OWNER,order.id,{requestKey:randomUUID(),scheduledAt:new Date(Date.now()+3600000).toISOString(),timezone:'Asia/Seoul',expectedRevision:0});
   await assert.rejects(f.service.start(OWNER,order.id,{requestKey:randomUUID()}),/campaign-playback-unavailable/);
   assert.equal((await f.service.get(OWNER,order.id)).status,'ready');
   const configured=createCampaignService({...f.dependencies,beforeStart:async()=>true});
@@ -148,6 +184,7 @@ test('one, two and three hour products keep immutable server prices, one lineup 
     assert.equal((await f.service.purchase(OWNER,input)).id,order.id);
     await assert.rejects(f.service.purchase(OWNER,{...input,productId:'spotlight-hour'}),/idempotency-conflict/);
     await f.service.saveMedia(OWNER,order.id,f.media(order.id));
+    await f.service.schedule(OWNER,order.id,{requestKey:randomUUID(),scheduledAt:new Date(Date.now()+3600000).toISOString(),timezone:'Asia/Seoul',expectedRevision:0});
     const started=await f.service.start(OWNER,order.id,{requestKey:randomUUID()}),manifest=await f.service.manifest(started.watchToken);
     assert.deepEqual(manifest.fighterIds,order.fighterIds);
     assert.equal(manifest.program.reduce((sum,slot)=>sum+slot.durationSeconds,0),product.durationSeconds);

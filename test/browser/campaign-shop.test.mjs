@@ -15,10 +15,12 @@ const ORIGIN='http://127.0.0.1:5197';
 for(const sourceKind of ['upload','youtube','twitch'])test(`broadcast purchase, recover, publish and scheduled playback: ${sourceKind}`,{timeout:90000},async t=>{
   const f=await paidFixture(t);await f.db.exec(await readFile(new URL('../../supabase/sandbox/20261103154930_commerce_campaigns.sql',import.meta.url),'utf8'));
   await f.db.exec(await readFile(new URL('../../supabase/sandbox/20261103170232_commerce_campaign_links.sql',import.meta.url),'utf8'));
+  await f.db.exec(await readFile(new URL('../../supabase/sandbox/20261103180002_commerce_campaign_schedule.sql',import.meta.url),'utf8'));
   const topup=await f.store.createTopup(OWNER,{requestKey:randomUUID(),amountCents:1000,credits:1000,currency:'USD'});
   await f.store.attachOrder(OWNER,topup.id,'EXISTING');await f.store.creditCapture(OWNER,topup.id,{providerOrderId:'EXISTING',captureId:'CREDIT',amountCents:1000,currency:'USD',status:'COMPLETED'});
   const rpc=async(name,args)=>{try{return{data:await f.db.transaction(async tx=>{await tx.exec('set local role service_role');
     if(name==='commerce_campaign_link')return(await tx.query('select public.commerce_campaign_link($1,$2,$3,$4::jsonb) value',[args.p_owner,args.p_order_id,args.p_request_key,JSON.stringify(args.p_input)])).rows[0].value;
+    if(name==='commerce_campaign_planning')return(await tx.query('select public.commerce_campaign_planning($1,$2,$3::jsonb) value',[args.p_owner,args.p_command,JSON.stringify(args.p_input)])).rows[0].value;
     return(await tx.query('select public.commerce_campaign($1,$2,$3::jsonb) value',[args.p_owner,args.p_command,JSON.stringify(args.p_input)])).rows[0].value;}),error:null};}catch(error){return{data:null,error};}};
   const files=new Map(),storage={createSignedUploadUrl:async path=>({data:{path,token:'fixture-upload',signedUrl:'https://storage.fixture/'+path}}),
     info:async path=>files.has(path)?{data:{metadata:{size:files.get(path).length}}}:{error:'missing'},
@@ -29,7 +31,7 @@ for(const sourceKind of ['upload','youtube','twitch'])test(`broadcast purchase, 
   const authenticate=async req=>req.headers.get('authorization')?.replace('Bearer fixture-','')??null;
   const campaign=createCampaignHandler({service,authenticate,publicOrigin:ORIGIN,upload:async(owner,id,input)=>media.upload(id,input)});
   const commerce=createCommerceHandler({service:f.commerce,authenticate,publicOrigin:ORIGIN});
-  const{server}=createBroadcastDemo({ODDBOUT_BROADCAST_PORT:'5197'});await new Promise(r=>server.listen(5197,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)));
+  const{server}=createBroadcastDemo({ODDBOUT_BROADCAST_PORT:'5197',SUPABASE_URL:'https://storage.fixture'});await new Promise(r=>server.listen(5197,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)));
   const browser=await chromium.launch({channel:'chrome',headless:true});t.after(()=>browser.close());
   const context=await browser.newContext({viewport:{width:1280,height:900}}),errors=[];
   await context.route('**/broadcast/config',r=>r.fulfill({json:{authConfigured:true,campaigns:true,commerceEnabled:true,supabaseUrl:'https://fixture.example',publishableKey:'fixture'}}));
@@ -38,11 +40,12 @@ for(const sourceKind of ['upload','youtube','twitch'])test(`broadcast purchase, 
   await context.route('https://storage.fixture/**',r=>r.fulfill({contentType:'video/mp4',body:files.get(new URL(r.request().url()).pathname.slice(1))}));
   // Exercise our iframe lifecycle independently of third-party availability or playback.
   for(const pattern of ['https://www.youtube-nocookie.com/**','https://clips.twitch.tv/**','https://player.twitch.tv/**','https://oddbout-broadcast-arena.onrender.com/**'])await context.route(pattern,r=>r.fulfill({contentType:'text/html',body:'<!doctype html><title>Player fixture</title><p>Embedded player fixture</p>'}));
-  let losePurchase=true,loseLink=true;
-  for(const[pattern,handler]of[['**/campaigns/**',campaign],['**/commerce/**',commerce]])await context.route(pattern,async r=>{
+  let losePurchase=true,loseLink=true,loseSchedule=true;
+  for(const[pattern,handler]of[[ORIGIN+'/campaigns/**',campaign],[ORIGIN+'/commerce/**',commerce]])await context.route(pattern,async r=>{
     const req=r.request(),res=await handler(new Request(req.url(),{method:req.method(),headers:req.headers(),...(req.postData()?{body:req.postData()}: {})}));
     if(losePurchase&&req.method()==='POST'&&new URL(req.url()).pathname==='/campaigns/orders'){losePurchase=false;await r.abort('failed');return;}
     if(loseLink&&req.method()==='POST'&&new URL(req.url()).pathname.endsWith('/link')){loseLink=false;await r.abort('failed');return;}
+    if(loseSchedule&&req.method()==='POST'&&new URL(req.url()).pathname.endsWith('/schedule')){loseSchedule=false;await r.abort('failed');return;}
     await r.fulfill({status:res.status,contentType:'application/json',body:await res.text()});
   });
   const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
@@ -75,10 +78,25 @@ for(const sourceKind of ['upload','youtube','twitch'])test(`broadcast purchase, 
     await page.locator('#save-link').click();await page.getByText('The save result is unknown. Retry the same link and destination.').waitFor();
     await page.locator('#save-link').click();
   }
-  await page.locator('#publish-consent').waitFor();
+  await page.locator('#save-schedule').waitFor();
+  assert.equal(await page.locator('#publish-broadcast').isVisible(),false);
+  await page.locator('#save-schedule').click();await page.getByText('Save not confirmed. Retry the same date; your ticket is unchanged.').waitFor();
+  await page.locator('#save-schedule').click();await page.locator('#open-host').waitFor();
+  assert.equal((await service.get(OWNER,order.id)).startedAt,null);
+  await page.locator('#calendar-agenda').getByRole('link',{name:'On-Air Agent →'}).waitFor();
+  await page.locator('#open-host').click();await page.locator('#publish-consent').waitFor();
+  assert.equal(await page.locator('#host-heading').isVisible(),true);
+  if(sourceKind==='upload'){
+    await page.waitForFunction(()=>document.getElementById('media-preview').readyState>=1,{},{timeout:10000});
+    assert.equal(await page.locator('#media-preview').evaluate(e=>e.duration),3);
+    await page.screenshot({path:fileURLToPath(new URL('../../output/showrunner-tests/host-ready-desktop.png',import.meta.url)),fullPage:true});
+    await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+    await page.screenshot({path:fileURLToPath(new URL('../../output/showrunner-tests/host-ready-mobile.png',import.meta.url)),fullPage:true});await page.setViewportSize({width:1280,height:900});
+  }
   await page.locator('#publish-consent').check();await page.locator('#publish-broadcast').click();
-  await page.getByRole('link',{name:/Watch broadcast/i}).first().waitFor();
+  await page.locator('#host-watch').waitFor();
   assert.equal((await service.get(OWNER,order.id)).status,'started');
+  assert.ok(Date.parse((await service.get(OWNER,order.id)).startedAt)<Date.parse((await service.get(OWNER,order.id)).scheduledAt));
   if(sourceKind!=='upload'){
     const started=await service.get(OWNER,order.id),watch=await context.newPage();watch.on('pageerror',e=>errors.push(e.message));
     await watch.clock.install();await watch.goto(ORIGIN+'/broadcast/watch/?show='+started.watchToken);
@@ -98,7 +116,7 @@ for(const sourceKind of ['upload','youtube','twitch'])test(`broadcast purchase, 
     }
     await watch.close();
   }
-  await page.reload();await page.locator('#broadcast-list').getByText('Published',{exact:true}).waitFor();
+  await page.goto(ORIGIN+'/broadcast/');await page.locator('#broadcast-list').getByText('Started',{exact:true}).waitFor();
   assert.equal(await page.locator('#wallet #broadcast-list article').count(),1);
   assert.equal(await page.locator('#wallet #broadcast-list .fighter-lineup img').count(),4);
   assert.doesNotMatch(await page.locator('body').innerText(),/Studio Credits/);
@@ -109,5 +127,5 @@ for(const sourceKind of ['upload','youtube','twitch'])test(`broadcast purchase, 
   await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   await page.screenshot({path:fileURLToPath(new URL(`../../output/showrunner-tests/campaign-${sourceKind}-mobile.png`,import.meta.url)),fullPage:true});
   await page.evaluate(id=>globalThis.testAccount(id),OTHER);await page.waitForFunction(()=>document.getElementById('wallet-available').textContent==='0');
-  assert.equal(await page.locator('#broadcast-list').getByText('Published',{exact:true}).count(),0);assert.deepEqual(errors,[]);
+  assert.equal(await page.locator('#broadcast-list').getByText('Started',{exact:true}).count(),0);assert.deepEqual(errors,[]);
 });

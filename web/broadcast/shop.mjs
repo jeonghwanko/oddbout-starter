@@ -6,12 +6,22 @@ const $ = id => document.getElementById(id);
 const AUTH_KEY = 'oddbout-paid-auth';
 const CREDIT_PRODUCT_IDS = new Set(['sandbox-1000','studio-series-5000']);
 const FIGHTER_NAMES = { kuma:'Kuma', yume:'Yume', bravow:'Bravow', beotim:'Beotim', quickcat:'Quickcat', kungjjak:'Kungjjak', sikeundung:'Sikeundung', duldul:'Duldul', eoridung:'Eoridung' };
-const ORDER_STATES = { awaiting_media:'Ready to use', ready:'Ready to publish', started:'Published', needs_attention:'Needs attention' };
+const ORDER_STATES = { awaiting_media:'Ready to use', ready:'Ready to schedule', started:'Started', needs_attention:'Needs attention' };
 let config, session, client, journal, campaignProduct, campaignProducts=[], selectedProductId='', commerceCatalog;
 let orders = [], selectedOrder = null, nextCursor = null, orderRevision = 0, selectionRevision = 0, accountEpoch = 0, orderTimer;
 let selectedFile = null, selectedFileDuration = null, previewObjectUrl = '', fileRevision = 0, busy = false, topupBusy = false;
 let mediaMode='upload',previewedLink='',disposeExternal=()=>{};
 const returnedIntent = new URLSearchParams(location.search).get('intent') ?? '';
+const requestedHost=new URLSearchParams(location.search).get('host');
+const hostOrderId=/^[a-f0-9]{8}-([a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(requestedHost??'')?requestedHost:null;
+const localZone=Intl.DateTimeFormat().resolvedOptions().timeZone;
+let calendarMonth=new Date(new Date().getFullYear(),new Date().getMonth(),1),calendarDay='',calendarItems=[],calendarCursor=null,calendarRevision=0;
+function localDate(value){const d=new Date(value);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
+function localInput(value){const d=new Date(value);return localDate(d)+`T${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;}
+function hostUrl(id){return '/broadcast/?host='+encodeURIComponent(id);}
+function formattedTime(value){return new Intl.DateTimeFormat(undefined,{dateStyle:'medium',timeStyle:'short'}).format(new Date(value));}
+function plannedState(order){return order.startedAt?(Date.now()>=Date.parse(order.startedAt)+order.durationSeconds*1000?'Ended':'Started'):order.scheduledAt?'Scheduled':ORDER_STATES[campaignState(order)]??'Needs attention';}
+function selectedDate(){const value=$('broadcast-date').value,date=new Date(value);return Number.isFinite(date.getTime())&&localInput(date)===value?date.toISOString():null;}
 
 function message(text,error=false) { $('shop-status').textContent = text; $('shop-status').classList.toggle('is-error',error); }
 function walletMessage(text,error=false) { $('wallet-status').textContent = text; $('wallet-status').classList.toggle('is-error',error); }
@@ -48,7 +58,9 @@ function updateControls() {
   $('add-credits').disabled=!client||busy||topupBusy;
   $('broadcasts-refresh').disabled = !session || busy;
   $('media-upload').disabled = !session || busy || !selectedOrder || campaignState(selectedOrder)!=='awaiting_media' || !selectedFile || !validDestination($('destination-url').value);
-  $('publish-broadcast').disabled = !session || busy || !selectedOrder || campaignState(selectedOrder)!=='ready' || !$('publish-consent').checked;
+  $('publish-broadcast').disabled = !hostOrderId || !session || busy || !selectedOrder?.scheduledAt || campaignState(selectedOrder)!=='ready' || !$('publish-consent').checked;
+  $('save-schedule').disabled=busy||!session||!selectedOrder||campaignState(selectedOrder)!=='ready'||!selectedDate();
+  $('broadcast-date').disabled=busy;
   const mediaLocked=Boolean(selectedOrder&&campaignState(selectedOrder)!=='awaiting_media');
   $('media-file').disabled=mediaLocked;$('destination-url').readOnly=mediaLocked;
   const savedMedia=selectedOrder&&journal?.get('campaign-media:'+selectedOrder.id);
@@ -163,19 +175,19 @@ function safeVideoUrl(value) {
   catch{return null;}
 }
 function renderOrder(order) {
-  const previousId=selectedOrder?.id,previousState=campaignState(selectedOrder);
+  const previousId=selectedOrder?.id,previousState=campaignState(selectedOrder),previousScheduleRevision=selectedOrder?.scheduleRevision,previousMediaId=selectedOrder?.mediaId;
   selectedOrder=order;const state=campaignState(order);
   $('purchase-panel').hidden=!order;
   if(!order){
     disposeExternal();previewedLink='';$('media-link').value='';setMediaMode('upload');
     fileRevision++;$('broadcast-setup').hidden=true;selectedFile=null;selectedFileDuration=null;$('destination-url').value='';$('media-file').value='';
     if(previewObjectUrl)URL.revokeObjectURL(previewObjectUrl);previewObjectUrl='';$('media-preview').removeAttribute('src');$('media-preview').hidden=true;
-    updateControls();return;
+    $('host-playback').hidden=true;$('host-watch').removeAttribute('src');$('host-status').textContent=hostOrderId?'Sign in to open this host.':'';updateControls();return;
   }
   if(previousId!==order.id){fileRevision++;selectedFile=null;selectedFileDuration=null;$('media-file').value='';if(previewObjectUrl)URL.revokeObjectURL(previewObjectUrl);previewObjectUrl='';$('media-preview').removeAttribute('src');$('media-preview').hidden=true;$('destination-url').value='';disposeExternal();previewedLink='';$('media-link').value='';setMediaMode('upload');}
-  if(previousId!==order.id||previousState!==state)$('publish-consent').checked=false;
+  if(previousId!==order.id||previousState!==state||previousScheduleRevision!==order.scheduleRevision||previousMediaId!==order.mediaId)$('publish-consent').checked=false;
   $('purchase-title').textContent=displayName(order);
-  $('purchase-state').textContent=ORDER_STATES[state]??'Status needs review';
+  $('purchase-state').textContent=plannedState(order);
   const items=[['Cost',`${Number(order.priceCredits??campaignProduct?.priceCredits??300).toLocaleString()} ${creditName()}`],['Duration',`${Math.round((order.durationSeconds??3600)/60)} minutes`],['Purchased',order.createdAt?new Date(order.createdAt).toLocaleString():'Saved to your account']];
   $('purchase-receipt').replaceChildren(...items.map(([label,value])=>{const item=document.createElement('div');item.className='receipt-item';const key=document.createElement('span');key.textContent=label;const val=document.createElement('strong');val.textContent=value;item.append(key,val);return item;}));
   const lineup=fighterLineup(order.fighterIds);lineup.classList.add('receipt-lineup');$('purchase-receipt').append(lineup);
@@ -187,16 +199,30 @@ function renderOrder(order) {
   const pendingMedia=journal?.get('campaign-media:'+order.id);
   if(order.media?.source){setMediaMode('link');$('media-link').value=order.media.source.url;if(state==='ready')previewMediaLink();}
   else if(pendingMedia?.input?.mediaUrl){setMediaMode('link');$('media-link').value=pendingMedia.input.mediaUrl;}
-  if(order.media&&!order.media.source){$('media-file-name').textContent='Sponsor clip verified';const duration=Number.isFinite(order.media.durationSeconds)?` · ${Math.ceil(order.media.durationSeconds)} sec`:'';$('media-file-meta').textContent=`Ready to publish${duration}`;}
+  if(order.media&&!order.media.source){$('media-file-name').textContent='Sponsor clip verified';const duration=Number.isFinite(order.media.durationSeconds)?` · ${Math.ceil(order.media.durationSeconds)} sec`:'';$('media-file-meta').textContent=`Video ready${duration}`;}
   if(order.media?.targetUrl && !previousId)$('destination-url').value=order.media.targetUrl;
   $('intro-text').textContent=plain(order.media?.aiIntro??order.aiIntro,1000);
   $('intro-preview').hidden=!$('intro-text').textContent;
   if(order.media?.targetUrl)$('destination-url').value=order.media.targetUrl;
   else {const pendingMedia=journal?.get('campaign-media:'+order.id);if(pendingMedia?.input?.targetUrl)$('destination-url').value=pendingMedia.input.targetUrl;}
   if(!order.media){const pendingUpload=journal?.get('campaign-upload:'+order.id);if(pendingUpload?.input?.fileName){$('media-file-name').textContent='Re-select '+plain(pendingUpload.input.fileName,120)+' to continue';$('media-file-meta').textContent='The saved upload request will continue with this file.';}}
-  if(state==='started') message('Broadcast published.');
+  $('schedule-panel').hidden=Boolean(hostOrderId)||state!=='ready';
+  $('publish-row').hidden=!hostOrderId||state!=='ready'||!order.scheduledAt;
+  $('setup-title').textContent=hostOrderId?'Preview promotion':'Add your promotion';
+  const pendingSchedule=journal?.get('campaign-schedule:'+order.id);
+  if(previousId!==order.id||previousState!==state||previousScheduleRevision!==order.scheduleRevision||!$('broadcast-date').value)$('broadcast-date').value=localInput(pendingSchedule?.input?.scheduledAt??order.scheduledAt??new Date(Math.ceil((Date.now()+300000)/300000)*300000));
+  $('schedule-timezone').textContent=localZone;
+  $('save-schedule').textContent=pendingSchedule?'Retry saved schedule':order.scheduledAt?'Update Calendar':'Add to Calendar';
+  $('open-host').hidden=!order.scheduledAt;$('open-host').href=hostUrl(order.id);
+  $('schedule-status').textContent=order.scheduledAt?'Scheduled for '+formattedTime(order.scheduledAt)+'. Start from On-Air Agent.':'';
+  if(hostOrderId){
+    $('host-status').textContent=order.startedAt?`${plannedState(order)} · ${formattedTime(order.startedAt)}`:order.scheduledAt?`Scheduled · ${formattedTime(order.scheduledAt)} · ${localZone}`:'Set a promotion and start time from My tickets first.';
+    $('host-playback').hidden=state!=='started';
+    if(state==='started'&&order.watchToken){const src='/broadcast/watch/?show='+encodeURIComponent(order.watchToken);if($('host-watch').getAttribute('src')!==src)$('host-watch').src=src;}
+  }
+  if(state==='started') message('Broadcast started.');
   else if(state==='needs_attention') message('This broadcast needs attention. Its purchase and current status are saved; no replacement was created.',true);
-  else if(state==='ready') message('Ready to publish.');
+  else if(state==='ready') message(hostOrderId?'Ready to start.':order.scheduledAt?'Scheduled. Open On-Air Agent to start.':'Promotion saved. Set a start date and time.');
   else message('Purchased. Add your video and link.');
   updateControls();
 }
@@ -206,11 +232,16 @@ function renderOrders() {
     const card=document.createElement('article');card.className='broadcast-card';
     const body=document.createElement('div'),title=document.createElement('h3'),meta=document.createElement('p');
     title.textContent=displayName(order);meta.textContent=order.createdAt?new Date(order.createdAt).toLocaleDateString():'';body.append(title,meta);
-    const state=document.createElement('span');state.className='broadcast-status';state.textContent=ORDER_STATES[campaignState(order)]??'Status needs review';card.append(body,state);
+    const state=document.createElement('span');state.className='broadcast-status';state.textContent=plannedState(order);card.append(body,state);
     card.append(fighterLineup(order.fighterIds));
     const watch=safeWatchUrl(order.watchUrl??(order.watchToken?'/broadcast/watch/?show='+encodeURIComponent(order.watchToken):''));
+    if(order.scheduledAt||campaignState(order)==='started'){const link=document.createElement('a');link.className='button button-secondary button-small';link.href=hostUrl(order.id);link.textContent='On-Air Agent →';card.append(link);}
     if(campaignState(order)==='started'&&watch){const link=document.createElement('a');link.href=watch;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Watch broadcast';card.append(link);}
-    else if(['awaiting_media','ready','needs_attention'].includes(campaignState(order))){const button=document.createElement('button');button.type='button';button.className='button button-secondary button-small';button.textContent=campaignState(order)==='awaiting_media'?'Use ticket':campaignState(order)==='ready'?'Review and publish':'Check status';button.addEventListener('click',async()=>{await selectOrder(order.id);if(selectedOrder?.id===order.id)($('broadcast-setup').hidden?$('purchase-panel'):$('broadcast-setup')).scrollIntoView({block:'start'});});card.append(button);}
+    else if(['awaiting_media','ready','needs_attention'].includes(campaignState(order))){
+      const button=document.createElement('button');button.type='button';button.className='button button-secondary button-small ticket-action';
+      const main=document.createElement('strong'),sub=document.createElement('small');main.textContent='Set Promotion';sub.textContent='Use Ticket';button.append(main,sub);
+      button.addEventListener('click',async()=>{await selectOrder(order.id);if(selectedOrder?.id===order.id)($('broadcast-setup').hidden?$('purchase-panel'):$('broadcast-setup')).scrollIntoView({block:'start'});});card.append(button);
+    }
     return card;
   }));
   if(!orders.length&&session){const empty=document.createElement('p');empty.className='section-status';empty.textContent='No tickets yet.';host.append(empty);}
@@ -220,7 +251,9 @@ async function selectOrder(id) {
   const revision=++selectionRevision,owner=session?.user.id,epoch=accountEpoch;
   try {
     const result=await api('/orders/'+encodeURIComponent(id));if(revision!==selectionRevision||session?.user.id!==owner||accountEpoch!==epoch)return;
-    const order=normalizedOrder(result);renderOrder(order);
+    const order=normalizedOrder(result);
+    if(hostOrderId&&selectedOrder?.id===order.id&&selectedOrder.status===order.status&&selectedOrder.scheduleRevision===order.scheduleRevision&&JSON.stringify(selectedOrder.media)===JSON.stringify(order.media)){if(order.startedAt)$('host-status').textContent=`${plannedState(order)} · ${formattedTime(order.startedAt)}`;return;}
+    renderOrder(order);
     if(campaignState(order)==='ready'&&!selectedFile){
       const preview=await api('/orders/'+encodeURIComponent(id)+'/preview');
       if(revision!==selectionRevision||session?.user.id!==owner||accountEpoch!==epoch)return;
@@ -231,7 +264,7 @@ async function selectOrder(id) {
       updateControls();
     }
   }
-  catch(error){if(revision===selectionRevision&&session?.user.id===owner&&accountEpoch===epoch)message('Could not load that broadcast. Refresh My broadcasts to try again.',true);}
+  catch(error){if(revision===selectionRevision&&session?.user.id===owner&&accountEpoch===epoch){message('Could not load that broadcast. Refresh My tickets to try again.',true);if(hostOrderId)$('host-status').textContent='This host is unavailable for the signed-in account.';}}
 }
 async function loadOrders({more=false}={}) {
   if(!session)return;
@@ -242,8 +275,9 @@ async function loadOrders({more=false}={}) {
   const incoming=Array.isArray(page.items)?page.items:[];
   if(more){const known=new Set(orders.map(item=>item.id));orders.push(...incoming.filter(item=>!known.has(item.id)));}else orders=incoming;
   nextCursor=page.nextCursor??null;renderOrders();
-  if(!selectedOrder){const resume=orders.find(order=>['awaiting_media','ready','needs_attention'].includes(campaignState(order)));if(resume)await selectOrder(resume.id);}
-  else {const latest=orders.find(order=>order.id===selectedOrder.id);if(latest&&campaignState(latest)!==campaignState(selectedOrder))await selectOrder(latest.id);}
+  if(hostOrderId){await selectOrder(hostOrderId);}
+  else if(!selectedOrder){const resume=orders.find(order=>['awaiting_media','ready','needs_attention'].includes(campaignState(order)));if(resume)await selectOrder(resume.id);}
+  else {const latest=orders.find(order=>order.id===selectedOrder.id);if(latest&&(campaignState(latest)!==campaignState(selectedOrder)||latest.scheduleRevision!==selectedOrder.scheduleRevision))await selectOrder(latest.id);}
   $('broadcasts-status').textContent='';
   updateControls();
 }
@@ -324,16 +358,16 @@ async function uploadMedia() {
   finally{busy=false;updateControls();}
 }
 async function publishBroadcast() {
-  if(!selectedOrder||!$('publish-consent').checked||campaignState(selectedOrder)!=='ready')return;
-  const orderId=selectedOrder.id,owner=session?.user.id,epoch=accountEpoch,name='campaign-start:'+orderId,input={orderId};busy=true;updateControls();message('Requesting publication on ODDBOUT…');
+  if(!hostOrderId||!selectedOrder?.scheduledAt||!$('publish-consent').checked||campaignState(selectedOrder)!=='ready')return;
+  const orderId=selectedOrder.id,owner=session?.user.id,epoch=accountEpoch,name='campaign-start:'+orderId,input={orderId,expectedRevision:selectedOrder.scheduleRevision,expectedMediaId:selectedOrder.mediaId};busy=true;updateControls();message('Starting your broadcast…');
   try{
     let op=journal.get(name);if(!op)op=journal.begin(name,input);
     if(JSON.stringify(op.input)!==JSON.stringify(input))throw new Error('A saved publish request needs review.');
     journal.markDispatched(name,op.requestKey);
-    const started=normalizedOrder(await api('/orders/'+encodeURIComponent(orderId)+'/start',{body:{requestKey:op.requestKey,confirmed:true}}));
+    const started=normalizedOrder(await api('/orders/'+encodeURIComponent(orderId)+'/start',{body:{requestKey:op.requestKey,expectedRevision:op.input.expectedRevision,expectedMediaId:op.input.expectedMediaId,confirmed:true}}));
     if(campaignState(started)==='started')journal.complete(name,op.requestKey);
     renderOrder(started);await loadOrders();
-  }catch(error){if(session?.user.id===owner&&accountEpoch===epoch)message(error.code==='campaign-playback-unavailable'?'ODDBOUT could not verify the broadcast setup right now. Your purchased broadcast is unchanged; try publishing again later.':'Publication status is not confirmed. Retry to check the same request; no second broadcast was created.',true);}
+  }catch(error){if(session?.user.id===owner&&accountEpoch===epoch){if(['schedule-changed','media-changed'].includes(error.code)&&error.responseOk){const op=journal.get(name);if(op)journal.complete(name,op.requestKey);await selectOrder(orderId);$('publish-consent').checked=false;message('The promotion or schedule changed on another device. Review it before starting.',true);}else message(error.code==='campaign-playback-unavailable'?'The broadcast setup could not be verified. Try Start again later.':'Start is not confirmed. Retry this same request; no second broadcast was created.',true);}}
   finally{busy=false;updateControls();}
 }
 async function saveMediaLink(){
@@ -364,7 +398,7 @@ async function captureReturnedPayment() {
 }
 function renderAccount(value) {
   const previous=session?.user.id;session=value;
-  if(previous!==value?.user.id){accountEpoch++;orderRevision++;selectionRevision++;clearTimeout(orderTimer);orders=[];selectedOrder=null;nextCursor=null;checkoutLink(null);openCredits(false);$('wallet-available').textContent='—';walletMessage('');renderOrders();renderOrder(null);}
+  if(previous!==value?.user.id){accountEpoch++;orderRevision++;selectionRevision++;calendarRevision++;calendarItems=[];calendarCursor=null;renderCalendar();clearTimeout(orderTimer);orders=[];selectedOrder=null;nextCursor=null;checkoutLink(null);openCredits(false);$('wallet-available').textContent='—';walletMessage('');renderOrders();renderOrder(null);}
   $('google-signin').hidden=Boolean(value);$('account-identity').hidden=!value;$('signout').hidden=!value;
   const accountName=value?.user.user_metadata?.full_name||value?.user.email||'';
   $('account-name').textContent=accountName;$('account-avatar').textContent=accountName?Array.from(accountName)[0].toUpperCase():'';
@@ -374,7 +408,7 @@ function renderAccount(value) {
       const owner=value.user.id,epoch=accountEpoch;
       const walletLoad=loadWallet().catch(()=>{if(session?.user.id===owner&&accountEpoch===epoch)walletMessage('DON could not be loaded. Refresh the page to retry.',true);throw new Error('wallet-load-failed');});
       const ordersLoad=loadOrders().catch(()=>{if(session?.user.id===owner&&accountEpoch===epoch)$('broadcasts-status').textContent='Broadcasts could not be loaded. Refresh to try again.';throw new Error('broadcast-load-failed');});
-      Promise.allSettled([walletLoad,ordersLoad]).then(results=>{
+      Promise.allSettled([walletLoad,ordersLoad,loadCalendar()]).then(results=>{
         if(session?.user.id!==owner||accountEpoch!==epoch)return;
         if($('shop-status').textContent==='Loading…')message(results.every(result=>result.status==='fulfilled')?'':'Some account details could not load. Please refresh.',results.some(result=>result.status==='rejected'));
         scheduleOrders();
@@ -387,9 +421,68 @@ function renderAccount(value) {
 function scheduleOrders() {
   clearTimeout(orderTimer);if(!session)return;
   const owner=session.user.id,epoch=accountEpoch;
-  orderTimer=setTimeout(async()=>{try{if(!document.hidden)await loadOrders();}catch{if(session?.user.id===owner&&accountEpoch===epoch)$('broadcasts-status').textContent='Status refresh failed. Your saved broadcasts are unchanged.';}finally{if(session?.user.id===owner&&accountEpoch===epoch)scheduleOrders();}},30_000);
+  orderTimer=setTimeout(async()=>{try{if(!document.hidden){await loadOrders();if(!hostOrderId)await loadCalendar();}}catch{if(session?.user.id===owner&&accountEpoch===epoch)$('broadcasts-status').textContent='Status refresh failed. Your saved broadcasts are unchanged.';}finally{if(session?.user.id===owner&&accountEpoch===epoch)scheduleOrders();}},30_000);
+}
+async function saveSchedule(){
+  const at=selectedDate();if(busy||!session||!selectedOrder||campaignState(selectedOrder)!=='ready'||!at)return;
+  const id=selectedOrder.id,owner=session.user.id,epoch=accountEpoch,name='campaign-schedule:'+id;
+  const input={orderId:id,scheduledAt:at,timezone:localZone,expectedRevision:selectedOrder.scheduleRevision??0};
+  busy=true;updateControls();$('schedule-status').textContent='Saving schedule…';
+  try{
+    const op=journal.get(name)??journal.begin(name,input);
+    if(JSON.stringify(op.input)!==JSON.stringify(input))throw new Error('saved-schedule-mismatch');
+    journal.markDispatched(name,op.requestKey);
+    const result=normalizedOrder(await api('/orders/'+id+'/schedule',{body:{requestKey:op.requestKey,scheduledAt:at,timezone:localZone,expectedRevision:input.expectedRevision,confirmed:true}}));
+    journal.complete(name,op.requestKey);renderOrder(result);
+    const date=new Date(result.scheduledAt);calendarMonth=new Date(date.getFullYear(),date.getMonth(),1);calendarDay=localDate(date);
+    await Promise.all([loadOrders(),loadCalendar()]);
+  }catch(error){
+    if(session?.user.id===owner&&epoch===accountEpoch){
+      if(error.responseOk&&['schedule-changed','invalid-schedule','campaign-already-started'].includes(error.code)){
+        const op=journal.get(name);if(op)journal.complete(name,op.requestKey);
+        if(error.code==='schedule-changed'||error.code==='campaign-already-started')await selectOrder(id);
+        $('schedule-status').textContent=error.code==='invalid-schedule'?'Choose a future date within the next year.':'This broadcast changed on another device. Review its current schedule.';
+      }else $('schedule-status').textContent=error.message==='saved-schedule-mismatch'?'Restore the saved date before retrying.':'Save not confirmed. Retry the same date; your ticket is unchanged.';
+    }
+  }finally{busy=false;updateControls();}
+}
+function renderCalendar(){
+  $('calendar-month').textContent=new Intl.DateTimeFormat(undefined,{month:'long',year:'numeric'}).format(calendarMonth);
+  $('calendar-zone').textContent=localZone;$('calendar-days').replaceChildren();
+  for(const day of ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']){const cell=document.createElement('span');cell.textContent=day;$('calendar-days').append(cell);}
+  for(let i=0;i<calendarMonth.getDay();i++)$('calendar-days').append(document.createElement('span'));
+  const count=new Date(calendarMonth.getFullYear(),calendarMonth.getMonth()+1,0).getDate();
+  for(let day=1;day<=count;day++){
+    const date=new Date(calendarMonth.getFullYear(),calendarMonth.getMonth(),day),key=localDate(date),items=calendarItems.filter(o=>localDate(o.scheduledAt)===key);
+    const button=document.createElement('button');button.type='button';button.textContent=String(day);button.setAttribute('aria-pressed',String(key===calendarDay));button.setAttribute('aria-label',`${formattedTime(date).split(',')[0]} · ${key} · ${items.length} broadcasts`);
+    if(items.length){const badge=document.createElement('small');badge.textContent=String(items.length);button.append(badge);}
+    button.addEventListener('click',()=>{calendarDay=key;renderCalendar();});$('calendar-days').append(button);
+  }
+  $('calendar-agenda').replaceChildren();
+  const items=calendarItems.filter(o=>localDate(o.scheduledAt)===calendarDay);
+  for(const order of items){
+    const row=document.createElement('article');row.className='calendar-entry';const info=document.createElement('div'),title=document.createElement('strong'),detail=document.createElement('p');
+    title.textContent=order.productName;detail.textContent=`${formattedTime(order.scheduledAt)} · ${order.durationSeconds/3600}h · ${plannedState(order)}`;
+    info.append(title,detail);const link=document.createElement('a');link.className='button button-secondary';link.href=hostUrl(order.id);link.textContent='On-Air Agent →';row.append(info,link);$('calendar-agenda').append(row);
+  }
+  if(!items.length){const empty=document.createElement('p');empty.textContent=session?'No broadcasts scheduled for this date.':'Sign in to see your broadcast calendar.';$('calendar-agenda').append(empty);}
+  $('calendar-more').hidden=!calendarCursor;
+}
+async function loadCalendar({more=false}={}){
+  if(!session||hostOrderId)return;
+  const revision=++calendarRevision,owner=session.user.id,epoch=accountEpoch;
+  const from=calendarMonth.toISOString(),to=new Date(calendarMonth.getFullYear(),calendarMonth.getMonth()+1,1).toISOString();
+  try{
+    const page=await api('/calendar?'+new URLSearchParams({from,to,...(more&&calendarCursor?{cursor:calendarCursor}:{})}));
+    if(revision!==calendarRevision||session?.user.id!==owner||epoch!==accountEpoch)return;
+    calendarItems=more?[...calendarItems,...page.items.filter(o=>!calendarItems.some(old=>old.id===o.id))]:page.items;calendarCursor=page.nextCursor;
+    if(!calendarDay.startsWith(localDate(calendarMonth).slice(0,7)))calendarDay=localDate(calendarItems[0]?.scheduledAt??calendarMonth);
+    renderCalendar();
+  }catch{if(revision===calendarRevision&&session?.user.id===owner&&epoch===accountEpoch)$('calendar-agenda').textContent='Calendar could not load. Select the month again to retry.';}
 }
 async function initialize() {
+  document.body.classList.toggle('host-mode',Boolean(hostOrderId));$('host-heading').hidden=!hostOrderId;
+  calendarDay=localDate(new Date());renderCalendar();
   config=await fetch('/broadcast/config').then(response=>response.json());
   const [campaign,commerceResponse]=await Promise.all([publicData('/campaigns/catalog'),fetch('/commerce/catalog').then(response=>response.json())]);
   campaignProducts=Array.isArray(campaign.products)?campaign.products:[campaign];selectedProductId=campaign.defaultProductId??campaignProducts[0]?.id??'';
@@ -403,7 +496,7 @@ async function initialize() {
 }
 async function signIn(){
   if(!client)return;
-  const {error}=await client.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+'/broadcast/'}});
+  const {error}=await client.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+'/broadcast/'+(hostOrderId?'?host='+encodeURIComponent(hostOrderId):'')}});
   if(error)message(error.message,true);
 }
 function openCredits(open){$('credit-options').hidden=!open;$('add-credits').setAttribute('aria-expanded',String(open));}
@@ -430,6 +523,10 @@ $('choose-link').addEventListener('click',()=>{setMediaMode('link');updateContro
 $('media-link').addEventListener('input',()=>{disposeExternal();previewedLink='';$('publish-consent').checked=false;updateControls();});
 $('preview-link').addEventListener('click',previewMediaLink);
 $('save-link').addEventListener('click',saveMediaLink);
+$('broadcast-date').addEventListener('input',updateControls);
+$('save-schedule').addEventListener('click',saveSchedule);
+for(const[id,step]of [['calendar-prev',-1],['calendar-next',1]])$(id).addEventListener('click',()=>{calendarRevision++;calendarMonth=new Date(calendarMonth.getFullYear(),calendarMonth.getMonth()+step,1);calendarDay=localDate(calendarMonth);calendarItems=[];calendarCursor=null;renderCalendar();loadCalendar();});
+$('calendar-more').addEventListener('click',()=>loadCalendar({more:true}));
 $('media-upload').addEventListener('click',uploadMedia);
 $('publish-consent').addEventListener('change',updateControls);
 $('publish-broadcast').addEventListener('click',publishBroadcast);

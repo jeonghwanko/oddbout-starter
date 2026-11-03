@@ -1,6 +1,6 @@
 # ODDBOUT Showrunner · Spotlight
 
-The customer flow is **choose a broadcast card → add sponsor video and URL → preview and publish → My broadcasts**.
+The customer flow is **buy a broadcast ticket → Set Promotion → schedule → On-Air Calendar → On-Air Agent → Start**.
 DON balance, top-up action and purchased broadcast tickets share the wallet above the products.
 Tickets show their four assigned fighters with portraits and names. Each product card has its own purchase
 button; uncertain purchases resume from that same card while other products stay disabled.
@@ -38,7 +38,10 @@ The separate promotion destination is an HTTPS URL. The server never fetches use
 
 AI writes a paid-sponsor introduction using the destination hostname. It does not claim to have
 watched the clip or researched the advertiser. The owner reviews the video, introduction and URL,
-then explicitly publishes. The resulting unlisted watch link exposes those materials to its viewers.
+then saves a start date and time to their private On-Air Calendar. Scheduling does not publish,
+start the clock or make another debit. On-Air Agent opens the authenticated host room for that order;
+the owner previews the promotion and presses **Start**. The resulting unlisted watch link exposes
+those materials to its viewers. The host room embeds the same ODDBOUT web watch page.
 Uploaded video URLs are temporary signed capabilities; the storage bucket remains private.
 YouTube and Twitch links use their official players, with the actual host as Twitch's `parent`.
 Private, removed, restricted or embedding-disabled videos cannot be guaranteed to play.
@@ -48,8 +51,17 @@ minimum width, the page offers an original-player link rather than a cropped emb
 [YouTube player parameters](https://developers.google.com/youtube/player_parameters) and
 [Twitch embed requirements](https://dev.twitch.tv/docs/embed/video-and-clips/).
 
-Order states are `awaiting_media`, `ready`, and `started`. The last state is labelled **Published**:
-it records publication, not verified delivery. Elapsed time does not mark a purchase fulfilled.
+Order states remain `awaiting_media`, `ready`, and `started`. Ready tickets with a saved time display
+**Scheduled**. The calendar stores the planned instant in UTC and the selected IANA time zone;
+forms and the calendar display the current device's time zone explicitly. Dates must be in the
+future, within one year, and can be changed before Start. Version checks prevent a stale device
+from overwriting a newer schedule or starting from a stale host review. Saved request keys recover
+uncertain responses without another reservation, model call or debit.
+
+Start is always manual. The host may start earlier or later than planned, with an explicit “Starts now”
+notice; the full purchased duration runs from the actual server `startedAt`. There is no scheduled
+background execution or automatic start when the planned time passes. The **Started** and **Ended**
+labels describe the program clock, not independently verified delivery. Elapsed time does not mark a purchase fulfilled.
 Unknown purchase/upload/save responses retain their original keys and paths for recovery.
 
 ## Playback boundary
@@ -75,9 +87,11 @@ There is no subscription or auto-renewal. Existing orders retain their original 
 
 After the migrations in [PAID-TASK-RECOVERY](PAID-TASK-RECOVERY.md), apply
 `supabase/sandbox/20261103154930_commerce_campaigns.sql`, followed by
-`supabase/sandbox/20261103170232_commerce_campaign_links.sql`, only to the isolated Sandbox project.
+`supabase/sandbox/20261103170232_commerce_campaign_links.sql`, then
+`supabase/sandbox/20261103180002_commerce_campaign_schedule.sql`, only to the isolated Sandbox project.
 They create the private campaign tables/RPC, `campaign-media` bucket and service-role-only link RPC.
-The link migration preserves existing MP4 records and purchase semantics. Deploy the game's
+These migrations preserve existing purchases and started broadcasts. New starts require a saved
+schedule; already-started records without one remain viewable. Deploy the game's
 `spotlight.html`, `spotlight-player.mjs` and `spotlight-contract.mjs` adapter before the API/UI release.
 Use the existing explicitly selected `ODDBOUT_BROADCAST_MODEL` and `OPENAI_API_KEY` for introductions.
 `/readyz` checks campaign schema access. Run `npm run campaign:check` and `npm run typecheck`.

@@ -26,6 +26,7 @@ export function createCampaignHandler({service,publicOrigin,authenticate,upload}
       if(route.length===1&&route[0]==='catalog'&&method==='GET')return json({ok:true,data:service.catalog()});
       if(route.length===2&&route[0]==='watch'&&method==='GET')return json({ok:true,data:await service.manifest(route[1])});
       const owner=await authenticate(request);if(!owner)throw new Problem(401,'authentication-required');
+      if(route.length===1&&route[0]==='calendar'&&method==='GET')return json({ok:true,data:await service.calendar(owner,{from:url.searchParams.get('from')??'',to:url.searchParams.get('to')??'',...(url.searchParams.has('cursor')?{cursor:url.searchParams.get('cursor')??''}:{})})});
       let input=/** @type {Record<string,any>} */({});
       if(method==='POST'){
         if(!request.headers.get('content-type')?.startsWith('application/json'))throw new Problem(415,'json-required');
@@ -50,6 +51,7 @@ export function createCampaignHandler({service,publicOrigin,authenticate,upload}
       else if(route.length===3&&route[0]==='orders'&&method==='POST'){
         if(route[2]==='media'){consent();data=await service.saveMedia(owner,route[1],body);}
         else if(route[2]==='link'){consent();data=await service.saveLink(owner,route[1],body);}
+        else if(route[2]==='schedule'){consent();data=await service.schedule(owner,route[1],body);}
         else if(route[2]==='start'){consent();data=await service.start(owner,route[1],body);}
         else if(route[2]==='upload'&&upload){await service.get(owner,route[1]);data=await upload(owner,route[1],body);}
         else throw new Problem(404,'not-found');

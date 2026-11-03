@@ -163,8 +163,9 @@ export function createBroadcastDemo(env = process.env) {
         const bytes = await readFile(new URL(file[0], root));
         if(['/broadcast/','/broadcast/watch/'].includes(address.pathname)){
           const authOrigin=url?new URL(url).origin:'';
-          res.setHeader('content-security-policy',`default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; media-src 'self' blob: ${authOrigin}; connect-src 'self' ${authOrigin}; frame-src https://oddbout-broadcast-arena.onrender.com https://www.youtube-nocookie.com https://player.twitch.tv https://clips.twitch.tv; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'`);
-          res.setHeader('x-frame-options','DENY');
+          const watch=address.pathname==='/broadcast/watch/';
+          res.setHeader('content-security-policy',`default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; media-src 'self' blob: ${authOrigin}; connect-src 'self' ${authOrigin}; frame-src 'self' https://oddbout-broadcast-arena.onrender.com https://www.youtube-nocookie.com https://player.twitch.tv https://clips.twitch.tv; frame-ancestors ${watch?"'self'":"'none'"}; base-uri 'none'; object-src 'none'; form-action 'self'`);
+          res.setHeader('x-frame-options',watch?'SAMEORIGIN':'DENY');
         }
         if (address.pathname === '/broadcast/tasks/') {
           const authOrigin = url ? new URL(url).origin : '';

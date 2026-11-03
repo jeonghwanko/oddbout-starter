@@ -15,7 +15,7 @@
       <div class="topbar-inner">
         <a class="brand" href="https://oddbout.com/" aria-label="ODDBOUT home"><img src="./assets/oddbout-logo.webp" alt="ODDBOUT Fight Club" width="378" height="80" /></a>
         <a class="studio-brand" href="/broadcast/"><img src="./assets/showrunner.svg" alt="" width="34" height="34" /><span>Showrunner</span></a>
-        <nav aria-label="Showrunner"><a href="#wallet">My wallet</a><a href="#spotlight">Broadcasts</a></nav>
+        <nav aria-label="Showrunner"><a href="/broadcast/#wallet">My wallet</a><a href="/broadcast/#spotlight">Broadcasts</a><a href="/broadcast/#on-air-calendar">On-Air Calendar</a></nav>
         <div class="account">
           <button id="google-signin" class="google-button" type="button" disabled aria-label="Sign in with Google"><img src="./assets/google-signin.png" alt="Sign in with Google" width="189" height="40" /></button>
           <span id="account-identity" class="account-identity" hidden><span class="avatar" id="account-avatar" aria-hidden="true"></span><span id="account-name"></span></span>
@@ -24,6 +24,7 @@
       </div>
     </header>
     <main id="main" class="shop-shell">
+      <section id="host-heading" hidden><a href="/broadcast/#on-air-calendar">← On-Air Calendar</a><h1>On-Air Agent</h1><p id="host-status" role="status"></p></section>
       <section class="shop-hero" aria-labelledby="page-title">
         <div class="shop-hero-copy">
           <h1 id="page-title">Your brand.<br /><span>In the ring.</span></h1>
@@ -57,6 +58,12 @@
         <div class="section-heading"><h2 id="spotlight-title">Choose your broadcast</h2></div>
         <div id="duration-options" class="duration-options" role="group" aria-label="Choose broadcast duration"></div>
       </section>
+      <section id="on-air-calendar" class="calendar-section" aria-labelledby="calendar-title">
+        <div class="section-heading"><h2 id="calendar-title">On-Air Calendar</h2><div class="calendar-nav"><button id="calendar-prev" type="button" aria-label="Previous month">←</button><strong id="calendar-month"></strong><button id="calendar-next" type="button" aria-label="Next month">→</button></div></div>
+        <p id="calendar-zone"></p><div id="calendar-days" class="calendar-days" aria-label="Broadcast dates"></div>
+        <div id="calendar-agenda" class="calendar-agenda" aria-live="polite"></div>
+        <button id="calendar-more" class="button button-secondary" type="button" hidden>Load more broadcasts</button>
+      </section>
       <section id="purchase-panel" class="purchase-panel" hidden aria-labelledby="purchase-title">
         <div class="section-heading"><h2 id="purchase-title">Spotlight</h2><span id="purchase-state" class="state-pill">—</span></div>
         <div id="purchase-receipt" class="purchase-receipt"></div>
@@ -85,11 +92,19 @@
             <div id="intro-preview" class="intro-preview" aria-labelledby="intro-title" hidden><h3 id="intro-title">AI introduction</h3><p id="intro-text"></p></div>
           </section>
         </div>
-        <div class="publish-row">
-          <label class="consent"><input id="publish-consent" type="checkbox" /><span>I checked playback. Publish this video and link.</span></label>
-          <button id="publish-broadcast" class="button button-primary" type="button" disabled>Publish broadcast</button>
+        <div id="schedule-panel" class="schedule-panel" hidden>
+          <label class="field" for="broadcast-date">Start date &amp; time<input id="broadcast-date" type="datetime-local" step="60" /></label>
+          <p id="schedule-timezone"></p>
+          <div class="schedule-actions"><button id="save-schedule" class="button button-primary" type="button">Add to Calendar</button><a id="open-host" class="button button-secondary" href="#" hidden>On-Air Agent →</a></div>
+          <p id="schedule-status" class="section-status" role="status" aria-live="polite"></p>
+        </div>
+        <div id="publish-row" class="publish-row" hidden>
+          <label class="consent"><input id="publish-consent" type="checkbox" /><span>I checked the promotion. Start this broadcast.</span></label>
+          <button id="publish-broadcast" class="button button-primary" type="button" disabled>Start</button>
+          <p>Starts now. Your full broadcast time begins when you press Start.</p>
         </div>
       </section>
+      <section id="host-playback" class="host-playback" hidden><iframe id="host-watch" title="Your broadcast" allow="autoplay; fullscreen" allowfullscreen></iframe></section>
     </main>
     <footer class="shop-footer" aria-label="Service information">
       <p class="sandbox-notice">PayPal Sandbox · No real charges</p>

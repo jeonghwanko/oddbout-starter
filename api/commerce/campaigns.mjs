@@ -50,11 +50,12 @@ export function createCampaignService({db,verifyMedia,verifyLink,beforeStart,sig
   async function run(owner,command,input={}){
     const {data,error}=command==='save_link'
       ?await db.rpc('commerce_campaign_link',{p_owner:owner,p_order_id:input.orderId,p_request_key:input.requestKey,p_input:input.media})
+      :['schedule','calendar','host_start'].includes(command)?await db.rpc('commerce_campaign_planning',{p_owner:owner,p_command:command==='host_start'?'start':command,p_input:input})
       :await db.rpc('commerce_campaign',{p_owner:owner,p_command:command,p_input:input});
     if(error){
       const code=String(error.message??'').match(/^commerce:([a-z_-]+)/)?.[1];
       throw new Problem(code==='not-found'?404:code==='insufficient-credits'?402:code==='owner-required'?401
-        :code==='invalid-input'?422:code?409:503,code??'campaign-unavailable');
+        :['invalid-input','invalid-schedule'].includes(code??'')?422:code?409:503,code??'campaign-unavailable');
     }
     return data;
   }
@@ -63,6 +64,24 @@ export function createCampaignService({db,verifyMedia,verifyLink,beforeStart,sig
   return {
     catalog:()=>({products:CAMPAIGN_PRODUCTS,defaultProductId:SPOTLIGHT_HOUR.id}),
     get,
+    /** Save one immutable scheduling intent; retries neither spend nor start.
+     * @param {string} owner @param {string} id @param {unknown} input */
+    schedule(owner,id,input){
+      const value=body(input,['requestKey','scheduledAt','timezone','expectedRevision']);
+      if(typeof value.scheduledAt!=='string'||!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(value.scheduledAt)||!Number.isFinite(Date.parse(value.scheduledAt))
+        ||!Number.isInteger(value.expectedRevision)||value.expectedRevision<0||typeof value.timezone!=='string'||value.timezone.length>80)throw new Problem(422,'invalid-schedule');
+      try{new Intl.DateTimeFormat('en',{timeZone:value.timezone});}catch{throw new Problem(422,'invalid-schedule');}
+      return run(owner,'schedule',{orderId:key(id),requestKey:key(value.requestKey),scheduledAt:value.scheduledAt,timezone:value.timezone,expectedRevision:value.expectedRevision});
+    },
+    /** Private monthly planning, separate from the purchase-history cursor.
+     * @param {string} owner @param {{from:string,to:string,cursor?:string}} input */
+    async calendar(owner,input){
+      const from=Date.parse(input.from),to=Date.parse(input.to);let cursor;
+      if(!Number.isFinite(from)||!Number.isFinite(to)||to<=from||to-from>42*86400000)throw new Problem(422,'invalid-schedule');
+      if(input.cursor){try{if(input.cursor.length>256||!/^[A-Za-z0-9_-]+$/.test(input.cursor))throw new Error();cursor=JSON.parse(Buffer.from(input.cursor,'base64url').toString('utf8'));if(!UUID.test(cursor.id)||!Number.isFinite(Date.parse(cursor.scheduledAt)))throw new Error();}catch{throw new Problem(422,'invalid-cursor');}}
+      const page=await run(owner,'calendar',{from:new Date(from).toISOString(),to:new Date(to).toISOString(),...(cursor?{cursor}:{})});
+      return {...page,nextCursor:page.nextCursor?Buffer.from(JSON.stringify(page.nextCursor),'utf8').toString('base64url'):null};
+    },
     /** A saved UUID is the purchase intent. Failed insufficient-funds transactions create no purchased order.
      * @param {string} owner @param {unknown} input */
     purchase(owner,input){const value=body(input,['requestKey','productId']);
@@ -133,11 +152,16 @@ export function createCampaignService({db,verifyMedia,verifyLink,beforeStart,sig
     /** Explicit final Start. Configuration verification precedes the immutable server start timestamp.
      * @param {string} owner @param {string} id @param {unknown} input */
     async start(owner,id,input){
-      const orderId=key(id),value=body(input,['requestKey']),requestKey=key(value.requestKey),order=await get(owner,orderId);
+      const orderId=key(id),value=body(input,['requestKey','expectedRevision','expectedMediaId']),requestKey=key(value.requestKey),order=await get(owner,orderId);
       if(order.status==='started')return order;
       if(order.status!=='ready')throw new Problem(409,'campaign-media-required');
+      if(!order.scheduledAt)throw new Problem(409,'campaign-schedule-required');
+      const expectedRevision=value.expectedRevision??order.scheduleRevision;
+      if(!Number.isInteger(expectedRevision)||expectedRevision!==order.scheduleRevision)throw new Problem(409,'schedule-changed');
+      const expectedMediaId=value.expectedMediaId??order.mediaId;
+      if(expectedMediaId!==order.mediaId)throw new Problem(409,'media-changed');
       if(!beforeStart||await beforeStart(owner,order)===false)throw new Problem(503,'campaign-playback-unavailable');
-      return run(owner,'start',{orderId,requestKey});
+      return run(owner,'host_start',{orderId,requestKey,expectedRevision,expectedMediaId});
     },
     /** Authenticated media preview after reload, including before the final Start.
      * @param {string} owner @param {string} id */
