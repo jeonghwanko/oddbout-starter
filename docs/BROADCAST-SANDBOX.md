@@ -27,7 +27,8 @@ DB와 Sandbox 설정 없이 실행하면 `preview-unconfigured` 모드다. 이 �
 먼저 테스트 전용 Supabase 프로젝트임을 프로젝트 참조 ID와 대시보드에서 확인한다. 아래 migration은 `commerce` 지갑·원장·예산·작업 schema와 RPC를 만든다. 이 SQL을 **격리된 개발/데모 프로젝트에만** 적용한다.
 
 - `supabase/sandbox/20261102115107_commerce_broadcast_ledger.sql`
-- 운영 또는 기존 프로덕션 프로젝트에 적용하지 않는다. 그래서 이 파일은 `supabase/migrations/` 밖에 있다: 운영 DB 절차·`supabase db push`·배포 drift watch는 이 SQL을 보지 않는다. 대상 프로젝트를 확인하고 SQL 편집기 등으로 이 파일 하나만 실행한다.
+- `supabase/sandbox/20261104090000_commerce_payouts.sql`(크리에이터 출전료 지급, 5-3절). 첫 파일 다음에 적용한다.
+- 운영 또는 기존 프로덕션 프로젝트에 적용하지 않는다. 그래서 이 파일들은 `supabase/migrations/` 밖에 있다: 운영 DB 절차·`supabase db push`·배포 drift watch는 이 SQL을 보지 않는다. 대상 프로젝트를 확인하고 SQL 편집기 등으로 이 두 파일만 순서대로 실행한다.
 - 운영 `ai-fighter`·`ai-fighter-mcp` Edge 함수와 Render는 commerce를 싣지 않는다(2026-11-03). Sandbox API·producer MCP·worker API는 `scripts/broadcast-demo.mjs` 서버에서만 돈다.
 
 서버 환경 변수는 코드의 실제 이름과 조건을 따른다.
@@ -50,6 +51,7 @@ DB와 Sandbox 설정 없이 실행하면 `preview-unconfigured` 모드다. 이 �
 | `ODDBOUT_BROADCAST_AUTO_PRODUCER` | `1`이면 시작된 모든 세션에 AI producer를 서버 안에서 자동 실행한다. 기본값은 끔(`0`)이다. `1`인데 `ODDBOUT_BROADCAST_MODEL`·`OPENAI_API_KEY`가 없으면 서버 시작을 거부한다. 5절을 참고한다. |
 | `ODDBOUT_BROADCAST_AUTO_PRODUCER_MAX_ACTIVE`, `ODDBOUT_BROADCAST_AUTO_PRODUCER_DAILY_CALLS` | 자동 producer의 동시 실행 상한(기본 3)과 UTC 하루 모델 호출 상한(기본 200). |
 | `ODDBOUT_BROADCAST_PRODUCER_STATE_DIR` | 자동 producer checkpoint 디렉터리. 기본 `.oddbout-broadcast/producers`. 재시작 후 재개하려면 영속 디스크에 둔다. |
+| `ODDBOUT_PAYOUTS`, `ODDBOUT_PAYOUT_RECEIVERS_JSON`, `ODDBOUT_PAYOUT_FEE_CENTS` | `1`이면 완료된 컵의 크리에이터 출전료를 PayPal Sandbox Payouts로 지급한다(기본 끔). 수취인은 선수 ID → Sandbox personal 계정 이메일 JSON이고, 출전료는 선수당 컵당 센트(기본 2). 5-3절을 참고한다. |
 | `ODDBOUT_PAYPAL_RECONCILIATION`, `ODDBOUT_PAYPAL_MCP_ENTRY` | `1`이면 공식 PayPal MCP 서버로 계정의 충전 기록을 PayPal과 대조한다(기본 끔). PayPal Sandbox 설정과 `npm ci --prefix deploy/paypal-mcp`가 필요하다. 경로를 바꿀 때만 `ODDBOUT_PAYPAL_MCP_ENTRY`를 쓴다. 5-2절을 참고한다. |
 | `ODDBOUT_BROADCAST_CONCIERGE`, `ODDBOUT_BROADCAST_CONCIERGE_DAILY_CALLS` | `1`이면 콘솔의 AI 컨시어지를 켠다(기본 끔). `ODDBOUT_BROADCAST_MODEL`·`OPENAI_API_KEY`가 필요하다. 하루 모델 호출 상한 기본 300. 6절 앞의 컨시어지 절을 참고한다. |
 
@@ -181,6 +183,17 @@ Grant는 등록된 사용자·broadcast에 한정되고, 매 요청 때 broadcas
 - 계정마다 한 번에 하나만 실행하고, 결과는 2분 동안 캐시한다. AI 감사자의 모델 호출은 대조당 6회, UTC 하루 100회까지다.
 - 이 기능은 원장 SQL의 `list_topups` 명령을 쓴다(2026-11-03 추가). 이전 버전 SQL을 이미 적용한 프로젝트는 `public.commerce_command` 함수만 이 파일의 정의로 바꾼다(`create function`을 `create or replace function`으로 실행).
 
+## 5-3. 크리에이터 출전료 지급 (데모 서버)
+
+`ODDBOUT_PAYOUTS=1`이면 완료된 컵마다 출전한 선수 네 명의 크리에이터에게 출전료를 PayPal Sandbox Payouts로 지급한다. 우승 상금이 아니라 출전료다. 컵 가격 25크레딧(Sandbox USD 0.25) 가운데 기본값으로 선수당 2센트, 컵당 8센트가 크리에이터 몫이다.
+
+- 수취인은 서버 설정 `ODDBOUT_PAYOUT_RECEIVERS_JSON`의 선수 ID → Sandbox personal 계정 이메일이다. 예: `{"kuma":"kuma.creator@personal.example.com"}`. 수취인이 없는 선수의 출전료는 쌓이지 않는다. 모델이나 요청이 수취인과 금액을 정하지 않는다.
+- 흐름: 지급안 제안(`POST /commerce/payouts`, 콘솔 버튼 또는 컨시어지의 `propose_creator_payouts`) → 세션 소유자가 콘솔에서 승인(`POST /commerce/payouts/<id>/approve`, `confirmed: true`, 같은 origin만; MCP agent 불가) → PayPal Payouts 배치 → 상태 조회(`GET /commerce/payouts/<id>`)로 `paid`/`failed` 확정. 제안만으로는 돈이 움직이지 않는다.
+- 이중 지급 방지: 지급 항목의 키는 (컵 작업, 선수)이므로 한 컵의 한 선수 출전료는 한 번만 지급안에 들어간다. 배치 ID를 PayPal `sender_batch_id`로, `p-<배치 ID>`를 `PayPal-Request-Id`로 쓴다. 응답을 잃은 승인은 같은 값으로 다시 보내므로 배치가 둘 생기지 않는다.
+- 첫 전송에 대한 명확한 4xx 거절(408·409·429 제외)만 배치를 `failed`(REJECTED)로 닫고 항목을 풀어 다시 제안할 수 있게 한다. 그 밖의 실패는 결과 불명확으로 `submitting`에 남고, 승인을 다시 눌러 같은 요청으로 재시도한다. 불명확한 전송 뒤의 재시도가 거절되면 PayPal이 이미 배치를 만들었을 수 있으므로 항목을 풀지 않는다. 운영자가 PayPal 대시보드에서 `sender_batch_id`(배치 ID)를 확인한다. PayPal의 DENIED·CANCELED는 항목을 푼다.
+- 배치 상태만 추적한다. 항목별 UNCLAIMED 등은 PayPal 대시보드에서 확인한다. Payouts webhook은 아직 처리하지 않으며 상태는 조회로 갱신한다.
+- PayPal Sandbox REST 앱에서 Payouts 기능을 켜야 한다. business 계정 잔액에서 지급된다. 실제 돈의 지급에는 별도 계약·세무·KYC 검토가 필요하며 이번 범위가 아니다.
+
 ## 6. 아직 제공하지 않는 기능
 
 - `--live`는 현재 `runner_live_channel_unverified`로 막혀 있다. OBS 연결 점검은 실제 Twitch 채널/ingest 검증이 아니다.
@@ -211,4 +224,5 @@ Grant는 등록된 사용자·broadcast에 한정되고, 매 요청 때 broadcas
 - OBS/호스트 doctor: `scripts/broadcast-host.mjs`, `broadcast/hosts.mjs`
 - render-only worker: `scripts/broadcast-runner.mjs`, `broadcast/runner.mjs`
 - 선택형 AI producer: `scripts/broadcast-producer.mjs`, `broadcast/producer.mjs`
-- 별도 Sandbox 원장 SQL(운영 migration 아님): `supabase/sandbox/20261102115107_commerce_broadcast_ledger.sql`
+- 별도 Sandbox 원장 SQL(운영 migration 아님): `supabase/sandbox/20261102115107_commerce_broadcast_ledger.sql`, `supabase/sandbox/20261104090000_commerce_payouts.sql`
+- 크리에이터 출전료 지급: `api/commerce/payouts.mjs`

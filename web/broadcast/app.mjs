@@ -37,13 +37,13 @@ async function call(path, body) {
     ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   const result = await response.json();
   if (session?.user.id !== owner || journal !== accountScope) throw new Error('Account changed. Sign in to the original account to recover the request.');
-  if (!response.ok || !result.ok) throw Object.assign(new Error(result.code ?? 'Request failed.'), { code: result.code, status: response.status, responseOk: result.ok });
+  if (!response.ok || !result.ok) throw Object.assign(new Error(result.code ?? 'Request failed.'), { code: result.code, status: response.status, responseOk: result.ok, outcomeUnknown: result.outcomeUnknown === true });
   return result.data;
 }
 function requireJournal() { if (!session || !journal) throw new Error('Sign in to your ODDBOUT account first.'); return journal; }
 function updateControls() {
   $('google-signin').disabled = !client || busyActions.has('google-signin');
-  for (const id of ['topup-form', 'budget-form', 'broadcast-form', 'host-cup', 'stop', 'refresh', 'verify-payment']) {
+  for (const id of ['topup-form', 'budget-form', 'broadcast-form', 'host-cup', 'stop', 'refresh', 'verify-payment', 'payout-propose']) {
     const disabled = busyActions.has(id) || !session || !config?.commerceEnabled
       || (walletSpendingBlocked && ['topup-form', 'budget-form', 'broadcast-form', 'host-cup'].includes(id))
       || (['topup-form', 'verify-payment'].includes(id) && !catalog?.paypalConfigured);
@@ -80,6 +80,7 @@ function action(id, callback, event = 'click', exclusive = false) {
       const message = id === 'budget-form' ? budgetErrors[error.code] ?? error.message : error.message;
       show(message);
       if (id === 'budget-form') budgetFeedback(message, true);
+      if (id === 'payout-propose') proposeFailed(error);
       if (id === 'google-signin') $('login-status').textContent = error.message;
     }
     finally { busyActions.delete(id); buttons.forEach(button => button.disabled = false); updateControls(); }
@@ -190,16 +191,20 @@ async function refresh() {
   const id = selected;
   if (id) {
     const path = 'broadcasts/' + encodeURIComponent(id);
-    const [report, jobs, producer] = await Promise.all([call(path + '/report'), call(path + '/jobs'),
-      config?.autoProducer ? call(path + '/producer').catch(() => ({ unavailable: true })) : null]);
+    const payoutsScopeNow = payoutsScope, payoutsLoadNow = ++payoutsLoad;
+    const [report, jobs, producer, payouts] = await Promise.all([call(path + '/report'), call(path + '/jobs'),
+      config?.autoProducer ? call(path + '/producer').catch(() => ({ unavailable: true })) : null,
+      payoutFee() ? call(path + '/payouts').catch(() => ({ unavailable: true })) : null]);
     if (revision !== refreshRevision || $('broadcastId').value.trim() !== id) return;
     $('report').textContent = JSON.stringify(report, null, 2);
     renderProducer(producer);
+    // A payout action or a newer list that finished meanwhile is newer than this answer.
+    if (payoutsScopeNow === payoutsScope && payoutsLoadNow === payoutsLoad) setPayouts(payouts);
     if (['running', 'waiting'].includes(producer?.state)) schedulePoll(revision);
     $('active-jobs').replaceChildren(...jobs.map(job => {
       const row = document.createElement('p'); row.textContent = job.status + ' · ' + job.priceCredits + ' credits · ' + job.fighterIds.join(' / '); return row;
     }));
-  } else renderProducer(null);
+  } else { renderProducer(null); clearPayouts(); }
 }
 action('google-signin', async () => {
   if (!client) throw new Error('Account connection is not configured on this development server.');
@@ -255,13 +260,242 @@ action('refresh', refresh);
 $('broadcastId').addEventListener('input', () => {
   refreshRevision++;
   $('active-jobs').replaceChildren(); $('report').textContent = 'Refresh to load the selected session.';
-  clearProducer();
+  clearProducer(); clearPayouts();
 });
 action('stop', async () => { const result = await call('broadcasts/' + encodeURIComponent($('broadcastId').value.trim()) + '/stop', {}); show(result); await refresh(); });
+// Creator payouts pay each fighter's creator a small appearance fee for a completed cup through PayPal Sandbox
+// Payouts. Proposing moves nothing: a person approves each batch with a click here. Everything the server sends
+// is untrusted text, so it is written with textContent and createElement only, never as markup or a link, and a
+// receiver's address is masked before it is shown.
+const PAYOUT_STATUSES = { proposed: 'Proposed', submitting: 'Sending', submitted: 'Submitted', paid: 'Paid', failed: 'Failed', cancelled: 'Cancelled' };
+const PAYOUT_FINAL = ['paid', 'failed', 'cancelled'];
+const PAYOUT_LOST = "PayPal's answer was lost. Approve again to retry the same payout — it cannot pay twice.";
+const PAYOUT_UNFINISHED = 'The request did not finish, so the result is unknown. Refresh to check; approving again cannot pay twice.';
+const PAYOUT_ERRORS = {
+  'nothing-to-pay': 'No completed cups are waiting to be paid.',
+  'not-found': 'That session or payout was not found.',
+  'web-approval-required': 'A payout can only be approved with a click on this console page. Reload the page and try again.',
+  'authentication-required': 'Sign in again to manage payouts.',
+  'commerce-unavailable': 'Payouts are unavailable right now. Please try again in a moment.',
+};
+const PAYOUT_MAX_BATCHES = 20, PAYOUT_MAX_ITEMS = 24;
+let payoutBatches = [], payoutsUnavailable = false, payoutsRendered = '';
+// payoutsScope changes when the selected session or account changes: results meant for another view are dropped.
+// payoutsLoad changes whenever a newer list or action result lands: an older list answer must not overwrite it.
+let payoutsScope = 0, payoutsLoad = 0;
+const payoutBusy = new Set(), payoutNotes = new Map();
+const payoutFee = () => Number.isSafeInteger(config?.payouts?.feeCents) && config.payouts.feeCents > 0 ? config.payouts.feeCents : 0;
+function payoutMoney(cents, currency = 'USD') {
+  if (!Number.isSafeInteger(cents) || cents < 0) return '';
+  const code = plain(currency, 3).toUpperCase();
+  return code === 'USD' ? '$' + (cents / 100).toFixed(2) : (cents / 100).toFixed(2) + ' ' + (code || 'USD');
+}
+/** `kuma@personal.example.com` becomes `ku***@personal.example.com`; anything that is not an address becomes `***`. */
+function maskReceiver(value) {
+  const text = plain(value, 254), at = text.lastIndexOf('@');
+  if (at < 1) return '***';
+  const local = Array.from(text.slice(0, at));
+  return local.slice(0, local.length > 3 ? 2 : 1).join('') + '***' + text.slice(at);
+}
+function payoutTime(value) {
+  const time = new Date(typeof value === 'string' ? value : NaN);
+  return Number.isNaN(time.getTime()) ? '' : time.toLocaleString();
+}
+const cupsLabel = cups => Number.isSafeInteger(cups) && cups > 0 ? cups.toLocaleString() + (cups === 1 ? ' cup' : ' cups') : '';
+const payoutBatchList = data => (Array.isArray(data) ? data : [])
+  .filter(batch => batch && typeof batch === 'object' && typeof batch.id === 'string' && UUID_PATTERN.test(batch.id))
+  .sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0)).slice(0, PAYOUT_MAX_BATCHES);
+function payoutStatus(text, error = false) {
+  $('payouts-status').textContent = text; $('payouts-status').classList.toggle('is-error', error);
+}
+function clearPayouts() {
+  payoutsScope++; payoutsLoad++;
+  payoutBatches = []; payoutsUnavailable = false; payoutsRendered = ''; payoutNotes.clear();
+  $('payouts-card').hidden = true; $('payouts-list').replaceChildren(); $('payouts-empty').hidden = true; payoutStatus('');
+}
+function payoutItem(item, currency) {
+  const row = textElement('li', 'payout-item');
+  const id = plain(item?.fighterId, 64), name = textElement('span', 'payout-fighter', id ? fighterName(id) : 'Fighter');
+  const cups = cupsLabel(item?.cups);
+  row.append(name, textElement('span', 'payout-amount', [cups, payoutMoney(item?.cents, currency)].filter(Boolean).join(' · ')),
+    textElement('span', 'payout-receiver', maskReceiver(item?.receiver)));
+  return row;
+}
+function payoutButton(label, className, busy, handler) {
+  const button = textElement('button', 'button button-small ' + className, label);
+  button.type = 'button'; button.disabled = busy; button.addEventListener('click', handler);
+  return button;
+}
+function payoutBatchCard(batch) {
+  const status = Object.hasOwn(PAYOUT_STATUSES, batch.status) ? batch.status : 'unknown', busy = payoutBusy.has(batch.id);
+  const currency = plain(batch.currency, 3) || 'USD', card = textElement('li', 'payout-batch');
+  card.dataset.batchId = batch.id; card.tabIndex = -1;
+  const head = textElement('div', 'payout-batch-head'), badge = textElement('span', 'payout-badge', Object.hasOwn(PAYOUT_STATUSES, status) ? PAYOUT_STATUSES[status] : 'Unknown');
+  badge.dataset.status = status;
+  head.append(badge, textElement('strong', 'payout-total', payoutMoney(batch.totalCents, currency) || '—'));
+  const created = payoutTime(batch.createdAt);
+  if (created) head.append(textElement('span', 'payout-time', created));
+  card.append(head);
+  const items = (Array.isArray(batch.items) ? batch.items : []).filter(item => item && typeof item === 'object').slice(0, PAYOUT_MAX_ITEMS);
+  if (items.length) { const list = textElement('ul', 'payout-items'); list.append(...items.map(item => payoutItem(item, currency))); card.append(list); }
+  else if (['failed', 'cancelled'].includes(status)) card.append(textElement('p', 'payout-meta', 'Nothing was paid. Its cups can be proposed again.'));
+  const providerId = plain(batch.providerBatchId, 64), providerStatus = plain(batch.providerStatus, 40).replaceAll('_', ' ');
+  if (providerId) card.append(textElement('p', 'payout-meta payout-provider', 'PayPal batch ' + providerId + (providerStatus ? ' · ' + providerStatus : '')));
+  const completed = PAYOUT_FINAL.includes(status) ? payoutTime(batch.completedAt) : '';
+  if (completed) card.append(textElement('p', 'payout-meta', 'Completed ' + completed));
+  const note = payoutNotes.get(batch.id);
+  if (status === 'submitting') card.append(textElement('p', 'payout-note is-warning', PAYOUT_LOST));
+  if (note?.status === status && note.text && !(status === 'submitting' && note.text === PAYOUT_LOST)) {
+    const line = textElement('p', 'payout-note' + (note.error ? ' is-error' : ''), note.text); line.setAttribute('role', 'status'); card.append(line);
+  }
+  const buttons = [];
+  if (status === 'proposed' || status === 'submitting') buttons.push(payoutButton('Approve and pay with PayPal', 'button-primary', busy, () => approvePayout(batch)));
+  if (status === 'proposed') buttons.push(payoutButton('Cancel', 'button-secondary', busy, () => cancelPayout(batch)));
+  if (status === 'submitted') buttons.push(payoutButton('Refresh status', 'button-secondary', busy, () => refreshPayout(batch)));
+  if (buttons.length) { const row = textElement('div', 'payout-buttons'); row.append(...buttons); card.append(row); }
+  return card;
+}
+function renderPayouts() {
+  const signature = JSON.stringify([payoutFee(), payoutsUnavailable, payoutBatches, [...payoutNotes], [...payoutBusy]]);
+  if (signature === payoutsRendered && !$('payouts-card').hidden) return; // a poll that changed nothing keeps focus where it is
+  payoutsRendered = signature;
+  $('payouts-intro').textContent = "Each completed cup pays every fighter's creator " + payoutMoney(payoutFee()) + ' (Sandbox).';
+  $('payouts-list').replaceChildren(...payoutBatches.map(payoutBatchCard));
+  const empty = $('payouts-empty');
+  empty.textContent = payoutsUnavailable ? 'Payouts could not be loaded. Use Refresh status above to try again.' : 'No payouts have been proposed for this session yet.';
+  empty.classList.toggle('is-error', payoutsUnavailable);
+  empty.hidden = payoutBatches.length > 0;
+  $('payouts-card').hidden = false;
+}
+/** @param {any} data The payouts list, `{ unavailable: true }` when it could not be read, or null to hide the card. */
+function setPayouts(data) {
+  if (!payoutFee() || !data) { clearPayouts(); return; }
+  payoutsUnavailable = !Array.isArray(data);
+  payoutBatches = payoutBatchList(data);
+  try {
+    const id = $('broadcastId').value.trim().toLowerCase();
+    if (!$('payouts-status').textContent && journal?.get('payout:' + id)) payoutStatus('A payout proposal is waiting for its reply. Propose payout recovers the same request and cannot create a second batch.');
+  } catch { /* A damaged journal is reported when the person proposes. */ }
+  renderPayouts();
+}
+function upsertPayout(batch) {
+  payoutBatches = payoutBatchList([batch, ...payoutBatches.filter(entry => entry?.id !== batch?.id)]);
+}
+async function loadPayouts() {
+  const id = $('broadcastId').value.trim();
+  if (!payoutFee() || !id) return;
+  const scope = payoutsScope, load = ++payoutsLoad;
+  let data;
+  try { data = await call('broadcasts/' + encodeURIComponent(id) + '/payouts'); } catch { data = { unavailable: true }; }
+  if (scope !== payoutsScope || load !== payoutsLoad || $('broadcastId').value.trim() !== id) return;
+  setPayouts(data);
+}
+const lostReply = error => error instanceof TypeError || error instanceof SyntaxError;
+function proposeFailed(error) {
+  const code = typeof error?.code === 'string' ? error.code : '';
+  if (code === 'nothing-to-pay') { payoutStatus(PAYOUT_ERRORS[code]); return; }
+  payoutStatus(lostReply(error) ? 'The reply was lost. Choose Propose payout again to retry the same request.'
+    : Object.hasOwn(PAYOUT_ERRORS, code) ? PAYOUT_ERRORS[code] : plain(error?.message, 200) || 'The payout could not be proposed.', true);
+}
+// One journal entry per session: a lost reply is retried with the same key, and another session is never blocked by it.
+action('payout-propose', async () => {
+  const saved = requireJournal(), id = $('broadcastId').value.trim().toLowerCase();
+  if (!payoutFee() || !UUID_PATTERN.test(id)) throw new Error('Select a session first.');
+  payoutStatus('');
+  const scope = payoutsScope, name = 'payout:' + id, { op, result } = await mutate(saved, name, { broadcastId: id }, 'payouts');
+  saved.complete(name, op.requestKey);
+  if (scope !== payoutsScope) return;
+  upsertPayout(result); payoutsLoad++;
+  payoutStatus(result?.status === 'proposed' ? 'Payout proposed. Nothing is sent until you approve it.' : 'This request already has a payout. Review it below.');
+  renderPayouts();
+  $('payouts-list').querySelector('[data-batch-id="' + CSS.escape(String(result?.id)) + '"]')?.focus({ preventScroll: true });
+}, 'click', true);
+function payoutFailure(error, kind) {
+  const code = typeof error?.code === 'string' ? error.code : '';
+  if (kind === 'approve' && error?.status === 502) {
+    return error.outcomeUnknown === true ? { text: PAYOUT_LOST, reload: true }
+      : { text: 'PayPal refused the payout' + (code ? ' (' + plain(code, 60) + ')' : '') + '. Nothing was paid.', reload: true };
+  }
+  if (kind === 'refresh' && error?.status === 502) return { text: 'PayPal could not report the status right now. Try again in a moment.', reload: false };
+  if (code === 'payout-not-approvable') return { text: 'This payout can no longer be approved. Its status was refreshed.', reload: true };
+  if (code === 'payout-not-cancellable') return { text: 'Only a proposed payout can be cancelled. Its status was refreshed.', reload: true };
+  if (Object.hasOwn(PAYOUT_ERRORS, code)) return { text: PAYOUT_ERRORS[code], reload: code === 'not-found' };
+  if (!code) return { text: kind === 'refresh' ? 'The status could not be checked. Try again in a moment.' : PAYOUT_UNFINISHED, reload: kind !== 'refresh' };
+  return { text: 'The payout request failed (' + plain(code, 60) + ').', reload: true };
+}
+/** Run one batch action: one at a time per batch, discarded when the view changed, with the note kept beside the batch. */
+async function runPayout(batch, kind, work) {
+  if (payoutBusy.has(batch.id)) return;
+  const scope = payoutsScope;
+  payoutBusy.add(batch.id); renderPayouts();
+  let text = '', error = false, reload = false;
+  try {
+    const result = await work();
+    if (scope === payoutsScope) { upsertPayout(result); text = payoutOutcome(result, kind); }
+  } catch (failure) { ({ text, reload } = payoutFailure(failure, kind)); error = true; }
+  payoutBusy.delete(batch.id);
+  if (scope !== payoutsScope) return;
+  payoutsLoad++;
+  const current = payoutBatches.find(entry => entry.id === batch.id);
+  if (current) payoutNotes.set(batch.id, { text, error, status: current.status }); else payoutNotes.delete(batch.id);
+  renderPayouts();
+  $('payouts-list').querySelector('[data-batch-id="' + CSS.escape(batch.id) + '"]')?.focus({ preventScroll: true });
+  if (reload) loadPayouts().catch(() => {});
+}
+function payoutOutcome(batch, kind) {
+  if (kind === 'cancel') return 'Cancelled. Nothing was sent to PayPal.';
+  if (batch?.status === 'submitted') return kind === 'approve' ? 'Sent to PayPal. Use Refresh status to follow it.' : 'Checked with PayPal. It is still in progress.';
+  return '';
+}
+function approvePayout(batch) {
+  const creators = new Set((batch.items ?? []).map(item => item?.receiver ?? item?.fighterId)).size, total = payoutMoney(batch.totalCents, batch.currency);
+  if (!confirm('Approve and pay ' + total + ' to ' + creators + (creators === 1 ? ' creator' : ' creators') + ' with PayPal?\n'
+    + 'This sends Sandbox money from the merchant account. No real money moves.\n'
+    + (batch.status === 'submitting' ? 'This retries the same payout; it cannot pay twice.' : 'Each cup is paid once.'))) return;
+  runPayout(batch, 'approve', () => call('payouts/' + encodeURIComponent(batch.id) + '/approve', { confirmed: true }));
+}
+function cancelPayout(batch) {
+  if (!confirm('Cancel this ' + payoutMoney(batch.totalCents, batch.currency) + ' payout?\nNothing is sent to PayPal, and its cups can be proposed again.')) return;
+  runPayout(batch, 'cancel', () => call('payouts/' + encodeURIComponent(batch.id) + '/cancel', { confirmed: true }));
+}
+function refreshPayout(batch) { runPayout(batch, 'refresh', () => call('payouts/' + encodeURIComponent(batch.id))); }
+/** A concierge payout proposal as a compact card. The concierge only proposes: approval is a click in Creator payouts. */
+function payoutAction(item) {
+  const card = textElement('div', 'chat-action chat-payout'), id = typeof item.broadcastId === 'string' && UUID_PATTERN.test(item.broadcastId) ? item.broadcastId.toLowerCase() : '';
+  const currency = plain(item.currency, 3) || 'USD', total = payoutMoney(item.totalCents, currency);
+  if (!id || !total) { card.append(textElement('p', 'chat-action-note', 'The payout proposal could not be shown. Open Creator payouts to check it.')); return card; }
+  const status = Object.hasOwn(PAYOUT_STATUSES, item.status) ? PAYOUT_STATUSES[item.status] : 'Proposed';
+  const grid = textElement('dl', 'chat-plan-grid');
+  for (const row of (Array.isArray(item.items) ? item.items : []).filter(entry => entry && typeof entry === 'object').slice(0, PAYOUT_MAX_ITEMS)) {
+    const fighter = plain(row.fighterId, 64), line = document.createElement('div');
+    line.append(textElement('dt', 'chat-plan-label', fighter ? fighterName(fighter) : 'Fighter'),
+      textElement('dd', 'chat-plan-value', [cupsLabel(row.cups), payoutMoney(row.cents, currency)].filter(Boolean).join(' · ')));
+    grid.append(line);
+  }
+  const review = textElement('button', 'button button-secondary', 'Review in Creator payouts'), note = textElement('p', 'chat-action-note');
+  review.type = 'button'; note.setAttribute('role', 'status');
+  review.addEventListener('click', () => reviewPayouts(id, review, note));
+  card.append(textElement('p', 'chat-action-title', 'Creator payout · ' + status + ' · ' + total), grid, review,
+    textElement('p', 'chat-action-note', 'Nothing is sent until you approve it in Creator payouts.'), note);
+  return card;
+}
+async function reviewPayouts(broadcastId, button, note) {
+  if (!payoutFee()) { note.textContent = 'Creator payouts are not available on this console.'; return; }
+  button.disabled = true; note.textContent = '';
+  try {
+    if ($('broadcastId').value.trim().toLowerCase() !== broadcastId) {
+      $('broadcastId').value = broadcastId; $('broadcastId').dispatchEvent(new Event('input')); await refresh();
+    } else await loadPayouts();
+    if ($('payouts-card').hidden) note.textContent = 'Creator payouts could not be loaded. Use Refresh status and try again.';
+    else { $('payouts-card').scrollIntoView({ block: 'start' }); $('payouts-title').focus({ preventScroll: true }); }
+  } catch (error) { note.textContent = plain(error?.message, 200) || 'Creator payouts could not be loaded.'; }
+  finally { button.disabled = false; }
+}
 // The AI concierge is a chat with the commerce service's agent. Its reply text is model output and is
 // untrusted: it is only written with textContent and a URL inside it is never made a link. Controls come
 // only from the server's `actions` list, and the PayPal link only after its origin is checked. The agent
-// can quote a plan and start a Sandbox top-up; the person still approves every budget with the form below.
+// can quote a plan, start a Sandbox top-up and propose creator payouts; the person still approves every budget with the
+// form below and every payout in Creator payouts.
 const CONCIERGE_MAX_CHARS = 1000;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CONCIERGE_ERRORS = {
@@ -383,7 +617,7 @@ function planAction(item) {
   return card;
 }
 function conciergeActions(actions) {
-  const builders = { checkout: checkoutAction, topup: topupAction, plan: planAction };
+  const builders = { checkout: checkoutAction, topup: topupAction, plan: planAction, payout: payoutAction };
   return actions.slice(0, 6).filter(item => item && typeof item.type === 'string' && Object.hasOwn(builders, item.type)).map(item => builders[item.type](item));
 }
 function conciergeError(error) {
@@ -397,7 +631,9 @@ async function sendConcierge(message) {
   const thinking = addChat(chatMessage('agent', 'Thinking…'));
   thinking.classList.add('is-thinking'); $('concierge-log').setAttribute('aria-busy', 'true');
   try {
-    const data = await call('concierge', conciergeId ? { conversationId: conciergeId, message } : { message });
+    // The selected session is the concierge's context; the server refuses anything that is not a session id.
+    const selected = $('broadcastId').value.trim();
+    const data = await call('concierge', { message, ...(conciergeId ? { conversationId: conciergeId } : {}), ...(UUID_PATTERN.test(selected) ? { broadcastId: selected } : {}) });
     if (epoch !== conciergeEpoch) return;
     if (typeof data?.conversationId === 'string' && UUID_PATTERN.test(data.conversationId)) conciergeId = data.conversationId;
     thinking.remove();
@@ -584,7 +820,7 @@ function authChanged(value) {
     show(value ? 'Account connected. Loading your current balance.' : 'Signed out.');
     for (const id of ['balance', 'available', 'reserved']) $(id).textContent = '—';
     $('active-jobs').replaceChildren(); $('report').textContent = 'No report loaded.';
-    clearProducer();
+    clearProducer(); clearPayouts();
     $('approvalId').value = journal?.selected('approvalId') ?? '';
     $('broadcastId').value = journal?.selected('broadcastId') ?? '';
     $('payment-recovery').hidden = true;

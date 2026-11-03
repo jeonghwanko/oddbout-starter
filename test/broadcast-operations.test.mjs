@@ -44,7 +44,7 @@ test('concurrent account tabs refuse a second paid action while the first is in 
 });
 
 test('only confirmed precondition refusals permit new input, never provider or ambiguous failures', () => {
-  for (const [status, code] of [[402, 'insufficient-credits'], [409, 'approval-expired'], [422, 'invalid-fighters']])
+  for (const [status, code] of [[402, 'insufficient-credits'], [409, 'approval-expired'], [422, 'invalid-fighters'], [409, 'nothing-to-pay']])
     assert.equal(isConfirmedRejection({ responseOk: false, status, code }), true);
   for (const value of [new Error('network'), { responseOk: false, status: 502, code: 'paypal-timeout' },
     { responseOk: false, status: 409, code: 'idempotency-conflict' }, { responseOk: false, status: 503, code: 'commerce-unavailable' }])

@@ -53,6 +53,13 @@ function matchesMoney(amount, expected, currency) {
   return BigInt(record.value.replace('.', '')) === BigInt(expected);
 }
 
+/** Sandbox payout receivers are email addresses the server configures. @param {unknown} value */
+export function payoutReceiver(value) {
+  const result = text(value, 254);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(result)) throw new PayPalError('paypal_invalid_input');
+  return result;
+}
+
 /** @param {string} value */
 function callbackUrl(value) {
   try {
@@ -210,6 +217,26 @@ export function createPayPalSandbox({ clientId, clientSecret, merchantId, fetch:
     async getOrder(orderId) { return api(`/v2/checkout/orders/${id(orderId)}`); },
     /** For the official PayPal MCP server process the reconciliation starts with read-only tools only. Never log it. */
     accessToken,
+    /** Payouts v1. The caller persists the batch first and reuses requestId and senderBatchId on every retry.
+     * @param {{senderBatchId:string,requestId:string,items:{receiver:string,amountMinor:number,currency:string,senderItemId:string,note:string}[]}} input */
+    async createPayout({ senderBatchId, requestId, items }) {
+      if (!Array.isArray(items) || !items.length || items.length > 100) throw new PayPalError('paypal_invalid_input');
+      const result = await api('/v1/payments/payouts', { method: 'POST', requestId: text(requestId, 108), mutation: true, body: {
+        sender_batch_header: { sender_batch_id: text(senderBatchId, 127), email_subject: 'ODDBOUT appearance fees (Sandbox)',
+          email_message: 'Your fighter appeared in completed ODDBOUT Sandbox cups.' },
+        items: items.map(item => ({ recipient_type: 'EMAIL', receiver: payoutReceiver(item.receiver),
+          amount: { value: money(item.amountMinor, item.currency), currency: item.currency }, note: text(item.note, 4000), sender_item_id: id(item.senderItemId) })),
+      } });
+      try {
+        const header = object(result.batch_header);
+        return { payoutBatchId: id(header.payout_batch_id), status: id(header.batch_status) };
+      } catch { throw new PayPalError('paypal_invalid_response', { outcomeUnknown: true }); }
+    },
+    /** @param {string} payoutBatchId */
+    async getPayout(payoutBatchId) {
+      const header = object((await api(`/v1/payments/payouts/${id(payoutBatchId)}`)).batch_header);
+      return { payoutBatchId: id(header.payout_batch_id), status: id(header.batch_status), senderBatchId: header.sender_batch_header?.sender_batch_id ?? null };
+    },
     /** Supply original UTF-8 request text to preserve signed event formatting.
      * @param {{headers:Headers|Record<string,string>,body:object|string,webhookId:string}} input */
     async verifyWebhook({ headers, body, webhookId }) {

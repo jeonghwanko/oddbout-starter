@@ -31,6 +31,10 @@ services:
         value: "0"
       - key: ODDBOUT_PAYPAL_RECONCILIATION
         value: "0"
+      - key: ODDBOUT_PAYOUTS
+        value: "0"
+      - key: ODDBOUT_PAYOUT_RECEIVERS_JSON
+        sync: false
       - key: ODDBOUT_BROADCAST_MODEL
         sync: false
       - key: OPENAI_API_KEY

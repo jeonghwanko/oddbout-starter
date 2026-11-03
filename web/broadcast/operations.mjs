@@ -58,5 +58,7 @@ export function isConfirmedRejection(error) {
     && new Set(['authentication-required', 'web-approval-required', 'json-required', 'unknown-product',
       'unknown-host', 'invalid-channel', 'invalid-budget', 'invalid-end-time', 'invalid-fighters',
       'invalid-request-key', 'not-found', 'insufficient-credits', 'approval-expired', 'approval-used',
-      'channel-busy', 'broadcast-stopped', 'price-version-conflict']).has(error.code);
+      'channel-busy', 'broadcast-stopped', 'price-version-conflict',
+      // A payout proposal refused before its batch row exists: nothing was created.
+      'nothing-to-pay']).has(error.code);
 }

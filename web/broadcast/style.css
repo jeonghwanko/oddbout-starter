@@ -833,6 +833,195 @@ h1 span {
 .producer-reason {
   color: var(--muted);
 }
+.payouts-card {
+  border-top: 1px solid var(--line);
+  margin-top: 23px;
+  padding-top: 21px;
+  min-width: 0;
+}
+.payouts-card[hidden] {
+  display: none;
+}
+.payouts-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.payouts-head h3 {
+  font-size: 15px;
+  margin: 0;
+}
+.payouts-tag {
+  font:
+    700 10px "Space Grotesk",
+    sans-serif;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 3px 7px;
+  color: var(--muted);
+}
+.payouts-intro {
+  margin: 9px 0 12px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.payouts-status {
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.payouts-status:empty {
+  display: none;
+}
+.payouts-status.is-error,
+.payouts-empty.is-error,
+.payout-note.is-error {
+  color: #9b342c;
+}
+.payouts-empty {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.payouts-empty[hidden] {
+  display: none;
+}
+.payouts-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.payouts-list:empty {
+  display: none;
+}
+.payout-batch {
+  display: grid;
+  gap: 8px;
+  background: var(--soft);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  min-width: 0;
+}
+.payout-batch p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.payout-batch-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+.payout-total {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.payout-time {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+.payout-badge {
+  font:
+    700 10px "Space Grotesk",
+    sans-serif;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 3px 7px;
+  background: #fff;
+  color: var(--muted);
+}
+.payout-badge[data-status="proposed"],
+.payout-badge[data-status="submitting"] {
+  background: #fff2d4;
+  border-color: #fff2d4;
+  color: #805715;
+}
+.payout-badge[data-status="submitted"] {
+  color: var(--ink);
+}
+.payout-badge[data-status="paid"] {
+  background: var(--lime);
+  border-color: var(--lime);
+  color: var(--ink);
+}
+.payout-badge[data-status="failed"] {
+  background: #fff0ec;
+  border-color: #fff0ec;
+  color: #9b342c;
+}
+.payout-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.payout-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0 10px;
+  min-width: 0;
+}
+.payout-fighter {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.payout-amount {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.payout-receiver {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.payout-meta {
+  color: var(--muted);
+}
+.payout-provider {
+  font:
+    11px ui-monospace,
+    monospace;
+}
+.payout-note.is-warning {
+  color: #805715;
+  font-weight: 600;
+}
+.payout-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.payout-buttons .button {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.payout-batch:focus {
+  outline: none;
+}
+.payout-batch:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
 .rehearsal-note {
   font-size: 12px;
   color: var(--muted);
@@ -957,6 +1146,16 @@ h1 span {
   margin: 0;
   font-weight: 600;
   overflow-wrap: anywhere;
+}
+.chat-payout .chat-plan-grid {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.chat-payout .chat-plan-label {
+  overflow-wrap: anywhere;
+}
+.chat-payout .chat-plan-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 .chat-chips {
   display: flex;
@@ -1391,6 +1590,7 @@ summary:hover {
   }
   .host-heading,
   .control-panel > #hosts-readiness,
+  .payouts-card,
   .rehearsal-note {
     grid-column: 1/-1;
   }

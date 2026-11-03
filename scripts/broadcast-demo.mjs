@@ -15,6 +15,8 @@ import { createProducerModel } from '../broadcast/producer.mjs';
 import { createProducerSupervisor } from '../broadcast/supervisor.mjs';
 import { createConcierge, createConciergeModel } from '../broadcast/concierge.mjs';
 import { createReconciler } from '../broadcast/reconcile.mjs';
+import { COMMERCE_CATALOG } from '../api/commerce/catalog.mjs';
+import { createPayoutService, payoutReceivers } from '../api/commerce/payouts.mjs';
 import { isPublishableKey } from './login.mjs';
 
 const root = new URL('../', import.meta.url);
@@ -42,9 +44,10 @@ export function createBroadcastDemo(env = process.env) {
   const issued = createIssuedProducerGrants();
   const mcp = db && commerce ? createCommerceMcpHandler({ db, commerce, producers, issued }) : null;
   const supervisor = mcp && commerce ? autoProducerFromEnvironment(env, { commerce, issued, mcp }) : null;
-  const concierge = commerce ? conciergeFromEnvironment(env, commerce.service) : null;
+  const payouts = commerce ? payoutsFromEnvironment(env, commerce) : null;
+  const concierge = commerce ? conciergeFromEnvironment(env, payouts ? { ...commerce.service, payouts } : commerce.service) : null;
   const reconciler = commerce ? reconcilerFromEnvironment(env, commerce) : null;
-  const service = commerce && (supervisor || concierge || reconciler) ? { ...commerce.service,
+  const service = commerce && (supervisor || concierge || reconciler || payouts) ? { ...commerce.service, ...(payouts ? { payouts } : {}),
     // A started session gets its producer right away; the start response never waits for it.
     ...(supervisor ? {
       /** @param {string} owner @param {unknown} input */
@@ -91,7 +94,7 @@ export function createBroadcastDemo(env = process.env) {
       if (req.method === 'GET' && address.pathname === '/broadcast/config') {
         res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
         res.end(JSON.stringify({ supabaseUrl: url ?? null, publishableKey: publishableKey ?? null, authConfigured: Boolean(db && publishableKey),
-          commerceEnabled: Boolean(commerce), autoProducer: Boolean(supervisor), concierge: Boolean(concierge), reconciliation: Boolean(reconciler), publicOrigin, mode: commerce ? 'sandbox' : 'preview-unconfigured' })); return;
+          commerceEnabled: Boolean(commerce), autoProducer: Boolean(supervisor), concierge: Boolean(concierge), reconciliation: Boolean(reconciler), payouts: payouts ? { feeCents: payouts.feeCents } : null, publicOrigin, mode: commerce ? 'sandbox' : 'preview-unconfigured' })); return;
       }
       const file = files.get(address.pathname);
       if (req.method === 'GET' && file) {
@@ -114,6 +117,19 @@ export function createBroadcastDemo(env = process.env) {
   server.requestTimeout = 30_000;
   server.headersTimeout = 15_000;
   return { server, port, publicOrigin, bindHost, supervisor };
+}
+
+/** Opt-in: ODDBOUT_PAYOUTS=1 pays creators an appearance fee per completed cup through PayPal Sandbox Payouts.
+ * ODDBOUT_PAYOUT_RECEIVERS_JSON maps fighter ids to Sandbox personal account emails; fighters without one earn nothing.
+ * @param {NodeJS.ProcessEnv} env @param {{store:any,paypal:any,merchantId:string}} commerce */
+export function payoutsFromEnvironment(env, { store, paypal, merchantId }) {
+  if (env.ODDBOUT_PAYOUTS === undefined || env.ODDBOUT_PAYOUTS === '0') return null;
+  if (env.ODDBOUT_PAYOUTS !== '1') throw new Error('invalid-payouts-setting');
+  if (!paypal || !merchantId) throw new Error('payouts-paypal-required');
+  let receivers;
+  try { receivers = JSON.parse(env.ODDBOUT_PAYOUT_RECEIVERS_JSON ?? 'null'); } catch { throw new Error('payout-receivers-required'); }
+  return createPayoutService({ store, paypal, receivers: payoutReceivers(receivers, COMMERCE_CATALOG.fighters),
+    feeCents: env.ODDBOUT_PAYOUT_FEE_CENTS === undefined ? 2 : Number(env.ODDBOUT_PAYOUT_FEE_CENTS) });
 }
 
 /** Opt-in: ODDBOUT_PAYPAL_RECONCILIATION=1 checks an account's top-ups against PayPal through the official PayPal MCP

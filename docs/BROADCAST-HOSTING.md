@@ -9,7 +9,7 @@ blocked until Twitch channel/ingest verification is implemented.
 | Component | Location | Entry point |
 | --- | --- | --- |
 | Judge console, PayPal callbacks, commerce API, producer MCP, worker API | Dedicated HTTPS web service | `scripts/broadcast-demo.mjs` |
-| Wallet, reservations, jobs, accounting | Dedicated Supabase test project | `supabase/sandbox/20261102115107_commerce_broadcast_ledger.sql` |
+| Wallet, reservations, jobs, accounting, creator payouts | Dedicated Supabase test project | `supabase/sandbox/20261102115107_commerce_broadcast_ledger.sql`, then `supabase/sandbox/20261104090000_commerce_payouts.sql` |
 | Public battle page and built-in assets | Static HTTPS host | Cup repository's `dist/broadcast.html` |
 | Visible browser, OBS, persistent runner/producer checkpoints | Selected always-on PC or graphical host | `broadcast-runner.mjs`, `broadcast-producer.mjs` |
 
@@ -46,8 +46,8 @@ See [port binding](https://render.com/docs/web-services#port-binding),
 
 ## Enable the isolated Sandbox
 
-1. Confirm the test Supabase project name/reference before applying the single
-   Sandbox SQL file. Never apply it to the game's production project.
+1. Confirm the test Supabase project name/reference before applying the two
+   Sandbox SQL files in order (ledger, then payouts). Never apply them to the game's production project.
 2. Put its `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_PUBLISHABLE_KEY`
    in API secret settings. Allow Auth redirect `https://<console-host>/broadcast/`.
    Enable the Google provider with the ODDBOUT OAuth web client. Add this isolated
@@ -97,6 +97,10 @@ service. Its daily and concurrent limits, the state directory and restart behavi
 To offer the console's AI concierge (balance, prices, quotes and PayPal Sandbox top-up, no approval
 or start), also set `ODDBOUT_BROADCAST_CONCIERGE=1`; see
 [BROADCAST-SANDBOX](BROADCAST-SANDBOX.md#5-1-ai-컨시어지-데모-서버).
+To pay creators an appearance fee per completed cup, set `ODDBOUT_PAYOUTS=1` and
+`ODDBOUT_PAYOUT_RECEIVERS_JSON` (fighter id to a Sandbox personal account email), and enable
+Payouts on the Sandbox REST app; the owner approves each payout in the console. See
+[BROADCAST-SANDBOX](BROADCAST-SANDBOX.md#5-3-크리에이터-출전료-지급-데모-서버).
 To let owners check their top-ups against PayPal through the official PayPal MCP server, set
 `ODDBOUT_PAYPAL_RECONCILIATION=1`; the Blueprint's build command already installs that server
 (`npm ci --prefix deploy/paypal-mcp`). See

@@ -572,6 +572,34 @@
               <p id="producer-result" class="producer-result" hidden></p>
               <ol id="producer-decisions" class="producer-decisions"></ol>
             </section>
+            <section
+              id="payouts-card"
+              class="payouts-card"
+              aria-labelledby="payouts-title"
+              hidden
+            >
+              <div class="payouts-head">
+                <h3 id="payouts-title" tabindex="-1">Creator payouts</h3>
+                <span class="payouts-tag">Sandbox</span>
+              </div>
+              <p id="payouts-intro" class="payouts-intro"></p>
+              <button
+                id="payout-propose"
+                class="button button-secondary button-small full-width"
+                type="button"
+                disabled
+              >
+                Propose payout
+              </button>
+              <p
+                id="payouts-status"
+                class="payouts-status"
+                role="status"
+                aria-live="polite"
+              ></p>
+              <ol id="payouts-list" class="payouts-list"></ol>
+              <p id="payouts-empty" class="payouts-empty" hidden></p>
+            </section>
             <p class="rehearsal-note">
               Rehearsal mode. Twitch streaming is not connected.
             </p>
