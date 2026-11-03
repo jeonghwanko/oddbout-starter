@@ -14,7 +14,7 @@
     <header class="topbar">
       <div class="topbar-inner">
         <a class="brand" href="https://oddbout.com/" aria-label="ODDBOUT home"><img src="./assets/oddbout-logo.webp" alt="ODDBOUT Fight Club" width="378" height="80" /></a>
-        <a class="studio-brand" href="/broadcast/"><img src="./assets/showrunner.svg" alt="" width="34" height="34" /><span>ODDBOUT Showrunner</span></a>
+        <a class="studio-brand" href="/broadcast/"><img src="./assets/showrunner.svg" alt="" width="34" height="34" /><span>Showrunner</span></a>
         <nav aria-label="Showrunner"><a href="#spotlight">Spotlight</a><a href="#my-broadcasts">My broadcasts</a><a href="#wallet">Studio Credits</a></nav>
         <div class="account">
           <button id="google-signin" class="google-button" type="button" disabled aria-label="Sign in with Google"><img src="./assets/google-signin.png" alt="Sign in with Google" width="189" height="40" /></button>
@@ -24,60 +24,52 @@
       </div>
     </header>
     <main id="main" class="shop-shell">
-      <aside class="sandbox-notice" aria-label="Test environment"><span aria-hidden="true">TEST</span><p><strong>Test environment</strong> · PayPal Sandbox only. No real charges.</p></aside>
       <section class="shop-hero" aria-labelledby="page-title">
         <div class="shop-hero-copy">
-          <span class="eyebrow">ODDBOUT SHOWRUNNER</span>
-          <h1 id="page-title">Your brand.<br /><span>A show worth watching.</span></h1>
-          <p>Choose a broadcast, add your promo video and link, then share your show. We pick the four fighters.</p>
+          <h1 id="page-title">Your brand.<br /><span>In the ring.</span></h1>
+          <p>4 random SS fighters · AI introductions</p>
         </div>
-        <div class="hero-art"><img src="./assets/showrunner.svg" alt="" /><span>AI tournament showrunner</span></div>
+        <div class="fighter-poster" aria-hidden="true"><div class="poster-faces">
+          <img src="./assets/kuma.webp" alt="" width="112" height="112" />
+          <img src="./assets/yume.webp" alt="" width="112" height="112" />
+          <img src="./assets/bravow.webp" alt="" width="112" height="112" />
+          <img src="./assets/beotim.webp" alt="" width="112" height="112" />
+        </div></div>
       </section>
-      <p id="shop-status" class="shop-status" role="status" aria-live="polite">Sign in to purchase and manage broadcasts.</p>
+      <aside class="sandbox-notice" aria-label="Test environment">PayPal Sandbox · No real charges</aside>
+      <p id="shop-status" class="shop-status" role="status" aria-live="polite"></p>
       <section id="spotlight" class="product-section" aria-labelledby="spotlight-title">
-        <div class="section-heading"><div><span class="eyebrow">FEATURED BROADCAST</span><h2 id="spotlight-title">Spotlight</h2></div><span class="product-mark" aria-hidden="true">01</span></div>
-        <article class="product-card">
-          <div class="product-copy">
-            <p class="product-description">Choose a broadcast length. Each option shows the full credit cost and sponsor schedule.</p>
-            <div id="duration-options" class="duration-options" role="group" aria-label="Choose broadcast duration"></div>
-          </div>
-          <div class="product-buy">
-            <div class="selected-summary"><span class="price-label">Selected broadcast</span><strong id="spotlight-price" class="product-price">Loading price…</strong></div>
-            <button id="spotlight-purchase" class="button button-primary" type="button" disabled>Purchase Spotlight</button>
-            <small>Studio Credits are charged only when you purchase. PayPal Sandbox top-ups are optional.</small>
-          </div>
-        </article>
+        <div class="section-heading"><h2 id="spotlight-title">Choose your broadcast</h2></div>
+        <div id="duration-options" class="duration-options" role="group" aria-label="Choose broadcast duration"></div>
+        <div class="product-buy"><button id="spotlight-purchase" class="button button-primary" type="button" disabled>Buy broadcast</button></div>
       </section>
       <section id="purchase-panel" class="purchase-panel" hidden aria-labelledby="purchase-title">
-        <div class="section-heading"><div><span class="eyebrow">YOUR PURCHASE</span><h2 id="purchase-title">Spotlight</h2></div><span id="purchase-state" class="state-pill">—</span></div>
+        <div class="section-heading"><h2 id="purchase-title">Spotlight</h2><span id="purchase-state" class="state-pill">—</span></div>
         <div id="purchase-receipt" class="purchase-receipt"></div>
         <button id="purchase-recover" class="button button-secondary" type="button" hidden>Check purchase status</button>
       </section>
       <section id="broadcast-setup" class="broadcast-setup" hidden aria-labelledby="setup-title">
-        <div class="section-heading"><div><span class="eyebrow">READY WHEN YOU ARE</span><h2 id="setup-title">Prepare your broadcast</h2></div></div>
+        <div class="section-heading"><h2 id="setup-title">Add your promotion</h2></div>
         <div class="setup-grid">
           <section class="setup-card" aria-labelledby="media-title">
             <h3 id="media-title">Sponsor clip</h3>
-            <p>MP4 video, up to 50 MB and five minutes. Clips under five minutes repeat within each sponsor break.</p>
-            <label class="upload-zone" for="media-file"><span class="upload-symbol" aria-hidden="true">＋</span><strong id="media-file-name">Choose an MP4 video</strong><span id="media-file-meta">Video details appear here after selection</span><input id="media-file" name="mediaFile" type="file" accept="video/mp4,.mp4" /></label>
+            <label class="upload-zone" for="media-file"><span class="upload-symbol" aria-hidden="true">＋</span><strong id="media-file-name">Choose MP4 · Max 50 MB / 5 min</strong><span id="media-file-meta"></span><input id="media-file" name="mediaFile" type="file" accept="video/mp4,.mp4" /></label>
             <video id="media-preview" class="media-preview" controls playsinline hidden></video>
             <button id="media-upload" class="button button-secondary" type="button" disabled>Upload sponsor clip</button>
           </section>
           <section class="setup-card" aria-labelledby="destination-title">
-            <h3 id="destination-title">Sponsor destination</h3>
-            <p>Viewers can follow this HTTPS link during the sponsor breaks. The broadcast plays on ODDBOUT.</p>
-            <label class="field" for="destination-url">Sponsor destination URL<input id="destination-url" name="destinationUrl" type="url" inputmode="url" autocomplete="url" placeholder="https://…" /></label>
-            <div class="intro-preview" aria-labelledby="intro-title"><span class="eyebrow" id="intro-title">AI INTRO PREVIEW</span><p id="intro-text">The intro is prepared after your clip and destination are saved.</p></div>
+            <label id="destination-title" class="field" for="destination-url">Promo URL<input id="destination-url" name="destinationUrl" type="url" inputmode="url" autocomplete="url" placeholder="https://…" /></label>
+            <div id="intro-preview" class="intro-preview" aria-labelledby="intro-title" hidden><h3 id="intro-title">AI introduction</h3><p id="intro-text"></p></div>
           </section>
         </div>
         <div class="publish-row">
-          <label class="consent"><input id="publish-consent" type="checkbox" /><span>I confirm this video and destination are ready to publish.</span></label>
+          <label class="consent"><input id="publish-consent" type="checkbox" /><span>Publish this video and link.</span></label>
           <button id="publish-broadcast" class="button button-primary" type="button" disabled>Publish broadcast</button>
         </div>
       </section>
       <section id="my-broadcasts" class="broadcasts-section" aria-labelledby="broadcasts-title">
-        <div class="section-heading"><div><span class="eyebrow">YOUR SHOWS</span><h2 id="broadcasts-title">My broadcasts</h2></div><button id="broadcasts-refresh" class="button button-secondary button-small" type="button" disabled>Refresh</button></div>
-        <p id="broadcasts-status" class="section-status" role="status" aria-live="polite">Sign in to see your broadcasts.</p>
+        <div class="section-heading"><h2 id="broadcasts-title">My broadcasts</h2><button id="broadcasts-refresh" class="button button-secondary button-small" type="button" disabled>Refresh</button></div>
+        <p id="broadcasts-status" class="section-status" role="status" aria-live="polite"></p>
         <div id="broadcast-list" class="broadcast-list" aria-live="polite"></div>
         <button id="broadcasts-more" class="button button-secondary button-small" type="button" hidden>Load older broadcasts</button>
       </section>
@@ -87,10 +79,8 @@
           <p id="wallet-status" class="section-status" role="status" aria-live="polite"></p>
           <a id="credit-paypal" class="button button-paypal" href="#" target="_blank" rel="noopener noreferrer" hidden>Continue with PayPal</a>
           <div id="credit-packs" class="credit-packs"></div>
-          <p class="fine-print">One-time purchase · No subscription. Existing Studio Credits stay in your account.</p>
         </details>
       </section>
-      <footer class="shop-footer"><span>Good fights. Good company.</span><a href="https://oddbout.com/">Back to ODDBOUT</a></footer>
     </main>
     <script src="./supabase.js"></script>
     <script type="module" src="./shop.mjs"></script>

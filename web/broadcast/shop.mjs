@@ -24,9 +24,9 @@ function updateControls() {
   $('google-signin').disabled = !client || busy || topupBusy;
   $('spotlight-purchase').disabled = !campaignProduct || busy || !config?.commerceEnabled;
   const pendingCampaign=journal?.get('campaignOrder');
-  if(pendingCampaign?.result?.id)$('spotlight-purchase').textContent='Open saved Spotlight purchase';
-  else if(pendingCampaign)$('spotlight-purchase').textContent=`Continue purchase · ${Number(campaignProduct?.priceCredits??300).toLocaleString()} ${creditName()}`;
-  else if(campaignProduct){const name=plain(campaignProduct.name,80),cost=`${Number(campaignProduct.priceCredits).toLocaleString()} ${creditName()}`;$('spotlight-purchase').textContent=orders.length?`Buy another ${name} broadcast · ${cost}`:`Purchase ${name} · ${cost}`;}
+  const purchaseLabel=pendingCampaign?.result?.id?'Open saved purchase':pendingCampaign?'Continue purchase':orders.length?'Buy another broadcast':'Buy broadcast';
+  $('spotlight-purchase').textContent=purchaseLabel;
+  $('spotlight-purchase').setAttribute('aria-label',campaignProduct?`${purchaseLabel} · ${campaignProduct.durationSeconds/3600} hours · ${Number(campaignProduct.priceCredits).toLocaleString()} Credits`:purchaseLabel);
   for(const button of $('duration-options').querySelectorAll('button'))button.disabled=busy||Boolean(journal?.get('campaignOrder'));
   $('broadcasts-refresh').disabled = !session || busy;
   $('media-upload').disabled = !session || busy || !selectedOrder || campaignState(selectedOrder)!=='awaiting_media' || !selectedFile || !validDestination($('destination-url').value);
@@ -59,30 +59,22 @@ function renderProduct() {
   const pending=journal?.get('campaignOrder');
   if(pending?.input?.productId)selectedProductId=pending.input.productId;
   campaignProduct=campaignProducts.find(product=>product.id===selectedProductId)??campaignProducts[0]??null;
-  if (!campaignProduct) { $('spotlight-price').textContent='Price unavailable'; $('spotlight-purchase').disabled=true; $('duration-options').replaceChildren(); return; }
+  if (!campaignProduct) { message('Prices unavailable. Please refresh.',true); $('spotlight-purchase').disabled=true; $('duration-options').replaceChildren(); return; }
   selectedProductId=campaignProduct.id;
   $('duration-options').replaceChildren(...[...campaignProducts].sort((a,b)=>a.durationSeconds-b.durationSeconds).map(product=>{
     const button=document.createElement('button');button.type='button';button.className='duration-option';button.dataset.campaignProductId=product.id;
     button.setAttribute('aria-pressed',String(product.id===selectedProductId));
     const hours=Math.round(product.durationSeconds/3600),durationLabel=`${hours} ${hours===1?'hour':'hours'}`;
     const name=document.createElement('strong');name.textContent=durationLabel;
-    const productName=document.createElement('span');productName.className='duration-product';productName.textContent=plain(product.name,80);
-    const adMinutes=Math.round(product.adSeconds/60),slotMinutes=Math.round((product.adSlots?.[0]?.durationSeconds??300)/60);
-    const specs=document.createElement('span');specs.textContent=`${adMinutes} min sponsor time · ${slotMinutes} min every 30 min`;
-    const tier=plain(product.fighterPoolTier,16)||'SS',poolSize=Number.isSafeInteger(product.fighterPool?.length)?product.fighterPool.length:null;
-    const format=document.createElement('span');format.textContent=`${product.fighterCount} ${tier} fighters picked at random${poolSize?` from ${poolSize}`:''} · AI intro + tournament`;
-    const cost=document.createElement('span');cost.className='duration-price';cost.textContent=`${Number(product.priceCredits).toLocaleString()} ${creditName()}`;
-    button.append(name,productName,specs,format,cost);
+    const specs=document.createElement('span');specs.className='duration-ads';specs.textContent=`${Math.round(product.adSeconds/60)} min of ads`;
+    const cost=document.createElement('span');cost.className='duration-price';
+    const amount=document.createElement('b');amount.textContent=Number(product.priceCredits).toLocaleString();
+    const unit=document.createElement('span');unit.textContent='Credits';cost.append(amount,unit);
+    button.append(name,specs,cost);
     button.addEventListener('click',()=>{if(journal?.get('campaignOrder'))return;selectedProductId=product.id;renderProduct();});
     return button;
   }));
-  $('spotlight-title').textContent=plain(campaignProduct.name,80)||'Spotlight';
   $('purchase-title').textContent=plain(campaignProduct.name,80)||'Spotlight';
-  const hours=Math.round(campaignProduct.durationSeconds/3600);
-  $('spotlight-price').textContent=`${hours} ${hours===1?'hour':'hours'} · ${Number(campaignProduct.priceCredits).toLocaleString()} ${plain(campaignProduct.currency,40)||creditName()}`;
-  $('spotlight-purchase').textContent=orders.length?`Buy another ${plain(campaignProduct.name,80)||'Spotlight'} broadcast · ${Number(campaignProduct.priceCredits).toLocaleString()} ${creditName()}`:`Purchase ${plain(campaignProduct.name,80)||'Spotlight'} · ${Number(campaignProduct.priceCredits).toLocaleString()} ${creditName()}`;
-  if(pending?.result?.id) $('spotlight-purchase').textContent='Open saved Spotlight purchase';
-  else if(pending) $('spotlight-purchase').textContent=`Continue purchase · ${Number(campaignProduct.priceCredits).toLocaleString()} ${creditName()}`;
   updateControls();
 }
 function renderCreditPacks() {
@@ -156,14 +148,15 @@ function renderOrder(order) {
   $('publish-broadcast').hidden=state!=='ready';
   if(order.media){$('media-file-name').textContent='Sponsor clip verified';const duration=Number.isFinite(order.media.durationSeconds)?` · ${Math.ceil(order.media.durationSeconds)} sec`:'';$('media-file-meta').textContent=`Ready to publish${duration}`;}
   if(order.media?.targetUrl && !previousId)$('destination-url').value=order.media.targetUrl;
-  if(order.media?.aiIntro||order.aiIntro) $('intro-text').textContent=plain(order.media?.aiIntro??order.aiIntro,1000);
+  $('intro-text').textContent=plain(order.media?.aiIntro??order.aiIntro,1000);
+  $('intro-preview').hidden=!$('intro-text').textContent;
   if(order.media?.targetUrl)$('destination-url').value=order.media.targetUrl;
   else {const pendingMedia=journal?.get('campaign-media:'+order.id);if(pendingMedia?.input?.targetUrl)$('destination-url').value=pendingMedia.input.targetUrl;}
   if(!order.media){const pendingUpload=journal?.get('campaign-upload:'+order.id);if(pendingUpload?.input?.fileName){$('media-file-name').textContent='Re-select '+plain(pendingUpload.input.fileName,120)+' to continue';$('media-file-meta').textContent='The saved upload request will continue with this file.';}}
-  if(state==='started') message('Your broadcast is published on ODDBOUT. Playback status is supplied by the broadcast service.');
+  if(state==='started') message('Broadcast published.');
   else if(state==='needs_attention') message('This broadcast needs attention. Its purchase and current status are saved; no replacement was created.',true);
-  else if(state==='ready') message('Your sponsor clip and intro are saved. Review the preview, then publish when ready.');
-  else message(`${displayName(order)} is purchased. Add its sponsor clip and HTTPS destination when you’re ready.`);
+  else if(state==='ready') message('Ready to publish.');
+  else message('Purchased. Add your video and link.');
   updateControls();
 }
 function renderOrders() {
@@ -178,7 +171,7 @@ function renderOrders() {
     else if(['awaiting_media','ready','needs_attention'].includes(campaignState(order))){const button=document.createElement('button');button.type='button';button.className='button button-secondary button-small';button.textContent=campaignState(order)==='awaiting_media'?'Add sponsor media':campaignState(order)==='ready'?'Review and publish':'Check status';button.addEventListener('click',()=>selectOrder(order.id));card.append(button);}
     return card;
   }));
-  if(!orders.length&&session){const empty=document.createElement('p');empty.className='section-status';empty.textContent='No broadcasts yet. Choose a Spotlight length to get started.';host.append(empty);}
+  if(!orders.length&&session){const empty=document.createElement('p');empty.className='section-status';empty.textContent='No broadcasts yet.';host.append(empty);}
   $('broadcasts-more').hidden=!nextCursor;
 }
 async function selectOrder(id) {
@@ -209,7 +202,7 @@ async function loadOrders({more=false}={}) {
   nextCursor=page.nextCursor??null;renderOrders();
   if(!selectedOrder){const resume=orders.find(order=>['awaiting_media','ready','needs_attention'].includes(campaignState(order)));if(resume)await selectOrder(resume.id);}
   else {const latest=orders.find(order=>order.id===selectedOrder.id);if(latest&&campaignState(latest)!==campaignState(selectedOrder))await selectOrder(latest.id);}
-  $('broadcasts-status').textContent=orders.length?'Your latest broadcast statuses are saved to this account.':'';
+  $('broadcasts-status').textContent='';
   updateControls();
 }
 async function purchaseSpotlight() {
@@ -314,19 +307,19 @@ function renderAccount(value) {
   const accountName=value?.user.user_metadata?.full_name||value?.user.email||'';
   $('account-name').textContent=accountName;$('account-avatar').textContent=accountName?Array.from(accountName)[0].toUpperCase():'';
   $('broadcasts-refresh').disabled=!value;
-  if(previous!==value?.user.id){journal=value?createOperationJournal(localStorage,value.user.id):null;message(value?'Account connected. Loading your Studio Credits and broadcasts.':'Sign in to purchase and manage broadcasts.');
+  if(previous!==value?.user.id){journal=value?createOperationJournal(localStorage,value.user.id):null;message(value?'Loading…':'');
     if(value){
       const owner=value.user.id,epoch=accountEpoch;
       const walletLoad=loadWallet().catch(()=>{if(session?.user.id===owner&&accountEpoch===epoch)walletMessage('Studio Credits could not be loaded. Refresh the page to retry.',true);throw new Error('wallet-load-failed');});
       const ordersLoad=loadOrders().catch(()=>{if(session?.user.id===owner&&accountEpoch===epoch)$('broadcasts-status').textContent='Broadcasts could not be loaded. Refresh to try again.';throw new Error('broadcast-load-failed');});
       Promise.allSettled([walletLoad,ordersLoad]).then(results=>{
         if(session?.user.id!==owner||accountEpoch!==epoch)return;
-        if($('shop-status').textContent==='Account connected. Loading your Studio Credits and broadcasts.')message(results.every(result=>result.status==='fulfilled')?'Your Studio Credits and broadcasts are up to date.':'Some account details could not be loaded. Check their status below.',results.some(result=>result.status==='rejected'));
+        if($('shop-status').textContent==='Loading…')message(results.every(result=>result.status==='fulfilled')?'':'Some account details could not load. Please refresh.',results.some(result=>result.status==='rejected'));
         scheduleOrders();
       });
       if(returnedIntent)setTimeout(()=>captureReturnedPayment(),0);
     }
-    else{$('wallet-available').textContent='—';$('wallet-reserved').textContent='—';$('wallet-total').textContent='—';$('broadcasts-status').textContent='Sign in to see your broadcasts.';}}
+    else{$('wallet-available').textContent='—';$('wallet-reserved').textContent='—';$('wallet-total').textContent='—';$('broadcasts-status').textContent='';}}
   renderProduct();renderCreditPacks();updateControls();
 }
 function scheduleOrders() {
@@ -356,14 +349,14 @@ $('spotlight-purchase').addEventListener('click',purchaseSpotlight);
 $('media-file').addEventListener('change',async event=>{
   const revision=++fileRevision,owner=session?.user.id,epoch=accountEpoch,orderId=selectedOrder?.id,file=event.currentTarget.files?.[0]??null;selectedFile=null;selectedFileDuration=null;
   if(previewObjectUrl)URL.revokeObjectURL(previewObjectUrl);previewObjectUrl='';
-  if(!file){$('media-preview').hidden=true;$('media-file-name').textContent='Choose an MP4 video';$('media-file-meta').textContent='Video details appear here after selection';updateControls();return;}
+  if(!file){$('media-preview').hidden=true;$('media-file-name').textContent='Choose MP4 · Max 50 MB / 5 min';$('media-file-meta').textContent='';updateControls();return;}
   $('media-file-name').textContent=file.name;$('media-file-meta').textContent=`${(file.size/1024/1024).toFixed(1)} MB · Checking video…`;
   if(file.size>50*1024*1024||file.type!=='video/mp4'){message('Choose an MP4 video no larger than 50 MB.',true);updateControls();return;}
   previewObjectUrl=URL.createObjectURL(file);$('media-preview').src=previewObjectUrl;$('media-preview').hidden=false;
   try{await new Promise((resolve,reject)=>{const video=$('media-preview');video.onloadedmetadata=()=>resolve();video.onerror=()=>reject(new Error('Video metadata could not be read.'));});
     if(revision!==fileRevision||session?.user.id!==owner||accountEpoch!==epoch||selectedOrder?.id!==orderId||$('media-file').files?.[0]!==file)return;
     const duration=$('media-preview').duration;if(!Number.isFinite(duration)||duration<=0||duration>300)throw new Error('Choose a video that is no longer than five minutes.');
-    selectedFile=file;selectedFileDuration=duration;$('media-file-meta').textContent=`${(file.size/1024/1024).toFixed(1)} MB · ${Math.ceil(duration)} sec`;message('Clip preview ready. Add the sponsor destination, then upload.');
+    selectedFile=file;selectedFileDuration=duration;$('media-file-meta').textContent=`${(file.size/1024/1024).toFixed(1)} MB · ${Math.ceil(duration)} sec`;message('');
   }catch(error){if(revision===fileRevision&&session?.user.id===owner&&accountEpoch===epoch&&selectedOrder?.id===orderId)message(error.message,true);}
   updateControls();
 });

@@ -43,7 +43,7 @@ test('fixed broadcast cards purchase once, recover media and publish without cus
   await page.goto(ORIGIN+'/broadcast/');await page.locator('#signout').waitFor();
   assert.equal(await page.locator('[data-campaign-product-id]').count(),3);
   assert.doesNotMatch(await page.locator('body').innerText(),/Run the ring|Set up your show|Session name|Credit limit|Broadcast host/);
-  await page.locator('[data-campaign-product-id="spotlight-3h"]').click();assert.match(await page.locator('#spotlight-purchase').innerText(),/900/);
+  await page.locator('[data-campaign-product-id="spotlight-3h"]').click();assert.match(await page.locator('#spotlight-purchase').getAttribute('aria-label'),/900/);
   await page.locator('#spotlight-purchase').click();await page.getByText(/purchase result is not confirmed/i).waitFor();
   await page.locator('#spotlight-purchase').click();await page.locator('#media-file').waitFor();
   const[order]=(await service.list(OWNER)).items;assert.equal(order.priceCredits,900);assert.equal((await f.store.wallet(OWNER)).balanceCredits,100);
