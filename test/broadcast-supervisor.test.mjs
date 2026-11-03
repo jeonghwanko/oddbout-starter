@@ -111,6 +111,20 @@ async function fixture(t) {
   return { ...database, service, issued, handle, approve, startedSession, stateDir, supervise, polls, jobsOf, checkpoint };
 }
 
+test('explicit retry preserves call limits and queues once; another owner cannot restart it',async t=>{
+  const f=await fixture(t),broadcast=await f.startedSession(OWNER),directory=await f.stateDir();let attempts=0;
+  const run=await f.supervise({directory,model:fakeModel(context=>{if(++attempts===1)throw new Error('invalid model response');return hostCup(context);})});
+  run.supervisor.ensure(OWNER,broadcast.id);
+  await until(()=>run.supervisor.status(OWNER,broadcast.id).canRetry,'failed model');
+  assert.equal((await f.jobsOf(OWNER,broadcast)).length,0);
+  await assert.rejects(run.supervisor.retry(OTHER,broadcast.id),/producer-retry-unavailable/);
+  await Promise.all([run.supervisor.retry(OWNER,broadcast.id),run.supervisor.retry(OWNER,broadcast.id)]);
+  await until(async()=>(await f.jobsOf(OWNER,broadcast)).length===1,'retried job');
+  assert.equal(run.model.calls.length,2);assert.equal(run.supervisor.status(OWNER,broadcast.id).modelCalls,2);
+  const saved=await f.checkpoint(directory,broadcast);assert.equal(saved.producer.retries.length,1);
+  assert.equal(saved.producer.retries[0].reason,'producer_model_outcome_unverified');
+});
+
 test('auto start: ensure() runs the producer for a started session, which queues a host_cup job with the model fighters and no one else asks for a cup', async t => {
   const f = await fixture(t);
   const broadcast = await f.startedSession(OWNER);
@@ -441,7 +455,7 @@ test('autoProducerFromEnvironment: unset or 0 is off, 1 needs an explicit model 
   const complete = { ODDBOUT_BROADCAST_AUTO_PRODUCER: '1', ODDBOUT_BROADCAST_MODEL: 'test-model', OPENAI_API_KEY: 'sk-test', ODDBOUT_BROADCAST_PRODUCER_STATE_DIR: directory };
   const supervisor = autoProducerFromEnvironment(complete, parts);
   t.after(() => supervisor.close());
-  assert.deepEqual(Object.keys(supervisor).sort(), ['close', 'ensure', 'resume', 'status']);
+  assert.deepEqual(Object.keys(supervisor).sort(), ['close', 'ensure', 'resume', 'retry', 'status']);
   assert.deepEqual(supervisor.status(OWNER, randomUUID()), { state: 'none' });
   // Limits are validated up front, not when the first session starts.
   for (const [name, value] of [['ODDBOUT_BROADCAST_AUTO_PRODUCER_MAX_ACTIVE', '0'], ['ODDBOUT_BROADCAST_AUTO_PRODUCER_DAILY_CALLS', 'many'], ['ODDBOUT_BROADCAST_MAX_MODEL_CALLS', '101']]) {

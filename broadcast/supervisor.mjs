@@ -7,6 +7,7 @@ import { loadJsonState, saveJsonState } from './producer-state.mjs';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const FILE = /^producer-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.json$/;
 const REASONS = new Set(['producer_scope_mismatch', 'producer_mcp_connection_failed', 'producer_state_scope_mismatch', 'producer_invalid_state']);
+const RETRYABLE = new Set(['producer_model_outcome_unverified','producer_invalid_decision']);
 
 /** @typedef {import('./producer.mjs').ProducerState} ProducerState */
 /** @typedef {{status:string,reason:string|null,at:string}} SupervisedResult */
@@ -29,6 +30,7 @@ export function createProducerSupervisor({ grants, service, mcpUrl, mcpFetch, mo
   /** @type {Map<string,string>} */ const waiting = new Map();
   /** @type {Map<string,SupervisedRecord>} */ const records = new Map();
   /** @type {Set<string>} */ const limited = new Set();
+  /** @type {Set<string>} */ const retrying = new Set();
   let day = '', used = 0, closed = false;
   const pathOf = (/** @type {string} */ id) => join(stateDir, `producer-${id}.json`);
   const stamp = () => new Date(now()).toISOString();
@@ -106,6 +108,21 @@ export function createProducerSupervisor({ grants, service, mcpUrl, mcpFetch, mo
 
   return {
     ensure,
+    /** Explicit owner action only: retry a model decision, never an uncertain cup mutation.
+     * Call counters and past decisions remain intact. @param {string} owner @param {string} broadcastId */
+    async retry(owner,broadcastId){
+      const record=records.get(broadcastId);
+      if(record?.owner!==owner||closed)throw new Error('producer-retry-unavailable');
+      if(active.has(broadcastId)||waiting.has(broadcastId)||retrying.has(broadcastId))return;
+      if(!record.producer||record.producer.pending||!RETRYABLE.has(record.result?.reason??'')||record.producer.modelCalls>=maxModelCalls)
+        throw new Error('producer-retry-unavailable');
+      retrying.add(broadcastId);
+      try{
+        record.producer.retries??=[];record.producer.retries.push({at:stamp(),reason:record.result?.reason??'unknown'});
+        delete record.producer.halted;record.producer.phase='ready';record.result=null;
+        await save(record);ensure(owner,broadcastId);
+      }finally{retrying.delete(broadcastId);}
+    },
     /** Resume every session whose producer had not finished when the last process stopped. */
     async resume() {
       await mkdir(stateDir, { recursive: true, mode: 0o700 });
@@ -129,6 +146,7 @@ export function createProducerSupervisor({ grants, service, mcpUrl, mcpFetch, mo
       const state = active.has(broadcastId) ? 'running' : waiting.has(broadcastId) ? 'waiting' : record?.result ? 'finished' : 'none';
       const producer = record?.producer;
       return { state, model, result: record?.result ?? null, modelCalls: producer?.modelCalls ?? 0, maxModelCalls,
+        canRetry:state==='finished'&&Boolean(producer&&!producer.pending&&producer.modelCalls<maxModelCalls&&RETRYABLE.has(record?.result?.reason??'')),
         decisions: (producer?.decisions ?? []).slice(-5).map(item => ({ sequence: item.sequence, at: item.at, action: item.decision?.action,
           fighterIds: item.decision?.fighterIds ?? null, reason: item.decision?.reason, episode: item.decision?.episode ?? null,
           outcome: item.outcome ?? null, answeredModel: item.modelObservation?.answeredModel ?? null })) };

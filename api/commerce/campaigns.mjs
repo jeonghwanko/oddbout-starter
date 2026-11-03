@@ -65,7 +65,7 @@ export function createCampaignService({db,verifyMedia,verifyLink,beforeStart,sig
   return {
     catalog:()=>({products:CAMPAIGN_PRODUCTS,defaultProductId:SPOTLIGHT_HOUR.id}),
     get,
-    /** @param {string} owner @param {string} id @param {'report'|'stop'|'reconcile'|'propose'|'pay'} action @param {any} [input] */
+    /** @param {string} owner @param {string} id @param {'report'|'stop'|'reconcile'|'propose'|'pay'|'retry'} action @param {any} [input] */
     async execution(owner,id,action,input={}){
       if(!execution)throw new Problem(503,'campaign-execution-unavailable');
       return execution[action](owner,key(id),input);

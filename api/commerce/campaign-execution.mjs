@@ -29,6 +29,14 @@ export function createCampaignExecution({store,hostId,supervisor,payouts,reconci
     /** @param {string} token */
     playback:token=>store.campaignExecution(null,'playback',{watchToken:token}),
     /** @param {string} owner @param {string} id */
+    async retry(owner,id){
+      if(!supervisor)throw new Problem(503,'campaign-execution-unavailable');
+      const data=await store.campaignExecution(owner,'report',{orderId:id});
+      if(!['queued','running'].includes(data.execution.broadcast.status)||data.execution.jobs.some((/** @type {any} */ j)=>['queued','running','unknown'].includes(j.status)))throw new Problem(409,'producer-retry-unavailable');
+      try{await supervisor.retry(owner,data.order.broadcastId);}catch{throw new Problem(409,'producer-retry-unavailable');}
+      return report(owner,id);
+    },
+    /** @param {string} owner @param {string} id */
     async stop(owner,id){await store.campaignExecution(owner,'stop',{orderId:id});return report(owner,id);},
     /** Reconcile precisely the top-ups attributed to this ticket, not whichever account transactions are newest.
      * @param {string} owner @param {string} id */

@@ -8,6 +8,9 @@ export function createExecutionPanel({api,getOwner,getJournal,onStatus=()=>{}}){
     const unknown=jobs.some(j=>j.status==='unknown'),failed=jobs.filter(j=>j.status==='failed').length,finished=b.status==='completed';
     $('execution-state').textContent=unknown?'Needs review':finished?(done?'Finished':'No completed cups'):b.status==='stopping'?'Finishing current cup':data.producer?.state==='finished'?'Agent finished · program continues':data.producer?.state==='running'?'Agent running':'Connecting agent';
     $('execution-results').textContent=`${done} completed ${done===1?'cup':'cups'}${failed?` · ${failed} not completed`:''}`;
+    const retryable=data.producer?.canRetry&&!finished; $('execution-retry').hidden=!retryable;$('execution-retry').disabled=busy;
+    if(retryable)$('execution-state').textContent='Agent needs a retry';
+    else if(data.producer?.result?.status==='unknown')$('execution-state').textContent='Agent needs review';
     $('execution-stop').hidden=finished||b.status==='stopping';$('execution-stop').disabled=busy;
     $('execution-refresh').disabled=busy;$('execution-reconcile').disabled=busy||!finished;
     $('execution-reconcile').textContent=data.settlement?'Check settlement again':'Check settlement';
@@ -19,7 +22,7 @@ export function createExecutionPanel({api,getOwner,getJournal,onStatus=()=>{}}){
     const needsApproval=batch&&['proposed','submitting'].includes(batch.status);
     $('execution-pay-row').hidden=!needsApproval;$('execution-pay').disabled=busy||!$('execution-consent').checked;
     $('execution-pay').textContent=batch?.status==='submitting'?'Retry same payout':`Pay ${usd(batch?.totalCents??0)} with PayPal`;
-    const lastDecision=data.producer?.decisions?.at(-1);$('execution-agent-note').textContent=lastDecision?.episode??lastDecision?.reason??'';
+    const lastDecision=data.producer?.decisions?.at(-1);$('execution-agent-note').textContent=retryable?'The last AI response was not usable. Retry continues this ticket without another DON charge.':lastDecision?.episode??lastDecision?.reason??'';
     $('execution-records').textContent=[`Ticket ${order.id}`,`Execution ${b.id}`,`Ticket price ${data.order.priceCredits} DON · additional charge 0 DON`,
       ...data.funding.map(f=>`PayPal order ${f.orderId} · capture ${f.captureId} · ${f.credits} DON`),
       ...data.payouts.map(p=>`Payout ${p.providerBatchId??p.id} · ${p.status}`)].join('\n');
@@ -35,7 +38,7 @@ export function createExecutionPanel({api,getOwner,getJournal,onStatus=()=>{}}){
   }
   async function act(action){
     if(busy||!order||!data)return;const owner=getOwner(),id=order.id,epoch=++revision,journal=getJournal();
-    busy=true;$('execution-message').textContent=action==='reconcile'?'Checking PayPal records…':action==='pay'?'Confirming payout…':'Finishing broadcast…';render();
+    busy=true;$('execution-message').textContent=action==='reconcile'?'Checking PayPal records…':action==='pay'?'Confirming payout…':action==='retry'?'Retrying Agent…':'Finishing broadcast…';render();
     try{
       const body={confirmed:true};if(action==='pay'){
         if(!$('execution-consent').checked)return;
@@ -54,6 +57,7 @@ export function createExecutionPanel({api,getOwner,getJournal,onStatus=()=>{}}){
   $('execution-refresh').addEventListener('click',()=>update(order));
   $('execution-reconcile').addEventListener('click',()=>act('reconcile'));
   $('execution-pay').addEventListener('click',()=>act('pay'));
+  $('execution-retry').addEventListener('click',()=>act('retry'));
   $('execution-consent').addEventListener('change',render);
   $('execution-stop').addEventListener('click',()=>{$('execution-stop-confirm').hidden=false;});
   $('execution-keep').addEventListener('click',()=>{$('execution-stop-confirm').hidden=true;});

@@ -54,7 +54,7 @@ export function createCampaignHandler({service,publicOrigin,authenticate,upload}
         else if(route[2]==='link'){consent();data=await service.saveLink(owner,route[1],body);}
         else if(route[2]==='schedule'){consent();data=await service.schedule(owner,route[1],body);}
         else if(route[2]==='start'){consent();data=await service.start(owner,route[1],body);}
-        else if(['stop','reconcile','propose','pay'].includes(route[2])){consent();data=await service.execution(owner,route[1],/** @type {'stop'|'reconcile'|'propose'|'pay'} */(route[2]),body);}
+        else if(['stop','reconcile','propose','pay','retry'].includes(route[2])){consent();data=await service.execution(owner,route[1],/** @type {'stop'|'reconcile'|'propose'|'pay'|'retry'} */(route[2]),body);}
         else if(route[2]==='upload'&&upload){await service.get(owner,route[1]);data=await upload(owner,route[1],body);}
         else throw new Problem(404,'not-found');
       }else throw new Problem(404,'not-found');

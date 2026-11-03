@@ -84,6 +84,8 @@ the allowance does not mint wallet credits. Legacy metered sessions keep their e
 The selected graphical host must be connected and idle, and all four fighters must have configured
 Sandbox payout receivers. A lost Start response reopens the same session. Database discovery resumes
 active ticket sessions after an API restart; job fencing prevents duplicate completion charges.
+Unusable AI responses display **Retry Agent**. Explicit retry preserves the same ticket, session,
+model-call count and attempt history; unresolved cup mutations cannot be retried through this control.
 
 The host page shows Agent decisions and completed cups. **End broadcast** stops new cups and lets a
 running cup finish. Unknown jobs remain held for review. After completion, **Check settlement** matches
