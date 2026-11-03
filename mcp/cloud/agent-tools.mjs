@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { Problem } from '../../api/http.mjs';
 import spec from '../../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { profileLimits } from '../../contracts/ai-fighter/profile-limits.mjs';
-import { CUP_WAIT_MS, UUID_ARG, arenaCall, pause, timeLeft, unavailable } from './common.mjs';
+import { CUP_WAIT_MS, UUID_ARG, arenaCall, frontNext, pause, timeLeft, unavailable } from './common.mjs';
 import { ENTRY_CLIPS } from '../../api/fighter-entry.mjs';
 /**
  * @typedef {import('./common.mjs').Identity} Identity
@@ -39,9 +39,9 @@ export const STYLE_GUIDE = Object.freeze({
 
 /**
  * `identity` is null only on a signed-out call, which register lets reach the public tools alone: the account tools cast it.
- * @param {{ register: Register, arena: Arena, db: any, identity: Identity | null, invoke: Invoke, recordAgent: RecordAgent, caller: string | null }} options
+ * @param {{ register: Register, arena: Arena, db: any, identity: Identity | null, invoke: Invoke, recordAgent: RecordAgent, caller: string | null, directory?: boolean }} options
  */
-export function registerAgentTools({ register, arena, db, identity, invoke, recordAgent, caller }) {
+export function registerAgentTools({ register, arena, db, identity, invoke, recordAgent, caller, directory = false }) {
   /** @type {(path: string, body?: object) => Promise<any>} */
   const call = (path, body) => arenaCall(arena, path, body);
   // A read's budget: the signed-in owner's; signed out, the host's anonymous user (`caller`); else every signed-out agent's together.
@@ -178,10 +178,16 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
     + 'ranked duels, cups and their rankings. A validated fighter starts in production (제작 중): out of other people\'s cups, ranked duels and lists while his owner previews and practises him. '
     + 'First show the user each of the eleven required motions; enter only on his request once he confirmed every one. '
     + 'Pass the package hash he watched (get_registered_fighter) and those motions. A new package returns him to production. '
-    + 'profile-set-required: submit his profile set first (submit_profile_set) and enter once it passed validation.',
+    + 'He enters only with a front painting that passed ODDBOUT\'s check (one character, whole, facing the viewer straight on): read '
+    + 'get_registered_fighter first and tell the user what its front lacks (a new painting goes in through prepare_profile_set, '
+    + 'upload_profile_set_asset and submit_profile_set). profile-set-required: next says what to do.',
     { fighterId: UUID_ARG(), expectedManifestSha256: z.string().regex(/^[a-f0-9]{64}$/),
       reviewedClips: z.array(z.enum(/** @type {[string, ...string[]]} */ ([...ENTRY_CLIPS]))).length(ENTRY_CLIPS.length) },
-    ({ fighterId, expectedManifestSha256, reviewedClips }) => entry(fighterId, 'POST', { expectedManifestSha256, reviewedClips }),
+    async ({ fighterId, expectedManifestSha256, reviewedClips }) => {
+      const result = await entry(fighterId, 'POST', { expectedManifestSha256, reviewedClips });
+      const next = result?.code === 'profile-set-required' ? frontNext(result.front, { directory }) : null;
+      return next ? { ...result, next } : result;
+    },
     { write: true, publish: true, openWorld: true, idempotent: true });
   register('withdraw_fighter', '출전 취소', 'Return the connected user\'s entered fighter to production (제작 중): other people stop meeting him '
     + 'in the roster, ranked duels and cups; his record stays. Requires the user\'s request.',

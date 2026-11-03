@@ -23,7 +23,9 @@ export const PUBLIC_BUCKET = 'af-profile-sets';
  * A row of af_profile_sets as the API reads it.
  * @typedef {{ id: string, fighter_id: string, owner_id: string, status: string, manifest_text: string, manifest_sha: string,
  *   manifest: ProfileSetFile, derived: any, validation: any, reason: string | null, lease_token: string | null, lease_until: string | null,
- *   expires_at: string, created_at: string, validated_at: string | null, approved_at: string | null, based_on?: string | null }} ProfileSetRow
+ *   expires_at: string, created_at: string, validated_at: string | null, approved_at: string | null, based_on?: string | null,
+ *   front_check?: 'pass' | 'fail' | null, front_verdict?: { checks: Record<string, string>, notes: string } | null,
+ *   front_lease_token?: string | null }} ProfileSetRow
  */
 
 /** @type {(value: unknown) => boolean} */
@@ -79,7 +81,7 @@ export const PROFILE_SET_STATUS = Object.freeze({
   'upload-expired': 409, 'upload-closed': 409, 'stale-validation': 409, 'review-conflict': 409, 'fighter-deleted': 409,
   'not-found': 404, 'fighter-not-found': 404, 'rate-limit': 429, 'account-disabled': 403, 'admin-required': 403,
   'validator-version': 400, 'validation-incomplete': 400, 'validation-result-limit': 400, 'invalid-release-code': 400, 'invalid-review': 400,
-  'invalid-query': 400, 'byte-budget-mismatch': 422, 'invalid-reason': 400, 'fighter-mismatch': 409,
+  'invalid-query': 400, 'byte-budget-mismatch': 422, 'invalid-reason': 400, 'fighter-mismatch': 409, 'stale-check': 409, 'invalid-verdict': 422,
 });
 
 /** Is this path a profile set's? (The worker's are under `worker/`, the operator's under `admin/`.) @param {string[]} parts */
@@ -106,9 +108,22 @@ export function profileSetView(row, urls) {
     ...(row.reason ? { reason: row.reason } : {}), ...(row.validation?.errors ? { errors: row.validation.errors } : {}),
     // A sheet the validator left out of a passing set (2026-11-03): the set goes on with his face square only.
     ...(Array.isArray(row.validation?.sheetErrors) && row.validation.sheetErrors.length ? { sheetErrors: row.validation.sheetErrors } : {}),
+    ...frontCheckView(row),
     createdAt: row.created_at, ...(row.approved_at ? { approvedAt: row.approved_at } : {}), ...(urls ? { urls } : {}),
     pending: { uploading: [...PROFILE_SET_ASSETS.filter(id => id === 'front' || expressions).map(id => `upload-${id}`), 'submit'],
-      queued: ['server-validation', 'operator-review'], validating: ['server-validation', 'operator-review'], review: ['operator-review'] }[row.status] ?? [] };
+      queued: ['server-validation', 'front-check', 'operator-review'], validating: ['server-validation', 'front-check', 'operator-review'],
+      review: [...(frontCheckPending(row) ? ['front-check'] : []), 'operator-review'] }[row.status] ?? [] };
+}
+/** @type {(row: ProfileSetRow) => boolean} */
+const frontCheckPending = row => row.status === 'review' && !row.front_check && !row.based_on;
+/**
+ * 정면 판정 (2026-11-03, supabase/migrations/20261103130000_oddbout_profile_front_check.sql): whether ODDBOUT's check saw one character,
+ * whole, from the front. `pending` until the official generation PC answers; a set made from an approved one keeps that set's front.
+ * @param {ProfileSetRow} row
+ */
+function frontCheckView(row) {
+  if (row.front_check) return { frontCheck: { status: row.front_check, checks: row.front_verdict?.checks ?? {}, notes: row.front_verdict?.notes ?? '' } };
+  return frontCheckPending(row) ? { frontCheck: { status: 'pending' } } : {};
 }
 /**
  * Sign a set's private files in one Storage call: its uploads once submitted and, once validated, its derived files. A file Storage cannot
@@ -389,6 +404,33 @@ export async function addOperatorSheet(db, { actor, setId, fighterId, key, reaso
     throw caught;
   }
 }
+/**
+ * 정면 판정's queue for the official generation PC (`generation-worker/profile-fronts/claim`): the oldest set the validator passed and nobody
+ * checked, with a ten-minute link to its front painting, or null. Another host checks none: owners' paintings stay with ODDBOUT's PC.
+ * @param {any} db @param {string | null} host  The worker key's host (null: the official one).
+ */
+export async function claimFrontCheck(db, host) {
+  if (host !== null) return null;
+  const { data: row, error } = await db.rpc('af_profile_set_front_claim', {});
+  if (error) throw rpcProblem(error, PROFILE_SET_STATUS);
+  if (!row?.id) return null;
+  const { front } = await signProfileSet(db, { ...row, derived: null }, 600);
+  if (!front) throw new Problem(503, 'storage-unavailable');
+  return { id: row.id, leaseToken: row.front_lease_token, front: { ...row.manifest.front, downloadUrl: front } };
+}
+/**
+ * The judge's verdict for a claimed set (`generation-worker/profile-fronts/finish`): { checks: { whole, front, single }, notes }.
+ * @param {any} db @param {string | null} host @param {any} body
+ */
+export async function finishFrontCheck(db, host, body) {
+  if (host !== null) throw new Problem(403, 'worker-required');
+  if (!object(body) || !UUID.test(body.profileSetId ?? '') || !UUID.test(body.leaseToken ?? '') || !object(body.verdict)) throw new Problem(400, 'invalid-result');
+  const { data: row, error } = await db.rpc('af_profile_set_front_finish', { p_id: body.profileSetId.toLowerCase(),
+    p_lease: body.leaseToken.toLowerCase(), p_verdict: body.verdict });
+  if (error) throw rpcProblem(error, PROFILE_SET_STATUS);
+  return { ok: true, profileSetId: row.id, stage: row.status, ...frontCheckView(row) };
+}
+
 /**
  * Close a set left half-uploaded by the API itself (an operator's sheet, a hosted fighter's): it no longer holds his owner's own upload.
  * Never throws: the failure it follows is the answer.

@@ -265,7 +265,7 @@ Anthropic의 Claude 커넥터 디렉터리에 내는 주소는 `https://mcp.oddb
   디렉터리 게시 전에는 커스텀 커넥터 설치 링크(이름·주소가 채워진 추가 창)와 인증 "필요할 때 로그인", OAuth 클라이언트 "자동으로 등록"을 안내한다.
   같은 날 개인정보·약관·지원 페이지도 연결한 앱 전부(OpenAI·Anthropic·xAI), 게임 도구가 받는 정보, 공개되는 글, 요청 로그 보관(제공자가 30일 안에 지움 —
   Supabase 요금제별 1~28일, Render Hobby 7일), 보안 신고 창구를 담도록 고쳤다. 머리글은 `ODDBOUT CONNECTOR`다.
-  심사 계정의 선수는 프로필 세트가 검증을 통과한 상태여야 한다. 아니면 심사자의 `enter_fighter`가 `profile-set-required`로 끝난다.
+  심사 계정의 선수는 프로필 세트가 승인됐거나 정면 판정을 통과한 상태여야 한다. 아니면 심사자의 `enter_fighter`가 `profile-set-required`로 끝난다.
 - 디렉터리 심사는 메타데이터 탐색에 10초 한도를 둔다. `mcp.oddbout.com`은 Render 무료 서버라 잠들면 그보다 오래 걸린다.
   2026-11-01 사용자 결정: 당분간 무료를 계속 쓰고, 사무실 PC의 crontab이 14분마다 `/health`를 불러 깨워 둔다. 그 PC가 꺼져 있으면 다시 잠드므로 심사 기간에는 켜 둔다.
 
@@ -492,6 +492,20 @@ Grok(grok.com, Cursor의 Grok Bot)이 받는 안내만으로 호스팅 생성까
 아무것도 바꾸지 않아 기다림을 끝내지 않는다. 진행률은 동작 단계에서만 오른다(5·25·45·65·80, 완성 100). 외형 단계는 완성 전까지 0이다.
 같은 대화에서 봇이 첫 동작 수정이 만들어지는 동안 두 번째 수정을 보내 `generation-state`만 받았다. 이제 `choose_hosted_look`·`revise_hosted_motion`의
 그 거절에는 "수정은 한 번에 하나, 동작이 다시 준비되면(`motion_ready`) 보내라"는 `next`가 붙는다.
+
+### 출전 전에 정면 알리기 (정면 판정, 2026-11-03)
+
+같은 날 Grok Bot이 레나 볼트를 출전시켰다(05:18:51Z `enter_fighter`). 39초 전에 그 선수의 프로필 세트가 검증을 통과했는데(`review`), 검증은 픽셀
+(형식·투명한 가장자리·키·얼굴 칸)만 보고 그림이 정면인지는 보지 않았다. 출전 조건도 `review`를 통과로 쳤으므로, 홈·무투장 어디에도 정면이 없는 채로 출전했다.
+사용자 결정: "정면샷인지 검증해서 MCP가 알려줘야지", 만든 시각에 따른 면제 없앰, 정면을 잃으면 제작 중. 실루엣 좌우 대칭은 정면(우리 정면 27장 0.55~0.97)과
+옆모습(옆모습 원본 1,337장, 최대 0.91)을 가르지 못해, 판정은 공식 생성 PC의 codex가 한다([OPEN-REGISTRATION.md](OPEN-REGISTRATION.md) 정면 판정).
+
+- `get_registered_fighter`의 `fighter.front`가 출전에 필요한 정면을 말한다: `required`(관문이 켜져 있는지), `ok`(출전시킬 수 있는 세트가 있는지), 없으면
+  가장 최근 세트의 `status`·`frontCheck`·거절 `reason`·판정 `notes`. 제작 중인 선수에게 모자란 것이 있으면 `next`가 사용자에게 할 말과 할 일을 준다
+  (`mcp/cloud/common.mjs` `frontNext`: 정면 없음 → 만들어 올리기, 검사 중 → 기다렸다 다시 읽기, 거절 → 이유를 알리고 새로 그리기).
+- `enter_fighter`가 `profile-set-required`로 거절되면 같은 `front`와 `next`가 붙는다. 설명은 먼저 `get_registered_fighter`를 읽으라고 한다.
+- `get_profile_set`의 `frontCheck`(`pending`·`pass`·`fail`과 판정), `submit_profile_set`·맡긴 선수의 등록 `next`도 판정을 거친 뒤 출전한다고 적는다.
+- 디렉터리판(`/claude`)에는 올리기 도구가 없으므로 `next`가 그 도구 이름과 한국어 상태 이름을 쓰지 않는다.
 
 ### 사이트 바로가기 `siteUrl` (2026-11-03)
 

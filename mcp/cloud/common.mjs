@@ -76,6 +76,30 @@ export const siteUrl = ({ fighterId, jobId, submissionId }) => fighterId ? `${CR
   : jobId ? `${CREATOR_PAGE}#job=${jobId}` : submissionId ? `${CREATOR_PAGE}#submission=${submissionId}` : null;
 /** What an agent does with a `siteUrl`: one sentence, shared by every result that carries one. */
 export const SITE_URL_NEXT = 'The user can follow this on the ODDBOUT website too: give him siteUrl to watch progress, pick a look, review the motions and enter the fighter (출전).';
+/**
+ * 정면 판정 (2026-11-03 사용자: "MCP 서버에서 이거 체크해서 정면샷 제작해야 출전할 수 있다고 알려줘야"): what an agent tells the user about his
+ * fighter's front before the entry (출전), from the API's `front` (af_fighter_front). Null when the entry asks for nothing more of it.
+ * `directory`: the directory edition, which has no upload tools and keeps ODDBOUT's Korean state names out (directory-edition.mjs).
+ * @param {any} front @param {{ directory?: boolean }} [options]
+ * @returns {string | null}
+ */
+export function frontNext(front, { directory = false } = {}) {
+  if (!front?.required || front.ok) return null;
+  const cannot = directory ? 'The fighter cannot enter public play yet' : 'He cannot enter (출전) yet';
+  const after = directory ? 'It can enter once front.ok.' : 'He can enter once front.ok.';
+  const make = directory ? 'This connector cannot upload one: tell the user to make a full-body front painting of the fighter (one character, '
+      + 'whole from head to soles, facing the viewer straight on) and upload it from the ODDBOUT app in ChatGPT or with the creator kit.'
+    : 'Make one with the user: a full-body front painting of this fighter, one character, whole from head to soles, facing the viewer '
+      + 'straight on (get_fighter_spec overview: profileSet), then prepare_profile_set, upload_profile_set_asset and submit_profile_set.';
+  if (!front.profileSetId) return `${cannot}: it has no front painting (profile set). ${make} ${after}`;
+  if (front.status === 'rejected')
+    return `${cannot}: its front painting was refused (${front.reason ?? 'rejected'}${front.notes ? `: ${front.notes}` : ''}). Tell the user why. `
+      + `${make} ${after}`;
+  if (front.status === 'uploading') return `${cannot}: its front painting was never submitted (${front.profileSetId}). `
+    + (directory ? 'Tell the user to finish it where it was started. ' : 'Finish its upload (upload_profile_set_asset) and submit_profile_set. ') + after;
+  return `${cannot}: ODDBOUT is checking its front painting (${front.profileSetId}) — the file first, then whether it shows one character, `
+    + `whole, facing the viewer straight on. Tell the user; read get_registered_fighter again later. ${after}`;
+}
 export const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 export const AUTH = [{ type: 'oauth2', scopes: ['openid', 'email', 'profile'] }];
 /**

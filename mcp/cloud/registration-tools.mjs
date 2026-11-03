@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { Problem, rpcProblem, sha256 } from '../../api/http.mjs';
 import spec from '../../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import schema from '../../contracts/ai-fighter/v1/fighter.schema.json' with { type: 'json' };
-import { CREATOR_PAGE, FILE, UUID_ARG, downloadHostFile, siteUrl, unavailable } from './common.mjs';
+import { CREATOR_PAGE, FILE, UUID_ARG, downloadHostFile, frontNext, siteUrl, unavailable } from './common.mjs';
 import { cleanupPublicFiles } from '../../api/profile-sets.mjs';
 /**
  * @typedef {import('./common.mjs').Identity} Identity
@@ -38,10 +38,11 @@ const HOSTED_ROUTE = 'A user without a workspace (the creator kit and a generati
  * Registers the tools every connection lists. `invoke` calls the in-process API as the verified owner; `recordAgent` labels a submission.
  * `identity` is null only on a signed-out call, which register lets reach the public tools alone: the account tools cast it.
  * `hosted`: whether this connection lists the hosted generation tools (hosted-tools.mjs), which the creation guide and the readiness
- * check then name (Grok 점검 2026-11-03: an agent without a workspace read only the workspace route there).
- * @param {{ register: Register, db: any, identity: Identity | null, invoke: Invoke, fetcher: typeof fetch, recordAgent: RecordAgent, hosted?: boolean }} options
+ * check then name (Grok 점검 2026-11-03: an agent without a workspace read only the workspace route there). `directory`: the directory
+ * edition, whose next names no upload tool (common.mjs frontNext).
+ * @param {{ register: Register, db: any, identity: Identity | null, invoke: Invoke, fetcher: typeof fetch, recordAgent: RecordAgent, hosted?: boolean, directory?: boolean }} options
  */
-export function registerRegistrationTools({ register, db, identity, invoke, fetcher, recordAgent, hosted = false }) {
+export function registerRegistrationTools({ register, db, identity, invoke, fetcher, recordAgent, hosted = false, directory = false }) {
   register('get_fighter_spec', '캐릭터 등록 규격', 'Read the fighter contract before authoring. All 11 motions and required file checks are required; quality diagnostics are deferred. '
     + 'This does not generate or register.',
     { section: z.enum(['overview', 'schema', 'creation']).default('overview') }, async ({ section }) => {
@@ -168,6 +169,12 @@ export function registerRegistrationTools({ register, db, identity, invoke, fetc
   register('get_fighter_submission', '등록 진행 상태', 'Read your submission. Only registered confirms registration; rejected contains the validation failure. '
     + 'Do not regenerate automatically.',
     { submissionId: UUID_ARG() }, async ({ submissionId }) => withSiteLink(await invoke(`submissions/${submissionId}`)));
-  register('get_registered_fighter', '등록 정보', 'Read your registered fighter and immutable package identity.',
-    { fighterId: UUID_ARG() }, async ({ fighterId }) => withSiteLink(await invoke(`fighters/${fighterId}`)));
+  register('get_registered_fighter', '등록 정보', 'Read your registered fighter and immutable package identity, and his front for the entry '
+    + '(front: whether the entry needs one, and ok once a front painting passed ODDBOUT\'s check; otherwise next says what to do).',
+    { fighterId: UUID_ARG() }, async ({ fighterId }) => {
+      const result = await invoke(`fighters/${fighterId}`);
+      // 정면 판정 (2026-11-03): a fighter in production hears what his front lacks before anyone asks to enter him.
+      const next = result?.fighter && !result.fighter.entered_at ? frontNext(result.fighter.front, { directory }) : null;
+      return withSiteLink(next ? { ...result, next } : result);
+    });
 }

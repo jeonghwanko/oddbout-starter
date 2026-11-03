@@ -18,7 +18,7 @@ ODDBOUT 제작자 페이지·에이전트의 **호스팅 생성 신청**(글과 
 | 파일 | 하는 일 |
 | --- | --- |
 | `og` | 모든 제공자 호출의 관문: 계정 고정(`login`), codex 칸, 메모리 상한(systemd 슬라이스), 장부, codex 기능 끄기(`harden`), 워커 서비스(`worker key·install·uninstall·start·stop·log`), 정리(`prune`), 고리 정렬의 RIFE(`rife torch|ncnn` — NVIDIA GPU면 PyTorch로 약 2배). 서비스 설치만: 운영자 수동 흐름(`new·deliver·close`)과 `self-update` |
-| `generation-worker.mjs` | 워커: 1분마다 심장 박동, 1시간마다 `og health`, 하루 한 번 `og prune`, 한 번에 한 작업의 한 단계를 임대해 돌리고 결과를 올린다. `og health`는 단계가 쓰는 모델(`gpt-6.1-sol`, og의 `OG_CODEX_MODEL`)로 codex를 물어, 그 모델을 거절하는 로그인은 작업을 받지 않는다(2026-11-03) |
+| `generation-worker.mjs` | 워커: 1분마다 심장 박동, 1시간마다 `og health`, 하루 한 번 `og prune`, 한 번에 한 작업의 한 단계를 임대해 돌리고 결과를 올린다. 공식 호스트는 단계와 단계 사이에 주인이 올린 프로필 정면 하나를 codex(도구 끔)로 판정한다(정면 판정, 2026-11-03: 전신·정면·한 명, `og run <날짜>-front-<세트>`). `og health`는 단계가 쓰는 모델(`gpt-6.1-sol`, og의 `OG_CODEX_MODEL`)로 codex를 물어, 그 모델을 거절하는 로그인은 작업을 받지 않는다(2026-11-03) |
 | `generation-stages.mjs` | 단계: 브리프·외형·동작·제출의 명령과 프롬프트, 결과 검사 |
 | `style-anchor-front.webp` | 화풍 기준 그림(우리 정면 원화, 사이트 `art/oddbout/style-anchor-front.webp`와 같은 파일). 정면 후보·옆모습·판정에 마지막 참조로 붙인다 |
 | `sprite-outcome.mjs` | sprite-gen 보고서로 실패한 실행의 과금 여부와 다음 할 일을 판정. 크리에이터 작업(`mcp/creation-jobs.mjs`)도 같은 파일을 쓴다. 호스트는 `host/`의 파일을 bin 한 폴더에 평평하게 설치하므로 워커가 부르는 파일은 모두 여기 있어야 한다 |
