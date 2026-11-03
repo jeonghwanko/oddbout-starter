@@ -30,6 +30,8 @@ execution. Unknown execution stays held for reconciliation.
   The phone page uses PKCE with tab-scoped session storage and explicit account-change invalidation.
 - Broadcast session creation and ID binding are one transaction. A separate continuation scan covers
   already-funded approvals and a crash between payment confirmation and producer startup.
+  When the remaining budget cannot fund another cup, continuation closes the same session after all
+  queued/running jobs settle. Unknown executions remain held instead of being treated as completion.
   Legacy one-cup operations still bind one job and refuse replacement jobs in that session.
 - Existing PayPal validation, credit ledger, worker leases, reconciliation and creator payouts are reused.
 

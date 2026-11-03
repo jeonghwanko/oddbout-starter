@@ -130,7 +130,19 @@ export function createPaidOperations({ store, commerce, publicOrigin, ensureProd
       if (operation.kind === 'broadcast' && !ensureProducer) throw new Problem(503, 'automatic-producer-unavailable');
       const resumed = operation.state === 'ready'
         ? decorate(await store.operation(owner, 'resume', { operationId: operationId(id), priceVersion: COMMERCE_CATALOG.version })) : operation;
-      if (resumed.kind === 'broadcast' && resumed.broadcastId && ['queued','running'].includes(resumed.state)) ensureProducer?.(owner,resumed.broadcastId);
+      if (resumed.kind === 'broadcast' && resumed.broadcastId && ['queued','running'].includes(resumed.state)) {
+        const report = await commerce.report(owner,resumed.broadcastId);
+        const unallocatedCredits = report.remainingReservedCredits - report.broadcast.allocatedCredits;
+        const unsettled = report.jobs.some((/** @type {any} */ job) => ['queued','running','unknown'].includes(job.status));
+        // A deterministic budget halt finishes the same session after every job has a known outcome.
+        // Pending/unknown allocations remain held; they are never released to make a session look complete.
+        if (Number.isSafeInteger(unallocatedCredits) && unallocatedCredits >= 0
+          && unallocatedCredits < COMMERCE_CATALOG.tools.host_cup.credits && !unsettled) {
+          await commerce.stop(owner,resumed.broadcastId);
+          return get(owner,id);
+        }
+        ensureProducer?.(owner,resumed.broadcastId);
+      }
       return resumed;
     },
     /** Durable work is discovered independently of payment polling, including previously funded accounts.

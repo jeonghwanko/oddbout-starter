@@ -152,3 +152,51 @@ test('a paired VM prepares the same ordinary broadcast API and discovers it afte
   assert.equal(page.items[0].id,saved.id);
   assert.equal((await f.db.query('select count(*)::int n from commerce.operations')).rows[0].n,1);
 });
+
+test('automatic continuation closes an exhausted original broadcast and releases only its unused remainder',async t => {
+  for (const budget of [25,60]) await t.test(`budget ${budget}`,async t => {
+    const ensured=[],f=await fixture(t,(owner,id)=>ensured.push(id));
+    const operation=await f.service.prepareBroadcast(OWNER,taskInput({maxCredits:budget}));
+    await f.service.approve(OWNER,operation.id,true);
+    const payment=await f.service.checkout(OWNER,operation.id);
+    f.orders.get(payment.operation.payment.providerOrderId).status='APPROVED';
+    const started=await f.service.resume(OWNER,operation.id);
+    for (let index=0;index<Math.floor(budget/25);index++) {
+      await f.commerce.cup(OWNER,{requestKey:randomUUID(),broadcastId:started.broadcastId,fighterIds:operation.input.fighterIds});
+      const job=await f.store.claimJob('renderer',{hostId:operation.input.hostId});
+      await f.store.completeJob('renderer',{jobId:job.id,leaseToken:job.leaseToken,outcome:'succeeded',result:proof(job)});
+    }
+    assert.equal((await f.service.get(OWNER,operation.id)).state,'running');
+    const producerStarts=ensured.length;
+    await f.db.query('update commerce.operations set continuation_next_at=clock_timestamp() where id=$1',[operation.id]);
+    assert.equal(await f.service.continueBroadcasts(),1);
+    const completed=await f.service.get(OWNER,operation.id),report=await f.commerce.report(OWNER,started.broadcastId);
+    assert.equal(completed.state,'completed');assert.equal(completed.broadcastId,started.broadcastId);
+    assert.equal(report.broadcast.status,'completed');assert.equal(report.remainingReservedCredits,0);
+    assert.equal(report.confirmedSpentCredits,Math.floor(budget/25)*25);
+    assert.equal(report.jobs.length,Math.floor(budget/25));
+    assert.equal((await f.store.wallet(OWNER)).reservedCredits,0);
+    assert.equal((await f.service.resume(OWNER,operation.id)).broadcastId,started.broadcastId);
+    assert.equal(ensured.length,producerStarts);
+    assert.equal((await f.db.query('select count(*)::int n from commerce.broadcasts')).rows[0].n,1);
+  });
+});
+
+test('budget allocated to queued, running or unknown work cannot be closed or released by continuation',async t => {
+  const f=await fixture(t),operation=await f.service.prepareBroadcast(OWNER,taskInput({maxCredits:25}));
+  await f.service.approve(OWNER,operation.id,true);
+  const payment=await f.service.checkout(OWNER,operation.id);
+  f.orders.get(payment.operation.payment.providerOrderId).status='APPROVED';
+  const started=await f.service.resume(OWNER,operation.id);
+  await f.commerce.cup(OWNER,{requestKey:randomUUID(),broadcastId:started.broadcastId,fighterIds:operation.input.fighterIds});
+  assert.equal((await f.service.resume(OWNER,operation.id)).state,'queued');
+  assert.equal((await f.store.wallet(OWNER)).reservedCredits,25);
+  const job=await f.store.claimJob('renderer',{hostId:operation.input.hostId});
+  assert.equal((await f.service.resume(OWNER,operation.id)).state,'running');
+  await f.store.completeJob('renderer',{jobId:job.id,leaseToken:job.leaseToken,outcome:'unknown',result:{reason:'lost renderer'}});
+  assert.equal((await f.service.resume(OWNER,operation.id)).state,'needs_reconciliation');
+  const report=await f.commerce.report(OWNER,started.broadcastId);
+  assert.notEqual(report.broadcast.status,'completed');assert.equal(report.jobs[0].status,'unknown');
+  assert.equal(report.confirmedSpentCredits,0);assert.equal((await f.store.wallet(OWNER)).reservedCredits,25);
+  assert.equal(report.ledger.filter(entry=>entry.kind==='release').length,0);
+});
