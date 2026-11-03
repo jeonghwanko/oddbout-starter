@@ -612,24 +612,24 @@
     "onChange": "Keep previous context and selections, report only affected requirements, recheck affected items. Never silently mix revisions.",
     "unavailable": "Appearance consultation may continue. Do not invent controls/timing, advance a rules-dependent group, generate or package against an unverified current contract."
   },
-  "revision": "04131ce7ac70beb7f46dca67c43ab1ae28d4384921062af0f864a19d6701cca2",
+  "revision": "c47ed96b34c7e66b164f4173db072049ed2f8e60a01bf34dbcc2d8407ba437d8",
   "provenance": {
-    "sourceCommit": "5f62f10aa43498681fe0e1f7f95da30dd8a691d1",
+    "sourceCommit": "5da1cc0ff671c5c63470e9d91a725935da2a3fff",
     "sourceDirty": false,
     "sourceFiles": {
-      "tools/ai-fighter/creation-context.mjs": "b0425b8c55843cb17031bb63d8bbd44c66de5a4b88b843f6984e30b2be649b8e",
-      "tools/ai-fighter/export-creation-context.mjs": "fcad318b37dae57a352b4c8ee509a1b03dd143a83f0518d726b06ff53df6d30d",
-      "contracts/ai-fighter/v1/contract-source.mjs": "6c34a93137bf0a4d0ac5172be72bba32b7d33388c17abed23b0e0edd19073970",
+      "tools/ai-fighter/creation-context.mjs": "e25f8fcac9b72a9aace46009164f955b097be3412d88c3a0047c9898ee6140e9",
+      "tools/ai-fighter/export-creation-context.mjs": "76688c3976f500b3b71fc2eccd7552eefc52b6eb44e6a687c9f2b58edbc0b252",
+      "contracts/ai-fighter/v1/contract-source.mjs": "d302ba31b83057e32c402f0b522c9579c8e2f0c28c214e203d4393afc6c7bd42",
       "src/world/native-city-combat.json": "20ebcbfddb44bb35e7d5f48fa3a2c1e85e9d46c0b67feb35fbfeeef4630d7c0d",
-      "src/app/InputBindings.ts": "024ee9d2e11706deeb350b28a91d545763f789bdc7229289fbef0d19c9892127",
-      "src/render/scenes/village/NativeCityFightInputController.ts": "13af5f8ab1691af64e942d005e3c09f7724b2b097880471d99ff423008417854",
-      "src/render/art/FighterFightSkin.ts": "92f107f297a4343046222dd37c253ddebb0a04806e1a855690d5f65c0986ce67",
-      "src/render/effects/NativeCityFightFeel.ts": "f8dd8d864838c309d300b3aa018ab7f221af319cc5606401a31418d64815f3eb",
-      "src/render/effects/CombatPresentation.ts": "5bfe4d824c650a0b45ba700616b75002945f2888bd8f2c9b552723d9a478d6d4",
-      "src/sim/cityFight/NativeCityLupinSwing.ts": "c0f055db1f00e99ed43634be609d1831df90a353fad5fbc501e46a0ee2baaac3",
-      "src/sim/cityFight/NativeCityFight.ts": "0915b794b972175b7bcb0ff63d3e4fda6785d5bfe1163afde6d2f5def7309bb5",
-      "src/sim/cityFight/NativeCityFightContacts.ts": "452ceed93445880f45246c8a64a51b396df495cf216ba175626101aebc7249ea",
-      "src/sim/cityFight/NativeCityFightDefend.ts": "802080119ec3a6ceb79f55070df857991cf7e074bcd9698a5ceccb7307586918"
+      "src/app/InputBindings.ts": "5d8d402ff35444d2ea6a4dede550dd149329f69c47d79cd95f20100d4dc877a5",
+      "src/render/scenes/village/NativeCityFightInputController.ts": "2ad2ee270c7cbcdc076ca15d2c662220b71bfed99cf3ae255c5668721a7c53a0",
+      "src/render/art/FighterFightSkin.ts": "976f7acc70e245523e7cc77cece2dd6e5d06121f9de84d0b86ad8f4b20553aaf",
+      "src/render/effects/NativeCityFightFeel.ts": "9942a2a06982d302b53c7d2f764e35af1e55d0e76754f90e2e1d8e7eb3b9348e",
+      "src/render/effects/CombatPresentation.ts": "ba46230f581f26d3c62c6498f4f5adf0700e70f18048228bc0391876565732ee",
+      "src/sim/cityFight/NativeCityLupinSwing.ts": "bc020d83b11d76d846bc339b4491006081b1379573a6ab4ca07da5bfcd1386d9",
+      "src/sim/cityFight/NativeCityFight.ts": "fa569c376506a655a03397bdb8531b7e8b78f00982424b68ddd55b8c64ca49e3",
+      "src/sim/cityFight/NativeCityFightContacts.ts": "528bcf8b4b21f8464ba79f1d287a33c142ee009594e9c85640fda0a4b4e64e0e",
+      "src/sim/cityFight/NativeCityFightDefend.ts": "65ff1f593c7dd0bd12e23170e337969647fdd1e4cb23f932be94125dbea05569"
     },
     "generated": true
   }
