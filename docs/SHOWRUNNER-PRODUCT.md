@@ -5,6 +5,8 @@ DON balance, top-up action and purchased broadcast tickets share the wallet abov
 Tickets show their four assigned fighters with portraits and names. Each product card has its own purchase
 button; uncertain purchases resume from that same card while other products stay disabled.
 This is the existing isolated PayPal Sandbox service, not live-money billing.
+The hero reads “Your brand. In the ring.” / “Your promo. In the heart of the action.”
+Sandbox disclosure and general operation status appear in the small page footer.
 
 ## Broadcast products
 
