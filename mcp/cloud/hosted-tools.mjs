@@ -41,6 +41,7 @@ export const HOSTED_INSTRUCTIONS = 'When the user wants ODDBOUT to make the figh
   + 'Preserve the unknown outcome and inspect the original call, rather than replaying request_hosted_fighter to recover it. '
   + 'Never create a new key or repeat a look/motion revision merely to recover an unknown outcome. '
   + 'Read the same job again for fresh preview URLs; a URL is not proof that the user saw the image. '
+  + 'While the user watches a working job in this chat, read it again with waitSeconds 25 each time a read returns and tell him each change. '
   + 'A result\'s siteUrl is the user\'s page for that request (or, once registered, for his fighter) on the ODDBOUT website. ';
 /**
  * picture and secondPicture: a file the host attaches, whose refusal says where any other picture goes (Grok 점검 2026-11-03: an address
@@ -49,6 +50,8 @@ export const HOSTED_INSTRUCTIONS = 'When the user wants ODDBOUT to make the figh
 const ATTACHED_ONLY = 'only a file this host attaches (ChatGPT does). Send any other picture, one made in this chat too, through '
   + 'start_picture_upload and pass its id in pictureUploads';
 const PICTURE = fileSchema(ATTACHED_ONLY);
+/** The worker's events that carry a picture the job shows (api/generations.mjs: draftsOf, chosenArtifactOf). */
+const PICTURE_EVENTS = ['drafts', 'side', 'expressions'];
 /** States the worker is on; an answer from the user is not awaited. */
 const HOSTED_WORKING = new Set(['queued', 'appearance', 'motions', 'submitting']);
 /** A submission still on its way to the registry (`af_submissions`). */
@@ -71,6 +74,13 @@ const RUN_FROM_WALK_NEXT = 'The run preview is the walk played faster: no filmed
  * or its own image card, and showed the picture once the bot downloaded the file and attached it.
  */
 const IMAGES_NEXT = 'where this chat shows no picture from its url, download each file (the url lasts ten minutes) and attach it';
+/**
+ * How an agent follows a working job (Grok 점검 2026-11-03: the bot's own schedule checked every 5 to 10 minutes, and the user asked for
+ * 25 seconds): a wait returns as soon as something the user sees changes, so a chat he watches hears of each motion as it is made.
+ */
+const WATCH_NEXT = 'While the user watches this chat, call get_hosted_fighter again with waitSeconds 25 each time it returns (it returns '
+  + 'early when the state, the progress or a picture changes) and tell him each change at once: new pictures, the progress (percent) or the '
+  + 'place in line. When he has left, check on a schedule and tell him only what changed.';
 /**
  * The tokens a job took off the user's balance (보유 토큰, 2026-10-31: every token ODDBOUT's making spends, whatever the outcome).
  * @param {HostedJob} job
@@ -103,12 +113,12 @@ function hostedStep(job) {
           + 'Tell the user, and check later with get_hosted_fighter.';
       if (job.queue && job.queue.position > 1)
         return `This request is number ${job.queue.position} in line: ODDBOUT makes one stage at a time and starts it within minutes. `
-          + 'Tell the user, and check later with get_hosted_fighter.';
+          + `Tell the user. ${WATCH_NEXT}`;
       return job.delegate
         ? 'ODDBOUT is writing the profile, painting two front-view looks and picking one itself, '
           + 'then it makes the eleven motions (about 15 to 30 minutes in all). '
-          + 'Tell the user, and check later with get_hosted_fighter.'
-        : 'ODDBOUT is writing the profile and painting two front-view looks (a few minutes). Call get_hosted_fighter with waitSeconds to wait.';
+          + `Tell the user. ${WATCH_NEXT}`
+        : `ODDBOUT is writing the profile and painting two front-view looks (a few minutes). ${WATCH_NEXT}`;
     case 'appearance_ready':
       return `${job.delegate ? 'ODDBOUT could not pick a look by itself. ' : ''}Show the user both looks (candidates a and b, his fighter from the front) as images `
         + `(${IMAGES_NEXT}) and ask which one: the one he picks is also his profile picture on the site and in the arena. `
@@ -117,7 +127,7 @@ function hostedStep(job) {
       return `ODDBOUT is drawing ${job.delegate ? 'the look it picked' : 'the chosen look'} from the side (job.side once it is drawn) and making the eleven motions `
         + 'from that side view (about 15 to 30 minutes), and his six arena faces from the front (job.expressions once drawn; the last is his '
         + 'knocked-out face on the KO card). Each motion shows in job.drafts as soon as it is made; a walk or run with a state '
-        + `is still being checked and may be filmed again. Tell the user and show him what is made so far (${IMAGES_NEXT}); check later with get_hosted_fighter.`;
+        + `is still being checked and may be filmed again. Tell the user and show him what is made so far (${IMAGES_NEXT}). ${WATCH_NEXT}`;
     case 'motion_ready':
       return `${job.preview?.some(p => p.note === 'run-from-walk') ? RUN_FROM_WALK_NEXT : ''}`
         + `Show the user ${job.delegate ? `the look ODDBOUT picked (candidate ${job.choice}), ` : ''}the motion previews as images (${IMAGES_NEXT}), `
@@ -125,7 +135,7 @@ function hostedStep(job) {
         + 'If he likes them, register_hosted_fighter (change only what he asks in the profile). '
         + `To fix one motion, revise_hosted_motion (${left.motions ?? 0} changes left).`;
     case 'submitting':
-      return 'ODDBOUT is packaging the fighter and submitting it under the user\'s account. Call get_hosted_fighter with waitSeconds.';
+      return `ODDBOUT is packaging the fighter and submitting it under the user's account. ${WATCH_NEXT}`;
     case 'submitted':
       // 출전 (2026-10-30): a registered fighter is in production until the user watches his motions and enters him.
       if (job.submission?.stage === 'registered') return `Registered: fighter ${job.submission.fighterId}, in production. Tell the user: he can watch `
@@ -135,7 +145,7 @@ function hostedStep(job) {
           + (job.expressions?.url ? 'His six arena faces were sent with it; get_profile_set says whether they passed the check (sheetErrors when not).' : '')
           : 'His profile set (front picture) did not go in with it: prepare_profile_set can upload one.');
       if (job.submission?.stage === 'rejected') return `The server check refused the package. A person at ODDBOUT will look at it.${spent(job)}`;
-      return 'The server is checking the package. Call get_hosted_fighter with waitSeconds.';
+      return `The server is checking the package. ${WATCH_NEXT}`;
     case 'needs_review': return `A person at ODDBOUT is checking this step; nothing to answer now. Tell the user and show him what is made so far `
       + `(${IMAGES_NEXT}); check later.${spent(job)}`;
     case 'rejected': return `ODDBOUT declined this request${error}.${spent(job)} A different request may be made while his balance is above zero.`;
@@ -149,6 +159,14 @@ function hostedStep(job) {
  * @param {HostedJob} job
  */
 const jobSite = job => siteUrl({ fighterId: job.submission?.stage === 'registered' ? job.submission.fighterId : null, jobId: job.id });
+/**
+ * An answer the job does not wait for now (Grok 점검 2026-11-03: the bot sent a second motion change while the first was being made, got a
+ * bare generation-state and had to guess): what to do instead.
+ */
+const ANSWER_LATER = 'This job is not waiting for that answer now: a change is made one at a time, and the motions take changes again once '
+  + 'they are ready (motion_ready). Read get_hosted_fighter (waitSeconds 25) for the state and its next, and send the change then.';
+/** @param {any} result  The API's JSON. */
+const answered = result => result?.code === 'generation-state' ? { ...result, next: ANSWER_LATER } : withNext(result);
 /** @param {any} result  The API's JSON. */
 const withNext = result => result?.ok && result.job ? { ...result, next: hostedNext(result.job), siteUrl: jobSite(result.job) } : result;
 
@@ -199,6 +217,16 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
   const JOB = UUID_ARG();
   /** @type {(path: string, body: object, headers?: Record<string, string>) => Promise<any>} */
   const post = (path, body, headers = {}) => invoke(path, 'POST', JSON.stringify(body), { 'content-type': 'application/json', ...headers });
+  /**
+   * When the job's latest picture event came (Grok 점검 2026-11-03): the kinds api/generations.mjs shows (drafts, the side view, the faces).
+   * Null when it has none; undefined when it could not be read.
+   * @param {string} jobId @returns {Promise<string | null | undefined>}
+   */
+  const latestPicture = async jobId => {
+    const { data, error } = await db.from('af_generation_events').select('at').eq('job_id', jobId).in('kind', PICTURE_EVENTS)
+      .order('at', { ascending: false }).limit(1).maybeSingle();
+    return error ? undefined : data?.at ?? null;
+  };
   /** @param {string} key */
   const jobIdForKey = async key => {
     const { data, error } = await db.from('af_generation_jobs').select('id').eq('owner_id', /** @type {Identity} */ (identity).owner).eq('idempotency_key', key.toLowerCase()).maybeSingle();
@@ -340,8 +368,8 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
     + `Key lookup only reads an existing job under this account, even when new generation is disabled; `
     + `not-found does not prove that an interrupted request never started. With neither identifier: `
     + `his latest five requests and whether hosted generation is open. Read the same job again if a preview URL expired; `
-    + `do not regenerate. waitSeconds (up to ${HOSTED_WAIT_SECONDS}) is a bounded wait, not a completion guarantee; `
-    + `if still working, check this job again later.`,
+    + `do not regenerate. waitSeconds (up to ${HOSTED_WAIT_SECONDS}) is a bounded wait, not a completion guarantee: it returns early when the `
+    + `state, the progress or a picture changes; if still working, read this job again.`,
     { jobId: JOB.optional(), idempotencyKey: UUID_ARG().optional(), waitSeconds: z.number().int().min(0).max(HOSTED_WAIT_SECONDS).optional() }, async ({ jobId, idempotencyKey, waitSeconds = 0 }, { signal, deadline: due }) => {
       if (jobId && idempotencyKey) return { ok: false, code: 'invalid-selector' };
       if (idempotencyKey) {
@@ -353,15 +381,24 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
         const list = await invoke('generations');
         return list.ok ? { ...list, jobs: list.jobs.map(/** @param {HostedJob} job */ job => ({ ...job, next: hostedNext(job), siteUrl: jobSite(job) })) } : list;
       }
-      // Wait on the state alone (no signed URLs per look), then read the job once: the wait leaves the call's last seconds to that read,
-      // and stops when the client went away.
+      // Wait on what the user sees without the signed URLs (the state, the progress and the time of the latest picture), then read the job
+      // once: the wait leaves the call's last seconds to that read, and stops when the client went away or anything of it changed.
       const deadline = Math.min(Date.now() + waitSeconds * 1000, due - HOSTED_READ_MS), pollMs = hosted.pollMs ?? HOSTED_POLL_MS;
+      /** @type {string | null} */
+      let seen = null;
       while (Date.now() + pollMs <= deadline && !signal.aborted) {
         // The job and its submission's state in one query (MCP 점검 2026-11-03: two per tick).
-        const { data: row, error } = await db.from('af_generation_jobs').select('status,submission:af_submissions!submission_id(status)')
+        const { data: row, error } = await db.from('af_generation_jobs').select('status,progress,submission:af_submissions!submission_id(status)')
           .eq('id', jobId).eq('owner_id', /** @type {Identity} */ (identity).owner).maybeSingle();
         if (error || !row) break;
-        if (hostedSettled(row.status, row.status === 'submitted' ? row.submission?.status ?? null : null)) break;
+        const submission = row.status === 'submitted' ? row.submission?.status ?? null : null;
+        if (hostedSettled(row.status, submission)) break;
+        // While the motions are made, a picture the worker sends (a draft, the side view, his faces) is an event of the job.
+        const picture = row.status === 'motions' ? await latestPicture(jobId) : null;
+        if (picture === undefined) break;
+        const now = JSON.stringify([row.status, row.progress, submission, picture]);
+        if (seen !== null && now !== seen) break;
+        seen = now;
         await pause(pollMs, signal);
       }
       return withNext(await invoke(`generations/${jobId}`));
@@ -373,13 +410,13 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
     + 'after an unknown outcome, read get_hosted_fighter instead of repeating this call.',
     { jobId: JOB, choose: z.enum(['a', 'b']).optional(), revise: z.string().min(2).max(GENERATION_LIMITS.note).optional() },
     ({ jobId, choose, revise }) => (choose === undefined) === (revise === undefined) ? { ok: false, code: 'invalid-answer' }
-      : post(`generations/${jobId}/appearance`, choose !== undefined ? { choose } : { revise }).then(withNext), { write: true, idempotent: false });
+      : post(`generations/${jobId}/appearance`, choose !== undefined ? { choose } : { revise }).then(answered), { write: true, idempotent: false });
   register('revise_hosted_motion', '동작 하나 고치기', 'Ask ODDBOUT to make one motion of the connected user\'s hosted fighter again with his sentence; the other motions stay. '
     + 'Not idle: the standing pose is the look itself. Requires the user\'s request. Not idempotent: '
     + 'after an unknown outcome, read get_hosted_fighter instead of repeating this call.',
     // Not idle: it is the look itself (choose_hosted_look changes the look, before the motions).
     { jobId: JOB, clip: z.enum(/** @type {[string, ...string[]]} */ (Object.keys(spec.motions).filter(clip => clip !== 'idle'))), note: z.string().min(2).max(GENERATION_LIMITS.note) },
-    ({ jobId, clip, note }) => post(`generations/${jobId}/motions`, { revise: { clip, note } }).then(withNext), { write: true, idempotent: false });
+    ({ jobId, clip, note }) => post(`generations/${jobId}/motions`, { revise: { clip, note } }).then(answered), { write: true, idempotent: false });
   register('register_hosted_fighter', '맡긴 선수 등록', 'Register the connected user\'s hosted fighter once he approved its motions: '
     + 'ODDBOUT packages it and submits it under his account, through the same server check as any fighter. '
     + 'profile holds only what he changed in the draft (name, description, names, bout lines, stats summing to 9). '

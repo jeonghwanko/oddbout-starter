@@ -484,6 +484,15 @@ Grok(grok.com, Cursor의 Grok Bot)이 받는 안내만으로 호스팅 생성까
 주면 된다. 그래서 그림이 있는 상태(`appearance_ready`·`motions`·`needs_review`·`motion_ready`)의 `next`가 "주소로 그림이 안 보이는 채팅이면 파일을 받아
 (주소는 10분) 첨부하라"고 적는다. `motions`·`needs_review`도 "지금까지 만든 것을 보여 주라"고 적는다(전에는 "기다려라"만 있어 봇이 아무것도 올리지 않았다).
 
+두 번째 대화(같은 날 10:01~10:24Z, 작업 `3a4e8a73`, #317 배포 뒤): 봇이 외형 두 장을 붙이고 채팅의 A/B 카드로 받은 답을 `choose_hosted_look`으로
+넘겼다(10:07Z). 동작 중에는 봇의 루틴이 5분마다 확인했고, 사용자가 "25초 간격으로" 하라고 하자 `waitSeconds`로 이어 읽으며 걷기·달리기 시트와
+표정을 붙이고 진행률을 표로 올렸다. 그래서 일하는 단계(대기·외형·동작·포장·검사)의 `next`와 서버 안내문이 "사용자가 보는 동안은 `waitSeconds 25`로
+이어 읽고 바뀐 것(새 그림·진행률·대기 순번)을 바로 알리라, 떠나면 예약 확인으로 바뀐 것만"이라고 적는다. 기다림은 상태·진행률·제출 상태와, 동작 중이면
+그림 이벤트(`drafts`·`side`·`expressions`)의 마지막 시각을 보다가 바뀌면 바로 돌아온다(전에는 단계가 끝날 때만). 워커의 임대 연장(빈 진행 호출)은
+아무것도 바꾸지 않아 기다림을 끝내지 않는다. 진행률은 동작 단계에서만 오른다(5·25·45·65·80, 완성 100). 외형 단계는 완성 전까지 0이다.
+같은 대화에서 봇이 첫 동작 수정이 만들어지는 동안 두 번째 수정을 보내 `generation-state`만 받았다. 이제 `choose_hosted_look`·`revise_hosted_motion`의
+그 거절에는 "수정은 한 번에 하나, 동작이 다시 준비되면(`motion_ready`) 보내라"는 `next`가 붙는다.
+
 ### 사이트 바로가기 `siteUrl` (2026-11-03)
 
 호스팅 도구(`request_hosted_fighter`·`get_hosted_fighter`·`choose_hosted_look`·`revise_hosted_motion`·`register_hosted_fighter`·`cancel_hosted_fighter`)와
