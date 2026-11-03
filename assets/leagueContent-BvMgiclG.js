@@ -1,1 +1,0 @@
-import{r as e}from"./leagueContent-ASfVvsBL.js";export{e as profiles};
