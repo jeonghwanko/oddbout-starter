@@ -119,6 +119,7 @@ function renderCreditPacks() {
     const box=document.createElement('div');box.className='credit-pack';
     const summary=document.createElement('span');summary.textContent=`${plain(product.name,64)} · ${Number(product.credits).toLocaleString()} ${creditName()} · ${money(product.amountCents,commerceCatalog.currency)}`;
     const button=document.createElement('button');button.className='button button-secondary button-small';button.type='button';button.textContent=pending?.input?.productId===product.id?'Continue checkout':'Add DON';button.disabled=!session||!config?.commerceEnabled||!commerceCatalog?.paypalConfigured||busy||topupBusy||Boolean(pending&&pending.input.productId!==product.id);
+    if(button.textContent==='Add DON')button.replaceChildren('Add ',donIcon(),' DON');
     button.addEventListener('click',()=>purchaseCreditPack(product.id,button));box.append(donIcon(),summary,button);return box;
   }));
 }

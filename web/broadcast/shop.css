@@ -35,4 +35,5 @@ nav{display:flex;align-items:center;justify-content:center;gap:24px;flex:1}nav a
 .media-choice{display:flex;gap:8px;margin-top:18px}.media-choice button{padding:10px 14px;background:var(--soft);font-weight:600}.media-choice [aria-pressed="true"]{background:var(--ink);color:white}#link-source .field{margin-top:18px;font-size:16px}#link-source>.button,#upload-source>.button{margin-top:14px}.external-preview{margin-top:18px}.external-video{display:block;width:100%;min-height:300px;aspect-ratio:16/9;border:0;border-radius:10px;background:#071316}.external-original{display:inline-block;margin-top:12px;font-size:16px;font-weight:600}
 
 .shop-footer{width:calc(100% - 64px);max-width:1176px;margin:0 auto;padding:20px 0 32px;border-top:1px solid var(--line);color:var(--muted)}.shop-footer .sandbox-notice{margin:0;font-size:13px;line-height:1.6}.shop-footer .shop-status{margin:6px 0 0;font-size:13px}
+.button .don-icon{width:24px;height:24px}
 @media(max-width:650px){.shop-footer{width:calc(100% - 36px)}}
