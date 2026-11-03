@@ -99,7 +99,7 @@ ODDBOUT 통합 플러그인은 연결된 Google 계정을 PC와 Dots 등록에 �
 - 화풍: 우리 게임의 담백한 셀 채색이다. 규격의 `style.colouring` 문구를 모든 생성에 붙이고, `style.anchor.url`의 기준 그림을 마지막 참조로 붙인다.
 - API(주인): `POST /fighters/:id/profile-sets`(UUID `Idempotency-Key`, 본문 = 세트 파일) → `PUT /profile-sets/:id/assets/front`(`image/webp`)
   (시트가 있으면 `PUT /profile-sets/:id/assets/expressions`도) → `POST /profile-sets/:id/submit`. 상태는 `GET /profile-sets/:id`(자기 파일의 10분 서명 주소 포함), 선수별 최근 10개는 `GET /fighters/:id/profile-sets`.
-  선수마다 열린 세트는 하나, 계정마다 하루 10개다.
+  선수마다 열린 세트는 하나, 계정마다 하루 10개다. 운영자가 만든 세트(표정 시트·정면)는 주인의 한도에 세지 않는다(2026-11-03).
 - 검증: 검증 작업자가 전체 디코드·실제 크기·세로 그림·투명한 가장자리·캐릭터 영역(그림 높이의 60 % 이상, 카드 폭 600 이하)·얼굴 칸(캐릭터 안,
   키의 10~30 %, 중심이 위쪽 40 % 안)을 본다. 통과하면 카드(캐릭터 영역, 높이 600)와 얼굴(192×192)을 만들고 `review`가 된다.
   디코드 뒤의 실패(자르기·인코딩·파생본 1 MB 초과)와 검사 프로세스의 죽음·30초 초과도 그 그림의 판정(`rejected`, 이유는 첫 오류 코드)이다.
