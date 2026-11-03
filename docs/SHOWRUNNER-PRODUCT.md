@@ -94,6 +94,10 @@ settlement creates an appearance-fee proposal for verified cups. The owner revie
 explicitly approves PayPal payout on this same page. Submission retries reuse the batch identity;
 paid appearances cannot be proposed again. Settlement must be successful and less than 15 minutes old;
 refund/reversal freezes prevent payment. The expandable records retain order, capture and payout IDs.
+`Paid` requires complete PayPal item results with every recipient marked `SUCCESS`; a successful
+batch header alone is insufficient. Unclaimed, blocked or incomplete item results retain the existing
+batch for review and cannot create a duplicate appearance payment. If the embedded bout does not
+report readiness within 20 seconds, the viewer offers a direct link to that same verified bout.
 
 The older console at `/broadcast/operator/` remains available. Its payout entry points enforce these
 same ticket settlement rules. Customer navigation does not expose its former setup panels.

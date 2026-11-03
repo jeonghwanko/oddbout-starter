@@ -134,8 +134,12 @@ for(const sourceKind of ['upload','youtube','twitch'])test(`broadcast purchase, 
     assert.equal(await watch.locator('#lineup img').count(),4);
     await watch.clock.fastForward(301000);await watch.locator('#arena').waitFor();
     assert.equal(await watch.locator('#external-video iframe').count(),0);
+    assert.equal(await watch.locator('#open-player').isVisible(),false);
+    await watch.clock.fastForward(21000);await watch.locator('#open-player').waitFor();
+    assert.equal(await watch.locator('#open-player').getAttribute('href'),await watch.locator('#arena').getAttribute('src'));
     await watch.clock.fastForward(1500000);await watch.locator('#external-video iframe').waitFor();
     assert.equal(await watch.locator('#arena').getAttribute('src'),null);
+    assert.equal(await watch.locator('#open-player').isVisible(),false);
     if(sourceKind==='twitch'){
       await watch.setViewportSize({width:390,height:844});await watch.getByRole('link',{name:'Open on Twitch to play'}).waitFor();
       assert.equal(await watch.locator('#external-video iframe').getAttribute('src'),null);

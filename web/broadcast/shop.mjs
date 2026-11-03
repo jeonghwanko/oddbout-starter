@@ -15,6 +15,7 @@ let mediaMode='upload',previewedLink='',disposeExternal=()=>{};
 const executionPanel=createExecutionPanel({api,getOwner:()=>session?.user.id,getJournal:()=>journal,onStatus:order=>{
   if(selectedOrder?.id!==order.id)return;selectedOrder={...selectedOrder,...order};$('purchase-state').textContent=plannedState(order);
   if(hostOrderId)$('host-status').textContent=`${plannedState(order)} · ${formattedTime(order.startedAt)}`;
+  if(order.executionStatus==='completed'&&$('shop-status').textContent==='Broadcast started.')message('');
 }});
 const returnedIntent = new URLSearchParams(location.search).get('intent') ?? '';
 const requestedHost=new URLSearchParams(location.search).get('host');

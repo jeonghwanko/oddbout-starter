@@ -3,10 +3,11 @@ import {mountExternal} from './external-player.mjs';
 const $=id=>document.getElementById(id);
 const show=new URLSearchParams(location.search).get('show');
 const arenaOrigin='https://oddbout-broadcast-arena.onrender.com';
-let manifest,clockOffset=0,current='',timer,spoken=false,waitingForResult=false,disposeExternal=()=>{};
+let manifest,clockOffset=0,current='',timer,arenaReadyTimer,spoken=false,waitingForResult=false,disposeExternal=()=>{};
 const names={kuma:'Kuma',yume:'Yume',bravow:'Bravow',beotim:'Beotim',quickcat:'Quickcat',kungjjak:'Kungjjak',sikeundung:'Sikeundung',duldul:'Duldul',eoridung:'Eoridung'};
 function nowSeconds(){return(Date.now()+clockOffset-Date.parse(manifest.startedAt))/1000;}
-function clear(){ $('video').pause();disposeExternal();$('arena').removeAttribute('src');$('arena').hidden=true;$('sponsor').hidden=true;$('play').hidden=true;globalThis.speechSynthesis?.cancel(); }
+function clear(){ clearTimeout(arenaReadyTimer);$('open-player').hidden=true;$('open-player').removeAttribute('href');$('video').pause();disposeExternal();$('arena').removeAttribute('src');$('arena').hidden=true;$('sponsor').hidden=true;$('play').hidden=true;globalThis.speechSynthesis?.cancel(); }
+function offerPlayer(){if($('arena').hidden)return;$('open-player').hidden=false;$('playback-error').textContent='Player not responding. Open this bout in a new tab.';}
 function tick(){
   if(!manifest)return;
   const elapsed=nowSeconds(),stopped=manifest.execution?.stoppedAt&&Date.parse(manifest.execution.stoppedAt)<Date.parse(manifest.startedAt)+manifest.durationSeconds*1000;
@@ -32,7 +33,7 @@ function tick(){
       const a=replay?.leftId??manifest.fighterIds[pair[0]],b=replay?.rightId??manifest.fighterIds[pair[1]];
       $('status').textContent=`${replay?'Agent-produced bout · Replay':'Exhibition '+(slot.index+1)} · ${names[a]??a} vs ${names[b]??b}`;
       const url=new URL('/spotlight.html',arenaOrigin);url.search=new URLSearchParams({id:replay?.id??manifest.id+'-'+slot.index,a,b,seed:String(replay?.seed??((manifest.programSeed+slot.index)>>>0))}).toString();
-      $('arena').src=url.href;$('arena').hidden=false;
+      $('open-player').href=url.href;$('arena').src=url.href;$('arena').hidden=false;arenaReadyTimer=setTimeout(offerPlayer,20000);
     }
   }
   if(slot.kind==='advertisement'&&!manifest.media.source&&Number.isFinite($('video').duration)&&$('video').duration>0){
@@ -44,8 +45,8 @@ $('video').addEventListener('error',()=>{$('playback-error').textContent='Sponso
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)tick();});
 window.addEventListener('message',event=>{
   if(event.origin!==arenaOrigin||event.source!==$('arena').contentWindow||!event.data)return;
-  if(event.data.type==='oddbout:spotlight:error')$('playback-error').textContent='This matchup could not play. The next scheduled matchup will still be attempted.';
-  if(event.data.type==='oddbout:spotlight:ready')$('playback-error').textContent='';
+  if(event.data.type==='oddbout:spotlight:error'){clearTimeout(arenaReadyTimer);offerPlayer();}
+  if(event.data.type==='oddbout:spotlight:ready'){clearTimeout(arenaReadyTimer);$('open-player').hidden=true;$('playback-error').textContent='';}
 });
 async function load(){
   if(!/^[a-f0-9]{64}$/.test(show??''))throw new Error('This broadcast link is invalid.');

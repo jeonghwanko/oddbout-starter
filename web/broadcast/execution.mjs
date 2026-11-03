@@ -16,7 +16,7 @@ export function createExecutionPanel({api,getOwner,getJournal,onStatus=()=>{}}){
     $('execution-reconcile').textContent=data.settlement?'Check settlement again':'Check settlement';
     $('execution-settlement').textContent=data.settlement?.status==='matched'?'PayPal payment matched':data.settlement?'Payment needs review':finished?'Ready to check':'Available when the broadcast finishes';
     const batch=data.payouts.find(p=>['proposed','submitting','submitted'].includes(p.status)),paid=data.payouts.filter(p=>p.status==='paid').reduce((sum,p)=>sum+p.totalCents,0);
-    $('execution-fees').textContent=batch?`${usd(batch.totalCents)} · ${batch.status==='proposed'?'Ready for approval':batch.status==='submitting'?'Confirmation pending':'Processing at PayPal'}`:paid?`${usd(paid)} paid`:'Included in your ticket';
+    $('execution-fees').textContent=batch?`${usd(batch.totalCents)} · ${batch.status==='proposed'?'Ready for approval':batch.status==='submitting'?'Confirmation pending':batch.providerStatus==='ITEMS_NEED_REVIEW'?'Recipient confirmation pending':'Processing at PayPal'}`:paid?`${usd(paid)} paid`:'Included in your ticket';
     const byFighter=new Map();for(const item of batch?.items??[])byFighter.set(item.fighterId,(byFighter.get(item.fighterId)??0)+item.cents);
     $('execution-payout-list').replaceChildren(...[...byFighter].map(([fighter,cents])=>{const li=document.createElement('li');li.textContent=`${fighter} · ${usd(cents)}`;return li;}));
     const needsApproval=batch&&['proposed','submitting'].includes(batch.status);

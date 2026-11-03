@@ -247,8 +247,21 @@ export function createPayPalSandbox({ clientId, clientSecret, merchantId, fetch:
     },
     /** @param {string} payoutBatchId */
     async getPayout(payoutBatchId) {
-      const header = object((await api(`/v1/payments/payouts/${id(payoutBatchId)}`)).batch_header);
-      return { payoutBatchId: id(header.payout_batch_id), status: id(header.batch_status), senderBatchId: header.sender_batch_header?.sender_batch_id ?? null };
+      // We send at most 100 recipients. Request the entire bounded batch; batch SUCCESS alone
+      // means processing finished, not that every recipient received funds.
+      const result = await api(`/v1/payments/payouts/${id(payoutBatchId)}?page_size=1000&total_required=true`);
+      const header = object(result.batch_header), batchStatus = id(header.batch_status);
+      if (header.payout_batch_id !== payoutBatchId) throw new PayPalError('paypal_invalid_response');
+      const items = Array.isArray(result.items) ? result.items.map((/** @type {any} */ item) => ({
+        id: id(item.payout_item_id), status: id(item.transaction_status),
+        transactionId: typeof item.transaction_id === 'string' ? id(item.transaction_id) : null,
+        amount: item.payout_item?.amount ?? null,
+      })) : [];
+      const complete = items.length > 0 && items.length <= 100 && result.total_items === items.length
+        && result.total_pages === 1 && new Set(items.map((/** @type {any} */ item) => item.id)).size === items.length;
+      const paid = complete && items.every((/** @type {any} */ item) => item.status === 'SUCCESS');
+      return { payoutBatchId: id(header.payout_batch_id), status: batchStatus === 'SUCCESS' && !paid ? 'ITEMS_NEED_REVIEW' : batchStatus,
+        batchStatus, senderBatchId: header.sender_batch_header?.sender_batch_id ?? null, items };
     },
     /** Supply original UTF-8 request text to preserve signed event formatting.
      * @param {{headers:Headers|Record<string,string>,body:object|string,webhookId:string}} input */

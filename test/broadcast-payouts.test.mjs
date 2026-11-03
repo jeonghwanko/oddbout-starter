@@ -52,7 +52,8 @@ function fakePayPal() {
   const calls = [], batches = new Map(), byRequest = new Map(), senders = new Map(), faults = [], violations = [];
   let tokenFault = 0, created = 0;
   const json = (data, status = 200) => new Response(JSON.stringify(data), { status });
-  const header = batch => ({ batch_header: { payout_batch_id: batch.id, batch_status: batch.status, sender_batch_header: { sender_batch_id: batch.senderBatchId } } });
+  const header = batch => ({ batch_header: { payout_batch_id: batch.id, batch_status: batch.status, sender_batch_header: { sender_batch_id: batch.senderBatchId } },
+    total_items:batch.body.items.length,total_pages:1,items:batch.body.items.map((item,i)=>({payout_item_id:'ITEM'+i,transaction_status:batch.status==='SUCCESS'?'SUCCESS':'PENDING',payout_item:item})) });
   async function fetch(url, init) {
     const target = new URL(url), method = init.method ?? 'GET', path = target.pathname;
     if (target.origin !== PAYPAL_ORIGIN) violations.push(`unexpected origin ${target.origin}`);
