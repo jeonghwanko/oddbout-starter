@@ -184,6 +184,9 @@ export function scopedDatabase(db, owner) {
   } });
 }
 
+/** @type {{ ttlMs: number, cacheScope: 'private' }} */
+const LIST_CACHE = { ttlMs: 300_000, cacheScope: 'private' };
+
 /**
  * @param {{ db: any, identity: Identity | null, fetcher?: typeof fetch, arena?: Arena | null, hosted?: Hosted | null,
  *   host?: { compact?: boolean, caller?: string | null }, edition?: 'full' | 'directory', call?: Call }} options
@@ -206,7 +209,10 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
       + 'use the supported host file route without bypassing network policy. Never ask for tokens or callback URLs in chat. '
       + 'A refused ODDBOUT sign-in (401 invalid_token) states its reason: tell the user that reason; it is not an outage, and when it asks '
       + 'to reconnect ODDBOUT in the connector settings, scheduled retries cannot fix it. Only a 503 asks for a retry. '
-      + 'A queued submission is not registered; inspect its status. Reuse one UUID for retries of identical bytes.' });
+      + 'A queued submission is not registered; inspect its status. Reuse one UUID for retries of identical bytes.',
+    // A 2026-07-28 client may keep the list and the discovery answer for five minutes (the SDK's default is 0: ask every time). At an
+    // address the list is the same for every caller, signed in or not, and changes only with a deploy; private, since editions differ by address.
+    cacheHints: { 'tools/list': LIST_CACHE, 'server/discover': LIST_CACHE } });
   // The existing API runs in-process with an identity bound to this verified request.
   const scoped = identity ? scopedDatabase(db, identity.owner) : null;
   // The workshop labels what this client writes (made with); the in-process API takes its OAuth client from the verified token only.

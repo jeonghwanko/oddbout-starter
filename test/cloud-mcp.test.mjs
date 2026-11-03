@@ -927,6 +927,11 @@ test('a 2026-07-28 client discovers, lists and calls the same tools; the list ke
   const tools = lists[0].result.tools, profile = tools.find(tool => tool.name === 'get_profile');
   assert.deepEqual(profile.securitySchemes, [{ type: 'oauth2', scopes: ['openid', 'email', 'profile'] }]);
   assert.equal(JSON.stringify(lists[0]).includes('json-schema.org'), false);
+  // A 2026 client may keep the list five minutes; a 2025 answer carries no cache fields.
+  assert.deepEqual([lists[0].result.ttlMs, lists[0].result.cacheScope], [300_000, 'private']);
+  const legacyList = await (await handle(new Request(CLOUD_RESOURCE, { method: 'POST', headers: { 'content-type': 'application/json',
+    accept: 'application/json, text/event-stream' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }) }))).json();
+  assert.equal(legacyList.result.tools.length, 21); assert.equal('ttlMs' in legacyList.result, false);
   // The call's log line names the era it spoke.
   const lines = logged.mock.calls.map(entry => JSON.parse(entry.arguments[0])).filter(line => line.tool === 'get_profile');
   assert.deepEqual(lines.map(line => line.protocol), ['2026-07-28', '2026-07-28']);
