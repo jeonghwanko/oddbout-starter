@@ -501,11 +501,16 @@ Grok(grok.com, Cursor의 Grok Bot)이 받는 안내만으로 호스팅 생성까
 옆모습(옆모습 원본 1,337장, 최대 0.91)을 가르지 못해, 판정은 공식 생성 PC의 codex가 한다([OPEN-REGISTRATION.md](OPEN-REGISTRATION.md) 정면 판정).
 
 - `get_registered_fighter`의 `fighter.front`가 출전에 필요한 정면을 말한다: `required`(관문이 켜져 있는지), `ok`(출전시킬 수 있는 세트가 있는지), 없으면
-  가장 최근 세트의 `status`·`frontCheck`·거절 `reason`·판정 `notes`. 제작 중인 선수에게 모자란 것이 있으면 `next`가 사용자에게 할 말과 할 일을 준다
-  (`mcp/cloud/common.mjs` `frontNext`: 정면 없음 → 만들어 올리기, 검사 중 → 기다렸다 다시 읽기, 거절 → 이유를 알리고 새로 그리기).
+  아직 검사 중인 세트(없으면 가장 최근 세트)의 `status`·`frontCheck`(`stalled`: 판정 다섯 번이 답하지 못해 운영자 몫)·거절 `reason`·판정 `notes`
+  (판정이 돌려보낸 때만). 제작 중인 선수에게 모자란 것이 있으면 `next`가 사용자에게 할 말과 할 일을 준다(`mcp/cloud/common.mjs` `frontNext`).
+  정면 없음이나 판정이 돌려보냄이면 새로 그려 올린다. 파일 검사 거절이면 고쳐 다시 내고, 검사 장애면 같은 그림을 다시 낸다. 둘 다 새로 그리지 않는다.
+  운영자 거절이면 이유를 알리고, 검사 중이거나 `stalled`면 기다린다. 판정과 운영자의 말은 `next` 지시문에 넣지 않고 `front`의 데이터로만 둔다
+  (그림 속 글이 판정 문장을 움직일 수 있다). 올리기 도구는 호스트가 붙인 파일만 받으므로(ChatGPT), 그 밖의 호스트에는 ChatGPT의 ODDBOUT 앱으로 올리라고 한다.
 - `enter_fighter`가 `profile-set-required`로 거절되면 같은 `front`와 `next`가 붙는다. 설명은 먼저 `get_registered_fighter`를 읽으라고 한다.
 - `get_profile_set`의 `frontCheck`(`pending`·`pass`·`fail`과 판정), `submit_profile_set`·맡긴 선수의 등록 `next`도 판정을 거친 뒤 출전한다고 적는다.
-- 디렉터리판(`/claude`)에는 올리기 도구가 없으므로 `next`가 그 도구 이름과 한국어 상태 이름을 쓰지 않는다.
+- 디렉터리판(`/claude`)에는 올리기 도구가 없으므로 `next`가 그 도구 이름과 한국어 상태 이름을 쓰지 않는다(`withSiteLink`의 기본 문장도).
+- 한계: 맡긴 선수의 정면이 판정에 떨어지면 ChatGPT 밖에서는 정면을 다시 올릴 길이 없다. 판정이 틀려도 운영자가 뒤집지 않는다(사용자는 PC 판정만
+  골랐다).
 
 ### 사이트 바로가기 `siteUrl` (2026-11-03)
 

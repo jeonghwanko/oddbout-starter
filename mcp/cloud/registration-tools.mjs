@@ -18,13 +18,14 @@ import { cleanupPublicFiles } from '../../api/profile-sets.mjs';
  * A submission's or fighter's result with where the user follows it on the site (siteUrl, 2026-11-03): the fighter's all-motions page once
  * registered (registering does not enter him; his owner does, after watching), else the submission's page — a refused one too, where
  * the site lists why. A failed call and a deleted fighter point nowhere.
- * @param {any} result  The API's JSON.
+ * @param {any} result  The API's JSON. @param {{ directory?: boolean }} [options]
  */
-export function withSiteLink(result) {
+export function withSiteLink(result, { directory = false } = {}) {
   if (!result?.ok || result.stage === 'deleted') return result;
   const url = siteUrl({ fighterId: result.fighter?.id ?? (result.stage === 'registered' ? result.fighterId : null), submissionId: result.submissionId });
+  // The directory edition keeps ODDBOUT's Korean state names out (directory-edition.mjs).
   return url ? { ...result, siteUrl: url, next: result.next ?? 'The user can also follow this on the ODDBOUT website: give him siteUrl to see its progress or why it was refused, '
-    + 'and once registered to review the eleven motions and enter the fighter (출전).' } : result;
+    + `and once registered to review the eleven motions and enter the fighter${directory ? ' into public play' : ' (출전)'}.` } : result;
 }
 /**
  * The hosted route as the creation guide and the readiness check name it: an agent with no workspace (Grok, Claude, a ChatGPT chat without
@@ -175,6 +176,6 @@ export function registerRegistrationTools({ register, db, identity, invoke, fetc
       const result = await invoke(`fighters/${fighterId}`);
       // 정면 판정 (2026-11-03): a fighter in production hears what his front lacks before anyone asks to enter him.
       const next = result?.fighter && !result.fighter.entered_at ? frontNext(result.fighter.front, { directory }) : null;
-      return withSiteLink(next ? { ...result, next } : result);
+      return withSiteLink(next ? { ...result, next } : result, { directory });
     });
 }

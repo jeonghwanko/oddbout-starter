@@ -57,7 +57,7 @@ export function createFighterEntryHandler({ db }) {
       catch (error) {
         // What his front lacks goes with the refusal (정면 판정, 2026-11-03): the site and the MCP say which step comes next.
         if (!(error instanceof Problem) || error.message !== 'profile-set-required') throw error;
-        const { data: front } = await db.rpc('af_fighter_front', { p_fighter: fighter });
+        const { data: front } = await Promise.resolve(db.rpc('af_fighter_front', { p_fighter: fighter })).catch(() => ({ data: null }));
         return json({ ok: false, stage: 'api', code: error.message, ...(front ? { front } : {}) }, error.status);
       }
     } catch (error) {

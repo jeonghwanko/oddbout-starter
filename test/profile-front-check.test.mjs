@@ -7,11 +7,12 @@ import { sha256, VALIDATOR_VERSION } from '../api/handler.mjs';
 import { ENTRY_CLIPS } from '../api/fighter-entry.mjs';
 import { PROFILE_SET_VALIDATOR_VERSION, PROFILE_SET_VERSION, claimFrontCheck, finishFrontCheck, profileSetKey, profileSetView } from '../api/profile-sets.mjs';
 import { frontNext } from '../mcp/cloud/common.mjs';
+import { CLOUD_ISSUER, CLOUD_RESOURCE, createCloudHandler } from '../mcp/cloud.mjs';
 import { FRONT_CHECKS, FRONT_JUDGE_SCHEMA, frontJobId, frontJudgePrompt, frontVerdict, lookJudgePrompt } from '../host/generation-stages.mjs';
 import { generation } from './helpers/generation-database.mjs';
 
 test('the PC takes a validated front, its verdict decides the entry, and the owner reads why (API)', async () => {
-  const { sql, owner, call, work } = await generation();
+  const g = await generation(), { sql, owner, call, work } = g;
   try {
     const value = result => result.rows[0].value;
     const text = JSON.stringify(example), sha = await sha256(new TextEncoder().encode(text)), bytes = example.assets.reduce((sum, a) => sum + a.bytes, 0);
@@ -61,11 +62,22 @@ test('the PC takes a validated front, its verdict decides the entry, and the own
     const refused = await enter();
     assert.deepEqual(refused.body.front, { required: true, ok: false, profileSetId: first, status: 'rejected', frontCheck: 'fail', reason: 'FRONT_VIEW',
       notes: 'A side view facing right.' });
-    assert.match(frontNext(refused.body.front), /refused \(FRONT_VIEW: A side view facing right\.\).*prepare_profile_set/);
-    assert.doesNotMatch(frontNext(refused.body.front, { directory: true }), /prepare_profile_set|출전/);
+    assert.match(frontNext(refused.body.front), /front check sent its painting back \(front\.reason and front\.notes.*prepare_profile_set/);
+    assert.doesNotMatch(frontNext(refused.body.front), /side view/, 'the judge\'s words stay data, out of the instruction');
+    assert.doesNotMatch(frontNext(refused.body.front, { directory: true }), /prepare_profile_set|get_fighter_spec|출전/);
+    // The MCP tools say it too: get_registered_fighter before an entry, enter_fighter with its refusal.
+    const mcp = await connector(g);
+    const viaMcp = await mcp.call('get_registered_fighter', { fighterId: fighter });
+    assert.equal(viaMcp.fighter.front.reason, 'FRONT_VIEW'); assert.match(viaMcp.next, /front check sent its painting back/);
+    const tried = await mcp.call('enter_fighter', { fighterId: fighter, expectedManifestSha256: sha, reviewedClips: [...ENTRY_CLIPS] });
+    assert.equal(tried.code, 'profile-set-required'); assert.match(tried.next, /front check sent its painting back/);
 
     const second = await validated();
     assert.match(frontNext(await read()), /ODDBOUT is checking its front painting/);
+    // A take the PC could not run goes back to the queue, not counted; only under its lease.
+    const given = (await work('POST', 'profile-fronts/claim', {})).body.profileSet;
+    assert.equal((await work('POST', 'profile-fronts/release', { profileSetId: second, leaseToken: crypto.randomUUID() })).body.code, 'stale-check');
+    assert.equal((await work('POST', 'profile-fronts/release', { profileSetId: second, leaseToken: given.leaseToken })).body.stage, 'requeued');
     const again = (await work('POST', 'profile-fronts/claim', {})).body.profileSet;
     const pass = { checks: { whole: 'pass', front: 'pass', single: 'pass' }, notes: 'One boxer, whole, facing the viewer.' };
     assert.equal((await work('POST', 'profile-fronts/finish', { profileSetId: second, leaseToken: again.leaseToken, verdict: pass })).body.frontCheck.status, 'pass');
@@ -73,7 +85,37 @@ test('the PC takes a validated front, its verdict decides the entry, and the own
     assert.equal(frontNext(await read()), null);
     const entered = await enter();
     assert.equal(entered.status, 200); assert.equal(entered.body.stage, 'entered');
+    assert.equal((await mcp.call('get_registered_fighter', { fighterId: fighter })).next.includes('front'), false, 'nothing left to say of his front');
   } finally { await sql.close(); }
+});
+
+/** The full MCP edition over the generation fixture's API, signed in as its owner (hosted-generation-mcp.test.mjs's connector). */
+async function connector(g) {
+  const claims = { sub: g.owner, client_id: crypto.randomUUID(), session_id: crypto.randomUUID(), iss: CLOUD_ISSUER, aud: CLOUD_RESOURCE, role: 'af_mcp',
+    af_mcp: 'registration-v1', is_anonymous: false, exp: Math.floor(Date.now() / 1000) + 600 };
+  const db = { ...g.db, auth: { getClaims: async () => ({ data: { claims } }) },
+    rpc: (name, args) => name === 'af_mcp_session_state' ? { data: 'usable' } : g.db.rpc(name, args) };
+  const handle = createCloudHandler({ db, arena: { url: 'https://arena.test', key: 'arena-key' } });
+  return { call: async (name, args) => (await (await handle(new Request(CLOUD_RESOURCE, { method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: 'Bearer signed-connector-token-for-test' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }) }))).json()).result.structuredContent };
+}
+
+test('the MCP asks for what fixes each refusal, never a new painting where the same one goes in again (리뷰 2026-11-03)', () => {
+  const on = { required: true, ok: false, profileSetId: 'p' };
+  assert.equal(frontNext({ ...on, ok: true }), null); assert.equal(frontNext({ ...on, required: false }), null);
+  assert.match(frontNext({ ...on, profileSetId: null, status: null }), /no front painting.*Make a full-body front painting/);
+  assert.match(frontNext({ ...on, status: 'rejected', frontCheck: 'fail', reason: 'FRONT_SINGLE' }), /front check sent its painting back/);
+  for (const reason of ['worker-attempt-limit', 'worker-infrastructure-limit'])
+    assert.match(frontNext({ ...on, status: 'rejected', frontCheck: null, reason }), /could not run.*Submit the same painting again.*do not make a new one/);
+  assert.match(frontNext({ ...on, status: 'rejected', frontCheck: null, reason: 'FACE_POSITION' }), /file check refused.*Fix that and submit it again/);
+  const operator = frontNext({ ...on, status: 'rejected', frontCheck: 'pass', reason: '다른 사람의 그림' });
+  assert.match(operator, /operator refused/); assert.doesNotMatch(operator, /다른 사람/);
+  assert.match(frontNext({ ...on, status: 'review', frontCheck: 'stalled' }), /operator will look at it\. Nothing to upload now/);
+  assert.match(frontNext({ ...on, status: 'uploading' }), /never submitted/);
+  for (const status of ['queued', 'validating', 'review']) assert.match(frontNext({ ...on, status, frontCheck: null }), /is checking its front painting/);
+  for (const front of [{ ...on, profileSetId: null }, { ...on, status: 'rejected', frontCheck: 'fail' }, { ...on, status: 'review', frontCheck: 'stalled' }])
+    assert.doesNotMatch(frontNext(front, { directory: true }), /prepare_profile_set|upload_profile_set_asset|get_fighter_spec|[가-힣]/);
 });
 
 test('only the official PC checks fronts: another host is told there is nothing, and its verdict is refused', async () => {
@@ -90,6 +132,8 @@ test('the owner reads the check: pending, then its verdict; a set made from an a
   assert.deepEqual(profileSetView(row).frontCheck, { status: 'pending' });
   assert.deepEqual(profileSetView({ ...row, based_on: 'q' }).frontCheck, undefined);
   assert.deepEqual(profileSetView({ ...row, based_on: 'q' }).pending, ['operator-review']);
+  assert.deepEqual(profileSetView({ ...row, status: 'queued', based_on: 'q' }).pending, ['server-validation', 'operator-review']);
+  assert.deepEqual(profileSetView({ ...row, front_attempts: 5 }).frontCheck, { status: 'stalled' });
   const verdict = { checks: { whole: 'fail', front: 'pass', single: 'pass' }, notes: 'The feet are cut off.' };
   assert.deepEqual(profileSetView({ ...row, status: 'rejected', reason: 'FRONT_WHOLE', front_check: 'fail', front_verdict: verdict }).frontCheck,
     { status: 'fail', ...verdict });
@@ -104,7 +148,8 @@ test('the judge asks the look judge\'s own whole and front questions and its ver
   const pass = { checks: { whole: 'pass', front: 'pass', single: 'pass' }, notes: ' One boxer. ' };
   assert.deepEqual(frontVerdict(pass), { ...pass, notes: 'One boxer.' });
   for (const bad of [null, { ...pass, extra: 1 }, { ...pass, checks: { ...pass.checks, front: 'yes' } }, { ...pass, notes: '' }, { ...pass, notes: 'x'.repeat(401) },
-    { ...pass, checks: { whole: 'pass', front: 'pass' } }]) assert.equal(frontVerdict(bad), null);
+    { ...pass, checks: { whole: 'pass', front: 'pass' } }, { ...pass, notes: '\u0001\u0002' }]) assert.equal(frontVerdict(bad), null);
+  assert.equal(frontVerdict({ ...pass, notes: 'A\u0000side\nview' }).notes, 'A side view');
   assert.match(frontJobId({ id: '0123abcd-0000-4000-8000-0123456789ab' }, new Date('2026-11-03T12:00:00Z')),
     /^20261103-front-0123abcd000040008000[0-9a-f]{12}$/);
   // og's job ids: `[0-9]{8}-[a-z0-9][a-z0-9-]{1,40}` (host/og job_dir).

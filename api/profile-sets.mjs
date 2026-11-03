@@ -25,7 +25,7 @@ export const PUBLIC_BUCKET = 'af-profile-sets';
  *   manifest: ProfileSetFile, derived: any, validation: any, reason: string | null, lease_token: string | null, lease_until: string | null,
  *   expires_at: string, created_at: string, validated_at: string | null, approved_at: string | null, based_on?: string | null,
  *   front_check?: 'pass' | 'fail' | null, front_verdict?: { checks: Record<string, string>, notes: string } | null,
- *   front_lease_token?: string | null }} ProfileSetRow
+ *   front_lease_token?: string | null, front_attempts?: number }} ProfileSetRow
  */
 
 /** @type {(value: unknown) => boolean} */
@@ -111,11 +111,14 @@ export function profileSetView(row, urls) {
     ...frontCheckView(row),
     createdAt: row.created_at, ...(row.approved_at ? { approvedAt: row.approved_at } : {}), ...(urls ? { urls } : {}),
     pending: { uploading: [...PROFILE_SET_ASSETS.filter(id => id === 'front' || expressions).map(id => `upload-${id}`), 'submit'],
-      queued: ['server-validation', 'front-check', 'operator-review'], validating: ['server-validation', 'front-check', 'operator-review'],
+      queued: ['server-validation', ...(row.based_on ? [] : ['front-check']), 'operator-review'],
+      validating: ['server-validation', ...(row.based_on ? [] : ['front-check']), 'operator-review'],
       review: [...(frontCheckPending(row) ? ['front-check'] : []), 'operator-review'] }[row.status] ?? [] };
 }
 /** @type {(row: ProfileSetRow) => boolean} */
 const frontCheckPending = row => row.status === 'review' && !row.front_check && !row.based_on;
+/** The check's takes before a set waits for the operator (af_profile_set_front_claim). */
+const FRONT_TAKES = 5;
 /**
  * 정면 판정 (2026-11-03, supabase/migrations/20261103130000_oddbout_profile_front_check.sql): whether ODDBOUT's check saw one character,
  * whole, from the front. `pending` until the official generation PC answers; a set made from an approved one keeps that set's front.
@@ -123,7 +126,8 @@ const frontCheckPending = row => row.status === 'review' && !row.front_check && 
  */
 function frontCheckView(row) {
   if (row.front_check) return { frontCheck: { status: row.front_check, checks: row.front_verdict?.checks ?? {}, notes: row.front_verdict?.notes ?? '' } };
-  return frontCheckPending(row) ? { frontCheck: { status: 'pending' } } : {};
+  // Five takes brought no verdict: an operator decides (`stalled`).
+  return frontCheckPending(row) ? { frontCheck: { status: (row.front_attempts ?? 0) >= FRONT_TAKES ? 'stalled' : 'pending' } } : {};
 }
 /**
  * Sign a set's private files in one Storage call: its uploads once submitted and, once validated, its derived files. A file Storage cannot
@@ -414,9 +418,25 @@ export async function claimFrontCheck(db, host) {
   const { data: row, error } = await db.rpc('af_profile_set_front_claim', {});
   if (error) throw rpcProblem(error, PROFILE_SET_STATUS);
   if (!row?.id) return null;
-  const { front } = await signProfileSet(db, { ...row, derived: null }, 600);
-  if (!front) throw new Problem(503, 'storage-unavailable');
+  // A link Storage cannot sign is the API's failure, not a take: the set goes back to the queue.
+  const front = await signProfileSet(db, { ...row, derived: null }, 600).then(urls => urls.front, () => null);
+  if (!front) {
+    await db.rpc('af_profile_set_front_release', { p_id: row.id, p_lease: row.front_lease_token });
+    throw new Problem(503, 'storage-unavailable');
+  }
   return { id: row.id, leaseToken: row.front_lease_token, front: { ...row.manifest.front, downloadUrl: front } };
+}
+/**
+ * A take the PC could not run (`generation-worker/profile-fronts/release`: codex cannot run there now, og did not start it): back in the
+ * queue, not counted.
+ * @param {any} db @param {string | null} host @param {any} body
+ */
+export async function releaseFrontCheck(db, host, body) {
+  if (host !== null) throw new Problem(403, 'worker-required');
+  if (!object(body) || !UUID.test(body.profileSetId ?? '') || !UUID.test(body.leaseToken ?? '')) throw new Problem(400, 'invalid-result');
+  const { data: row, error } = await db.rpc('af_profile_set_front_release', { p_id: body.profileSetId.toLowerCase(), p_lease: body.leaseToken.toLowerCase() });
+  if (error) throw rpcProblem(error, PROFILE_SET_STATUS);
+  return { ok: true, profileSetId: row.id, stage: 'requeued' };
 }
 /**
  * The judge's verdict for a claimed set (`generation-worker/profile-fronts/finish`): { checks: { whole, front, single }, notes }.

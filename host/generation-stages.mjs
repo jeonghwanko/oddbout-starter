@@ -391,13 +391,16 @@ export function frontJudgePrompt() {
     'right" or "the legs are cut off at the knees"). Answer with JSON only, as the schema says.',
   ].join('\n');
 }
-/** The judge's verdict, checked again here: { checks, notes } with every check pass or fail and nothing else, or null. */
+/**
+ * The judge's verdict, checked again here: { checks, notes } with every check pass or fail and nothing else, or null. The notes lose
+ * control characters (the picture's text can steer them; escaped, 400 of them passed the column's 2000 bytes — 리뷰 2026-11-03).
+ */
 export function frontVerdict(value) {
-  const checks = value?.checks, notes = value?.notes;
+  const checks = value?.checks, notes = typeof value?.notes === 'string' ? value.notes.replace(/[\u0000-\u001f\u007f]/g, ' ').trim() : null;
   if (!value || typeof value !== 'object' || Object.keys(value).length !== 2 || !checks || typeof checks !== 'object'
     || Object.keys(checks).length !== FRONT_CHECKS.length || !FRONT_CHECKS.every(check => ['pass', 'fail'].includes(checks[check]))
-    || typeof notes !== 'string' || !notes.trim() || notes.length > 400) return null;
-  return { checks: Object.fromEntries(FRONT_CHECKS.map(check => [check, checks[check]])), notes: notes.trim() };
+    || !notes || notes.length > 400) return null;
+  return { checks: Object.fromEntries(FRONT_CHECKS.map(check => [check, checks[check]])), notes };
 }
 /** The og folder of one front check: `<day>-front-<set id without dashes>`, as og's job ids go. */
 export const frontJobId = (set, at = new Date()) => `${at.toISOString().slice(0, 10).replaceAll('-', '')}-front-${set.id.replaceAll('-', '')}`;

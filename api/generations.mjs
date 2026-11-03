@@ -13,8 +13,8 @@ import { SUBMISSION_STATUS, checkedManifest, storeAsset } from './submissions.mj
 import { DECISIONS, reviewEvidence } from './decisions-review.mjs';
 import { benchmarkReview } from './decisions-benchmark.mjs';
 import { BENCHMARK_BODY_BYTES } from './sequence-benchmark.mjs';
-import { PROFILE_SET_LIMITS, PROFILE_SET_VERSION, claimFrontCheck, expireUpload, finishFrontCheck, parseProfileSet, profileSetKey, storeOnce }
-  from './profile-sets.mjs';
+import { PROFILE_SET_LIMITS, PROFILE_SET_VERSION, claimFrontCheck, expireUpload, finishFrontCheck, parseProfileSet, profileSetKey, releaseFrontCheck,
+  storeOnce } from './profile-sets.mjs';
 import { BUCKET } from './submissions.mjs';
 import { accountTokens } from './account.mjs';
 /**
@@ -692,10 +692,13 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     const body = await readJson(request, GENERATION_LIMITS.result + 2000);
     // 정면 판정 (2026-11-03): owners' front paintings, checked by the official PC's codex between its stages (profile-sets.mjs claimFrontCheck).
     if (route === 'generation-worker/profile-fronts/claim') {
+      // Another host checks none, and its worker stops asking (`frontChecks: false`).
+      if (host !== null) return { ok: true, stage: 'idle', frontChecks: false };
       const set = await claimFrontCheck(db, host);
       return set ? { ok: true, profileSet: set } : { ok: true, stage: 'idle' };
     }
     if (route === 'generation-worker/profile-fronts/finish') return finishFrontCheck(db, host, body);
+    if (route === 'generation-worker/profile-fronts/release') return releaseFrontCheck(db, host, body);
     if (route === 'generation-worker/heartbeat') {
       const { health, usage } = fields(body, ['health', 'usage']);
       if (!isObject(health) || JSON.stringify(health).length > 2000) throw new Problem(422, 'invalid-health');
