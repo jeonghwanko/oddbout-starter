@@ -1,51 +1,51 @@
 # ODDBOUT distribution
 
-**Current source-kit release: 0.6.14** (2026-11-03 KST: MCP SDK v2 and the 2026-07-28 discovery probe).
+**Current source-kit release: 0.6.15** (2026-11-03 KST: the discovery probe time limit and sprite-gen 5fc42b6).
 
-The workspace MCP server, `creation:tool` and the broadcast producer client run on SDK v2 (`@modelcontextprotocol/server` and
-`@modelcontextprotocol/client` 2.4.0) in place of `@modelcontextprotocol/sdk` 1.32.1 (#295). Workspace tool results are byte-identical
-to 0.6.13. A tool name the server does not list is now the spec's `-32602` protocol error, which `creation:tool` reports as
-`{"ok":false,"code":"unknown-tool"}` instead of a failed workspace command. `npm run mcp:check -- --probe` also discovers the cloud server
-as a 2026-07-28 client (`server/discover`, then `tools/list`, no session) and reports it as `modernServer`; the probe fails unless
-both protocols discover it (#298). The contract, validators and sprite-gen pin are unchanged.
+`npm run mcp:check -- --probe` gives the 2026-07-28 discovery (`server/discover`, then `tools/list`) its own time limit instead of sharing
+the 2025 probe's 10 s (#303): the first probe after a deploy, with a cold Edge function and gateway, had reported `modernServer:
+network-error`. The sprite-gen pin moves from `704cb9e` to `5fc42b6` (#304): the Codex facing check now names its model,
+gpt-6.1-sol, instead of reading each login's `config.toml` or Codex's default; the reasoning effort still follows the login, and the
+logo text checks and other providers are unchanged. Workspace tools, the contract and the validators are unchanged.
 
-Cloud `prepare_fighter_packaging` points to the reviewed 0.6.14 runtime once `ai-fighter-mcp` is deployed with
+Cloud `prepare_fighter_packaging` points to the reviewed 0.6.15 runtime once `ai-fighter-mcp` is deployed with
 this pin. It also supplies the workspace execution instructions; the cloud cannot read Dots files. Install the locked Node
 dependencies in the extracted `plugin/runtime/`, then run its `inspect_fighter_packaging` and `pack_fighter_package`
 tools on the existing plan. There is no new generation or generation login.
 
-- [Download the 0.6.14 ZIP](https://oddbout.com/creator-kit/0.6.14/40015bf50ecf0c21daa51fc3e7fabb88b7df58fb6c311d913dc812c84619d579/oddbout-0.6.14.zip)
-- [Release manifest](https://oddbout.com/creator-kit/0.6.14/40015bf50ecf0c21daa51fc3e7fabb88b7df58fb6c311d913dc812c84619d579/release.json)
-- [Download helper](https://oddbout.com/creator-kit/0.6.14/40015bf50ecf0c21daa51fc3e7fabb88b7df58fb6c311d913dc812c84619d579/fetch-creator-kit.py)
+- [Download the 0.6.15 ZIP](https://oddbout.com/creator-kit/0.6.15/63a0fb169f063609aa80ff64815581daf948dbdc831d62c722dcd5d85b65296b/oddbout-0.6.15.zip)
+- [Release manifest](https://oddbout.com/creator-kit/0.6.15/63a0fb169f063609aa80ff64815581daf948dbdc831d62c722dcd5d85b65296b/release.json)
+- [Download helper](https://oddbout.com/creator-kit/0.6.15/63a0fb169f063609aa80ff64815581daf948dbdc831d62c722dcd5d85b65296b/fetch-creator-kit.py)
 
 | Verified item | Value |
 | --- | --- |
-| ZIP size | 4,213,571 bytes |
-| ZIP SHA-256 | `84c8355cd1dbaa2fa9c686e34d65ffd202ddaa54c1943e6dcfe3ef6b61c86e5d` |
-| Release manifest SHA-256 | `00ca58e5ad5ee7300b520d331c74b90bbb6039e4c29c20645ff2f9c0dca3f6c4` |
-| Runtime manifest SHA-256 | `ba587f0f9a01584e8ffb1017245f29a9c96f29da14a449f574d7ca87fc254731` |
+| ZIP size | 4,214,073 bytes |
+| ZIP SHA-256 | `17b999d8a179e08c45d27f789e26be2ecf5dbbf6b858b503917296b89fe903b6` |
+| Release manifest SHA-256 | `01eacc23cedb5d85ff5ecb6c379f1c8553cb1764852388b3db5dd30fe9680f97` |
+| Runtime manifest SHA-256 | `af05615c26b5dcfbc0ec158f20c98792aed8cf9bc72020ec3ed2b9e4df0b977c` |
 | Helper SHA-256 | `b66c31ff833816dfa74c90d9155359d3fdd484dff8c12759e48addde01707592` (unchanged) |
-| Archive build source | `c4986fa13633fb262347bca543cf3bc6224fcfe5` (main after [PR #299](https://github.com/jeonghwanko/oddbout-starter/pull/299)) |
-| Tested PR heads | `43f09419058ea0b912c8baa65e1f04cf9fbacaad` ([PR #295](https://github.com/jeonghwanko/oddbout-starter/pull/295)), `9665218cb4757710597a4cf6b50411416df051f6` ([PR #298](https://github.com/jeonghwanko/oddbout-starter/pull/298)), `2a35cfa0d94f0196e27772a72467e369a9b5e1df` ([PR #299](https://github.com/jeonghwanko/oddbout-starter/pull/299)) |
-| sprite-gen pin | `704cb9e5a34f16a0340e7fc6e46709a047ab02d4` (unchanged) |
-| Kit Pages publication | `a34121a5f57cdcb9cb6af7dbb8c687be633d71c9` |
+| Archive build source | `2f46dbe7fb7fc12d0c87eb2dc33d3dee13cdb7bb` (main after [PR #308](https://github.com/jeonghwanko/oddbout-starter/pull/308)) |
+| Tested PR heads | `ec5ad952d53ad06d01efa7c284cc80911e06b307` ([PR #303](https://github.com/jeonghwanko/oddbout-starter/pull/303)), `0a4b3d7ee74fbf82f5e2ffa95727870c2e5eac1c` ([PR #304](https://github.com/jeonghwanko/oddbout-starter/pull/304)), `cd26277313d666f66c229cc73df58fa4d73d19f3` ([PR #308](https://github.com/jeonghwanko/oddbout-starter/pull/308)) |
+| sprite-gen pin | `5fc42b6d2a57354f38e5c348d0bb35590a3ddcf0` |
+| Kit Pages publication | `b162e348d16e15ce9ada36a8a8763bcbc46ad905` |
 
-Full PR CI passed for #295, #298 and #299. The archive was built from a clean worktree at the main merge with the sprite-gen submodule
-checked out at its pin. The trusted helper downloaded the published release, verified it and extracted all 742 archive files. Locked
-production Node dependencies (now `@modelcontextprotocol/server` and `/client` 2.4.0) installed with no vulnerabilities reported. The
-extracted runtime reports version 0.6.14, its `creation:tool` lists all 18 workspace tools, `get_fighter_spec` answers with a one-line
-text, a mistyped tool name is reported as `unknown-tool`, and its `mcp:check --probe` found `mcp.oddbout.com` as both a 2025 and a
-2026-07-28 client. No Python engine ran.
+Full PR CI passed for #303, #304 and #308. The archive was built from a clean worktree at the main merge with the sprite-gen
+submodule checked out at its pin; a trial build of the PR head before the merge gave byte-identical release files (the source commit is
+recorded only in the private build report). The trusted helper downloaded the published release, verified it and extracted all 742
+archive files. Locked production Node dependencies installed with no vulnerabilities reported. The extracted runtime reports version
+0.6.15, its `creation:tool` lists all 18 workspace tools, `get_fighter_spec` answers with a one-line text, a mistyped tool name is
+reported as `unknown-tool`, its sprite-gen sets `CODEX_FACING_MODEL = "gpt-6.1-sol"`, and its `mcp:check --probe` found
+`mcp.oddbout.com` as both a 2025 and a 2026-07-28 client. No Python engine ran.
 
-Publication added only three release files, preserved 6,372 existing files without changes or deletions,
-and verified HTTP 200 and exact release bytes plus 12 unchanged site files at 2026-11-03T00:42:26.819Z. This release requires no game,
+Publication added only three release files, preserved 6,375 existing files without changes or deletions,
+and verified HTTP 200 and exact release bytes plus 12 unchanged site files at 2026-11-03T03:53:00.143Z. This release requires no game,
 API or site build.
 
-The Dots source pin is `c4986fa13633fb262347bca543cf3bc6224fcfe5` (0.6.14). It is still a candidate, with saved-VM acceptance pending.
+The Dots source pin is `2f46dbe7fb7fc12d0c87eb2dc33d3dee13cdb7bb` (0.6.15). It is still a candidate, with saved-VM acceptance pending.
 No Dots install was run at this pin, the saved Dots environment was not republished, and Grok sign-in, generation and delivery were not
 verified. No animation was generated and no registration was submitted during this release verification.
 
-Earlier releases (0.6.13 back to 0.4.0) and their verification records are in [records/KIT-RELEASES.md](records/KIT-RELEASES.md).
+Earlier releases (0.6.14 back to 0.4.0) and their verification records are in [records/KIT-RELEASES.md](records/KIT-RELEASES.md).
 When a new release becomes current, move the entry above there.
 
 For installation and migration use [ODDBOUT-PLUGIN.md](ODDBOUT-PLUGIN.md). `plugin:bundle` now produces a
