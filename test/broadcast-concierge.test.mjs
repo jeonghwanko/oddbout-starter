@@ -166,9 +166,9 @@ test('idempotent checkout: one credit pack per conversation is one PayPal order,
   assert.equal(await f.count('topups', "where owner='" + OWNER + "' and request_key<>'fixture-funding'"), 1);
 
   // The key is per credit pack and per conversation.
-  const other = await f.say(OWNER, 'and the big pack', [[fnCall('create_topup_checkout', { productId: 'sandbox-50000' })], [say('ok')]], one.conversationId);
+  const other = await f.say(OWNER, 'and the Series pack', [[fnCall('create_topup_checkout', { productId: 'studio-series-5000' })], [say('ok')]], one.conversationId);
   assert.notEqual(other.actions[0].intentId, intentId);
-  assert.deepEqual(f.orderOf(other.actions[0].intentId).purchase_units[0].amount, { currency_code: 'USD', value: '500.00' });
+  assert.deepEqual(f.orderOf(other.actions[0].intentId).purchase_units[0].amount, { currency_code: 'USD', value: '50.00' });
   assert.equal(f.createOrders(), 2);
   const fresh = await f.say(OWNER, 'a new chat', [[fnCall('create_topup_checkout', { productId: 'sandbox-1000' })], [say('ok')]]);
   assert.notEqual(fresh.conversationId, one.conversationId);
@@ -271,7 +271,7 @@ test('the concierge has no approval or start power: those tools are refused, quo
   assert.deepEqual(tools.map(tool => tool.name), FIVE_TOOLS);
   assert.deepEqual([...CONCIERGE_TOOLS], FIVE_TOOLS);
   assert.ok(tools.every(tool => tool.type === 'function' && tool.strict === true && tool.parameters.additionalProperties === false));
-  assert.deepEqual(tools.find(tool => tool.name === 'create_topup_checkout').parameters.properties.productId.enum, COMMERCE_CATALOG.products.map(product => product.id));
+  assert.deepEqual(tools.find(tool => tool.name === 'create_topup_checkout').parameters.properties.productId.enum, COMMERCE_CATALOG.products.filter(product=>!product.operatorOnly).map(product => product.id));
   const names = new Set(tools.flatMap(tool => Object.keys(tool.parameters.properties)));
   for (const forbidden of ['owner', 'requestKey', 'approvalId', 'confirmed', 'amountCents', 'credits', 'priceCredits', 'approvalUrl']) assert.equal(names.has(forbidden), false, `${forbidden} must not be a tool argument`);
 });
@@ -300,7 +300,7 @@ test('quote_broadcast and tool arguments fail as data the model can read, never 
   const output = shown(f.model.calls.at(-1).input, prices.call_id);
   assert.equal(output.ok, true);
   assert.equal(output.prices.version, COMMERCE_CATALOG.version);
-  assert.deepEqual(output.prices.creditPacks.map(pack => [pack.productId, pack.credits, pack.priceCents]), COMMERCE_CATALOG.products.map(pack => [pack.id, pack.credits, pack.amountCents]));
+  assert.deepEqual(output.prices.creditPacks.map(pack => [pack.productId, pack.credits, pack.priceCents]), COMMERCE_CATALOG.products.filter(pack=>!pack.operatorOnly).map(pack => [pack.id, pack.credits, pack.amountCents]));
   assert.equal(output.prices.cupCredits, 25);
   assert.deepEqual(output.prices.hosts, ['current-pc']);
   assert.deepEqual(output.prices.fighters, COMMERCE_CATALOG.fighters);
@@ -399,7 +399,7 @@ test('a failed model call is a 503 with no detail and leaves the transcript as i
   assert.equal(f.model.calls.at(-1).input[0].role, 'developer');
 });
 
-test('a checkout whose order creation stays unknown past the window gets a new key, and one turn shows one PayPal button', async t => {
+test('an unknown checkout stays on its original intent after the replay window instead of creating another purchase', async t => {
   let clock = Date.now();
   const f = await fixture(t, {}, { now: () => clock });
   f.failNextOrder();
@@ -409,14 +409,11 @@ test('a checkout whose order creation stays unknown past the window gets a new k
   const stuck = await f.say(OWNER, 'again', [[fnCall('create_topup_checkout', { productId: 'sandbox-1000' })], [say('needs reconciliation')]], failed.conversationId);
   assert.deepEqual(stuck.toolCalls, [{ name: 'create_topup_checkout', ok: false, code: 'checkout-needs-reconciliation' }]);
   assert.equal(f.orders.size, 0);
-  // The next attempt uses a new key: a new intent and order. Asking twice in one turn still yields one button.
-  // The ledger stamps intents with database time, so the service clock returns to it for the new intent.
-  clock = Date.now();
   const fresh = await f.say(OWNER, 'once more', [[fnCall('create_topup_checkout', { productId: 'sandbox-1000' })], [fnCall('create_topup_checkout', { productId: 'sandbox-1000' })], [say('link')]], failed.conversationId);
-  assert.equal(fresh.actions.length, 1);
-  assert.equal(fresh.actions[0].approvalUrl, 'https://www.sandbox.paypal.com/checkoutnow?token=ORDER1');
-  assert.equal(f.orders.size, 1);
-  assert.equal(await f.count('topups', `where owner = '${OWNER}' and request_key <> 'fixture-funding'`), 2, 'the unknown intent and the new one');
+  assert.equal(fresh.actions.length, 0);
+  assert.ok(fresh.toolCalls.every(call=>call.code==='checkout-needs-reconciliation'));
+  assert.equal(f.orders.size, 0);
+  assert.equal(await f.count('topups', `where owner = '${OWNER}' and request_key <> 'fixture-funding'`), 1, 'only the original unknown intent');
 });
 
 test('a failed turn after a checkout keeps the checkout key, so the retry reuses the same PayPal order', async t => {

@@ -4,7 +4,9 @@ let client, session, catalog, journal, config;
 let walletSpendingBlocked = false;
 let refreshRevision = 0, pollTimer;
 let paidOperation = null, paidList = [], paidNextCursor = null, paidRevision = 0, paidSessionEpoch = 0, paidTimer, paidCheckoutLink = null;
+let purchases = [], purchaseRevision = 0, purchaseEpoch = 0, purchaseTimer;
 let manualSessionSelection = false, requestedOperation = new URLSearchParams(location.search).get('operation');
+let returnedIntentId = new URLSearchParams(location.search).get('intent') ?? '', returnedIntentCancelled = new URLSearchParams(location.search).get('cancelled') === '1', returnedIntentChecked = false;
 const FIGHTER_NAMES = { kuma: 'Kuma', yume: 'Yume', bravow: 'Bravow', beotim: 'Beotim' };
 // The AI producer card is data-driven from the owner-only producer route. Every string it shows may
 // come from a model, so it is only ever written with textContent.
@@ -27,10 +29,15 @@ function budgetFeedback(message, error = false) {
 const show = value => {
   $('status').textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
   $('activity-summary').textContent = typeof value === 'string' ? value
-    : value.status === 'credited' ? 'Top-up complete. Your credits are ready.'
+    : value.status === 'credited' ? `${Number(value.credits ?? 0).toLocaleString()} Studio Credits are ready to use.`
     : value.approved ? 'Budget approved. You can start your rehearsal.'
     : 'Session updated. View the details below.';
 };
+function showCreditsReady(credits) {
+  const count = Number.isSafeInteger(credits) && credits > 0 ? credits.toLocaleString() + ' ' : '';
+  const message = `${count}Studio Credits added. Your balance is ready to use.`;
+  $('status').textContent = message; $('activity-summary').textContent = message;
+}
 async function call(path, body) {
   if (!session) throw new Error('Sign in to your ODDBOUT account first.');
   const owner = session.user.id, accountScope = journal;
@@ -60,13 +67,18 @@ function updateControls() {
     const disabled = busyActions.has(id) || !session || !config?.commerceEnabled
       || (walletSpendingBlocked && ['topup-form', 'budget-form', 'broadcast-form', 'host-cup'].includes(id))
       || (['topup-form', 'verify-payment'].includes(id) && !catalog?.paypalConfigured);
-    for (const button of [...$(id).querySelectorAll('button'), ...($(id).tagName === 'BUTTON' ? [$(id)] : [])]) button.disabled = disabled;
+    for (const button of [...$(id).querySelectorAll('button'), ...($(id).tagName === 'BUTTON' ? [$(id)] : [])]) {
+      button.disabled = id === 'topup-form' && button.classList.contains('package-card')
+        ? !config?.commerceEnabled || !catalog?.paypalConfigured || Boolean(journal?.get('topup')) || busyActions.has('topup-form') : disabled;
+    }
   }
   $('paid-consent').disabled = !paidBroadcastMode() || !session;
   $('paid-renew-consent').disabled = !paidBroadcastMode() || !session;
   $('paid-approve').disabled = busyActions.has('paid-approve') || !session || !paidBroadcastMode() || !$('paid-consent').checked;
   $('paid-renew').disabled = busyActions.has('paid-renew') || !session || !paidBroadcastMode() || !$('paid-renew-consent').checked;
   for (const id of ['paid-checkout','paid-cancel','paid-refresh','paid-more']) $(id).disabled = busyActions.has(id) || !session || (id === 'paid-checkout' && !paidBroadcastMode());
+  updateTopupPurchaseButton();
+  $('purchases-refresh').disabled = !session || busyActions.has('purchases-refresh');
   updateConcierge();
   updateReconcile();
 }
@@ -106,7 +118,7 @@ function action(id, callback, event = 'click', exclusive = false) {
   });
 }
 const fighters = () => $('fighterIds').value.split(',').map(id => id.trim()).filter(Boolean);
-const renderHost = () => { $('hosts-readiness').textContent = $('hostId').value + ' · Check OBS on this host before starting.'; };
+const renderHost = () => { $('hosts-readiness').textContent = paidBroadcastMode() ? 'Check OBS on the configured host before starting.' : $('hostId').value + ' · Check OBS on this host before starting.'; };
 function renderLineup() {
   $('fighter-lineup').replaceChildren(...fighters().map(id => {
     const chip = document.createElement('span');
@@ -132,9 +144,167 @@ function showCheckout(result) {
   link.hidden = !href;
   if (href) link.href = href;
   $('payment-recovery').hidden = false;
-  show('Open PayPal in the new tab, approve the order, then return here and verify payment.');
+  show('Continue this PayPal checkout. Payment is added to your balance only after PayPal confirms it.');
 }
 const plain = (value, max = 400) => typeof value === 'string' ? value.slice(0, max) : '';
+const PRODUCT_STORAGE_KEY = 'oddbout-showrunner-product';
+function creditName() { return plain(catalog?.service?.creditName, 40) || 'Studio Credits'; }
+function priceLabel(amountCents, currency = 'USD') {
+  if (!Number.isSafeInteger(amountCents) || amountCents < 0) return 'Price unavailable';
+  try { return new Intl.NumberFormat(undefined, { style: 'currency', currency: plain(currency,3).toUpperCase() || 'USD' }).format(amountCents / 100); }
+  catch { return '$' + (amountCents / 100).toFixed(2); }
+}
+function publicProducts() { return (Array.isArray(catalog?.products) ? catalog.products : []).filter(product => product && product.operatorOnly !== true); }
+function selectedProduct() { return catalog?.products?.find(product => product.id === $('productId').value) ?? null; }
+function productCups(product) {
+  const unitPrice = Number(catalog?.tools?.host_cup?.credits);
+  if (Number.isSafeInteger(product?.credits) && Number.isSafeInteger(unitPrice) && unitPrice > 0) return Math.floor(product.credits / unitPrice);
+  return Number.isSafeInteger(product?.maxCups) ? product.maxCups : null;
+}
+function rememberSelectedProduct(id) {
+  const product = publicProducts().find(item => item.id === id);
+  if (!product) return;
+  try { sessionStorage.setItem(PRODUCT_STORAGE_KEY, id); } catch { /* Selection still works in this page. */ }
+}
+function renderPackages() {
+  const all = Array.isArray(catalog?.products) ? catalog.products : [];
+  const select = $('productId');
+  select.replaceChildren(...all.map(product => new Option(`${plain(product.name,80)} · ${priceLabel(product.amountCents,catalog.currency)}`, product.id)));
+  let remembered = '';
+  try { remembered = sessionStorage.getItem(PRODUCT_STORAGE_KEY) ?? ''; } catch { /* Use the first public pack. */ }
+  const products = publicProducts();
+  if (products.some(product => product.id === remembered)) select.value = remembered;
+  else if (products.length) select.value = products[0].id;
+  const cards = $('package-cards');
+  const iconNames = { bell: 'i-bell', bracket: 'i-bracket' };
+  cards.replaceChildren(...products.map(product => {
+    const button = textElement('button','package-card'); button.type = 'button'; button.dataset.productId = product.id;
+    button.setAttribute('aria-pressed', String(select.value === product.id));
+    const icon = document.createElementNS('http://www.w3.org/2000/svg','svg'); icon.classList.add('package-icon'); icon.setAttribute('aria-hidden','true');
+    const use = document.createElementNS('http://www.w3.org/2000/svg','use'); use.setAttribute('href','#' + (iconNames[product.icon] ?? 'i-bell')); icon.append(use);
+    const title = textElement('strong','package-name',plain(product.name,80));
+    const cost = textElement('span','package-price',priceLabel(product.amountCents,catalog.currency));
+    const quantity = textElement('span','package-quantity',`${Number(product.credits).toLocaleString()} ${creditName()}`);
+    const cups = productCups(product);
+    const estimate = textElement('span','package-cups',cups === null ? '' : `Up to ${cups.toLocaleString()} cups`);
+    const description = textElement('span','package-description',plain(product.description,160));
+    const terms = textElement('span','package-terms','One-time purchase · No subscription');
+    button.append(icon,title,cost,quantity,estimate,description,terms);
+    button.addEventListener('click', () => { select.value = product.id; rememberSelectedProduct(product.id); updatePackageSelection(); });
+    return button;
+  }));
+  updatePackageSelection();
+}
+function updatePackageSelection() {
+  const id = $('productId').value;
+  const pending = Boolean(journal?.get('topup'));
+  for (const card of $('package-cards').querySelectorAll('[data-product-id]')) {
+    card.setAttribute('aria-pressed', String(card.dataset.productId === id));
+    card.disabled = pending;
+  }
+  rememberSelectedProduct(id);
+  updateTopupPurchaseButton();
+}
+function updateTopupPurchaseButton() {
+  const button = $('topup-submit'), product = selectedProduct(), pending = journal?.get('topup');
+  if (!button) return;
+  if (pending) button.textContent = pending.result ? 'Open the pending checkout above' : 'Continue pending purchase';
+  else if (product) button.textContent = `Buy ${plain(product.name,80)} · ${priceLabel(product.amountCents,catalog?.currency)}`;
+  else button.textContent = 'Choose a credit pack';
+  button.disabled = !session || !config?.commerceEnabled || !catalog?.paypalConfigured || (!product && !pending) || walletSpendingBlocked || busyActions.has('topup-form');
+}
+function purchaseState(status) {
+  return ({ credited:'Added', ordered:'PayPal checkout started', created:'Checkout started', pending:'Payment pending', failed:'Not completed', refunded:'Refunded', reversed:'Reversed' })[status]
+    ?? (plain(status,40).replaceAll('_',' ') || 'Status unavailable');
+}
+function purchaseDate(value) { const date = new Date(value); return Number.isNaN(date.getTime()) ? 'Date unavailable' : date.toLocaleString(); }
+function renderPurchases() {
+  const panel = $('purchase-history'); panel.hidden = !session || !config?.commerceEnabled;
+  const host = $('purchase-list');
+  host.replaceChildren(...purchases.map(purchase => {
+    const row = textElement('article','purchase-row');
+    const heading = textElement('div','purchase-heading');
+    heading.append(textElement('strong','purchase-name',plain(purchase.productName,80) || 'Studio Credits'),textElement('span','purchase-state',purchaseState(purchase.status)));
+    const credits = Number.isSafeInteger(purchase.credits) ? `${purchase.credits.toLocaleString()} ${creditName()}` : creditName();
+    const amount = priceLabel(purchase.amountCents,purchase.currency);
+    row.append(heading,textElement('p','purchase-meta',`${credits} · ${amount} · ${purchaseDate(purchase.createdAt)}`));
+    if (purchase.canCheckout === true) {
+      const button = textElement('button','button button-secondary button-small','Continue this checkout'); button.type='button';
+      button.addEventListener('click', () => recoverPurchase(purchase,button)); row.append(button);
+    }
+    return row;
+  }));
+  if (!purchases.length && session) host.append(textElement('p','purchase-empty','No purchases on this account yet.'));
+}
+function renderShowSummary(report) {
+  const summary = $('show-summary'), broadcast = report?.broadcast, jobs = Array.isArray(report?.jobs) ? report.jobs : [];
+  if (!broadcast) { summary.hidden = true; $('show-summary-metrics').replaceChildren(); $('show-summary-winners').textContent = ''; return; }
+  const completed = jobs.filter(job => job.status === 'succeeded');
+  const spent = report.confirmedSpentCredits ?? broadcast.spentCredits;
+  const remaining = report.remainingReservedCredits ?? broadcast.reservedCredits;
+  const metrics = [['Completed cups', completed.length.toLocaleString()],
+    ['Studio Credits used', Number.isSafeInteger(spent) ? spent.toLocaleString() : '—'],
+    ['Credits remaining', Number.isSafeInteger(remaining) ? remaining.toLocaleString() : '—']];
+  $('show-summary-metrics').replaceChildren(...metrics.map(([label,value]) => {
+    const item = textElement('div','show-summary-metric'); item.append(textElement('span','show-summary-label',label),textElement('strong','show-summary-value',value)); return item;
+  }));
+  const final = completed.at(-1), winner = final?.result?.winnerId;
+  $('show-summary-winners').textContent = typeof winner === 'string' && winner
+    ? `Latest verified cup winner: ${fighterName(winner)}` : '';
+  summary.hidden = false;
+  const operationCompleted = paidOperation?.state === 'completed'
+    && (paidOperation.broadcastId === broadcast.id || $('broadcastId').value.trim() === broadcast.id);
+  if (broadcast.status === 'completed' || operationCompleted) {
+    $('activity-summary').textContent = `Show complete · ${completed.length.toLocaleString()} ${completed.length === 1 ? 'cup' : 'cups'} · ${Number.isSafeInteger(spent) ? spent.toLocaleString() : '—'} Studio Credits used.`;
+  }
+}
+async function loadPurchases() {
+  if (!session || !config?.commerceEnabled) return;
+  const revision = ++purchaseRevision, epoch = purchaseEpoch, owner = session.user.id;
+  $('purchase-history').hidden = false; $('purchases-status').textContent = 'Loading recent purchases…'; $('purchases-status').classList.remove('is-error');
+  const data = await call('purchases');
+  if (revision !== purchaseRevision || epoch !== purchaseEpoch || session?.user.id !== owner) return;
+  purchases = Array.isArray(data.items) ? data.items.slice(0,50) : [];
+  let matchedCredit = null;
+  const pending = journal?.get('topup');
+  if (pending?.result?.intentId) matchedCredit = purchases.find(item => item.id === pending.result.intentId && item.status === 'credited') ?? null;
+  if (matchedCredit && pending) {
+    journal?.complete('topup', pending.requestKey);
+    if ($('payment-intent').value === matchedCredit.id) { $('payment-intent').value = ''; $('paypal-approval').hidden = true; $('paypal-approval').removeAttribute('href'); }
+    $('payment-recovery').hidden = true;
+  }
+  renderPurchases();
+  $('purchases-status').textContent = matchedCredit ? `${plain(matchedCredit.productName,80) || 'Purchase'} added to your Studio Credits.` : '';
+  if (matchedCredit) { await refresh(); showCreditsReady(matchedCredit.credits); }
+  updateControls();
+}
+async function recoverPurchase(purchase, button) {
+  if (button.disabled || !session) return;
+  const owner = session.user.id, epoch = purchaseEpoch; button.disabled = true;
+  try {
+    const checkout = await call(`topups/${encodeURIComponent(purchase.id)}/checkout`,{ confirmed:true });
+    if (session?.user.id !== owner || purchaseEpoch !== epoch) return;
+    if (checkout.status === 'credited') { await refresh(); showCreditsReady(checkout.credits); }
+    else showCheckout(checkout);
+    try { await loadPurchases(); } catch {
+      if (session?.user.id === owner && purchaseEpoch === epoch) { $('purchases-status').textContent = 'Checkout recovered. Purchase history will refresh shortly.'; $('purchases-status').classList.add('is-error'); }
+    }
+  } catch (error) {
+    if (session?.user.id === owner && purchaseEpoch === epoch) { $('purchases-status').textContent = error.code === 'checkout-outcome-unknown' || error.code === 'checkout-needs-reconciliation'
+      ? 'This payment needs a status check. No new checkout was created.' : 'The existing checkout could not be recovered. Refresh to check its status.'; $('purchases-status').classList.add('is-error'); }
+  } finally { if (session?.user.id === owner && purchaseEpoch === epoch) button.disabled = false; }
+}
+const PURCHASE_POLL_MS = 30_000;
+function schedulePurchasesPoll() {
+  clearTimeout(purchaseTimer);
+  if (!session || !config?.commerceEnabled) return;
+  const owner = session.user.id, epoch = purchaseEpoch;
+  purchaseTimer = setTimeout(async () => {
+    try { if (!document.hidden) await loadPurchases(); }
+    catch { if (session?.user.id === owner && purchaseEpoch === epoch) { $('purchases-status').textContent = 'Purchase status could not be refreshed. Your records are unchanged.'; $('purchases-status').classList.add('is-error'); } }
+    finally { if (session?.user.id === owner && purchaseEpoch === epoch) schedulePurchasesPoll(); }
+  },PURCHASE_POLL_MS);
+}
 function paidOperationStatus(text, error = false) {
   const status = $('paid-operation-status'); status.textContent = text; status.classList.toggle('is-error', error);
 }
@@ -156,11 +326,11 @@ const PAID_ERRORS = { 'automatic-producer-unavailable': 'Automatic producer star
 function operationTime(value) { const date = new Date(value); return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString(); }
 function paidSummary(operation) {
   const input = operation.input ?? {}, pack = input.product, shortfall = Math.max(0,(input.maxCredits ?? 0) - (operation.availableCredits ?? 0));
-  const funding = operation.payment ? `${plain(operation.payment.status,40).replaceAll('_',' ')} · $${(operation.payment.amountCents/100).toFixed(2)} Sandbox · ${operation.payment.credits} credits`
-    : shortfall === 0 ? `Covered by ${Number(operation.availableCredits ?? 0).toLocaleString()} available credits`
-    : pack ? `${plain(pack.name,100)} · $${(pack.amountCents/100).toFixed(2)} Sandbox · ${Number(pack.credits).toLocaleString()} credits` : 'PayPal Sandbox';
-  const fields = [['Host', input.hostId], ['Session', input.channelId], ['Credit limit', Number.isSafeInteger(input.maxCredits) ? input.maxCredits.toLocaleString() + ' credits' : '—'],
-    ['Cup price', Number.isSafeInteger(input.cupCredits) ? input.cupCredits.toLocaleString() + ' credits' : '—'],
+  const funding = operation.payment ? `${plain(operation.payment.status,40).replaceAll('_',' ')} · $${(operation.payment.amountCents/100).toFixed(2)} · ${operation.payment.credits} ${creditName()}`
+    : shortfall === 0 ? `Covered by ${Number(operation.availableCredits ?? 0).toLocaleString()} available ${creditName()}`
+    : pack ? `${plain(pack.name,100)} · $${(pack.amountCents/100).toFixed(2)} · ${Number(pack.credits).toLocaleString()} ${creditName()}` : 'PayPal Sandbox';
+  const fields = [['Host', input.hostId], ['Session', input.channelId], ['Credit limit', Number.isSafeInteger(input.maxCredits) ? input.maxCredits.toLocaleString() + ' ' + creditName() : '—'],
+    ['Cup price', Number.isSafeInteger(input.cupCredits) ? input.cupCredits.toLocaleString() + ' ' + creditName() : '—'],
     ['Maximum cups', Number.isSafeInteger(input.maxCups) ? input.maxCups.toLocaleString() : '—'],
     ['Fighters', Array.isArray(input.fighterIds) ? input.fighterIds.map(fighterName).join(' · ') : '—'], ['Approval deadline', operationTime(operation.effectiveEndsAt ?? input.endsAt)],
     ['Funding', funding]];
@@ -236,8 +406,9 @@ function applyPaidOperationSession(operation) {
   if (!current) return false;
   $('broadcastId').value = ''; journal?.select('broadcastId', '');
   refreshRevision++; clearTimeout(pollTimer);
+  $('activity-summary').textContent = 'This saved broadcast has not started yet.';
   $('active-jobs').replaceChildren(); $('report').textContent = 'This saved broadcast has not started yet.';
-  clearProducer(); clearPayouts();
+  clearProducer(); clearPayouts(); renderShowSummary(null);
   return true;
 }
 async function refreshPaidOperations({ loadMore = false } = {}) {
@@ -421,7 +592,7 @@ async function refresh() {
       config?.autoProducer ? call(path + '/producer').catch(() => ({ unavailable: true })) : null,
       payoutFee() ? call(path + '/payouts').catch(() => ({ unavailable: true })) : null]);
     if (revision !== refreshRevision || $('broadcastId').value.trim() !== id) return;
-    $('report').textContent = JSON.stringify(report, null, 2);
+    $('report').textContent = JSON.stringify(report, null, 2); renderShowSummary(report);
     renderProducer(producer);
     // A payout action or a newer list that finished meanwhile is newer than this answer.
     if (payoutsScopeNow === payoutsScope && payoutsLoadNow === payoutsLoad) setPayouts(payouts);
@@ -429,7 +600,30 @@ async function refresh() {
     $('active-jobs').replaceChildren(...jobs.map(job => {
       const row = document.createElement('p'); row.textContent = job.status + ' · ' + job.priceCredits + ' credits · ' + job.fighterIds.join(' / '); return row;
     }));
-  } else { renderProducer(null); clearPayouts(); }
+  } else { renderProducer(null); clearPayouts(); renderShowSummary(null); }
+}
+async function captureReturnedIntent(owner, epoch) {
+  if (!returnedIntentId || !UUID_PATTERN.test(returnedIntentId) || session?.user.id !== owner || purchaseEpoch !== epoch) return;
+  try {
+    const result = await call('topups/' + encodeURIComponent(returnedIntentId) + '/capture', {});
+    if (session?.user.id !== owner || purchaseEpoch !== epoch) return;
+    if (result.status === 'credited') {
+      const pending = journal?.get('topup');
+      if (pending?.result?.intentId === returnedIntentId) journal?.complete('topup', pending.requestKey);
+      if ($('payment-intent').value === returnedIntentId) { $('payment-intent').value = ''; $('paypal-approval').hidden = true; $('paypal-approval').removeAttribute('href'); }
+      $('payment-recovery').hidden = true; staleReconcile();
+      $('purchases-status').textContent = `${Number(result.credits ?? 0).toLocaleString()} ${creditName()} added to your balance.`;
+    } else $('purchases-status').textContent = 'PayPal has not confirmed this purchase yet. The same purchase is still being checked.';
+    await refresh(); await loadPurchases();
+    if (result.status === 'credited') showCreditsReady(result.credits);
+  } catch (error) {
+    if (session?.user.id !== owner || purchaseEpoch !== epoch) return;
+    $('purchases-status').textContent = error.code === 'paypal-approval-required'
+      ? 'PayPal has not confirmed this purchase yet. Your credits have not changed.'
+      : 'The purchase status is not confirmed yet. The original checkout is preserved.';
+    $('purchases-status').classList.toggle('is-error', error.code !== 'paypal-approval-required');
+    try { await loadPurchases(); } catch { /* The status message remains; no replacement checkout is made. */ }
+  }
 }
 action('google-signin', async () => {
   if (!client) throw new Error('Account connection is not configured on this development server.');
@@ -438,10 +632,22 @@ action('google-signin', async () => {
   if (error) throw error;
 });
 action('signout', async () => { const result = await client?.auth.signOut(); if (result?.error) throw result.error; });
+document.getElementById('productId').addEventListener('change', updatePackageSelection);
+document.getElementById('purchases-refresh').addEventListener('click', async () => {
+  if (busyActions.has('purchases-refresh')) return;
+  const owner = session?.user.id, epoch = purchaseEpoch;
+  busyActions.add('purchases-refresh'); updateControls();
+  try { await loadPurchases(); } catch {
+    if (session?.user.id === owner && purchaseEpoch === epoch) { $('purchases-status').textContent = 'Purchase history could not be refreshed. Try again shortly.'; $('purchases-status').classList.add('is-error'); }
+  }
+  finally { if (session?.user.id === owner && purchaseEpoch === epoch) busyActions.delete('purchases-refresh'); updateControls(); }
+});
 action('topup-form', async () => {
-  const saved = requireJournal(), { op, result } = await mutate(saved, 'topup', { productId: $('productId').value }, 'checkout');
-  if (result.status === 'credited') { saved.complete('topup', op.requestKey); show(result); await refresh(); }
+  const saved = requireJournal(), input = saved.get('topup')?.input ?? { productId: $('productId').value };
+  const { op, result } = await mutate(saved, 'topup', input, 'checkout');
+  if (result.status === 'credited') { saved.complete('topup', op.requestKey); await refresh(); showCreditsReady(result.credits); }
   else { saved.acknowledge('topup', op.requestKey, result); showCheckout(result); }
+  await loadPurchases();
 }, 'submit', true);
 action('verify-payment', async () => {
   const saved = requireJournal(), intent = $('payment-intent').value.trim();
@@ -453,7 +659,7 @@ action('verify-payment', async () => {
     $('paypal-approval').hidden = true;
     staleReconcile();
   }
-  show(result); await refresh();
+  show(result); await refresh(); await loadPurchases();
 }, 'click', true);
 action('budget-form', async () => {
   if (paidBroadcastMode()) { await preparePaidBroadcast(); return; }
@@ -1067,6 +1273,8 @@ function authChanged(value) {
   const previousOwner = session?.user.id;
   if (previousOwner !== value?.user.id) {
     refreshRevision++; paidRevision++; paidSessionEpoch++; clearTimeout(paidTimer); paidOperation = null; paidList = []; paidNextCursor = null; paidCheckoutLink = null;
+    purchaseRevision++; purchaseEpoch++; clearTimeout(purchaseTimer); purchases = []; $('purchase-list').replaceChildren(); $('purchases-status').textContent = '';
+    $('purchase-history').hidden = true;
     manualSessionSelection = false; $('paid-broadcast-review').hidden = true; $('saved-broadcasts').hidden = true; $('paid-broadcast-list').replaceChildren();
     walletSpendingBlocked = false; $('wallet-status').textContent = ''; budgetFeedback(''); resetConcierge(); resetReconcile();
   }
@@ -1085,7 +1293,7 @@ function authChanged(value) {
     show(value ? 'Account connected. Loading your current balance.' : 'Signed out.');
     for (const id of ['balance', 'available', 'reserved']) $(id).textContent = '—';
     $('active-jobs').replaceChildren(); $('report').textContent = 'No report loaded.';
-    clearProducer(); clearPayouts();
+    clearProducer(); clearPayouts(); renderShowSummary(null);
     $('approvalId').value = journal?.selected('approvalId') ?? '';
     $('broadcastId').value = journal?.selected('broadcastId') ?? '';
     $('payment-recovery').hidden = true;
@@ -1105,17 +1313,34 @@ function authChanged(value) {
     const pendingCup = journal?.get('cup')?.input;
     if (pendingCup) { $('broadcastId').value = pendingCup.broadcastId; $('fighterIds').value = pendingCup.fighterIds.join(','); show('A cup request is pending. Queue one cup recovers the same request.'); }
   }
+  updatePackageSelection(); renderPurchases();
   renderLineup();
   renderHost();
   if (value && config?.commerceEnabled) setTimeout(() => refresh().catch(error => show(error.message)), 0);
+  if (value && config?.commerceEnabled) {
+    const owner = value.user.id, epoch = purchaseEpoch;
+    setTimeout(() => loadPurchases().then(schedulePurchasesPoll).catch(() => {
+      if (session?.user.id !== owner || purchaseEpoch !== epoch) return;
+      $('purchases-status').textContent = 'Purchase history could not be loaded. Use Refresh to try again.'; $('purchases-status').classList.add('is-error'); schedulePurchasesPoll();
+    }), 0);
+    if (returnedIntentId && !returnedIntentCancelled && !returnedIntentChecked) {
+      returnedIntentChecked = true;
+      setTimeout(() => captureReturnedIntent(owner, epoch), 0);
+    }
+  }
   if (value && config?.paidOperations) setTimeout(() => refreshPaidOperations().catch(() => paidOperationStatus('Saved broadcasts could not be loaded. Use Refresh to try again.', true)), 0);
 }
 async function initialize() {
   renderLineup();
   config = await fetch('./config').then(r => r.json());
+  for (const id of ['execution-settings','session-reference']) $(id).open = !paidBroadcastMode();
+  $('hosts-readiness').hidden = paidBroadcastMode();
   $('broadcast-form').hidden = paidBroadcastMode(); $('host-cup').hidden = paidBroadcastMode();
   const result = await fetch('/commerce/catalog').then(r => r.json()); catalog = result.catalog;
-  $('productId').replaceChildren(...catalog.products.map(product => new Option(product.name + ' · $' + (product.amountCents / 100).toFixed(2) + ' USD', product.id)));
+  const serviceName = plain(catalog.service?.name,80) || 'ODDBOUT Showrunner';
+  document.title = serviceName + ' · Studio'; $('showrunner-brand-name').textContent = serviceName; document.querySelector('.studio-label').textContent = serviceName;
+  document.querySelector('.credit-unit').textContent = creditName();
+  renderPackages();
   $('hostId').replaceChildren(...catalog.hosts.map(host => new Option(host.id, host.id)));
   $('hostId').addEventListener('change', renderHost); renderHost();
   updateControls();
@@ -1126,8 +1351,9 @@ async function initialize() {
   $('configuration-status').hidden = !$('configuration-status').textContent;
   const query = new URLSearchParams(location.search), intent = query.get('intent');
   if (intent) {
-    show(query.get('cancelled') === '1' ? 'PayPal approval cancelled. No credits were added by this return.'
-      : config.paidOperations ? 'Payment status is updating for your saved broadcast.' : 'Return here and choose Verify payment to confirm your top-up.');
+    returnedIntentId = UUID_PATTERN.test(intent) ? intent : '';
+    returnedIntentCancelled = query.get('cancelled') === '1';
+    show(returnedIntentCancelled ? 'PayPal approval was cancelled. No credits were added.' : 'Checking this purchase with PayPal. Studio Credits update only after PayPal confirms it.');
     history.replaceState(null, '', '/broadcast/');
   }
   if (!config.authConfigured) { show('No balances or successful operations are simulated.'); return; }

@@ -206,14 +206,16 @@ export function createPayPalSandbox({ clientId, clientSecret, merchantId, fetch:
   }
 
   return {
-    /** @param {{requestId:string,referenceId:string,amountMinor:number,currency:string,returnUrl:string,cancelUrl:string}} input */
+    /** @param {{requestId:string,referenceId:string,amountMinor:number,currency:string,returnUrl:string,cancelUrl:string,description?:string,brandName?:string}} input */
     async createOrder(input) {
       const requestId = text(input.requestId, 108);
       const referenceId = text(input.referenceId, 256);
       const amount = { currency_code: input.currency, value: money(input.amountMinor, input.currency) };
       const order = await api('/v2/checkout/orders', { method: 'POST', requestId, mutation: true, body: {
-        intent: 'CAPTURE', purchase_units: [{ reference_id: referenceId, amount, payee: { merchant_id: merchantId } }],
-        payment_source: { paypal: { experience_context: { return_url: callbackUrl(input.returnUrl), cancel_url: callbackUrl(input.cancelUrl), shipping_preference: 'NO_SHIPPING', user_action: 'PAY_NOW' } } },
+        intent: 'CAPTURE', purchase_units: [{ reference_id: referenceId, amount, payee: { merchant_id: merchantId },
+          ...(input.description === undefined ? {} : {description:text(input.description,127)}) }],
+        payment_source: { paypal: { experience_context: { return_url: callbackUrl(input.returnUrl), cancel_url: callbackUrl(input.cancelUrl), shipping_preference: 'NO_SHIPPING', user_action: 'PAY_NOW',
+          ...(input.brandName === undefined ? {} : {brand_name:text(input.brandName,127)}) } } },
       } });
       try {
         const orderId = id(order.id);

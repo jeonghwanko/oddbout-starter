@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light" />
     <meta name="theme-color" content="#f7f6f0" />
-    <title>ODDBOUT · Broadcast Studio</title>
+    <title>ODDBOUT Showrunner · Studio</title>
     <link rel="stylesheet" href="./style.css" />
-    <link rel="icon" href="./assets/kuma.webp" type="image/webp" />
+    <link rel="icon" href="./assets/showrunner.svg" type="image/svg+xml" />
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
@@ -66,6 +66,12 @@
         <symbol id="i-check" viewBox="0 0 24 24">
           <path d="M12 3 5 6v5c0 5 3 8 7 10 4-2 7-5 7-10V6Zm-3 9 2 2 4-4" />
         </symbol>
+        <symbol id="i-bell" viewBox="0 0 24 24">
+          <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" />
+        </symbol>
+        <symbol id="i-bracket" viewBox="0 0 24 24">
+          <path d="M5 4v5h5M19 4v5h-5M5 9v3a2 2 0 0 0 2 2h3v6m9-11v3a2 2 0 0 1-2 2h-3v6" />
+        </symbol>
       </defs>
     </svg>
     <header class="topbar">
@@ -76,9 +82,9 @@
             alt="ODDBOUT Fight Club"
             width="378"
             height="80" /></a
-        ><span class="studio-label">Broadcast Studio</span>
+        ><span class="studio-label">ODDBOUT Showrunner</span>
         <nav aria-label="Studio">
-          <a href="#saved-broadcasts">Saved broadcasts</a><a href="/broadcast/tasks/">Saved cups</a><a href="#wallet">Wallet</a><a href="#setup">Setup</a
+          <a href="#saved-broadcasts">Saved broadcasts</a><a href="/broadcast/tasks/">Saved cups</a><a href="#wallet">Studio Credits</a><a href="#setup">Setup</a
           ><a href="#control">Control</a>
         </nav>
         <div class="account">
@@ -114,11 +120,12 @@
     <main id="main" class="shell">
       <section class="intro" aria-labelledby="page-title">
         <div class="intro-copy">
-          <span class="badge"><span class="dot"></span> SANDBOX STUDIO</span>
+          <div class="showrunner-brand"><img src="./assets/showrunner.svg" alt="" width="36" height="36"><span id="showrunner-brand-name">ODDBOUT Showrunner</span></div>
+          <span class="badge"><span class="dot"></span> AI TOURNAMENT PRODUCER</span>
           <h1 id="page-title">
-            Small setup.<br /><span>Big fight energy.</span>
+            Run your next<br /><span>fight night.</span>
           </h1>
-          <p>Your fighters. Your budget. Your show.</p>
+          <p>Set a budget. Your AI producer runs the tournament. Creators can earn appearance fees.</p>
         </div>
         <div class="fighter-poster" aria-hidden="true">
           <span class="poster-caption">THE NEXT ROUND IS YOURS</span>
@@ -141,6 +148,7 @@
           >
         </div>
       </section>
+      <aside class="sandbox-notice" aria-label="Test environment"><span aria-hidden="true">TEST</span><p><strong>Test environment</strong> · Studio Credits and PayPal Sandbox only. No real charges.</p></aside>
       <p
         id="login-status"
         class="inline-status"
@@ -158,9 +166,9 @@
         <div class="section-heading">
           <h2 id="wallet-title">
             <svg class="icon" aria-hidden="true"><use href="#i-wallet" /></svg>
-            Your credits
+            Studio Credits
           </h2>
-          <span class="section-note">Test credits only · No real charges</span>
+          <span class="section-note">Your balance and purchases</span>
         </div>
         <div class="wallet-grid">
           <article class="wallet-card">
@@ -168,7 +176,7 @@
               <span class="metric-label">Available</span>
               <div>
                 <output id="available">—</output
-                ><span class="credit-unit">credits</span>
+                ><span class="credit-unit">Studio Credits</span>
               </div>
             </div>
             <div class="wallet-secondary">
@@ -181,7 +189,7 @@
           </article>
           <form id="topup-form" class="panel topup-panel">
             <div class="topup-heading">
-              <h3>Add a little firepower.</h3>
+              <h3>Choose a credit pack</h3>
               <img
                 src="./assets/paypal.png"
                 alt="PayPal"
@@ -189,17 +197,18 @@
                 height="26"
               />
             </div>
-            <label class="field" for="productId"
-              >Credit package<select id="productId" name="productId" required>
+            <label class="sr-only" for="productId"
+              >Credit pack<select id="productId" name="productId" required>
                 <option value="">Loading packages…</option>
               </select></label
-            ><button class="button button-paypal" type="submit">
-              Top up with PayPal
+            ><div id="package-cards" class="package-cards" role="group" aria-label="Studio Credits packs"></div>
+            <button id="topup-submit" class="button button-paypal full-width" type="submit" disabled>
+              Select a pack
               <svg class="icon" aria-hidden="true">
                 <use href="#i-external" />
               </svg>
             </button>
-            <p class="field-hint">Review your test payment on PayPal.</p>
+            <p class="field-hint">One-time purchase. No subscription.</p>
           </form>
         </div>
         <p
@@ -208,6 +217,12 @@
           role="status"
           aria-live="polite"
         ></p>
+        <section id="purchase-history" class="purchases-panel" hidden aria-labelledby="purchases-title">
+          <div class="section-heading"><h3 id="purchases-title">Recent purchases</h3><button id="purchases-refresh" class="button button-secondary button-small" type="button">Refresh</button></div>
+          <p class="purchases-caption">The 50 latest purchases on this account.</p>
+          <p id="purchases-status" class="purchases-status" role="status" aria-live="polite"></p>
+          <div id="purchase-list" class="purchases-list" aria-live="polite"></div>
+        </section>
         <div class="panel payment-recovery" id="payment-recovery" hidden>
           <div>
             <h3>Finish your top-up</h3>
@@ -391,11 +406,6 @@
           </div>
           <form id="budget-form" class="panel form-panel">
             <div class="form-grid">
-              <label class="field" for="hostId"
-                >Broadcast host<select id="hostId" name="hostId" required>
-                  <option value="">Choose a host</option>
-                </select></label
-              >
               <label class="field" for="channelId"
                 >Session name<input
                   id="channelId"
@@ -431,12 +441,23 @@
                   required
               /></label>
               <div class="field field-full">
-                <label for="fighterIds">Fighter lineup</label>
+                <span id="fighter-lineup-label">Fighter lineup</span>
                 <div
                   id="fighter-lineup"
                   class="lineup"
+                  role="group"
+                  aria-labelledby="fighter-lineup-label"
                   aria-label="Selected fighters"
                 ></div>
+              </div>
+              <details id="execution-settings" class="execution-settings field-full" open>
+                <summary>Advanced execution settings</summary>
+                <div class="execution-settings-grid">
+                  <label class="field" for="hostId">Broadcast host<select id="hostId" name="hostId" required>
+                    <option value="">Choose a host</option>
+                  </select></label>
+                  <div class="field">
+                    <label for="fighterIds">Fighter IDs</label>
                 <input
                   id="fighterIds"
                   name="fighterIds"
@@ -446,10 +467,11 @@
                   spellcheck="false"
                   required
                   aria-describedby="fighters-hint"
-                /><span class="field-hint" id="fighters-hint"
-                  >4 unique fighter IDs, separated by commas.</span
-                >
-              </div>
+                />
+                    <span class="field-hint" id="fighters-hint">4 unique fighter IDs, separated by commas.</span>
+                  </div>
+                </div>
+              </details>
             </div>
             <div class="approval-callout">
               <svg class="icon" aria-hidden="true"><use href="#i-info" /></svg>
@@ -536,14 +558,16 @@
               </button>
             </form>
             <div class="session-controls">
-              <label class="field" for="broadcastId"
-                >Current session<input
+              <details id="session-reference" class="session-reference" open>
+                <summary>Session reference</summary>
+                <label class="field" for="broadcastId">Current session ID<input
                   id="broadcastId"
                   name="broadcastId"
                   type="text"
                   autocomplete="off"
                   placeholder="No session yet"
-              /></label>
+                /></label>
+              </details>
               <div class="button-row">
                 <button
                   id="host-cup"
@@ -639,6 +663,11 @@
           <p id="activity-summary" role="status" aria-live="polite">
             Sign in to get your show started.
           </p>
+          <section id="show-summary" class="show-summary" hidden aria-labelledby="show-summary-title">
+            <h3 id="show-summary-title">Tournament summary</h3>
+            <div id="show-summary-metrics" class="show-summary-metrics"></div>
+            <p id="show-summary-winners" class="show-summary-winners"></p>
+          </section>
           <div id="active-jobs" class="jobs-list" aria-live="polite"></div>
           <details class="technical-details">
             <summary>Session details</summary>

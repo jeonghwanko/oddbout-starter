@@ -36,7 +36,12 @@ export function createCommerceHandler({ service, authenticate, publicOrigin, age
       }
       let data;
       if (route.join('/') === 'wallet' && method === 'GET') data = await service.wallet(owner);
+      else if (route.join('/') === 'purchases' && method === 'GET' && !agent) data = await service.purchases(owner);
       else if (route.join('/') === 'checkout' && method === 'POST') data = await service.checkout(owner, body);
+      else if (route.length === 3 && route[0] === 'topups' && route[2] === 'checkout' && method === 'POST') {
+        if (agent || origin !== publicOrigin || body?.confirmed !== true) throw new Problem(403, 'web-approval-required');
+        data = await service.recoverCheckout(owner,route[1]);
+      }
       else if (route.length === 3 && route[0] === 'topups' && route[2] === 'capture' && method === 'POST') data = await service.capture(owner, route[1]);
       else if (route.join('/') === 'quote' && method === 'POST') data = service.quote(body);
       else if (route.join('/') === 'approvals' && method === 'POST') {

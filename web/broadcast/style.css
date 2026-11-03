@@ -304,6 +304,38 @@ input[readonly] {
   z-index: 1;
   flex-shrink: 0;
 }
+.showrunner-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  font: 700 13px "Space Grotesk", sans-serif;
+  letter-spacing: 0.1px;
+}
+.showrunner-brand img { width: 34px; height: 34px; }
+.sandbox-notice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 14px 0 4px;
+  padding: 10px 14px;
+  border: 1px solid #dfd2b2;
+  border-radius: 10px;
+  background: #fff8e7;
+  color: #51462e;
+  font-size: 12px;
+}
+.sandbox-notice > span {
+  flex: none;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: #f0dfb8;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+}
+.sandbox-notice p { margin: 0; }
+.sandbox-notice strong { color: var(--ink); }
 .badge {
   font-size: 10px;
   letter-spacing: 1.5px;
@@ -508,6 +540,53 @@ h1 span {
   text-align: center;
   font-size: 12px;
 }
+.package-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap: 10px;
+}
+.package-card {
+  display: grid;
+  justify-items: start;
+  align-content: start;
+  gap: 5px;
+  min-width: 0;
+  min-height: 182px;
+  padding: 14px 13px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: #fff;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+.package-card[aria-pressed="true"] {
+  border-color: var(--ink);
+  background: #f4f7e7;
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+.package-card:focus-visible { outline: 3px solid #69a5d5; outline-offset: 2px; }
+.package-icon { width: 25px; height: 25px; margin-bottom: 4px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.package-name { font: 700 15px "Space Grotesk", sans-serif; }
+.package-price { font-size: 13px; font-weight: 700; }
+.package-quantity { font-size: 12px; }
+.package-cups { color: #4e6828; font-size: 11px; font-weight: 700; }
+.package-description { color: var(--muted); font-size: 11px; line-height: 1.4; }
+.package-terms { margin-top: 2px; color: var(--muted); font-size: 10px; }
+.purchases-panel { margin-top: 18px; padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: #fff; }
+.purchases-panel .section-heading { align-items: center; }
+.purchases-panel h3 { margin: 0; font-size: 15px; }
+.purchases-caption,.purchases-status { margin: 8px 0; color: var(--muted); font-size: 12px; }
+.purchases-status.is-error { color: #9b342c; }
+.purchases-status:empty { display: none; }
+.purchases-list { display: grid; gap: 8px; }
+.purchase-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: #fbfaf6; }
+.purchase-heading { display: flex; align-items: baseline; flex-wrap: wrap; gap: 5px 10px; }
+.purchase-name { font-size: 12px; }
+.purchase-state { color: var(--muted); font-size: 11px; }
+.purchase-meta { margin: 3px 0 0; color: var(--muted); font-size: 11px; }
+.purchase-empty { margin: 0; padding: 8px 0; color: var(--muted); font-size: 12px; }
 .button {
   display: inline-flex;
   justify-content: center;
@@ -1813,6 +1892,28 @@ summary:hover {
   border: 1px solid var(--line, #d9dfd5);
   border-radius: 14px;
   background: #fff;
+}
+.execution-settings,
+.session-reference {
+  min-width: 0;
+}
+.execution-settings summary,
+.session-reference summary {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.execution-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 12px;
+}
+.execution-settings-grid .field { min-width: 0; }
+.session-reference { margin-bottom: 12px; }
+.session-reference > .field { margin-top: 10px; }
+@media (max-width: 600px) {
+  .execution-settings-grid { grid-template-columns: 1fr; }
 }
 .paid-operation-status { font-size: 14px; margin: 10px 0; color: inherit; }
 .paid-operation-status.is-error { color: #9b342c; }

@@ -82,6 +82,7 @@ export function createBroadcastDemo(env = process.env) {
   const worker = db && commerce ? createBroadcastWorkerHandler({ store: createCommerceStore(db), workers }) : null;
   const files = new Map([
     ['/broadcast/', ['web/broadcast/index.html', 'text/html; charset=utf-8']],
+    ['/broadcast/assets/showrunner.svg', ['web/broadcast/assets/showrunner.svg', 'image/svg+xml']],
     ['/broadcast/style.css', ['web/broadcast/style.css', 'text/css; charset=utf-8']],
     ['/broadcast/app.mjs', ['web/broadcast/app.mjs', 'text/javascript; charset=utf-8']],
     ['/broadcast/operations.mjs', ['web/broadcast/operations.mjs', 'text/javascript; charset=utf-8']],

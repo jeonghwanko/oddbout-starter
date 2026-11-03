@@ -68,6 +68,8 @@ test('ordinary concierge plan survives checkout closure and returns to the same 
   }
   await f.commerce.stop(OWNER,running.broadcastId);finished=true;
   await pc.locator('#refresh').click();await pc.waitForFunction(()=>document.getElementById('report').textContent.includes('completed'));
+  assert.deepEqual(await pc.locator('#show-summary-metrics strong').allTextContents(),['2','50','0']);
+  assert.match(await pc.locator('#show-summary-winners').textContent(),/Kuma/);
   await pc.locator('#payout-propose').click();await pc.locator('#payouts-list').getByText(/Proposed/i).first().waitFor();
   const proposals=await payouts.list(OWNER,running.broadcastId);assert.equal(proposals.length,1);assert.equal(proposals[0].totalCents,16);
   assert.equal((await paid.get(OWNER,operation.id)).broadcastId,running.broadcastId);
@@ -78,6 +80,7 @@ test('ordinary concierge plan survives checkout closure and returns to the same 
   await pc.locator('#paid-review-title').filter({hasText:'Aftershow'}).waitFor();
   await pc.waitForFunction(()=>document.getElementById('broadcastId').value==='');
   assert.equal(await pc.locator('#producer-card').isVisible(),false);
+  assert.equal(await pc.locator('#show-summary').isVisible(),false);
   assert.equal(await pc.locator('#payouts-list').isVisible(),false);
   await pc.evaluate(id=>globalThis.testAccount(id),OTHER);
   await pc.waitForFunction(()=>document.getElementById('broadcastId').value==='');

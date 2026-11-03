@@ -74,7 +74,7 @@ export function createPaidOperations({ store, commerce, publicOrigin, ensureProd
       }
       const quote = commerce.quote(input), wallet = await commerce.wallet(owner);
       const shortfall = Math.max(0, quote.maxCredits - wallet.availableCredits);
-      const product = COMMERCE_CATALOG.products.find(item => item.credits >= shortfall);
+      const product = COMMERCE_CATALOG.products.find(item => !item.operatorOnly && item.credits >= shortfall);
       if (!product) throw new Problem(422, 'credit-pack-shortfall-too-large');
       return decorate(await store.operation(owner, 'prepare_broadcast', { ...quote, requestKey, product }));
     },

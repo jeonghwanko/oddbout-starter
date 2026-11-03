@@ -111,7 +111,8 @@ test('HTTP checkout enforces server product/owner, reconciles capture response l
   const f = await fixture(t); const requestKey = randomUUID();
   const intent = await f.checkout({ requestKey, owner: OTHER, amountMinor: 1, amountCents: 1, credits: 999999, currency: 'EUR' });
   const creation = f.calls.find(call => call.path === '/v2/checkout/orders');
-  assert.deepEqual(creation.body.purchase_units, [{ reference_id: intent.intentId, amount: { currency_code: 'USD', value: '10.00' }, payee: { merchant_id: MERCHANT } }]);
+  assert.deepEqual(creation.body.purchase_units, [{ reference_id: intent.intentId, amount: { currency_code: 'USD', value: '10.00' }, payee: { merchant_id: MERCHANT },
+    description:'ODDBOUT Showrunner Starter - 1,000 Studio Credits' }]);
   assert.equal(creation.requestId, `o-${intent.intentId}`);
   const before = f.calls.length;
   const stolen = await f.call(`topups/${intent.intentId}/capture`, { owner: OTHER, body: { owner: OWNER } });
