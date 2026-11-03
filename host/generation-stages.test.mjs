@@ -246,6 +246,14 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
   await writeFile(path.join(dir, 'looks', 'look-b-0.png'), 'look');
   const flag = (args, name) => args[args.indexOf(name) + 1];
   let live = 0, most = 0, failShow = false, aligning = 0, mostAligning = 0, extractFailed = false;
+  // The rows' gen-set and each gait's first take wait here until all three are in flight (2026-11-03): the count below then measures the
+  // stage running its branches at once, not a 5 ms timer happening to line them up (under a loaded full suite it often did not). A stage
+  // that ran them one after another waits out the fallback instead, and the count fails.
+  const starting = new Set();
+  let meet = () => {}, fallback;
+  const met = new Promise(done => { meet = () => { clearTimeout(fallback); done(undefined); }; });
+  const branchStart = (tool, args) => tool === 'gen-set' && flag(args, '--run-dir') === path.join(dir, 'motion', 'rows') ? 'rows'
+    : tool === 'video-set' ? flag(args, '--states') : null;
   const og = async (args, { stdin } = {}) => {
     calls.push({ args, stdin });
     const tool = args[0] === 'npm' ? (args[2] === 'sprite' ? args[4] : args[2]) : args[0];
@@ -253,7 +261,13 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
     // RIFE on the GPU: the alignments and a motion-auto cut's jump repair, one at a time.
     const gpu = tool === 'video-cycle-align' || tool === 'video-loop';
     if (gpu) mostAligning = Math.max(mostAligning, ++aligning);
-    most = Math.max(most, ++live); await new Promise(done => setTimeout(done, 5)); live -= 1;
+    most = Math.max(most, ++live);
+    const branch = starting.size < 3 ? branchStart(tool, args) : null;
+    if (branch && !starting.has(branch)) {
+      starting.add(branch);
+      if (starting.size === 3) meet(); else { fallback ??= setTimeout(meet, 10_000); await met; }
+    }
+    await new Promise(done => setTimeout(done, 5)); live -= 1;
     if (gpu) aligning -= 1;
     if (tool === 'gen') await writeFile(flag(args, '--out'), 'relaxed');
     if (failShow && tool === 'gen-set' && flag(args, '--run-dir').endsWith('show-rows')) return { code: 1 };
