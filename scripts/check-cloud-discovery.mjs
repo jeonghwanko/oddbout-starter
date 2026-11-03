@@ -52,11 +52,13 @@ async function message(response) {
 const MODERN = '2026-07-28';
 /**
  * The same server as a 2026-07-28 client sees it: no session, `server/discover` then `tools/list`, each with the Mcp-* headers and its
- * `_meta` envelope. A failure here leaves the 2025 result as it was.
- * @param {typeof fetch} fetcher @param {AbortSignal} signal
+ * `_meta` envelope. A failure here leaves the 2025 result as it was. It has its own time limit: sharing the 2025 one, the first probe
+ * after a deploy (cold function and gateway, five requests in 10 s) reported a network error (2026-11-03).
+ * @param {typeof fetch} fetcher @param {number} timeoutMs
  * @returns {Promise<string>}
  */
-async function discoverModern(fetcher, signal) {
+async function discoverModern(fetcher, timeoutMs) {
+  const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), timeoutMs), signal = controller.signal;
   const meta = { 'io.modelcontextprotocol/protocolVersion': MODERN, 'io.modelcontextprotocol/clientCapabilities': {},
     'io.modelcontextprotocol/clientInfo': { name: 'oddbout-discovery', version: '1' } };
   try {
@@ -81,11 +83,11 @@ async function discoverModern(fetcher, signal) {
     return required.every(name => listed.result.tools.some(/** @param {any} tool */ tool => tool.name === name)) ? 'discovered' : 'required-tools-missing';
   } catch (error) {
     return error instanceof SyntaxError || error instanceof Error && ['malformed-response','response-too-large'].includes(error.message) ? 'malformed-response' : 'network-error';
-  }
+  } finally { clearTimeout(timeout); }
 }
 
-/** @param {{ probe?: boolean, configPath?: string, fetcher?: typeof fetch }} [options] */
-export async function checkCloudDiscovery({ probe = false, configPath, fetcher = fetch } = {}) {
+/** @param {{ probe?: boolean, configPath?: string, fetcher?: typeof fetch, timeoutMs?: number }} [options]  timeoutMs: each protocol's own limit */
+export async function checkCloudDiscovery({ probe = false, configPath, fetcher = fetch, timeoutMs = 10000 } = {}) {
   const result = { config: 'invalid', server: 'unverified', modernServer: 'unverified', hostPlugin: 'unverified', conversationTools: 'unverified', account: 'unverified' };
   try {
     const text = configPath ? await readFile(configPath, 'utf8') : await readFile(pluginConfig, 'utf8').catch(() => readFile(bundledConfig, 'utf8'));
@@ -94,7 +96,7 @@ export async function checkCloudDiscovery({ probe = false, configPath, fetcher =
   } catch { return result; }
   result.config = 'valid';
   if (!probe) return result;
-  const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), 10000);
+  const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), timeoutMs);
   /** @type {string | null} */ let session = null;
   /** @type {string | null} */ let protocol = null;
   try {
@@ -123,7 +125,7 @@ export async function checkCloudDiscovery({ probe = false, configPath, fetcher =
     if (!listed || typeof listed !== 'object' || listed.jsonrpc !== '2.0' || listed.id !== 2 || !Array.isArray(listed.result?.tools) || listed.result.nextCursor ||
       !listed.result.tools.every(/** @param {any} tool */ tool => typeof tool?.name === 'string')) throw Error('malformed-response');
     result.server = required.every(name => listed.result.tools.some(/** @param {any} tool */ tool => tool.name === name)) ? 'discovered' : 'required-tools-missing';
-    if (result.server === 'discovered') result.modernServer = await discoverModern(fetcher, controller.signal);
+    if (result.server === 'discovered') result.modernServer = await discoverModern(fetcher, timeoutMs);
   } catch (error) {
     result.server = error instanceof SyntaxError || error instanceof Error && ['malformed-response','response-too-large'].includes(error.message) ? 'malformed-response' : 'network-error';
   } finally { clearTimeout(timeout); }
