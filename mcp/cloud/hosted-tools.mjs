@@ -5,7 +5,7 @@ import { GENERATION_LIMITS, UPLOAD_TICKET_HEADER } from '../../api/generations.m
 import { Problem } from '../../api/http.mjs';
 import spec from '../../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { profileLimits } from '../../contracts/ai-fighter/profile-limits.mjs';
-import { CREATOR_PAGE, FILE, LIBRARY_FILE_HOSTS, SITE_URL_NEXT, UUID_ARG, downloadHostFile, pause, siteUrl, timeLeft, unavailable, within } from './common.mjs';
+import { CREATOR_PAGE, LIBRARY_FILE_HOSTS, SITE_URL_NEXT, UUID_ARG, allowedFileUrl, downloadHostFile, fileSchema, pause, siteUrl, timeLeft, unavailable, within } from './common.mjs';
 import { TICKET_UPLOAD_URL } from './resources.mjs';
 /**
  * @typedef {import('./common.mjs').Identity} Identity
@@ -42,6 +42,13 @@ export const HOSTED_INSTRUCTIONS = 'When the user wants ODDBOUT to make the figh
   + 'Never create a new key or repeat a look/motion revision merely to recover an unknown outcome. '
   + 'Read the same job again for fresh preview URLs; a URL is not proof that the user saw the image. '
   + 'A result\'s siteUrl is the user\'s page for that request (or, once registered, for his fighter) on the ODDBOUT website. ';
+/**
+ * picture and secondPicture: a file the host attaches, whose refusal says where any other picture goes (Grok 점검 2026-11-03: an address
+ * alone, one without a file id or a long data: address failed the schema with zod's words only). Agents read it in the validation error.
+ */
+const ATTACHED_ONLY = 'only a file this host attaches (ChatGPT does). Send any other picture, one made in this chat too, through '
+  + 'start_picture_upload and pass its id in pictureUploads';
+const PICTURE = fileSchema(ATTACHED_ONLY);
 /** States the worker is on; an answer from the user is not awaited. */
 const HOSTED_WORKING = new Set(['queued', 'appearance', 'motions', 'submitting']);
 /** A submission still on its way to the registry (`af_submissions`). */
@@ -213,13 +220,20 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
     + 'do not replay this creation call while its outcome is unknown. '
     + 'A confirmed safe retry keeps the original key and arguments. Returns the job; follow its next.',
     { description: z.string().min(GENERATION_LIMITS.descriptionMin).max(GENERATION_LIMITS.description), language: z.enum(['ko', 'en']),
-      picture: FILE.optional(), secondPicture: FILE.optional(), pictureUploads: z.array(UUID_ARG()).max(GENERATION_LIMITS.refs).optional(),
+      picture: PICTURE.optional(), secondPicture: PICTURE.optional(), pictureUploads: z.array(UUID_ARG()).max(GENERATION_LIMITS.refs).optional(),
       rightsConfirmed: z.boolean().optional(), delegate: z.boolean().optional(),
       host: z.union([z.enum(['oddbout', 'any', 'mine']), UUID_ARG()]).optional(), hostConsent: z.boolean().optional(), idempotencyKey: UUID_ARG() },
     async ({ description, language, picture, secondPicture, pictureUploads = [], rightsConfirmed, delegate, host, hostConsent, idempotencyKey }, { signal, deadline }) => {
       // Once saved, the same key returns its job without re-uploading pictures. Before that, use read-only recovery.
       const existingId = await jobIdForKey(idempotencyKey);
       if (existingId) return withNext(await invoke(`generations/${existingId}`));
+      // A file of the shape but from no host ODDBOUT takes (an agent's own address with an id it holds), named before any check: the
+      // service, the rights the user would be asked about, the request's checks. Its pictures go in through a ticket.
+      const refused = /** @type {const} */ ([['picture', picture], ['secondPicture', secondPicture]]).filter(([, file]) => file
+        && !allowedFileUrl(file.download_url, LIBRARY_FILE_HOSTS)).map(([field]) => field);
+      if (refused.length) return { ok: false, code: 'unsupported-file-origin', fields: refused,
+        next: `${refused.join(' and ')} ${refused.length > 1 ? 'take' : 'takes'} ${ATTACHED_ONLY}. Nothing was fetched or kept; `
+          + 'start_picture_upload takes the host and hostConsent you will request.' };
       // Off (the service switch, the worker away or unwell) before any picture is kept. A failed read is the database's, not the switch's.
       const service = await invoke('generations/capabilities');
       if (!service.ok) return service;
@@ -271,7 +285,8 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
       const { secret, ...ticket } = made.ticket;
       return { ok: true, ticket, page: `${PICTURE_PAGE}${ticket.id}`,
         ...(secret ? { command: `curl -sS -H "${UPLOAD_TICKET_HEADER}: ${secret}" --data-binary "@<file>" ${TICKET_UPLOAD_URL}` } : {}),
-        next: `Give the user the page link (PNG, JPEG or WebP, up to 4 MB, 64 to 4096 pixels a side)${secret ? ', or run the command with the file '
+        next: `Give the user the page link (PNG, JPEG or WebP, up to 4 MB, 64 to 4096 pixels a side; a picture made in this chat: the user saves it `
+          + `first, then adds it there)${secret ? ', or run the command with the file '
           + '(one with no answer or a 5xx: get_picture_upload before running it again)' : ''}. When he says the pictures are in, get_picture_upload with ticket.id.` };
     }, { write: true, idempotent: false });
   register('get_picture_upload', '올린 그림 확인', 'The pictures a start_picture_upload ticket took (at most two), each with its address for ten '

@@ -50,8 +50,14 @@ export const timedFetch = (ms = DATABASE_TIMEOUT_MS, base = fetch) => (input, in
 /** A 5xx Problem that keeps what failed behind its code, for the call's log line. @param {string} code @param {unknown} cause */
 export const unavailable = (code, cause) => Object.assign(new Problem(503, code), { cause });
 
-export const FILE = z.object({ download_url: z.string().max(8192), file_id: z.string().min(1).max(256),
-  mime_type: z.string().max(128).optional(), file_name: z.string().max(512).optional() }).strict();
+/**
+ * A file the host attaches (ChatGPT's fileParams fill it). `error` replaces zod's messages for a value of the wrong shape, which the agent
+ * reads in the call's validation error; the schema the host sees stays the same.
+ * @param {string} [error]
+ */
+export const fileSchema = error => z.object({ download_url: z.string({ error }).max(8192, { error }), file_id: z.string({ error }).min(1, { error }).max(256, { error }),
+  mime_type: z.string().max(128).optional(), file_name: z.string().max(512).optional() }, { error }).strict();
+export const FILE = fileSchema();
 /**
  * A UUID argument. zod's `uuid()` writes a 168-character pattern into every tool's schema (13 of them, 2.2 KB of each tools/list, every
  * conversation — MCP 점검 2026-10-27); the server checks the ids again (`api/http.mjs` UUID), so a short pattern is enough here.

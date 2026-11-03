@@ -27,11 +27,21 @@ export function withSiteLink(result) {
     + 'and once registered to review the eleven motions and enter the fighter (출전).' } : result;
 }
 /**
+ * The hosted route as the creation guide and the readiness check name it: an agent with no workspace (Grok, Claude, a ChatGPT chat without
+ * the kit) cannot follow the workspace steps, which need the kit, the user's generation account and attached package files.
+ */
+const HOSTED_ROUTE = 'A user without a workspace (the creator kit and a generation account of the user\'s own in this conversation) can have '
+  + 'ODDBOUT make the fighter on its own worker: offer it, and only on the user\'s request call request_hosted_fighter with the user\'s words, '
+  + 'then follow each result\'s next. Each request spends the user\'s tokens, whatever the outcome. Pictures go in as files this host attaches, '
+  + 'else through start_picture_upload.';
+/**
  * Registers the tools every connection lists. `invoke` calls the in-process API as the verified owner; `recordAgent` labels a submission.
  * `identity` is null only on a signed-out call, which register lets reach the public tools alone: the account tools cast it.
- * @param {{ register: Register, db: any, identity: Identity | null, invoke: Invoke, fetcher: typeof fetch, recordAgent: RecordAgent }} options
+ * `hosted`: whether this connection lists the hosted generation tools (hosted-tools.mjs), which the creation guide and the readiness
+ * check then name (Grok 점검 2026-11-03: an agent without a workspace read only the workspace route there).
+ * @param {{ register: Register, db: any, identity: Identity | null, invoke: Invoke, fetcher: typeof fetch, recordAgent: RecordAgent, hosted?: boolean }} options
  */
-export function registerRegistrationTools({ register, db, identity, invoke, fetcher, recordAgent }) {
+export function registerRegistrationTools({ register, db, identity, invoke, fetcher, recordAgent, hosted = false }) {
   register('get_fighter_spec', '캐릭터 등록 규격', 'Read the fighter contract before authoring. All 11 motions and required file checks are required; quality diagnostics are deferred. '
     + 'This does not generate or register.',
     { section: z.enum(['overview', 'schema', 'creation']).default('overview') }, async ({ section }) => {
@@ -44,6 +54,7 @@ export function registerRegistrationTools({ register, db, identity, invoke, fetc
           readinessTool: 'check_creation_readiness' } } };
       }
       return { ok: true, data: section === 'schema' ? schema : {
+        ...(hosted ? { hosted: `${HOSTED_ROUTE} The steps below are the workspace route.` } : {}),
         steps: ['appearance review', 'locomotion review', 'attack review', 'defense/reaction review',
           'optional style review (skill, entrance and victory clips, fighting style; may be skipped)', 'final review', 'prepare_fighter_registration',
           'upload_fighter_asset for each pending asset', 'submit_fighter_registration', 'get_fighter_submission',
@@ -73,15 +84,20 @@ export function registerRegistrationTools({ register, db, identity, invoke, fetc
     + 'Generation, conversation display and package review remain unverified until actual evidence exists; '
     + 'this call never generates.',
     { purpose: z.enum(['generation','connection','registration']).default('registration') }, async ({ purpose }) => {
-      const result = await invoke('me');
+      // The service's state beside the account (both reads at once): whether ODDBOUT's making is on, the switch and its worker. The
+      // account's own checks (tokens, one request at a time, a host's consent) answer the request itself; a failed read is unknown (null).
+      const [result, service] = await Promise.all([invoke('me'), hosted ? invoke('generations/capabilities') : null]);
       if (!result.ok) return result;
-      return { ok: true, purpose, scope: 'cloud-registration-connection', account: result.account,
+      const making = service && result.account.canSubmit ? { tool: 'request_hosted_fighter', capabilities: service.ok ? service.capabilities : null,
+        note: `${HOSTED_ROUTE} capabilities is the service only: the account's own checks answer the request.` } : null;
+      return { ok: true, purpose, scope: 'cloud-registration-connection', account: result.account, ...(making ? { hosted: making } : {}),
         registration: { status: result.account.canSubmit ? 'ready' : 'blocked', requiresPc: false, auth: 'connected-google-oauth' },
         generation: { status: 'unverified', reason: 'actual-host-generation-call-required' },
         delivery: { status: 'unverified', inputCapability: 'openai-fileParams', reason: 'actual-conversation-preview-and-file-transfer-required' },
         package: { status: 'unverified', reason: 'final-visual-review-and-package-validation-required' },
-        nextCommands: [], nextAction: result.account.canSubmit ? 'Continue the user-requested review group or register the approved actual package using host file attachments. '
-          + 'Verify generation/display separately in the current conversation.' : 'Account registration access is unavailable; inspect the account response.' };
+        nextCommands: [], nextAction: (result.account.canSubmit ? 'Continue the user-requested review group or register the approved actual package using host file attachments. '
+          + 'Verify generation/display separately in the current conversation.' : 'Account registration access is unavailable; inspect the account response.')
+          + (making && purpose !== 'registration' ? ' A new fighter without a workspace of the user\'s own: see hosted.' : '') };
     });
   register('list_my_fighters', '내 캐릭터', 'List only the connected user’s registered fighters.', {}, async () => {
     const { data, error } = await db.from('af_fighters').select('id,profile,status,review_state,created_at,entered_at').eq('owner_id', /** @type {Identity} */ (identity).owner)
