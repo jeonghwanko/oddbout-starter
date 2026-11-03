@@ -367,6 +367,30 @@ test('Postgres (정면 판정 리뷰, 2026-11-03): only a front that let him ent
   } finally { await db.close(); }
 });
 
+test('Postgres (2026-11-03): an operator\'s sets do not fill the owner\'s ten a day; his own uploads do', async () => {
+  const { db, owner, fighter, value } = await frontFixture();
+  try {
+    const create = async () => {
+      const body = JSON.stringify(set());
+      return value(await db.query('select to_jsonb(public.af_profile_set_create($1,$2,$3,$4,$5,$6)) as value',
+        [owner, fighter, crypto.randomUUID(), body, await sha256(new TextEncoder().encode(body)), 1000]));
+    };
+    // Ten sets of the last day, closed (an open one would refuse the next on its own), eight of them an operator's sheets.
+    const ids = [];
+    for (let i = 0; i < 10; i++) {
+      ids.push((await db.query(`insert into public.af_profile_sets(fighter_id, owner_id, idempotency_key, manifest_text, manifest_sha, manifest, status)
+        values ($1, $2, gen_random_uuid(), '{}', $3, '{}', 'rejected') returning id`, [fighter, owner, 'a'.repeat(64)])).rows[0].id);
+    }
+    for (const id of ids.slice(0, 8))
+      await db.query("insert into public.af_profile_set_events(fighter_id, profile_set_id, kind) values ($1, $2, 'admin-expressions')", [fighter, id]);
+    const made = await create();
+    assert.equal(made.status, 'uploading', 'two of his own and one more: under ten');
+    await db.query("update public.af_profile_sets set status = 'rejected' where id = $1", [made.id]);
+    await db.query("delete from public.af_profile_set_events where kind = 'admin-expressions'");
+    await assert.rejects(create(), /profile-set-quota/, 'ten of his own the same day: the limit');
+  } finally { await db.close(); }
+});
+
 test('Postgres (2026-11-03): a set with an expression sheet needs its upload, a 0.2.0 verdict and the stored arena sheet; the roster and cleanup carry it', async () => {
   const db = await migratedDatabase();
   try {
