@@ -1,7 +1,7 @@
 {
-  "version": "0.6.15",
-  "manifestUrl": "https://oddbout.com/creator-kit/0.6.15/63a0fb169f063609aa80ff64815581daf948dbdc831d62c722dcd5d85b65296b/release.json",
-  "manifestSha256": "01eacc23cedb5d85ff5ecb6c379f1c8553cb1764852388b3db5dd30fe9680f97",
-  "helperUrl": "https://oddbout.com/creator-kit/0.6.15/63a0fb169f063609aa80ff64815581daf948dbdc831d62c722dcd5d85b65296b/fetch-creator-kit.py",
+  "version": "0.6.16",
+  "manifestUrl": "https://oddbout.com/creator-kit/0.6.16/110e020bb13822a5f6bf268fd627d9584683cfb5e8894af0578a73b8ed4f3cef/release.json",
+  "manifestSha256": "56235956bfa57ea71e70e3a4a71707dfd542cd33c2c5906368de2a3ffe43dd2f",
+  "helperUrl": "https://oddbout.com/creator-kit/0.6.16/110e020bb13822a5f6bf268fd627d9584683cfb5e8894af0578a73b8ed4f3cef/fetch-creator-kit.py",
   "helperSha256": "b66c31ff833816dfa74c90d9155359d3fdd484dff8c12759e48addde01707592"
 }
