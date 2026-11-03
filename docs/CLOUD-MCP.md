@@ -457,6 +457,24 @@ ChatGPT 밖의 에이전트(Grok·Claude·Gemini CLI·Codex CLI·Cursor의 Grok 
 성공한 작업 응답에는 `next`(`hostedNext`)가 있다(목록은 각 `jobs[].next`): 사용자에게 무엇을 보이고 물을지, 또는 얼마나 기다릴지.
 한 선수는 대략 신청 → 외형 두 장(몇 분) → 고르기 → 동작 11개(15~30분) → 확인 → 등록이다.
 
+### 작업 공간 없는 에이전트의 길 (Grok 점검, 2026-11-03)
+
+Grok(grok.com, Cursor의 Grok Bot)이 받는 안내만으로 호스팅 생성까지 가는지 점검했다. 실제 API·DB(PGlite)와 가짜 워커로 그림 표 → 신청 → 외형 →
+고르기 → 동작 → 등록 요청(`submitting`)까지 돌리면 막히지 않았다. 패키지 검사와 등록 완료는 이 시험에서 돌지 않았다. 실제 Grok 대화로도 확인하지 않았다.
+운영 함수 요청 로그(10-28~11-03 UTC)에는 Grok 클라이언트의 접속·도구 목록 요청과 그 밖의 작은 요청 몇 번(11-01 15:14~15:30Z, 11-02)이 있다. 그 로그에는
+도구 이름이 남지 않고, 호출마다 도구 이름을 남기는 `mcp-call` 줄은 11-03에야 생겼다. 고친 곳은 다음과 같다.
+
+- `request_hosted_fighter`의 `picture`·`secondPicture`는 호스트가 붙인 파일만 받는다. 다른 모양의 값(주소만, 파일 id 없는 주소, 8,192자를 넘는
+  `data:` 주소)은 입력 검사에서 거절되는데, 그 오류 문구가 이제 `start_picture_upload`와 `pictureUploads`를 알려 준다(`fileSchema`의 `error`. 도구 목록의
+  스키마는 그대로다). 모양은 맞지만 받는 호스트가 아닌 파일은 서비스 확인·권리 확인·신청 검사 전에 `unsupported-file-origin`과 그 칸(`fields`), 같은 안내로
+  거절하고 아무것도 받지 않는다. Grok이 실제로 무엇을 넘기는지는 아직 아무도 보지 못했다(위 그림 주소 관찰).
+- `get_fighter_spec`의 `creation`은 호스팅 도구가 있는 연결에서 맨 앞에 `hosted`를 준다: 작업 공간이 없는 사용자에게 권하고, 사용자가 원할 때만
+  `request_hosted_fighter`, 신청마다 토큰을 쓴다. 나머지 단계는 작업 공간 경로다.
+- `check_creation_readiness`는 호스팅 도구가 있는 연결에서, 등록할 수 있는 계정에 `hosted`(`tool`, API의 `capabilities` 그대로, `note`)를 더한다.
+  `capabilities`는 서비스(스위치와 워커)의 상태일 뿐이다. 토큰·한 번에 하나·호스트 동의는 신청이 답한다. 읽지 못하면 `null`이다. 두 읽기는 함께 돈다.
+  `purpose`가 `generation`·`connection`이면 `nextAction`이 `hosted`를 가리킨다. `generation`은 그대로 `unverified`다.
+- 대화에서 만든 그림은 사용자가 저장한 뒤 표의 페이지에서 올린다(`start_picture_upload`의 `next`).
+
 ### 사이트 바로가기 `siteUrl` (2026-11-03)
 
 호스팅 도구(`request_hosted_fighter`·`get_hosted_fighter`·`choose_hosted_look`·`revise_hosted_motion`·`register_hosted_fighter`·`cancel_hosted_fighter`)와

@@ -44,6 +44,37 @@ test('hosted generation tools list only when configured', async () => {
   } finally { await g.sql.close(); }
 });
 
+// Grok 점검 (2026-11-03): an agent with no workspace read only the workspace route in the creation guide and the readiness check.
+test('the creation guide and the readiness check name the hosted route where its tools are listed, and whether it takes requests now', async () => {
+  const g = await generation();
+  try {
+    const without = await connector(g, null), withHosted = await connector(g, {});
+    const guide = async c => (await c.call('get_fighter_spec', { section: 'creation' })).data;
+    assert.equal((await guide(without)).hosted, undefined);
+    const listed = await guide(withHosted);
+    assert.deepEqual(Object.keys(listed).slice(0, 2), ['hosted', 'steps']); assert.match(listed.hosted, /request_hosted_fighter/);
+    const ready = (c, purpose = 'generation') => c.call('check_creation_readiness', { purpose });
+    const plain = await ready(without);
+    assert.equal(plain.hosted, undefined); assert.doesNotMatch(plain.nextAction, /hosted/);
+    // The service's own state (off until the switch and a healthy worker), never the account's checks; generation stays unverified.
+    const off = await ready(withHosted);
+    assert.deepEqual([off.hosted.tool, off.hosted.capabilities.hosted, off.hosted.capabilities.reason], ['request_hosted_fighter', false, 'disabled']);
+    assert.match(off.hosted.note, /only on the user's request[\s\S]*tokens[\s\S]*service only/);
+    assert.match(off.nextAction, /see hosted/); assert.equal(off.generation.status, 'unverified');
+    await g.healthy();
+    assert.equal((await ready(withHosted)).hosted.capabilities.hosted, true);
+    // Registering a package: the block is there, the next step is the package's.
+    const registering = await ready(withHosted, 'registration');
+    assert.equal(registering.hosted.tool, 'request_hosted_fighter'); assert.doesNotMatch(registering.nextAction, /hosted/);
+  } finally { await g.sql.close(); }
+  // A service state that cannot be read is unknown, and the account still answers.
+  const failed = await generation({ failing: ['af_generation_capabilities'] });
+  try {
+    const unknown = await (await connector(failed, {})).call('check_creation_readiness', { purpose: 'generation' });
+    assert.deepEqual([unknown.ok, unknown.registration.status, unknown.hosted.capabilities], [true, 'ready', null]);
+  } finally { await failed.sql.close(); }
+});
+
 test('an agent asks ODDBOUT for a fighter, passes the picks and registers it in a handful of calls', async () => {
   const g = await generation();
   try {
@@ -399,7 +430,22 @@ test('a picture chosen from the ChatGPT Library reaches the request; other Azure
 test('an agent without file attachments sends the user\'s pictures through a ticket and names them in the request', async () => {
   const g = await generation();
   try {
-    const { call, downloads } = await connector(g, { pollMs: 10 });
+    const { call, text, downloads } = await connector(g, { pollMs: 10 });
+    // An agent's own picture (Grok 점검 2026-11-03; what Grok passes is not observed yet). The wrong shape — an address alone, or a data:
+    // address over the limit — fails the schema with the way in; a file of the shape from no taken host is named before any check (off
+    // here, no rights confirmed) and fetches nothing.
+    const ask = { description: '빨간 글러브를 낀 고양이 복서, 귀가 크다', language: 'ko', idempotencyKey: crypto.randomUUID() };
+    for (const picture of ['https://images.grok.test/made.png', { download_url: 'https://images.grok.test/made.png' },
+      { download_url: `data:image/png;base64,${'A'.repeat(9000)}`, file_id: 'made' }])
+      assert.match(await text('request_hosted_fighter', { ...ask, picture }), /picture[\s\S]*only a file this host attaches[\s\S]*start_picture_upload/);
+    const checks = [], rpc = g.db.rpc;
+    g.db.rpc = (name, args) => { checks.push(name); return rpc(name, args); };
+    const refused = await call('request_hosted_fighter', { ...ask, picture: { download_url: 'https://files.oaiusercontent.com/file-1', file_id: 'file-1' },
+      secondPicture: { download_url: 'https://images.grok.test/made.png', file_id: 'made' } });
+    assert.deepEqual([refused.code, refused.fields], ['unsupported-file-origin', ['secondPicture']]);
+    assert.match(refused.next, /^secondPicture takes only a file this host attaches[\s\S]*start_picture_upload/);
+    assert.deepEqual([checks.filter(name => name.startsWith('af_generation_')), downloads.length], [[], 0]);
+    g.db.rpc = rpc;
     // Off, no ticket: the request's checks come first, as no picture is kept for a request that cannot be made (3차 리뷰 2026-11-01).
     assert.equal((await call('start_picture_upload', {})).code, 'generation-unavailable');
     assert.equal((await g.sql.query('select count(*)::int as n from public.af_generation_upload_tickets')).rows[0].n, 0);
@@ -407,6 +453,7 @@ test('an agent without file attachments sends the user\'s pictures through a tic
     // A chat with no terminal gets the link only: nothing in it uploads.
     const linkOnly = await call('start_picture_upload', {});
     assert.equal(linkOnly.page, `${PICTURE_PAGE}${linkOnly.ticket.id}`);
+    assert.match(linkOnly.next, /made in this chat/);
     assert.deepEqual([linkOnly.command, linkOnly.ticket.secret], [undefined, undefined]);
     const started = await call('start_picture_upload', { terminal: true });
     assert.equal(started.ok, true, JSON.stringify(started));
@@ -427,7 +474,7 @@ test('an agent without file attachments sends the user\'s pictures through a tic
     assert.deepEqual([read.ticket.open, read.ticket.closed, read.ticket.uploads.length], [false, 'full', 2]);
     assert.ok(read.next.startsWith('Show him the pictures'), read.next);
     assert.ok(read.ticket.uploads.every(u => u.usable && typeof u.url === 'string'), JSON.stringify(read.ticket.uploads));
-    const ids = read.ticket.uploads.map(u => u.id), ask = { description: '빨간 글러브를 낀 고양이 복서, 귀가 크다', language: 'ko' };
+    const ids = read.ticket.uploads.map(u => u.id);
     const attached = { download_url: 'https://files.oaiusercontent.com/file-1', file_id: 'file-1' };
     // Two in all with attached files, refused before any attached one is downloaded; the rights confirmed as for any picture.
     assert.equal((await call('request_hosted_fighter', { ...ask, picture: attached, pictureUploads: ids, rightsConfirmed: true,

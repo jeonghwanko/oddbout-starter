@@ -271,7 +271,7 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
     const directoryTitle = DIRECTORY_TITLES.get(name);
     if (directoryTitle) registerTool(name, directoryTitle, DIRECTORY_DESCRIPTIONS.get(name) ?? description, inputSchema, run, options);
   } : registerTool;
-  registerRegistrationTools({ register, db, identity, invoke, fetcher, recordAgent });
+  registerRegistrationTools({ register, db, identity, invoke, fetcher, recordAgent, hosted: Boolean(hosted) && !directory });
   registerPackagingPreparation({ register, invoke });
   registerProfileSetTools({ register, db, identity, invoke, fetcher });
   // 에이전트 도구 (3단계, 2026-10-27): read ODDBOUT's records, spar, enter cups and tune the fighting style. Listed only with the arena key.
