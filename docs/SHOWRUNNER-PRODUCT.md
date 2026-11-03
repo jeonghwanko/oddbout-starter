@@ -108,7 +108,8 @@ After the migrations in [PAID-TASK-RECOVERY](PAID-TASK-RECOVERY.md), apply
 `supabase/sandbox/20261103154930_commerce_campaigns.sql`, followed by
 `supabase/sandbox/20261103170232_commerce_campaign_links.sql`, then
 `supabase/sandbox/20261103180002_commerce_campaign_schedule.sql`, then
-`supabase/sandbox/20261103185105_commerce_campaign_execution.sql`, only to the isolated Sandbox project.
+`supabase/sandbox/20261103185105_commerce_campaign_execution.sql`, then
+`supabase/sandbox/20261103193040_commerce_campaign_recovery.sql`, only to the isolated Sandbox project.
 They create the private campaign tables/RPC, `campaign-media` bucket and service-role-only link RPC.
 These migrations preserve existing purchases and started broadcasts. New starts require a saved
 schedule; already-started records without one remain viewable. Deploy the game's

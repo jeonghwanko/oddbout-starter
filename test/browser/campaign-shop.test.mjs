@@ -20,6 +20,7 @@ for(const sourceKind of ['upload','youtube','twitch'])test(`broadcast purchase, 
   await f.db.exec(await readFile(new URL('../../supabase/sandbox/20261103170232_commerce_campaign_links.sql',import.meta.url),'utf8'));
   await f.db.exec(await readFile(new URL('../../supabase/sandbox/20261103180002_commerce_campaign_schedule.sql',import.meta.url),'utf8'));
   await f.db.exec(await readFile(new URL('../../supabase/sandbox/20261103185105_commerce_campaign_execution.sql',import.meta.url),'utf8'));
+  await f.db.exec(await readFile(new URL('../../supabase/sandbox/20261103193040_commerce_campaign_recovery.sql',import.meta.url),'utf8'));
   const topup=await f.store.createTopup(OWNER,{requestKey:randomUUID(),amountCents:1000,credits:1000,currency:'USD'});
   await f.store.attachOrder(OWNER,topup.id,'EXISTING');await f.store.creditCapture(OWNER,topup.id,{providerOrderId:'EXISTING',captureId:'CREDIT',amountCents:1000,currency:'USD',status:'COMPLETED'});
   const rpc=async(name,args)=>{try{return{data:await f.db.transaction(async tx=>{await tx.exec('set local role service_role');

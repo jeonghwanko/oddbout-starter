@@ -10,7 +10,7 @@ import {COMMERCE_CATALOG} from '../api/commerce/catalog.mjs';
 const OWNER='11111111-1111-4111-8111-111111111111',OTHER='22222222-2222-4222-8222-222222222222',HOST='svl-mac-01';
 async function fixture(t){
   const f=await commerceDatabase();t.after(()=>f.db.close());
-  for(const name of ['20261103154930_commerce_campaigns','20261103170232_commerce_campaign_links','20261103180002_commerce_campaign_schedule','20261103185105_commerce_campaign_execution'])await f.db.exec(await readFile(new URL('../supabase/sandbox/'+name+'.sql',import.meta.url),'utf8'));
+  for(const name of ['20261103154930_commerce_campaigns','20261103170232_commerce_campaign_links','20261103180002_commerce_campaign_schedule','20261103185105_commerce_campaign_execution','20261103193040_commerce_campaign_recovery'])await f.db.exec(await readFile(new URL('../supabase/sandbox/'+name+'.sql',import.meta.url),'utf8'));
   let sends=0,lose=false;const batches=new Map(),ensures=[];
   const payouts=createPayoutService({store:f.store,feeCents:1,receivers:Object.fromEntries(COMMERCE_CATALOG.fighters.map(id=>[id,id+'@personal.example.com'])),paypal:{
     async createPayout({senderBatchId}){if(!batches.has(senderBatchId)){sends++;batches.set(senderBatchId,'PAYOUT'+sends);}if(lose){lose=false;throw new Error('lost response');}return{payoutBatchId:batches.get(senderBatchId)};},
@@ -31,12 +31,14 @@ test('ticket → one prepaid session → verified job → funding reconciliation
   const f=await fixture(t);const funding=await f.fund(300),order=await f.ready();
   await assert.rejects(f.start(order),/campaign-host-offline/);await f.claim();
   const started=await f.start(order),again=await f.start(order);assert.equal(started.broadcastId,again.broadcastId);assert.equal(f.ensures.length,2);
+  await f.execution.recover();assert.deepEqual(f.ensures[2],[OWNER,started.broadcastId]);
   assert.equal((await f.store.wallet(OWNER)).balanceCredits,0);assert.equal((await f.store.wallet(OWNER)).reservedCredits,0);
   await assert.rejects(f.execution.report(OTHER,order.id),/not-found/);
   await f.enqueue(started);const job=await f.claim();await f.complete(job);await f.complete(job);
   assert.equal((await f.store.wallet(OWNER)).balanceCredits,0);
   await assert.rejects(f.execution.reconcile(OWNER,order.id),/broadcast-not-finished/);
   await f.execution.stop(OWNER,order.id);
+  await f.execution.recover();assert.equal(f.ensures.length,3);
   await assert.rejects(f.payouts.propose(OWNER,{broadcastId:started.broadcastId,requestKey:randomUUID()}),/campaign-settlement-required/);
   const settled=await f.execution.reconcile(OWNER,order.id);assert.equal(settled.settlement.status,'matched');assert.deepEqual(settled.funding.map(s=>[s.intentId,s.credits]),[[funding.id,300]]);
   const proposed=await f.execution.propose(OWNER,order.id,{requestKey:randomUUID()}),batch=proposed.payouts[0];assert.equal(batch.totalCents,4);
