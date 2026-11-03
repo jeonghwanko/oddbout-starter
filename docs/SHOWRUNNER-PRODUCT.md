@@ -41,7 +41,8 @@ watched the clip or researched the advertiser. The owner reviews the video, intr
 then saves a start date and time to their private On-Air Calendar. Scheduling does not publish,
 start the clock or make another debit. On-Air Agent opens the authenticated host room for that order;
 the owner previews the promotion and presses **Start**. The resulting unlisted watch link exposes
-those materials to its viewers. The host room embeds the same ODDBOUT web watch page.
+those materials to its viewers. The host room's **Watch broadcast** button opens the ODDBOUT web
+watch page in its own tab, keeping the host controls available.
 Uploaded video URLs are temporary signed capabilities; the storage bucket remains private.
 YouTube and Twitch links use their official players, with the actual host as Twitch's `parent`.
 Private, removed, restricted or embedding-disabled videos cannot be guaranteed to play.

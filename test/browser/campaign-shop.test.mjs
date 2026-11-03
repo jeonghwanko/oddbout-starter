@@ -95,6 +95,10 @@ for(const sourceKind of ['upload','youtube','twitch'])test(`broadcast purchase, 
   }
   await page.locator('#publish-consent').check();await page.locator('#publish-broadcast').click();
   await page.locator('#host-watch').waitFor();
+  if(sourceKind==='upload'){
+    const [viewer]=await Promise.all([context.waitForEvent('page'),page.locator('#host-watch').click()]);
+    await viewer.locator('#sponsor').waitFor();assert.match(await viewer.locator('#status').innerText(),/Sponsor break/);await viewer.close();
+  }
   assert.equal((await service.get(OWNER,order.id)).status,'started');
   assert.ok(Date.parse((await service.get(OWNER,order.id)).startedAt)<Date.parse((await service.get(OWNER,order.id)).scheduledAt));
   if(sourceKind!=='upload'){

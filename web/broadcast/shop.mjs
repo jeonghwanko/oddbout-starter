@@ -182,7 +182,7 @@ function renderOrder(order) {
     disposeExternal();previewedLink='';$('media-link').value='';setMediaMode('upload');
     fileRevision++;$('broadcast-setup').hidden=true;selectedFile=null;selectedFileDuration=null;$('destination-url').value='';$('media-file').value='';
     if(previewObjectUrl)URL.revokeObjectURL(previewObjectUrl);previewObjectUrl='';$('media-preview').removeAttribute('src');$('media-preview').hidden=true;
-    $('host-playback').hidden=true;$('host-watch').removeAttribute('src');$('host-status').textContent=hostOrderId?'Sign in to open this host.':'';updateControls();return;
+    $('host-playback').hidden=true;$('host-watch').removeAttribute('href');$('host-status').textContent=hostOrderId?'Sign in to open this host.':'';updateControls();return;
   }
   if(previousId!==order.id){fileRevision++;selectedFile=null;selectedFileDuration=null;$('media-file').value='';if(previewObjectUrl)URL.revokeObjectURL(previewObjectUrl);previewObjectUrl='';$('media-preview').removeAttribute('src');$('media-preview').hidden=true;$('destination-url').value='';disposeExternal();previewedLink='';$('media-link').value='';setMediaMode('upload');}
   if(previousId!==order.id||previousState!==state||previousScheduleRevision!==order.scheduleRevision||previousMediaId!==order.mediaId)$('publish-consent').checked=false;
@@ -218,7 +218,7 @@ function renderOrder(order) {
   if(hostOrderId){
     $('host-status').textContent=order.startedAt?`${plannedState(order)} · ${formattedTime(order.startedAt)}`:order.scheduledAt?`Scheduled · ${formattedTime(order.scheduledAt)} · ${localZone}`:'Set a promotion and start time from My tickets first.';
     $('host-playback').hidden=state!=='started';
-    if(state==='started'&&order.watchToken){const src='/broadcast/watch/?show='+encodeURIComponent(order.watchToken);if($('host-watch').getAttribute('src')!==src)$('host-watch').src=src;}
+    if(state==='started'&&order.watchToken)$('host-watch').href='/broadcast/watch/?show='+encodeURIComponent(order.watchToken);
   }
   if(state==='started') message('Broadcast started.');
   else if(state==='needs_attention') message('This broadcast needs attention. Its purchase and current status are saved; no replacement was created.',true);
