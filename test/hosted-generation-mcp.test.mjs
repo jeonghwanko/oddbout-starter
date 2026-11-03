@@ -123,6 +123,9 @@ test('an agent asks ODDBOUT for a fighter, passes the picks and registers it in 
     const ready = await call('get_hosted_fighter', { jobId });
     assert.equal(ready.job.status, 'motion_ready'); assert.match(ready.next, /register_hosted_fighter/);
     assert.equal((await call('revise_hosted_motion', { jobId, clip: 'walk', note: '덜 통통 튀게' })).job.revisionsLeft.motions, 2);
+    // A second change while the first is made is refused with what to do (Grok 점검 2026-11-03: the bot got a bare code).
+    const early = await call('revise_hosted_motion', { jobId, clip: 'run', note: '팔을 더 크게' });
+    assert.equal(early.code, 'generation-state'); assert.match(early.next, /one at a time[\s\S]*motion_ready/);
     held = await claim('motions'); assert.deepEqual(held.motionNote, { clip: 'walk', note: '덜 통통 튀게' });
     await finish(held, { preview });
 
@@ -170,7 +173,7 @@ test('a wait on a submitted fighter reads the job and its submission in one quer
     reads.length = 0;
     await call('get_hosted_fighter', { jobId: job.id });
     const once = reads.splice(0);
-    const tick = ([table, columns]) => table === 'af_generation_jobs' && columns === 'status,submission:af_submissions!submission_id(status)';
+    const tick = ([table, columns]) => table === 'af_generation_jobs' && columns === 'status,progress,submission:af_submissions!submission_id(status)';
     // The check ends once the wait has seen it running.
     const settle = async () => { while (!reads.some(tick)) await new Promise(done => setTimeout(done, 5));
       await g.sql.query("update public.af_submissions set status = 'rejected' where id = $1", [submission]); };
@@ -598,4 +601,42 @@ test('next says to attach the downloaded pictures wherever there are pictures to
     assert.match(hostedNext({ ...job, status }), /download each file \(the url lasts ten minutes\) and attach it/, status);
   assert.match(hostedNext({ ...job, status: 'appearance_ready' }), /Show the user both looks[\s\S]*ask which one[\s\S]*choose_hosted_look/);
   assert.doesNotMatch(hostedNext({ ...job, status: 'queued' }), /attach/);
+});
+
+// Grok 점검 (2026-11-03): the user watching asked for 25-second reads; a wait returns as soon as a picture, the progress or the state
+// changes, and a lease renewal (the worker's progress call with nothing in it) does not end it.
+test('a wait on a working job returns when a picture or the progress changes, not on a lease renewal', async () => {
+  const g = await generation();
+  try {
+    await g.healthy();
+    const { call } = await connector(g, { pollMs: 10 });
+    const { job } = await call('request_hosted_fighter', { description: '빨간 글러브를 낀 고양이 복서, 귀가 크다', language: 'ko', idempotencyKey: crypto.randomUUID() });
+    let held = (await g.work('POST', 'claim', {})).body.job;
+    const finish = (h, result) => g.work('POST', 'finish', { jobId: h.id, leaseToken: h.leaseToken, outcome: 'ok', result });
+    await finish(held, { brief: { profile: { name: '빨간 주먹' } } });
+    held = (await g.work('POST', 'claim', {})).body.job;
+    for (const name of ['look-a-0', 'look-b-0'])
+      await g.work('PUT', `jobs/${held.id}/artifacts/${name}`, webp(400, 600), { 'x-generation-lease': held.leaseToken, 'content-type': 'image/webp' });
+    await finish(held, { candidates: ['look-a-0', 'look-b-0'] });
+    await call('choose_hosted_look', { jobId: job.id, choose: 'a' });
+    held = (await g.work('POST', 'claim', {})).body.job;
+    const progress = body => g.work('POST', 'progress', { jobId: held.id, leaseToken: held.leaseToken, ...body });
+    const timed = async (send, waitSeconds = 5) => {
+      const started = Date.now();
+      const [read] = await Promise.all([call('get_hosted_fighter', { jobId: job.id, waitSeconds }),
+        new Promise(done => setTimeout(done, 150)).then(send)]);
+      return { read, ms: Date.now() - started };
+    };
+    // A draft is a picture event: the wait ends with it, and the read shows it.
+    await g.work('PUT', `jobs/${held.id}/artifacts/draft-walk-0`, webp(400, 600), { 'x-generation-lease': held.leaseToken, 'content-type': 'image/webp' });
+    const drafted = await timed(() => progress({ event: { kind: 'drafts', seq: 1, clips: [{ clip: 'walk', name: 'draft-walk-0' }] } }));
+    assert.ok(drafted.ms < 3000, `${drafted.ms} ms`); assert.deepEqual(drafted.read.job.drafts.map(d => d.clip), ['walk']);
+    assert.match(drafted.read.next, /waitSeconds 25/);
+    // So is a step of the progress.
+    const stepped = await timed(() => progress({ progress: 25 }));
+    assert.ok(stepped.ms < 3000, `${stepped.ms} ms`); assert.equal(stepped.read.job.progress, 25);
+    // A lease renewal changes nothing the user sees: the wait runs its time.
+    const renewed = await timed(() => progress({}), 1);
+    assert.ok(renewed.ms >= 900, `${renewed.ms} ms`); assert.equal(renewed.read.job.progress, 25);
+  } finally { await g.sql.close(); }
 });
