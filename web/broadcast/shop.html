@@ -15,7 +15,7 @@
       <div class="topbar-inner">
         <a class="brand" href="https://oddbout.com/" aria-label="ODDBOUT home"><img src="./assets/oddbout-logo.webp" alt="ODDBOUT Fight Club" width="378" height="80" /></a>
         <a class="studio-brand" href="/broadcast/"><img src="./assets/showrunner.svg" alt="" width="34" height="34" /><span>Showrunner</span></a>
-        <nav aria-label="Showrunner"><a href="#spotlight">Spotlight</a><a href="#my-broadcasts">My broadcasts</a><a href="#wallet">Studio Credits</a></nav>
+        <nav aria-label="Showrunner"><a href="#wallet">My wallet</a><a href="#spotlight">Broadcasts</a></nav>
         <div class="account">
           <button id="google-signin" class="google-button" type="button" disabled aria-label="Sign in with Google"><img src="./assets/google-signin.png" alt="Sign in with Google" width="189" height="40" /></button>
           <span id="account-identity" class="account-identity" hidden><span class="avatar" id="account-avatar" aria-hidden="true"></span><span id="account-name"></span></span>
@@ -40,14 +40,20 @@
       <p id="shop-status" class="shop-status" role="status" aria-live="polite"></p>
       <section id="wallet" class="wallet-section" aria-labelledby="wallet-title">
         <div class="wallet-bar">
-          <div><h2 id="wallet-title">Your Credits</h2><strong id="wallet-available">—</strong></div>
-          <button id="add-credits" class="button button-secondary" type="button" aria-expanded="false" aria-controls="credit-options" disabled>Add credits</button>
+          <div><h2 id="wallet-title">Your DON</h2><div class="wallet-amount"><img class="don-icon" src="./assets/don.svg" alt="" width="40" height="40" /><strong id="wallet-available">—</strong></div></div>
+          <button id="add-credits" class="button button-secondary" type="button" aria-expanded="false" aria-controls="credit-options" disabled>Add DON</button>
         </div>
         <p id="wallet-status" class="section-status" role="status" aria-live="polite"></p>
         <div id="credit-options" hidden>
           <a id="credit-paypal" class="button button-paypal" href="#" target="_blank" rel="noopener noreferrer" hidden>Continue with PayPal</a>
           <div id="credit-packs" class="credit-packs"></div>
         </div>
+        <section id="my-broadcasts" class="broadcasts-section" aria-labelledby="broadcasts-title">
+          <div class="section-heading"><h2 id="broadcasts-title">My tickets</h2><button id="broadcasts-refresh" class="button button-secondary button-small" type="button" disabled>Refresh</button></div>
+          <p id="broadcasts-status" class="section-status" role="status" aria-live="polite"></p>
+          <div id="broadcast-list" class="broadcast-list" aria-live="polite"></div>
+          <button id="broadcasts-more" class="button button-secondary button-small" type="button" hidden>Older tickets</button>
+        </section>
       </section>
       <section id="spotlight" class="product-section" aria-labelledby="spotlight-title">
         <div class="section-heading"><h2 id="spotlight-title">Choose your broadcast</h2></div>
@@ -63,9 +69,18 @@
         <div class="setup-grid">
           <section class="setup-card" aria-labelledby="media-title">
             <h3 id="media-title">Sponsor clip</h3>
+            <div class="media-choice" role="group" aria-label="Video source"><button id="choose-upload" type="button" aria-pressed="true">Upload MP4</button><button id="choose-link" type="button" aria-pressed="false">YouTube / Twitch</button></div>
+            <div id="upload-source">
             <label class="upload-zone" for="media-file"><span class="upload-symbol" aria-hidden="true">＋</span><strong id="media-file-name">Choose MP4 · Max 50 MB / 5 min</strong><span id="media-file-meta"></span><input id="media-file" name="mediaFile" type="file" accept="video/mp4,.mp4" /></label>
             <video id="media-preview" class="media-preview" controls playsinline hidden></video>
             <button id="media-upload" class="button button-secondary" type="button" disabled>Upload sponsor clip</button>
+            </div>
+            <div id="link-source" hidden>
+              <label class="field" for="media-link">Video link<input id="media-link" type="url" inputmode="url" placeholder="YouTube or Twitch URL" /></label>
+              <button id="preview-link" class="button button-secondary" type="button">Preview video</button>
+              <div id="external-preview" class="external-preview" hidden></div>
+              <button id="save-link" class="button button-primary" type="button" disabled>Save video link</button>
+            </div>
           </section>
           <section class="setup-card" aria-labelledby="destination-title">
             <label id="destination-title" class="field" for="destination-url">Promo URL<input id="destination-url" name="destinationUrl" type="url" inputmode="url" autocomplete="url" placeholder="https://…" /></label>
@@ -73,15 +88,9 @@
           </section>
         </div>
         <div class="publish-row">
-          <label class="consent"><input id="publish-consent" type="checkbox" /><span>Publish this video and link.</span></label>
+          <label class="consent"><input id="publish-consent" type="checkbox" /><span>I checked playback. Publish this video and link.</span></label>
           <button id="publish-broadcast" class="button button-primary" type="button" disabled>Publish broadcast</button>
         </div>
-      </section>
-      <section id="my-broadcasts" class="broadcasts-section" aria-labelledby="broadcasts-title">
-        <div class="section-heading"><h2 id="broadcasts-title">My broadcasts</h2><button id="broadcasts-refresh" class="button button-secondary button-small" type="button" disabled>Refresh</button></div>
-        <p id="broadcasts-status" class="section-status" role="status" aria-live="polite"></p>
-        <div id="broadcast-list" class="broadcast-list" aria-live="polite"></div>
-        <button id="broadcasts-more" class="button button-secondary button-small" type="button" hidden>Load older broadcasts</button>
       </section>
     </main>
     <script src="./supabase.js"></script>

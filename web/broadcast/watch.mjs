@@ -1,11 +1,12 @@
 import {programSlot} from './program.mjs';
+import {mountExternal} from './external-player.mjs';
 const $=id=>document.getElementById(id);
 const show=new URLSearchParams(location.search).get('show');
 const arenaOrigin='https://oddbout-broadcast-arena.onrender.com';
-let manifest,clockOffset=0,current='',timer,spoken=false;
+let manifest,clockOffset=0,current='',timer,spoken=false,disposeExternal=()=>{};
 const names={kuma:'Kuma',yume:'Yume',bravow:'Bravow',beotim:'Beotim',quickcat:'Quickcat',kungjjak:'Kungjjak',sikeundung:'Sikeundung',duldul:'Duldul',eoridung:'Eoridung'};
 function nowSeconds(){return(Date.now()+clockOffset-Date.parse(manifest.startedAt))/1000;}
-function clear(){ $('video').pause();$('arena').removeAttribute('src');$('arena').hidden=true;$('sponsor').hidden=true;$('play').hidden=true;globalThis.speechSynthesis?.cancel(); }
+function clear(){ $('video').pause();disposeExternal();$('arena').removeAttribute('src');$('arena').hidden=true;$('sponsor').hidden=true;$('play').hidden=true;globalThis.speechSynthesis?.cancel(); }
 function tick(){
   if(!manifest)return;
   const elapsed=nowSeconds(),slot=programSlot(elapsed,manifest.durationSeconds),bounded=Math.max(0,Math.min(manifest.durationSeconds,Math.floor(elapsed)));
@@ -17,9 +18,10 @@ function tick(){
     $('player').hidden=false;
     if(slot.kind==='advertisement'){
       $('status').textContent='Sponsor break · your host’s introduction';$('sponsor').hidden=false;
-      $('video').src=manifest.media.videoUrl;$('intro').textContent=manifest.media.aiIntro;
+      $('intro').textContent=manifest.media.aiIntro;$('video').hidden=Boolean(manifest.media.source);
       $('sponsor-link').href=manifest.media.targetUrl;$('sponsor-link').textContent='Visit '+new URL(manifest.media.targetUrl).hostname+' ↗';
-      $('video').play().catch(()=>{$('play').hidden=false;});
+      if(manifest.media.source){disposeExternal=mountExternal($('external-video'),manifest.media.source,{autoplay:true});$('play').textContent='Hear introduction';$('play').hidden=false;}
+      else{$('video').src=manifest.media.videoUrl;$('play').textContent='Play broadcast with sound';$('video').play().catch(()=>{$('play').hidden=false;});}
     }else{
       const pairs=[[0,1],[2,3],[0,2],[1,3],[0,3],[1,2]],pair=pairs[slot.index%pairs.length];
       const a=manifest.fighterIds[pair[0]],b=manifest.fighterIds[pair[1]];
@@ -28,11 +30,11 @@ function tick(){
       $('arena').src=url.href;$('arena').hidden=false;
     }
   }
-  if(slot.kind==='advertisement'&&Number.isFinite($('video').duration)&&$('video').duration>0){
+  if(slot.kind==='advertisement'&&!manifest.media.source&&Number.isFinite($('video').duration)&&$('video').duration>0){
     const target=slot.offset%$('video').duration;if(Math.abs($('video').currentTime-target)>3)$('video').currentTime=target;
   }
 }
-$('play').addEventListener('click',async()=>{try{await $('video').play();$('play').hidden=true;if(!spoken&&globalThis.speechSynthesis){const utterance=new SpeechSynthesisUtterance(manifest.media.aiIntro);utterance.lang='en-US';speechSynthesis.speak(utterance);spoken=true;}}catch{$('playback-error').textContent='Playback could not start. Try the video’s play control.';}});
+$('play').addEventListener('click',async()=>{try{if(!manifest.media.source)await $('video').play();$('play').hidden=true;if(!spoken&&globalThis.speechSynthesis){const utterance=new SpeechSynthesisUtterance(manifest.media.aiIntro);utterance.lang='en-US';speechSynthesis.speak(utterance);spoken=true;}}catch{$('playback-error').textContent='Playback could not start. Try the video’s play control.';}});
 $('video').addEventListener('error',()=>{$('playback-error').textContent='Sponsor video could not play. Refresh to get a new playback link.';});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)tick();});
 window.addEventListener('message',event=>{
@@ -46,7 +48,7 @@ async function load(){
   if(!response.ok||!body.ok)throw new Error('This broadcast is unavailable. Try again shortly.');
   manifest=body.data;clockOffset=Date.parse(manifest.serverNow)-Date.now();
   if(!Number.isFinite(clockOffset)||![3600,7200,10800].includes(manifest.durationSeconds)||!Array.isArray(manifest.fighterIds)||manifest.fighterIds.length!==4||!manifest.fighterIds.every(id=>Object.hasOwn(names,id)))throw new Error('The broadcast program could not be verified.');
-  $('title').textContent=manifest.productName;$('lineup').textContent='SS lineup · '+manifest.fighterIds.map(id=>names[id]).join(' · ');
+  $('title').textContent=manifest.productName;$('lineup').replaceChildren(...manifest.fighterIds.map(id=>{const item=document.createElement('span'),img=document.createElement('img'),name=document.createElement('span');item.className='watch-fighter';img.src='/broadcast/assets/'+id+'.webp';img.alt='';img.width=40;img.height=40;name.textContent=names[id];item.append(img,name);return item;}));
   tick();clearInterval(timer);timer=setInterval(tick,1000);
 }
 load().catch(error=>{$('status').textContent=error.message;});

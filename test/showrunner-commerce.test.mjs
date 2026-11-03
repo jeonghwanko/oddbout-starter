@@ -24,7 +24,7 @@ async function fixture(t) {
 
 test('Showrunner merchandising preserves unit prices and ignores client price, credit and package-name spoofing',async t=>{
   const f=await fixture(t),catalog=(await f.request('catalog')).catalog;
-  assert.equal(catalog.service.name,'ODDBOUT Showrunner');assert.equal(catalog.service.creditName,'Studio Credits');
+  assert.equal(catalog.service.name,'ODDBOUT Showrunner');assert.equal(catalog.service.creditName,'DON');
   assert.equal(catalog.version,'sandbox-2026-11-02-v1');assert.equal(catalog.tools.host_cup.credits,25);
   assert.deepEqual(catalog.products.filter(item=>!item.operatorOnly).map(({id,name,amountCents,credits,maxCups,icon})=>({id,name,amountCents,credits,maxCups,icon})),[
     {id:'sandbox-1000',name:'Starter',amountCents:1000,credits:1000,maxCups:40,icon:'bell'},
@@ -37,7 +37,7 @@ test('Showrunner merchandising preserves unit prices and ignores client price, c
   const requestKey=randomUUID(),body={requestKey,productId:'studio-series-5000',credits:1,amountCents:1,name:'Spoofed',description:'Spoofed'};
   const first=await f.request('checkout',{body});assert.equal(first.status,200);
   const unit=f.orders.get('ORDER1').purchase_units[0];
-  assert.equal(unit.amount.value,'50.00');assert.equal(unit.description,'ODDBOUT Showrunner Series - 5,000 Studio Credits');
+  assert.equal(unit.amount.value,'50.00');assert.equal(unit.description,'ODDBOUT Showrunner Series - 5,000 DON');
   const intent=await f.store.findTopup(OWNER,first.data.intentId);
   assert.deepEqual(intent.input,{requestKey,amountCents:5000,credits:5000,currency:'USD'});
   assert.deepEqual((await f.request('checkout',{body})).data,first.data);
@@ -114,7 +114,7 @@ test('PayPal receives server-controlled Showrunner branding and package descript
   const result=await service.checkout(OWNER,{requestKey:randomUUID(),productId:'sandbox-1000',brandName:'Spoofed'});
   const payload=calls.find(call=>call.body).body;
   assert.equal(payload.payment_source.paypal.experience_context.brand_name,COMMERCE_CATALOG.service.name);
-  assert.equal(payload.purchase_units[0].description,'ODDBOUT Showrunner Starter - 1,000 Studio Credits');
+  assert.equal(payload.purchase_units[0].description,'ODDBOUT Showrunner Starter - 1,000 DON');
   assert.equal(payload.purchase_units[0].reference_id,result.intentId);
   assert.deepEqual(payload.purchase_units[0].amount,{currency_code:'USD',value:'10.00'});
 });

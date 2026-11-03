@@ -69,7 +69,7 @@ export function createCommerceService({ store, paypal, merchantId = '', publicOr
       const intents = await store.listTopups(owner);
       return {items:intents.map((/** @type {any} */ intent) => {
         const product=productFor(intent);
-        return {id:intent.id,productId:product?.id ?? null,productName:product?.name ?? 'Studio Credits purchase',
+        return {id:intent.id,productId:product?.id ?? null,productName:product?.name ?? 'DON purchase',
           credits:intent.credits,amountCents:intent.amountCents,currency:intent.currency,createdAt:intent.createdAt,
           creditedAt:intent.creditedAt,status:intent.status,
           canCheckout:intent.status !== 'credited' && Boolean(intent.providerOrderId || now()-Date.parse(intent.createdAt)<=5*60_000)};

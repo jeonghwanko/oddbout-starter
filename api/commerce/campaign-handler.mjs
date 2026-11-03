@@ -33,7 +33,7 @@ export function createCampaignHandler({service,publicOrigin,authenticate,upload}
         if(!input||typeof input!=='object'||Array.isArray(input))throw new Problem(422,'invalid-input');
         if(origin!==publicOrigin)throw new Problem(403,'web-approval-required');
         limit(owner,60);
-        if(route[2]==='media')limit(owner+':media',2);
+        if(['media','link'].includes(route[2]))limit(owner+':media',2);
         if(route[2]==='upload')limit(owner+':upload',5);
       }
       const {confirmed,...body}=input;
@@ -49,6 +49,7 @@ export function createCampaignHandler({service,publicOrigin,authenticate,upload}
       else if(route.length===3&&route[0]==='orders'&&route[2]==='preview'&&method==='GET')data=await service.preview(owner,route[1]);
       else if(route.length===3&&route[0]==='orders'&&method==='POST'){
         if(route[2]==='media'){consent();data=await service.saveMedia(owner,route[1],body);}
+        else if(route[2]==='link'){consent();data=await service.saveLink(owner,route[1],body);}
         else if(route[2]==='start'){consent();data=await service.start(owner,route[1],body);}
         else if(route[2]==='upload'&&upload){await service.get(owner,route[1]);data=await upload(owner,route[1],body);}
         else throw new Problem(404,'not-found');

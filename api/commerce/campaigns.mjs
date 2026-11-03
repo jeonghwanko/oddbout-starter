@@ -1,9 +1,10 @@
 // @ts-check
 import {Problem,UUID} from '../http.mjs';
 import {COMMERCE_CATALOG} from './catalog.mjs';
+import {parseMediaLink} from './media-links.mjs';
 
 export const SPOTLIGHT_HOUR=Object.freeze({id:'spotlight-hour',name:'Spotlight Hour',priceCredits:300,
-  durationSeconds:3600,adSeconds:600,currency:'Studio Credits',fighterCount:4,fighterPoolTier:'SS',
+  durationSeconds:3600,adSeconds:600,currency:'DON',fighterCount:4,fighterPoolTier:'SS',
   maxUploadBytes:52428800,allowedMimeTypes:Object.freeze(['video/mp4']),maxVideoSeconds:300,
   fighterTierMeaning:'Campaign merchandising tier; not game rank',fighterPool:COMMERCE_CATALOG.fighters,
   adSlots:Object.freeze([{startSeconds:0,durationSeconds:300},{startSeconds:1800,durationSeconds:300}])});
@@ -38,15 +39,18 @@ function videoPath(value,orderId){
  * A purchased campaign is a flat charge; it never invokes the metered cup enqueue/spend commands.
  * @param {{db:{rpc:(name:string,args:any)=>PromiseLike<{data:any,error:any}>},store?:unknown,
  * verifyMedia?:(owner:string,orderId:string,input:{videoPath:string,targetUrl:string})=>Promise<CampaignMedia>,
+ * verifyLink?:(owner:string,orderId:string,input:{source:import('./media-links.mjs').ExternalVideo,targetUrl:string})=>Promise<{aiIntro:string}>,
  * beforeStart?:(owner:string,order:any)=>Promise<boolean|void>,
  * signMedia?:(orderId:string,media:CampaignMedia)=>Promise<{videoUrl:string,expiresAt?:string}>}} options */
-export function createCampaignService({db,verifyMedia,beforeStart,signMedia}){
+export function createCampaignService({db,verifyMedia,verifyLink,beforeStart,signMedia}){
   /** Same-process media submits share verification. This is not a distributed provider-execution lease.
    * @type {Map<string,{signature:string,promise:Promise<any>}>} */
   const mediaInFlight=new Map();
   /** @param {string|null} owner @param {string} command @param {any} [input] */
   async function run(owner,command,input={}){
-    const {data,error}=await db.rpc('commerce_campaign',{p_owner:owner,p_command:command,p_input:input});
+    const {data,error}=command==='save_link'
+      ?await db.rpc('commerce_campaign_link',{p_owner:owner,p_order_id:input.orderId,p_request_key:input.requestKey,p_input:input.media})
+      :await db.rpc('commerce_campaign',{p_owner:owner,p_command:command,p_input:input});
     if(error){
       const code=String(error.message??'').match(/^commerce:([a-z_-]+)/)?.[1];
       throw new Problem(code==='not-found'?404:code==='insufficient-credits'?402:code==='owner-required'?401
@@ -99,6 +103,29 @@ export function createCampaignService({db,verifyMedia,beforeStart,signMedia}){
           ||!SPOTLIGHT_HOUR.allowedMimeTypes.includes(verified.mimeType)
           ||typeof verified.aiIntro!=='string'||!verified.aiIntro.trim()||verified.aiIntro.length>1000)throw new Problem(422,'invalid-verified-media');
         return run(owner,'save_media',{orderId,requestKey,...verified});
+      })();
+      mediaInFlight.set(identity,{signature,promise});
+      try{return await promise;}finally{if(mediaInFlight.get(identity)?.promise===promise)mediaInFlight.delete(identity);}
+    },
+    /** Linked videos retain provider identity; duration and embeddability are not claimed as verified.
+     * @param {string} owner @param {string} id @param {unknown} input */
+    async saveLink(owner,id,input){
+      const orderId=key(id),value=body(input,['requestKey','mediaUrl','targetUrl']),requestKey=key(value.requestKey);
+      let source;try{source=parseMediaLink(value.mediaUrl);}catch{throw new Problem(422,'unsupported-video-link');}
+      const requested={source,targetUrl:target(value.targetUrl)},order=await get(owner,orderId);
+      const existing=await run(owner,'find_media',{orderId,requestKey});
+      if(existing){
+        if(existing.media.source?.url!==source.url||existing.media.source?.kind!==source.kind||existing.media.source?.id!==source.id)throw new Problem(409,'idempotency-conflict');
+        if(existing.media.targetUrl!==requested.targetUrl)throw new Problem(409,'idempotency-conflict');return existing.order;
+      }
+      const identity=`${owner}:${orderId}:${requestKey}`,signature=JSON.stringify(requested),pending=mediaInFlight.get(identity);
+      if(pending){if(pending.signature!==signature)throw new Problem(409,'idempotency-conflict');return pending.promise;}
+      const promise=(async()=>{
+        if(order.status==='started')throw new Problem(409,'campaign-already-started');
+        if(!verifyLink)throw new Problem(503,'campaign-links-unavailable');
+        const verified=await verifyLink(owner,orderId,requested);
+        if(typeof verified?.aiIntro!=='string'||!verified.aiIntro.trim()||verified.aiIntro.length>1000)throw new Problem(422,'invalid-verified-media');
+        return run(owner,'save_link',{orderId,requestKey,media:{...requested,aiIntro:verified.aiIntro,verification:'link-format-only'}});
       })();
       mediaInFlight.set(identity,{signature,promise});
       try{return await promise;}finally{if(mediaInFlight.get(identity)?.promise===promise)mediaInFlight.delete(identity);}

@@ -29,13 +29,13 @@ function budgetFeedback(message, error = false) {
 const show = value => {
   $('status').textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
   $('activity-summary').textContent = typeof value === 'string' ? value
-    : value.status === 'credited' ? `${Number(value.credits ?? 0).toLocaleString()} Studio Credits are ready to use.`
+    : value.status === 'credited' ? `${Number(value.credits ?? 0).toLocaleString()} DON are ready to use.`
     : value.approved ? 'Budget approved. You can start your rehearsal.'
     : 'Session updated. View the details below.';
 };
 function showCreditsReady(credits) {
   const count = Number.isSafeInteger(credits) && credits > 0 ? credits.toLocaleString() + ' ' : '';
-  const message = `${count}Studio Credits added. Your balance is ready to use.`;
+  const message = `${count}DON added. Your balance is ready to use.`;
   $('status').textContent = message; $('activity-summary').textContent = message;
 }
 async function call(path, body) {
@@ -148,7 +148,7 @@ function showCheckout(result) {
 }
 const plain = (value, max = 400) => typeof value === 'string' ? value.slice(0, max) : '';
 const PRODUCT_STORAGE_KEY = 'oddbout-showrunner-product';
-function creditName() { return plain(catalog?.service?.creditName, 40) || 'Studio Credits'; }
+function creditName() { return plain(catalog?.service?.creditName, 40) || 'DON'; }
 function priceLabel(amountCents, currency = 'USD') {
   if (!Number.isSafeInteger(amountCents) || amountCents < 0) return 'Price unavailable';
   try { return new Intl.NumberFormat(undefined, { style: 'currency', currency: plain(currency,3).toUpperCase() || 'USD' }).format(amountCents / 100); }
@@ -224,7 +224,7 @@ function renderPurchases() {
   host.replaceChildren(...purchases.map(purchase => {
     const row = textElement('article','purchase-row');
     const heading = textElement('div','purchase-heading');
-    heading.append(textElement('strong','purchase-name',plain(purchase.productName,80) || 'Studio Credits'),textElement('span','purchase-state',purchaseState(purchase.status)));
+    heading.append(textElement('strong','purchase-name',plain(purchase.productName,80) || 'DON'),textElement('span','purchase-state',purchaseState(purchase.status)));
     const credits = Number.isSafeInteger(purchase.credits) ? `${purchase.credits.toLocaleString()} ${creditName()}` : creditName();
     const amount = priceLabel(purchase.amountCents,purchase.currency);
     row.append(heading,textElement('p','purchase-meta',`${credits} · ${amount} · ${purchaseDate(purchase.createdAt)}`));
@@ -243,7 +243,7 @@ function renderShowSummary(report) {
   const spent = report.confirmedSpentCredits ?? broadcast.spentCredits;
   const remaining = report.remainingReservedCredits ?? broadcast.reservedCredits;
   const metrics = [['Completed cups', completed.length.toLocaleString()],
-    ['Studio Credits used', Number.isSafeInteger(spent) ? spent.toLocaleString() : '—'],
+    ['DON used', Number.isSafeInteger(spent) ? spent.toLocaleString() : '—'],
     ['Credits remaining', Number.isSafeInteger(remaining) ? remaining.toLocaleString() : '—']];
   $('show-summary-metrics').replaceChildren(...metrics.map(([label,value]) => {
     const item = textElement('div','show-summary-metric'); item.append(textElement('span','show-summary-label',label),textElement('strong','show-summary-value',value)); return item;
@@ -255,7 +255,7 @@ function renderShowSummary(report) {
   const operationCompleted = paidOperation?.state === 'completed'
     && (paidOperation.broadcastId === broadcast.id || $('broadcastId').value.trim() === broadcast.id);
   if (broadcast.status === 'completed' || operationCompleted) {
-    $('activity-summary').textContent = `Show complete · ${completed.length.toLocaleString()} ${completed.length === 1 ? 'cup' : 'cups'} · ${Number.isSafeInteger(spent) ? spent.toLocaleString() : '—'} Studio Credits used.`;
+    $('activity-summary').textContent = `Show complete · ${completed.length.toLocaleString()} ${completed.length === 1 ? 'cup' : 'cups'} · ${Number.isSafeInteger(spent) ? spent.toLocaleString() : '—'} DON used.`;
   }
 }
 async function loadPurchases() {
@@ -274,7 +274,7 @@ async function loadPurchases() {
     $('payment-recovery').hidden = true;
   }
   renderPurchases();
-  $('purchases-status').textContent = matchedCredit ? `${plain(matchedCredit.productName,80) || 'Purchase'} added to your Studio Credits.` : '';
+  $('purchases-status').textContent = matchedCredit ? `${plain(matchedCredit.productName,80) || 'Purchase'} added to your DON.` : '';
   if (matchedCredit) { await refresh(); showCreditsReady(matchedCredit.credits); }
   updateControls();
 }
@@ -1353,7 +1353,7 @@ async function initialize() {
   if (intent) {
     returnedIntentId = UUID_PATTERN.test(intent) ? intent : '';
     returnedIntentCancelled = query.get('cancelled') === '1';
-    show(returnedIntentCancelled ? 'PayPal approval was cancelled. No credits were added.' : 'Checking this purchase with PayPal. Studio Credits update only after PayPal confirms it.');
+    show(returnedIntentCancelled ? 'PayPal approval was cancelled. No credits were added.' : 'Checking this purchase with PayPal. DON update only after PayPal confirms it.');
     history.replaceState(null, '', location.pathname);
   }
   if (!config.authConfigured) { show('No balances or successful operations are simulated.'); return; }

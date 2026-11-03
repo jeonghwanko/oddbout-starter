@@ -96,12 +96,15 @@ export function createBroadcastDemo(env = process.env) {
     ['/broadcast/', ['web/broadcast/shop.html', 'text/html; charset=utf-8']],
     ['/broadcast/shop.mjs', ['web/broadcast/shop.mjs', 'text/javascript; charset=utf-8']],
     ['/broadcast/shop.css', ['web/broadcast/shop.css', 'text/css; charset=utf-8']],
+    ['/broadcast/media-links.mjs', ['api/commerce/media-links.mjs', 'text/javascript; charset=utf-8']],
+    ['/broadcast/external-player.mjs', ['web/broadcast/external-player.mjs', 'text/javascript; charset=utf-8']],
     ['/broadcast/watch/', ['web/broadcast/watch.html', 'text/html; charset=utf-8']],
     ['/broadcast/watch.mjs', ['web/broadcast/watch.mjs', 'text/javascript; charset=utf-8']],
     ['/broadcast/program.mjs', ['web/broadcast/program.mjs', 'text/javascript; charset=utf-8']],
     ['/broadcast/watch.css', ['web/broadcast/watch.css', 'text/css; charset=utf-8']],
     ['/broadcast/operator/', ['web/broadcast/index.html', 'text/html; charset=utf-8']],
     ['/broadcast/assets/showrunner.svg', ['web/broadcast/assets/showrunner.svg', 'image/svg+xml']],
+    ['/broadcast/assets/don.svg', ['web/broadcast/assets/don.svg', 'image/svg+xml']],
     ['/broadcast/style.css', ['web/broadcast/style.css', 'text/css; charset=utf-8']],
     ['/broadcast/app.mjs', ['web/broadcast/app.mjs', 'text/javascript; charset=utf-8']],
     ['/broadcast/operations.mjs', ['web/broadcast/operations.mjs', 'text/javascript; charset=utf-8']],
@@ -111,7 +114,7 @@ export function createBroadcastDemo(env = process.env) {
     ['/broadcast/supabase.js', ['node_modules/@supabase/supabase-js/dist/umd/supabase.js', 'text/javascript; charset=utf-8']],
   ]);
   // Explicit asset allowlist: never turn this into an arbitrary filesystem route.
-  for (const name of ['oddbout-logo', 'kuma', 'yume', 'bravow', 'beotim']) {
+  for (const name of ['oddbout-logo', 'kuma', 'yume', 'bravow', 'beotim', 'quickcat', 'kungjjak', 'sikeundung', 'duldul', 'eoridung']) {
     files.set(`/broadcast/assets/${name}.webp`, [`web/broadcast/assets/${name}.webp`, 'image/webp']);
   }
   for (const name of ['paypal', 'google-signin']) {
@@ -160,7 +163,7 @@ export function createBroadcastDemo(env = process.env) {
         const bytes = await readFile(new URL(file[0], root));
         if(['/broadcast/','/broadcast/watch/'].includes(address.pathname)){
           const authOrigin=url?new URL(url).origin:'';
-          res.setHeader('content-security-policy',`default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; media-src 'self' blob: ${authOrigin}; connect-src 'self' ${authOrigin}; frame-src https://oddbout-broadcast-arena.onrender.com; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'`);
+          res.setHeader('content-security-policy',`default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; media-src 'self' blob: ${authOrigin}; connect-src 'self' ${authOrigin}; frame-src https://oddbout-broadcast-arena.onrender.com https://www.youtube-nocookie.com https://player.twitch.tv https://clips.twitch.tv; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'`);
           res.setHeader('x-frame-options','DENY');
         }
         if (address.pathname === '/broadcast/tasks/') {

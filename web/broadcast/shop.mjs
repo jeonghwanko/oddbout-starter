@@ -1,13 +1,16 @@
 import { createOperationJournal } from './operations.mjs';
+import {parseMediaLink} from './media-links.mjs';
+import {mountExternal} from './external-player.mjs';
 
 const $ = id => document.getElementById(id);
 const AUTH_KEY = 'oddbout-paid-auth';
 const CREDIT_PRODUCT_IDS = new Set(['sandbox-1000','studio-series-5000']);
 const FIGHTER_NAMES = { kuma:'Kuma', yume:'Yume', bravow:'Bravow', beotim:'Beotim', quickcat:'Quickcat', kungjjak:'Kungjjak', sikeundung:'Sikeundung', duldul:'Duldul', eoridung:'Eoridung' };
-const ORDER_STATES = { awaiting_media:'Add sponsor media', ready:'Ready to publish', started:'Published', needs_attention:'Needs attention' };
+const ORDER_STATES = { awaiting_media:'Ready to use', ready:'Ready to publish', started:'Published', needs_attention:'Needs attention' };
 let config, session, client, journal, campaignProduct, campaignProducts=[], selectedProductId='', commerceCatalog;
 let orders = [], selectedOrder = null, nextCursor = null, orderRevision = 0, selectionRevision = 0, accountEpoch = 0, orderTimer;
 let selectedFile = null, selectedFileDuration = null, previewObjectUrl = '', fileRevision = 0, busy = false, topupBusy = false;
+let mediaMode='upload',previewedLink='',disposeExternal=()=>{};
 const returnedIntent = new URLSearchParams(location.search).get('intent') ?? '';
 
 function message(text,error=false) { $('shop-status').textContent = text; $('shop-status').classList.toggle('is-error',error); }
@@ -15,6 +18,16 @@ function walletMessage(text,error=false) { $('wallet-status').textContent = text
 function campaignState(order) { return order?.status ?? order?.state ?? 'unknown'; }
 function plain(value,max=400) { return typeof value === 'string' ? value.slice(0,max) : ''; }
 function fighterName(id) { return FIGHTER_NAMES[id] ?? plain(id,64).replace(/([a-z])([A-Z])/g,'$1 $2').replace(/^./,letter=>letter.toUpperCase()); }
+function donIcon(){const img=document.createElement('img');img.className='don-icon';img.src='/broadcast/assets/don.svg';img.alt='';img.width=32;img.height=32;return img;}
+function fighterLineup(ids){
+  const list=document.createElement('ul');list.className='fighter-lineup';list.setAttribute('aria-label','Your fighters');
+  for(const id of ids??[]){
+    const item=document.createElement('li'),label=document.createElement('span');label.textContent=fighterName(id);
+    if(Object.hasOwn(FIGHTER_NAMES,id)){const photo=document.createElement('img');photo.src='/broadcast/assets/'+id+'.webp';photo.alt='';photo.width=56;photo.height=56;item.append(photo);}
+    item.append(label);list.append(item);
+  }
+  return list;
+}
 function money(cents,currency='USD') {
   if (!Number.isSafeInteger(cents) || cents < 0) return 'Price unavailable';
   try { return new Intl.NumberFormat(undefined,{style:'currency',currency:plain(currency,3).toUpperCase() || 'USD'}).format(cents/100); }
@@ -29,7 +42,7 @@ function updateControls() {
     const label=!session?'Sign in to buy':pendingThis?(pendingCampaign.result?.id?'Open purchase':'Continue purchase'):'Buy broadcast';
     button.textContent=label;
     const hours=product?.durationSeconds/3600;
-    button.setAttribute('aria-label',`${label} · ${hours} ${hours===1?'hour':'hours'} · ${product?.priceCredits} Credits`);
+    button.setAttribute('aria-label',`${label} · ${hours} ${hours===1?'hour':'hours'} · ${product?.priceCredits} DON`);
     button.disabled=busy||topupBusy||!config?.commerceEnabled||!client||Boolean(pendingCampaign&&!pendingThis);
   }
   $('add-credits').disabled=!client||busy||topupBusy;
@@ -38,12 +51,28 @@ function updateControls() {
   $('publish-broadcast').disabled = !session || busy || !selectedOrder || campaignState(selectedOrder)!=='ready' || !$('publish-consent').checked;
   const mediaLocked=Boolean(selectedOrder&&campaignState(selectedOrder)!=='awaiting_media');
   $('media-file').disabled=mediaLocked;$('destination-url').readOnly=mediaLocked;
+  const savedMedia=selectedOrder&&journal?.get('campaign-media:'+selectedOrder.id);
+  $('choose-upload').disabled=busy||mediaLocked||Boolean(savedMedia?.input?.mediaUrl);
+  $('choose-link').disabled=busy||mediaLocked||Boolean(savedMedia?.input?.videoPath);
+  $('media-link').readOnly=mediaLocked||busy;
+  $('preview-link').disabled=busy||!validMediaLink($('media-link').value);
+  $('save-link').disabled=busy||!session||!selectedOrder||mediaLocked||!validDestination($('destination-url').value)||!previewedLink||validMediaLink($('media-link').value)?.url!==previewedLink;
   for(const button of $('credit-packs').querySelectorAll('button'))button.disabled=!session||busy||topupBusy;
   $('signout').disabled = busy || topupBusy;
 }
 function validDestination(value) {
   try { const url=new URL(value.trim()); return url.protocol==='https:' && !url.username && !url.password && value.trim().length<=2048; }
   catch { return false; }
+}
+function validMediaLink(value){try{return parseMediaLink(value.trim());}catch{return null;}}
+function setMediaMode(mode){
+  mediaMode=mode;$('upload-source').hidden=mode!=='upload';$('link-source').hidden=mode!=='link';
+  $('choose-upload').setAttribute('aria-pressed',String(mode==='upload'));$('choose-link').setAttribute('aria-pressed',String(mode==='link'));
+  if(mode==='link')$('media-preview').pause();else{disposeExternal();previewedLink='';}
+}
+function previewMediaLink(){
+  const source=validMediaLink($('media-link').value);if(!source){message('Enter a YouTube video or Twitch channel, video or clip URL.',true);return;}
+  disposeExternal();disposeExternal=mountExternal($('external-preview'),source);previewedLink=source.url;$('publish-consent').checked=false;updateControls();
 }
 async function readResponse(response) {
   const result = await response.json();
@@ -59,7 +88,7 @@ async function api(path,{body,base='/campaigns'}={}) {
   return data;
 }
 async function publicData(path) { return readResponse(await fetch(path)); }
-function creditName() { return plain(commerceCatalog?.service?.creditName,40) || 'Studio Credits'; }
+function creditName() { return plain(commerceCatalog?.service?.creditName,40) || 'DON'; }
 function renderProduct() {
   const pending=journal?.get('campaignOrder');
   if(pending?.input?.productId)selectedProductId=pending.input.productId;
@@ -73,7 +102,8 @@ function renderProduct() {
     const specs=document.createElement('span');specs.className='duration-ads';specs.textContent=`${Math.round(product.adSeconds/60)} min of ads`;
     const cost=document.createElement('span');cost.className='duration-price';
     const amount=document.createElement('b');amount.textContent=Number(product.priceCredits).toLocaleString();
-    const unit=document.createElement('span');unit.textContent='Credits';cost.append(amount,unit);
+    const unit=document.createElement('span');unit.textContent='DON';
+    const value=document.createElement('span');value.className='don-amount';value.append(donIcon(),amount);cost.append(value,unit);
     const buy=document.createElement('button');buy.type='button';buy.className='button button-primary';buy.dataset.buyProductId=product.id;
     buy.addEventListener('click',()=>purchaseSpotlight(product.id));
     card.append(name,specs,cost,buy);
@@ -88,8 +118,8 @@ function renderCreditPacks() {
   $('credit-packs').replaceChildren(...packs.map(product=>{
     const box=document.createElement('div');box.className='credit-pack';
     const summary=document.createElement('span');summary.textContent=`${plain(product.name,64)} · ${Number(product.credits).toLocaleString()} ${creditName()} · ${money(product.amountCents,commerceCatalog.currency)}`;
-    const button=document.createElement('button');button.className='button button-secondary button-small';button.type='button';button.textContent=pending?.input?.productId===product.id?'Continue checkout':'Add credits';button.disabled=!session||!config?.commerceEnabled||!commerceCatalog?.paypalConfigured||busy||topupBusy||Boolean(pending&&pending.input.productId!==product.id);
-    button.addEventListener('click',()=>purchaseCreditPack(product.id,button));box.append(summary,button);return box;
+    const button=document.createElement('button');button.className='button button-secondary button-small';button.type='button';button.textContent=pending?.input?.productId===product.id?'Continue checkout':'Add DON';button.disabled=!session||!config?.commerceEnabled||!commerceCatalog?.paypalConfigured||busy||topupBusy||Boolean(pending&&pending.input.productId!==product.id);
+    button.addEventListener('click',()=>purchaseCreditPack(product.id,button));box.append(donIcon(),summary,button);return box;
   }));
 }
 async function loadWallet() {
@@ -113,8 +143,8 @@ async function purchaseCreditPack(productId,button) {
     let op=existing??saved.begin('topup',input);saved.markDispatched('topup',op.requestKey);
     const result=await api('/checkout',{base:'/commerce',body:{...input,requestKey:op.requestKey}});
     if(result.status==='credited') {saved.complete('topup',op.requestKey);walletMessage(`${Number(result.credits??0).toLocaleString()} ${creditName()} added. Your balance is ready.`,false);checkoutLink(null);await loadWallet();}
-    else {saved.acknowledge('topup',op.requestKey,result);checkoutLink(result);walletMessage('Continue the same PayPal checkout. Credits are added only after PayPal confirms payment.');}
-  } catch(error) {if(session?.user.id===owner&&accountEpoch===epoch)walletMessage(error.code==='insufficient-credits'?'This account needs more Studio Credits. Your pack request is saved.': 'The credit-pack request is saved. Retry to continue the same checkout.',true);}
+    else {saved.acknowledge('topup',op.requestKey,result);checkoutLink(result);walletMessage('Continue the same PayPal checkout. DON is added only after PayPal confirms payment.');}
+  } catch(error) {if(session?.user.id===owner&&accountEpoch===epoch)walletMessage(error.code==='insufficient-credits'?'This account needs more DON. Your pack request is saved.': 'The credit-pack request is saved. Retry to continue the same checkout.',true);}
   finally {topupBusy=false;renderCreditPacks();updateControls();}
 }
 function normalizedOrder(value) { return value?.order??value?.campaign??value; }
@@ -136,20 +166,27 @@ function renderOrder(order) {
   selectedOrder=order;const state=campaignState(order);
   $('purchase-panel').hidden=!order;
   if(!order){
+    disposeExternal();previewedLink='';$('media-link').value='';setMediaMode('upload');
     fileRevision++;$('broadcast-setup').hidden=true;selectedFile=null;selectedFileDuration=null;$('destination-url').value='';$('media-file').value='';
     if(previewObjectUrl)URL.revokeObjectURL(previewObjectUrl);previewObjectUrl='';$('media-preview').removeAttribute('src');$('media-preview').hidden=true;
     updateControls();return;
   }
-  if(previousId!==order.id){fileRevision++;selectedFile=null;selectedFileDuration=null;$('media-file').value='';if(previewObjectUrl)URL.revokeObjectURL(previewObjectUrl);previewObjectUrl='';$('media-preview').removeAttribute('src');$('media-preview').hidden=true;$('destination-url').value='';}
+  if(previousId!==order.id){fileRevision++;selectedFile=null;selectedFileDuration=null;$('media-file').value='';if(previewObjectUrl)URL.revokeObjectURL(previewObjectUrl);previewObjectUrl='';$('media-preview').removeAttribute('src');$('media-preview').hidden=true;$('destination-url').value='';disposeExternal();previewedLink='';$('media-link').value='';setMediaMode('upload');}
   if(previousId!==order.id||previousState!==state)$('publish-consent').checked=false;
+  $('purchase-title').textContent=displayName(order);
   $('purchase-state').textContent=ORDER_STATES[state]??'Status needs review';
-  const items=[['Cost',`${Number(order.priceCredits??campaignProduct?.priceCredits??300).toLocaleString()} ${creditName()}`],['Duration',`${Math.round((order.durationSeconds??3600)/60)} minutes`],['Fighters',(order.fighterIds??[]).map(fighterName).join(' · ')||'Assigned after purchase'],['Purchased',order.createdAt?new Date(order.createdAt).toLocaleString():'Saved to your account']];
+  const items=[['Cost',`${Number(order.priceCredits??campaignProduct?.priceCredits??300).toLocaleString()} ${creditName()}`],['Duration',`${Math.round((order.durationSeconds??3600)/60)} minutes`],['Purchased',order.createdAt?new Date(order.createdAt).toLocaleString():'Saved to your account']];
   $('purchase-receipt').replaceChildren(...items.map(([label,value])=>{const item=document.createElement('div');item.className='receipt-item';const key=document.createElement('span');key.textContent=label;const val=document.createElement('strong');val.textContent=value;item.append(key,val);return item;}));
+  const lineup=fighterLineup(order.fighterIds);lineup.classList.add('receipt-lineup');$('purchase-receipt').append(lineup);
   $('purchase-recover').hidden=state!=='needs_attention';
   $('broadcast-setup').hidden=!['awaiting_media','ready'].includes(state);
   $('media-upload').hidden=state!=='awaiting_media';
+  $('save-link').hidden=state!=='awaiting_media';
   $('publish-broadcast').hidden=state!=='ready';
-  if(order.media){$('media-file-name').textContent='Sponsor clip verified';const duration=Number.isFinite(order.media.durationSeconds)?` · ${Math.ceil(order.media.durationSeconds)} sec`:'';$('media-file-meta').textContent=`Ready to publish${duration}`;}
+  const pendingMedia=journal?.get('campaign-media:'+order.id);
+  if(order.media?.source){setMediaMode('link');$('media-link').value=order.media.source.url;if(state==='ready')previewMediaLink();}
+  else if(pendingMedia?.input?.mediaUrl){setMediaMode('link');$('media-link').value=pendingMedia.input.mediaUrl;}
+  if(order.media&&!order.media.source){$('media-file-name').textContent='Sponsor clip verified';const duration=Number.isFinite(order.media.durationSeconds)?` · ${Math.ceil(order.media.durationSeconds)} sec`:'';$('media-file-meta').textContent=`Ready to publish${duration}`;}
   if(order.media?.targetUrl && !previousId)$('destination-url').value=order.media.targetUrl;
   $('intro-text').textContent=plain(order.media?.aiIntro??order.aiIntro,1000);
   $('intro-preview').hidden=!$('intro-text').textContent;
@@ -167,14 +204,15 @@ function renderOrders() {
   host.replaceChildren(...orders.map(order=>{
     const card=document.createElement('article');card.className='broadcast-card';
     const body=document.createElement('div'),title=document.createElement('h3'),meta=document.createElement('p');
-    title.textContent=displayName(order);meta.textContent=[order.startedAt?`Started ${new Date(order.startedAt).toLocaleString()}`:order.createdAt?`Purchased ${new Date(order.createdAt).toLocaleString()}`:'',Number.isSafeInteger(order.priceCredits)?`${order.priceCredits} ${creditName()}`:''].filter(Boolean).join(' · ');body.append(title,meta);
+    title.textContent=displayName(order);meta.textContent=order.createdAt?new Date(order.createdAt).toLocaleDateString():'';body.append(title,meta);
     const state=document.createElement('span');state.className='broadcast-status';state.textContent=ORDER_STATES[campaignState(order)]??'Status needs review';card.append(body,state);
+    card.append(fighterLineup(order.fighterIds));
     const watch=safeWatchUrl(order.watchUrl??(order.watchToken?'/broadcast/watch/?show='+encodeURIComponent(order.watchToken):''));
     if(campaignState(order)==='started'&&watch){const link=document.createElement('a');link.href=watch;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Watch broadcast';card.append(link);}
-    else if(['awaiting_media','ready','needs_attention'].includes(campaignState(order))){const button=document.createElement('button');button.type='button';button.className='button button-secondary button-small';button.textContent=campaignState(order)==='awaiting_media'?'Add sponsor media':campaignState(order)==='ready'?'Review and publish':'Check status';button.addEventListener('click',()=>selectOrder(order.id));card.append(button);}
+    else if(['awaiting_media','ready','needs_attention'].includes(campaignState(order))){const button=document.createElement('button');button.type='button';button.className='button button-secondary button-small';button.textContent=campaignState(order)==='awaiting_media'?'Use ticket':campaignState(order)==='ready'?'Review and publish':'Check status';button.addEventListener('click',async()=>{await selectOrder(order.id);if(selectedOrder?.id===order.id)($('broadcast-setup').hidden?$('purchase-panel'):$('broadcast-setup')).scrollIntoView({block:'start'});});card.append(button);}
     return card;
   }));
-  if(!orders.length&&session){const empty=document.createElement('p');empty.className='section-status';empty.textContent='No broadcasts yet.';host.append(empty);}
+  if(!orders.length&&session){const empty=document.createElement('p');empty.className='section-status';empty.textContent='No tickets yet.';host.append(empty);}
   $('broadcasts-more').hidden=!nextCursor;
 }
 async function selectOrder(id) {
@@ -186,7 +224,7 @@ async function selectOrder(id) {
       const preview=await api('/orders/'+encodeURIComponent(id)+'/preview');
       if(revision!==selectionRevision||session?.user.id!==owner||accountEpoch!==epoch)return;
       const videoUrl=safeVideoUrl(preview.videoUrl);
-      if(videoUrl){$('media-preview').src=videoUrl;$('media-preview').hidden=false;}
+      if(videoUrl&&!preview.source){$('media-preview').src=videoUrl;$('media-preview').hidden=false;}
       if(typeof preview.aiIntro==='string')$('intro-text').textContent=plain(preview.aiIntro,1000);
       if(validDestination(preview.targetUrl))$('destination-url').value=preview.targetUrl;
       updateControls();
@@ -234,7 +272,7 @@ async function purchaseSpotlight(productId) {
         const canRelease=!previouslyDispatched&&purchaseOp;
         if(canRelease&&journal?.get('campaignOrder')?.requestKey===purchaseOp.requestKey)journal.complete('campaignOrder',purchaseOp.requestKey);
         openCredits(true);$('wallet').scrollIntoView({block:'center'});
-        message(canRelease?'Not enough Studio Credits for this length. Add credits or choose a shorter broadcast. No order was created.':'Not enough Studio Credits on this attempt. An earlier request may have reached the server, so its key is retained. Add credits or retry the same length.');
+        message(canRelease?'Not enough DON for this length. Add DON or choose a shorter broadcast. No order was created.':'Not enough DON on this attempt. An earlier request may have reached the server, so its key is retained. Add DON or retry the same length.');
         if(canRelease)renderProduct();
       }
       else message(error.code==='campaign-playback-unavailable'?'The ODDBOUT broadcast service is not ready right now. Your purchase is saved; no broadcast has started.':'The purchase result is not confirmed. Click again to recover this same purchase; no replacement order was created.',true);
@@ -297,6 +335,20 @@ async function publishBroadcast() {
   }catch(error){if(session?.user.id===owner&&accountEpoch===epoch)message(error.code==='campaign-playback-unavailable'?'ODDBOUT could not verify the broadcast setup right now. Your purchased broadcast is unchanged; try publishing again later.':'Publication status is not confirmed. Retry to check the same request; no second broadcast was created.',true);}
   finally{busy=false;updateControls();}
 }
+async function saveMediaLink(){
+  const source=validMediaLink($('media-link').value);
+  if(busy||!session||!selectedOrder||campaignState(selectedOrder)!=='awaiting_media'||!source||previewedLink!==source.url||!validDestination($('destination-url').value))return;
+  const owner=session.user.id,epoch=accountEpoch,orderId=selectedOrder.id,name='campaign-media:'+orderId;
+  const input={orderId,mediaUrl:source.url,targetUrl:$('destination-url').value.trim()};busy=true;updateControls();message('Saving video link…');
+  try{
+    const op=journal.get(name)??journal.begin(name,input);
+    if(JSON.stringify(op.input)!==JSON.stringify(input))throw new Error('saved-media-mismatch');
+    journal.markDispatched(name,op.requestKey);
+    const result=normalizedOrder(await api('/orders/'+orderId+'/link',{body:{requestKey:op.requestKey,mediaUrl:input.mediaUrl,targetUrl:input.targetUrl,confirmed:true}}));
+    journal.complete(name,op.requestKey);renderOrder(result);await loadOrders();
+  }catch(error){if(session?.user.id===owner&&accountEpoch===epoch)message(error.code==='unsupported-video-link'?'Use a YouTube video or Twitch channel, video or clip link.':error.message==='saved-media-mismatch'?'Restore the link and destination from the saved request before retrying.':'The save result is unknown. Retry the same link and destination.',true);}
+  finally{busy=false;updateControls();}
+}
 async function captureReturnedPayment() {
   if(!returnedIntent||!session)return;
   const owner=session.user.id,epoch=accountEpoch;
@@ -319,7 +371,7 @@ function renderAccount(value) {
   if(previous!==value?.user.id){journal=value?createOperationJournal(localStorage,value.user.id):null;message(value?'Loading…':'');
     if(value){
       const owner=value.user.id,epoch=accountEpoch;
-      const walletLoad=loadWallet().catch(()=>{if(session?.user.id===owner&&accountEpoch===epoch)walletMessage('Studio Credits could not be loaded. Refresh the page to retry.',true);throw new Error('wallet-load-failed');});
+      const walletLoad=loadWallet().catch(()=>{if(session?.user.id===owner&&accountEpoch===epoch)walletMessage('DON could not be loaded. Refresh the page to retry.',true);throw new Error('wallet-load-failed');});
       const ordersLoad=loadOrders().catch(()=>{if(session?.user.id===owner&&accountEpoch===epoch)$('broadcasts-status').textContent='Broadcasts could not be loaded. Refresh to try again.';throw new Error('broadcast-load-failed');});
       Promise.allSettled([walletLoad,ordersLoad]).then(results=>{
         if(session?.user.id!==owner||accountEpoch!==epoch)return;
@@ -342,7 +394,7 @@ async function initialize() {
   campaignProducts=Array.isArray(campaign.products)?campaign.products:[campaign];selectedProductId=campaign.defaultProductId??campaignProducts[0]?.id??'';
   commerceCatalog=commerceResponse.catalog??commerceResponse.data?.catalog;renderProduct();renderCreditPacks();
   if(!config.commerceEnabled)message('Broadcast purchases are unavailable on this server.');
-  if(!commerceCatalog?.paypalConfigured)walletMessage('PayPal Sandbox top-ups are not configured. Existing Studio Credits remain available.');
+  if(!commerceCatalog?.paypalConfigured)walletMessage('PayPal Sandbox top-ups are not configured. Existing DON remain available.');
   if(!config.authConfigured||!config.supabaseUrl||!config.publishableKey){$('google-signin').disabled=true;message('Account sign-in is not configured on this server.');return;}
   client=globalThis.supabase.createClient(config.supabaseUrl,config.publishableKey,{auth:{persistSession:true,storage:sessionStorage,storageKey:AUTH_KEY,flowType:'pkce',autoRefreshToken:true,detectSessionInUrl:true}});
   client.auth.onAuthStateChange((_event,value)=>renderAccount(value));
@@ -372,6 +424,11 @@ $('media-file').addEventListener('change',async event=>{
   updateControls();
 });
 $('destination-url').addEventListener('input',updateControls);
+$('choose-upload').addEventListener('click',()=>{setMediaMode('upload');updateControls();});
+$('choose-link').addEventListener('click',()=>{setMediaMode('link');updateControls();});
+$('media-link').addEventListener('input',()=>{disposeExternal();previewedLink='';$('publish-consent').checked=false;updateControls();});
+$('preview-link').addEventListener('click',previewMediaLink);
+$('save-link').addEventListener('click',saveMediaLink);
 $('media-upload').addEventListener('click',uploadMedia);
 $('publish-consent').addEventListener('change',updateControls);
 $('publish-broadcast').addEventListener('click',publishBroadcast);
