@@ -402,7 +402,7 @@ test('agent tools list only with the arena key; reads are public, spars and cups
   const arena = { url: 'https://arena.test/oddbout-arena', key, pollMs: 1, pollTries: 2, fetcher: async (url, init = {}) => {
     calls.push({ url, method: init.method, headers: init.headers ?? {}, body: init.body ? JSON.parse(init.body) : undefined });
     if (url.endsWith('/fighters')) return Response.json({ ok: true, rules: 39, fighters: [{ id: 'kuma', name: 'KUMA' }] });
-    if (url.includes('/agent/')) return Response.json({ ok: true, echo: JSON.parse(init.body) });
+    if (url.includes('/agent/') && init.body) return Response.json({ ok: true, echo: JSON.parse(init.body) });
     return Response.json({ ok: true, url });
   } };
   const names = async handle => (await (await handle(request('tools/list'))).json()).result.tools.map(t => t.name);
@@ -433,6 +433,17 @@ test('agent tools list only with the arena key; reads are public, spars and cups
   const unkeyed = calls.length;
   assert.equal((await call(handle, 'enter_cup', { fighterId: fighter })).isError, true); assert.equal(calls.length, unkeyed, 'no cup without a key');
   assert.equal((await call(handle, 'read_bout', { cupId: fighter })).structuredContent.code, 'invalid-bout');
+  // 파이트머니 2판: a career cup and its prep for the verified owner.
+  const careerKey = crypto.randomUUID();
+  await call(handle, 'enter_cup', { fighterId: fighter, idempotencyKey: careerKey, career: true });
+  assert.deepEqual(calls.filter(c => c.url.endsWith('/agent/cup')).at(-1).body, { owner, fighter, idempotencyKey: careerKey, career: true });
+  await call(handle, 'get_career', { fighterId: 'kuma' });
+  assert.equal(calls.at(-1).url, 'https://arena.test/oddbout-arena/agent/career?fighter=kuma'); assert.equal(calls.at(-1).headers['x-arena-owner'], owner);
+  const chose = (await call(handle, 'choose_career_prep', { cupId: fighter, kind: 'upgrade', card: 'heavy' })).structuredContent;
+  assert.deepEqual(chose.echo, { owner, ticket: fighter, choice: { kind: 'upgrade', card: 'heavy' } });
+  assert.equal((await call(handle, 'choose_career_prep', { cupId: fighter, kind: 'story' })).structuredContent.code, 'invalid-choice');
+  const auto = (await call(handle, 'set_career_auto', { fighterId: 'kuma', on: true })).structuredContent;
+  assert.deepEqual(auto.echo, { owner, fighter: 'kuma', on: true });
   const failing = createCloudHandler({ db: dbFor(), arena: { ...arena, fetcher: async () => { throw new Error('down'); } } });
   assert.equal((await call(failing, 'get_rankings', {})).structuredContent.code, 'arena-unavailable');
 });
@@ -515,7 +526,8 @@ test('every write tool says whether a retry is safe; the ones that make somethin
   assert.deepEqual(writes, {
     prepare_fighter_deletion: true, delete_fighter: true, prepare_fighter_registration: true, upload_fighter_asset: true, submit_fighter_registration: true,
     prepare_profile_set: true, upload_profile_set_asset: true, submit_profile_set: true,
-    enter_cup: true, update_fighter_profile: true, update_fighter_style: true, enter_fighter: true, withdraw_fighter: true,
+    enter_cup: true, choose_career_prep: false, set_career_auto: true, update_fighter_profile: true, update_fighter_style: true, enter_fighter: true,
+    withdraw_fighter: true,
     update_fighter_canon: true, post_workshop_note: false, resolve_workshop_note: true, set_fighter_relation: true, manage_world: false, write_world_post: true,
     request_hosted_fighter: false, choose_hosted_look: false, revise_hosted_motion: false, register_hosted_fighter: true, cancel_hosted_fighter: true,
     start_picture_upload: false, store_creator_source: true, prepare_creator_source_download: true,
@@ -527,7 +539,8 @@ test('each edition\'s tools/list stays within its byte budget', async () => {
   // Every conversation pays for the list (MCP 점검 2026-11-03: about 14k tokens for the full one). Measured that day at 57,512, 43,038 and
   // 30,892 bytes; each ceiling sits just above. The descriptions carry product rules, so do not shorten them in bulk to fit: raise a ceiling
   // on purpose, in the change that needs it, and say why. Raised the same day by 500 for both full lists: enter_cup's idempotency key and its
-  // retry rule (+269 bytes) on lists already at 57,913 and 43,374.
+  // retry rule (+269 bytes) on lists already at 57,913 and 43,374. Raised again the same day by 1,500 for both full lists: the career tools
+  // (파이트머니 2판 — enter_cup's career, get_career, choose_career_prep, set_career_auto: about +1,400 bytes), and the directory's by 1,500 for the same.
   const arena = { url: 'https://arena.test/oddbout-arena', key: 'k'.repeat(64), fetcher: async () => Response.json({ ok: true }) };
   const bytes = async (options, url) => {
     const response = await createCloudHandler({ db: dbFor(), ...options })(new Request(url, { method: 'POST',
@@ -535,8 +548,8 @@ test('each edition\'s tools/list stays within its byte budget', async () => {
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }) }));
     return new TextEncoder().encode(await response.text()).length;
   };
-  for (const [edition, options, url, ceiling] of [['full, arena and hosted', { arena, hosted: {} }, CLOUD_RESOURCE, 58_500],
-    ['full without hosted', { arena }, CLOUD_RESOURCE, 44_000], ['directory', { arena, hosted: {} }, DIRECTORY_RESOURCE, 31_500]]) {
+  for (const [edition, options, url, ceiling] of [['full, arena and hosted', { arena, hosted: {} }, CLOUD_RESOURCE, 60_000],
+    ['full without hosted', { arena }, CLOUD_RESOURCE, 45_500], ['directory', { arena, hosted: {} }, DIRECTORY_RESOURCE, 33_000]]) {
     const size = await bytes(options, url);
     assert.ok(size <= ceiling, `${edition}: tools/list is ${size} bytes, over its ${ceiling}`);
   }
@@ -701,7 +714,7 @@ test('the directory edition lists only its tools, in English, with every hint; t
   // /mcp keeps all its tools: ChatGPT's submitted plugin is pinned to its list. Here set_fighter_relation and manage_world split by kind of write.
   const split = ['propose_fighter_relation', 'answer_fighter_relation', 'end_fighter_relation', 'create_world', 'update_world', 'remove_world_fighter',
     'set_fighter_world'];
-  assert.deepEqual([tools.length, full.length], [32, 52]);
+  assert.deepEqual([tools.length, full.length], [35, 55]);
   assert.deepEqual(tools.map(t => t.name).sort(), [...DIRECTORY_TITLES.keys()].sort());
   const dropped = full.map(t => t.name).filter(name => !DIRECTORY_TITLES.has(name));
   for (const name of ['request_hosted_fighter', 'list_generation_hosts', 'prepare_fighter_registration', 'submit_profile_set', 'store_creator_source',
