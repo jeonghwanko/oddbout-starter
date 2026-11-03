@@ -78,19 +78,21 @@
             <div id="upload-source">
             <label class="upload-zone" for="media-file"><span class="upload-symbol" aria-hidden="true">＋</span><strong id="media-file-name">Choose MP4 · Max 50 MB / 5 min</strong><span id="media-file-meta"></span><input id="media-file" name="mediaFile" type="file" accept="video/mp4,.mp4" /></label>
             <video id="media-preview" class="media-preview" controls playsinline hidden></video>
-            <button id="media-upload" class="button button-secondary" type="button" disabled>Upload sponsor clip</button>
             </div>
             <div id="link-source" hidden>
               <label class="field" for="media-link">Video link<input id="media-link" type="url" inputmode="url" placeholder="YouTube or Twitch URL" /></label>
               <button id="preview-link" class="button button-secondary" type="button">Preview video</button>
               <div id="external-preview" class="external-preview" hidden></div>
-              <button id="save-link" class="button button-primary" type="button" disabled>Save video link</button>
             </div>
           </section>
           <section class="setup-card" aria-labelledby="destination-title">
             <label id="destination-title" class="field" for="destination-url">Promo URL<input id="destination-url" name="destinationUrl" type="url" inputmode="url" autocomplete="url" placeholder="https://…" /></label>
             <div id="intro-preview" class="intro-preview" aria-labelledby="intro-title" hidden><h3 id="intro-title">AI introduction</h3><p id="intro-text"></p></div>
           </section>
+        </div>
+        <div id="promotion-actions" class="promotion-actions" hidden>
+          <button id="media-upload" class="button button-primary" type="button" disabled>Save Promotion</button>
+          <button id="save-link" class="button button-primary" type="button" disabled hidden>Save Promotion</button>
         </div>
         <div id="schedule-panel" class="schedule-panel" hidden>
           <label class="field" for="broadcast-date">Start date &amp; time<input id="broadcast-date" type="datetime-local" step="60" /></label>

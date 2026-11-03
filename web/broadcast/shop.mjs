@@ -62,6 +62,10 @@ function updateControls() {
   $('save-schedule').disabled=busy||!session||!selectedOrder||campaignState(selectedOrder)!=='ready'||!selectedDate();
   $('broadcast-date').disabled=busy;
   const mediaLocked=Boolean(selectedOrder&&campaignState(selectedOrder)!=='awaiting_media');
+  const canSavePromotion=Boolean(selectedOrder&&!mediaLocked);
+  $('promotion-actions').hidden=!canSavePromotion;
+  $('media-upload').hidden=!canSavePromotion||mediaMode!=='upload';
+  $('save-link').hidden=!canSavePromotion||mediaMode!=='link';
   $('media-file').disabled=mediaLocked;$('destination-url').readOnly=mediaLocked;
   const savedMedia=selectedOrder&&journal?.get('campaign-media:'+selectedOrder.id);
   $('choose-upload').disabled=busy||mediaLocked||Boolean(savedMedia?.input?.mediaUrl);
@@ -193,8 +197,6 @@ function renderOrder(order) {
   const lineup=fighterLineup(order.fighterIds);lineup.classList.add('receipt-lineup');$('purchase-receipt').append(lineup);
   $('purchase-recover').hidden=state!=='needs_attention';
   $('broadcast-setup').hidden=!['awaiting_media','ready'].includes(state);
-  $('media-upload').hidden=state!=='awaiting_media';
-  $('save-link').hidden=state!=='awaiting_media';
   $('publish-broadcast').hidden=state!=='ready';
   const pendingMedia=journal?.get('campaign-media:'+order.id);
   if(order.media?.source){setMediaMode('link');$('media-link').value=order.media.source.url;if(state==='ready')previewMediaLink();}
