@@ -4,8 +4,8 @@ This record covers the deployed customer flow, not a production-money transactio
 
 ## Deployment
 
-- Final API/UI: `aab5ebb5a6b5cdab9473ed57e0050b4d4b35194d` on `codex/paypal-task-recovery`, Render `Deploy succeeded | Live`.
-- The live financial rehearsal ran on `cb41f59ae616cf0719f1425cea9380c249b6336b`; the final release adds recipient verification and player recovery.
+- Final API/UI: `6f60c1a1da8d224a17b8e692b15789aea9f318c4` on `codex/paypal-task-recovery`, Render `Deploy succeeded | Live`.
+- The live financial rehearsal ran on `cb41f59ae616cf0719f1425cea9380c249b6336b`; `aab5ebb5` added recipient verification and player recovery, and the final release preserves payment returns through login.
 - Integration base: `7d9d4afce7c3b83aebd9b0561fdd5c13ca3d740c`.
 - Database recovery correction: `abc6e603`; it changes Sandbox SQL, tests and documentation only.
 - Sandbox project: `kxxhrnomfeequyujyppn`. Production database was not changed.
@@ -106,3 +106,6 @@ return exposed a missing top-up intent in the Google OAuth destination. Sign-in 
 the validated intent UUID, with a tab-local fallback when the provider returns to the base URL.
 It clears that fallback after confirmed credit; PayPal token and payer parameters are not forwarded.
 The focused browser regression passed both exact-return and base-URL fallback cases.
+After deployment, the actual signed-out return tab completed Google sign-in and resumed the same
+intent automatically. Its UI showed 1,000 DON added; a second database check still found the original
+capture and exactly one credit entry. `/readyz` returned 200 and served assets matched the release.
