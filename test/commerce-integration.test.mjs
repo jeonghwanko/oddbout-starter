@@ -129,6 +129,17 @@ test('HTTP checkout enforces server product/owner, reconciles capture response l
   assert.equal((await f.db.query("select count(*)::int as n from commerce.ledger where kind='topup'")).rows[0].n, 1);
 });
 
+test('endurance package uses its server price and credits a verified Sandbox capture exactly once', async t => {
+  const f = await fixture(t);
+  const intent = await f.checkout({ productId: 'sandbox-50000', credits: 1, amountCents: 1 });
+  const order = f.orders.get('ORDER1');
+  assert.deepEqual(order.purchase_units[0].amount, { currency_code: 'USD', value: '500.00' });
+  order.status = 'APPROVED';
+  for (let n = 0; n < 2; n++) assert.equal((await f.call(`topups/${intent.intentId}/capture`)).body.data.status, 'credited');
+  assert.equal((await f.store.wallet(OWNER)).balanceCredits, 50000);
+  assert.equal(f.calls.filter(call => call.path.endsWith('/capture')).length, 1);
+});
+
 test('real PayPal validation rejects forged amount, currency, reference, merchant and pending capture before credit', async t => {
   const f = await fixture(t);
   const mutations = [unit => { unit.amount.value = '0.01'; }, unit => { unit.amount.currency_code = 'EUR'; }, unit => { unit.reference_id = randomUUID(); }, unit => { unit.payee.merchant_id = 'OTHERSELLER'; }, unit => { unit.payments.captures[0].status = 'PENDING'; }];

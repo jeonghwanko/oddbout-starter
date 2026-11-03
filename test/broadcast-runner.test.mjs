@@ -223,6 +223,7 @@ test('worker transport uses fixed authenticated endpoints, bounded signals and r
 test('visible Playwright adapter dispatches exactly the persisted job/fence/seed and closes its browser',async()=>{
   const observed={}; let closed=0;
   const page={goto:async(url,options)=>{observed.url=url;observed.navigation=options;},url:()=>observed.url,waitForFunction:async()=>{},
+    frameLocator:selector=>{observed.frame=selector;return {locator:selector=>({click:async options=>{observed.audioClick={selector,options};}})};},
     evaluate:async(_fn,input)=>{observed.input=input;return cupResult();}};
   const playwright={chromium:{launch:async(options)=>{observed.launch=options;return {newContext:async()=>({newPage:async()=>page}),close:async()=>{closed++;}};}}};
   const renderer=createPlaywrightRenderer({arenaUrl:'http://localhost:5178/broadcast.html',playwright,platform:'win32'});
@@ -230,9 +231,24 @@ test('visible Playwright adapter dispatches exactly the persisted job/fence/seed
   assert.deepEqual(observed.launch,{headless:false});
   assert.deepEqual(observed.input,{jobId:job.id,leaseToken:2,seed:123,fighterIds:['a','b','c','d']});
   assert.equal(output.rendererObservation.renderer,'playwright-visible-chromium'); assert.ok(closed>=1);
+  assert.equal(output.rendererObservation.audioGestureDispatched,true);
+  assert.equal(observed.frame,'iframe[title="ODDBOUT exhibition battle"]');
+  assert.equal(observed.audioClick.selector,'canvas');
   await assert.rejects(renderer.runCup(job,{signal:new AbortController().signal}),ConfirmedRenderFailure);
   const linux=createPlaywrightRenderer({arenaUrl:'http://localhost/broadcast.html',platform:'linux',env:{},playwright});
   await assert.rejects(linux.runCup(job,{signal:new AbortController().signal}),error=>error.message==='runner_graphical_session_required');
+});
+
+test('a failed audio gesture preserves the completed cup without redispatching',async()=>{
+  let dispatches=0;const arenaUrl='http://localhost:5178/broadcast.html';
+  const page={goto:async()=>{},url:()=>arenaUrl,waitForFunction:async()=>{},
+    evaluate:async()=>{dispatches++;return cupResult();},
+    frameLocator:()=>({locator:()=>({click:async()=>{throw new Error('canvas detached');}})})};
+  const playwright={chromium:{launch:async()=>({newContext:async()=>({newPage:async()=>page}),close:async()=>{}})}};
+  const renderer=createPlaywrightRenderer({arenaUrl,playwright,platform:'win32'});
+  const result=await renderer.runCup(claimedJob(),{signal:new AbortController().signal});
+  assert.equal(dispatches,1);assert.equal(result.rendererObservation.audioGestureDispatched,false);
+  assert.deepEqual(result.bouts,cupResult().bouts);
 });
 
 test('CLI accepts only public selectors and explicit modes; credentials come from environment',()=>{

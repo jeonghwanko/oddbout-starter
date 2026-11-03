@@ -76,6 +76,10 @@ node --env-file=.env scripts/broadcast-host.mjs --doctor --host current-pc --con
 
 ## 4. 현재 실행 모드와 한계
 
+장시간 테스트에는 `sandbox-50000` 패키지(50,000 테스트 크레딧 / Sandbox USD 500)를 사용할 수 있다. 기존 1,000 패키지와 같은 환산율이며 실제 결제 수단으로 전환하지 않는다. 예산 승인·컵당 25크레딧·최대 24시간·미사용 예약 반환 규칙은 같다.
+
+자동 렌더러는 첫 경기 준비 후 iframe 캔버스를 클릭해 게임 오디오를 활성화한다. 결과의 `audioGestureDispatched`는 클릭 성공만 기록한다. 실제 OBS 오디오 레벨과 수신 방송 소리는 별도로 확인해야 하며, 클릭 실패가 완료된 컵의 재실행 사유가 되지 않는다.
+
 기본 브라우저는 `npx playwright install chromium`으로 설치한다. 설치된 Chrome/Edge를 쓰려면 호스트 환경에 `ODDBOUT_BROADCAST_BROWSER_CHANNEL=chrome` 또는 `msedge`를 명시한다. 자동 fallback은 없으며 관측 결과에 선택한 브라우저를 기록한다. 결제·작업 claim 없이 실제 세 경기만 점검하려면 `npm run broadcast:check-renderer -- <arena-origin>/broadcast.html`을 쓴다.
 
 host runner는 선택 호스트의 그래픽 세션에서 실행한다. 로컬 설정·서버와 승인된 작업·worker token·OBS WebSocket·`ODDBOUT_BROADCAST_API_ORIGIN`, `ODDBOUT_BROADCAST_WORKER_TOKEN`, `ODDBOUT_BROADCAST_ARENA_URL`가 필요하다. Linux는 `DISPLAY` 또는 `WAYLAND_DISPLAY`가 필요하다. arena URL은 쿼리가 없는 `/broadcast.html` 경로여야 하며 페이지가 `window.oddboutBroadcast.runCup`을 제공해야 한다. 이 starter 개발 서버는 경기 페이지를 제공하지 않으므로 호환되는 게임 페이지가 별도로 필요하다. Playwright의 visible Chromium도 runner 호스트에 설치되어 있어야 한다. 기본 상태 파일은 `.oddbout-broadcast/<hostId>.json`이고 실행 중복을 막는 lock을 둔다.

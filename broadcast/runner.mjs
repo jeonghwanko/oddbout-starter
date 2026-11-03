@@ -145,12 +145,22 @@ export function createPlaywrightRenderer({ arenaUrl, playwright, platform = proc
         if (signal.aborted || closed || page.url() !== arena) throw new Error();
         const observedStart = new Date().toISOString();
         dispatched = true;
-        const result = await page.evaluate(async (/** @type {any} */ input) => /** @type {any} */ (window).oddboutBroadcast.runCup(input),
+        const resultPromise = page.evaluate(async (/** @type {any} */ input) => /** @type {any} */ (window).oddboutBroadcast.runCup(input),
           { jobId: job.id, leaseToken: job.leaseToken, seed: job.seed, fighterIds: job.fighterIds });
+        // The game creates its AudioContext on a real canvas gesture. Wait for the
+        // first bout's ready signal, then click inside its iframe (the parent is not enough).
+        // A missed gesture does not turn an already-completed paid cup into a retry.
+        const audioGesture = (async () => {
+          await page.waitForFunction(() => document.getElementById('broadcast-status')?.textContent?.includes(' VS '), undefined, { timeout: 45_000 });
+          await page.frameLocator('iframe[title="ODDBOUT exhibition battle"]').locator('canvas').click({ position: { x: 20, y: 20 }, timeout: 10_000 });
+          return true;
+        })().catch(() => false);
+        const result = await resultPromise;
+        const audioGestureDispatched = await audioGesture;
         if (page.url() !== arena) throw new Error();
         const observedUrl = new URL(arena); observedUrl.search = '';
         observedResult = { ...result, rendererObservation: { renderer: 'playwright-visible-chromium', browserChannel: browserChannel ?? 'bundled-chromium', arenaUrl: observedUrl.href,
-          observedDispatchAt: observedStart, observedResultAt: new Date().toISOString() } };
+          audioGestureDispatched, observedDispatchAt: observedStart, observedResultAt: new Date().toISOString() } };
         return observedResult;
       } catch (/** @type {any} */ error) {
         // Nothing reached the arena before dispatch, aborted or not. After it, only the page's own verdict that the cup
