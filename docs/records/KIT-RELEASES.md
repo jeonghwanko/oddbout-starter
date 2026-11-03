@@ -4,6 +4,51 @@ Earlier source-kit releases, moved here from [PLUGIN-DISTRIBUTION.md](../PLUGIN-
 release and the distribution procedures. Each entry records that release as published and verified at the time; it is not
 current procedure. Published release paths stay immutable.
 
+**Previous source-kit release: 0.6.14** (2026-11-03 KST: MCP SDK v2 and the 2026-07-28 discovery probe).
+
+The workspace MCP server, `creation:tool` and the broadcast producer client run on SDK v2 (`@modelcontextprotocol/server` and
+`@modelcontextprotocol/client` 2.4.0) in place of `@modelcontextprotocol/sdk` 1.32.1 (#295). Workspace tool results are byte-identical
+to 0.6.13. A tool name the server does not list is now the spec's `-32602` protocol error, which `creation:tool` reports as
+`{"ok":false,"code":"unknown-tool"}` instead of a failed workspace command. `npm run mcp:check -- --probe` also discovers the cloud server
+as a 2026-07-28 client (`server/discover`, then `tools/list`, no session) and reports it as `modernServer`; the probe fails unless
+both protocols discover it (#298). The contract, validators and sprite-gen pin are unchanged.
+
+Cloud `prepare_fighter_packaging` points to the reviewed 0.6.14 runtime once `ai-fighter-mcp` is deployed with
+this pin. It also supplies the workspace execution instructions; the cloud cannot read Dots files. Install the locked Node
+dependencies in the extracted `plugin/runtime/`, then run its `inspect_fighter_packaging` and `pack_fighter_package`
+tools on the existing plan. There is no new generation or generation login.
+
+- [Download the 0.6.14 ZIP](https://oddbout.com/creator-kit/0.6.14/40015bf50ecf0c21daa51fc3e7fabb88b7df58fb6c311d913dc812c84619d579/oddbout-0.6.14.zip)
+- [Release manifest](https://oddbout.com/creator-kit/0.6.14/40015bf50ecf0c21daa51fc3e7fabb88b7df58fb6c311d913dc812c84619d579/release.json)
+- [Download helper](https://oddbout.com/creator-kit/0.6.14/40015bf50ecf0c21daa51fc3e7fabb88b7df58fb6c311d913dc812c84619d579/fetch-creator-kit.py)
+
+| Verified item | Value |
+| --- | --- |
+| ZIP size | 4,213,571 bytes |
+| ZIP SHA-256 | `84c8355cd1dbaa2fa9c686e34d65ffd202ddaa54c1943e6dcfe3ef6b61c86e5d` |
+| Release manifest SHA-256 | `00ca58e5ad5ee7300b520d331c74b90bbb6039e4c29c20645ff2f9c0dca3f6c4` |
+| Runtime manifest SHA-256 | `ba587f0f9a01584e8ffb1017245f29a9c96f29da14a449f574d7ca87fc254731` |
+| Helper SHA-256 | `b66c31ff833816dfa74c90d9155359d3fdd484dff8c12759e48addde01707592` (unchanged) |
+| Archive build source | `c4986fa13633fb262347bca543cf3bc6224fcfe5` (main after [PR #299](https://github.com/jeonghwanko/oddbout-starter/pull/299)) |
+| Tested PR heads | `43f09419058ea0b912c8baa65e1f04cf9fbacaad` ([PR #295](https://github.com/jeonghwanko/oddbout-starter/pull/295)), `9665218cb4757710597a4cf6b50411416df051f6` ([PR #298](https://github.com/jeonghwanko/oddbout-starter/pull/298)), `2a35cfa0d94f0196e27772a72467e369a9b5e1df` ([PR #299](https://github.com/jeonghwanko/oddbout-starter/pull/299)) |
+| sprite-gen pin | `704cb9e5a34f16a0340e7fc6e46709a047ab02d4` (unchanged) |
+| Kit Pages publication | `a34121a5f57cdcb9cb6af7dbb8c687be633d71c9` |
+
+Full PR CI passed for #295, #298 and #299. The archive was built from a clean worktree at the main merge with the sprite-gen submodule
+checked out at its pin. The trusted helper downloaded the published release, verified it and extracted all 742 archive files. Locked
+production Node dependencies (now `@modelcontextprotocol/server` and `/client` 2.4.0) installed with no vulnerabilities reported. The
+extracted runtime reports version 0.6.14, its `creation:tool` lists all 18 workspace tools, `get_fighter_spec` answers with a one-line
+text, a mistyped tool name is reported as `unknown-tool`, and its `mcp:check --probe` found `mcp.oddbout.com` as both a 2025 and a
+2026-07-28 client. No Python engine ran.
+
+Publication added only three release files, preserved 6,372 existing files without changes or deletions,
+and verified HTTP 200 and exact release bytes plus 12 unchanged site files at 2026-11-03T00:42:26.819Z. This release requires no game,
+API or site build.
+
+The Dots source pin is `c4986fa13633fb262347bca543cf3bc6224fcfe5` (0.6.14). It is still a candidate, with saved-VM acceptance pending.
+No Dots install was run at this pin, the saved Dots environment was not republished, and Grok sign-in, generation and delivery were not
+verified. No animation was generated and no registration was submitted during this release verification.
+
 **Previous source-kit release: 0.6.13** (2026-11-03 KST: expression sheets and the profile-set kit command).
 
 A registered fighter's profile set may now carry his expression sheet: six arena faces, the KO card's defeat face last (#282). 0.6.13
