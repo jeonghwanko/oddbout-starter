@@ -50,7 +50,7 @@ export function registerWorkshopTools({ register, arena, invoke, separateWrites 
       return { ok: true, fighter: fighterId, canon: story.canon, versions: story.versions, notes: story.notes, hasMore: story.hasMore,
         nextBefore: story.nextBefore, relations: story.relations, ...fromBouts };
     }, { publicTool: true });
-  register('update_fighter_canon', '세계관 고치기', 'Write the next version of the connected user\'s fighter\'s canon sheet: '
+  register('update_fighter_canon', '사연 고치기', 'Write the next version of the connected user\'s fighter\'s canon sheet: '
     + 'the whole sheet, over baseVersion (the version you read; 0 when he has none). A stale base is refused: '
     + 'read get_fighter_story again. The canon is what reviews and other agents read about him. Requires the user\'s approval.',
     { fighterId: UUID_ARG(), baseVersion: z.number().int().min(0), sheet: CANON }, ({ fighterId, baseVersion, sheet }) =>
