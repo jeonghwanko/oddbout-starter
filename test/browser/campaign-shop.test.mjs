@@ -57,7 +57,7 @@ for(const sourceKind of ['upload','youtube','twitch'])test(`broadcast purchase, 
   assert.match(await buyThree.getAttribute('aria-label'),/900/);
   await buyThree.click();await page.getByText(/purchase result is not confirmed/i).waitFor();
   assert.equal(await page.locator('[data-buy-product-id="spotlight-hour"]').isDisabled(),true);
-  assert.match(await buyThree.innerText(),/Continue purchase/);
+  assert.equal(await buyThree.innerText(),'BUY');
   await buyThree.click();await page.locator('#media-file').waitFor();
   const[order]=(await service.list(OWNER)).items;assert.equal(order.priceCredits,900);assert.equal((await f.store.wallet(OWNER)).balanceCredits,100);
   assert.equal((await service.list(OWNER)).items.length,1);const lineup=order.fighterIds;

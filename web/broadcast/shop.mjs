@@ -39,7 +39,7 @@ function updateControls() {
   for(const button of $('duration-options').querySelectorAll('[data-buy-product-id]')){
     const product=campaignProducts.find(item=>item.id===button.dataset.buyProductId);
     const pendingThis=pendingCampaign?.input?.productId===product?.id;
-    const label=!session?'Sign in to buy':pendingThis?(pendingCampaign.result?.id?'Open purchase':'Continue purchase'):'Buy broadcast';
+    const label='BUY';
     button.textContent=label;
     const hours=product?.durationSeconds/3600;
     button.setAttribute('aria-label',`${label} · ${hours} ${hours===1?'hour':'hours'} · ${product?.priceCredits} DON`);
