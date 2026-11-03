@@ -63,6 +63,18 @@ test('missing tools, malformed response, 401 and network errors remain distinct'
   assert.equal((await checkCloudDiscovery({ probe: true, fetcher: async () => { throw Error('redirect'); } })).server, 'network-error');
   assert.equal((await checkCloudDiscovery({ probe: true, fetcher: async () => new Response('x',{headers:{'content-length':'1048577'}}) })).server, 'malformed-response');
 });
+test('each protocol has its own time limit: a slow 2025 step leaves the 2026 one its whole limit', async () => {
+  const slow = mock(), fetcher = async (url, options) => {
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(resolve, 80);
+      options.signal.addEventListener('abort', () => { clearTimeout(timer); reject(Error('aborted')); }, { once: true });
+    });
+    return slow.fetcher(url, options);
+  };
+  // Three 2025 requests, then two 2026 ones, 80 ms each: 400 ms in all, more than the 300 ms each protocol may take.
+  const result = await checkCloudDiscovery({ probe: true, fetcher, timeoutMs: 300 });
+  assert.equal(result.server, 'discovered'); assert.equal(result.modernServer, 'discovered');
+});
 test('untrusted plugin configuration never triggers a request', async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'cloud-config-'));
   try {
