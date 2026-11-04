@@ -32,12 +32,15 @@ byte limits, request IDs, timeouts and cancellation.
 1. Sign in to Cloudflare, verify the account email, and approve Wrangler's browser
    OAuth flow. Use only the deployment scopes needed:
    `npx wrangler login --scopes account:read user:read workers_scripts:write workers_routes:write zone:read`.
+   If the localhost callback expires or cannot be reached, repeat with `--device`
+   and approve the matching displayed code within its validity window.
    Do not paste OAuth callback URLs or tokens into chat or the repository.
 2. Add `oddbout.com` to Cloudflare's Free DNS plan. Compare the complete registrar
    DNS export with the imported list, including mail, verification and other
    subdomains. Public lookups cannot enumerate a zone.
 3. Preserve the four GitHub Pages apex A records and `www` CNAME as **DNS only**.
-   Preserve verification TXT records. Keep `mcp` as a **proxied** CNAME to
+   Preserve verification TXT records and `broadcast`'s DNS-only CNAME to
+   `oddbout-broadcast-sandbox.onrender.com`. Keep `mcp` as a **proxied** CNAME to
    `ai-fighter-validator.onrender.com`. Do not delete Render's custom domain.
 4. Configure SSL/TLS **Full**, following [Render's Cloudflare setup](https://render.com/docs/configure-cloudflare-dns).
    Full encrypts origin traffic but does not validate the origin certificate;
