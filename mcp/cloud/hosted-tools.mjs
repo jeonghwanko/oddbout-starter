@@ -24,7 +24,8 @@ import { TICKET_UPLOAD_URL } from './resources.mjs';
  *   profileSetId?: string | null, tokens?: number | null, expressions?: { url: string | null } | null,
  *   progress?: number, description?: string, profile?: { name?: string } | null, createdAt?: string, updatedAt?: string, agent?: string | null,
  *   side?: { url: string | null } | null, drafts?: { clip: string, url: string | null, state?: string }[] }} HostedJob
- * @typedef {{ at: string, kind: string, names: string[] | null }} PictureEvent  A job's latest picture event; `names`: a drafts list's `clip:name`s.
+ * @typedef {{ at: string, kind: string, draft: { clip: string, name: string } | null }} PictureEvent  A job's latest picture event; `draft`: the
+ *   one a drafts list added or changed.
  * @typedef {{ status: string, progress: number, submission: string | null, picture: PictureEvent | null }} WatchTick  What a wait sees of a job.
  */
 
@@ -183,29 +184,44 @@ const withNext = result => result?.ok && result.job ? { ...result, next: hostedN
  * @param {HostedJob} job
  */
 const onlyWatched = job => hostedStep(job).endsWith(WATCH_NEXT);
+/** The latest picture events a wait reads: the newest, and the drafts list before it to tell what the newest changed. */
+const PICTURE_EVENTS_READ = 5;
+/** A drafts event's entries, each with what makes it a new picture or a new state (a new take has a new name). @param {any} event */
+const draftEntries = event => (Array.isArray(event?.data?.clips) ? /** @type {any[]} */ (event.data.clips) : [])
+  .map(d => ({ clip: String(d?.clip), name: String(d?.name), key: `${d?.clip}:${d?.name}:${d?.state ?? ''}` }));
 /**
- * The picture a wait saw come (the latest picture event, if it came during this wait): the side view, the faces, or the draft a drafts list
- * added or replaced (a new take has a new name). Null when none came, or a list only marked or took off a take.
- * @param {HostedJob} job @param {WatchTick | null} first @param {WatchTick | null} last
+ * The draft a drafts list added or changed from the list before it, else its last.
+ * @param {any} latest @param {any} previous
+ * @returns {{ clip: string, name: string } | null}
  */
-function newPicture(job, first, last) {
-  const event = last?.picture;
-  if (!event || event.at === first?.picture?.at) return null;
-  if (event.kind === 'side' || event.kind === 'expressions') { const url = job[event.kind]?.url; return url ? { kind: event.kind, url } : null; }
-  const before = new Set(first?.picture?.kind === 'drafts' ? first.picture.names : []);
-  const clip = (event.names ?? []).filter(name => !before.has(name)).at(-1)?.split(':')[0];
-  const draft = clip === undefined ? undefined : job.drafts?.find(d => d.clip === clip);
-  return draft?.url ? { kind: 'draft', clip, url: draft.url, ...(draft.state ? { state: draft.state } : {}) } : null;
+function changedDraft(latest, previous) {
+  const now = draftEntries(latest), before = new Set(draftEntries(previous).map(d => d.key));
+  const entry = now.filter(d => !before.has(d.key)).at(-1) ?? now.at(-1);
+  return entry ? { clip: entry.clip, name: entry.name } : null;
+}
+/**
+ * The job's latest picture for a watch's answer, whenever it came (리뷰 2026-11-05: one that came between two waits was never shown when only
+ * a new one was): the side view, the faces, or the draft its latest drafts list added or changed (else the newest with a URL). `new`: it came
+ * during this wait. The agent tells it from one it showed by kind and name; the URL changes with every read.
+ * @param {HostedJob} job @param {PictureEvent | null} event @param {boolean} fresh
+ */
+function latestPictureOf(job, event, fresh) {
+  if (!event) return null;
+  if (event.kind === 'side' || event.kind === 'expressions') { const url = job[event.kind]?.url; return url ? { kind: event.kind, url, new: fresh } : null; }
+  const named = event.draft && job.drafts?.find(d => d.clip === event.draft?.clip && d.url);
+  const draft = named ?? job.drafts?.findLast(d => d.url);
+  return draft?.url ? { kind: 'draft', clip: draft.clip, ...(named && event.draft ? { name: event.draft.name } : {}),
+    ...(draft.state ? { state: draft.state } : {}), url: draft.url, new: fresh } : null;
 }
 /**
  * A watch's short answer: the job's state (with its place in line or its package's check), what changed during this wait (status, progress,
- * pictures), the new picture's URL, and while the motions are made which pictures there are, by name only.
- * @param {HostedJob} job @param {WatchTick | null} first @param {WatchTick | null} last
+ * pictures), the latest picture's URL, and while the motions are made which pictures there are, by name only.
+ * @param {HostedJob} job @param {WatchTick | null} first @param {WatchTick | null} last @param {PictureEvent | null} event  the latest picture event
  */
-function watchedView(job, first, last) {
-  const picture = newPicture(job, first, last);
+function watchedView(job, first, last, event) {
+  const fresh = first !== null && last?.picture?.at !== first.picture?.at, picture = latestPictureOf(job, event, fresh);
   const changed = first === null ? [] : [...(first.status !== job.status ? ['status'] : []), ...(first.progress !== job.progress ? ['progress'] : []),
-    ...(last?.picture?.at !== first.picture?.at ? ['pictures'] : [])];
+    ...(fresh ? ['pictures'] : [])];
   return { ok: true, watch: true,
     job: { id: job.id, status: job.status, progress: job.progress ?? null,
       ...(job.queue ? { queue: { position: job.queue.position, ...(job.queue.reason ? { reason: job.queue.reason } : {}) } } : {}),
@@ -214,8 +230,9 @@ function watchedView(job, first, last) {
     ...(job.status === 'motions' ? { pictures: { drafts: (job.drafts ?? []).map(d => d.state ? `${d.clip} (${d.state})` : d.clip),
       side: Boolean(job.side?.url), expressions: Boolean(job.expressions?.url) } } : {}),
     ...(picture ? { picture } : {}), siteUrl: jobSite(job),
-    next: `Still working: tell the user what changed${picture ? ` and show him picture (${IMAGES_NEXT})` : ''}, then while he watches call get_hosted_fighter `
-      + 'again with waitSeconds 25. Without waitSeconds it returns the whole job: every picture\'s url, the profile draft and the full next.' };
+    next: `Still working: tell the user what changed${picture ? ` and show him picture unless you already showed that one (same kind, clip and name; `
+      + `the url changes every read; ${IMAGES_NEXT})` : ''}, then while he watches call get_hosted_fighter again with waitSeconds 25. `
+      + 'Without waitSeconds it returns the whole job: every picture\'s url, the profile draft and the full next.' };
 }
 /**
  * One job of the recent list, enough to tell them apart (MCP 최적화 2026-11-05: five whole jobs, their pictures' URLs mostly, were 16 KB).
@@ -274,17 +291,18 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
   /** @type {(path: string, body: object, headers?: Record<string, string>) => Promise<any>} */
   const post = (path, body, headers = {}) => invoke(path, 'POST', JSON.stringify(body), { 'content-type': 'application/json', ...headers });
   /**
-   * The job's latest picture event (Grok 점검 2026-11-03): the kinds api/generations.mjs shows (drafts, the side view, the faces), with a
-   * drafts list's names (MCP 최적화 2026-11-05: which draft a watch's answer shows). Null when it has none; undefined when it could not be read.
+   * The job's latest picture event (Grok 점검 2026-11-03): the kinds api/generations.mjs shows (drafts, the side view, the faces), with the
+   * draft a drafts list added or changed (MCP 최적화 2026-11-05: which draft a watch's answer shows). Null when it has none; undefined when
+   * it could not be read.
    * @param {string} jobId @returns {Promise<PictureEvent | null | undefined>}
    */
   const latestPicture = async jobId => {
     const { data, error } = await db.from('af_generation_events').select('at,kind,data').eq('job_id', jobId).in('kind', PICTURE_EVENTS)
-      .order('at', { ascending: false }).limit(1).maybeSingle();
+      .order('at', { ascending: false }).limit(PICTURE_EVENTS_READ);
     if (error) return undefined;
-    if (!data) return null;
-    const clips = data.kind === 'drafts' && Array.isArray(data.data?.clips) ? /** @type {any[]} */ (data.data.clips) : null;
-    return { at: data.at, kind: data.kind, names: clips && clips.map(draft => `${draft?.clip}:${draft?.name}`) };
+    const [latest, ...older] = /** @type {{ at: string, kind: string, data: any }[]} */ (data ?? []);
+    if (!latest) return null;
+    return { at: latest.at, kind: latest.kind, draft: latest.kind === 'drafts' ? changedDraft(latest, older.find(event => event.kind === 'drafts')) : null };
   };
   /** @param {string} key */
   const jobIdForKey = async key => {
@@ -464,7 +482,10 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
         await pause(pollMs, signal);
       }
       const read = withNext(await invoke(`generations/${jobId}`));
-      return waitSeconds > 0 && read.ok && onlyWatched(read.job) ? watchedView(read.job, first, last) : read;
+      if (!(waitSeconds > 0 && read.ok && onlyWatched(read.job))) return read;
+      // The latest picture the wait saw; read now when no tick saw the motions (the call's budget left none, or they began after it).
+      const event = last?.status === 'motions' ? last.picture : read.job.status === 'motions' ? (await latestPicture(jobId)) ?? null : null;
+      return watchedView(read.job, first, last, event);
     });
   register('choose_hosted_look', '외형 고르기', 'Answer the two front-view looks of the connected user\'s hosted fighter with his words: '
     + 'choose a or b (it is also his profile picture; ODDBOUT then draws it from the side and makes the motions from that), '

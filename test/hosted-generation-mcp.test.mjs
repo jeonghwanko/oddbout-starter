@@ -641,12 +641,15 @@ test('a wait on a working job returns when a picture or the progress changes, no
     const drafted = await timed(() => progress({ event: { kind: 'drafts', seq: 1, clips: [{ clip: 'walk', name: 'draft-walk-0' }] } }));
     assert.ok(drafted.ms < 3000, `${drafted.ms} ms`);
     // In short while it only asks to be watched (MCP 최적화 2026-11-05): what changed, the new picture and the pictures there are by name.
-    assert.deepEqual([drafted.read.watch, drafted.read.changed, drafted.read.pictures.drafts, drafted.read.picture.clip], [true, ['pictures'], ['walk'], 'walk']);
+    assert.deepEqual([drafted.read.watch, drafted.read.changed, drafted.read.pictures.drafts, drafted.read.picture.clip, drafted.read.picture.new],
+      [true, ['pictures'], ['walk'], 'walk', true]);
     assert.match(drafted.read.picture.url, /draft-walk-0\.webp/);
     assert.match(drafted.read.next, /waitSeconds 25/);
     // So is a step of the progress.
     const stepped = await timed(() => progress({ progress: 25 }));
     assert.ok(stepped.ms < 3000, `${stepped.ms} ms`); assert.equal(stepped.read.job.progress, 25); assert.deepEqual(stepped.read.changed, ['progress']);
+    // The latest picture comes with every watch, marked as not new once an earlier read has had it.
+    assert.deepEqual([stepped.read.picture.clip, stepped.read.picture.new], ['walk', false]);
     // A lease renewal changes nothing the user sees: the wait runs its time.
     const renewed = await timed(() => progress({}), 1);
     assert.ok(renewed.ms >= 900, `${renewed.ms} ms`); assert.equal(renewed.read.job.progress, 25); assert.deepEqual(renewed.read.changed, []);
@@ -675,8 +678,8 @@ async function motionsJob(g, options = {}) {
   for (const kind of ['side', 'expressions']) { await artifact(`${kind}-0-a`); await progress({ event: { kind, outcome: 'chosen', artifact: `${kind}-0-a` } }); }
   const clips = ['walk', 'run', 'fightIdle', 'combo', 'slam', 'dash', 'block', 'hit', 'groggy', 'fall'];
   let seq = 0;
-  const drafts = async count => {
-    const list = clips.slice(0, count).map(clip => ({ clip, name: `draft-${clip.toLowerCase()}-0` }));
+  const drafts = async (count, states = {}) => {
+    const list = clips.slice(0, count).map(clip => ({ clip, name: `draft-${clip.toLowerCase()}-0`, ...(states[clip] ? { state: states[clip] } : {}) }));
     for (const { name } of list) await artifact(name);
     return progress({ progress: 40 + count, event: { kind: 'drafts', seq: ++seq, clips: list } });
   };
@@ -700,16 +703,21 @@ test('a watch on a job that only asks to be watched answers in short; without a 
     assert.deepEqual(Object.keys(watched).sort(), ['changed', 'job', 'next', 'ok', 'picture', 'pictures', 'siteUrl', 'watch']);
     assert.deepEqual(watched.job, { id: jobId, status: 'motions', progress: 50 });
     assert.deepEqual(watched.changed, ['progress', 'pictures']);
-    assert.deepEqual([watched.picture.kind, watched.picture.clip], ['draft', 'fall']); assert.match(watched.picture.url, /draft-fall-0\.webp\?token=/);
+    assert.deepEqual([watched.picture.kind, watched.picture.clip, watched.picture.name, watched.picture.new], ['draft', 'fall', 'draft-fall-0', true]);
+    assert.match(watched.picture.url, /draft-fall-0\.webp\?token=/);
     assert.deepEqual(watched.pictures, { drafts: ['walk', 'run', 'fightIdle', 'combo', 'slam', 'dash', 'block', 'hit', 'groggy', 'fall'], side: true, expressions: true });
     assert.equal(watched.siteUrl, full.siteUrl);
-    assert.ok(!watched.next.includes('\n')); assert.match(watched.next, /show him picture[\s\S]*waitSeconds 25[\s\S]*Without waitSeconds it returns the whole job/);
+    assert.ok(!watched.next.includes('\n'));
+    assert.match(watched.next, /show him picture unless you already showed that one[\s\S]*waitSeconds 25[\s\S]*Without waitSeconds it returns the whole job/);
     // One signed URL instead of every picture's: a small answer, whatever the job holds.
     assert.equal((JSON.stringify(watched).match(/token=/g) ?? []).length, 1);
     assert.ok(watchedBytes < 2048 && watchedBytes * 4 < fullBytes, `watch ${watchedBytes} bytes, full ${fullBytes}`);
-    // A wait that saw nothing change says so, with no picture.
+    // A wait that saw nothing change says so; it still carries the latest picture, not new.
     const quiet = await watch(null, 1);
-    assert.deepEqual([quiet.watch, quiet.changed, quiet.picture], [true, [], undefined]);
+    assert.deepEqual([quiet.watch, quiet.changed, quiet.picture.clip, quiet.picture.new], [true, [], 'fall', false]);
+    // A take marked for another filming is the latest picture too, with its state.
+    const marked = await watch(() => drafts(10, { walk: 'retaking' }));
+    assert.deepEqual([marked.changed, marked.picture.clip, marked.picture.state, marked.picture.new], [['pictures'], 'walk', 'retaking', true]);
     // A decision point (the motions ready for his answer) is the whole job and its next, waited for or not.
     await finish({ preview: ['idle', 'walk', 'run'].map(clip => ({ clip, name: `motion-${clip}-0` })) });
     const ready = await watch(null, 1);
@@ -719,6 +727,27 @@ test('a watch on a job that only asks to be watched answers in short; without a 
     await g.sql.query("update public.af_generation_jobs set status = 'failed', error_code = 'stage-attempts' where id = $1", [jobId]);
     const failed = await watch(null, 1);
     assert.equal(failed.watch, undefined); assert.match(failed.next, /failed \(stage-attempts\)/);
+  } finally { await g.sql.close(); }
+});
+
+// 리뷰 2026-11-05: a draft made while the agent wrote to the user (between two waits) was in the next wait's first look, so no answer gave its URL.
+test('a picture that came before the watch began is still its answer\'s picture, not new; one that comes during it is new', async () => {
+  const g = await generation();
+  try {
+    const { jobId, drafts, watch, bytes } = await motionsJob(g);
+    // Nine drafts before any watch: the first watch, though nothing changes, shows the ninth.
+    const first = await watch(null, 1);
+    assert.deepEqual([first.changed, first.picture.kind, first.picture.clip, first.picture.new], [[], 'draft', 'groggy', false]);
+    assert.ok(first.picture.url.includes(`jobs/${jobId}/draft-groggy-0.webp?token=`), first.picture.url);
+    // The tenth lands between two waits: the next wait, which sees no change, still shows it.
+    await drafts(10);
+    const between = await watch(null, 1);
+    assert.deepEqual([between.changed, between.picture.clip, between.picture.name, between.picture.new], [[], 'fall', 'draft-fall-0', false]);
+    assert.match(between.picture.url, /draft-fall-0\.webp\?token=/);
+    assert.ok(bytes() < 2048, `${bytes()} bytes`);
+    // One that lands during a wait is new.
+    const during = await watch(() => drafts(10, { fall: 'checking' }));
+    assert.deepEqual([during.changed, during.picture.clip, during.picture.state, during.picture.new], [['pictures'], 'fall', 'checking', true]);
   } finally { await g.sql.close(); }
 });
 
