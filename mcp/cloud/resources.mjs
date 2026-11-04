@@ -34,3 +34,9 @@ export const CLOUD_ISSUER = `${PROJECT}/auth/v1`;
 export const ARENA_URL = `${PROJECT}/functions/v1/oddbout-arena`;
 /** The API function's own ticket upload route (the terminal picture route skips the gateway, whose body limit is 64 KB). */
 export const TICKET_UPLOAD_URL = `${PROJECT}/functions/v1/ai-fighter/generations/ticket-uploads`;
+/**
+ * Browser calls are taken from the agents that connect (ChatGPT, Grok, Cursor, Claude) and ODDBOUT's own site; a call with no origin is not a
+ * browser's. Here since the gateway answers a GET or HEAD at the MCP addresses as the function does (MCP 최적화 2026-11-05).
+ */
+export const ALLOWED_ORIGINS = new Set(['https://chatgpt.com', 'https://chat.openai.com', 'https://platform.openai.com', 'https://oddbout.com',
+  'https://grok.com', 'https://www.grok.com', 'https://cursor.com', 'https://www.cursor.com', 'https://claude.ai', 'https://claude.com']);

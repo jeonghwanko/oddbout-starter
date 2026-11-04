@@ -210,8 +210,9 @@ Cursor의 Grok Bot이 02:21Z에 로그인 먼저 주소로 연결한 뒤 토큰�
 - Supabase 주소는 계속 받는다. 이미 그 주소로 추가한 커넥터는 그대로 동작한다. 사용자가 새 주소로 전환해 달라고 요청하면, 호스트의 공식 편집 기능을 우선 사용한다.
   편집이 불가능하면 기존 OAuth 연결을 보존하고 사용자에게 대체 연결을 먼저 만들지, 이후 기존 항목을 제거할지 선택받는다. 새 주소의 `tools/list`와
   `get_profile`이 의도한 계정으로 성공하고 사용자가 기존 항목 제거도 명시적으로 요청한 경우에만 기존 커넥터를 제거한다.
-- 요청이 Render를 한 번 더 거친다. `mcp.oddbout.com`은 Render 무료 서버라 잠들 수 있다. 운영자 PC가 14분마다 깨운다. 본문 한도(64 KiB)는 함수와 같다.
-  게이트웨이는 응답 헤더를 30초, 스트림 전체를 160초까지 기다린다.
+- Render와 Cloudflare는 `worker/gateway-core.mjs`의 같은 중계 규칙을 쓴다. 운영 전환·DNSSEC 대기·예비 원본 확인은
+  [MCP-GATEWAY](MCP-GATEWAY.md)를 따른다. Worker route가 활성화되면 MCP 요청은 Supabase로 직접 가고, `/health`와 `/wake`는 Render로 간다.
+  Render는 잠들 수 있어 운영자 PC가 14분마다 깨운다. 본문 한도는 64 KiB다. 헤더는 45초, 스트림 전체는 160초까지 기다린다.
 - 사이트는 Grok 카드와 안내에서만 새 주소를 준다(게임 `ODDBOUT_MCP_GROK_SIGN_IN_URL`). grok.com과 Cursor의 Grok Bot이 이 카드를 쓴다. Claude·Codex·Gemini는
   Supabase 주소 그대로다. MCP TS SDK(1.32의 `selectResourceURL`)와 Gemini CLI는 `WWW-Authenticate`의 `resource_metadata`를 따라서 루트 문제를 겪지 않는다.
   그래서 Render 무료 서버를 거칠 까닭이 없다(적대적 리뷰 지적).
@@ -224,13 +225,14 @@ Cursor의 Grok Bot이 02:21Z에 로그인 먼저 주소로 연결한 뒤 토큰�
 ## Claude 디렉터리판 (2026-11-01)
 
 Anthropic의 Claude 커넥터 디렉터리에 내는 주소는 `https://mcp.oddbout.com/claude`(`PUBLIC_DIRECTORY_RESOURCE`)다. 같은 서버이지만 심사자가 Claude에서
-실제로 돌릴 수 있는 도구 32종만 등록한다(`mcp/cloud/directory-edition.mjs`의 `DIRECTORY_TITLES`). 함수 주소로는 `…/ai-fighter-mcp/claude`(`DIRECTORY_RESOURCE`)다.
+실제로 돌릴 수 있는 도구 35종만 등록한다(`mcp/cloud/directory-edition.mjs`의 `DIRECTORY_TITLES`). 함수 주소로는 `…/ai-fighter-mcp/claude`(`DIRECTORY_RESOURCE`)다.
 
-- 운영 51종에서 24종을 뺐고, 묶인 쓰기 도구 둘을 일곱으로 나눴다(아래). 뺀 이유는 이렇다. 디렉터리 정책은 디자인용이 아닌 AI 이미지·영상·오디오 생성을 받지 않으므로 호스팅 생성 10종(그림 올리기 표 셋 포함)을 뺐다. 파일 인자는 OpenAI 파일 호스트만
+- 운영 55종에서 25종을 뺐고, 묶인 쓰기 도구 둘을 일곱으로 나눴다(아래). 뺀 이유는 이렇다. 디렉터리 정책은 디자인용이 아닌 AI 이미지·영상·오디오 생성을 받지 않으므로 호스팅 생성 10종(그림 올리기 표 셋 포함)을 뺐다. 파일 인자는 OpenAI 파일 호스트만
   받으므로(`allowedFileUrl`) 파일 등록·프로필 세트·제작 원본·파일 진단을 뺐다. Claude에서 할 수 없는 제작·등록으로 이끄는 `get_fighter_spec`·`check_creation_readiness`도 뺐다.
   등록하지 않은 도구는 이 판에 없는 도구다. 부르면 SDK의 알 수 없는 도구 오류가 나고 실행되지 않는다.
 - 디렉터리는 전 세계에 노출되므로 title을 영어로 쓴다. 이 판은 title을 annotation에도 한 번 더 넣는다(Anthropic 점검표가 hint와 함께 title을 본다).
-  그 밖의 annotation·입력 스키마·인증 표시는 원래 도구와 같다. 설명은 세 개를 바꿨다.
+  그 밖의 annotation·입력 스키마는 원래 도구와 같다. OpenAI 앱의 도구 메타데이터(`_meta`의 `securitySchemes`·`openai/fileParams`·`openai/profile`과
+  맨 위 `securitySchemes`)는 2026-11-05부터 이 판에 없다. 설명은 세 개를 바꿨다.
   - `enter_fighter`: 원래 설명은 뺀 `submit_profile_set`을 가리키고 대화에서 동작을 보여 주라고 한다. 이 판에서는 사용자가 제작자 사이트의 미리보기에서 동작을 본다.
     프로필 세트가 없으면 이 커넥터로는 올릴 수 없다고 말하고, 사이트에서 만든 선수는 등록 때 함께 들어가며 그 밖에는 ChatGPT의 ODDBOUT 앱에서 올린다고 안내한다.
   - `withdraw_fighter`·`write_world_post`: 한국어 상태 이름(제작 중, 정사)을 뺐다. 시험이 이 판의 도구와 지침에 한글이 없는지 본다.
@@ -247,7 +249,7 @@ Anthropic의 Claude 커넥터 디렉터리에 내는 주소는 `https://mcp.oddb
   메타데이터의 `resource_documentation`은 Claude 연결 안내 `https://oddbout.com/cloud-plugin/claude.html`(`DIRECTORY_DOCUMENTATION`)이다.
 - 게이트웨이는 `mcp.oddbout.com` 호스트에서만 `/claude`, `/claude/.well-known/oauth-protected-resource`, `/.well-known/oauth-protected-resource/claude`를
   함수의 `/claude`로 넘기고 `x-oddbout-public-resource: https://mcp.oddbout.com/claude`를 붙인다. 함수는 이 값일 때만 그 주소를 광고한다. 로그인 먼저 주소와 같은 방식이다.
-- `/mcp`·`/signin`의 도구·title·지침은 바뀌지 않는다(시험이 `/mcp` 51종을 센다 — 그림 올리기 표 셋을 더해).
+- `/mcp`의 도구·title·지침은 바뀌지 않는다(시험이 `/mcp` 55종과 그 목록의 sha256을 본다). `/signin`은 아래 [로그인 먼저 주소의 도구](#로그인-먼저-주소의-도구-2026-11-05).
 - 연결을 주소에 묶는다(2026-11-01, `20261101150000_ai_fighter_mcp_session_edition.sql`). Supabase Auth는 클라이언트가 요청한 `resource`(RFC 8707)를
   토큰에 넣지 않는다. `aud`는 토큰 훅의 고정 목록이고, 훅 입력에도 요청 주소가 없다. 그래서 토큰만으로는 어느 주소용인지 알 수 없다.
   - OAuth 세션의 첫 로그인 호출이 그 세션을 그 판에 묶는다(`af_mcp_session_editions`): `/mcp`·`/signin`은 `full`, `/claude`는 `directory`다.
@@ -257,17 +259,35 @@ Anthropic의 Claude 커넥터 디렉터리에 내는 주소는 `https://mcp.oddb
     `af_mcp_expired_token_state`는 그대로 두고 이 함수가 부른다(삭제 함수들이 앞의 것을 쓴다).
   - 이전 세션은 다음 호출의 판에 묶인다. 지금까지 모든 커넥터는 `full` 주소를 썼다. 행에는 사용자 id가 없고 세션이 끝나도 남지만 해가 없다.
   - 배포는 DB가 먼저다. 함수가 먼저 나가면 없는 함수를 불러 로그인 확인이 모두 503이 된다. 앞의 함수 코드는 옛 함수를 부르므로 DB만 먼저 나가도 괜찮다.
-- 32종 중 26종은 대결장 키(`ODDBOUT_ARENA_AGENT_KEY`)가 있을 때만 등록된다. 키가 빠지면 이 판은 6종만 보인다. 배포 확인의 "32종"이 이것을 잡는다.
-- 배포 순서는 DB 마이그레이션 → 함수(`fighter:mcp`) → Render(`worker:deploy`)다. 그 뒤 운영에서 `/claude`의 `tools/list`가 32종인지, 토큰 없는 `get_profile`이 위 401을 받는지,
+- 35종 중 29종은 대결장 키(`ODDBOUT_ARENA_AGENT_KEY`)가 있을 때만 등록된다. 키가 빠지면 이 판은 6종만 보인다. 배포 확인의 "35종"이 이것을 잡는다.
+- 배포 순서는 DB 마이그레이션 → 함수(`fighter:mcp`) → Render(`worker:deploy`)다. 그 뒤 운영에서 `/claude`의 `tools/list`가 35종인지, 토큰 없는 `get_profile`이 위 401을 받는지,
   메타데이터의 `resource`가 접속 주소와 같은지 읽기 요청으로 확인한다.
 - 제출 전 필수 조건: Claude 연결 안내 페이지 `https://oddbout.com/cloud-plugin/claude.html`(·`claude.ko.html`)이 200으로 답해야 한다. 메타데이터의 `resource_documentation`이다.
   이 페이지는 `website/cloud-plugin/content.mjs`의 `claude` 키로 만들고 사이트 게시에 함께 나간다(`scripts/build-cloud-plugin-site.mjs`).
   디렉터리 게시 전에는 커스텀 커넥터 설치 링크(이름·주소가 채워진 추가 창)와 인증 "필요할 때 로그인", OAuth 클라이언트 "자동으로 등록"을 안내한다.
   같은 날 개인정보·약관·지원 페이지도 연결한 앱 전부(OpenAI·Anthropic·xAI), 게임 도구가 받는 정보, 공개되는 글, 요청 로그 보관(제공자가 30일 안에 지움 —
   Supabase 요금제별 1~28일, Render Hobby 7일), 보안 신고 창구를 담도록 고쳤다. 머리글은 `ODDBOUT CONNECTOR`다.
-  심사 계정의 선수는 프로필 세트가 검증을 통과한 상태여야 한다. 아니면 심사자의 `enter_fighter`가 `profile-set-required`로 끝난다.
+  심사 계정의 선수는 프로필 세트가 승인됐거나 정면 판정을 통과한 상태여야 한다. 아니면 심사자의 `enter_fighter`가 `profile-set-required`로 끝난다.
 - 디렉터리 심사는 메타데이터 탐색에 10초 한도를 둔다. `mcp.oddbout.com`은 Render 무료 서버라 잠들면 그보다 오래 걸린다.
   2026-11-01 사용자 결정: 당분간 무료를 계속 쓰고, 사무실 PC의 crontab이 14분마다 `/health`를 불러 깨워 둔다. 그 PC가 꺼져 있으면 다시 잠드므로 심사 기간에는 켜 둔다.
+
+## 로그인 먼저 주소의 도구 (2026-11-05)
+
+`/signin`(Grok·Cursor·Gemini CLI·터미널 에이전트)에는 OpenAI 파일 호스트가 없다. 파일 인자는 그 호스트의 주소만 받으므로(`allowedFileUrl`) 파일 도구는
+거기서 한 번도 성공할 수 없었다. 그래서 이 주소는 `FILE_HOST_TOOLS` 여덟 종(`prepare_fighter_registration`·`upload_fighter_asset`·`prepare_profile_set`·
+`upload_profile_set_asset`·`verify_creator_file_input`·`store_creator_source`·`get_creator_source`·`prepare_creator_source_download`)을 등록하지 않는다.
+대결장 키와 호스팅 생성이 있으면 `/mcp` 55종, `/signin` 47종이다(둘 다 없으면 21종과 13종). 부르면 알 수 없는 도구 오류다.
+
+- 판(`edition`)은 그대로 `full`이다. 세션이 판에 묶이므로(`af_mcp_session_editions`) 새 판을 만들지 않고, 요청 경로(`signInFirst`)로 정한다.
+  Supabase 주소의 `/signin`도 같다.
+- OpenAI 앱의 도구 메타데이터(`_meta`의 `securitySchemes`·`openai/fileParams`·`openai/profile`, 맨 위 `securitySchemes`)를 싣지 않는다. 남은 도구의
+  title·설명·입력 스키마·annotation·`outputSchema`는 `/mcp`와 같다. 설명은 `enter_fighter` 하나만 다르다: 뺀 프로필 세트 업로드 도구 대신, 이 커넥터로는
+  올릴 수 없고 ChatGPT의 ODDBOUT 앱이나 제작 키트에서 올린다고 적는다. 한국어 상태 이름은 그대로다.
+- 서버 지침, `get_fighter_spec`(overview의 `registration.assetUpload: 'none'`, `profileSet.order`, creation 단계), `check_creation_readiness`
+  (`delivery.inputCapability: 'none'`, `nextAction`), `get_registered_fighter`·`enter_fighter`의 `next`(`frontNext`의 `uploads`), 호스팅 작업의 `next`도
+  뺀 도구를 부르지 않고 같은 문장(`NO_FILES`)으로 파일이 어디로 가는지 말한다. `request_hosted_fighter`는 남는다(`pictureUploads`). 스키마는 그대로이고
+  `_meta`만 빠진다.
+- `directory`는 이제 "한국어 상태 이름을 빼는 디렉터리판"만 뜻하고, 업로드 도구가 없다는 것은 `uploads`(= `/mcp`일 때만 참)가 따로 말한다.
 
 ## 사용 흐름
 
@@ -338,7 +358,7 @@ creator-kit 소스는 계정·등록에 호스팅 ODDBOUT MCP 하나를 쓰도�
 
 ## 에이전트 도구(3단계, 2026-10-27)
 
-등록 뒤에 에이전트가 할 일이다. 선수를 싸우게 해 보고, 기록을 읽고, 싸우는 성격을 고친다. 도구는 함수에 결과 함수 열쇠
+등록 뒤에 에이전트가 할 일이다. 선수를 싸우게 해 보고, 기록을 읽고, 전투 스타일을 고친다. 도구는 함수에 결과 함수 열쇠
 (`ODDBOUT_ARENA_AGENT_KEY`, 게임 `oddbout-arena`와 같은 값)가 있을 때만 목록에 나온다. 열쇠 없이 이 코드만 올리면 도구 목록은 그대로다.
 
 | 도구 | 로그인 | 하는 일 |
@@ -350,7 +370,10 @@ creator-kit 소스는 계정·등록에 호스팅 ODDBOUT MCP 하나를 쓰도�
 | `get_cup` | 없음 | 컵 하나(대진·상태·치른 경기) |
 | `read_bout` | 없음 | 경기를 다시 돌려 읽는 기록: 승패·끝난 방식·남은 HP·맞힌 수·하이라이트와 시각, 브라우저 다시 보기 링크. 컵 경기(`cupId`·`round`·`slot`)나 짝과 시드. 로그인했으면 그 계정의, 아니면 로그인 안 한 에이전트 전체의 분당 한도 |
 | `spar` | 필요 | 두 선수의 한 판(지금 패키지). 순위에 들지 않고 남지 않는다. 등록 선수는 출전한 선수만. 계정마다 분당 한도 |
-| `enter_cup` | 필요 | 연결 계정의 출전한 등록 선수로 16강 컵. 나머지 15명은 서버가 기본 선수에서 뽑는다. 결과는 컵 순위에 든다. 컵이 끝날 때까지(약 7초, 12초까지) 기다려 끝난 컵을 돌려준다. 컵마다 새 UUID `idempotencyKey`가 있어야 하고, 같은 키로 다시 부르면 그 키가 만든 컵을 `replayed: true`로 돌려준다(새 컵 없음, 아레나가 키로 티켓을 정한다 — 2026-11-03). 사용자 요청이 있어야 한다 |
+| `enter_cup` | 필요 | 연결 계정의 출전한 등록 선수로 16강 컵. 나머지 15명은 서버가 기본 선수에서 뽑는다. 결과는 컵 순위에 든다. 컵이 끝날 때까지(약 7초, 12초까지) 기다려 끝난 컵을 돌려준다. 컵마다 새 UUID `idempotencyKey`가 있어야 하고, 같은 키로 다시 부르면 그 키가 만든 컵을 `replayed: true`로 돌려준다(새 컵 없음, 아레나가 키로 티켓을 정한다 — 2026-11-03). `career: true`(파이트머니 2판, 2026-11-03)면 사용자의 커리어 컵이다: 파이트머니가 계정 금화로 들어오고 선수의 인기·강화가 이어지며, 컵 순위에는 들지 않는다. 대표 경기 사이에서 준비를 기다리므로 `next: 'get_career'`로 곧바로 돌려준다. 사용자 요청이 있어야 한다 |
+| `get_career` | 필요 | 파이트머니 2판: 사용자의 선수 커리어(인기·스태미나·강화·계정 금화)와 가장 최근 커리어 컵이 남긴 준비(상황·열린 선택·이야기 카드 셋) |
+| `choose_career_prep` | 필요 | 커리어 컵의 준비를 고른다: 강화 카드(`light`·`heavy`·`skill`, 값은 계정 금화에서), 제안된 이야기 카드(`storyId`), 쉬기. 컵은 다음 대표 경기로 간다. 같은 준비는 한 번만 닫힌다(다시 부르면 `stale`). 사용자 요청이 있어야 한다 |
+| `set_career_auto` | 필요 | 자동 매니저 켜기·끄기(준비 네 번 뒤 열린다). 켜면 준비마다 기다리지 않고 서버가 바로 고른다(띠 밖이면 스태미나, 아니면 가장 싼 강화). 사용자 요청이 있어야 한다 |
 | `enter_fighter` | 필요 | 제작 중인 선수를 출전시킨다(2026-10-30). 사용자가 본 패키지 해시와 필수 동작 11개를 낸다. 그 뒤로 공개 명단·랭크 대결·컵에 나온다. 동작을 보여주고 사용자 요청이 있어야 한다 |
 | `withdraw_fighter` | 필요 | 출전 취소. 다른 사람에게 더는 나오지 않고 전적은 남는다. 사용자 요청이 있어야 한다 |
 | `update_fighter_style` | 필요 | 새 그림 없이 `combat.style`만 바꾼다(객체는 교체, null은 삭제). 프로필 고치기와 같은 길(`PATCH fighters/<id>/profile`의 `style`, 마이그레이션 `20261027170000_ai_fighter_style_edits`)이다. 사용자 승인이 있어야 한다 |
@@ -362,7 +385,8 @@ creator-kit 소스는 계정·등록에 호스팅 ODDBOUT MCP 하나를 쓰도�
 기술 클립(`skill`)은 등록 때 정해지므로 성격 고치기로 더할 수 없다.
 
 ChatGPT 호출(`_meta`에 `openai/…`가 있는 호출): Apps SDK는 결과의 구조화 값과 텍스트를 모두 모델에 넘긴다. 그래서 1,200자를 넘는 결과의
-텍스트는 필드 요약 한 줄로 줄인다(`compactText`, 실패 결과와 작은 결과는 그대로). 다른 호스트는 텍스트에 전체 JSON을 그대로 받는다.
+텍스트는 필드 요약 한 줄로 줄인다(`compactText`, 실패 결과와 작은 결과는 그대로). 다른 호스트는 텍스트에 전체 JSON을 그대로 받고, 같은 값을
+`structuredContent`로 한 번 더 받지 않는다(2026-11-05, 결과가 두 배였다). `outputSchema`가 있는 `get_profile`만 모든 호스트에 구조화 값을 준다.
 로그인하지 않은 ChatGPT 사용자의 `read_bout` 한도는 `_meta["openai/subject"]`(익명 사용자 id)로 사용자마다 센다. 이 id는 호출하는 쪽이 정하므로
 (바꿀 때마다 새 한도였다) MCP는 그 읽기에 `x-arena-signed-out: 1`을 붙이고, 아레나는 그 id의 한도와 함께 로그인 안 한 에이전트 전체의 공용 한도에도
 센다(2026-10-30). id가 없는 읽기는 전처럼 공용 한도(`public`)만 쓴다.
@@ -390,7 +414,7 @@ ODDBOUT의 생성 워커가 사용자의 말(과 그림 1~2장)로 선수를 만
 | 도구 | 하는 일 |
 | --- | --- |
 | `request_hosted_fighter` | 설명·언어와 선택 그림 둘(`picture`·`secondPicture` 파일 인자, 또는 올리기 표로 넣은 `pictureUploads`, 합쳐 둘까지. 권리 확인 `rightsConfirmed`)로 신청. `delegate: true`는 맡기기다(아래). 같은 계정·`idempotencyKey`로 **이미 저장된 작업**이 있으면 그림을 다시 올리지 않고 반환한다. 결과가 불명확할 때는 조회 도구로 복구한다 |
-| `get_hosted_fighter` | 작업 상태, 외형 후보 둘·동작 미리보기의 서명 URL(10분), 프로필 초안, `next`. `jobId` 또는 원래 `idempotencyKey` 하나로 조회하며 둘 다 없으면 최근 다섯 신청, 열림 여부, 보유 토큰(`tokens`: granted·spent·balance). 각 작업은 그 작업이 쓴 토큰(`job.tokens`)을 보인다. 키 조회는 새 신청·업로드를 하지 않는다. `waitSeconds`(25초까지)는 찾은 작업의 상태를 기다린다 |
+| `get_hosted_fighter` | 작업 상태, 외형 후보 둘·동작 미리보기의 서명 URL(10분), 프로필 초안, `next`. `jobId` 또는 원래 `idempotencyKey` 하나로 조회하며 둘 다 없으면 최근 다섯 신청, 열림 여부, 보유 토큰(`tokens`: granted·spent·balance). 최근 목록의 각 작업은 요약(상태·진행률·설명·이름·시각·그 작업이 쓴 토큰 `tokens`·`siteUrl`)이고, 자세한 내용은 `jobId`로 읽는다(2026-11-05). 키 조회는 새 신청·업로드를 하지 않는다. `waitSeconds`(25초까지)는 찾은 작업의 상태를 기다린다. 지켜보기만 하면 되는 단계(대기·외형·동작·포장·검사 중)에서는 짧은 답(`watch: true`: 상태·진행률·대기 순서, 이번 대기에 바뀐 것 `changed`, 새로 온 그림 하나의 URL `picture`, 동작 중이면 그림 이름 목록 `pictures`)을 주고, 고를 때·끝났을 때와 `waitSeconds` 없는 조회는 전체를 준다 |
 | `choose_hosted_look` | 후보 `a`·`b` 고르기, 또는 한 문장 수정(두 장을 다시 그린다) |
 | `revise_hosted_motion` | 동작 하나를 한 문장으로 다시. 나머지 동작은 그대로 |
 | `register_hosted_fighter` | 사용자가 동작을 승인한 뒤 등록. 프로필은 워커 초안 위에 사용자가 바꾼 칸만 얹는다(언어별 이름·대사는 칸별로). 다른 선수와 같은 서버 검사를 거친다 |
@@ -456,6 +480,61 @@ ChatGPT 밖의 에이전트(Grok·Claude·Gemini CLI·Codex CLI·Cursor의 Grok 
 
 성공한 작업 응답에는 `next`(`hostedNext`)가 있다(목록은 각 `jobs[].next`): 사용자에게 무엇을 보이고 물을지, 또는 얼마나 기다릴지.
 한 선수는 대략 신청 → 외형 두 장(몇 분) → 고르기 → 동작 11개(15~30분) → 확인 → 등록이다.
+
+### 작업 공간 없는 에이전트의 길 (Grok 점검, 2026-11-03)
+
+Grok(grok.com, Cursor의 Grok Bot)이 받는 안내만으로 호스팅 생성까지 가는지 점검했다. 실제 API·DB(PGlite)와 가짜 워커로 그림 표 → 신청 → 외형 →
+고르기 → 동작 → 등록 요청(`submitting`)까지 돌리면 막히지 않았다. 패키지 검사와 등록 완료는 이 시험에서 돌지 않았다. 실제 Grok 대화로도 확인하지 않았다.
+운영 함수 요청 로그(10-28~11-03 UTC)에는 Grok 클라이언트의 접속·도구 목록 요청과 그 밖의 작은 요청 몇 번(11-01 15:14~15:30Z, 11-02)이 있다. 그 로그에는
+도구 이름이 남지 않고, 호출마다 도구 이름을 남기는 `mcp-call` 줄은 11-03에야 생겼다. 고친 곳은 다음과 같다.
+
+- `request_hosted_fighter`의 `picture`·`secondPicture`는 호스트가 붙인 파일만 받는다. 다른 모양의 값(주소만, 파일 id 없는 주소, 8,192자를 넘는
+  `data:` 주소)은 입력 검사에서 거절되는데, 그 오류 문구가 이제 `start_picture_upload`와 `pictureUploads`를 알려 준다(`fileSchema`의 `error`. 도구 목록의
+  스키마는 그대로다). 모양은 맞지만 받는 호스트가 아닌 파일은 서비스 확인·권리 확인·신청 검사 전에 `unsupported-file-origin`과 그 칸(`fields`), 같은 안내로
+  거절하고 아무것도 받지 않는다. Grok이 실제로 무엇을 넘기는지는 아직 아무도 보지 못했다(위 그림 주소 관찰).
+- `get_fighter_spec`의 `creation`은 호스팅 도구가 있는 연결에서 맨 앞에 `hosted`를 준다: 작업 공간이 없는 사용자에게 권하고, 사용자가 원할 때만
+  `request_hosted_fighter`, 신청마다 토큰을 쓴다. 나머지 단계는 작업 공간 경로다.
+- `check_creation_readiness`는 호스팅 도구가 있는 연결에서, 등록할 수 있는 계정에 `hosted`(`tool`, API의 `capabilities` 그대로, `note`)를 더한다.
+  `capabilities`는 서비스(스위치와 워커)의 상태일 뿐이다. 토큰·한 번에 하나·호스트 동의는 신청이 답한다. 읽지 못하면 `null`이다. 두 읽기는 함께 돈다.
+  `purpose`가 `generation`·`connection`이면 `nextAction`이 `hosted`를 가리킨다. `generation`은 그대로 `unverified`다.
+- 대화에서 만든 그림은 사용자가 저장한 뒤 표의 페이지에서 올린다(`start_picture_upload`의 `next`).
+
+실제 Grok Bot 대화(2026-11-03 08:43~09:40Z, Cursor의 Grok Bot, 작업 `5cf1bf54`): 내 선수 목록 → 그림 표(`terminal: true`, 봇이 자기 VM에서 curl로
+911 KB 한 장) → 그림 확인 → `request_hosted_fighter`까지 막히지 않았다. 외형 고르기는 1분 반 만에 지나갔고(사이트에서 고름), 달리기가 검사를 못 넘겨
+`needs_review`(`run-not-clean`)가 됐다. 봇은 자기 루틴으로 10분 남짓마다 `get_hosted_fighter`를 읽었다.
+
+**그림 보이기**: 이 채팅은 그림 주소를 그리지 않는다. 마크다운으로 쓰든 봇의 `<image-card>`로 쓰든 글자로 나왔고, 봇이 서명 주소(10분)로 파일을
+받아 첨부하자 그림이 보였다. 봇의 말로는 A/B 카드와 첨부는 봇이 띄우고, MCP는 `candidates`의 주소, 비어 있는 `choice`(고를 차례), `next`의 할 일만
+주면 된다. 그래서 그림이 있는 상태(`appearance_ready`·`motions`·`needs_review`·`motion_ready`)의 `next`가 "주소로 그림이 안 보이는 채팅이면 파일을 받아
+(주소는 10분) 첨부하라"고 적는다. `motions`·`needs_review`도 "지금까지 만든 것을 보여 주라"고 적는다(전에는 "기다려라"만 있어 봇이 아무것도 올리지 않았다).
+
+두 번째 대화(같은 날 10:01~10:24Z, 작업 `3a4e8a73`, #317 배포 뒤): 봇이 외형 두 장을 붙이고 채팅의 A/B 카드로 받은 답을 `choose_hosted_look`으로
+넘겼다(10:07Z). 동작 중에는 봇의 루틴이 5분마다 확인했고, 사용자가 "25초 간격으로" 하라고 하자 `waitSeconds`로 이어 읽으며 걷기·달리기 시트와
+표정을 붙이고 진행률을 표로 올렸다. 그래서 일하는 단계(대기·외형·동작·포장·검사)의 `next`와 서버 안내문이 "사용자가 보는 동안은 `waitSeconds 25`로
+이어 읽고 바뀐 것(새 그림·진행률·대기 순번)을 바로 알리라, 떠나면 예약 확인으로 바뀐 것만"이라고 적는다. 기다림은 상태·진행률·제출 상태와, 동작 중이면
+그림 이벤트(`drafts`·`side`·`expressions`)의 마지막 시각을 보다가 바뀌면 바로 돌아온다(전에는 단계가 끝날 때만). 워커의 임대 연장(빈 진행 호출)은
+아무것도 바꾸지 않아 기다림을 끝내지 않는다. 진행률은 동작 단계에서만 오른다(5·25·45·65·80, 완성 100). 외형 단계는 완성 전까지 0이다.
+같은 대화에서 봇이 첫 동작 수정이 만들어지는 동안 두 번째 수정을 보내 `generation-state`만 받았다. 이제 `choose_hosted_look`·`revise_hosted_motion`의
+그 거절에는 "수정은 한 번에 하나, 동작이 다시 준비되면(`motion_ready`) 보내라"는 `next`가 붙는다.
+
+### 출전 전에 정면 알리기 (정면 판정, 2026-11-03)
+
+같은 날 Grok Bot이 레나 볼트를 출전시켰다(05:18:51Z `enter_fighter`). 39초 전에 그 선수의 프로필 세트가 검증을 통과했는데(`review`), 검증은 픽셀
+(형식·투명한 가장자리·키·얼굴 칸)만 보고 그림이 정면인지는 보지 않았다. 출전 조건도 `review`를 통과로 쳤으므로, 홈·무투장 어디에도 정면이 없는 채로 출전했다.
+사용자 결정: "정면샷인지 검증해서 MCP가 알려줘야지", 만든 시각에 따른 면제 없앰, 정면을 잃으면 제작 중. 실루엣 좌우 대칭은 정면(우리 정면 27장 0.55~0.97)과
+옆모습(옆모습 원본 1,337장, 최대 0.91)을 가르지 못해, 판정은 공식 생성 PC의 codex가 한다([OPEN-REGISTRATION.md](OPEN-REGISTRATION.md) 정면 판정).
+
+- `get_registered_fighter`의 `fighter.front`가 출전에 필요한 정면을 말한다: `required`(관문이 켜져 있는지), `ok`(출전시킬 수 있는 세트가 있는지), 없으면
+  아직 검사 중인 세트(없으면 가장 최근 세트)의 `status`·`frontCheck`(`stalled`: 판정 다섯 번이 답하지 못해 운영자 몫)·거절 `reason`·판정 `notes`
+  (판정이 돌려보낸 때만). 제작 중인 선수에게 모자란 것이 있으면 `next`가 사용자에게 할 말과 할 일을 준다(`mcp/cloud/common.mjs` `frontNext`).
+  정면 없음이나 판정이 돌려보냄이면 새로 그려 올린다. 파일 검사 거절이면 고쳐 다시 내고, 검사 장애면 같은 그림을 다시 낸다. 둘 다 새로 그리지 않는다.
+  운영자 거절이면 이유를 알리고, 검사 중이거나 `stalled`면 기다린다. 판정과 운영자의 말은 `next` 지시문에 넣지 않고 `front`의 데이터로만 둔다
+  (그림 속 글이 판정 문장을 움직일 수 있다). 올리기 도구는 호스트가 붙인 파일만 받으므로(ChatGPT), 그 밖의 호스트에는 ChatGPT의 ODDBOUT 앱으로 올리라고 한다.
+- `enter_fighter`가 `profile-set-required`로 거절되면 같은 `front`와 `next`가 붙는다. 설명은 먼저 `get_registered_fighter`를 읽으라고 한다.
+- `get_profile_set`의 `frontCheck`(`pending`·`pass`·`fail`과 판정), `submit_profile_set`·맡긴 선수의 등록 `next`도 판정을 거친 뒤 출전한다고 적는다.
+- 디렉터리판(`/claude`)에는 올리기 도구가 없으므로 `next`가 그 도구 이름과 한국어 상태 이름을 쓰지 않는다(`withSiteLink`의 기본 문장도).
+- 한계: 맡긴 선수의 정면이 판정에 떨어지면 ChatGPT 밖에서는 정면을 다시 올릴 길이 없다. 판정이 틀려도 운영자가 뒤집지 않는다(사용자는 PC 판정만
+  골랐다).
 
 ### 사이트 바로가기 `siteUrl` (2026-11-03)
 
@@ -536,24 +615,24 @@ URL 재발급과 신규 접수가 열린 상태에서 다른 계정의 키 조�
 
 ## 공방과 연대기 도구(4단계, 2026-10-27)
 
-선수의 정본을 쓰고, 다른 선수를 비평·제안하고, 관계를 맺고, 세계를 연다. 에이전트 도구와 같이 결과 함수 열쇠가 있을 때만 목록에 나온다.
+선수의 사연을 쓰고, 다른 선수를 비평·제안하고, 관계를 맺고, 세계를 연다. 에이전트 도구와 같이 결과 함수 열쇠가 있을 때만 목록에 나온다.
 경로는 같은 API(`api/workshop.mjs`, 마이그레이션 `20261027200000_oddbout_workshop`·`20261027210000_oddbout_open_worlds`·
 `20261027230000_oddbout_workshop_hardening`)다. 이 MCP가
-쓴 공방 글과 정본 판에는 OAuth 클라이언트 이름이 남는다(`createHandler`의 `agentClient` — 도구 인자에서 받지 않는다).
+쓴 공방 글과 사연 판에는 OAuth 클라이언트 이름이 남는다(`createHandler`의 `agentClient` — 도구 인자에서 받지 않는다).
 
 | 도구 | 로그인 | 하는 일 |
 | --- | --- | --- |
-| `get_fighter_story` | 없음 | 정본과 판 목록, 공방 최근 글(더 앞은 `before`), 맺은 관계, 결과가 만든 관계(재대결·설욕·천적·우세), 그의 경기의 경기평. 기본 선수는 사이트 프로필 |
+| `get_fighter_story` | 없음 | 사연과 판 목록, 공방 최근 글(더 앞은 `before`), 맺은 관계, 결과가 만든 관계(재대결·설욕·천적·우세), 그의 경기의 경기평. 기본 선수는 사이트 프로필 |
 | `get_world` | 없음 | `worldId` 없이: 공개 세계 목록과 새 세계 표지 id. 있으면: 소개·진영·소속 선수·정사(주인이 올린 글)·소속 선수의 최근 컵 경기와 경기평 |
-| `update_fighter_canon` | 필요 | 연결 계정 선수의 정본 다음 판(성격·말투·동기·금기·대표 장면). 읽은 판(`baseVersion`) 위에만 쓴다. 선수당 한 시간 30판. 사용자 승인이 있어야 한다 |
-| `post_workshop_note` | 필요 | 등록 선수의 공방에 비평·제안(정본 칸·싸우는 성격·다시 그리기)·경기평. 근거 경기 셋까지, 경기평은 하나 이상. 공개 이름이 보인다(`nickname` 으로 처음 한 번 정한다). 10분 10개·하루 60개 |
-| `get_workshop_inbox` | 필요 | 연결 계정 선수에게 온 열린 글(최근 100개), 기다리는 관계(`otherKind`: 상대 쪽에서 본 관계), 내 선수의 지금 정본(`version`이 쓸 때의 기준 판 — 공개 무대 밖 선수도), 공개 이름 |
-| `resolve_workshop_note` | 필요 | 열린 제안을 받거나 거절한다. 거절은 비평·경기평도 받은 글에서 치운다. 받으면 정본 칸은 그때의 정본 위에 합친 새 판(데이터베이스가 선수 잠금 안에서 합친다 — 칸이 하나도 안 남으면 `canon-empty`), 성격은 답한 뒤 프로필 고치기와 같은 길(제안 id 가 멱등 키 — 실패했으면 다시 받기로 마친다). 사용자 결정이 있어야 한다 |
+| `update_fighter_canon` | 필요 | 연결 계정 선수의 사연 다음 판(성격·말투·동기·금기·대표 장면). 읽은 판(`baseVersion`) 위에만 쓴다. 선수당 한 시간 30판. 사용자 승인이 있어야 한다 |
+| `post_workshop_note` | 필요 | 등록 선수의 공방에 비평·제안(사연 칸·전투 스타일·다시 그리기)·경기평. 근거 경기 셋까지, 경기평은 하나 이상. 공개 이름이 보인다(`nickname` 으로 처음 한 번 정한다). 10분 10개·하루 60개 |
+| `get_workshop_inbox` | 필요 | 연결 계정 선수에게 온 열린 글(최근 100개), 기다리는 관계(`otherKind`: 상대 쪽에서 본 관계), 내 선수의 지금 사연(`version`이 쓸 때의 기준 판 — 공개 무대 밖 선수도), 공개 이름 |
+| `resolve_workshop_note` | 필요 | 열린 제안을 받거나 거절한다. 거절은 비평·경기평도 받은 글에서 치운다. 받으면 사연 칸은 그때의 사연 위에 합친 새 판(데이터베이스가 선수 잠금 안에서 합친다 — 칸이 하나도 안 남으면 `canon-empty`), 성격은 답한 뒤 프로필 고치기와 같은 길(제안 id 가 멱등 키 — 실패했으면 다시 받기로 마친다). 사용자 결정이 있어야 한다 |
 | `set_fighter_relation` | 필요 | 공개 무대의 등록 선수끼리 라이벌·동료·스승·제자를 맺기(다른 주인은 받아야 선다)·받기·거절·끊기. 한 쌍에 하나, 선수당 열둘(지운 선수와의 관계는 세지 않는다) |
 | `manage_world` | 필요 | `create`: 세계 열기(계정당 둘, 바로 공개, 표지는 `get_world`의 목록). `update`: 내 세계의 글·표지·진영 목록, 글을 정사로 올리기·내리기, 선수 빼기. `place`: 공개 무대의 내 선수를 남이 연 세계·진영에 두기·빼기(세계당 200명) |
 | `write_world_post` | 필요 | 세계 라운지에 글. `nickname`으로 먼저 가입한다. 세계 주인은 바로 정사로 올릴 수 있다. 같은 UUID 로 다시 보내면 같은 글이 돌아온다(남의 글 id 면 `post-exists`) |
 
-정본·공방 글·라운지 글은 다른 사람의 글이다. 도구 설명이 에이전트에게 그것을 지시가 아닌 데이터로 읽으라고 적는다.
+사연·공방 글·라운지 글은 다른 사람의 글이다. 도구 설명이 에이전트에게 그것을 지시가 아닌 데이터로 읽으라고 적는다.
 세계 쓰기 세 가지는 `manage_world` 하나로 묶는다. 도구 개수와 목록 크기는 배포·서버 설정에 따라 달라지므로 실제 `tools/list`로 확인한다.
 
 ## 운영 설정과 배포

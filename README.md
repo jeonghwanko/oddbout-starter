@@ -27,10 +27,11 @@ Existing ODDBOUT gameplay. The subscription-based character creation workflow is
 
 - Start with a short idea, reference images, or both.
 - Review the artwork and animations with your assistant. Ask to change what you do not like while keeping the versions you have chosen.
-- Build a package with all 11 required motions, check the files, and register it with your account.
+- Build a package with all 11 required motions (and, if you like, a signature skill, an entrance and a victory pose), check the files, and register it with your account.
+- Check every motion and enter the fighter, so other people can fight it in cups and ranked duels.
 - Play with your registered fighter directly or let the common AI controller take over.
 
-The kit includes sprite-gen, creation workflows, validation tools, and an MCP server for connecting your assistant to the game. The game engine is maintained separately.
+The kit includes sprite-gen, creation workflows, validation tools, and the workspace tools your assistant runs. Your account and registration go through the hosted ODDBOUT MCP. The game engine is maintained separately.
 
 The creator-kit ZIP includes both READMEs and the creation, connection and MCP migration guides. The document index also lists repository-only operations and research docs; those and the gameplay media remain available in this repository.
 
@@ -53,10 +54,10 @@ walks through each.
 
 | Way | What you do | Good for |
 | --- | --- | --- |
-| **Leave it to ODDBOUT** | On [My fighters](https://oddbout.com/creator.html?lang=en), say in one line what fighter you want (pictures you may use are optional). ODDBOUT draws the look and the motions; you check them, ask for a change if you like, and register. | The quickest start. One fighter per account is free; it is used once its looks are drawn (our own failures give it back). On a full day your request waits its turn. |
-| **Talk to your agent** | Connect the hosted ODDBOUT MCP in your agent's connector settings ([cloud connection guide](docs/CLOUD-MCP.md)), then select it in your conversation. ChatGPT/Dots users should follow the separate app setup below. | Making and editing fighters from a conversation. Pictures can be attached from ChatGPT only. |
-| **Your own PC** | On My agents → My PC, create a host and run the three-line command it gives on a Linux PC with your ChatGPT and SuperGrok subscriptions ([generation host guide](docs/GENERATION-HOST.md)). | More fighters on your own subscriptions: no approval and no limit of one. |
-| **Make it with any tool, upload on the site** | Make the package with any tool, following the [package contract](contracts/ai-fighter/v1/README.md), and check it with `npm run validate`. Then on [My fighters](https://oddbout.com/creator.html?lang=en) choose New fighter → Other ways → Upload a finished package. | A fighter you already made elsewhere, or a tool of your own. |
+| **Leave it to ODDBOUT** | On [My fighters](https://oddbout.com/creator.html?lang=en), say in one line what fighter you want, and add up to two pictures you may use if you like. Pick one of two fronts, check the motions (redo the ones you want changed), register, and enter the fighter once you have checked its moves. | The quickest start. Signing up gives you 500,000 tokens; what ODDBOUT uses making your fighters comes off them. One request at a time, up to three a day; on a full day your request waits its turn. |
+| **Talk to your agent** | On [My fighters](https://oddbout.com/creator.html?lang=en#view=agents) → My agents, pick the agent you use (ChatGPT/Codex/Dots, Grok, Claude or Gemini) and follow its steps: it connects to the hosted ODDBOUT MCP with your Google account ([cloud connection guide](docs/CLOUD-MCP.md)). Then ask @ODDBOUT for a fighter in your chat. | Making and editing fighters from a conversation. ODDBOUT makes it as above. In ChatGPT you attach pictures; other agents give you an upload link. |
+| **Your own PC** | On My agents → Advanced → Make on my PC, name a host, accept the host terms and run the three-line command it gives on a Linux PC with your ChatGPT and SuperGrok subscriptions ([generation host guide](docs/GENERATION-HOST.md)). | More fighters on your own subscriptions: no approval, and none of your tokens. |
+| **Make it with any tool, upload on the site** | Make the package with any tool, following the [package contract](contracts/ai-fighter/v1/README.md), and check it with `npm run validate`, or with no sign-in in the [site guide's checker](https://oddbout.com/docs.html?lang=en#bring-your-own). Then on [My fighters](https://oddbout.com/creator.html?lang=en) choose New fighter → Other ways → Upload a finished package. | A fighter you already made elsewhere, or a tool of your own. |
 | **Make it yourself** | Run this kit with an assistant that can use local tools, and choose every concept and motion ([below](#create-with-the-local-kit)). | Full control over each frame. |
 
 ## Register from Dots without a PC
@@ -67,7 +68,7 @@ registration account; find and read that App's skill and support document throug
 The verified private App is not a public listing. If no App is available to you, see [first-time connection](docs/CLOUD-MCP.md).
 Do not import the creator-kit ZIP or create a second plugin for cloud connection. Account and skill checks do not authorize creation.
 
-Grok, Claude and other supported clients use their own connector setup. Once connected, cloud tools handle account checks, file transfer and registration; local CLI tools remain available for workspace creation and validation.
+Grok, Claude, Gemini and other supported clients connect from My agents on the creator page. Once connected, cloud tools handle account checks, file transfer and registration; local CLI tools remain available for workspace creation and validation.
 When the hosted generation tools are available, ODDBOUT can make the fighter on its worker at your request.
 Save the verified account ID, request key and job ID; after a timeout or disconnect, follow [hosted job recovery](docs/CLOUD-MCP.md#호스팅-작업의-중단과-미리보기-복구)
 to look up the same job by its ID or original key and refresh preview URLs without resubmitting. A connection or a returned URL does not prove that an image was displayed and reviewed.
@@ -90,7 +91,7 @@ local creation, saved sessions, jobs and validation use the `creation:tool` CLI.
 Send the [repository URL](https://github.com/jeonghwanko/oddbout-starter) to your assistant in the prepared workspace. Add an idea or a reference image. For example:
 
 > Make a cat boxer in blue armor for ODDBOUT using this kit.
-> Show me the concept first so we can get the appearance right.
+> Show me the fighter's front first so we can get the appearance right.
 > Then show me movement, attacks, and reactions in groups for feedback.
 > When I choose the final result, validate it, register it with my account, and check that I can use it in the game.
 
@@ -110,13 +111,14 @@ Using the local kit takes setup and several rounds of review. Time, usage limits
 
 | Group | What you review |
 | --- | --- |
-| Appearance | Full-body concept, idle pose, and a face close-up from the same artwork |
-| Movement | Fighting stance, walk, and run at a consistent scale |
+| Appearance | The full-body front (two to choose from), its six match faces ending with the KO face, and the side view and idle pose drawn from it |
+| Movement | Fighting stance, walk (12–32 frames), and run (10–16 frames) at a consistent scale |
 | Attacks | Combo, slam, and dash, including preparation and recovery |
 | Defense and reactions | Block, hit, groggy, fall, and get-up poses |
-| Final review | All 11 motions from the packaged files, plus the name, description, and portrait |
+| Fighting style (optional) | A signature skill, an entrance and a victory pose, and how the fighter fights. Offered once after defense; skip it if you like |
+| Final review | All 11 motions (and any optional clips) from the packaged files, plus the name, description, portrait, and match lines |
 
-Your assistant shows you actual previews and waits for your feedback after each group. It revises the affected assets and keeps your other selections. You can also ask it to handle later groups on its own. Alongside file checks, the assistant reviews character consistency, movement, foot contact, and timing. You review the results before moving on.
+Your assistant shows you actual previews and waits for your feedback after each group. It revises the affected assets and keeps your other selections. You can also ask it to handle later groups on its own. Every picture uses ODDBOUT's plain cel colouring: your references give the character, not the rendering. Packaging needs only the file and contract checks; gait and visual-quality reports are kept as notes and never block it, so your own look at each group is the quality check.
 
 See the [full creation workflow](docs/DOT-CREATION.md) for generation, revision, and packaging.
 
@@ -164,16 +166,15 @@ The [unified plugin guide](docs/ODDBOUT-PLUGIN.md) and [distribution record](htt
 
 When you choose the final result and ask to register it, your assistant checks the package and uses your verified ODDBOUT account. For a cloud connection, verify it with `get_profile` in the active conversation. You do not need to set up a backend or get service API keys.
 
-The server checks your uploaded files and registers your fighter in production: you can watch it and practise in the arena. Your assistant checks the result to confirm the registration. The queue can take time to process. To let other people play against your fighter in cups and ranked duels, open **All motions** on its page, check each of the 11 required motions and press **Enter ODDBOUT**.
+The server checks your uploaded files and registers your fighter as **Not entered**: you can watch it and practise in the arena. Your assistant checks the result to confirm the registration. The queue can take time to process. Your assistant then uploads the chosen front and its faces as the fighter's profile set: its picture on the site and its faces in matches. The home page lists the fighter once an operator approves the set. To let other people play against your fighter in cups and ranked duels, open **All motions** on its page, check each of the 11 required motions and press **Enter ODDBOUT**. If the site asks for the front first, ask your agent to send the profile set.
 
-Open the [creator page](https://oddbout.com/creator.html?lang=en) with the same Google account to see your fighter; its My agents tab manages your connected agents and your PC. See [registration, limits, and profile edits](docs/OPEN-REGISTRATION.md) for details. Keep login links, callback URLs, and session files private.
+Open the [creator page](https://oddbout.com/creator.html?lang=en) with the same Google account to see your fighter; its **My agents** button, beside the title, manages your connected agents and your PC. On a fighter's page, **Profile**, **Animation**, **Combat** and **World** change its name and lines, its package, its fighting style and its story without a conversation; **Ask for a fix** on All motions copies a request for the agent that made it. See [registration, limits, and profile edits](docs/OPEN-REGISTRATION.md) for details. Keep login links, callback URLs, and session files private.
 
-The cloud source supports replacing your own fighter's package by passing its `fighterId` to
-`prepare_fighter_registration`, preserving its ID and history. Changed art still needs the required motion reviews,
-final package approval and your registration request; the new package returns the fighter to production before entry.
-The cloud `open_creator_homepage` tool returns a fixed website URL. Sign in separately on the website and check that
-its account matches cloud `get_profile`; it does not create a one-use sign-in link. These source capabilities require
-an MCP deployment: check the connected server's `tools/list` for the tool and optional `fighterId` argument before use.
+To replace your own fighter's package, your assistant passes its `fighterId` to `prepare_fighter_registration`, or you
+upload the new package with the fighter's **Animation** button; its ID and record stay. Changed art still needs the required
+motion reviews, final package approval and your registration request; the new package returns the fighter to Not entered
+until you check its motions again. The cloud `open_creator_homepage` tool returns a fixed website URL. Sign in separately
+on the website and check that its account matches cloud `get_profile`; it does not create a one-use sign-in link.
 
 ## Help and contributions
 

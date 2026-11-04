@@ -54,6 +54,11 @@ Dot's default one-use sign-in links now target the Pages URL. The former
 
 ## Free validation service
 
+The MCP gateway can run independently on Cloudflare with Render retained as the
+origin fallback. Source, deployment prerequisites, DNSSEC migration and rollback:
+[MCP-GATEWAY](MCP-GATEWAY.md). Code availability alone does not indicate that DNS
+or the production route has been switched.
+
 Render service `ai-fighter-validator` (`srv-dbbohr8m7kps73flja7g`) uses the Free
 instance in Singapore, with no payment card added. It deploys the
 `main` branch. Auto-deploy is off; deploy reviewed commits
@@ -89,6 +94,9 @@ function as `x-request-id` and returns it to the client in the same header. The 
 calls, so an `api-failure` line from a tool's call has the same `requestId`. Each call has a 25-second budget from its
 arrival (`CALL_BUDGET_MS`): `enter_cup` and `get_hosted_fighter` stop waiting by then and say what to read next, and every
 database or Storage call ends by 15 seconds (`timedFetch`). The gateway waits up to 45 seconds for the answer's headers.
+Since 2026-11-05 every MCP request (a POST at an MCP address, whatever its outcome) also writes one `{"mcp":1,…}` line to
+stdout: `edition`, JSON-RPC `method`, `tool` (tools/call only), `compact` (ChatGPT's short text), the HTTP `status`, the
+answer's `bytes` and `ms`. It names no token, account, argument or URL; it is how the hosts' polling and result sizes are read.
 
 Startup runs the real child-process WebP validator against the existing
 geometric test fixture. Health is available only after it passes. No fighter

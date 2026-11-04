@@ -258,7 +258,7 @@
       "min": 200,
       "max": 1000
     },
-    "note": "선택. 싸우는 성격을 닫힌 선택지와 작은 등급으로만 고른다(공격 섞기·특수·필살기·교전 거리·충격파·소환물·기질·교전 성향). 서버가 각 값을 자체 수치로 바꾼다. 공격 섞기는 하나 이상이 0보다 크고 fast 는 slam + combo 이하다. 기술은 skill 클립(skill.kind)이 정한다. 기술 클립·소환물·충격파 가운데 extrasBudget 개까지. 없으면 표준 키트 그대로다."
+    "note": "선택. 전투 스타일을 닫힌 선택지와 작은 등급으로만 고른다(공격 섞기·특수·필살기·교전 거리·충격파·소환물·기질·교전 성향). 서버가 각 값을 자체 수치로 바꾼다. 공격 섞기는 하나 이상이 0보다 크고 fast 는 slam + combo 이하다. 기술은 skill 클립(skill.kind)이 정한다. 기술 클립·소환물·충격파 가운데 extrasBudget 개까지. 없으면 표준 키트 그대로다."
   },
   "profileLines": {
     "keys": [
@@ -272,7 +272,7 @@
   "combatKits": [
     {
       "id": "standard-duel",
-      "description": "서버가 관리하는 기본 대결 규칙. 제작자는 HP·피해·사거리·코드·AI 지시를 제출하지 않는다. 능력치 등급 배분(combat.stats)과 싸우는 성격(combat.style)만 고른다.",
+      "description": "서버가 관리하는 기본 대결 규칙. 제작자는 HP·피해·사거리·코드·AI 지시를 제출하지 않는다. 능력치 등급 배분(combat.stats)과 전투 스타일(combat.style)만 고른다.",
       "integration": "pending-game-integration",
       "currentConsumers": {
         "player": "FighterFightSkin / Lupin rules",

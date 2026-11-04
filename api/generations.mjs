@@ -13,7 +13,8 @@ import { SUBMISSION_STATUS, checkedManifest, storeAsset } from './submissions.mj
 import { DECISIONS, reviewEvidence } from './decisions-review.mjs';
 import { benchmarkReview } from './decisions-benchmark.mjs';
 import { BENCHMARK_BODY_BYTES } from './sequence-benchmark.mjs';
-import { PROFILE_SET_LIMITS, PROFILE_SET_VERSION, expireUpload, parseProfileSet, profileSetKey, storeOnce } from './profile-sets.mjs';
+import { PROFILE_SET_LIMITS, PROFILE_SET_VERSION, claimFrontCheck, expireUpload, finishFrontCheck, parseProfileSet, profileSetKey, releaseFrontCheck,
+  storeOnce } from './profile-sets.mjs';
 import { BUCKET } from './submissions.mjs';
 import { accountTokens } from './account.mjs';
 /**
@@ -284,21 +285,26 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
   }
   /** @param {Job} row @param {Map<string, number> | null} [taken]  Read for a list at once (jobTokens); read here when not given. */
   async function view(row, taken) {
-    const candidates = candidatesOf(row), preview = previewOf(row), drafts = await draftsOf(row), side = await chosenArtifactOf(row);
-    const expressions = await chosenArtifactOf(row, 'expressions');
-    const hosts = await hostsOf([row.requested_host, row.assigned_host]);
+    const candidates = candidatesOf(row), preview = previewOf(row);
+    // Its reads at once (MCP 최적화 2026-11-05: eight in a row for each read of a job, which a watching chat makes every 25 seconds). A failure
+    // is the one the reads in their old order met first: the four before the signed URLs, the URLs, then the rest.
+    /** @type {<T>(result: PromiseSettledResult<T>) => T} */
+    const value = result => { if (result.status === 'rejected') throw result.reason; return result.value; };
+    const reads = await Promise.allSettled([draftsOf(row), chosenArtifactOf(row), chosenArtifactOf(row, 'expressions'),
+      hostsOf([row.requested_host, row.assigned_host]),
+      (async () => {
+        if (!row.submission_id) return null;
+        const { data, error } = await db.from('af_submissions').select('id,status,fighter_id').eq('id', row.submission_id).maybeSingle();
+        if (error) throw new Problem(503, 'database-unavailable');
+        return data ? { id: data.id, stage: data.status, fighterId: data.fighter_id ?? null } : null;
+      })(),
+      // 첫 선수 무료 (2026-10-30): a request to ODDBOUT on a full day waits for its looks; where it stands, for the page's line.
+      row.host_choice === 'oddbout' && !row.started_at && ['queued', 'appearance'].includes(row.status) ? call('af_generation_queue', { p_id: row.id }) : null,
+      taken === undefined ? jobTokens([row.id]) : taken]);
+    const drafts = value(reads[0]), side = value(reads[1]), expressions = value(reads[2]), hosts = value(reads[3]);
     const urls = await signed([...candidates.map(name => artifactPath(row.id, name)), ...preview.map(p => artifactPath(row.id, p.name)),
       ...drafts.map(d => artifactPath(row.id, d.name)), ...[side, expressions].flatMap(name => name ? [artifactPath(row.id, name)] : [])]);
-    let submission = /** @type {{ id: any, stage: any, fighterId: any } | null} */ (null);
-    if (row.submission_id) {
-      const { data, error } = await db.from('af_submissions').select('id,status,fighter_id').eq('id', row.submission_id).maybeSingle();
-      if (error) throw new Problem(503, 'database-unavailable');
-      if (data) submission = { id: data.id, stage: data.status, fighterId: data.fighter_id ?? null };
-    }
-    // 첫 선수 무료 (2026-10-30): a request to ODDBOUT on a full day waits for its looks; where it stands, for the page's line.
-    const queue = row.host_choice === 'oddbout' && !row.started_at && ['queued', 'appearance'].includes(row.status)
-      ? await call('af_generation_queue', { p_id: row.id }) : null;
-    const tokens = taken === undefined ? await jobTokens([row.id]) : taken;
+    const submission = value(reads[4]), queue = value(reads[5]), tokens = value(reads[6]);
     return { id: row.id, status: row.status, progress: row.progress, error: row.error_code ?? null, description: row.description, language: row.language,
       delegate: row.delegate === true, createdAt: row.created_at, updatedAt: row.updated_at, profile: row.profile ?? (isObject(row.brief?.profile) ? row.brief.profile : null),
       candidates: candidates.map((name, i) => ({ key: i === 0 ? 'a' : 'b', url: urls.get(artifactPath(row.id, name)) ?? null })), choice: row.choice ?? null,
@@ -689,6 +695,15 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     }
     if (method !== 'POST') throw new Problem(404, 'route-not-found');
     const body = await readJson(request, GENERATION_LIMITS.result + 2000);
+    // 정면 판정 (2026-11-03): owners' front paintings, checked by the official PC's codex between its stages (profile-sets.mjs claimFrontCheck).
+    if (route === 'generation-worker/profile-fronts/claim') {
+      // Another host checks none, and its worker stops asking (`frontChecks: false`).
+      if (host !== null) return { ok: true, stage: 'idle', frontChecks: false };
+      const set = await claimFrontCheck(db, host);
+      return set ? { ok: true, profileSet: set } : { ok: true, stage: 'idle' };
+    }
+    if (route === 'generation-worker/profile-fronts/finish') return finishFrontCheck(db, host, body);
+    if (route === 'generation-worker/profile-fronts/release') return releaseFrontCheck(db, host, body);
     if (route === 'generation-worker/heartbeat') {
       const { health, usage } = fields(body, ['health', 'usage']);
       if (!isObject(health) || JSON.stringify(health).length > 2000) throw new Problem(422, 'invalid-health');

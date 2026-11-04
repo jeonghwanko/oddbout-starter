@@ -14,7 +14,7 @@ test('public gateway forwards only the fixed MCP endpoint and bounded protocol h
     const response=await fetch(base+'/mcp',{method:'POST',headers:{authorization:'Bearer oauth-token',cookie:'private=secret','x-ai-fighter-time':'123','x-oddbout-public-resource':'https://evil.test','content-type':'application/json'},body:'{"jsonrpc":"2.0"}'});
     assert.equal(response.status,200);assert.equal(response.headers.get('set-cookie'),null);
     assert.equal(calls.length,1);assert.equal(calls[0].url,'https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter-mcp');
-    assert.equal(calls[0].options.redirect,'error');assert.equal(calls[0].options.headers.get('cookie'),null);
+    assert.equal(calls[0].options.redirect,'manual');assert.equal(calls[0].options.headers.get('cookie'),null);
     assert.equal(calls[0].options.headers.get('x-ai-fighter-time'),null);
     assert.equal(calls[0].options.headers.get('authorization'),'Bearer oauth-token');
     assert.equal(calls[0].options.headers.get('x-oddbout-public-resource'),LEGACY_PUBLIC_RESOURCE);

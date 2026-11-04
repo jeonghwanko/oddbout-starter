@@ -15,18 +15,25 @@ async function connector(g, hosted, fetcher = async () => new Response(png(512, 
   const downloads = [];
   const db = { ...g.db, auth: { getClaims: async () => ({ data: { claims } }) },
     rpc: (name, args) => name === 'af_mcp_session_state' ? { data: 'usable' } : g.db.rpc(name, args) };
-  const handle = createCloudHandler({ db, hosted, budgetMs, fetcher: async (...args) => { downloads.push(args[0]); return fetcher(...args); } });
-  let loseResponse = false;
+  const handle = createCloudHandler({ db, hosted, budgetMs, log: () => {}, fetcher: async (...args) => { downloads.push(args[0]); return fetcher(...args); } });
+  let loseResponse = false, bytes = 0;
   const rpc = async (method, params) => {
     const response = await handle(new Request(CLOUD_RESOURCE, { method: 'POST',
     headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: 'Bearer signed-connector-token-for-test' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params: meta && method === 'tools/call' ? { ...params, _meta: meta } : params }) }));
     if (loseResponse) { loseResponse = false; await response.body?.cancel(); throw new Error('simulated lost response'); }
-    return (await response.json()).result;
+    const text = await response.text();
+    bytes = Buffer.byteLength(text);
+    return JSON.parse(text).result;
   };
+  // A tool's JSON: a host other than ChatGPT gets it as the text only (MCP 최적화 2026-11-05).
+  const toolJson = result => result.structuredContent ?? JSON.parse(result.content[0].text);
   return { downloads, loseNextResponse: () => { loseResponse = true; }, tools: async () => (await rpc('tools/list', {})).tools,
-    call: async (name, args) => (await rpc('tools/call', { name, arguments: args })).structuredContent,
-    text: async (name, args) => (await rpc('tools/call', { name, arguments: args })).content[0].text };
+    call: async (name, args) => toolJson(await rpc('tools/call', { name, arguments: args })),
+    raw: (name, args) => rpc('tools/call', { name, arguments: args }),
+    text: async (name, args) => (await rpc('tools/call', { name, arguments: args })).content[0].text,
+    // The last answer's HTTP body, in bytes.
+    bytes: () => bytes };
 }
 
 test('hosted generation tools list only when configured', async () => {
@@ -42,6 +49,37 @@ test('hosted generation tools list only when configured', async () => {
     for (const name of ['request_hosted_fighter', 'choose_hosted_look', 'revise_hosted_motion'])
       assert.equal(on.find(t => t.name === name).annotations.idempotentHint, false, name);
   } finally { await g.sql.close(); }
+});
+
+// Grok 점검 (2026-11-03): an agent with no workspace read only the workspace route in the creation guide and the readiness check.
+test('the creation guide and the readiness check name the hosted route where its tools are listed, and whether it takes requests now', async () => {
+  const g = await generation();
+  try {
+    const without = await connector(g, null), withHosted = await connector(g, {});
+    const guide = async c => (await c.call('get_fighter_spec', { section: 'creation' })).data;
+    assert.equal((await guide(without)).hosted, undefined);
+    const listed = await guide(withHosted);
+    assert.deepEqual(Object.keys(listed).slice(0, 2), ['hosted', 'steps']); assert.match(listed.hosted, /request_hosted_fighter/);
+    const ready = (c, purpose = 'generation') => c.call('check_creation_readiness', { purpose });
+    const plain = await ready(without);
+    assert.equal(plain.hosted, undefined); assert.doesNotMatch(plain.nextAction, /hosted/);
+    // The service's own state (off until the switch and a healthy worker), never the account's checks; generation stays unverified.
+    const off = await ready(withHosted);
+    assert.deepEqual([off.hosted.tool, off.hosted.capabilities.hosted, off.hosted.capabilities.reason], ['request_hosted_fighter', false, 'disabled']);
+    assert.match(off.hosted.note, /only on the user's request[\s\S]*tokens[\s\S]*service only/);
+    assert.match(off.nextAction, /see hosted/); assert.equal(off.generation.status, 'unverified');
+    await g.healthy();
+    assert.equal((await ready(withHosted)).hosted.capabilities.hosted, true);
+    // Registering a package: the block is there, the next step is the package's.
+    const registering = await ready(withHosted, 'registration');
+    assert.equal(registering.hosted.tool, 'request_hosted_fighter'); assert.doesNotMatch(registering.nextAction, /hosted/);
+  } finally { await g.sql.close(); }
+  // A service state that cannot be read is unknown, and the account still answers.
+  const failed = await generation({ failing: ['af_generation_capabilities'] });
+  try {
+    const unknown = await (await connector(failed, {})).call('check_creation_readiness', { purpose: 'generation' });
+    assert.deepEqual([unknown.ok, unknown.registration.status, unknown.hosted.capabilities], [true, 'ready', null]);
+  } finally { await failed.sql.close(); }
 });
 
 test('an agent asks ODDBOUT for a fighter, passes the picks and registers it in a handful of calls', async () => {
@@ -63,7 +101,9 @@ test('an agent asks ODDBOUT for a fighter, passes the picks and registers it in 
     assert.equal((await g.sql.query('select count(*)::int as n from public.af_generation_uploads')).rows[0].n, 1);
     const jobId = made.job.id;
     const listed = await call('get_hosted_fighter', {});
-    assert.equal(listed.capabilities.hosted, true); assert.equal(listed.jobs[0].next, made.next);
+    // The list holds each job in short (MCP 최적화 2026-11-05); its next says to read one by its id.
+    assert.equal(listed.capabilities.hosted, true); assert.equal(listed.jobs[0].id, made.job.id); assert.equal(listed.jobs[0].next, undefined);
+    assert.match(listed.next, /jobId/);
     // 보유 토큰 (2026-10-31): an open request does not use his tokens up; the balance does, and nothing was spent yet.
     assert.equal(listed.used, false); assert.deepEqual(listed.tokens, { granted: 500000, spent: 0, balance: 500000 });
 
@@ -92,6 +132,9 @@ test('an agent asks ODDBOUT for a fighter, passes the picks and registers it in 
     const ready = await call('get_hosted_fighter', { jobId });
     assert.equal(ready.job.status, 'motion_ready'); assert.match(ready.next, /register_hosted_fighter/);
     assert.equal((await call('revise_hosted_motion', { jobId, clip: 'walk', note: '덜 통통 튀게' })).job.revisionsLeft.motions, 2);
+    // A second change while the first is made is refused with what to do (Grok 점검 2026-11-03: the bot got a bare code).
+    const early = await call('revise_hosted_motion', { jobId, clip: 'run', note: '팔을 더 크게' });
+    assert.equal(early.code, 'generation-state'); assert.match(early.next, /one at a time[\s\S]*motion_ready/);
     held = await claim('motions'); assert.deepEqual(held.motionNote, { clip: 'walk', note: '덜 통통 튀게' });
     await finish(held, { preview });
 
@@ -139,7 +182,7 @@ test('a wait on a submitted fighter reads the job and its submission in one quer
     reads.length = 0;
     await call('get_hosted_fighter', { jobId: job.id });
     const once = reads.splice(0);
-    const tick = ([table, columns]) => table === 'af_generation_jobs' && columns === 'status,submission:af_submissions!submission_id(status)';
+    const tick = ([table, columns]) => table === 'af_generation_jobs' && columns === 'status,progress,submission:af_submissions!submission_id(status)';
     // The check ends once the wait has seen it running.
     const settle = async () => { while (!reads.some(tick)) await new Promise(done => setTimeout(done, 5));
       await g.sql.query("update public.af_submissions set status = 'rejected' where id = $1", [submission]); };
@@ -399,7 +442,22 @@ test('a picture chosen from the ChatGPT Library reaches the request; other Azure
 test('an agent without file attachments sends the user\'s pictures through a ticket and names them in the request', async () => {
   const g = await generation();
   try {
-    const { call, downloads } = await connector(g, { pollMs: 10 });
+    const { call, text, downloads } = await connector(g, { pollMs: 10 });
+    // An agent's own picture (Grok 점검 2026-11-03; what Grok passes is not observed yet). The wrong shape — an address alone, or a data:
+    // address over the limit — fails the schema with the way in; a file of the shape from no taken host is named before any check (off
+    // here, no rights confirmed) and fetches nothing.
+    const ask = { description: '빨간 글러브를 낀 고양이 복서, 귀가 크다', language: 'ko', idempotencyKey: crypto.randomUUID() };
+    for (const picture of ['https://images.grok.test/made.png', { download_url: 'https://images.grok.test/made.png' },
+      { download_url: `data:image/png;base64,${'A'.repeat(9000)}`, file_id: 'made' }])
+      assert.match(await text('request_hosted_fighter', { ...ask, picture }), /picture[\s\S]*only a file this host attaches[\s\S]*start_picture_upload/);
+    const checks = [], rpc = g.db.rpc;
+    g.db.rpc = (name, args) => { checks.push(name); return rpc(name, args); };
+    const refused = await call('request_hosted_fighter', { ...ask, picture: { download_url: 'https://files.oaiusercontent.com/file-1', file_id: 'file-1' },
+      secondPicture: { download_url: 'https://images.grok.test/made.png', file_id: 'made' } });
+    assert.deepEqual([refused.code, refused.fields], ['unsupported-file-origin', ['secondPicture']]);
+    assert.match(refused.next, /^secondPicture takes only a file this host attaches[\s\S]*start_picture_upload/);
+    assert.deepEqual([checks.filter(name => name.startsWith('af_generation_')), downloads.length], [[], 0]);
+    g.db.rpc = rpc;
     // Off, no ticket: the request's checks come first, as no picture is kept for a request that cannot be made (3차 리뷰 2026-11-01).
     assert.equal((await call('start_picture_upload', {})).code, 'generation-unavailable');
     assert.equal((await g.sql.query('select count(*)::int as n from public.af_generation_upload_tickets')).rows[0].n, 0);
@@ -407,6 +465,7 @@ test('an agent without file attachments sends the user\'s pictures through a tic
     // A chat with no terminal gets the link only: nothing in it uploads.
     const linkOnly = await call('start_picture_upload', {});
     assert.equal(linkOnly.page, `${PICTURE_PAGE}${linkOnly.ticket.id}`);
+    assert.match(linkOnly.next, /made in this chat/);
     assert.deepEqual([linkOnly.command, linkOnly.ticket.secret], [undefined, undefined]);
     const started = await call('start_picture_upload', { terminal: true });
     assert.equal(started.ok, true, JSON.stringify(started));
@@ -427,7 +486,7 @@ test('an agent without file attachments sends the user\'s pictures through a tic
     assert.deepEqual([read.ticket.open, read.ticket.closed, read.ticket.uploads.length], [false, 'full', 2]);
     assert.ok(read.next.startsWith('Show him the pictures'), read.next);
     assert.ok(read.ticket.uploads.every(u => u.usable && typeof u.url === 'string'), JSON.stringify(read.ticket.uploads));
-    const ids = read.ticket.uploads.map(u => u.id), ask = { description: '빨간 글러브를 낀 고양이 복서, 귀가 크다', language: 'ko' };
+    const ids = read.ticket.uploads.map(u => u.id);
     const attached = { download_url: 'https://files.oaiusercontent.com/file-1', file_id: 'file-1' };
     // Two in all with attached files, refused before any attached one is downloaded; the rights confirmed as for any picture.
     assert.equal((await call('request_hosted_fighter', { ...ask, picture: attached, pictureUploads: ids, rightsConfirmed: true,
@@ -470,7 +529,7 @@ test('a picture address an agent reports is noted by its kind (and an http host)
   const g = await generation();
   try {
     const logged = t.mock.method(console, 'log', () => {});
-    const { call, downloads } = await connector(g, {});
+    const { call, raw, downloads } = await connector(g, {});
     const noted = await call('report_picture_link', { url: 'https://images.example.test/u/1234/gen/abc.png?sig=secret', madeBy: 'grok' });
     assert.deepEqual([noted.ok, noted.fetched, noted.kept, noted.observed.hostname], [true, false, false, 'images.example.test']);
     assert.equal(downloads.length, 0);
@@ -478,7 +537,7 @@ test('a picture address an agent reports is noted by its kind (and an http host)
     assert.ok(line && line.includes('"madeBy":"grok"') && !line.includes('secret') && !line.includes('1234'), line);
     // The maker is one of a few words, never free text.
     const probes = () => logged.mock.calls.filter(c => String(c.arguments[0]).includes('picture-link-probe')).length, seen = probes();
-    assert.equal(await call('report_picture_link', { url: 'https://images.example.test/a.png', madeBy: 'Kim Minsu' }), undefined);
+    assert.equal((await raw('report_picture_link', { url: 'https://images.example.test/a.png', madeBy: 'Kim Minsu' })).isError, true);
     assert.equal(probes(), seen);
   } finally { await g.sql.close(); }
 });
@@ -541,4 +600,182 @@ test('siteUrl names a fighter before a request before a submission, and nothing 
   assert.equal(siteUrl({ submissionId: id }), `${CREATOR_PAGE}#submission=${id}`);
   assert.equal(siteUrl({}), null);
   assert.ok(PICTURE_PAGE.startsWith(`${CREATOR_PAGE}#view=upload&ticket=`));
+});
+
+// Grok 점검 (2026-11-03): Cursor's Grok Bot chat shows a job's pictures only as files the bot downloads and attaches; next says so wherever
+// there are pictures to show, and asks for the a/b choice while choice is empty.
+test('next says to attach the downloaded pictures wherever there are pictures to show', () => {
+  const job = { id: 'x', candidates: [], host: { choice: 'oddbout' }, revisionsLeft: { appearance: 2, motions: 3 }, preview: [] };
+  for (const status of ['appearance_ready', 'motions', 'motion_ready', 'needs_review'])
+    assert.match(hostedNext({ ...job, status }), /download each file \(the url lasts ten minutes\) and attach it/, status);
+  assert.match(hostedNext({ ...job, status: 'appearance_ready' }), /Show the user both looks[\s\S]*ask which one[\s\S]*choose_hosted_look/);
+  assert.doesNotMatch(hostedNext({ ...job, status: 'queued' }), /attach/);
+});
+
+// Grok 점검 (2026-11-03): the user watching asked for 25-second reads; a wait returns as soon as a picture, the progress or the state
+// changes, and a lease renewal (the worker's progress call with nothing in it) does not end it.
+test('a wait on a working job returns when a picture or the progress changes, not on a lease renewal', async () => {
+  const g = await generation();
+  try {
+    await g.healthy();
+    const { call } = await connector(g, { pollMs: 10 });
+    const { job } = await call('request_hosted_fighter', { description: '빨간 글러브를 낀 고양이 복서, 귀가 크다', language: 'ko', idempotencyKey: crypto.randomUUID() });
+    let held = (await g.work('POST', 'claim', {})).body.job;
+    const finish = (h, result) => g.work('POST', 'finish', { jobId: h.id, leaseToken: h.leaseToken, outcome: 'ok', result });
+    await finish(held, { brief: { profile: { name: '빨간 주먹' } } });
+    held = (await g.work('POST', 'claim', {})).body.job;
+    for (const name of ['look-a-0', 'look-b-0'])
+      await g.work('PUT', `jobs/${held.id}/artifacts/${name}`, webp(400, 600), { 'x-generation-lease': held.leaseToken, 'content-type': 'image/webp' });
+    await finish(held, { candidates: ['look-a-0', 'look-b-0'] });
+    await call('choose_hosted_look', { jobId: job.id, choose: 'a' });
+    held = (await g.work('POST', 'claim', {})).body.job;
+    const progress = body => g.work('POST', 'progress', { jobId: held.id, leaseToken: held.leaseToken, ...body });
+    const timed = async (send, waitSeconds = 5) => {
+      const started = Date.now();
+      const [read] = await Promise.all([call('get_hosted_fighter', { jobId: job.id, waitSeconds }),
+        new Promise(done => setTimeout(done, 150)).then(send)]);
+      return { read, ms: Date.now() - started };
+    };
+    // A draft is a picture event: the wait ends with it, and the read shows it.
+    await g.work('PUT', `jobs/${held.id}/artifacts/draft-walk-0`, webp(400, 600), { 'x-generation-lease': held.leaseToken, 'content-type': 'image/webp' });
+    const drafted = await timed(() => progress({ event: { kind: 'drafts', seq: 1, clips: [{ clip: 'walk', name: 'draft-walk-0' }] } }));
+    assert.ok(drafted.ms < 3000, `${drafted.ms} ms`);
+    // In short while it only asks to be watched (MCP 최적화 2026-11-05): what changed, the new picture and the pictures there are by name.
+    assert.deepEqual([drafted.read.watch, drafted.read.changed, drafted.read.pictures.drafts, drafted.read.picture.clip, drafted.read.picture.new],
+      [true, ['pictures'], ['walk'], 'walk', true]);
+    assert.match(drafted.read.picture.url, /draft-walk-0\.webp/);
+    assert.match(drafted.read.next, /waitSeconds 25/);
+    // So is a step of the progress.
+    const stepped = await timed(() => progress({ progress: 25 }));
+    assert.ok(stepped.ms < 3000, `${stepped.ms} ms`); assert.equal(stepped.read.job.progress, 25); assert.deepEqual(stepped.read.changed, ['progress']);
+    // The latest picture comes with every watch, marked as not new once an earlier read has had it.
+    assert.deepEqual([stepped.read.picture.clip, stepped.read.picture.new], ['walk', false]);
+    // A lease renewal changes nothing the user sees: the wait runs its time.
+    const renewed = await timed(() => progress({}), 1);
+    assert.ok(renewed.ms >= 900, `${renewed.ms} ms`); assert.equal(renewed.read.job.progress, 25); assert.deepEqual(renewed.read.changed, []);
+  } finally { await g.sql.close(); }
+});
+
+// 감시 응답 줄이기 (MCP 최적화 2026-11-05): a chat that watched read the whole job — every picture's signed URL and the long next — at each
+// 25-second wait. A job in its motions, with Storage-length signed URLs, two looks, the side view, his faces and nine drafts.
+async function motionsJob(g, options = {}) {
+  await g.healthy();
+  const storage = g.db.storage.from;
+  g.db.storage.from = bucket => ({ ...storage(bucket), createSignedUrls: async paths => ({ data: paths.map(path => ({ path,
+    signedUrl: `https://storage.test/storage/v1/object/sign/${bucket}/${path}?token=${'t'.repeat(300)}` })) }) });
+  const c = await connector(g, { pollMs: 10 }, undefined, options);
+  const jobId = (await c.call('request_hosted_fighter', { description: '빨간 글러브를 낀 고양이 복서, 귀가 크다', language: 'ko', idempotencyKey: crypto.randomUUID() })).job.id;
+  let held = (await g.work('POST', 'claim', {})).body.job;
+  const finish = result => g.work('POST', 'finish', { jobId, leaseToken: held.leaseToken, outcome: 'ok', result });
+  const artifact = name => g.work('PUT', `jobs/${jobId}/artifacts/${name}`, webp(400, 600), { 'x-generation-lease': held.leaseToken, 'content-type': 'image/webp' });
+  const progress = body => g.work('POST', 'progress', { jobId, leaseToken: held.leaseToken, ...body });
+  await finish({ brief: { profile: { name: '빨간 주먹' } } });
+  held = (await g.work('POST', 'claim', {})).body.job;
+  for (const name of ['look-a-0', 'look-b-0']) await artifact(name);
+  await finish({ candidates: ['look-a-0', 'look-b-0'] });
+  await c.call('choose_hosted_look', { jobId, choose: 'a' });
+  held = (await g.work('POST', 'claim', {})).body.job;
+  for (const kind of ['side', 'expressions']) { await artifact(`${kind}-0-a`); await progress({ event: { kind, outcome: 'chosen', artifact: `${kind}-0-a` } }); }
+  const clips = ['walk', 'run', 'fightIdle', 'combo', 'slam', 'dash', 'block', 'hit', 'groggy', 'fall'];
+  let seq = 0;
+  const drafts = async (count, states = {}) => {
+    const list = clips.slice(0, count).map(clip => ({ clip, name: `draft-${clip.toLowerCase()}-0`, ...(states[clip] ? { state: states[clip] } : {}) }));
+    for (const { name } of list) await artifact(name);
+    return progress({ progress: 40 + count, event: { kind: 'drafts', seq: ++seq, clips: list } });
+  };
+  await drafts(9);
+  // A watch that the worker's `send` ends (or its time, with none).
+  const watch = (send, waitSeconds = 5) => Promise.all([c.call('get_hosted_fighter', { jobId, waitSeconds }),
+    send ? new Promise(done => setTimeout(done, 150)).then(send) : null]).then(([read]) => read);
+  return { ...c, jobId, drafts, watch, finish };
+}
+
+test('a watch on a job that only asks to be watched answers in short; without a wait, at a decision and at the end it stays whole', async () => {
+  const g = await generation();
+  try {
+    const { call, bytes, jobId, drafts, watch, finish } = await motionsJob(g);
+    // Without waitSeconds: the whole job, as before.
+    const full = await call('get_hosted_fighter', { jobId }), fullBytes = bytes();
+    assert.deepEqual([full.job.status, full.job.drafts.length, full.job.candidates.length], ['motions', 9, 2]);
+    assert.ok(full.job.side.url && full.job.expressions.url); assert.match(full.next, /eleven motions[\s\S]*waitSeconds 25/);
+    // A wait the tenth draft ends: the job's state, what changed, that draft's URL only, and the pictures by name.
+    const watched = await watch(() => drafts(10)), watchedBytes = bytes();
+    assert.deepEqual(Object.keys(watched).sort(), ['changed', 'job', 'next', 'ok', 'picture', 'pictures', 'siteUrl', 'watch']);
+    assert.deepEqual(watched.job, { id: jobId, status: 'motions', progress: 50 });
+    assert.deepEqual(watched.changed, ['progress', 'pictures']);
+    assert.deepEqual([watched.picture.kind, watched.picture.clip, watched.picture.name, watched.picture.new], ['draft', 'fall', 'draft-fall-0', true]);
+    assert.match(watched.picture.url, /draft-fall-0\.webp\?token=/);
+    assert.deepEqual(watched.pictures, { drafts: ['walk', 'run', 'fightIdle', 'combo', 'slam', 'dash', 'block', 'hit', 'groggy', 'fall'], side: true, expressions: true });
+    assert.equal(watched.siteUrl, full.siteUrl);
+    assert.ok(!watched.next.includes('\n'));
+    assert.match(watched.next, /show him picture unless you already showed that one[\s\S]*waitSeconds 25[\s\S]*Without waitSeconds it returns the whole job/);
+    // One signed URL instead of every picture's: a small answer, whatever the job holds.
+    assert.equal((JSON.stringify(watched).match(/token=/g) ?? []).length, 1);
+    assert.ok(watchedBytes < 2048 && watchedBytes * 4 < fullBytes, `watch ${watchedBytes} bytes, full ${fullBytes}`);
+    // A wait that saw nothing change says so; it still carries the latest picture, not new.
+    const quiet = await watch(null, 1);
+    assert.deepEqual([quiet.watch, quiet.changed, quiet.picture.clip, quiet.picture.new], [true, [], 'fall', false]);
+    // A take marked for another filming is the latest picture too, with its state.
+    const marked = await watch(() => drafts(10, { walk: 'retaking' }));
+    assert.deepEqual([marked.changed, marked.picture.clip, marked.picture.state, marked.picture.new], [['pictures'], 'walk', 'retaking', true]);
+    // A decision point (the motions ready for his answer) is the whole job and its next, waited for or not.
+    await finish({ preview: ['idle', 'walk', 'run'].map(clip => ({ clip, name: `motion-${clip}-0` })) });
+    const ready = await watch(null, 1);
+    assert.equal(ready.watch, undefined); assert.equal(ready.job.status, 'motion_ready'); assert.equal(ready.job.preview.length, 3);
+    assert.match(ready.next, /register_hosted_fighter/);
+    // So is the end.
+    await g.sql.query("update public.af_generation_jobs set status = 'failed', error_code = 'stage-attempts' where id = $1", [jobId]);
+    const failed = await watch(null, 1);
+    assert.equal(failed.watch, undefined); assert.match(failed.next, /failed \(stage-attempts\)/);
+  } finally { await g.sql.close(); }
+});
+
+// 리뷰 2026-11-05: a draft made while the agent wrote to the user (between two waits) was in the next wait's first look, so no answer gave its URL.
+test('a picture that came before the watch began is still its answer\'s picture, not new; one that comes during it is new', async () => {
+  const g = await generation();
+  try {
+    const { jobId, drafts, watch, bytes } = await motionsJob(g);
+    // Nine drafts before any watch: the first watch, though nothing changes, shows the ninth.
+    const first = await watch(null, 1);
+    assert.deepEqual([first.changed, first.picture.kind, first.picture.clip, first.picture.new], [[], 'draft', 'groggy', false]);
+    assert.ok(first.picture.url.includes(`jobs/${jobId}/draft-groggy-0.webp?token=`), first.picture.url);
+    // The tenth lands between two waits: the next wait, which sees no change, still shows it.
+    await drafts(10);
+    const between = await watch(null, 1);
+    assert.deepEqual([between.changed, between.picture.clip, between.picture.name, between.picture.new], [[], 'fall', 'draft-fall-0', false]);
+    assert.match(between.picture.url, /draft-fall-0\.webp\?token=/);
+    assert.ok(bytes() < 2048, `${bytes()} bytes`);
+    // One that lands during a wait is new.
+    const during = await watch(() => drafts(10, { fall: 'checking' }));
+    assert.deepEqual([during.changed, during.picture.clip, during.picture.state, during.picture.new], [['pictures'], 'fall', 'checking', true]);
+  } finally { await g.sql.close(); }
+});
+
+test('ChatGPT\'s watch is the same short answer, in its structured result beside the text', async () => {
+  const g = await generation();
+  try {
+    const { raw, jobId, drafts } = await motionsJob(g, { meta: { 'openai/locale': 'ko' } });
+    const [read] = await Promise.all([raw('get_hosted_fighter', { jobId, waitSeconds: 5 }), new Promise(done => setTimeout(done, 150)).then(() => drafts(10))]);
+    assert.equal(read.structuredContent.watch, true); assert.equal(read.structuredContent.picture.clip, 'fall');
+    assert.ok(read.content[0].text === JSON.stringify(read.structuredContent) || read.content[0].text.startsWith('Full result in structuredContent'));
+  } finally { await g.sql.close(); }
+});
+
+test('the recent list holds each request in short and says to read one by its id; the balance and the service stay', async () => {
+  const g = await generation();
+  try {
+    const { call, jobId } = await motionsJob(g);
+    for (let i = 0; i < 4; i++) await g.sql.query(`insert into public.af_generation_jobs(owner_id, idempotency_key, description, language, status, created_at)
+      values ($1, $2, 'An older cat boxer', 'en', 'cancelled', now() - interval '1 day')`, [g.owner, crypto.randomUUID()]);
+    const listed = await call('get_hosted_fighter', {}), whole = await call('get_hosted_fighter', { jobId });
+    assert.equal(listed.jobs.length, 5); assert.equal(listed.jobs[0].id, jobId);
+    for (const job of listed.jobs) assert.deepEqual(Object.keys(job), ['id', 'status', 'progress', 'error', 'description', 'name', 'createdAt', 'updatedAt',
+      'tokens', 'submission', 'agent', 'siteUrl']);
+    assert.deepEqual(listed.jobs[0], { id: jobId, status: 'motions', progress: whole.job.progress, error: null, description: whole.job.description,
+      name: '빨간 주먹', createdAt: whole.job.createdAt, updatedAt: whole.job.updatedAt, tokens: whole.job.tokens, submission: null, agent: null,
+      siteUrl: whole.siteUrl });
+    assert.ok(!JSON.stringify(listed).includes('token='), 'no signed URL in the list');
+    assert.deepEqual([listed.used, listed.tokens.balance, listed.capabilities.hosted], [false, 500000, true]);
+    assert.match(listed.next, /read one by its jobId/);
+  } finally { await g.sql.close(); }
 });

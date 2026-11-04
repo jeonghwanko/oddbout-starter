@@ -12,7 +12,7 @@ import { Problem, UUID } from './http.mjs';
  */
 
 /**
- * The canon sheet (정본, `canon-sheet-1`): who the fighter is, in his owner's words. Every field is optional; a sheet has at least one.
+ * The canon sheet (사연, `canon-sheet-1`): who the fighter is, in his owner's words. Every field is optional; a sheet has at least one.
  * personality 성격, voice 말투, motive 동기, taboos 금기 (what he never does or says), scenes 대표 장면 (moments that show him).
  * Relations are not here: the relation graph holds them (declared ones and those his bouts made).
  * `items`: a list of up to that many texts; `lines`: newlines allowed.

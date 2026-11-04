@@ -22,6 +22,9 @@ export const DIRECTORY_TITLES = new Map([
   ['read_bout', 'Replay a bout'],
   ['spar', 'Spar'],
   ['enter_cup', 'Enter a 16-fighter cup'],
+  ['get_career', 'Read a fighter\'s career'],
+  ['choose_career_prep', 'Make a career cup\'s prep'],
+  ['set_career_auto', 'Career auto manager'],
   ['update_fighter_profile', 'Edit fighter profile'],
   ['update_fighter_style', 'Edit fighting style'],
   ['enter_fighter', 'Enter fighter into public play'],
@@ -54,8 +57,9 @@ export const DIRECTORY_DESCRIPTIONS = new Map([
     + 'ODDBOUT creator website (open_creator_homepage). Enter only on the user\'s request once they confirmed every one there. '
     + 'Pass the package hash they watched (get_registered_fighter) and those motions. A new package returns the fighter to production. '
     // Hosted generation puts the chosen front in as the profile set at registration (cloud/hosted-tools.mjs); the upload tools take OpenAI files only.
-    + 'profile-set-required: the fighter has no profile set (its front picture) yet, and this connector cannot upload one. Tell the user: a fighter '
-    + 'made on the ODDBOUT website gets it at registration; otherwise it is uploaded from the ODDBOUT app in ChatGPT. Enter once it passed validation.'],
+    + 'It enters only with a front picture (profile set) that passed ODDBOUT\'s check: one character, whole, facing the viewer straight on. '
+    + 'Read get_registered_fighter first and tell the user what its front lacks; this connector cannot upload one. A fighter made on the ODDBOUT '
+    + 'website gets it at registration; otherwise it is uploaded from the ODDBOUT app in ChatGPT. profile-set-required: next says what to do.'],
   ['withdraw_fighter', 'Return the connected user\'s entered fighter to production: other people stop meeting it in the roster, ranked duels '
     + 'and cups; its record stays. Requires the user\'s request.'],
   ['write_world_post', 'Write a post in a world\'s lounge as the connected user (a story, a chronicle entry, a bout recap). '

@@ -1,16 +1,29 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createServer } from 'node:net';
 import { chromium } from 'playwright';
 import { createBroadcastDemo } from '../../scripts/broadcast-demo.mjs';
 import { createCommerceService } from '../../api/commerce/service.mjs';
 import { createCommerceStore } from '../../api/commerce/store.mjs';
 import { createCommerceHandler } from '../../api/commerce/handler.mjs';
 
-test('budget review accepts spaces and Korean, shows errors beside the button and never approves on cancel', { timeout: 30_000 }, async t => {
-  const origin = 'http://127.0.0.1:5191';
-  const { server } = createBroadcastDemo({ ODDBOUT_BROADCAST_PORT: '5191' });
-  await new Promise(resolve => server.listen(5191, '127.0.0.1', resolve));
+/**
+ * The demo on a port free now, closed after the test; its origin. The demo's origin names its port, so the port is chosen before the demo
+ * is made (a fixed one failed with EADDRINUSE while another process held it, 2026-11-03).
+ */
+async function demo(t) {
+  const probe = createServer();
+  await new Promise((resolve, reject) => { probe.once('error', reject); probe.listen(0, '127.0.0.1', resolve); });
+  const { port } = probe.address();
+  await new Promise(resolve => probe.close(resolve));
+  const { server } = createBroadcastDemo({ ODDBOUT_BROADCAST_PORT: String(port) });
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', resolve); });
   t.after(() => new Promise(resolve => server.close(resolve)));
+  return `http://127.0.0.1:${port}`;
+}
+
+test('budget review accepts spaces and Korean, shows errors beside the button and never approves on cancel', { timeout: 30_000 }, async t => {
+  const origin = await demo(t);
   const browser = await chromium.launch({ channel: process.env.ODDBOUT_TEST_BROWSER_CHANNEL ?? 'chrome', headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage();
@@ -56,9 +69,7 @@ test('budget review accepts spaces and Korean, shows errors beside the button an
 });
 
 test('Google-only account flow recovers from OAuth errors and clears identity on sign-out', { timeout: 30_000 }, async t => {
-  const { server } = createBroadcastDemo({ ODDBOUT_BROADCAST_PORT: '5190' });
-  await new Promise(resolve => server.listen(5190, '127.0.0.1', resolve));
-  t.after(() => new Promise(resolve => server.close(resolve)));
+  const origin = await demo(t);
   const browser = await chromium.launch({ channel: process.env.ODDBOUT_TEST_BROWSER_CHANNEL ?? 'chrome', headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
@@ -72,13 +83,13 @@ test('Google-only account flow recovers from OAuth errors and clears identity on
         return {error:null};},
       async signOut(){cb('SIGNED_OUT',null);return {error:null};}
     }};}};` }));
-  await page.goto('http://127.0.0.1:5190/broadcast/operator/');
+  await page.goto(origin + '/broadcast/operator/');
   await page.waitForFunction(() => !document.getElementById('google-signin').disabled);
   assert.equal(await page.locator('input[type="email"]').count(), 0);
   await page.getByRole('button', { name: 'Sign in with Google' }).click();
   await page.locator('#login-status').filter({ hasText: 'OAuth unavailable' }).waitFor();
   assert.equal(await page.locator('#google-signin').isEnabled(), true);
-  assert.deepEqual(await page.evaluate(() => globalThis.__oauthOptions), { provider: 'google', options: { redirectTo: 'http://127.0.0.1:5190/broadcast/' } });
+  assert.deepEqual(await page.evaluate(() => globalThis.__oauthOptions), { provider: 'google', options: { redirectTo: origin + '/broadcast/' } });
   await page.locator('#google-signin').click();
   await page.locator('#account-name').filter({ hasText: 'Studio Tester' }).waitFor();
   assert.equal(await page.locator('#google-signin').isVisible(), false);
@@ -98,12 +109,10 @@ test('Google-only account flow recovers from OAuth errors and clears identity on
 // Explicit opt-in: node --test test/browser/broadcast-console.test.mjs
 // Requires installed Chrome (or ODDBOUT_TEST_BROWSER_CHANNEL). No real accounts/payments.
 test('real browser: disabled integration, cross-tab payment fencing, rejection recovery and sign-out privacy', { timeout: 60_000 }, async t => {
-  const { server } = createBroadcastDemo({ ODDBOUT_BROADCAST_PORT: '5189' });
-  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(5189, '127.0.0.1', resolve); });
-  t.after(() => new Promise(resolve => server.close(resolve)));
+  const origin = await demo(t);
   const browser = await chromium.launch({ channel: process.env.ODDBOUT_TEST_BROWSER_CHANNEL ?? 'chrome', headless: true });
   t.after(() => browser.close());
-  const errors = [], origin = 'http://127.0.0.1:5189', id = '11111111-1111-4111-8111-111111111111';
+  const errors = [], id = '11111111-1111-4111-8111-111111111111';
   const preview = await browser.newPage({ viewport: { width: 390, height: 844 } });
   await preview.goto(origin + '/broadcast/operator/');
   await preview.locator('#activity-summary').filter({ hasText: 'No balances or successful operations are simulated.' }).waitFor();

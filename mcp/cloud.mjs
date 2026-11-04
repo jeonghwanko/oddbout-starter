@@ -5,7 +5,7 @@ import { createHandler } from '../api/handler.mjs';
 import { Problem, UUID, bearerToken, failureDetail, readBody } from '../api/http.mjs';
 import { registerFileInputProbe } from './file-input-probe.mjs';
 import { registerCreatorSources } from './creator-sources.mjs';
-import { AUTH, CALL_BUDGET_MS, FILE, READ, downloadHostFile, output } from './cloud/common.mjs';
+import { AUTH, CALL_BUDGET_MS, FILE, NO_FILES, READ, downloadHostFile, output } from './cloud/common.mjs';
 import { registerRegistrationTools } from './cloud/registration-tools.mjs';
 import { registerPackagingPreparation } from './cloud/packaging-tools.mjs';
 import { registerAgentTools } from './cloud/agent-tools.mjs';
@@ -14,8 +14,8 @@ import { registerWorkshopTools } from './cloud/workshop-tools.mjs';
 import { HOSTED_INSTRUCTIONS, registerHostedTools } from './cloud/hosted-tools.mjs';
 import { DIRECTORY_DESCRIPTIONS, DIRECTORY_INSTRUCTIONS, DIRECTORY_TITLES } from './cloud/directory-edition.mjs';
 import { mcpServing } from './cloud/serve.mjs';
-import { CLOUD_ISSUER, CLOUD_RESOURCE, DIRECTORY_DOCUMENTATION, DIRECTORY_RESOURCE, LEGACY_PUBLIC_RESOURCE, PUBLIC_DIRECTORY_RESOURCE, PUBLIC_RESOURCE,
-  PUBLIC_SIGN_IN_RESOURCE, SIGN_IN_RESOURCE } from './cloud/resources.mjs';
+import { ALLOWED_ORIGINS, CLOUD_ISSUER, CLOUD_RESOURCE, DIRECTORY_DOCUMENTATION, DIRECTORY_RESOURCE, LEGACY_PUBLIC_RESOURCE, PUBLIC_DIRECTORY_RESOURCE,
+  PUBLIC_RESOURCE, PUBLIC_SIGN_IN_RESOURCE, SIGN_IN_RESOURCE } from './cloud/resources.mjs';
 // The cloud MCP's tool families live in ./cloud/ (Edge-only, as this file); these names are this module's as before.
 export { CALL_BUDGET_MS, allowedFileUrl, compactText, downloadHostFile, timedFetch } from './cloud/common.mjs';
 export { STYLE_GUIDE } from './cloud/agent-tools.mjs';
@@ -46,6 +46,12 @@ export function validCloudAudience(aud) {
  */
 export const PUBLIC_TOOLS = new Set(['get_fighter_spec', 'get_style_guide', 'list_fighters', 'get_rankings', 'get_fighter_record', 'get_cup', 'read_bout',
   'get_fighter_story', 'get_world', 'list_generation_hosts', 'prepare_fighter_packaging']);
+/**
+ * The tools that take files only OpenAI's file host gives (allowedFileUrl: ChatGPT's attachments and Library), or that only report on them.
+ * Only /mcp, which ChatGPT's app uses, lists them (2026-11-05): at the sign-in-first address (Grok, Cursor, Gemini CLI) none could succeed.
+ */
+export const FILE_HOST_TOOLS = new Set(['prepare_fighter_registration', 'upload_fighter_asset', 'prepare_profile_set', 'upload_profile_set_asset',
+  'verify_creator_file_input', 'store_creator_source', 'get_creator_source', 'prepare_creator_source_download']);
 /** Public tools that spend an arena budget: a signed-in caller's call counts on his owner (MCP 점검, 2026-10-27). */
 export const OWNER_BUDGET_TOOLS = new Set(['read_bout']);
 /**
@@ -145,6 +151,7 @@ export async function authenticateCloud(db, request, now = Date.now, edition = '
  * the request's `signal` (aborted when the client goes away) and the `deadline` its answer is due by (CALL_BUDGET_MS from its arrival).
  * @typedef {{ requestId?: string, protocol?: string | null, signal?: AbortSignal, deadline?: number }} Call
  */
+/** One MCP request as its log line names it (createCloudHandler). @typedef {{ edition: 'full' | 'directory', method: string | null, tool: string | null, compact: boolean }} RequestLine */
 
 /**
  * One JSON line per tool call (MCP 점검 2026-11-03: a failed call left no trace, and nothing said which tools agents use or which protocol
@@ -188,11 +195,23 @@ export function scopedDatabase(db, owner) {
 const LIST_CACHE = { ttlMs: 300_000, cacheScope: 'private' };
 
 /**
+ * `signInFirst`: the request came to the sign-in-first address (`/signin`). Its sessions are the full edition's, so it is no edition of its
+ * own; it only lists no file-host tools and no OpenAI tool metadata.
  * @param {{ db: any, identity: Identity | null, fetcher?: typeof fetch, arena?: Arena | null, hosted?: Hosted | null,
- *   host?: { compact?: boolean, caller?: string | null }, edition?: 'full' | 'directory', call?: Call }} options
+ *   host?: { compact?: boolean, caller?: string | null }, edition?: 'full' | 'directory', call?: Call, signInFirst?: boolean }} options
  */
-export function cloudServer({ db, identity, fetcher = fetch, arena = null, hosted = null, host = {}, edition = 'full', call = {} }) {
+export function cloudServer({ db, identity, fetcher = fetch, arena = null, hosted = null, host = {}, edition = 'full', call = {}, signInFirst = false }) {
   const directory = edition === 'directory';
+  // Only /mcp serves ChatGPT's app (2026-11-05): its host attaches the files the upload tools take, and reads OpenAI's tool metadata
+  // (securitySchemes, openai/fileParams, openai/profile). /signin and the directory edition list neither, and their texts name no upload tool.
+  const fileHost = !directory && !signInFirst, openaiMeta = fileHost;
+  /** What the instructions say of files: how to pass them where there is a file host, else where they go. */
+  const fileWords = fileHost ? 'Use host file attachments for fighter.json and WebP assets. '
+    + 'When file inputs are exposed as paths, pass existing absolute workspace paths; the host uploads them. '
+    + 'For existing Library or Page files use the host’s supported file materialization or original-byte read tools and verify '
+    + 'size and SHA-256 before submission. Never substitute rendered previews or invent file IDs, URLs or hashes. '
+    + 'A VM direct-network denial does not establish failure of the native connector; '
+    + 'use the supported host file route without bypassing network policy. ' : `${NO_FILES} `;
   const server = new McpServer({ name: 'oddbout-cloud', version: '1.0.0' }, {
     instructions: directory ? DIRECTORY_INSTRUCTIONS : (hosted ? HOSTED_INSTRUCTIONS : '') + 'For creation in the user’s workspace, use the user’s own generation account. '
       + 'Verify get_profile matches the intended registration account, especially after adding or switching connected accounts. '
@@ -201,12 +220,7 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
       + 'generation and display still require actual host evidence. '
       + 'Do not run local stdio login or ask for a PC to authenticate cloud registration. Do not generate merely to test access. '
       + 'Require the user’s final registration request and preserve motion review boundaries. '
-      + 'Use host file attachments for fighter.json and WebP assets. '
-      + 'When file inputs are exposed as paths, pass existing absolute workspace paths; the host uploads them. '
-      + 'For existing Library or Page files use the host’s supported file materialization or original-byte read tools and verify '
-      + 'size and SHA-256 before submission. Never substitute rendered previews or invent file IDs, URLs or hashes. '
-      + 'A VM direct-network denial does not establish failure of the native connector; '
-      + 'use the supported host file route without bypassing network policy. Never ask for tokens or callback URLs in chat. '
+      + fileWords + 'Never ask for tokens or callback URLs in chat. '
       + 'A refused ODDBOUT sign-in (401 invalid_token) states its reason: tell the user that reason; it is not an outage, and when it asks '
       + 'to reconnect ODDBOUT in the connector settings, scheduled retries cannot fix it. Only a 503 asks for a retry. '
       + 'A queued submission is not registered; inspect its status. Reuse one UUID for retries of identical bytes.',
@@ -243,10 +257,20 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
       ...(profile ? { outputSchema: z.object({ id: z.string().min(1), email: z.string().optional(), nickname: z.string().optional() }).strict() } : {}),
       // The directory edition repeats the title among the annotations, where Anthropic's tool checklist looks for it with the hints.
       annotations: { ...(directory ? { title } : {}), ...READ, readOnlyHint: !write, openWorldHint: openWorld, destructiveHint: publish, idempotentHint: idempotent },
-      _meta: { securitySchemes: publicTool ? [{ type: 'noauth' }] : AUTH,
-        ...(files.length ? { 'openai/fileParams': files } : {}), ...(profile ? { 'openai/profile': true } : {}) } },
+      ...(openaiMeta ? { _meta: { securitySchemes: publicTool ? [{ type: 'noauth' }] : AUTH,
+        ...(files.length ? { 'openai/fileParams': files } : {}), ...(profile ? { 'openai/profile': true } : {}) } } : {}) },
     async (/** @type {Record<string, unknown>} */ args, /** @type {import('@modelcontextprotocol/server').ServerContext | undefined} */ ctx) => {
-      if (!publicTool && !identity) return { ...output({ ok: false, code: 'authentication-required' }),
+      /**
+       * The result as this host reads it. A host other than ChatGPT reads the text, which holds the whole JSON: the same value again as
+       * structuredContent doubled every result it got (MCP 최적화 2026-11-05). ChatGPT reads the structured result beside its short text, and
+       * a tool with an outputSchema (get_profile) must send it.
+       * @param {Record<string, unknown>} value @param {boolean} [short]  compactText, for ChatGPT's answer
+       */
+      const reply = (value, short = false) => {
+        const result = output(value, short);
+        return host.compact === true || profile ? result : { content: result.content, ...(result.isError ? { isError: true } : {}) };
+      };
+      if (!publicTool && !identity) return { ...reply({ ok: false, code: 'authentication-required' }),
         _meta: { 'mcp/www_authenticate': [`Bearer resource_metadata="${CLOUD_RESOURCE}/.well-known/oauth-protected-resource"`] } };
       const started = Date.now(), signals = [ctx?.mcpReq?.signal, call.signal].filter(signal => signal !== undefined);
       // The SDK's signal ends with a cancellation; the request's, when the client goes away (2026-07-28 reads a closed stream as one).
@@ -259,35 +283,34 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
       try { value = await run(/** @type {Parameters<typeof run>[0]} */ (args), context); }
       catch (error) { failure = error; value = { ok: false, code: error instanceof Problem ? error.message : 'cloud-operation-unavailable' }; }
       logCall({ tool: name, edition, client: identity?.claims.client_id ?? null, call, started, value, failure });
-      if (failure !== undefined) return output(value);
-      const result = output(value, host.compact === true);
+      if (failure !== undefined) return reply(value);
+      const result = reply(value, host.compact === true);
       // A diagnostic failure is useful data; keep it readable by hosts that throw away tool errors.
       return diagnostic ? { ...result, isError: false } : result;
     });
   };
-  // The directory edition registers only its tools, under their titles there; any other is unknown to it, not refused.
+  // The directory edition registers only its tools, under their titles there; any other is unknown to it, not refused. Without a file
+  // host the file-host tools are unknown the same way.
   /** @type {Register} */
   const register = directory ? (name, title, description, inputSchema, run, options) => {
     const directoryTitle = DIRECTORY_TITLES.get(name);
     if (directoryTitle) registerTool(name, directoryTitle, DIRECTORY_DESCRIPTIONS.get(name) ?? description, inputSchema, run, options);
-  } : registerTool;
-  registerRegistrationTools({ register, db, identity, invoke, fetcher, recordAgent });
+  } : fileHost ? registerTool : (name, title, description, inputSchema, run, options) => {
+    if (!FILE_HOST_TOOLS.has(name)) registerTool(name, title, description, inputSchema, run, options);
+  };
+  registerRegistrationTools({ register, db, identity, invoke, fetcher, recordAgent, hosted: Boolean(hosted) && !directory, directory, uploads: fileHost });
   registerPackagingPreparation({ register, invoke });
   registerProfileSetTools({ register, db, identity, invoke, fetcher });
   // 에이전트 도구 (3단계, 2026-10-27): read ODDBOUT's records, spar, enter cups and tune the fighting style. Listed only with the arena key.
   if (arena?.url && arena?.key) {
-    registerAgentTools({ register, arena, db, identity, invoke, recordAgent, caller: host.caller ?? null });
+    registerAgentTools({ register, arena, db, identity, invoke, recordAgent, caller: host.caller ?? null, directory, uploads: fileHost });
     registerWorkshopTools({ register, arena, invoke, separateWrites: directory });
   }
-  if (hosted && !directory) registerHostedTools({ register, db, identity, invoke, fetcher, hosted });
+  if (hosted && !directory) registerHostedTools({ register, db, identity, invoke, fetcher, hosted, uploads: fileHost });
   registerFileInputProbe({ register, fileSchema: FILE, identity, downloadFile: downloadHostFile, fetcher });
   registerCreatorSources({ register, fileSchema: FILE, identity, db, downloadFile: downloadHostFile, fetcher });
   return server;
 }
-
-/** Browser calls are taken from the agents that connect (ChatGPT, Grok, Cursor, Claude) and ODDBOUT's own site; a call with no origin is not a browser's. */
-const ALLOWED_ORIGINS = new Set(['https://chatgpt.com', 'https://chat.openai.com', 'https://platform.openai.com', 'https://oddbout.com',
-  'https://grok.com', 'https://www.grok.com', 'https://cursor.com', 'https://www.cursor.com', 'https://claude.ai', 'https://claude.com']);
 
 /**
  * Where a request goes: its route under the function, whether it came to the sign-in-first address, its edition, and the resource its OAuth
@@ -341,13 +364,14 @@ async function hostOf(body) {
 }
 
 /**
- * The tool list as hosts read it. The SDK serializes custom auth metadata only in _meta: publish the current host's top-level contract too.
+ * The tool list as hosts read it. The SDK serializes custom auth metadata only in _meta: publish the current host's top-level contract too
+ * (OpenAI's, so only where the tools carry it: /mcp).
  * Every schema names its JSON Schema draft (1.1 KB of each list, every conversation); hosts do not need it.
  * @param {any} result
  */
 function publishedToolList(result) {
   for (const tool of result.result?.tools ?? []) {
-    tool.securitySchemes = tool._meta.securitySchemes;
+    if (tool._meta?.securitySchemes) tool.securitySchemes = tool._meta.securitySchemes;
     delete tool.inputSchema?.$schema; delete tool.outputSchema?.$schema;
   }
   return result;
@@ -362,12 +386,32 @@ function publishedToolList(result) {
  * @param {{url: string, key: string, fetcher?: typeof fetch, cupWaitMs?: number, pollMs?: number, pollTries?: number} | null} [options.arena]
  * @param {{pollMs?: number} | null} [options.hosted]
  * @param {number} [options.budgetMs]  one call's budget from its arrival (CALL_BUDGET_MS; shorter in tests)
+ * @param {(line: string) => void} [options.log]  where each MCP request's line goes (console.log)
  * @returns {(request: Request) => Promise<Response>}
  */
-export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted = null, budgetMs = CALL_BUDGET_MS }) {
+export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted = null, budgetMs = CALL_BUDGET_MS, log = console.log }) {
   const serve = mcpServing(65536);
+  /**
+   * One line per MCP request (MCP 최적화 2026-11-05): its method, tool and edition, whether the host got ChatGPT's short text, and the status,
+   * bytes and time of the answer — the bytes are what the hosts' polling costs. Never the token, the account, the arguments or a URL. A
+   * request that is no MCP message (the metadata, a preflight, a probe) leaves none; a stream, which no tool sends, is passed on uncounted.
+   */
   return async request => {
-    const started = Date.now();
+    const started = Date.now(), seen = /** @type {{ line?: RequestLine }} */ ({});
+    const response = await respond(request, started, seen);
+    if (!seen.line) return response;
+    const counted = response.body === null ? new Uint8Array()
+      : (response.headers.get('content-type') ?? '').startsWith('application/json') ? new Uint8Array(await response.arrayBuffer()) : null;
+    log(JSON.stringify({ mcp: 1, ...seen.line, status: response.status, bytes: counted?.length ?? null, ms: Date.now() - started }));
+    return counted === null || response.body === null ? response
+      : new Response(counted.length ? counted : null, { status: response.status, statusText: response.statusText, headers: response.headers });
+  };
+  /**
+   * The request path.
+   * @param {Request} request @param {number} started @param {{ line?: RequestLine }} seen  filled in once the request is an MCP message
+   * @returns {Promise<Response>}
+   */
+  async function respond(request, started, seen) {
     const { route, signInFirst, edition, resource } = routeOf(request);
     if (route === '.well-known/oauth-protected-resource' && request.method === 'GET') return json({ resource,
       authorization_servers: [CLOUD_ISSUER], scopes_supported: ['openid', 'email', 'profile'],
@@ -407,10 +451,15 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted =
       }
       return json({ error: 'method_not_allowed' }, 405, { allow: 'POST, OPTIONS' });
     }
+    /** @type {RequestLine} */
+    const line = { edition, method: null, tool: null, compact: false };
+    seen.line = line;
     let body;
     try { body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, 65536))); }
     catch { return json({ error: 'invalid_request' }, 400); }
     if (!body || Array.isArray(body) || typeof body.method !== 'string') return json({ error: 'invalid_request' }, 400);
+    line.method = body.method.slice(0, 80);
+    if (body.method === 'tools/call' && typeof body.params?.name === 'string') line.tool = body.params.name.slice(0, 80);
     const { identity, problem } = await identityFor(db, request, body, signInFirst, edition);
     if (problem) return signInProblem(problem);
     // A server per request on purpose: its tools close over this request's verified identity, so no state can carry one
@@ -422,8 +471,10 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted =
     /** @type {Call} */
     const call = { requestId: UUID.test(given) ? given.toLowerCase() : crypto.randomUUID(),
       protocol: /^\d{4}-\d{2}-\d{2}$/.test(version) ? version : null, signal: request.signal, deadline: started + budgetMs };
+    const host = await hostOf(body);
+    line.compact = host.compact;
     /** @type {Parameters<typeof cloudServer>[0]} */
-    const options = { db, identity, fetcher, arena, hosted, host: await hostOf(body), edition, call };
+    const options = { db, identity, fetcher, arena, hosted, host, edition, call, signInFirst };
     try {
       const response = await serve(cloudServer(options), request, body);
       if (body.method === 'tools/list' && response.status === 200) return json(publishedToolList(await response.json()));
@@ -433,5 +484,5 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted =
         ms: Date.now() - started, ok: false, code: 'mcp_unavailable', ...failureDetail(error) }));
       return json({ error: 'mcp_unavailable' }, 503);
     }
-  };
+  }
 }

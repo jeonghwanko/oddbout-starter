@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { Problem } from '../../api/http.mjs';
 import spec from '../../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { profileLimits } from '../../contracts/ai-fighter/profile-limits.mjs';
-import { CUP_WAIT_MS, UUID_ARG, arenaCall, pause, timeLeft, unavailable } from './common.mjs';
+import { CUP_WAIT_MS, UUID_ARG, arenaCall, frontNext, pause, timeLeft, unavailable } from './common.mjs';
 import { ENTRY_CLIPS } from '../../api/fighter-entry.mjs';
 /**
  * @typedef {import('./common.mjs').Identity} Identity
@@ -15,7 +15,7 @@ import { ENTRY_CLIPS } from '../../api/fighter-entry.mjs';
  */
 
 /**
- * How a fighter's `combat.style` reads (the game contract's README, 싸우는 성격; values in `spec.combatStyle`). An agent translates the
+ * How a fighter's `combat.style` reads (the game contract's README, 전투 스타일; values in `spec.combatStyle`). An agent translates the
  * fighter's concept into these closed choices itself; the server only checks them. Grade 3 and missing values are the standard kit.
  */
 export const STYLE_GUIDE = Object.freeze({
@@ -39,9 +39,11 @@ export const STYLE_GUIDE = Object.freeze({
 
 /**
  * `identity` is null only on a signed-out call, which register lets reach the public tools alone: the account tools cast it.
- * @param {{ register: Register, arena: Arena, db: any, identity: Identity | null, invoke: Invoke, recordAgent: RecordAgent, caller: string | null }} options
+ * `uploads`: whether this address lists the upload tools (only /mcp, 2026-11-05: common.mjs frontNext).
+ * @param {{ register: Register, arena: Arena, db: any, identity: Identity | null, invoke: Invoke, recordAgent: RecordAgent, caller: string | null, directory?: boolean,
+ *   uploads?: boolean }} options
  */
-export function registerAgentTools({ register, arena, db, identity, invoke, recordAgent, caller }) {
+export function registerAgentTools({ register, arena, db, identity, invoke, recordAgent, caller, directory = false, uploads = !directory }) {
   /** @type {(path: string, body?: object) => Promise<any>} */
   const call = (path, body) => arenaCall(arena, path, body);
   // A read's budget: the signed-in owner's; signed out, the host's anonymous user (`caller`); else every signed-out agent's together.
@@ -49,7 +51,7 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
   const read = path => identity ? arenaCall(arena, path, undefined, identity.owner)
     : arenaCall(arena, path, undefined, caller ?? 'public', undefined, { signedOut: caller !== null });
   const ID = z.string().min(1).max(64).regex(/^[a-z0-9-]+$/);
-  register('get_style_guide', '싸우는 성격 안내', 'Read how a fighter\'s combat.style choices fight, to translate the character\'s concept into them. '
+  register('get_style_guide', '전투 스타일 안내', 'Read how a fighter\'s combat.style choices fight, to translate the character\'s concept into them. '
     + 'Values and limits are the contract\'s (spec.combatStyle). This changes nothing.',
     {}, async () => ({ ok: true, contract: spec.combatStyle, guide: STYLE_GUIDE }), { publicTool: true });
   register('list_fighters', 'ODDBOUT 선수 명단', 'List ODDBOUT\'s fighters: the built-in roster and the listed, entered registered fighters (id and name). '
@@ -59,6 +61,7 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
       const [builtins, first] = await Promise.all([call('fighters'), invoke('roster')]);
       if (!builtins.ok) return builtins;
       const registered = [];
+      // The pages one after another: each one's cursor is the last fighter of the page before (keyset), not known up front.
       for (let cursor = null, page = 0; page < 5; page++) {
         /** @type {any} */
         const list = page === 0 ? first : await invoke(`roster?after=${encodeURIComponent(cursor)}`);
@@ -69,10 +72,10 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
       }
       return { ok: true, rules: builtins.rules, builtin: builtins.fighters, registered };
     }, { publicTool: true });
-  register('get_rankings', 'ODDBOUT 순위', 'Read the cup rankings: built-in fighters by cup points, '
+  register('get_rankings', 'ODDBOUT 랭킹', 'Read the cup rankings: built-in fighters by cup points, '
     + 'or registered fighters by cup win rate (a minimum number of bouts).',
     { scope: z.enum(['builtin', 'registered']).default('builtin') }, ({ scope }) => call(scope === 'registered' ? 'rankings?scope=registered' : 'rankings'), { publicTool: true });
-  register('get_fighter_record', '선수 공개 기록', 'Read a fighter\'s public cup record: wins, losses, '
+  register('get_fighter_record', '전적', 'Read a fighter\'s public cup record: wins, losses, '
     + 'recent bouts (with each cup\'s seed for read_bout) and the rivals he met most.',
     { fighterId: ID }, async ({ fighterId }) => {
       const record = await call(`fighter?id=${encodeURIComponent(fighterId)}`);
@@ -103,24 +106,49 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
     + 'the results count in the cup rankings. Only an entered fighter (enter_fighter) enters. Requires the user\'s request. '
     + 'Returns the finished cup (a few seconds); '
     + 'if it is still running, read it with get_cup. Use a new UUID per cup and the same UUID to retry it: '
-    + 'a retry after an unknown outcome returns the cup it made (replayed), never a second cup.',
+    + 'a retry after an unknown outcome returns the cup it made (replayed), never a second cup. '
+    + 'career: true makes it the user\'s career cup (fight money to the account, the fighter\'s fans and upgrades grow; not ranked) — '
+    + 'its prep between bouts is get_career then choose_career_prep.',
     // The key names the cup at the arena (2026-11-03): a gateway once cut off a call whose cup was made, and the retry made a second one.
-    { fighterId: UUID_ARG(), idempotencyKey: UUID_ARG() }, async ({ fighterId, idempotencyKey }, { signal, deadline: due }) => {
+    // 파이트머니 2판 (2026-11-03): `career` makes it the user's career cup — the fighter's money, fans and upgrades go on with every bout,
+    // the account's gold is paid, and between his bouts the cup waits for the prep (get_career, choose_career_prep; or the auto manager).
+    { fighterId: UUID_ARG(), idempotencyKey: UUID_ARG(), career: z.boolean().optional() }, async ({ fighterId, idempotencyKey, career }, { signal, deadline: due }) => {
       const issued = await arenaCall(arena, 'agent/cup', { owner: /** @type {Identity} */ (identity).owner, fighter: fighterId,
-        idempotencyKey: idempotencyKey.toLowerCase() }, undefined, timeLeft(due, 20000));
+        idempotencyKey: idempotencyKey.toLowerCase(), ...(career ? { career: true } : {}) }, undefined, timeLeft(due, 20000));
       if (!issued.ok) return issued;
+      // A career cup stops at his next bout for the prep: the agent reads it with get_career.
+      if (issued.career === true) return { ...issued, state: 'open', next: 'get_career' };
       // A cup is fought in about seven seconds: wait for it here so the agent needs no second call (MCP 점검 2026-10-27).
       // The wait ends by the call's deadline (counted from its request, the issue included: 2026-11-03) or CUP_WAIT_MS, each read bounded by
       // the time left; a client that went away ends it at once. The cup is made either way: an open one is read with get_cup.
+      // Its reads come after 1, 1, 2, 3, 4… seconds (MCP 최적화 2026-11-05): a read a second took twelve reads to wait twelve seconds for a
+      // cup that ran long; seven now wait 22.
       const deadline = Math.min(due, Date.now() + (arena.cupWaitMs ?? CUP_WAIT_MS)), pollMs = arena.pollMs ?? 1000;
-      for (let i = 0; i < (arena.pollTries ?? 12) && Date.now() + pollMs < deadline && !signal.aborted; i++) {
-        await pause(pollMs, signal);
+      for (let i = 0, wait = pollMs; i < (arena.pollTries ?? 12) && Date.now() + wait < deadline && !signal.aborted; i++, wait = pollMs * Math.max(1, i)) {
+        await pause(wait, signal);
         if (signal.aborted) break;
         const cup = await arenaCall(arena, `cup?id=${issued.ticket}`, undefined, undefined, timeLeft(deadline, 20000), { signal }).catch(() => null);
         if (cup?.ok && cup.cup && cup.cup.state !== 'open') return { ...issued, cup: cup.cup };
       }
       return { ...issued, state: 'open', next: 'get_cup' };
     }, { write: true, openWorld: true, idempotent: true });
+  const CARD = z.enum(['light', 'heavy', 'skill']);
+  register('get_career', '커리어 준비', 'Read the user\'s career of a fighter (fight money): fans, stamina, upgrade levels, the account\'s gold, '
+    + 'and the newest career cup with the prep it owes — the situation, the open choices (upgrade, stamina story, rest), the three story cards. '
+    + 'Then choose_career_prep.',
+    { fighterId: ID }, ({ fighterId }) => read(`agent/career?fighter=${encodeURIComponent(fighterId)}`));
+  register('choose_career_prep', '커리어 준비 고르기', 'Make the prep a career cup owes (get_career): an upgrade card (light, heavy, skill — its price '
+    + 'from the account\'s gold), a story card from the three offered, or rest. The cup goes on to his next bout. Requires the user\'s request.',
+    { cupId: UUID_ARG(), kind: z.enum(['upgrade', 'story', 'rest']), card: CARD.optional(), storyId: z.string().regex(/^[a-z0-9-]{1,40}$/).optional() },
+    ({ cupId, kind, card, storyId }) => {
+      const choice = kind === 'upgrade' ? (card ? { kind, card } : null) : kind === 'story' ? (storyId ? { kind, id: storyId } : null) : { kind };
+      if (!choice) return { ok: false, code: 'invalid-choice' };
+      return call('agent/career/manage', { owner: /** @type {Identity} */ (identity).owner, ticket: cupId.toLowerCase(), choice });
+    }, { write: true, idempotent: false });
+  register('set_career_auto', '자동 매니저', 'Turn the auto manager of the user\'s career of a fighter on or off (open after four prep steps): '
+    + 'on, every prep is made at once without waiting. Requires the user\'s request.',
+    { fighterId: ID, on: z.boolean() },
+    ({ fighterId, on }) => call('agent/career/auto', { owner: /** @type {Identity} */ (identity).owner, fighter: fighterId, on }), { write: true, idempotent: true });
   // The owner's current registered package hash (the version an edit is made on), or a 404.
   /** @param {string} fighterId */
   const currentSha = async fighterId => {
@@ -161,7 +189,7 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
       lines: z.union([z.record(z.string(), z.string()), z.null()]) }).partial().strict(), idempotencyKey: UUID_ARG() },
     ({ fighterId, profile, idempotencyKey }) => Object.keys(profile).length ? edit(fighterId, { profile }, idempotencyKey) : { ok: false, code: 'invalid-profile' },
     { write: true, publish: true, openWorld: true, idempotent: true });
-  register('update_fighter_style', '싸우는 성격 고치기', 'Change the connected user\'s registered fighter\'s fighting style (combat.style) without new art: '
+  register('update_fighter_style', '전투 스타일 고치기', 'Change the connected user\'s registered fighter\'s fighting style (combat.style) without new art: '
     + 'an object replaces it, null removes it. Checked against the contract (get_style_guide). '
     + 'His next bouts fight the new style. Requires the user\'s approval of the change. '
     + 'Use a new UUID per change and the same UUID to retry it.',
@@ -178,10 +206,19 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
     + 'ranked duels, cups and their rankings. A validated fighter starts in production (제작 중): out of other people\'s cups, ranked duels and lists while his owner previews and practises him. '
     + 'First show the user each of the eleven required motions; enter only on his request once he confirmed every one. '
     + 'Pass the package hash he watched (get_registered_fighter) and those motions. A new package returns him to production. '
-    + 'profile-set-required: submit his profile set first (submit_profile_set) and enter once it passed validation.',
+    + 'He enters only with a front painting that passed ODDBOUT\'s check (one character, whole, facing the viewer straight on): read '
+    + 'get_registered_fighter first and tell the user what its front lacks '
+    // Without the upload tools (2026-11-05: /signin; the directory edition has its own text) it names none of them.
+    + (uploads ? '(a new painting goes in through prepare_profile_set, upload_profile_set_asset and submit_profile_set). '
+      : '(this connector cannot upload one: the user uploads a new painting from the ODDBOUT app in ChatGPT or with the creator kit). ')
+    + 'profile-set-required: next says what to do.',
     { fighterId: UUID_ARG(), expectedManifestSha256: z.string().regex(/^[a-f0-9]{64}$/),
       reviewedClips: z.array(z.enum(/** @type {[string, ...string[]]} */ ([...ENTRY_CLIPS]))).length(ENTRY_CLIPS.length) },
-    ({ fighterId, expectedManifestSha256, reviewedClips }) => entry(fighterId, 'POST', { expectedManifestSha256, reviewedClips }),
+    async ({ fighterId, expectedManifestSha256, reviewedClips }) => {
+      const result = await entry(fighterId, 'POST', { expectedManifestSha256, reviewedClips });
+      const next = result?.code === 'profile-set-required' ? frontNext(result.front, { directory, uploads }) : null;
+      return next ? { ...result, next } : result;
+    },
     { write: true, publish: true, openWorld: true, idempotent: true });
   register('withdraw_fighter', '출전 취소', 'Return the connected user\'s entered fighter to production (제작 중): other people stop meeting him '
     + 'in the roster, ranked duels and cups; his record stays. Requires the user\'s request.',

@@ -1,6 +1,6 @@
 {
   "name": "oddbout-starter",
-  "version": "0.6.14",
+  "version": "0.6.17",
   "description": "Local Dot/Codex MCP starter for AI Fighter authoring and package validation",
   "private": true,
   "type": "module",
@@ -26,6 +26,9 @@
     "site:build": "node scripts/build-creator-site.mjs",
     "site:publish": "node scripts/publish-creator-site.mjs",
     "worker:deploy": "node scripts/deploy-render.mjs",
+    "gateway:deploy": "wrangler deploy -c cloudflare/mcp-gateway/wrangler.toml",
+    "gateway:dev": "wrangler dev -c cloudflare/mcp-gateway/wrangler.toml",
+    "gateway:smoke": "node scripts/gateway-smoke.mjs",
     "login": "node scripts/login.mjs",
     "logout": "node scripts/login.mjs logout",
     "admin": "node scripts/admin.mjs",
@@ -80,7 +83,9 @@
     "@electric-sql/pglite": "0.5.10",
     "@types/node": "22.20.5",
     "@types/qrcode": "1.5.6",
+    "miniflare": "5.20261103.0-beta",
     "playwright": "1.64.1",
-    "typescript": "7.0.2"
+    "typescript": "7.0.2",
+    "wrangler": "4.157.0"
   }
 }

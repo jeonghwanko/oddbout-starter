@@ -17,7 +17,7 @@ Dot은 먼저 `get_fighter_spec`의 `creation`과 [사용자별 제작 흐름](D
 ## 제작 흐름
 
 기본은 [대화하며 한 단계씩 만들기](DOT-CREATION.md#0-대화하며-한-단계씩-만들기)다.
-외형, 대기·이동, 공격, 방어·피격, 최종 확인의 다섯 묶음으로 진행한다. 게임 문맥에 있으면 방어·피격 뒤에 선택 묶음(싸우는 성격·고유 기술)을 한 번 제안한다.
+외형, 대기·이동, 공격, 방어·피격, 최종 확인의 다섯 묶음으로 진행한다. 게임 문맥에 있으면 방어·피격 뒤에 선택 묶음(전투 스타일·고유 기술)을 한 번 제안한다.
 묶음 안에서는 생성·검수를 이어서 처리하고 결과를 함께 보여준 뒤 피드백을 기다린다. 동작마다 진행 허락을 묻지 않는다.
 피드백 단계를 건너뛰는 것은 사용자가 위임한 범위에 한한다.
 
@@ -79,7 +79,7 @@ MCP 파일 경로는 `AI_FIGHTER_ROOT`를 기준으로 `output/my-fighter/fighte
 | `combat.kitId` | `standard-duel`. 서버가 관리할 규칙의 예약 ID |
 | `profile.lines` | 선택. 경기 전 도전 대사 `challenge`, 경기 뒤 승리 대사 `win`·패배 대사 `lose`(각 40자, 하나 이상). 무투장 말풍선에만 쓴다 |
 | `combat.stats` | 선택. 능력치 등급 `power`·`toughness`·`speed`, 각 1–5, 합은 정확히 9. 없으면 모두 3이다 |
-| `combat.style` | 선택. 싸우는 성격. 닫힌 선택지와 작은 등급만 고른다([계약 안내의 Fighting style](../contracts/ai-fighter/v1/README.md#fighting-style)). 없으면 표준 키트 그대로다 |
+| `combat.style` | 선택. 전투 스타일. 닫힌 선택지와 작은 등급만 고른다([계약 안내의 Fighting style](../contracts/ai-fighter/v1/README.md#fighting-style)). 없으면 표준 키트 그대로다 |
 | `appearance` | 정사영, 16도, 오른쪽 원본, 왼쪽 반전, 몸높이 400, 배율 1 |
 | `assets` | 실제 파일의 ID, 경로, MIME, SHA-256, 바이트, 너비·높이 |
 | `clips` | 필수 동작과 [선택 동작](#선택-동작)의 시트, 프레임, 기준점, 시간, 접촉 표식 |
