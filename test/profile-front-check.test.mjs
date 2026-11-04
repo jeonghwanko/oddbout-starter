@@ -96,9 +96,11 @@ async function connector(g) {
   const db = { ...g.db, auth: { getClaims: async () => ({ data: { claims } }) },
     rpc: (name, args) => name === 'af_mcp_session_state' ? { data: 'usable' } : g.db.rpc(name, args) };
   const handle = createCloudHandler({ db, arena: { url: 'https://arena.test', key: 'arena-key' } });
-  return { call: async (name, args) => (await (await handle(new Request(CLOUD_RESOURCE, { method: 'POST',
+  // The tool's JSON: a host other than ChatGPT gets it as the text only (MCP 최적화 2026-11-05).
+  const toolJson = result => result.structuredContent ?? JSON.parse(result.content[0].text);
+  return { call: async (name, args) => toolJson((await (await handle(new Request(CLOUD_RESOURCE, { method: 'POST',
     headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: 'Bearer signed-connector-token-for-test' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }) }))).json()).result.structuredContent };
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }) }))).json()).result) };
 }
 
 test('the MCP asks for what fixes each refusal, never a new painting where the same one goes in again (리뷰 2026-11-03)', () => {

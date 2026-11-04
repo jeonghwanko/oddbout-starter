@@ -56,7 +56,10 @@ async function rpc(method, params, token = accessToken) {
 async function step(title, tool, args, verify) {
   const result = await rpc('tools/call', { name: tool, arguments: args });
   assert.equal(result.status, 200);
-  const value = result.body.result?.structuredContent ?? result.body.result;
+  // A host other than ChatGPT gets the tool's JSON as the text only (MCP 최적화 2026-11-05); get_profile's is structured too.
+  const answer = result.body.result, text = answer?.content?.[0]?.text;
+  let value = answer?.structuredContent ?? answer;
+  if (!answer?.structuredContent && typeof text === 'string') { try { value = JSON.parse(text); } catch { /* not JSON: the result itself */ } }
   verify(value);
   evidence.steps.push({ title, tool, arguments: args, response: scrub(value), status: 'passed' });
   console.log(JSON.stringify({ title, status: 'passed' }));

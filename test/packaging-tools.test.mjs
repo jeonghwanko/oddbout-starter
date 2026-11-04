@@ -44,7 +44,8 @@ test('native cloud preparation is public, names actual workspace execution, and 
       arguments: { workspacePath: '/workspace', kitPath: '/kit', planPath: 'plan.json',
         outputPath: 'output/velora-work/artifacts/fit', fitSheets: true, outputScale: .9 } } }) }));
   assert.equal(response.status, 200);
-  const result = (await response.json()).result.structuredContent;
+  // A host other than ChatGPT gets the tool's JSON as the text only (MCP 최적화 2026-11-05).
+  const result = JSON.parse((await response.json()).result.content[0].text);
   assert.equal(result.ok, true, JSON.stringify(result));
   assert.equal(result.stage, 'workspace-execution-required');
   assert.equal(result.minimumKitVersion, result.runtime.version);

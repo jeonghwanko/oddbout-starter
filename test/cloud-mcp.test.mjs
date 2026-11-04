@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
-import { createCloudHandler, scopedDatabase, authenticateCloud, GROK_RECONNECT_PAGE, SIGN_IN_PROBLEMS, allowedFileUrl, downloadHostFile, compactText, timedFetch, CLOUD_RESOURCE, CLOUD_ISSUER, PUBLIC_RESOURCE, LEGACY_PUBLIC_RESOURCE, SIGN_IN_RESOURCE, PUBLIC_SIGN_IN_RESOURCE, DIRECTORY_RESOURCE, PUBLIC_DIRECTORY_RESOURCE, DIRECTORY_DOCUMENTATION } from '../mcp/cloud.mjs';
+import { createCloudHandler as cloudHandler, scopedDatabase, authenticateCloud, GROK_RECONNECT_PAGE, SIGN_IN_PROBLEMS, allowedFileUrl, downloadHostFile, compactText, timedFetch, CLOUD_RESOURCE, CLOUD_ISSUER, PUBLIC_RESOURCE, LEGACY_PUBLIC_RESOURCE, SIGN_IN_RESOURCE, PUBLIC_SIGN_IN_RESOURCE, DIRECTORY_RESOURCE, PUBLIC_DIRECTORY_RESOURCE, DIRECTORY_DOCUMENTATION } from '../mcp/cloud.mjs';
 import { DIRECTORY_INSTRUCTIONS, DIRECTORY_TITLES } from '../mcp/cloud/directory-edition.mjs';
 import { verifiedUserId } from '../api/http.mjs';
 import { safeClientRedirect, authorizationId } from '../web/cloud-connect/connect.mjs';
@@ -17,6 +17,10 @@ const dbFor = (c=claims(), active=true) => ({ auth: { getClaims: async () => ({ 
   rpc: async () => ({data:active===true?'usable':active===false?'ended':active}) });
 const request = (method,params={}, auth=false) => new Request(CLOUD_RESOURCE,{ method:'POST', headers:{'content-type':'application/json',accept:'application/json, text/event-stream',...(auth?{authorization:`Bearer ${token}`}:{})}, body:JSON.stringify({jsonrpc:'2.0',id:1,method,params}) });
 const call = async (handle,name,args={}) => (await (await handle(request('tools/call',{name,arguments:args},true))).json()).result;
+// A tool's JSON (MCP 최적화 2026-11-05): ChatGPT's calls and get_profile carry it as structuredContent, other hosts' only as the whole text.
+const toolJson = result => result.structuredContent ?? JSON.parse(result.content[0].text);
+// Each request's own log line goes nowhere here; a test that reads it passes its own log.
+const createCloudHandler = options => cloudHandler({ log: () => {}, ...options });
 test('MCP discovery, file schemas, profile identity and HTTP auth challenge interoperate', async () => {
   const handle=createCloudHandler({db:dbFor()});
   const init=await (await handle(request('initialize',{protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'test',version:'1'}}))).json();
@@ -50,10 +54,10 @@ test('MCP discovery, file schemas, profile identity and HTTP auth challenge inte
   const gateway=await handle(new Request('http://edge-runtime/ai-fighter-mcp/.well-known/oauth-protected-resource'));
   assert.equal(gateway.status,200);
   const contract=await (await handle(request('tools/call',{name:'get_fighter_spec',arguments:{section:'overview'}}))).json();
-  assert.equal(contract.result.structuredContent.data.registration.available,true);
-  assert.equal(contract.result.structuredContent.data.registration.requiresPc,false);
-  assert.equal(contract.result.structuredContent.data.registration.assetUpload,'openai-fileParams');
-  assert.equal(contract.result.structuredContent.data.registration.approvalRequired,false);
+  assert.equal(toolJson(contract.result).data.registration.available,true);
+  assert.equal(toolJson(contract.result).data.registration.requiresPc,false);
+  assert.equal(toolJson(contract.result).data.registration.assetUpload,'openai-fileParams');
+  assert.equal(toolJson(contract.result).data.registration.approvalRequired,false);
 });
 test('normal user tokens, wrong audiences, expiry, future tokens, missing grants and spoofed identities are rejected',async()=>{
   const req=new Request(CLOUD_RESOURCE,{headers:{authorization:`Bearer ${token}`}});
@@ -176,7 +180,7 @@ test('with the real auth-js an expired token passes only with a valid signature,
 });
 test('cloud readiness never turns account access into generation, display or package approval',async()=>{
   const db={...dbFor(),rpc:async name=>({data:name==='af_account'?{invited:true,accessMode:'open',canSubmit:true}:name==='af_mcp_session_state'?'usable':true})};
-  const ready=(await call(createCloudHandler({db}),'check_creation_readiness',{purpose:'registration'})).structuredContent;
+  const ready=toolJson(await call(createCloudHandler({db}),'check_creation_readiness',{purpose:'registration'}));
   assert.equal(ready.registration.status,'ready');assert.equal(ready.registration.requiresPc,false);
   for(const key of ['generation','delivery','package'])assert.equal(ready[key].status,'unverified');
   assert.deepEqual(ready.nextCommands,[]);
@@ -194,10 +198,10 @@ test('foreign submissions and mismatched bytes do not upload; errors never echo 
   const db={...dbFor(),from:()=>query};
   const handle=createCloudHandler({db,fetcher:async()=>{downloads++;return new Response('abc')}});
   const args={submissionId:crypto.randomUUID(),assetId:'idle',file:{download_url:'https://files.oaiusercontent.com/a?secret=xyz',file_id:'file_a'}};
-  assert.equal((await call(handle,'upload_fighter_asset',args)).structuredContent.code,'not-found'); assert.equal(downloads,0);
+  assert.equal(toolJson(await call(handle,'upload_fighter_asset',args)).code,'not-found'); assert.equal(downloads,0);
   assert.ok(filters.some(([k,v])=>k==='owner_id'&&v===owner));
   data=row; const bad=await call(handle,'upload_fighter_asset',args);
-  assert.equal(bad.structuredContent.code,'asset-hash-or-size');assert.ok(!JSON.stringify(bad).includes('secret'));
+  assert.equal(toolJson(bad).code,'asset-hash-or-size');assert.ok(!JSON.stringify(bad).includes('secret'));
 });
 test('manifest registration binds owner/idempotency and does not report queued as registered',async()=>{
   const rpcCalls=[],id=crypto.randomUUID(),key=crypto.randomUUID();
@@ -205,10 +209,10 @@ test('manifest registration binds owner/idempotency and does not report queued a
   const db={...dbFor(),from:()=>query,rpc:async(name,args)=>{rpcCalls.push([name,args]);return{data:name==='af_create_submission'?{id,status:'uploading',manifest_sha:args.p_sha}:name==='af_mcp_session_state'?'usable':true}}};
   const handle=createCloudHandler({db,fetcher:async()=>new Response(JSON.stringify(example))});
   const prepared=await call(handle,'prepare_fighter_registration',{manifest:{download_url:'https://files.oaiusercontent.com/f.json',file_id:'file_json'},idempotencyKey:key});
-  assert.equal(prepared.structuredContent.stage,'uploading');assert.equal(prepared.structuredContent.assets.length,example.assets.length);
+  assert.equal(toolJson(prepared).stage,'uploading');assert.equal(toolJson(prepared).assets.length,example.assets.length);
   assert.equal(rpcCalls.find(([n])=>n==='af_create_submission')[1].p_owner,owner);assert.equal(rpcCalls.find(([n])=>n==='af_create_submission')[1].p_key,key);
   const status=await call(handle,'get_fighter_submission',{submissionId:id});
-  assert.equal(status.structuredContent.stage,'queued');assert.equal(status.structuredContent.fighterId,null);
+  assert.equal(toolJson(status).stage,'queued');assert.equal(toolJson(status).fighterId,null);
 });
 // siteUrl (2026-11-03): where the user follows a submission on the site; registering does not enter a fighter, so a registered one points at
 // his all-motions page (where his owner watches the motions and enters him).
@@ -222,19 +226,19 @@ test('registration results carry siteUrl: the submission\'s page, then his fight
     : name === 'af_submit' ? row : name === 'af_mcp_session_state' ? 'usable' : true }) };
   const handle = createCloudHandler({ db, fetcher: async () => new Response(JSON.stringify(example)) });
   const page = `https://oddbout.com/creator.html#submission=${id}`, motions = `https://oddbout.com/creator.html#fighter=${fighter}&view=motions`;
-  const prepared = (await call(handle, 'prepare_fighter_registration', { manifest: { download_url: 'https://files.oaiusercontent.com/f.json', file_id: 'file_json' }, idempotencyKey: key })).structuredContent;
+  const prepared = toolJson(await call(handle, 'prepare_fighter_registration', { manifest: { download_url: 'https://files.oaiusercontent.com/f.json', file_id: 'file_json' }, idempotencyKey: key }));
   assert.equal(prepared.siteUrl, page); assert.match(prepared.next, /give him siteUrl to see its progress or why it was refused/);
-  assert.equal((await call(handle, 'submit_fighter_registration', { submissionId: id })).structuredContent.siteUrl, page);
-  assert.equal((await call(handle, 'get_fighter_submission', { submissionId: id })).structuredContent.siteUrl, page);
+  assert.equal(toolJson(await call(handle, 'submit_fighter_registration', { submissionId: id })).siteUrl, page);
+  assert.equal(toolJson(await call(handle, 'get_fighter_submission', { submissionId: id })).siteUrl, page);
   row = { ...row, status: 'registered', fighter_id: fighter };
-  const registered = (await call(handle, 'get_fighter_submission', { submissionId: id })).structuredContent;
+  const registered = toolJson(await call(handle, 'get_fighter_submission', { submissionId: id }));
   assert.deepEqual([registered.stage, registered.siteUrl], ['registered', motions]);
-  assert.equal((await call(handle, 'submit_fighter_registration', { submissionId: id })).structuredContent.siteUrl, motions);
+  assert.equal(toolJson(await call(handle, 'submit_fighter_registration', { submissionId: id })).siteUrl, motions);
   // The fighter's own lookup, and nowhere for a failed call.
-  const found = (await call(handle, 'get_registered_fighter', { fighterId: fighter })).structuredContent;
+  const found = toolJson(await call(handle, 'get_registered_fighter', { fighterId: fighter }));
   assert.equal(found.siteUrl, motions);
   const refused = createCloudHandler({ db: { ...db, from: table => ({ ...query(table), async maybeSingle() { return { data: null }; } }) } });
-  const missing = (await call(refused, 'get_fighter_submission', { submissionId: id })).structuredContent;
+  const missing = toolJson(await call(refused, 'get_fighter_submission', { submissionId: id }));
   assert.equal(missing.ok, false); assert.equal(missing.siteUrl, undefined);
 });
 test('registration update forwards only a valid optional fighter ID and preserves API refusals', async () => {
@@ -250,19 +254,19 @@ test('registration update forwards only a valid optional fighter ID and preserve
   const tools = (await (await handle(request('tools/list'))).json()).result.tools;
   const schema = tools.find(t=>t.name==='prepare_fighter_registration').inputSchema;
   assert.ok(schema.properties.fighterId); assert.ok(!schema.required.includes('fighterId'));
-  assert.equal((await call(handle,'prepare_fighter_registration',args)).structuredContent.stage,'uploading');
+  assert.equal(toolJson(await call(handle,'prepare_fighter_registration',args)).stage,'uploading');
   assert.equal(calls.at(-1).p_fighter,null);
   const update = {...args,idempotencyKey:updateKey,fighterId:fighter};
-  assert.equal((await call(handle,'prepare_fighter_registration',update)).structuredContent.stage,'uploading');
+  assert.equal(toolJson(await call(handle,'prepare_fighter_registration',update)).stage,'uploading');
   assert.equal(calls.at(-1).p_fighter,fighter); assert.equal(calls.at(-1).p_owner,owner); assert.equal(calls.at(-1).p_key,updateKey);
-  assert.equal((await call(handle,'prepare_fighter_registration',update)).structuredContent.stage,'uploading');
+  assert.equal(toolJson(await call(handle,'prepare_fighter_registration',update)).stage,'uploading');
   assert.equal(calls.at(-1).p_key,updateKey); assert.equal(calls.at(-1).p_sha,calls.at(-2).p_sha);
   const before = [downloads,calls.length];
   assert.equal((await call(handle,'prepare_fighter_registration',{...args,fighterId:'not-a-uuid'})).isError,true);
   assert.deepEqual([downloads,calls.length],before);
   for (const code of ['fighter-not-found','idempotency-conflict']) {
     refusal = code;
-    assert.equal((await call(handle,'prepare_fighter_registration',update)).structuredContent.code,code);
+    assert.equal(toolJson(await call(handle,'prepare_fighter_registration',update)).code,code);
   }
 });
 test('creator homepage is an authenticated fixed navigation URL without account handoff', async () => {
@@ -274,7 +278,7 @@ test('creator homepage is an authenticated fixed navigation URL without account 
   assert.equal(tool.securitySchemes[0].type,'oauth2');
   assert.equal(tool.annotations.readOnlyHint,true); assert.equal(tool.annotations.idempotentHint,true);
   assert.equal((await handle(request('tools/call',{name:'open_creator_homepage',arguments:{}}))).status,401);
-  const result = (await call(handle,'open_creator_homepage')).structuredContent;
+  const result = toolJson(await call(handle,'open_creator_homepage'));
   assert.equal(result.url,'https://oddbout.com/creator.html');
   assert.match(result.signIn,/normally.*same account as get_profile/);
   assert.equal(unexpected,0);
@@ -370,7 +374,7 @@ test('deletion tools require explicit confirmation and bind every call to verifi
   assert.equal(tool.annotations.destructiveHint,true);
   assert.ok(tool.inputSchema.required.includes('confirm'));
   assert.ok(!Object.keys(tool.inputSchema.properties).some(k=>/owner|email|session|client/.test(k)));
-  const p=(await call(handle,'prepare_fighter_deletion',{fighterId:fighter})).structuredContent;
+  const p=toolJson(await call(handle,'prepare_fighter_deletion',{fighterId:fighter}));
   assert.deepEqual(p.account,{id:owner,email:'test@example.com'});
   const args={fighterId:fighter,confirmationToken:confirmation,confirmName:'Exact name'};
   assert.equal((await call(handle,'delete_fighter',{...args,confirm:false})).isError,true);
@@ -380,7 +384,7 @@ test('deletion tools require explicit confirmation and bind every call to verifi
     p_owner:owner,p_session:session,p_client:client,p_fighter:fighter,p_token:confirmation,p_confirm_name:'Exact name'});
   db.rpc=async name=>name==='af_mcp_session_state'?{data:'usable'}:{error:{message:'private database details'}};
   const failed=await call(handle,'delete_fighter',{...args,confirm:true});
-  assert.equal(failed.structuredContent.code,'database-unavailable');
+  assert.equal(toolJson(failed).code,'database-unavailable');
   assert.ok(!JSON.stringify(failed).includes('private database'));
 });
 
@@ -390,10 +394,10 @@ test('owned list excludes deleted rows and owned lookup returns only a deletion 
     async limit(){return{data:[]}},async maybeSingle(){return{data:{id:fighter,deleted_at:deletedAt,profile:{name:'Deleted'}}}}};
   const db={...dbFor(),from:()=>query};
   const handle=createCloudHandler({db});
-  assert.deepEqual((await call(handle,'list_my_fighters')).structuredContent.fighters,[]);
+  assert.deepEqual(toolJson(await call(handle,'list_my_fighters')).fighters,[]);
   assert.ok(filters.some(([k,v])=>k==='deleted_at'&&v===null));
   assert.ok(filters.some(([k,v])=>k==='owner_id'&&v===owner));
-  assert.deepEqual((await call(handle,'get_registered_fighter',{fighterId:fighter})).structuredContent,
+  assert.deepEqual(toolJson(await call(handle,'get_registered_fighter',{fighterId:fighter})),
     {ok:true,stage:'deleted',fighterId:fighter,deletedAt});
 });
 
@@ -413,39 +417,39 @@ test('agent tools list only with the arena key; reads are public, spars and cups
     assert.ok(listed.includes(tool), tool);
   // Public reads need no connected account and send no key.
   const signedOut = createCloudHandler({ db: { auth: { getClaims: async () => ({ data: null }) }, rpc: async () => ({ data: false }) }, arena });
-  const guide = (await (await signedOut(request('tools/call', { name: 'get_style_guide', arguments: {} }))).json()).result.structuredContent;
+  const guide = toolJson((await (await signedOut(request('tools/call', { name: 'get_style_guide', arguments: {} }))).json()).result);
   assert.equal(guide.ok, true); assert.deepEqual(guide.contract.temper, ['guard', 'retreat', 'measure', 'patience']);
-  const bout = (await (await signedOut(request('tools/call', { name: 'read_bout', arguments: { a: 'kuma', b: 'yume', seed: 7 } }))).json()).result.structuredContent;
+  const bout = toolJson((await (await signedOut(request('tools/call', { name: 'read_bout', arguments: { a: 'kuma', b: 'yume', seed: 7 } }))).json()).result);
   assert.equal(bout.url, 'https://arena.test/oddbout-arena/bout?a=kuma&b=yume&seed=7');
   // A read goes on the arena's agent budget: signed out, every signed-out agent's together (`public`).
   assert.equal(calls.at(-1).headers['x-arena-agent'], key); assert.equal(calls.at(-1).headers['x-arena-owner'], 'public');
   assert.equal((await (await signedOut(request('tools/call', { name: 'spar', arguments: { fighterId: 'kuma', opponentId: 'yume' } }))).status), 401);
   // Agent calls: the owner is the verified one, never an argument.
   const handle = createCloudHandler({ db: dbFor(), arena });
-  const spar = (await call(handle, 'spar', { fighterId: 'kuma', opponentId: 'yume', seed: 3 })).structuredContent;
+  const spar = toolJson(await call(handle, 'spar', { fighterId: 'kuma', opponentId: 'yume', seed: 3 }));
   assert.deepEqual(spar.echo, { owner, a: 'kuma', b: 'yume', seed: 3 }); assert.equal(calls.at(-1).headers['x-arena-agent'], key);
   await call(handle, 'read_bout', { a: 'kuma', b: 'yume', seed: 7 }); assert.equal(calls.at(-1).headers['x-arena-owner'], owner);
   const fighter = crypto.randomUUID();
   // The cup's idempotency key goes to the arena lowercase (its UUID check is), as the agent's own (2026-11-03); a call without one is refused.
   const cupKey = crypto.randomUUID();
-  const entered = (await call(handle, 'enter_cup', { fighterId: fighter, idempotencyKey: cupKey.toUpperCase() })).structuredContent;
+  const entered = toolJson(await call(handle, 'enter_cup', { fighterId: fighter, idempotencyKey: cupKey.toUpperCase() }));
   assert.deepEqual(entered.echo, { owner, fighter, idempotencyKey: cupKey }); assert.equal(entered.state, 'open'); assert.equal(entered.next, 'get_cup');
   const unkeyed = calls.length;
   assert.equal((await call(handle, 'enter_cup', { fighterId: fighter })).isError, true); assert.equal(calls.length, unkeyed, 'no cup without a key');
-  assert.equal((await call(handle, 'read_bout', { cupId: fighter })).structuredContent.code, 'invalid-bout');
+  assert.equal(toolJson(await call(handle, 'read_bout', { cupId: fighter })).code, 'invalid-bout');
   // 파이트머니 2판: a career cup and its prep for the verified owner.
   const careerKey = crypto.randomUUID();
   await call(handle, 'enter_cup', { fighterId: fighter, idempotencyKey: careerKey, career: true });
   assert.deepEqual(calls.filter(c => c.url.endsWith('/agent/cup')).at(-1).body, { owner, fighter, idempotencyKey: careerKey, career: true });
   await call(handle, 'get_career', { fighterId: 'kuma' });
   assert.equal(calls.at(-1).url, 'https://arena.test/oddbout-arena/agent/career?fighter=kuma'); assert.equal(calls.at(-1).headers['x-arena-owner'], owner);
-  const chose = (await call(handle, 'choose_career_prep', { cupId: fighter, kind: 'upgrade', card: 'heavy' })).structuredContent;
+  const chose = toolJson(await call(handle, 'choose_career_prep', { cupId: fighter, kind: 'upgrade', card: 'heavy' }));
   assert.deepEqual(chose.echo, { owner, ticket: fighter, choice: { kind: 'upgrade', card: 'heavy' } });
-  assert.equal((await call(handle, 'choose_career_prep', { cupId: fighter, kind: 'story' })).structuredContent.code, 'invalid-choice');
-  const auto = (await call(handle, 'set_career_auto', { fighterId: 'kuma', on: true })).structuredContent;
+  assert.equal(toolJson(await call(handle, 'choose_career_prep', { cupId: fighter, kind: 'story' })).code, 'invalid-choice');
+  const auto = toolJson(await call(handle, 'set_career_auto', { fighterId: 'kuma', on: true }));
   assert.deepEqual(auto.echo, { owner, fighter: 'kuma', on: true });
   const failing = createCloudHandler({ db: dbFor(), arena: { ...arena, fetcher: async () => { throw new Error('down'); } } });
-  assert.equal((await call(failing, 'get_rankings', {})).structuredContent.code, 'arena-unavailable');
+  assert.equal(toolJson(await call(failing, 'get_rankings', {})).code, 'arena-unavailable');
 });
 
 test('a style edit goes through the profile edit on the owner\'s current package', async () => {
@@ -456,7 +460,7 @@ test('a style edit goes through the profile edit on the owner\'s current package
   const handle = createCloudHandler({ db: { ...dbFor(), from: () => query }, arena });
   const tool = (await (await handle(request('tools/list'))).json()).result.tools.find(t => t.name === 'update_fighter_style');
   assert.equal(tool.annotations.destructiveHint, true);
-  const result = (await call(handle, 'update_fighter_style', { fighterId: fighter, style: { distance: 2 }, idempotencyKey: crypto.randomUUID() })).structuredContent;
+  const result = toolJson(await call(handle, 'update_fighter_style', { fighterId: fighter, style: { distance: 2 }, idempotencyKey: crypto.randomUUID() }));
   // The in-process API asks the database next; this stub has none, so it stops there — after reading only the owner's own fighter.
   assert.equal(result.ok, false);
   assert.ok(filters.some(([k, v]) => k === 'owner_id' && v === owner)); assert.ok(filters.some(([k, v]) => k === 'id' && v === fighter));
@@ -475,9 +479,9 @@ test('MCP 점검: short UUID schemas without $schema; a cup entry waits for the 
   assert.equal(text.includes('json-schema.org'), false);
   const uuid = listed.result.tools.find(t => t.name === 'enter_cup').inputSchema.properties.fighterId;
   assert.ok(uuid.pattern.length < 80, uuid.pattern);
-  const entered = (await call(handle, 'enter_cup', { fighterId: crypto.randomUUID(), idempotencyKey: crypto.randomUUID() })).structuredContent;
+  const entered = toolJson(await call(handle, 'enter_cup', { fighterId: crypto.randomUUID(), idempotencyKey: crypto.randomUUID() }));
   assert.equal(entered.cup.state, 'done'); assert.equal(polls, 3);
-  const record = (await call(handle, 'get_fighter_record', { fighterId: 'kuma' })).structuredContent;
+  const record = toolJson(await call(handle, 'get_fighter_record', { fighterId: 'kuma' }));
   assert.deepEqual(record.recent, [{ cup: ticket, round: 0, slot: 0 }]);
   assert.equal((await call(handle, 'get_cup', { cupId: 'not-a-uuid' })).isError, true);
 });
@@ -490,7 +494,7 @@ test('a profile edit goes through the same edit on the owner\'s current package,
   const tool = (await (await handle(request('tools/list'))).json()).result.tools.find(t => t.name === 'update_fighter_profile');
   assert.equal(tool.annotations.destructiveHint, true); assert.deepEqual(Object.keys(tool.inputSchema.properties.profile.properties).sort(),
     ['concept', 'description', 'language', 'lines', 'moves', 'name', 'names']);
-  assert.equal((await call(handle, 'update_fighter_profile', { fighterId: fighter, profile: {}, idempotencyKey: crypto.randomUUID() })).structuredContent.code, 'invalid-profile');
+  assert.equal(toolJson(await call(handle, 'update_fighter_profile', { fighterId: fighter, profile: {}, idempotencyKey: crypto.randomUUID() })).code, 'invalid-profile');
   assert.equal((await call(handle, 'update_fighter_profile', { fighterId: fighter, profile: { portrait: 'x' }, idempotencyKey: crypto.randomUUID() })).isError, true);
   await call(handle, 'update_fighter_profile', { fighterId: fighter, profile: { lines: { win: 'Again!' } }, idempotencyKey: crypto.randomUUID() });
   assert.ok(filters.some(([k, v]) => k === 'owner_id' && v === owner)); assert.ok(filters.some(([k, v]) => k === 'id' && v === fighter));
@@ -507,13 +511,13 @@ test('an edit retried with its key after a lost response returns that edit, not 
     for (const [tool, change, other] of [['update_fighter_style', { style: { distance: 2 } }, { style: { distance: 4 } }],
       ['update_fighter_profile', { profile: { name: 'Retried fighter' } }, { profile: { name: 'Another name' } }]]) {
       const args = { fighterId: fighter, ...change, idempotencyKey: crypto.randomUUID() };
-      const first = (await call(handle, tool, args)).structuredContent;
+      const first = toolJson(await call(handle, tool, args));
       assert.equal(first.ok, true, JSON.stringify(first));
-      const retried = (await call(handle, tool, args)).structuredContent;
+      const retried = toolJson(await call(handle, tool, args));
       assert.equal(retried.ok, true, JSON.stringify(retried));
       assert.equal(retried.submissionId, first.submissionId); assert.equal(retried.manifestSha256, first.manifestSha256);
       // The same key for a different change is still refused.
-      assert.equal((await call(handle, tool, { ...args, ...other })).structuredContent.code, 'idempotency-conflict');
+      assert.equal(toolJson(await call(handle, tool, { ...args, ...other })).code, 'idempotency-conflict');
     }
     assert.equal((await f.sql.query('select count(*)::int as n from public.af_submissions where fighter_id = $1', [fighter])).rows[0].n, 3);
   } finally { await f.sql.close(); }
@@ -618,9 +622,9 @@ test('ChatGPT\'s calls get a short text for a large result (it reads the structu
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'read_bout', arguments: { a: 'kuma', b: 'yume', seed: 1 }, ...(meta ? { _meta: meta } : {}) } }) }))
     .then(r => r.json()).then(j => j.result);
   const plain = await ask(), chat = await ask({ 'openai/locale': 'ko', 'openai/subject': 'user-123' }), other = await ask({ 'openai/subject': 'user-456' });
-  assert.equal(plain.content[0].text, JSON.stringify(plain.structuredContent));
+  assert.equal(plain.structuredContent, undefined);
   assert.match(chat.content[0].text, /^Full result in structuredContent \(\d+ characters\): ok=true, rules=39, fighters\[40\]$/);
-  assert.deepEqual(chat.structuredContent, plain.structuredContent);
+  assert.deepEqual(chat.structuredContent, JSON.parse(plain.content[0].text));
   assert.equal(calls[0]['x-arena-owner'], 'public');
   assert.match(calls[1]['x-arena-owner'], /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-8[0-9a-f]{3}-[0-9a-f]{12}$/);
   assert.notEqual(calls[1]['x-arena-owner'], calls[2]['x-arena-owner']);
@@ -638,7 +642,7 @@ test('a cup entry stops waiting at its deadline and hands over to get_cup', asyn
     return Response.json({ ok: true });
   } };
   const handle = createCloudHandler({ db: dbFor(), arena }), started = Date.now();
-  const entered = (await call(handle, 'enter_cup', { fighterId: crypto.randomUUID(), idempotencyKey: crypto.randomUUID() })).structuredContent;
+  const entered = toolJson(await call(handle, 'enter_cup', { fighterId: crypto.randomUUID(), idempotencyKey: crypto.randomUUID() }));
   assert.deepEqual([entered.state, entered.next], ['open', 'get_cup']);
   assert.ok(Date.now() - started < 1000, `waited ${Date.now() - started} ms`);
 });
@@ -752,7 +756,7 @@ test('the directory edition lists only its tools, in English, with every hint; t
   assert.match(DIRECTORY_INSTRUCTIONS, /https:\/\/oddbout\.com\/creator\.html/); assert.doesNotMatch(DIRECTORY_INSTRUCTIONS, HANGUL);
   assert.match(await instructions(CLOUD_RESOURCE), /check_creation_readiness/);
   // Signed out like the public address: its public tools answer, an account tool asks for a sign-in at the edition's own metadata.
-  assert.equal((await (await post(DIRECTORY_RESOURCE, 'tools/call', { name: 'get_style_guide', arguments: {} })).json()).result.structuredContent.ok, true);
+  assert.equal(toolJson((await (await post(DIRECTORY_RESOURCE, 'tools/call', { name: 'get_style_guide', arguments: {} })).json()).result).ok, true);
   const signIn = (resource = DIRECTORY_RESOURCE) => `Bearer resource_metadata="${resource}/.well-known/oauth-protected-resource", scope="openid email profile"`;
   const denied = await post(DIRECTORY_RESOURCE, 'tools/call', { name: 'get_profile', arguments: {} });
   assert.equal(denied.status, 401); assert.equal(denied.headers.get('www-authenticate'), signIn());
@@ -795,22 +799,22 @@ test('an agent enters his fighter on the watched package and withdraws him; list
       rpc: (name, args) => name === 'af_mcp_session_state' ? { data: 'usable' } : f.db.rpc(name, args) };
     const arena = { url: 'https://arena.test/oddbout-arena', key: 'k'.repeat(64), fetcher: async () => Response.json({ ok: true, fighters: [] }) };
     const handle = createCloudHandler({ db, arena });
-    const listed = async () => (await call(handle, 'list_fighters')).structuredContent.registered.some(row => row.id === fighter);
+    const listed = async () => toolJson(await call(handle, 'list_fighters')).registered.some(row => row.id === fighter);
     const clips = ['idle', 'walk', 'run', 'fightIdle', 'combo', 'slam', 'dash', 'block', 'hit', 'groggy', 'fall'];
     assert.equal(await listed(), false);
-    assert.equal((await call(handle, 'list_my_fighters')).structuredContent.fighters[0].entered_at, null);
+    assert.equal(toolJson(await call(handle, 'list_my_fighters')).fighters[0].entered_at, null);
     assert.equal((await call(handle, 'enter_fighter', { fighterId: fighter, expectedManifestSha256: registered.manifest_sha, reviewedClips: clips.slice(1) })).isError, true);
     // The account first, as the site's route does (적대적 리뷰 2026-10-30).
     await f.sql.query('update public.af_creators set enabled=false where owner_id=$1', [f.owner]);
     const disabled = await call(handle, 'enter_fighter', { fighterId: fighter, expectedManifestSha256: registered.manifest_sha, reviewedClips: clips });
-    assert.equal(disabled.structuredContent.code, 'account-disabled');
+    assert.equal(toolJson(disabled).code, 'account-disabled');
     await f.sql.query('update public.af_creators set enabled=true where owner_id=$1', [f.owner]);
     const stale = await call(handle, 'enter_fighter', { fighterId: fighter, expectedManifestSha256: 'f'.repeat(64), reviewedClips: clips });
-    assert.equal(stale.structuredContent.code, 'fighter-changed');
-    const entered = (await call(handle, 'enter_fighter', { fighterId: fighter, expectedManifestSha256: registered.manifest_sha, reviewedClips: clips })).structuredContent;
+    assert.equal(toolJson(stale).code, 'fighter-changed');
+    const entered = toolJson(await call(handle, 'enter_fighter', { fighterId: fighter, expectedManifestSha256: registered.manifest_sha, reviewedClips: clips }));
     assert.equal(entered.stage, 'entered', JSON.stringify(entered));
     assert.equal(await listed(), true);
-    assert.equal((await call(handle, 'withdraw_fighter', { fighterId: fighter })).structuredContent.stage, 'in-production');
+    assert.equal(toolJson(await call(handle, 'withdraw_fighter', { fighterId: fighter })).stage, 'in-production');
     assert.equal(await listed(), false);
   } finally { await f.sql.close(); }
 });
@@ -841,7 +845,7 @@ test('enter_cup ends by the call budget counted from the request, its issue incl
   const { arena, seen } = cupArena(150);
   const handle = createCloudHandler({ db: dbFor(), arena, budgetMs: 400 });
   const started = Date.now();
-  const entered = (await call(handle, 'enter_cup', { fighterId: crypto.randomUUID(), idempotencyKey: crypto.randomUUID() })).structuredContent;
+  const entered = toolJson(await call(handle, 'enter_cup', { fighterId: crypto.randomUUID(), idempotencyKey: crypto.randomUUID() }));
   assert.equal(entered.state, 'open'); assert.equal(entered.next, 'get_cup');
   // The wait once started after the issue: 150 ms of issue, then the whole CUP_WAIT_MS.
   assert.ok(Date.now() - started < 1500, `${Date.now() - started} ms`); assert.ok(seen.polls >= 1 && seen.polls < 20, `${seen.polls} polls`);
@@ -853,7 +857,7 @@ test('a client that goes away ends a waiting call at once', async t => {
   const handle = createCloudHandler({ db: dbFor(), arena });
   const gone = new AbortController(), started = Date.now();
   setTimeout(() => gone.abort(), 100);
-  const entered = (await (await handle(toolCall('enter_cup', { fighterId: crypto.randomUUID(), idempotencyKey: crypto.randomUUID() }, { signal: gone.signal }))).json()).result.structuredContent;
+  const entered = toolJson((await (await handle(toolCall('enter_cup', { fighterId: crypto.randomUUID(), idempotencyKey: crypto.randomUUID() }, { signal: gone.signal }))).json()).result);
   assert.equal(entered.state, 'open');
   assert.ok(Date.now() - started < 2000, `${Date.now() - started} ms`);
   const polls = seen.polls;
@@ -881,7 +885,7 @@ test('a server fault logs what failed behind its code; a refusal logs no detail;
   const errors = t.mock.method(console, 'error', () => {}), logged = t.mock.method(console, 'log', () => {});
   const bug = createCloudHandler({ db: { ...dbFor(), from: () => { throw new TypeError('private row value'); } } });
   const result = await call(bug, 'list_my_fighters');
-  assert.equal(result.structuredContent.code, 'cloud-operation-unavailable'); assert.ok(!JSON.stringify(result).includes('private row'));
+  assert.equal(toolJson(result).code, 'cloud-operation-unavailable'); assert.ok(!JSON.stringify(result).includes('private row'));
   const [line] = errors.mock.calls.map(entry => JSON.parse(entry.arguments[0]));
   assert.deepEqual([line.stage, line.tool, line.ok, line.code], ['mcp-call', 'list_my_fighters', false, 'cloud-operation-unavailable']);
   assert.deepEqual(line.error, { name: 'TypeError', message: 'private row value' }); assert.ok(line.stack.length >= 1);
@@ -889,12 +893,12 @@ test('a server fault logs what failed behind its code; a refusal logs no detail;
   const db = { ...dbFor(), rpc: async name => name === 'af_mcp_session_state' ? { data: 'usable' } : { error: { message: 'private database details', code: '57014' } } };
   const args = { fighterId: crypto.randomUUID(), confirmationToken: crypto.randomUUID(), confirmName: 'Exact name', confirm: true };
   const failed = await call(createCloudHandler({ db }), 'delete_fighter', args);
-  assert.equal(failed.structuredContent.code, 'database-unavailable'); assert.ok(!JSON.stringify(failed).includes('private database'));
+  assert.equal(toolJson(failed).code, 'database-unavailable'); assert.ok(!JSON.stringify(failed).includes('private database'));
   const database = JSON.parse(errors.mock.calls.at(-1).arguments[0]);
   assert.deepEqual([database.tool, database.code, database.error], ['delete_fighter', 'database-unavailable', { message: 'private database details', code: '57014' }]);
   // The deletion's own refusal stays the caller's: an ordinary line without detail.
   const refusing = { ...dbFor(), rpc: async name => name === 'af_mcp_session_state' ? { data: 'usable' } : { error: { message: 'deletion-name-mismatch' } } };
-  assert.equal((await call(createCloudHandler({ db: refusing }), 'delete_fighter', args)).structuredContent.code, 'deletion-name-mismatch');
+  assert.equal(toolJson(await call(createCloudHandler({ db: refusing }), 'delete_fighter', args)).code, 'deletion-name-mismatch');
   const refusal = JSON.parse(logged.mock.calls.at(-1).arguments[0]);
   assert.deepEqual([refusal.tool, refusal.ok, refusal.code, refusal.error], ['delete_fighter', false, 'deletion-name-mismatch', undefined]);
   assert.equal(errors.mock.callCount(), 2);
@@ -961,4 +965,67 @@ test('a 2026-07-28 client discovers, lists and calls the same tools; the list ke
     assert.equal(legacy.getNegotiatedProtocolVersion(), '2025-11-25');
     assert.equal((await legacy.listTools()).tools.length, 21);
   } finally { await legacy.close(); }
+});
+
+// MCP 최적화 2026-11-05: a host other than ChatGPT got every result twice, the whole JSON as its text and again as structuredContent.
+test('a result goes once to a host that reads its text, as before to ChatGPT, and get_profile keeps its structured result for both', async () => {
+  const arena = { url: 'https://arena.test/oddbout-arena', key: 'k'.repeat(64), fetcher: async () => Response.json({ ok: true, rules: 39,
+    fighters: Array.from({ length: 40 }, (_, i) => ({ id: `f${i}`, name: `Fighter ${i}` })) }) };
+  const handle = createCloudHandler({ db: dbFor(), arena }), chatgpt = { 'openai/locale': 'ko' }, bout = { a: 'kuma', b: 'yume', seed: 1 };
+  const ask = (name, args, meta) => handle(new Request(CLOUD_RESOURCE, { method: 'POST', headers: { 'content-type': 'application/json',
+    accept: 'application/json, text/event-stream', authorization: `Bearer ${token}` },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args, ...(meta ? { _meta: meta } : {}) } }) }))
+    .then(response => response.json()).then(answer => answer.result);
+  const plain = await ask('read_bout', bout), chat = await ask('read_bout', bout, chatgpt);
+  assert.equal(plain.structuredContent, undefined); assert.equal(plain.content.length, 1);
+  const value = JSON.parse(plain.content[0].text);
+  assert.equal(value.fighters.length, 40);
+  assert.match(chat.content[0].text, /^Full result in structuredContent \(\d+ characters\): ok=true, rules=39, fighters\[40\]$/);
+  assert.deepEqual(chat.structuredContent, value);
+  // A refusal keeps isError; its JSON is the text alone, and ChatGPT's is whole beside its structured copy as before.
+  const refused = await ask('read_bout', {}), chatRefused = await ask('read_bout', {}, chatgpt);
+  assert.deepEqual([refused.isError, refused.structuredContent, JSON.parse(refused.content[0].text)], [true, undefined, { ok: false, code: 'invalid-bout' }]);
+  assert.deepEqual([chatRefused.isError, chatRefused.structuredContent, chatRefused.content[0].text], [true, { ok: false, code: 'invalid-bout' },
+    JSON.stringify({ ok: false, code: 'invalid-bout' })]);
+  // get_profile has an outputSchema, which needs the structured result: every host gets it.
+  for (const meta of [undefined, chatgpt]) {
+    const profile = await ask('get_profile', {}, meta);
+    assert.deepEqual(profile.structuredContent, { id: owner, email: 'test@example.com', nickname: 'ODDBOUT' });
+    assert.deepEqual(JSON.parse(profile.content[0].text), profile.structuredContent);
+  }
+});
+
+test('every MCP request leaves one line: edition, method, tool, ChatGPT or not, status, bytes and time — never the token or the account', async () => {
+  const lines = [], handle = cloudHandler({ db: dbFor(), log: line => lines.push(line) });
+  const bytes = async response => Buffer.byteLength(await response.text());
+  const listed = await bytes(await handle(request('tools/list')));
+  const profile = await (await handle(new Request(DIRECTORY_RESOURCE, { method: 'POST', headers: { 'content-type': 'application/json',
+    accept: 'application/json, text/event-stream', authorization: `Bearer ${token}` }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call',
+      params: { name: 'get_profile', arguments: {}, _meta: { 'openai/locale': 'ko' } } }) }))).text();
+  // The answer is sent whole after it is counted.
+  assert.equal(JSON.parse(profile).result.structuredContent.id, owner);
+  const denied = await handle(request('tools/call', { name: 'get_profile', arguments: {} }));
+  assert.equal(denied.status, 401);
+  const deniedBytes = await bytes(denied), unreadable = await bytes(await handle(new Request(CLOUD_RESOURCE, { method: 'POST', body: 'not json' })));
+  // No MCP message, no line: the metadata, a probe, a preflight.
+  for (const [url, init] of [[`${CLOUD_RESOURCE}/.well-known/oauth-protected-resource`, {}], [CLOUD_RESOURCE, { method: 'HEAD' }],
+    [CLOUD_RESOURCE, { method: 'OPTIONS', headers: { origin: 'https://claude.ai' } }]]) await handle(new Request(url, init));
+  const parsed = lines.map(line => JSON.parse(line));
+  assert.deepEqual(parsed.map(({ ms, ...line }) => line), [
+    { mcp: 1, edition: 'full', method: 'tools/list', tool: null, compact: false, status: 200, bytes: listed },
+    { mcp: 1, edition: 'directory', method: 'tools/call', tool: 'get_profile', compact: true, status: 200, bytes: Buffer.byteLength(profile) },
+    { mcp: 1, edition: 'full', method: 'tools/call', tool: 'get_profile', compact: false, status: 401, bytes: deniedBytes },
+    { mcp: 1, edition: 'full', method: null, tool: null, compact: false, status: 400, bytes: unreadable }]);
+  assert.ok(parsed.every(line => Number.isInteger(line.ms) && line.ms >= 0));
+  for (const secret of [token, owner, client, 'test@example.com', 'Bearer']) assert.ok(!lines.join('\n').includes(secret), secret);
+});
+
+test('a cup entry reads the cup after 1, 1, 2, 3… poll intervals, not after every one (MCP 최적화 2026-11-05)', async t => {
+  t.mock.method(console, 'log', () => {});
+  const { arena, seen } = cupArena();
+  const handle = createCloudHandler({ db: dbFor(), arena: { ...arena, cupWaitMs: 300 } });
+  const entered = toolJson(await call(handle, 'enter_cup', { fighterId: crypto.randomUUID(), idempotencyKey: crypto.randomUUID() }));
+  assert.deepEqual([entered.state, entered.next], ['open', 'get_cup']);
+  // Reads after 20, 20, 40, 60 and 80 ms fit in 300 (the next would be at 320); a read every 20 ms was fourteen.
+  assert.ok(seen.polls >= 3 && seen.polls <= 5, `${seen.polls} polls`);
 });

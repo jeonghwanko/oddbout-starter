@@ -2,6 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createCloudHandler, CLOUD_ISSUER, CLOUD_RESOURCE, DIRECTORY_RESOURCE, PUBLIC_TOOLS } from '../mcp/cloud.mjs';
 import { profileFixture } from './helpers/profile-api-fixture.mjs';
+// A tool's JSON: a host other than ChatGPT gets it as the text only (MCP 최적화 2026-11-05).
+const toolJson = result => result.structuredContent ?? JSON.parse(result.content[0].text);
 
 // The cloud MCP on a real (PGlite) database: its in-process API writes as the verified owner and labels his client's name.
 test('workshop tools: story from the API and the arena, a named note made with the client, canon, worlds and their chronicle', async () => {
@@ -25,7 +27,7 @@ test('workshop tools: story from the API and the arena, a named note made with t
     const rpc = async (method, params, auth = true) => (await (await handle(new Request(CLOUD_RESOURCE, { method: 'POST',
       headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', ...(auth ? { authorization: 'Bearer signed-connector-token-for-test' } : {}) },
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) }))).json()).result;
-    const call = async (name, args, auth = true) => (await rpc('tools/call', { name, arguments: args }, auth)).structuredContent;
+    const call = async (name, args, auth = true) => toolJson(await rpc('tools/call', { name, arguments: args }, auth));
     const tools = (await rpc('tools/list', {})).tools;
     const workshop = ['get_fighter_story', 'update_fighter_canon', 'post_workshop_note', 'get_workshop_inbox', 'resolve_workshop_note',
       'set_fighter_relation', 'get_world', 'manage_world', 'write_world_post'];
@@ -88,7 +90,7 @@ test('directory edition: relation and world writes are separate tools that reach
     const call = async (name, args) => (await (await handle(new Request(DIRECTORY_RESOURCE, { method: 'POST',
       headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: 'Bearer signed-connector-token-for-test' },
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }) }))).json()).result;
-    const content = async (name, args) => (await call(name, args)).structuredContent;
+    const content = async (name, args) => toolJson(await call(name, args));
     // Relations: a proposal sets the public name before the API looks at the other fighter; an answer and an end reach their own routes.
     assert.equal((await content('propose_fighter_relation', { fighterId: fighter, otherId: crypto.randomUUID(), kind: 'rival', nickname: '감독' })).code,
       'fighter-not-found');

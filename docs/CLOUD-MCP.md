@@ -366,7 +366,8 @@ creator-kit 소스는 계정·등록에 호스팅 ODDBOUT MCP 하나를 쓰도�
 기술 클립(`skill`)은 등록 때 정해지므로 성격 고치기로 더할 수 없다.
 
 ChatGPT 호출(`_meta`에 `openai/…`가 있는 호출): Apps SDK는 결과의 구조화 값과 텍스트를 모두 모델에 넘긴다. 그래서 1,200자를 넘는 결과의
-텍스트는 필드 요약 한 줄로 줄인다(`compactText`, 실패 결과와 작은 결과는 그대로). 다른 호스트는 텍스트에 전체 JSON을 그대로 받는다.
+텍스트는 필드 요약 한 줄로 줄인다(`compactText`, 실패 결과와 작은 결과는 그대로). 다른 호스트는 텍스트에 전체 JSON을 그대로 받고, 같은 값을
+`structuredContent`로 한 번 더 받지 않는다(2026-11-05, 결과가 두 배였다). `outputSchema`가 있는 `get_profile`만 모든 호스트에 구조화 값을 준다.
 로그인하지 않은 ChatGPT 사용자의 `read_bout` 한도는 `_meta["openai/subject"]`(익명 사용자 id)로 사용자마다 센다. 이 id는 호출하는 쪽이 정하므로
 (바꿀 때마다 새 한도였다) MCP는 그 읽기에 `x-arena-signed-out: 1`을 붙이고, 아레나는 그 id의 한도와 함께 로그인 안 한 에이전트 전체의 공용 한도에도
 센다(2026-10-30). id가 없는 읽기는 전처럼 공용 한도(`public`)만 쓴다.
@@ -394,7 +395,7 @@ ODDBOUT의 생성 워커가 사용자의 말(과 그림 1~2장)로 선수를 만
 | 도구 | 하는 일 |
 | --- | --- |
 | `request_hosted_fighter` | 설명·언어와 선택 그림 둘(`picture`·`secondPicture` 파일 인자, 또는 올리기 표로 넣은 `pictureUploads`, 합쳐 둘까지. 권리 확인 `rightsConfirmed`)로 신청. `delegate: true`는 맡기기다(아래). 같은 계정·`idempotencyKey`로 **이미 저장된 작업**이 있으면 그림을 다시 올리지 않고 반환한다. 결과가 불명확할 때는 조회 도구로 복구한다 |
-| `get_hosted_fighter` | 작업 상태, 외형 후보 둘·동작 미리보기의 서명 URL(10분), 프로필 초안, `next`. `jobId` 또는 원래 `idempotencyKey` 하나로 조회하며 둘 다 없으면 최근 다섯 신청, 열림 여부, 보유 토큰(`tokens`: granted·spent·balance). 각 작업은 그 작업이 쓴 토큰(`job.tokens`)을 보인다. 키 조회는 새 신청·업로드를 하지 않는다. `waitSeconds`(25초까지)는 찾은 작업의 상태를 기다린다 |
+| `get_hosted_fighter` | 작업 상태, 외형 후보 둘·동작 미리보기의 서명 URL(10분), 프로필 초안, `next`. `jobId` 또는 원래 `idempotencyKey` 하나로 조회하며 둘 다 없으면 최근 다섯 신청, 열림 여부, 보유 토큰(`tokens`: granted·spent·balance). 최근 목록의 각 작업은 요약(상태·진행률·설명·이름·시각·그 작업이 쓴 토큰 `tokens`·`siteUrl`)이고, 자세한 내용은 `jobId`로 읽는다(2026-11-05). 키 조회는 새 신청·업로드를 하지 않는다. `waitSeconds`(25초까지)는 찾은 작업의 상태를 기다린다. 지켜보기만 하면 되는 단계(대기·외형·동작·포장·검사 중)에서는 짧은 답(`watch: true`: 상태·진행률·대기 순서, 이번 대기에 바뀐 것 `changed`, 새로 온 그림 하나의 URL `picture`, 동작 중이면 그림 이름 목록 `pictures`)을 주고, 고를 때·끝났을 때와 `waitSeconds` 없는 조회는 전체를 준다 |
 | `choose_hosted_look` | 후보 `a`·`b` 고르기, 또는 한 문장 수정(두 장을 다시 그린다) |
 | `revise_hosted_motion` | 동작 하나를 한 문장으로 다시. 나머지 동작은 그대로 |
 | `register_hosted_fighter` | 사용자가 동작을 승인한 뒤 등록. 프로필은 워커 초안 위에 사용자가 바꾼 칸만 얹는다(언어별 이름·대사는 칸별로). 다른 선수와 같은 서버 검사를 거친다 |
