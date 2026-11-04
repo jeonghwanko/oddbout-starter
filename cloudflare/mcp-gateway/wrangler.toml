@@ -3,7 +3,9 @@ main = "index.mjs"
 compatibility_date = "2026-11-04"
 compatibility_flags = ["enable_request_signal"]
 workers_dev = true
-routes = [{ pattern = "mcp.oddbout.com/*", zone_name = "oddbout.com" }]
+# No production `routes` on purpose (MCP 리뷰 2026-11-05): with any, `wrangler deploy` PUTs this script's whole route list, which can
+# recreate mcp.oddbout.com/* and reset its dashboard-only "Request limit failure mode: Fail open". The route lives in the Cloudflare
+# dashboard (docs/MCP-GATEWAY.md, Route ownership); a deploy only updates the script.
 
 # Test a workers.dev deployment before attaching a production route.
 [env.staging]

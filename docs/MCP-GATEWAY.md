@@ -61,12 +61,13 @@ byte limits, request IDs, timeouts and cancellation.
 7. Only after that wait and DNS comparison, replace Spaceship nameservers with
    the exact two assigned by Cloudflare. Wait for the zone to become Active and
    its edge certificate to be active before sending proxied traffic.
-8. Deploy production with `npm run gateway:deploy`. The configuration installs a
-   **route** `mcp.oddbout.com/*`, not a Worker Custom Domain. In the route settings,
-   set **Request limit failure mode → Fail open (proceed)** and read the saved
-   setting back. Wrangler's route declaration does not guarantee this setting.
-   Recheck it after each route redeploy. If it is unavailable or cannot be verified,
-   do not claim free-quota fallback is ready.
+8. Deploy production with `npm run gateway:deploy`; it uploads the script only.
+   Then add the **route** `mcp.oddbout.com/*` (zone `oddbout.com`, Worker
+   `oddbout-mcp-gateway`) in the Cloudflare dashboard — a route, not a Worker
+   Custom Domain. In the route settings, set **Request limit failure mode → Fail
+   open (proceed)** and read the saved setting back. If it is unavailable or cannot
+   be verified, do not claim free-quota fallback is ready. See
+   [Route ownership](#route-ownership-2026-11-05).
 9. Run `npm run gateway:smoke -- https://mcp.oddbout.com --worker`. Check the legacy
    Render MCP address separately. Test ChatGPT, Claude `/claude` and Cursor
    `/signin` through their actual clients, including login and an account tool.
@@ -81,6 +82,23 @@ only when the route's fail-open setting is enabled. Render must also remain
 available within its own billing limits. Fail open is not a general exception
 handler: an upstream 502 or a CPU-limit failure is not a guaranteed origin retry.
 See [Cloudflare limits](https://developers.cloudflare.com/workers/platform/limits/).
+
+## Route ownership (2026-11-05)
+
+The production route `mcp.oddbout.com/*` is managed in the Cloudflare dashboard,
+with **Fail open (proceed)**. `wrangler.toml` declares no production `routes`:
+with any, `wrangler deploy` (4.157, `publishRoutes`) replaces the script's whole
+route list with `PUT /accounts/:account/workers/scripts/:name/routes` ("PUT will
+delete previous routes on this script"). That can recreate the route and reset
+its dashboard-only fail-open setting, so a Free-plan daily limit would block
+requests instead of falling through to Render. Wrangler touches routes only when
+`routes` is non-empty, so `npm run gateway:deploy` updates the script alone; the
+staging environment keeps its empty `routes`.
+
+- After any route change (dashboard, API, or a config that adds `routes` again),
+  read **Request limit failure mode** back and set Fail open again if needed.
+- `npm run gateway:smoke -- https://mcp.oddbout.com --worker` confirms the route
+  still reaches the Worker (`x-oddbout-gateway: cloudflare` on handled responses).
 
 ## Rollback
 
