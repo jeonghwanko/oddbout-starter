@@ -4,7 +4,7 @@
 이 문서에는 게임이 직접 생성한 현재 규격이 아래 JSON으로 포함되어 있습니다.
 다른 안내만 읽고 규격을 읽었다고 간주하지 마세요. 첫 응답 전에 아래 JSON의
 revision, workflow, contract, controls, timing을 읽고 이번 대화의 기준으로 저장하세요.
-첫 응답에는 “게임 규격 cc546c8ec0fb 기준”이라고 출처를 짧게 밝히고,
+첫 응답에는 “게임 규격 f7b9c90c4fe8 기준”이라고 출처를 짧게 밝히고,
 캐릭터 설명이나 참고 이미지를 요청하세요. 사용자에게 기술 수치를 고르라고 하지 마세요.
 
 ## 제작 범위
@@ -28,7 +28,7 @@ review_creation_progress가 연결되어 있으면 선택 상태를 검사하고
 
 ## 자료 갱신
 
-이 문서는 게임 소스에서 자동 생성한 시작 시점의 스냅샷입니다. 현재 revision: cc546c8ec0fbf702fc3448021e20aaad580633dac82ff48a21e1cb7b13c11fc5
+이 문서는 게임 소스에서 자동 생성한 시작 시점의 스냅샷입니다. 현재 revision: f7b9c90c4fe8368ca3d4be5e706f54860af6c07351d192ac2cb0f3387462275a
 새 묶음·재개·패키징 전에 [현재 게임 JSON](https://raw.githubusercontent.com/jeonghwanko/oddbout-starter/refs/heads/codex/game-context/creation-context.json)을 다시 읽고 revision을 비교하세요.
 바뀌면 이전 자료·선택을 보관하고 영향을 받은 항목만 설명·재검토하세요. 가져오지 못하면 그 사실을 말하고,
 외형 상담만 계속할 수 있습니다. 규격에 의존하는 묶음으로 진행하거나 수치를 추정하지 마세요.
@@ -652,24 +652,18 @@ Dot의 제품 기억을 초기화하는 기능은 아닙니다. 이전 기록의
     "onChange": "Keep previous context and selections, report only affected requirements, recheck affected items. Never silently mix revisions.",
     "unavailable": "Appearance consultation may continue. Do not invent controls/timing, advance a rules-dependent group, generate or package against an unverified current contract."
   },
-  "revision": "cc546c8ec0fbf702fc3448021e20aaad580633dac82ff48a21e1cb7b13c11fc5",
+  "revision": "f7b9c90c4fe8368ca3d4be5e706f54860af6c07351d192ac2cb0f3387462275a",
   "provenance": {
-    "sourceCommit": "a5fba043b8a817ebfa66e371bc2ad68421520896",
+    "sourceCommit": "61e94c6b3b89e0b9ea7b35d0cb73c00db7f84d35",
     "sourceDirty": false,
     "sourceFiles": {
       "tools/ai-fighter/creation-context.mjs": "b0425b8c55843cb17031bb63d8bbd44c66de5a4b88b843f6984e30b2be649b8e",
-      "tools/ai-fighter/export-creation-context.mjs": "fcad318b37dae57a352b4c8ee509a1b03dd143a83f0518d726b06ff53df6d30d",
+      "tools/ai-fighter/export-creation-context.mjs": "7f0a7318215e927bcbd3e280ceabab388f681bfebd019dcc49a99eb1ea8c21a4",
       "contracts/ai-fighter/v1/contract-source.mjs": "6c34a93137bf0a4d0ac5172be72bba32b7d33388c17abed23b0e0edd19073970",
       "src/world/native-city-combat.json": "20ebcbfddb44bb35e7d5f48fa3a2c1e85e9d46c0b67feb35fbfeeef4630d7c0d",
       "src/app/InputBindings.ts": "45f8fe13b3b1821cd18a20a97cf52b8eb60f2dc4464e3faae3c0940bb2e97e04",
-      "src/render/scenes/village/NativeCityFightInputController.ts": "13af5f8ab1691af64e942d005e3c09f7724b2b097880471d99ff423008417854",
-      "src/render/art/FighterFightSkin.ts": "92f107f297a4343046222dd37c253ddebb0a04806e1a855690d5f65c0986ce67",
       "src/render/effects/NativeCityFightFeel.ts": "f8dd8d864838c309d300b3aa018ab7f221af319cc5606401a31418d64815f3eb",
-      "src/render/effects/CombatPresentation.ts": "5bfe4d824c650a0b45ba700616b75002945f2888bd8f2c9b552723d9a478d6d4",
-      "src/sim/cityFight/NativeCityLupinSwing.ts": "c0f055db1f00e99ed43634be609d1831df90a353fad5fbc501e46a0ee2baaac3",
-      "src/sim/cityFight/NativeCityFight.ts": "0915b794b972175b7bcb0ff63d3e4fda6785d5bfe1163afde6d2f5def7309bb5",
-      "src/sim/cityFight/NativeCityFightContacts.ts": "452ceed93445880f45246c8a64a51b396df495cf216ba175626101aebc7249ea",
-      "src/sim/cityFight/NativeCityFightDefend.ts": "802080119ec3a6ceb79f55070df857991cf7e074bcd9698a5ceccb7307586918"
+      "src/render/effects/CombatPresentation.ts": "5bfe4d824c650a0b45ba700616b75002945f2888bd8f2c9b552723d9a478d6d4"
     },
     "generated": true
   }
