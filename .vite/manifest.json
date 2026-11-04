@@ -965,7 +965,7 @@
     ]
   },
   "contracts/ai-fighter/v1/example.fighter.json": {
-    "file": "assets/example.fighter-Bz-exq6f.json",
+    "file": "assets/example.fighter-OCFYqmYG.json",
     "src": "contracts/ai-fighter/v1/example.fighter.json"
   },
   "contracts/ai-fighter/validate.mjs": {
@@ -1034,7 +1034,7 @@
     ]
   },
   "docs.html": {
-    "file": "assets/docs-CF4OJqcB.js",
+    "file": "assets/docs-yq-caF8u.js",
     "name": "docs",
     "src": "docs.html",
     "isEntry": true,
@@ -1054,7 +1054,7 @@
       "assets/info-MB1OWjGx.css"
     ],
     "assets": [
-      "assets/example.fighter-Bz-exq6f.json"
+      "assets/example.fighter-OCFYqmYG.json"
     ]
   },
   "fighter.html": {
