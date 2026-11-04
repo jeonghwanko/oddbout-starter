@@ -1,0 +1,12 @@
+name = "oddbout-mcp-gateway"
+main = "index.mjs"
+compatibility_date = "2026-11-04"
+compatibility_flags = ["enable_request_signal"]
+workers_dev = true
+routes = [{ pattern = "mcp.oddbout.com/*", zone_name = "oddbout.com" }]
+
+# Test a workers.dev deployment before attaching a production route.
+[env.staging]
+name = "oddbout-mcp-gateway-staging"
+workers_dev = true
+routes = []

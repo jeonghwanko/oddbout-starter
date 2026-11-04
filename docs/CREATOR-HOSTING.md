@@ -54,6 +54,11 @@ Dot's default one-use sign-in links now target the Pages URL. The former
 
 ## Free validation service
 
+The MCP gateway can run independently on Cloudflare with Render retained as the
+origin fallback. Source, deployment prerequisites, DNSSEC migration and rollback:
+[MCP-GATEWAY](MCP-GATEWAY.md). Code availability alone does not indicate that DNS
+or the production route has been switched.
+
 Render service `ai-fighter-validator` (`srv-dbbohr8m7kps73flja7g`) uses the Free
 instance in Singapore, with no payment card added. It deploys the
 `main` branch. Auto-deploy is off; deploy reviewed commits
