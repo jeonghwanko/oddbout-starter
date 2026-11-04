@@ -34,3 +34,7 @@ Logos retain their owners' trademark rights. These assets identify the connected
 services; they do not imply endorsement.
 
 - `don.svg`: original lime coin with a D monogram for the DON service balance.
+- `sample-promo.mp4`: original 6-second, 1280×720 H.264 (yuv420p, no audio, `+faststart`) sponsor placeholder
+  that judges can upload in the demo, made 2026-11-05. ODDBOUT colors with "YOUR BRAND HERE" set in the bundled
+  Space Grotesk and DM Sans (OFL), rendered from authored HTML in Chrome and encoded with ffmpeg. No third-party
+  footage, audio or marks. It passes the server's MP4 check (`inspectCampaignMp4` in `api/commerce/campaign-media.mjs`).

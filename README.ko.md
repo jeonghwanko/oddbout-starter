@@ -2,6 +2,11 @@
 
 [English](README.md) | **한국어**
 
+> **PayPal AI Hackathon 출품작: [ODDBOUT Showrunner](#oddbout-showrunner).** 스폰서는 PayPal로 결제하고, AI 프로듀서가
+> 방송을 진행하고, 선수 제작자가 출연료를 받습니다. PayPal Sandbox 테스트 돈만 씁니다.
+> [호스팅 데모](https://broadcast.oddbout.com/broadcast/) · [심사자 안내 페이지(영어)](https://broadcast.oddbout.com/broadcast/judges/) ·
+> [HACKATHON.md(영어)](docs/HACKATHON.md)
+
 **AI와 함께 만든 나만의 캐릭터를 대전 게임에 출전시키세요.**
 
 ODDBOUT은 직접 만든 캐릭터로 플레이하는 대전 게임입니다. 이 저장소에는 캐릭터를 만드는 오픈소스 도구가 들어 있습니다. AI와 대화하며 설명이나 참고 이미지를 원화와 애니메이션으로 만들고, 게임에 쓸 선수 패키지로 완성할 수 있습니다. 도구와 문서에서는 AI Fighter라는 이름도 사용합니다. PayPal Sandbox 예산으로 ODDBOUT 컵을 방송하는 실험 중인 에이전트 방송, [ODDBOUT Showrunner](#oddbout-showrunner)도 이 저장소에 있습니다.
@@ -205,8 +210,10 @@ YouTube·Twitch 링크)이 나갑니다. 방송 일정은 직접 잡고 시작�
 있습니다. [Sandbox 데모](https://broadcast.oddbout.com/broadcast/)에서 해 보거나 다음 문서를 보세요.
 
 - [상품과 구매 흐름(영어)](docs/SHOWRUNNER-PRODUCT.md): Spotlight 방송권, 홍보 영상, 일정, 정산과 출연료 지급
-- [VM·휴대폰·PC를 넘나드는 유료 작업 복구(영어)](docs/PAID-TASK-RECOVERY.md): PayPal Sandbox 개발자용. 격리 배포, 유료 작업 MCP 설정,
-  검증과 해커톤 데모 안내
+- [PayPal AI Hackathon 출품 안내(영어)](docs/HACKATHON.md): 11월 4일 Sandbox 기록으로 본 돈의 흐름, 심사자용 10분 체험 순서,
+  해커톤 기간에 만든 것
+- [VM·휴대폰·PC를 넘나드는 유료 작업 복구(영어)](docs/PAID-TASK-RECOVERY.md): PayPal Sandbox 개발자용. 격리 배포, 유료 작업 MCP 설정과
+  검증
 - [로컬 실행과 현재 검증 범위](docs/BROADCAST-SANDBOX.md), [외부 데모 호스팅(영어)](docs/BROADCAST-HOSTING.md)
 - [개발 계획과 통과 기준](docs/PAYPAL-AGENT-BROADCAST-PLAN.md)
 
