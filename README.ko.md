@@ -196,9 +196,19 @@ npm run sprite:setup
 프로듀서는 결제하거나 예산을 승인할 수 없습니다. 그래픽 세션과 OBS가 있는 PC의 runner가 [Twitch Cup](https://github.com/jeonghwanko/oddbout-twitch-cup)
 경기장에서 컵을 치르고, 서버 원장은 같은 결과 보고를 한 번만 반영하므로 다시 보낸 보고로 두 번 청구되지 않습니다.
 
+상점에서는 Spotlight 방송권을 팝니다. 1~3시간 동안 컵이 이어지고, 한 시간에 두 번 있는 5분짜리 스폰서 시간에 내 홍보 영상(MP4나
+YouTube·Twitch 링크)이 나갑니다. 방송 일정은 직접 잡고 시작도 직접 누릅니다. 방송이 끝나면 PayPal과 정산을 맞춰 보고 선수 출연료
+지급을 승인합니다. 결제한 방송은 결제 탭을 닫거나 에이전트 연결이 끊기거나 서버가 다시 시작돼도 사라지지 않습니다. 자동 시작을
+승인해 두었다면 서버가 원래 결제를 확인하고 원래 프로듀서 세션을 시작하며, 다른 기기에서도 그 방송을 이어서 볼 수 있습니다.
+
 아직 개발 중입니다. PayPal Sandbox의 테스트 돈만 쓰고 실결제는 하지 않으며, Twitch 채널 검증이 생길 때까지 runner의 `--live`는 막혀
-있습니다. [Sandbox 데모](https://broadcast.oddbout.com/broadcast/)에서 해 보거나 [로컬 실행과 현재 검증 범위](docs/BROADCAST-SANDBOX.md),
-[외부 데모 호스팅(영어)](docs/BROADCAST-HOSTING.md), [개발 계획과 통과 기준](docs/PAYPAL-AGENT-BROADCAST-PLAN.md)을 보세요.
+있습니다. [Sandbox 데모](https://broadcast.oddbout.com/broadcast/)에서 해 보거나 다음 문서를 보세요.
+
+- [상품과 구매 흐름(영어)](docs/SHOWRUNNER-PRODUCT.md): Spotlight 방송권, 홍보 영상, 일정, 정산과 출연료 지급
+- [VM·휴대폰·PC를 넘나드는 유료 작업 복구(영어)](docs/PAID-TASK-RECOVERY.md): PayPal Sandbox 개발자용. 격리 배포, 유료 작업 MCP 설정,
+  검증과 해커톤 데모 안내
+- [로컬 실행과 현재 검증 범위](docs/BROADCAST-SANDBOX.md), [외부 데모 호스팅(영어)](docs/BROADCAST-HOSTING.md)
+- [개발 계획과 통과 기준](docs/PAYPAL-AGENT-BROADCAST-PLAN.md)
 
 ## 문제 제보와 기여
 
@@ -217,7 +227,7 @@ PR은 `main`으로 보내며, `test` 워크플로를 통과해야 머지됩니�
 | [실행 환경](docs/EXECUTION-HOST.md) · [미리보기 전달](docs/DELIVERY.md) | 계정 분리, 로컬 실행, 실제 결과 표시 |
 | [호스팅](docs/CREATOR-HOSTING.md) · [보안](SECURITY.md) | 배포와 보안 경계 |
 | [생성 호스트 되기](docs/GENERATION-HOST.md) | 내 Linux PC와 구독으로 내 선수를 만들고, 승인되면 다른 제작자의 신청도 만든다 |
-| [Showrunner 로컬 실행](docs/BROADCAST-SANDBOX.md) · [외부 데모(영어)](docs/BROADCAST-HOSTING.md) | 에이전트 방송: PayPal Sandbox 재화, AI 프로듀서, 컵 runner와 OBS |
+| [Showrunner 상품(영어)](docs/SHOWRUNNER-PRODUCT.md) · [유료 작업 복구(영어)](docs/PAID-TASK-RECOVERY.md) · [로컬 실행](docs/BROADCAST-SANDBOX.md) · [외부 데모(영어)](docs/BROADCAST-HOSTING.md) | 에이전트 방송: Spotlight 방송권, PayPal Sandbox 결제와 복구, AI 프로듀서, 컵 runner와 OBS |
 
 의존성 설치 후 로컬 개발 검사는 다음 명령으로 실행합니다.
 

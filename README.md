@@ -8,9 +8,6 @@ ODDBOUT is a fighting game where you play with a character you create. This repo
 
 [Play ODDBOUT](https://oddbout.com/fighter.html) · [Manage your fighters](https://oddbout.com/creator.html?lang=en) · [Site guide](https://oddbout.com/docs.html?lang=en) · [Creation guide](docs/START-HERE.md) · [Report a problem](https://github.com/jeonghwanko/oddbout-starter/issues)
 
-PayPal Sandbox developers: [Paid task recovery across VM, phone and PC](docs/PAID-TASK-RECOVERY.md)
-includes the isolated deployment, MCP setup, verification and hackathon demo guide.
-
 ## Install the Codex plugin
 
 Install the local custom plugin from this Git repository: [Codex installation guide](docs/LOCAL-PLUGIN.md#install-the-codex-skill-from-git). It adds the creation skill and reuses your existing ODDBOUT MCP. No directory approval or creator-kit ZIP is required. Login stays a separate user action.
@@ -209,10 +206,20 @@ whether to host the next cup, wait or stop; it cannot pay or approve a budget. A
 plays each cup in the [Twitch Cup](https://github.com/jeonghwanko/oddbout-twitch-cup) arena, and the server's ledger applies
 each result report once, so a resent report is not charged again.
 
+Its storefront sells Spotlight tickets: one to three hours of cups with your promotion, an MP4 or a YouTube or Twitch link,
+played in two five-minute sponsor breaks each hour. You schedule the broadcast and press Start yourself. When it ends, you
+check the settlement against PayPal and approve the fighters' appearance fees. A paid broadcast also outlives a closed checkout
+tab, a lost agent or a server restart: once you have approved its automatic start, the server verifies the original payment
+and starts the original producer session, and you can follow it from another device.
+
 It is still in development. It uses PayPal Sandbox test money only, never live payments, and the runner's `--live` mode stays
-blocked until Twitch channel verification exists. [Try the Sandbox demo](https://broadcast.oddbout.com/broadcast/), or see
-[local setup and current checks (Korean)](docs/BROADCAST-SANDBOX.md), [the hosted demo](docs/BROADCAST-HOSTING.md) and
-[the plan and acceptance gates (Korean)](docs/PAYPAL-AGENT-BROADCAST-PLAN.md).
+blocked until Twitch channel verification exists. [Try the Sandbox demo](https://broadcast.oddbout.com/broadcast/), or read:
+
+- [Product and purchase flow](docs/SHOWRUNNER-PRODUCT.md): Spotlight tickets, promotion media, scheduling, settlement and payouts
+- [Paid task recovery across VM, phone and PC](docs/PAID-TASK-RECOVERY.md): for PayPal Sandbox developers, the isolated
+  deployment, the paid-task MCP setup, verification and the hackathon demo guide
+- [Local setup and current checks (Korean)](docs/BROADCAST-SANDBOX.md) and [the hosted demo](docs/BROADCAST-HOSTING.md)
+- [The plan and acceptance gates (Korean)](docs/PAYPAL-AGENT-BROADCAST-PLAN.md)
 
 ## Help and contributions
 
@@ -232,7 +239,7 @@ strict type check of `api/`, `worker/`, `mcp/` and `scripts/`.
 | [Execution environment](docs/EXECUTION-HOST.md) · [Preview delivery](docs/DELIVERY.md) | Account isolation, local execution, and actual media display |
 | [Hosting](docs/CREATOR-HOSTING.md) · [Security](SECURITY.md) | Deployment and security boundaries |
 | [Generation host (Korean)](docs/GENERATION-HOST.md) | Make your own fighters on your own Linux PC and subscriptions, and, once approved, other creators' requests |
-| [Showrunner sandbox (Korean)](docs/BROADCAST-SANDBOX.md) · [Hosted demo](docs/BROADCAST-HOSTING.md) | Agent broadcasts: PayPal Sandbox credits, the AI producer, the cup runner and OBS |
+| [Showrunner product](docs/SHOWRUNNER-PRODUCT.md) · [Paid task recovery](docs/PAID-TASK-RECOVERY.md) · [Sandbox (Korean)](docs/BROADCAST-SANDBOX.md) · [Hosted demo](docs/BROADCAST-HOSTING.md) | Agent broadcasts: Spotlight tickets, PayPal Sandbox payments and their recovery, the AI producer, the cup runner and OBS |
 
 Local development checks, after installing dependencies:
 
