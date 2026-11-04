@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { Problem, sha256 } from '../api/http.mjs';
 import { pngHeader } from './file-input-probe.mjs';
 import { SOURCE_BUCKET, SOURCE_LIMIT, importVmPublicKey, sealVmGrant } from '../api/creator-source-crypto.mjs';
-import { LIBRARY_FILE_HOSTS as HOSTS } from './cloud/common.mjs';
+import { LIBRARY_FILE_HOSTS as HOSTS, UUID_ARG } from './cloud/common.mjs';
 /**
  * @typedef {import('./cloud/common.mjs').Identity} Identity
  * @typedef {import('./cloud/common.mjs').HostFile} HostFile
@@ -14,8 +14,9 @@ import { LIBRARY_FILE_HOSTS as HOSTS } from './cloud/common.mjs';
  * A row of af_creator_sources.
  * @typedef {{ id: string, owner_id: string, sha256: string, bytes: number, width: number, height: number, status: 'pending' | 'ready' }} SourceRow
  */
+// The ids are common.mjs's UUID_ARG (MCP 최적화 2026-11-05): zod's uuid() wrote its long pattern four times into /mcp's list. The same
+// 8-4-4-4-12 hex shape the API's own check takes (api/bytes.mjs UUID); the database and sealVmGrant check them again.
 
-const UUID = () => z.string().uuid();
 /** @param {SourceRow} row */
 const receipt = row => ({ sourceId: row.id, accountId: row.owner_id, bytes: row.bytes, sha256: row.sha256,
   width: row.width, height: row.height, status: row.status, persisted: row.status === 'ready', decoded: false, vmReceived: false });
@@ -109,12 +110,12 @@ export function registerCreatorSources({ register, fileSchema, identity, db, dow
   const service = creatorSourceService({ db, owner: identity?.owner, downloadFile, fetcher });
   register('store_creator_source', '제작 원본 비공개 보관',
     'Store an authorized original PNG privately for this account and VM creation. Use actual host file input and measured original size/hash. Reuse the same idempotency key for identical bytes, including an unknown result. No generation or publication.',
-    { file: fileSchema, expectedBytes: z.number().int().min(33).max(SOURCE_LIMIT), expectedSha256: z.string().regex(/^[a-f0-9]{64}$/), idempotencyKey: UUID() },
+    { file: fileSchema, expectedBytes: z.number().int().min(33).max(SOURCE_LIMIT), expectedSha256: z.string().regex(/^[a-f0-9]{64}$/), idempotencyKey: UUID_ARG() },
     args => service.save(args), { write: true, idempotent: true, files: ['file'], openWorld: true });
   register('get_creator_source', '제작 원본 상태', 'Read this account’s private original receipt. Does not prove VM delivery or display.',
-    { sourceId: UUID() }, ({ sourceId }) => service.get(sourceId));
+    { sourceId: UUID_ARG() }, ({ sourceId }) => service.get(sourceId));
   register('prepare_creator_source_download', 'VM 원본 전달 준비',
     'Authorize a five-minute download of your private original to the VM public request created in the user-selected workspace. Returns an encrypted grant, never a signed URL or login token. Pass its envelope as a file to dots:source receive on that same VM. Renew after expiry without regenerating or reuploading the source.',
-    { sourceId: UUID(), vmRequest: z.object({ version: z.literal(1), requestId: UUID(), publicKey: z.string().max(2048) }).strict() },
+    { sourceId: UUID_ARG(), vmRequest: z.object({ version: z.literal(1), requestId: UUID_ARG(), publicKey: z.string().max(2048) }).strict() },
     ({ sourceId, vmRequest }) => service.grant(sourceId, vmRequest), { write: true, idempotent: true });
 }

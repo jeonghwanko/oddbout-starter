@@ -479,6 +479,8 @@ test('MCP 점검: short UUID schemas without $schema; a cup entry waits for the 
   const handle = createCloudHandler({ db: dbFor(), arena });
   const listed = await (await handle(request('tools/list'))).json(), text = JSON.stringify(listed);
   assert.equal(text.includes('json-schema.org'), false);
+  // No tool keeps zod's own uuid() (the creator-source tools did until 2026-11-05).
+  assert.equal(text.includes('"format":"uuid"'), false);
   const uuid = listed.result.tools.find(t => t.name === 'enter_cup').inputSchema.properties.fighterId;
   assert.ok(uuid.pattern.length < 80, uuid.pattern);
   const entered = toolJson(await call(handle, 'enter_cup', { fighterId: crypto.randomUUID(), idempotencyKey: crypto.randomUUID() }));
@@ -721,8 +723,9 @@ test('the sign-in-first address lists no file-host tool and no OpenAI metadata, 
   // Without the arena and the hosted tools every one of them goes: 21 at /mcp, 13 here.
   const bare = ask(createCloudHandler({ db }));
   assert.deepEqual([(await toolsAt(SIGN_IN_RESOURCE, bare)).length, (await toolsAt(CLOUD_RESOURCE, bare)).length], [13, 21]);
-  // /mcp's list as it was before (sha256 of its tools at 219e35d1).
-  assert.equal(createHash('sha256').update(JSON.stringify(full)).digest('hex'), 'c537ac2231663683b14803446f36beac0a8e07fcd9aae1c8a98407510fedc30a');
+  // /mcp's list, to the byte (sha256 of its tools). Changed on purpose only once since 219e35d1 (c537ac22…): the creator-source tools' ids
+  // took the short UUID_ARG pattern (2026-11-05, −480 B; none of the tools ChatGPT's app review pins).
+  assert.equal(createHash('sha256').update(JSON.stringify(full)).digest('hex'), 'd807a06428d4a31bd99b09f9f7daa6f6197f92a67473711e5c663b31a2807b96');
   for (const tool of signIn) {
     const same = full.find(t => t.name === tool.name);
     assert.deepEqual([tool._meta, tool.securitySchemes], [undefined, undefined], tool.name);
