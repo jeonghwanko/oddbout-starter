@@ -4,7 +4,7 @@
 
 **AI와 함께 만든 나만의 캐릭터를 대전 게임에 출전시키세요.**
 
-ODDBOUT은 직접 만든 캐릭터로 플레이하는 대전 게임입니다. 이 저장소에는 캐릭터를 만드는 오픈소스 도구가 들어 있습니다. AI와 대화하며 설명이나 참고 이미지를 원화와 애니메이션으로 만들고, 게임에 쓸 선수 패키지로 완성할 수 있습니다. 도구와 문서에서는 AI Fighter라는 이름도 사용합니다.
+ODDBOUT은 직접 만든 캐릭터로 플레이하는 대전 게임입니다. 이 저장소에는 캐릭터를 만드는 오픈소스 도구가 들어 있습니다. AI와 대화하며 설명이나 참고 이미지를 원화와 애니메이션으로 만들고, 게임에 쓸 선수 패키지로 완성할 수 있습니다. 도구와 문서에서는 AI Fighter라는 이름도 사용합니다. PayPal Sandbox 예산으로 ODDBOUT 컵을 방송하는 실험 중인 에이전트 방송, [ODDBOUT Showrunner](#oddbout-showrunner)도 이 저장소에 있습니다.
 
 [게임하기](https://oddbout.com/fighter.html) · [내 선수 관리](https://oddbout.com/creator.html?lang=ko) · [사이트 가이드](https://oddbout.com/docs.html?lang=ko) · [제작 시작 안내](docs/START-HERE.md) · [문제 제보](https://github.com/jeonghwanko/oddbout-starter/issues)
 
@@ -12,7 +12,32 @@ ODDBOUT은 직접 만든 캐릭터로 플레이하는 대전 게임입니다. �
 
 이 Git 저장소에서 로컬 커스텀 플러그인을 설치할 수 있습니다: [설치 안내](docs/LOCAL-PLUGIN.md#install-the-codex-skill-from-git). 제작 스킬을 추가하고 기존 ODDBOUT MCP를 재사용합니다. 공개 디렉터리 심사나 creator-kit ZIP은 필요하지 않으며 로그인은 사용자가 별도로 진행합니다.
 
-## 플레이 미리보기
+## 영상으로 보기
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+[![ODDBOUT × Twitch Cup: 에이전트가 만들고, 채팅이 고르고, 생중계로 싸운다](https://img.youtube.com/vi/aLOsJlcQ2_c/maxresdefault.jpg)](https://youtu.be/aLOsJlcQ2_c)
+
+**[ODDBOUT × Twitch Cup](https://youtu.be/aLOsJlcQ2_c)** (2분 50초, 영어). 에이전트가 만들고, 채팅이 고르고, 생중계로 싸웁니다. Codex 에이전트가 ODDBOUT MCP·플러그인에 연결하고, Dots가 선수를 그려 움직이게 하고, oddbout.com이 검사해 등록하면, Twitch 시청자가 채팅에 `!join`을 입력해 4인 컵에 내보냅니다. 영상의 방송은 혼자 하는 리허설입니다.
+
+[컵 해 보기](https://oddbout.com/twitch.html) · [Twitch Cup 소스](https://github.com/jeonghwanko/oddbout-twitch-cup)
+
+</td>
+<td width="50%" valign="top">
+
+[![ODDBOUT Showrunner: AI 에이전트가 생방송으로 돈을 번다?](https://img.youtube.com/vi/-GeIlI4Cf9w/maxresdefault.jpg)](https://youtu.be/-GeIlI4Cf9w)
+
+**[ODDBOUT Showrunner](https://youtu.be/-GeIlI4Cf9w)** (1분 54초, 영어). AI 에이전트가 생방송으로 돈을 번다? 노트북이 닫히거나, 결제 탭이 돌아오지 않거나, 서버가 다시 시작돼도 유료 방송 작업이 이어져 결제를 잃지도 두 번 청구하지도 않는 흐름을 애니메이션 도표로 보여 줍니다.
+
+[PayPal Sandbox 데모 해 보기](https://broadcast.oddbout.com/broadcast/)(테스트 돈만 씀) · [Showrunner 소개](#oddbout-showrunner)
+
+</td>
+</tr>
+</table>
+
+### 플레이 영상
 
 [![ODDBOUT 대전 플레이: 경기장의 두 캐릭터](docs/media/oddbout-gameplay.gif)](docs/media/oddbout-gameplay.mp4)
 
@@ -164,6 +189,17 @@ npm run sprite:setup
 새 패키지는 동작을 다시 확인할 때까지 선수를 출전 전으로 돌립니다. 클라우드 `open_creator_homepage` 도구는 고정된 사이트 주소를 돌려줍니다.
 사이트에는 따로 로그인하고, 그 계정이 클라우드 `get_profile`과 같은지 확인하세요. 한 번 쓰는 로그인 링크를 만들지는 않습니다.
 
+## ODDBOUT Showrunner
+
+[`broadcast/`](broadcast)의 Showrunner는 정한 예산 안에서 ODDBOUT 컵을 방송으로 돌립니다. PayPal Sandbox로 재화를 충전하고
+세션과 예산을 승인하면, 선택형 AI 프로듀서가 자기 MCP로 그 승인 범위 안에서만 다음 컵 열기·대기·중지 중 하나를 고릅니다.
+프로듀서는 결제하거나 예산을 승인할 수 없습니다. 그래픽 세션과 OBS가 있는 PC의 runner가 [Twitch Cup](https://github.com/jeonghwanko/oddbout-twitch-cup)
+경기장에서 컵을 치르고, 서버 원장은 같은 결과 보고를 한 번만 반영하므로 다시 보낸 보고로 두 번 청구되지 않습니다.
+
+아직 개발 중입니다. PayPal Sandbox의 테스트 돈만 쓰고 실결제는 하지 않으며, Twitch 채널 검증이 생길 때까지 runner의 `--live`는 막혀
+있습니다. [Sandbox 데모](https://broadcast.oddbout.com/broadcast/)에서 해 보거나 [로컬 실행과 현재 검증 범위](docs/BROADCAST-SANDBOX.md),
+[외부 데모 호스팅(영어)](docs/BROADCAST-HOSTING.md), [개발 계획과 통과 기준](docs/PAYPAL-AGENT-BROADCAST-PLAN.md)을 보세요.
+
 ## 문제 제보와 기여
 
 설치·생성·로그인·등록·게임 이용 중 문제가 생기면 실패한 단계, 기대한 결과와 실제 결과, 오류 메시지, 도구 버전이나 커밋을 [이슈](https://github.com/jeonghwanko/oddbout-starter/issues)에 남겨주세요. 인증 정보와 비공개 파일은 제외합니다. 생성이나 업로드가 시간 초과된 경우에는 기존 요청과 결과물부터 확인한 뒤 재시도합니다.
@@ -181,6 +217,7 @@ PR은 `main`으로 보내며, `test` 워크플로를 통과해야 머지됩니�
 | [실행 환경](docs/EXECUTION-HOST.md) · [미리보기 전달](docs/DELIVERY.md) | 계정 분리, 로컬 실행, 실제 결과 표시 |
 | [호스팅](docs/CREATOR-HOSTING.md) · [보안](SECURITY.md) | 배포와 보안 경계 |
 | [생성 호스트 되기](docs/GENERATION-HOST.md) | 내 Linux PC와 구독으로 내 선수를 만들고, 승인되면 다른 제작자의 신청도 만든다 |
+| [Showrunner 로컬 실행](docs/BROADCAST-SANDBOX.md) · [외부 데모(영어)](docs/BROADCAST-HOSTING.md) | 에이전트 방송: PayPal Sandbox 재화, AI 프로듀서, 컵 runner와 OBS |
 
 의존성 설치 후 로컬 개발 검사는 다음 명령으로 실행합니다.
 

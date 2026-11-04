@@ -4,7 +4,7 @@
 
 **Create a fighter with AI. Bring your character into the arena.**
 
-ODDBOUT is a fighting game where you play with a character you create. This repository contains the open-source tools for making that character. Work with an AI assistant to turn a description or reference image into artwork, animations, and a fighter package for the game. The tools and docs also use the name AI Fighter.
+ODDBOUT is a fighting game where you play with a character you create. This repository contains the open-source tools for making that character. Work with an AI assistant to turn a description or reference image into artwork, animations, and a fighter package for the game. The tools and docs also use the name AI Fighter. It also holds [ODDBOUT Showrunner](#oddbout-showrunner), an experimental agent broadcast that runs ODDBOUT cups on a PayPal Sandbox budget.
 
 [Play ODDBOUT](https://oddbout.com/fighter.html) · [Manage your fighters](https://oddbout.com/creator.html?lang=en) · [Site guide](https://oddbout.com/docs.html?lang=en) · [Creation guide](docs/START-HERE.md) · [Report a problem](https://github.com/jeonghwanko/oddbout-starter/issues)
 
@@ -12,7 +12,32 @@ ODDBOUT is a fighting game where you play with a character you create. This repo
 
 Install the local custom plugin from this Git repository: [Codex installation guide](docs/LOCAL-PLUGIN.md#install-the-codex-skill-from-git). It adds the creation skill and reuses your existing ODDBOUT MCP. No directory approval or creator-kit ZIP is required. Login stays a separate user action.
 
-## Gameplay preview
+## Watch
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+[![ODDBOUT × Twitch Cup: built by agents, picked by chat, fought live](https://img.youtube.com/vi/aLOsJlcQ2_c/maxresdefault.jpg)](https://youtu.be/aLOsJlcQ2_c)
+
+**[ODDBOUT × Twitch Cup](https://youtu.be/aLOsJlcQ2_c)** (2:50). Built by agents, picked by chat, fought live: a Codex agent connects to ODDBOUT's MCP and plugin, Dots draws and animates the fighters, oddbout.com checks and registers them, and Twitch viewers send them into a four-fighter cup by typing `!join`. The stream shown is a solo rehearsal.
+
+[Try the cup](https://oddbout.com/twitch.html) · [Twitch Cup source](https://github.com/jeonghwanko/oddbout-twitch-cup)
+
+</td>
+<td width="50%" valign="top">
+
+[![ODDBOUT Showrunner: AI agents live-streaming and earning revenue?](https://img.youtube.com/vi/-GeIlI4Cf9w/maxresdefault.jpg)](https://youtu.be/-GeIlI4Cf9w)
+
+**[ODDBOUT Showrunner](https://youtu.be/-GeIlI4Cf9w)** (1:54). AI agents live-streaming and earning revenue? An animated walkthrough of paid agent broadcast work that keeps going when a laptop closes, a payment tab never returns or a server restarts, so a payment is neither lost nor charged twice.
+
+[Try the PayPal Sandbox demo](https://broadcast.oddbout.com/broadcast/) (test money only) · [About Showrunner](#oddbout-showrunner)
+
+</td>
+</tr>
+</table>
+
+### Gameplay clip
 
 [![ODDBOUT gameplay: two fighters in the arena](docs/media/oddbout-gameplay.gif)](docs/media/oddbout-gameplay.mp4)
 
@@ -173,6 +198,19 @@ motion reviews, final package approval and your registration request; the new pa
 until you check its motions again. The cloud `open_creator_homepage` tool returns a fixed website URL. Sign in separately
 on the website and check that its account matches cloud `get_profile`; it does not create a one-use sign-in link.
 
+## ODDBOUT Showrunner
+
+Showrunner, in [`broadcast/`](broadcast), runs ODDBOUT cups as a broadcast on a budget. You buy credits with PayPal Sandbox
+and approve a session and its budget. An optional AI producer then chooses, through its own MCP and only within that approval,
+whether to host the next cup, wait or stop; it cannot pay or approve a budget. A runner on a PC with a graphical session and OBS
+plays each cup in the [Twitch Cup](https://github.com/jeonghwanko/oddbout-twitch-cup) arena, and the server's ledger applies
+each result report once, so a resent report is not charged again.
+
+It is still in development. It uses PayPal Sandbox test money only, never live payments, and the runner's `--live` mode stays
+blocked until Twitch channel verification exists. [Try the Sandbox demo](https://broadcast.oddbout.com/broadcast/), or see
+[local setup and current checks (Korean)](docs/BROADCAST-SANDBOX.md), [the hosted demo](docs/BROADCAST-HOSTING.md) and
+[the plan and acceptance gates (Korean)](docs/PAYPAL-AGENT-BROADCAST-PLAN.md).
+
 ## Help and contributions
 
 If setup, generation, sign-in, registration, or gameplay fails, [open an issue](https://github.com/jeonghwanko/oddbout-starter/issues) with the failing step, expected and actual behavior, error message, and tool version or commit. Exclude credentials and private files. For generation or upload timeouts, check existing requests and outputs before retrying.
@@ -191,6 +229,7 @@ strict type check of `api/`, `worker/`, `mcp/` and `scripts/`.
 | [Execution environment](docs/EXECUTION-HOST.md) · [Preview delivery](docs/DELIVERY.md) | Account isolation, local execution, and actual media display |
 | [Hosting](docs/CREATOR-HOSTING.md) · [Security](SECURITY.md) | Deployment and security boundaries |
 | [Generation host (Korean)](docs/GENERATION-HOST.md) | Make your own fighters on your own Linux PC and subscriptions, and, once approved, other creators' requests |
+| [Showrunner sandbox (Korean)](docs/BROADCAST-SANDBOX.md) · [Hosted demo](docs/BROADCAST-HOSTING.md) | Agent broadcasts: PayPal Sandbox credits, the AI producer, the cup runner and OBS |
 
 Local development checks, after installing dependencies:
 
