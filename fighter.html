@@ -121,8 +121,8 @@
         flex: 0 0 48px;
         box-sizing: border-box;
         padding: 0 16px;
-        background: #071923;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+        /* 2026-11-04 메뉴 리뉴얼: 위 막대는 검은 단색 하나(빗금·선 없음) — 아래 하늘 바탕 화면과 선 없이 면으로 나뉜다. */
+        background: #141020;
       }
       .game-home {
         display: inline-flex;
@@ -185,7 +185,7 @@
       }
       html[data-boot-motion="reduce"] .boot-loading-ring { animation: none; }
     </style>
-  <script type="module" crossorigin src="/assets/fighter-BMqej8AD.js"></script>
+  <script type="module" crossorigin src="/assets/fighter-DYMQIM_j.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-B0Z9INg1.js">
   <link rel="modulepreload" crossorigin href="/assets/_oddbout-analytics-DfJ7iKZO.js">
   <link rel="modulepreload" crossorigin href="/assets/pseudo-B3ZLOM_E.js">
@@ -201,30 +201,29 @@
   <link rel="modulepreload" crossorigin href="/assets/localeLoader-Ds4pezaf.js">
   <link rel="modulepreload" crossorigin href="/assets/accountControl-D1V_Ykft.js">
   <link rel="modulepreload" crossorigin href="/assets/FighterIdentity-ByNvDHFC.js">
-  <link rel="modulepreload" crossorigin href="/assets/leagueContent-H9xsvncs.js">
   <link rel="modulepreload" crossorigin href="/assets/arenaRankings-BD8QJkW0.js">
   <link rel="modulepreload" crossorigin href="/assets/arena-bout-rules-TByrQP64.js">
   <link rel="modulepreload" crossorigin href="/assets/UtcTime-BFPbMiHs.js">
   <link rel="modulepreload" crossorigin href="/assets/rankedDuels-Bwy1dHfO.js">
   <link rel="modulepreload" crossorigin href="/assets/RuntimeOptions-Cc2HqYGT.js">
   <link rel="modulepreload" crossorigin href="/assets/PhaserTextureFamilies-C8vBSGBz.js">
-  <link rel="modulepreload" crossorigin href="/assets/UiFeedback-f-VZ05IF.js">
+  <link rel="modulepreload" crossorigin href="/assets/UiFeedback-BjwawHZZ.js">
   <link rel="modulepreload" crossorigin href="/assets/CityFighterIds-BLg6b4th.js">
   <link rel="modulepreload" crossorigin href="/assets/ArenaRoster-viIU018c.js">
   <link rel="modulepreload" crossorigin href="/assets/TwitchArenaBout-B1EudwAr.js">
   <link rel="modulepreload" crossorigin href="/assets/FighterCombat-k1htHgeg.js">
   <link rel="modulepreload" crossorigin href="/assets/arena-concept-runtime-BHN1CmLz.js">
   <link rel="modulepreload" crossorigin href="/assets/ArenaArtCatalog-lashfPc-.js">
-  <link rel="modulepreload" crossorigin href="/assets/ArenaGoldDropView-B1_2xwY_.js">
-  <link rel="modulepreload" crossorigin href="/assets/GameBoot-BObrSIGa.js">
-  <link rel="modulepreload" crossorigin href="/assets/ArenaLayout-CZv8r6G_.js">
+  <link rel="modulepreload" crossorigin href="/assets/ArenaGoldDropView-70PkZxgd.js">
+  <link rel="modulepreload" crossorigin href="/assets/GameBoot-CocjI5ZZ.js">
+  <link rel="modulepreload" crossorigin href="/assets/ArenaBracketPlate-Bh0fdoP-.js">
   <link rel="stylesheet" crossorigin href="/assets/accountControl-DJTesTWn.css">
   <link rel="stylesheet" crossorigin href="/assets/fighter-1IPMv0AM.css">
 </head>
   <body>
     <nav class="game-navigation">
-      <a id="fighter-home" class="game-home" href="./?lang=ko">
-        <span aria-hidden="true">←</span>
+      <!-- 2026-11-04 사용자: 로고를 눌러 경기 화면을 벗어나는 실수가 잦다 — 뒤로 화살표를 빼고, 홈페이지는 새 창에서 연다. -->
+      <a id="fighter-home" class="game-home" href="./?lang=ko" target="_blank" rel="noopener">
         <img class="game-logo" src="./art/ui/oddbout-logo.webp" alt="ODDBOUT" width="376" height="76" />
       </a>
     </nav>
@@ -256,6 +255,6 @@
       for (const type of ["keydown", "keyup"]) homeLink.addEventListener(type, event => event.stopPropagation());
       if (bootParams.get("motion") === "reduce") document.documentElement.dataset.bootMotion = "reduce";
     </script>
-    <script>(()=>{const p={"en":["assets/en-1aJG8dNp.js","assets/en-CH-W3Etd.js","assets/en-DB545Isa2.js","assets/en-Dlkc4kRO.js"],"ko":["assets/ko-C6wEs5Ld.js","assets/ko-CbqNJq7o2.js","assets/ko-DBcoIe0S.js"],"ja":["assets/en-Dlkc4kRO.js","assets/ja-A_vkFuGy2.js","assets/ja-CiPG3aq1.js","assets/ja-Ck6WZawn.js"]}[document.documentElement.lang];if(!p)return;for(const f of p){const l=document.createElement("link");l.rel="modulepreload";l.crossOrigin="";l.href="./"+f;document.head.append(l)}})()</script>
+    <script>(()=>{const p={"en":["assets/en-1aJG8dNp.js","assets/en-DY8Uuyes.js","assets/en-Dlkc4kRO.js"],"ko":["assets/ko-BhRdKfud.js","assets/ko-DBcoIe0S.js"],"ja":["assets/en-Dlkc4kRO.js","assets/ja-CiPG3aq1.js","assets/ja-zirDygU1.js"]}[document.documentElement.lang];if(!p)return;for(const f of p){const l=document.createElement("link");l.rel="modulepreload";l.crossOrigin="";l.href="./"+f;document.head.append(l)}})()</script>
   </body>
 </html>

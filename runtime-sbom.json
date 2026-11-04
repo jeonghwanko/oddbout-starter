@@ -55,49 +55,6 @@
     },
     {
       "type": "library",
-      "name": "pdfjs-dist",
-      "version": "6.3.289",
-      "scope": "required",
-      "purl": "pkg:npm/pdfjs-dist@6.3.289",
-      "licenses": [
-        {
-          "license": {
-            "id": "Apache-2.0"
-          }
-        },
-        {
-          "license": {
-            "id": "BSD-3-Clause"
-          }
-        }
-      ],
-      "properties": [
-        {
-          "name": "bundled-assets",
-          "value": "pdfjs-dist/cmaps/*.bcmap (Adobe CMaps; BSD-3-Clause)"
-        },
-        {
-          "name": "excluded-optional-dependencies",
-          "value": "@napi-rs/canvas (not browser bundled)"
-        }
-      ]
-    },
-    {
-      "type": "library",
-      "name": "three",
-      "version": "0.186.1",
-      "scope": "required",
-      "purl": "pkg:npm/three@0.186.1",
-      "licenses": [
-        {
-          "license": {
-            "id": "MIT"
-          }
-        }
-      ]
-    },
-    {
-      "type": "library",
       "name": "@supabase/supabase-js",
       "version": "2.117.3",
       "scope": "required",
@@ -236,14 +193,6 @@
     },
     {
       "ref": "pkg:npm/matter-js@0.20.0",
-      "dependsOn": []
-    },
-    {
-      "ref": "pkg:npm/pdfjs-dist@6.3.289",
-      "dependsOn": []
-    },
-    {
-      "ref": "pkg:npm/three@0.186.1",
       "dependsOn": []
     },
     {
