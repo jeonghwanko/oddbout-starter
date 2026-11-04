@@ -210,8 +210,9 @@ Cursor의 Grok Bot이 02:21Z에 로그인 먼저 주소로 연결한 뒤 토큰�
 - Supabase 주소는 계속 받는다. 이미 그 주소로 추가한 커넥터는 그대로 동작한다. 사용자가 새 주소로 전환해 달라고 요청하면, 호스트의 공식 편집 기능을 우선 사용한다.
   편집이 불가능하면 기존 OAuth 연결을 보존하고 사용자에게 대체 연결을 먼저 만들지, 이후 기존 항목을 제거할지 선택받는다. 새 주소의 `tools/list`와
   `get_profile`이 의도한 계정으로 성공하고 사용자가 기존 항목 제거도 명시적으로 요청한 경우에만 기존 커넥터를 제거한다.
-- 요청이 Render를 한 번 더 거친다. `mcp.oddbout.com`은 Render 무료 서버라 잠들 수 있다. 운영자 PC가 14분마다 깨운다. 본문 한도(64 KiB)는 함수와 같다.
-  게이트웨이는 응답 헤더를 30초, 스트림 전체를 160초까지 기다린다.
+- Render와 Cloudflare는 `worker/gateway-core.mjs`의 같은 중계 규칙을 쓴다. 운영 전환·DNSSEC 대기·예비 원본 확인은
+  [MCP-GATEWAY](MCP-GATEWAY.md)를 따른다. Worker route가 활성화되면 MCP 요청은 Supabase로 직접 가고, `/health`와 `/wake`는 Render로 간다.
+  Render는 잠들 수 있어 운영자 PC가 14분마다 깨운다. 본문 한도는 64 KiB다. 헤더는 45초, 스트림 전체는 160초까지 기다린다.
 - 사이트는 Grok 카드와 안내에서만 새 주소를 준다(게임 `ODDBOUT_MCP_GROK_SIGN_IN_URL`). grok.com과 Cursor의 Grok Bot이 이 카드를 쓴다. Claude·Codex·Gemini는
   Supabase 주소 그대로다. MCP TS SDK(1.32의 `selectResourceURL`)와 Gemini CLI는 `WWW-Authenticate`의 `resource_metadata`를 따라서 루트 문제를 겪지 않는다.
   그래서 Render 무료 서버를 거칠 까닭이 없다(적대적 리뷰 지적).

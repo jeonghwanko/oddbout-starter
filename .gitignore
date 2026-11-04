@@ -1,4 +1,5 @@
 node_modules/
+.wrangler/
 .oddbout-private/
 .oddbout-broadcast/
 deploy/broadcast-hosts.json
