@@ -39,7 +39,7 @@ export const STYLE_GUIDE = Object.freeze({
 
 /**
  * `identity` is null only on a signed-out call, which register lets reach the public tools alone: the account tools cast it.
- * `uploads`: whether this address lists the upload tools (only /mcp, 2026-11-05: common.mjs frontNext).
+ * `uploads`: whether this address lists the upload tools (all but the directory edition: common.mjs frontNext).
  * @param {{ register: Register, arena: Arena, db: any, identity: Identity | null, invoke: Invoke, recordAgent: RecordAgent, caller: string | null, directory?: boolean,
  *   uploads?: boolean }} options
  */
@@ -208,7 +208,7 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
     + 'Pass the package hash he watched (get_registered_fighter) and those motions. A new package returns him to production. '
     + 'He enters only with a front painting that passed ODDBOUT\'s check (one character, whole, facing the viewer straight on): read '
     + 'get_registered_fighter first and tell the user what its front lacks '
-    // Without the upload tools (2026-11-05: /signin; the directory edition has its own text) it names none of them.
+    // Without the upload tools it names none of them (the directory edition has its own text).
     + (uploads ? '(a new painting goes in through prepare_profile_set, upload_profile_set_asset and submit_profile_set). '
       : '(this connector cannot upload one: the user uploads a new painting from the ODDBOUT app in ChatGPT or with the creator kit). ')
     + 'profile-set-required: next says what to do.',

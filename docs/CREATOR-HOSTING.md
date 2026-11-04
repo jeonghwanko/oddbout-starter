@@ -94,9 +94,12 @@ function as `x-request-id` and returns it to the client in the same header. The 
 calls, so an `api-failure` line from a tool's call has the same `requestId`. Each call has a 25-second budget from its
 arrival (`CALL_BUDGET_MS`): `enter_cup` and `get_hosted_fighter` stop waiting by then and say what to read next, and every
 database or Storage call ends by 15 seconds (`timedFetch`). The gateway waits up to 45 seconds for the answer's headers.
-Since 2026-11-05 every MCP request (a POST at an MCP address, whatever its outcome) also writes one `{"mcp":1,…}` line to
-stdout: `edition`, JSON-RPC `method`, `tool` (tools/call only), `compact` (ChatGPT's short text), the HTTP `status`, the
-answer's `bytes` and `ms`. It names no token, account, argument or URL; it is how the hosts' polling and result sizes are read.
+Since 2026-11-05 every MCP request (a POST at an MCP address — `/mcp`, `/signin` or `/claude` — whatever its outcome, a
+refused browser origin's 403 included) also writes one `{"mcp":1,…}` line to stdout: `route` (`mcp`, `signin` or `claude`:
+/mcp and /signin are both the full edition), `edition`, JSON-RPC `method` (null when the body was refused or never read),
+`tool` (tools/call only), `compact` (ChatGPT's short text, told from the body, so ChatGPT's refused sign-ins are tagged too),
+the HTTP `status`, the answer's `bytes` and `ms`. A POST to an unknown path (404) is at no MCP address and writes none. It
+names no token, account, argument or URL; it is how the hosts' polling and result sizes are read.
 
 Startup runs the real child-process WebP validator against the existing
 geometric test fixture. Health is available only after it passes. No fighter

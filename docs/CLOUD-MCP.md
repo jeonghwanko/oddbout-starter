@@ -249,7 +249,10 @@ Anthropic의 Claude 커넥터 디렉터리에 내는 주소는 `https://mcp.oddb
   메타데이터의 `resource_documentation`은 Claude 연결 안내 `https://oddbout.com/cloud-plugin/claude.html`(`DIRECTORY_DOCUMENTATION`)이다.
 - 게이트웨이는 `mcp.oddbout.com` 호스트에서만 `/claude`, `/claude/.well-known/oauth-protected-resource`, `/.well-known/oauth-protected-resource/claude`를
   함수의 `/claude`로 넘기고 `x-oddbout-public-resource: https://mcp.oddbout.com/claude`를 붙인다. 함수는 이 값일 때만 그 주소를 광고한다. 로그인 먼저 주소와 같은 방식이다.
-- `/mcp`의 도구·title·지침은 바뀌지 않는다(시험이 `/mcp` 55종과 그 목록의 sha256을 본다). `/signin`은 아래 [로그인 먼저 주소의 도구](#로그인-먼저-주소의-도구-2026-11-05).
+- `/mcp`의 title·설명·지침은 그대로다(시험이 `/mcp` 55종과 그 목록의 sha256을 본다). 2026-11-05에 바뀐 것은 하나다: 제작 원본 도구 셋
+  (`store_creator_source`·`get_creator_source`·`prepare_creator_source_download`)의 id 입력 스키마가 zod `uuid()`(`format: uuid`와 168자 패턴)에서
+  `UUID_ARG`의 짧은 패턴으로 바뀌어 목록이 480바이트 줄었다(59,470 → 58,990 B). ChatGPT 앱 심사가 고정한 도구는 아니다.
+  `/signin`은 아래 [로그인 먼저 주소의 도구](#로그인-먼저-주소의-도구-2026-11-05).
 - 연결을 주소에 묶는다(2026-11-01, `20261101150000_ai_fighter_mcp_session_edition.sql`). Supabase Auth는 클라이언트가 요청한 `resource`(RFC 8707)를
   토큰에 넣지 않는다. `aud`는 토큰 훅의 고정 목록이고, 훅 입력에도 요청 주소가 없다. 그래서 토큰만으로는 어느 주소용인지 알 수 없다.
   - OAuth 세션의 첫 로그인 호출이 그 세션을 그 판에 묶는다(`af_mcp_session_editions`): `/mcp`·`/signin`은 `full`, `/claude`는 `directory`다.
@@ -273,21 +276,15 @@ Anthropic의 Claude 커넥터 디렉터리에 내는 주소는 `https://mcp.oddb
 
 ## 로그인 먼저 주소의 도구 (2026-11-05)
 
-`/signin`(Grok·Cursor·Gemini CLI·터미널 에이전트)에는 OpenAI 파일 호스트가 없다. 파일 인자는 그 호스트의 주소만 받으므로(`allowedFileUrl`) 파일 도구는
-거기서 한 번도 성공할 수 없었다. 그래서 이 주소는 `FILE_HOST_TOOLS` 여덟 종(`prepare_fighter_registration`·`upload_fighter_asset`·`prepare_profile_set`·
-`upload_profile_set_asset`·`verify_creator_file_input`·`store_creator_source`·`get_creator_source`·`prepare_creator_source_download`)을 등록하지 않는다.
-대결장 키와 호스팅 생성이 있으면 `/mcp` 55종, `/signin` 47종이다(둘 다 없으면 21종과 13종). 부르면 알 수 없는 도구 오류다.
+`/signin`은 `/mcp`와 같은 것을 등록한다. 도구, `_meta`(`securitySchemes`·`openai/fileParams`·`openai/profile`), 맨 위 `securitySchemes`, 서버 지침과
+도구가 답하는 문장까지 바이트로 같다(시험이 대결장 키·호스팅 생성이 있을 때 55종과 없을 때 21종에서 `tools/list`·`initialize`를 비교한다).
 
-- 판(`edition`)은 그대로 `full`이다. 세션이 판에 묶이므로(`af_mcp_session_editions`) 새 판을 만들지 않고, 요청 경로(`signInFirst`)로 정한다.
-  Supabase 주소의 `/signin`도 같다.
-- OpenAI 앱의 도구 메타데이터(`_meta`의 `securitySchemes`·`openai/fileParams`·`openai/profile`, 맨 위 `securitySchemes`)를 싣지 않는다. 남은 도구의
-  title·설명·입력 스키마·annotation·`outputSchema`는 `/mcp`와 같다. 설명은 `enter_fighter` 하나만 다르다: 뺀 프로필 세트 업로드 도구 대신, 이 커넥터로는
-  올릴 수 없고 ChatGPT의 ODDBOUT 앱이나 제작 키트에서 올린다고 적는다. 한국어 상태 이름은 그대로다.
-- 서버 지침, `get_fighter_spec`(overview의 `registration.assetUpload: 'none'`, `profileSet.order`, creation 단계), `check_creation_readiness`
-  (`delivery.inputCapability: 'none'`, `nextAction`), `get_registered_fighter`·`enter_fighter`의 `next`(`frontNext`의 `uploads`), 호스팅 작업의 `next`도
-  뺀 도구를 부르지 않고 같은 문장(`NO_FILES`)으로 파일이 어디로 가는지 말한다. `request_hosted_fighter`는 남는다(`pictureUploads`). 스키마는 그대로이고
-  `_meta`만 빠진다.
-- `directory`는 이제 "한국어 상태 이름을 빼는 디렉터리판"만 뜻하고, 업로드 도구가 없다는 것은 `uploads`(= `/mcp`일 때만 참)가 따로 말한다.
+- 까닭: 위 연결 안내가 Codex를 `/signin`에 붙이고, Codex의 네이티브 파일 입력은 OpenAI 파일 호스트를 거쳐 업로드 도구에 닿는다(아래 2026-10-25
+  파일 전달 재현, `website/cloud-plugin/review-20261025/native-registration-evidence.json`). #328이 이 주소에서 파일 도구 여덟 종과 OpenAI 메타데이터를
+  뺐다가 그 길을 막을 수 있어 되돌렸다(MCP 리뷰 2026-11-05).
+- 판(`edition`)은 그대로 `full`이다. 세션이 판에 묶이므로(`af_mcp_session_editions`) 새 판을 만들지 않는다. Supabase 주소의 `/signin`도 같다.
+- 업로드 도구가 없는 주소는 `/claude`뿐이다. 그 판의 문장은 `uploads`(디렉터리판이 아닐 때 참)가 거짓일 때의 문장이다(`frontNext`, `NO_FILES`).
+  `directory`는 "한국어 상태 이름을 빼는 디렉터리판"을 뜻한다.
 
 ## 사용 흐름
 
@@ -414,7 +411,7 @@ ODDBOUT의 생성 워커가 사용자의 말(과 그림 1~2장)로 선수를 만
 | 도구 | 하는 일 |
 | --- | --- |
 | `request_hosted_fighter` | 설명·언어와 선택 그림 둘(`picture`·`secondPicture` 파일 인자, 또는 올리기 표로 넣은 `pictureUploads`, 합쳐 둘까지. 권리 확인 `rightsConfirmed`)로 신청. `delegate: true`는 맡기기다(아래). 같은 계정·`idempotencyKey`로 **이미 저장된 작업**이 있으면 그림을 다시 올리지 않고 반환한다. 결과가 불명확할 때는 조회 도구로 복구한다 |
-| `get_hosted_fighter` | 작업 상태, 외형 후보 둘·동작 미리보기의 서명 URL(10분), 프로필 초안, `next`. `jobId` 또는 원래 `idempotencyKey` 하나로 조회하며 둘 다 없으면 최근 다섯 신청, 열림 여부, 보유 토큰(`tokens`: granted·spent·balance). 최근 목록의 각 작업은 요약(상태·진행률·설명·이름·시각·그 작업이 쓴 토큰 `tokens`·`siteUrl`)이고, 자세한 내용은 `jobId`로 읽는다(2026-11-05). 키 조회는 새 신청·업로드를 하지 않는다. `waitSeconds`(25초까지)는 찾은 작업의 상태를 기다린다. 지켜보기만 하면 되는 단계(대기·외형·동작·포장·검사 중)에서는 짧은 답(`watch: true`: 상태·진행률·대기 순서, 이번 대기에 바뀐 것 `changed`, 새로 온 그림 하나의 URL `picture`, 동작 중이면 그림 이름 목록 `pictures`)을 주고, 고를 때·끝났을 때와 `waitSeconds` 없는 조회는 전체를 준다 |
+| `get_hosted_fighter` | 작업 상태, 외형 후보 둘·동작 미리보기의 서명 URL(10분), 프로필 초안, `next`. `jobId` 또는 원래 `idempotencyKey` 하나로 조회하며 둘 다 없으면 최근 다섯 신청, 열림 여부, 보유 토큰(`tokens`: granted·spent·balance). 최근 목록의 각 작업은 요약(상태·진행률·설명·이름·시각·그 작업이 쓴 토큰 `tokens`·`siteUrl`)이고, 자세한 내용은 `jobId`로 읽는다(2026-11-05). 키 조회는 새 신청·업로드를 하지 않는다. `waitSeconds`(25초까지)는 찾은 작업의 상태를 기다린다. `next`가 지켜보라고만 하는 단계에서는 짧은 답(`watch: true`)을 준다: 차례를 기다리는 줄(`queue.reason` `turn`)과 외형을 그리는 중, 동작, 포장(`submitting`), 서버 검사 중인 제출. 같은 대기라도 생성 용량(`usage`)·운영 중지(`paused`)·커뮤니티 호스트를 기다리는 작업, 고를 때(`appearance_ready`·`motion_ready`), 사람 확인, 끝났을 때와 `waitSeconds` 없는 조회는 전체를 준다. 짧은 답은 상태·진행률·대기 순서·제출 단계, 이번 대기에 바뀐 것 `changed`(`status`·`progress`·`submission`·`pictures`), 동작 중이면 대기 시작 90초 전부터 더하거나 바뀐 그림 모두 `pictures`(최신 먼저 12장까지, 넘치면 `more`. 각각 `kind`·`clip`·`name`·`state`·`url`·`new` — 이번 대기에 왔으면 `new: true`. 한 이벤트에 여러 장이 와도, 두 조회 사이에 여러 번 와도 다 든다), 있는 그림의 이름 목록 `made`, 맡기기면 ODDBOUT이 고른 외형 `look`(`choice`·`url`)이다(MCP 리뷰 2026-11-05) |
 | `choose_hosted_look` | 후보 `a`·`b` 고르기, 또는 한 문장 수정(두 장을 다시 그린다) |
 | `revise_hosted_motion` | 동작 하나를 한 문장으로 다시. 나머지 동작은 그대로 |
 | `register_hosted_fighter` | 사용자가 동작을 승인한 뒤 등록. 프로필은 워커 초안 위에 사용자가 바꾼 칸만 얹는다(언어별 이름·대사는 칸별로). 다른 선수와 같은 서버 검사를 거친다 |
@@ -426,7 +423,9 @@ ODDBOUT의 생성 워커가 사용자의 말(과 그림 1~2장)로 선수를 만
 ### 그림 올리기 표 (2026-11-01)
 
 ChatGPT 밖의 에이전트(Grok·Claude·Gemini CLI·Codex CLI·Cursor의 Grok Bot)는 파일 인자가 없다. 그래서 대화에서 만든 그림이나 사용자가 그린 그림을
-표로 보낸다. 그림은 원화의 참고다. 추천 조합(GPT 원화 + Grok 영상)은 그대로다. 호스팅 생성에 딸린 도구라 Claude 디렉터리판(`/claude`)에는 없다.
+표로 보낸다. 다만 2026-10-25 기록(아래 "보관 안내·안전 표시·파일 전달 재현")은 로컬 Codex의 네이티브 파일 입력이 OpenAI 파일 호스트를 거쳐 업로드 도구에
+닿았다고 적는다. 어느 Codex 표면(CLI·앱·IDE)이 그 입력을 갖는지는 기록이 가리지 않으므로 두 길이 다 있다: 파일 입력이 있으면 파일 인자, 없으면 표.
+그림은 원화의 참고다. 추천 조합(GPT 원화 + Grok 영상)은 그대로다. 호스팅 생성에 딸린 도구라 Claude 디렉터리판(`/claude`)에는 없다.
 
 - `start_picture_upload`가 표를 만든다(`af_generation_upload_tickets`, 마이그레이션 `20261101100000`). 표 하나는 30분 동안 그림 둘을 받는다.
   표를 주기 전에 신청의 검사를 먼저 한다(3차 리뷰 2026-11-01): MCP가 서비스 스위치(`generations/capabilities`)를 보고, API가 에이전트가 넘긴
@@ -510,10 +509,10 @@ Grok(grok.com, Cursor의 Grok Bot)이 받는 안내만으로 호스팅 생성까
 
 두 번째 대화(같은 날 10:01~10:24Z, 작업 `3a4e8a73`, #317 배포 뒤): 봇이 외형 두 장을 붙이고 채팅의 A/B 카드로 받은 답을 `choose_hosted_look`으로
 넘겼다(10:07Z). 동작 중에는 봇의 루틴이 5분마다 확인했고, 사용자가 "25초 간격으로" 하라고 하자 `waitSeconds`로 이어 읽으며 걷기·달리기 시트와
-표정을 붙이고 진행률을 표로 올렸다. 그래서 일하는 단계(대기·외형·동작·포장·검사)의 `next`와 서버 안내문이 "사용자가 보는 동안은 `waitSeconds 25`로
+표정을 붙이고 진행률을 표로 올렸다. 그래서 일하는 단계(차례를 기다리는 대기·외형·동작·포장·검사. 생성 용량·운영 중지·호스트를 기다리면 나중에 확인)의 `next`와 서버 안내문이 "사용자가 보는 동안은 `waitSeconds 25`로
 이어 읽고 바뀐 것(새 그림·진행률·대기 순번)을 바로 알리라, 떠나면 예약 확인으로 바뀐 것만"이라고 적는다. 기다림은 상태·진행률·제출 상태와, 동작 중이면
-그림 이벤트(`drafts`·`side`·`expressions`)의 마지막 시각을 보다가 바뀌면 바로 돌아온다(전에는 단계가 끝날 때만). 워커의 임대 연장(빈 진행 호출)은
-아무것도 바꾸지 않아 기다림을 끝내지 않는다. 진행률은 동작 단계에서만 오른다(5·25·45·65·80, 완성 100). 외형 단계는 완성 전까지 0이다.
+그림을 실은 마지막 이벤트(모든 `drafts`, 고른 `side`·`expressions`)를 보다가 바뀌면 바로 돌아온다(전에는 단계가 끝날 때만). 워커의 임대 연장(빈 진행 호출)과
+그림 없는 이벤트(옆모습 테이크의 통과·실패, 실패한 표정)는 아무것도 바꾸지 않아 기다림을 끝내지 않는다(MCP 리뷰 2026-11-05). 진행률은 동작 단계에서만 오른다(5·25·45·65·80, 완성 100). 외형 단계는 완성 전까지 0이다.
 같은 대화에서 봇이 첫 동작 수정이 만들어지는 동안 두 번째 수정을 보내 `generation-state`만 받았다. 이제 `choose_hosted_look`·`revise_hosted_motion`의
 그 거절에는 "수정은 한 번에 하나, 동작이 다시 준비되면(`motion_ready`) 보내라"는 `next`가 붙는다.
 

@@ -40,8 +40,8 @@ const HOSTED_ROUTE = 'A user without a workspace (the creator kit and a generati
  * `identity` is null only on a signed-out call, which register lets reach the public tools alone: the account tools cast it.
  * `hosted`: whether this connection lists the hosted generation tools (hosted-tools.mjs), which the creation guide and the readiness
  * check then name (Grok 점검 2026-11-03: an agent without a workspace read only the workspace route there). `directory`: the directory
- * edition, whose next keeps the Korean state names out (common.mjs frontNext). `uploads`: whether this address lists the upload tools (only
- * /mcp, 2026-11-05); without them the guide, the readiness check and next name none and say where files go instead (NO_FILES).
+ * edition, whose next keeps the Korean state names out (common.mjs frontNext). `uploads`: whether this address lists the upload tools (all
+ * but the directory edition); without them the guide, the readiness check and next name none and say where files go instead (NO_FILES).
  * @param {{ register: Register, db: any, identity: Identity | null, invoke: Invoke, fetcher: typeof fetch, recordAgent: RecordAgent, hosted?: boolean,
  *   directory?: boolean, uploads?: boolean }} options
  */

@@ -5,7 +5,7 @@ import { createHandler } from '../api/handler.mjs';
 import { Problem, UUID, bearerToken, failureDetail, readBody } from '../api/http.mjs';
 import { registerFileInputProbe } from './file-input-probe.mjs';
 import { registerCreatorSources } from './creator-sources.mjs';
-import { AUTH, CALL_BUDGET_MS, FILE, NO_FILES, READ, downloadHostFile, output } from './cloud/common.mjs';
+import { AUTH, CALL_BUDGET_MS, FILE, READ, downloadHostFile, output } from './cloud/common.mjs';
 import { registerRegistrationTools } from './cloud/registration-tools.mjs';
 import { registerPackagingPreparation } from './cloud/packaging-tools.mjs';
 import { registerAgentTools } from './cloud/agent-tools.mjs';
@@ -46,12 +46,6 @@ export function validCloudAudience(aud) {
  */
 export const PUBLIC_TOOLS = new Set(['get_fighter_spec', 'get_style_guide', 'list_fighters', 'get_rankings', 'get_fighter_record', 'get_cup', 'read_bout',
   'get_fighter_story', 'get_world', 'list_generation_hosts', 'prepare_fighter_packaging']);
-/**
- * The tools that take files only OpenAI's file host gives (allowedFileUrl: ChatGPT's attachments and Library), or that only report on them.
- * Only /mcp, which ChatGPT's app uses, lists them (2026-11-05): at the sign-in-first address (Grok, Cursor, Gemini CLI) none could succeed.
- */
-export const FILE_HOST_TOOLS = new Set(['prepare_fighter_registration', 'upload_fighter_asset', 'prepare_profile_set', 'upload_profile_set_asset',
-  'verify_creator_file_input', 'store_creator_source', 'get_creator_source', 'prepare_creator_source_download']);
 /** Public tools that spend an arena budget: a signed-in caller's call counts on his owner (MCP 점검, 2026-10-27). */
 export const OWNER_BUDGET_TOOLS = new Set(['read_bout']);
 /**
@@ -151,7 +145,10 @@ export async function authenticateCloud(db, request, now = Date.now, edition = '
  * the request's `signal` (aborted when the client goes away) and the `deadline` its answer is due by (CALL_BUDGET_MS from its arrival).
  * @typedef {{ requestId?: string, protocol?: string | null, signal?: AbortSignal, deadline?: number }} Call
  */
-/** One MCP request as its log line names it (createCloudHandler). @typedef {{ edition: 'full' | 'directory', method: string | null, tool: string | null, compact: boolean }} RequestLine */
+/**
+ * One MCP request as its log line names it (createCloudHandler): `route`, the address it came to (/mcp and /signin are both the full edition).
+ * @typedef {{ route: 'mcp' | 'signin' | 'claude', edition: 'full' | 'directory', method: string | null, tool: string | null, compact: boolean }} RequestLine
+ */
 
 /**
  * One JSON line per tool call (MCP 점검 2026-11-03: a failed call left no trace, and nothing said which tools agents use or which protocol
@@ -195,23 +192,16 @@ export function scopedDatabase(db, owner) {
 const LIST_CACHE = { ttlMs: 300_000, cacheScope: 'private' };
 
 /**
- * `signInFirst`: the request came to the sign-in-first address (`/signin`). Its sessions are the full edition's, so it is no edition of its
- * own; it only lists no file-host tools and no OpenAI tool metadata.
+ * The full edition serves /mcp and /signin alike: the same tools, metadata and texts (MCP 리뷰 2026-11-05). Codex connects at /signin
+ * (docs/CLOUD-MCP.md) and its native file input reaches the upload tools through OpenAI's file hosts, so /signin keeps them.
  * @param {{ db: any, identity: Identity | null, fetcher?: typeof fetch, arena?: Arena | null, hosted?: Hosted | null,
- *   host?: { compact?: boolean, caller?: string | null }, edition?: 'full' | 'directory', call?: Call, signInFirst?: boolean }} options
+ *   host?: { compact?: boolean, caller?: string | null }, edition?: 'full' | 'directory', call?: Call }} options
  */
-export function cloudServer({ db, identity, fetcher = fetch, arena = null, hosted = null, host = {}, edition = 'full', call = {}, signInFirst = false }) {
+export function cloudServer({ db, identity, fetcher = fetch, arena = null, hosted = null, host = {}, edition = 'full', call = {} }) {
   const directory = edition === 'directory';
-  // Only /mcp serves ChatGPT's app (2026-11-05): its host attaches the files the upload tools take, and reads OpenAI's tool metadata
-  // (securitySchemes, openai/fileParams, openai/profile). /signin and the directory edition list neither, and their texts name no upload tool.
-  const fileHost = !directory && !signInFirst, openaiMeta = fileHost;
-  /** What the instructions say of files: how to pass them where there is a file host, else where they go. */
-  const fileWords = fileHost ? 'Use host file attachments for fighter.json and WebP assets. '
-    + 'When file inputs are exposed as paths, pass existing absolute workspace paths; the host uploads them. '
-    + 'For existing Library or Page files use the host’s supported file materialization or original-byte read tools and verify '
-    + 'size and SHA-256 before submission. Never substitute rendered previews or invent file IDs, URLs or hashes. '
-    + 'A VM direct-network denial does not establish failure of the native connector; '
-    + 'use the supported host file route without bypassing network policy. ' : `${NO_FILES} `;
+  // Hosts with OpenAI's file host (ChatGPT, Codex) attach the files the upload tools take, and read OpenAI's tool metadata (securitySchemes,
+  // openai/fileParams, openai/profile). The directory edition lists neither, and its texts name no upload tool (`uploads`).
+  const fileHost = !directory, openaiMeta = fileHost;
   const server = new McpServer({ name: 'oddbout-cloud', version: '1.0.0' }, {
     instructions: directory ? DIRECTORY_INSTRUCTIONS : (hosted ? HOSTED_INSTRUCTIONS : '') + 'For creation in the user’s workspace, use the user’s own generation account. '
       + 'Verify get_profile matches the intended registration account, especially after adding or switching connected accounts. '
@@ -220,7 +210,12 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
       + 'generation and display still require actual host evidence. '
       + 'Do not run local stdio login or ask for a PC to authenticate cloud registration. Do not generate merely to test access. '
       + 'Require the user’s final registration request and preserve motion review boundaries. '
-      + fileWords + 'Never ask for tokens or callback URLs in chat. '
+      + 'Use host file attachments for fighter.json and WebP assets. '
+      + 'When file inputs are exposed as paths, pass existing absolute workspace paths; the host uploads them. '
+      + 'For existing Library or Page files use the host’s supported file materialization or original-byte read tools and verify '
+      + 'size and SHA-256 before submission. Never substitute rendered previews or invent file IDs, URLs or hashes. '
+      + 'A VM direct-network denial does not establish failure of the native connector; '
+      + 'use the supported host file route without bypassing network policy. Never ask for tokens or callback URLs in chat. '
       + 'A refused ODDBOUT sign-in (401 invalid_token) states its reason: tell the user that reason; it is not an outage, and when it asks '
       + 'to reconnect ODDBOUT in the connector settings, scheduled retries cannot fix it. Only a 503 asks for a retry. '
       + 'A queued submission is not registered; inspect its status. Reuse one UUID for retries of identical bytes.',
@@ -289,15 +284,12 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
       return diagnostic ? { ...result, isError: false } : result;
     });
   };
-  // The directory edition registers only its tools, under their titles there; any other is unknown to it, not refused. Without a file
-  // host the file-host tools are unknown the same way.
+  // The directory edition registers only its tools, under their titles there; any other is unknown to it, not refused.
   /** @type {Register} */
   const register = directory ? (name, title, description, inputSchema, run, options) => {
     const directoryTitle = DIRECTORY_TITLES.get(name);
     if (directoryTitle) registerTool(name, directoryTitle, DIRECTORY_DESCRIPTIONS.get(name) ?? description, inputSchema, run, options);
-  } : fileHost ? registerTool : (name, title, description, inputSchema, run, options) => {
-    if (!FILE_HOST_TOOLS.has(name)) registerTool(name, title, description, inputSchema, run, options);
-  };
+  } : registerTool;
   registerRegistrationTools({ register, db, identity, invoke, fetcher, recordAgent, hosted: Boolean(hosted) && !directory, directory, uploads: fileHost });
   registerPackagingPreparation({ register, invoke });
   registerProfileSetTools({ register, db, identity, invoke, fetcher });
@@ -365,7 +357,7 @@ async function hostOf(body) {
 
 /**
  * The tool list as hosts read it. The SDK serializes custom auth metadata only in _meta: publish the current host's top-level contract too
- * (OpenAI's, so only where the tools carry it: /mcp).
+ * (OpenAI's, so only where the tools carry it: the full edition, /mcp and /signin).
  * Every schema names its JSON Schema draft (1.1 KB of each list, every conversation); hosts do not need it.
  * @param {any} result
  */
@@ -392,9 +384,10 @@ function publishedToolList(result) {
 export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted = null, budgetMs = CALL_BUDGET_MS, log = console.log }) {
   const serve = mcpServing(65536);
   /**
-   * One line per MCP request (MCP 최적화 2026-11-05): its method, tool and edition, whether the host got ChatGPT's short text, and the status,
-   * bytes and time of the answer — the bytes are what the hosts' polling costs. Never the token, the account, the arguments or a URL. A
-   * request that is no MCP message (the metadata, a preflight, a probe) leaves none; a stream, which no tool sends, is passed on uncounted.
+   * One line per MCP request (MCP 최적화 2026-11-05): the address it came to, its method, tool and edition, whether the host got ChatGPT's
+   * short text, and the status, bytes and time of the answer — the bytes are what the hosts' polling costs. Never the token, the account,
+   * the arguments or a URL. Every POST at an MCP address leaves one, a refused origin's too (MCP 리뷰 2026-11-05); a request that is no MCP
+   * message (the metadata, a preflight, a probe, an unknown path) leaves none; a stream, which no tool sends, is passed on uncounted.
    */
   return async request => {
     const started = Date.now(), seen = /** @type {{ line?: RequestLine }} */ ({});
@@ -408,7 +401,7 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted =
   };
   /**
    * The request path.
-   * @param {Request} request @param {number} started @param {{ line?: RequestLine }} seen  filled in once the request is an MCP message
+   * @param {Request} request @param {number} started @param {{ line?: RequestLine }} seen  filled in for a POST at an MCP address
    * @returns {Promise<Response>}
    */
   async function respond(request, started, seen) {
@@ -418,6 +411,9 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted =
       ...(edition === 'directory' ? { resource_name: 'ODDBOUT', resource_documentation: DIRECTORY_DOCUMENTATION }
         : { resource_name: 'ODDBOUT character registration', resource_documentation: 'https://oddbout.com/docs.html' }) });
     if (route) return json({ error: 'not_found' }, 404);
+    /** @type {RequestLine} */
+    const line = { route: signInFirst ? 'signin' : edition === 'directory' ? 'claude' : 'mcp', edition, method: null, tool: null, compact: false };
+    if (request.method === 'POST') seen.line = line;
     const origin = request.headers.get('origin');
     if (origin !== null && !ALLOWED_ORIGINS.has(origin)) return json({ error: 'origin_not_allowed' }, 403);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: {
@@ -451,15 +447,15 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted =
       }
       return json({ error: 'method_not_allowed' }, 405, { allow: 'POST, OPTIONS' });
     }
-    /** @type {RequestLine} */
-    const line = { edition, method: null, tool: null, compact: false };
-    seen.line = line;
     let body;
     try { body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, 65536))); }
     catch { return json({ error: 'invalid_request' }, 400); }
     if (!body || Array.isArray(body) || typeof body.method !== 'string') return json({ error: 'invalid_request' }, 400);
     line.method = body.method.slice(0, 80);
     if (body.method === 'tools/call' && typeof body.params?.name === 'string') line.tool = body.params.name.slice(0, 80);
+    // Whether the host is ChatGPT is the body's to say, not the sign-in's: its refused calls are named so too (MCP 리뷰 2026-11-05).
+    const host = await hostOf(body);
+    line.compact = host.compact;
     const { identity, problem } = await identityFor(db, request, body, signInFirst, edition);
     if (problem) return signInProblem(problem);
     // A server per request on purpose: its tools close over this request's verified identity, so no state can carry one
@@ -471,10 +467,8 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted =
     /** @type {Call} */
     const call = { requestId: UUID.test(given) ? given.toLowerCase() : crypto.randomUUID(),
       protocol: /^\d{4}-\d{2}-\d{2}$/.test(version) ? version : null, signal: request.signal, deadline: started + budgetMs };
-    const host = await hostOf(body);
-    line.compact = host.compact;
     /** @type {Parameters<typeof cloudServer>[0]} */
-    const options = { db, identity, fetcher, arena, hosted, host, edition, call, signInFirst };
+    const options = { db, identity, fetcher, arena, hosted, host, edition, call };
     try {
       const response = await serve(cloudServer(options), request, body);
       if (body.method === 'tools/list' && response.status === 200) return json(publishedToolList(await response.json()));
