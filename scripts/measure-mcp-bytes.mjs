@@ -1,6 +1,7 @@
 // @ts-check
 // What the hosted MCP sends (MCP 최적화 2026-11-05): each edition's tools/list, and get_hosted_fighter on a job in its motions — the full view,
-// a watch (waitSeconds) that a new draft ends, and the recent list — for ChatGPT (`openai/*` _meta) and for any other host. In process on the
+// a watch (waitSeconds) that a new draft ends, one that eight drafts in one event end (MCP 리뷰 2026-11-05), and the recent list — for
+// ChatGPT (`openai/*` _meta) and for any other host. In process on the
 // PGlite fixture (test/helpers), no network; signed URLs are shaped like Storage's. `node scripts/measure-mcp-bytes.mjs` prints JSON.
 import { createCloudHandler, CLOUD_ISSUER, CLOUD_RESOURCE, DIRECTORY_RESOURCE, SIGN_IN_RESOURCE } from '../mcp/cloud.mjs';
 import { generation, webp } from '../test/helpers/generation-database.mjs';
@@ -83,18 +84,26 @@ try {
     for (const { name } of list) await artifact(name);
     return lease({ progress: 40 + count, event: { kind: 'drafts', seq: ++seq, clips: list } });
   };
+  /** A watch's look-back (90 s) names every picture of shortly before it: these events are long past, as in a chat that watches. */
+  const age = () => g.sql.query("update public.af_generation_events set at = at - interval '5 minutes' where job_id = $1", [jobId]);
+  /** A watch that `send` ends. @type {(chatgpt: boolean, send: () => Promise<unknown>) => Promise<number>} */
+  const watch = async (chatgpt, send) => (await Promise.all([call('get_hosted_fighter', { jobId, waitSeconds: 10 }, chatgpt),
+    new Promise(done => setTimeout(done, 300)).then(send)]))[0].bytes;
   /** @type {Record<string, Record<string, number>>} */
-  const hosted = { full: {}, watch: {}, list: {} };
+  const hosted = { full: {}, watch: {}, watchBurst: {}, list: {} };
   for (const [host, chatgpt] of /** @type {[string, boolean][]} */ ([['other', false], ['chatgpt', true]])) {
     await drafts(9);
     hosted.full[host] = (await call('get_hosted_fighter', { jobId }, chatgpt)).bytes;
     // Most reads of a chat that watches end on a change: here the tenth draft.
-    const [watched] = await Promise.all([call('get_hosted_fighter', { jobId, waitSeconds: 10 }, chatgpt),
-      new Promise(done => setTimeout(done, 300)).then(() => drafts(10))]);
-    hosted.watch[host] = watched.bytes;
+    await age();
+    hosted.watch[host] = await watch(chatgpt, () => drafts(10));
+    // After assembly the worker sends every action clip not yet drafted in one event: here eight, past two.
+    await drafts(2); await age();
+    hosted.watchBurst[host] = await watch(chatgpt, () => drafts(10));
     hosted.list[host] = (await call('get_hosted_fighter', {}, chatgpt)).bytes;
   }
   console.log = print;
-  console.log(JSON.stringify({ toolsList, hosted: { scenario: 'one job in its motions: 2 looks, side, faces, 9 drafts (the watch ends on the 10th)',
+  console.log(JSON.stringify({ toolsList, hosted: { scenario: 'one job in its motions: 2 looks, side, faces, 9 drafts (the watch ends on the 10th; '
+    + 'watchBurst: on 8 drafts in one event)',
     signedUrlChars: signedUrl('af-generation', `jobs/${jobId}/draft-walk-0.webp`).length, ...hosted } }, null, 2));
 } finally { console.log = print; await g.sql.close(); }

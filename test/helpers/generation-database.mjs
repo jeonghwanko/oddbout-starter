@@ -65,6 +65,7 @@ export async function generation({ decisionsReviewer = null, responsesReviewer =
         } catch (error) { return { error: { message: error.message, code: error.code ?? 'P0001' } }; }
       },
       gt: (key, val) => { values.push(val); filters.push(`${key}>$${values.length}`); return q; },
+      lte: (key, val) => { values.push(val); filters.push(`${key}<=$${values.length}`); return q; },
       in: (key, vals) => { values.push(vals); filters.push(`${key}=any($${values.length})`); return q; },
       order: (key, o) => { order = ` order by ${key}${o?.ascending === false ? ' desc' : ''}`; return q; }, limit: n => { limit = ` limit ${n}`; return q; },
       maybeSingle: async () => ({ data: (await run())[0] ?? null }), then: (ok, no) => run().then(data => ({ data })).then(ok, no) };
