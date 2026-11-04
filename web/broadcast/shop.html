@@ -37,6 +37,14 @@
           <img src="./assets/beotim.webp" alt="" width="112" height="112" />
         </div></div>
       </section>
+      <section class="how-it-works" aria-labelledby="how-title">
+        <h2 id="how-title">How Spotlight works</h2>
+        <ol class="how-steps">
+          <li class="is-paypal"><span class="how-number" aria-hidden="true">1</span><strong>Pay with PayPal</strong><span>Buy DON, then a 1–3 hour ticket.</span></li>
+          <li class="is-ai"><span class="how-number" aria-hidden="true">2</span><strong>An AI producer runs your show</strong><span>Fighter cups with your promo in the breaks.</span></li>
+          <li class="is-paypal"><span class="how-number" aria-hidden="true">3</span><strong>Creators get paid</strong><span>Appearance fees through PayPal Payouts.</span></li>
+        </ol>
+      </section>
       <section id="wallet" class="wallet-section" aria-labelledby="wallet-title">
         <div class="wallet-bar">
           <div><h2 id="wallet-title">Your DON</h2><div class="wallet-amount"><img class="don-icon" src="./assets/don.svg" alt="" width="40" height="40" /><strong id="wallet-available">—</strong></div></div>
@@ -109,10 +117,32 @@
       <section id="host-playback" class="host-playback" hidden><a id="host-watch" class="button button-primary" target="_blank" rel="noopener noreferrer">Watch broadcast ↗</a></section>
       <section id="execution-panel" class="execution-panel" hidden aria-labelledby="execution-title">
         <div class="section-heading"><h2 id="execution-title">Your broadcast</h2><button id="execution-refresh" class="button button-secondary button-small">Refresh</button></div>
-        <div class="execution-grid">
-          <section><h3>On-Air Agent</h3><strong id="execution-state"></strong><p id="execution-results"></p><p id="execution-agent-note"></p><button id="execution-retry" class="button button-primary button-small" hidden>Retry Agent</button><button id="execution-stop" class="button button-secondary button-small">End broadcast</button></section>
-          <section><h3>Settlement</h3><p id="execution-settlement"></p><button id="execution-reconcile" class="button button-secondary button-small">Check settlement</button></section>
-          <section><h3>Creator fees</h3><strong id="execution-fees"></strong><ul id="execution-payout-list"></ul></section>
+        <ol id="execution-trail" class="progress-trail progress-trail-large" aria-label="Ticket progress"></ol>
+        <div class="execution-board">
+          <section class="execution-card" aria-labelledby="execution-agent-title">
+            <div class="execution-card-head"><h3 id="execution-agent-title">AI producer decisions</h3><strong id="execution-state" class="execution-badge"></strong></div>
+            <p id="execution-results" class="execution-count"></p>
+            <p class="execution-sub">The AI producer plans each cup and books it with the <code>host_cup</code> MCP tool, inside this ticket.</p>
+            <ol id="execution-decisions" class="decision-list" aria-label="Latest AI producer decisions"></ol>
+            <p id="execution-decisions-empty" class="execution-sub" hidden>No decisions yet.</p>
+            <p id="execution-agent-note"></p>
+            <div class="execution-card-actions"><button id="execution-retry" class="button button-primary button-small" hidden>Retry Agent</button><button id="execution-stop" class="button button-secondary button-small">End broadcast</button></div>
+          </section>
+          <div class="execution-money">
+            <section class="execution-card" aria-labelledby="execution-settlement-title">
+              <div class="execution-card-head"><h3 id="execution-settlement-title">Settlement</h3><span id="execution-settlement-badge" class="execution-badge" hidden></span></div>
+              <p id="execution-settlement" class="execution-sub"></p>
+              <dl id="execution-settlement-facts" class="execution-facts" hidden></dl>
+              <div id="execution-audit" class="execution-audit" hidden><h4>AI audit note</h4><p id="execution-audit-text"></p></div>
+              <button id="execution-reconcile" class="button button-secondary button-small">Check settlement</button>
+            </section>
+            <section class="execution-card" aria-labelledby="execution-fees-title">
+              <div class="execution-card-head"><h3 id="execution-fees-title">Creator fees</h3><span id="execution-fees-badge" class="execution-badge" hidden></span></div>
+              <strong id="execution-fees" class="execution-count"></strong>
+              <ul id="execution-payout-list" class="fee-list" aria-label="Appearance fees by fighter"></ul>
+              <div id="execution-payout-receipts"></div>
+            </section>
+          </div>
         </div>
         <div id="execution-stop-confirm" class="execution-actions" hidden><p>Finish the current cup and end this broadcast early?</p><button id="execution-keep" class="button button-secondary">Keep running</button><button id="execution-end" class="button button-primary">End broadcast</button></div>
         <div id="execution-pay-row" class="execution-actions" hidden><label class="consent"><input id="execution-consent" type="checkbox" />I approve these creator fees. PayPal Sandbox · no real money.</label><button id="execution-pay" class="button button-primary" disabled>Pay with PayPal</button></div>
@@ -122,6 +152,7 @@
     </main>
     <footer class="shop-footer" aria-label="Service information">
       <p class="sandbox-notice">PayPal Sandbox · No real charges</p>
+      <p class="judges-link"><a href="/broadcast/judges/">Hackathon judges: start here →</a></p>
       <p id="shop-status" class="shop-status" role="status" aria-live="polite"></p>
     </footer>
     <script src="./supabase.js"></script>
