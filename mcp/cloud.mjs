@@ -5,7 +5,7 @@ import { createHandler } from '../api/handler.mjs';
 import { Problem, UUID, bearerToken, failureDetail, readBody } from '../api/http.mjs';
 import { registerFileInputProbe } from './file-input-probe.mjs';
 import { registerCreatorSources } from './creator-sources.mjs';
-import { AUTH, CALL_BUDGET_MS, FILE, READ, downloadHostFile, output } from './cloud/common.mjs';
+import { AUTH, CALL_BUDGET_MS, FILE, NO_FILES, READ, downloadHostFile, output } from './cloud/common.mjs';
 import { registerRegistrationTools } from './cloud/registration-tools.mjs';
 import { registerPackagingPreparation } from './cloud/packaging-tools.mjs';
 import { registerAgentTools } from './cloud/agent-tools.mjs';
@@ -46,6 +46,12 @@ export function validCloudAudience(aud) {
  */
 export const PUBLIC_TOOLS = new Set(['get_fighter_spec', 'get_style_guide', 'list_fighters', 'get_rankings', 'get_fighter_record', 'get_cup', 'read_bout',
   'get_fighter_story', 'get_world', 'list_generation_hosts', 'prepare_fighter_packaging']);
+/**
+ * The tools that take files only OpenAI's file host gives (allowedFileUrl: ChatGPT's attachments and Library), or that only report on them.
+ * Only /mcp, which ChatGPT's app uses, lists them (2026-11-05): at the sign-in-first address (Grok, Cursor, Gemini CLI) none could succeed.
+ */
+export const FILE_HOST_TOOLS = new Set(['prepare_fighter_registration', 'upload_fighter_asset', 'prepare_profile_set', 'upload_profile_set_asset',
+  'verify_creator_file_input', 'store_creator_source', 'get_creator_source', 'prepare_creator_source_download']);
 /** Public tools that spend an arena budget: a signed-in caller's call counts on his owner (MCP 점검, 2026-10-27). */
 export const OWNER_BUDGET_TOOLS = new Set(['read_bout']);
 /**
@@ -189,11 +195,23 @@ export function scopedDatabase(db, owner) {
 const LIST_CACHE = { ttlMs: 300_000, cacheScope: 'private' };
 
 /**
+ * `signInFirst`: the request came to the sign-in-first address (`/signin`). Its sessions are the full edition's, so it is no edition of its
+ * own; it only lists no file-host tools and no OpenAI tool metadata.
  * @param {{ db: any, identity: Identity | null, fetcher?: typeof fetch, arena?: Arena | null, hosted?: Hosted | null,
- *   host?: { compact?: boolean, caller?: string | null }, edition?: 'full' | 'directory', call?: Call }} options
+ *   host?: { compact?: boolean, caller?: string | null }, edition?: 'full' | 'directory', call?: Call, signInFirst?: boolean }} options
  */
-export function cloudServer({ db, identity, fetcher = fetch, arena = null, hosted = null, host = {}, edition = 'full', call = {} }) {
+export function cloudServer({ db, identity, fetcher = fetch, arena = null, hosted = null, host = {}, edition = 'full', call = {}, signInFirst = false }) {
   const directory = edition === 'directory';
+  // Only /mcp serves ChatGPT's app (2026-11-05): its host attaches the files the upload tools take, and reads OpenAI's tool metadata
+  // (securitySchemes, openai/fileParams, openai/profile). /signin and the directory edition list neither, and their texts name no upload tool.
+  const fileHost = !directory && !signInFirst, openaiMeta = fileHost;
+  /** What the instructions say of files: how to pass them where there is a file host, else where they go. */
+  const fileWords = fileHost ? 'Use host file attachments for fighter.json and WebP assets. '
+    + 'When file inputs are exposed as paths, pass existing absolute workspace paths; the host uploads them. '
+    + 'For existing Library or Page files use the host’s supported file materialization or original-byte read tools and verify '
+    + 'size and SHA-256 before submission. Never substitute rendered previews or invent file IDs, URLs or hashes. '
+    + 'A VM direct-network denial does not establish failure of the native connector; '
+    + 'use the supported host file route without bypassing network policy. ' : `${NO_FILES} `;
   const server = new McpServer({ name: 'oddbout-cloud', version: '1.0.0' }, {
     instructions: directory ? DIRECTORY_INSTRUCTIONS : (hosted ? HOSTED_INSTRUCTIONS : '') + 'For creation in the user’s workspace, use the user’s own generation account. '
       + 'Verify get_profile matches the intended registration account, especially after adding or switching connected accounts. '
@@ -202,12 +220,7 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
       + 'generation and display still require actual host evidence. '
       + 'Do not run local stdio login or ask for a PC to authenticate cloud registration. Do not generate merely to test access. '
       + 'Require the user’s final registration request and preserve motion review boundaries. '
-      + 'Use host file attachments for fighter.json and WebP assets. '
-      + 'When file inputs are exposed as paths, pass existing absolute workspace paths; the host uploads them. '
-      + 'For existing Library or Page files use the host’s supported file materialization or original-byte read tools and verify '
-      + 'size and SHA-256 before submission. Never substitute rendered previews or invent file IDs, URLs or hashes. '
-      + 'A VM direct-network denial does not establish failure of the native connector; '
-      + 'use the supported host file route without bypassing network policy. Never ask for tokens or callback URLs in chat. '
+      + fileWords + 'Never ask for tokens or callback URLs in chat. '
       + 'A refused ODDBOUT sign-in (401 invalid_token) states its reason: tell the user that reason; it is not an outage, and when it asks '
       + 'to reconnect ODDBOUT in the connector settings, scheduled retries cannot fix it. Only a 503 asks for a retry. '
       + 'A queued submission is not registered; inspect its status. Reuse one UUID for retries of identical bytes.',
@@ -244,8 +257,8 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
       ...(profile ? { outputSchema: z.object({ id: z.string().min(1), email: z.string().optional(), nickname: z.string().optional() }).strict() } : {}),
       // The directory edition repeats the title among the annotations, where Anthropic's tool checklist looks for it with the hints.
       annotations: { ...(directory ? { title } : {}), ...READ, readOnlyHint: !write, openWorldHint: openWorld, destructiveHint: publish, idempotentHint: idempotent },
-      _meta: { securitySchemes: publicTool ? [{ type: 'noauth' }] : AUTH,
-        ...(files.length ? { 'openai/fileParams': files } : {}), ...(profile ? { 'openai/profile': true } : {}) } },
+      ...(openaiMeta ? { _meta: { securitySchemes: publicTool ? [{ type: 'noauth' }] : AUTH,
+        ...(files.length ? { 'openai/fileParams': files } : {}), ...(profile ? { 'openai/profile': true } : {}) } } : {}) },
     async (/** @type {Record<string, unknown>} */ args, /** @type {import('@modelcontextprotocol/server').ServerContext | undefined} */ ctx) => {
       /**
        * The result as this host reads it. A host other than ChatGPT reads the text, which holds the whole JSON: the same value again as
@@ -276,21 +289,24 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
       return diagnostic ? { ...result, isError: false } : result;
     });
   };
-  // The directory edition registers only its tools, under their titles there; any other is unknown to it, not refused.
+  // The directory edition registers only its tools, under their titles there; any other is unknown to it, not refused. Without a file
+  // host the file-host tools are unknown the same way.
   /** @type {Register} */
   const register = directory ? (name, title, description, inputSchema, run, options) => {
     const directoryTitle = DIRECTORY_TITLES.get(name);
     if (directoryTitle) registerTool(name, directoryTitle, DIRECTORY_DESCRIPTIONS.get(name) ?? description, inputSchema, run, options);
-  } : registerTool;
-  registerRegistrationTools({ register, db, identity, invoke, fetcher, recordAgent, hosted: Boolean(hosted) && !directory, directory });
+  } : fileHost ? registerTool : (name, title, description, inputSchema, run, options) => {
+    if (!FILE_HOST_TOOLS.has(name)) registerTool(name, title, description, inputSchema, run, options);
+  };
+  registerRegistrationTools({ register, db, identity, invoke, fetcher, recordAgent, hosted: Boolean(hosted) && !directory, directory, uploads: fileHost });
   registerPackagingPreparation({ register, invoke });
   registerProfileSetTools({ register, db, identity, invoke, fetcher });
   // 에이전트 도구 (3단계, 2026-10-27): read ODDBOUT's records, spar, enter cups and tune the fighting style. Listed only with the arena key.
   if (arena?.url && arena?.key) {
-    registerAgentTools({ register, arena, db, identity, invoke, recordAgent, caller: host.caller ?? null, directory });
+    registerAgentTools({ register, arena, db, identity, invoke, recordAgent, caller: host.caller ?? null, directory, uploads: fileHost });
     registerWorkshopTools({ register, arena, invoke, separateWrites: directory });
   }
-  if (hosted && !directory) registerHostedTools({ register, db, identity, invoke, fetcher, hosted });
+  if (hosted && !directory) registerHostedTools({ register, db, identity, invoke, fetcher, hosted, uploads: fileHost });
   registerFileInputProbe({ register, fileSchema: FILE, identity, downloadFile: downloadHostFile, fetcher });
   registerCreatorSources({ register, fileSchema: FILE, identity, db, downloadFile: downloadHostFile, fetcher });
   return server;
@@ -348,13 +364,14 @@ async function hostOf(body) {
 }
 
 /**
- * The tool list as hosts read it. The SDK serializes custom auth metadata only in _meta: publish the current host's top-level contract too.
+ * The tool list as hosts read it. The SDK serializes custom auth metadata only in _meta: publish the current host's top-level contract too
+ * (OpenAI's, so only where the tools carry it: /mcp).
  * Every schema names its JSON Schema draft (1.1 KB of each list, every conversation); hosts do not need it.
  * @param {any} result
  */
 function publishedToolList(result) {
   for (const tool of result.result?.tools ?? []) {
-    tool.securitySchemes = tool._meta.securitySchemes;
+    if (tool._meta?.securitySchemes) tool.securitySchemes = tool._meta.securitySchemes;
     delete tool.inputSchema?.$schema; delete tool.outputSchema?.$schema;
   }
   return result;
@@ -457,7 +474,7 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted =
     const host = await hostOf(body);
     line.compact = host.compact;
     /** @type {Parameters<typeof cloudServer>[0]} */
-    const options = { db, identity, fetcher, arena, hosted, host, edition, call };
+    const options = { db, identity, fetcher, arena, hosted, host, edition, call, signInFirst };
     try {
       const response = await serve(cloudServer(options), request, body);
       if (body.method === 'tools/list' && response.status === 200) return json(publishedToolList(await response.json()));

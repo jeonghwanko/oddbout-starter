@@ -39,9 +39,11 @@ export const STYLE_GUIDE = Object.freeze({
 
 /**
  * `identity` is null only on a signed-out call, which register lets reach the public tools alone: the account tools cast it.
- * @param {{ register: Register, arena: Arena, db: any, identity: Identity | null, invoke: Invoke, recordAgent: RecordAgent, caller: string | null, directory?: boolean }} options
+ * `uploads`: whether this address lists the upload tools (only /mcp, 2026-11-05: common.mjs frontNext).
+ * @param {{ register: Register, arena: Arena, db: any, identity: Identity | null, invoke: Invoke, recordAgent: RecordAgent, caller: string | null, directory?: boolean,
+ *   uploads?: boolean }} options
  */
-export function registerAgentTools({ register, arena, db, identity, invoke, recordAgent, caller, directory = false }) {
+export function registerAgentTools({ register, arena, db, identity, invoke, recordAgent, caller, directory = false, uploads = !directory }) {
   /** @type {(path: string, body?: object) => Promise<any>} */
   const call = (path, body) => arenaCall(arena, path, body);
   // A read's budget: the signed-in owner's; signed out, the host's anonymous user (`caller`); else every signed-out agent's together.
@@ -205,13 +207,16 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
     + 'First show the user each of the eleven required motions; enter only on his request once he confirmed every one. '
     + 'Pass the package hash he watched (get_registered_fighter) and those motions. A new package returns him to production. '
     + 'He enters only with a front painting that passed ODDBOUT\'s check (one character, whole, facing the viewer straight on): read '
-    + 'get_registered_fighter first and tell the user what its front lacks (a new painting goes in through prepare_profile_set, '
-    + 'upload_profile_set_asset and submit_profile_set). profile-set-required: next says what to do.',
+    + 'get_registered_fighter first and tell the user what its front lacks '
+    // Without the upload tools (2026-11-05: /signin; the directory edition has its own text) it names none of them.
+    + (uploads ? '(a new painting goes in through prepare_profile_set, upload_profile_set_asset and submit_profile_set). '
+      : '(this connector cannot upload one: the user uploads a new painting from the ODDBOUT app in ChatGPT or with the creator kit). ')
+    + 'profile-set-required: next says what to do.',
     { fighterId: UUID_ARG(), expectedManifestSha256: z.string().regex(/^[a-f0-9]{64}$/),
       reviewedClips: z.array(z.enum(/** @type {[string, ...string[]]} */ ([...ENTRY_CLIPS]))).length(ENTRY_CLIPS.length) },
     async ({ fighterId, expectedManifestSha256, reviewedClips }) => {
       const result = await entry(fighterId, 'POST', { expectedManifestSha256, reviewedClips });
-      const next = result?.code === 'profile-set-required' ? frontNext(result.front, { directory }) : null;
+      const next = result?.code === 'profile-set-required' ? frontNext(result.front, { directory, uploads }) : null;
       return next ? { ...result, next } : result;
     },
     { write: true, publish: true, openWorld: true, idempotent: true });

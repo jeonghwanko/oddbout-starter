@@ -94,15 +94,16 @@ const spent = job => Number.isSafeInteger(job.tokens) && /** @type {number} */ (
 /** The states the user can follow on the site and answer there; a job over, a refused package and a registered fighter (whose text names his page) say nothing of it. */
 const HOSTED_FOLLOWED = new Set(['queued', 'appearance', 'appearance_ready', 'motions', 'motion_ready', 'submitting', 'needs_review']);
 /**
- * What the agent does next with a job, and (siteUrl, 2026-11-03) where the user can follow it on the site.
- * @param {HostedJob} job
+ * What the agent does next with a job, and (siteUrl, 2026-11-03) where the user can follow it on the site. `uploads`: whether this address
+ * lists the upload tools (only /mcp, 2026-11-05); without them a step names none.
+ * @param {HostedJob} job @param {{ uploads?: boolean }} [options]
  */
-export function hostedNext(job) {
-  const step = hostedStep(job);
+export function hostedNext(job, { uploads = true } = {}) {
+  const step = hostedStep(job, uploads);
   return HOSTED_FOLLOWED.has(job.status) || (job.status === 'submitted' && !['registered', 'rejected'].includes(job.submission?.stage ?? '')) ? `${step} ${SITE_URL_NEXT}` : step;
 }
-/** @param {HostedJob} job */
-function hostedStep(job) {
+/** @param {HostedJob} job @param {boolean} [uploads] */
+function hostedStep(job, uploads = true) {
   const left = job.revisionsLeft ?? {}, error = job.error ? ` (${job.error})` : '';
   switch (job.status) {
     case 'queued': case 'appearance':
@@ -150,7 +151,8 @@ function hostedStep(job) {
         + (job.profileSetId ? `His chosen front went in as his profile set (${job.profileSetId}). Before he enters, read get_registered_fighter: its `
           + 'front says whether the set passed ODDBOUT\'s checks, and its next what to do if not. The home and the arena show it once an operator approves it. '
           + (job.expressions?.url ? 'His six arena faces were sent with it; get_profile_set says whether they passed the check (sheetErrors when not).' : '')
-          : 'His profile set (front picture) did not go in with it: prepare_profile_set can upload one.');
+          : 'His profile set (front picture) did not go in with it: '
+            + (uploads ? 'prepare_profile_set can upload one.' : 'this connector cannot upload one; the user uploads it from the ODDBOUT app in ChatGPT or with the creator kit.'));
       if (job.submission?.stage === 'rejected') return `The server check refused the package. A person at ODDBOUT will look at it.${spent(job)}`;
       return `The server is checking the package. ${WATCH_NEXT}`;
     case 'needs_review': return `A person at ODDBOUT is checking this step; nothing to answer now. Tell the user and show him what is made so far `
@@ -172,10 +174,10 @@ const jobSite = job => siteUrl({ fighterId: job.submission?.stage === 'registere
  */
 const ANSWER_LATER = 'This job is not waiting for that answer now: a change is made one at a time, and the motions take changes again once '
   + 'they are ready (motion_ready). Read get_hosted_fighter (waitSeconds 25) for the state and its next, and send the change then.';
-/** @param {any} result  The API's JSON. */
-const answered = result => result?.code === 'generation-state' ? { ...result, next: ANSWER_LATER } : withNext(result);
-/** @param {any} result  The API's JSON. */
-const withNext = result => result?.ok && result.job ? { ...result, next: hostedNext(result.job), siteUrl: jobSite(result.job) } : result;
+/** @param {any} result  The API's JSON. @param {boolean} uploads */
+const answeredOf = (result, uploads) => result?.code === 'generation-state' ? { ...result, next: ANSWER_LATER } : withNextOf(result, uploads);
+/** @param {any} result  The API's JSON. @param {boolean} uploads */
+const withNextOf = (result, uploads) => result?.ok && result.job ? { ...result, next: hostedNext(result.job, { uploads }), siteUrl: jobSite(result.job) } : result;
 
 /**
  * 감시 응답 줄이기 (MCP 최적화 2026-11-05): a chat that watches a job read the whole of it — every picture's signed URL and the long next — at
@@ -284,10 +286,15 @@ export function pictureLinkShape(value, fullLength = value.length) {
 
 /**
  * `identity` is null only on a signed-out call, which register lets reach the public tools alone: the account tools cast it.
- * @param {{ register: Register, db: any, identity: Identity | null, invoke: Invoke, fetcher: typeof fetch, hosted: Hosted }} options
+ * `uploads`: whether this address lists the upload tools (only /mcp, 2026-11-05): next names them only there.
+ * @param {{ register: Register, db: any, identity: Identity | null, invoke: Invoke, fetcher: typeof fetch, hosted: Hosted, uploads?: boolean }} options
  */
-export function registerHostedTools({ register, db, identity, invoke, fetcher, hosted }) {
+export function registerHostedTools({ register, db, identity, invoke, fetcher, hosted, uploads = true }) {
   const JOB = UUID_ARG();
+  /** @param {any} result  The API's JSON. */
+  const withNext = result => withNextOf(result, uploads);
+  /** @param {any} result  The API's JSON. */
+  const answered = result => answeredOf(result, uploads);
   /** @type {(path: string, body: object, headers?: Record<string, string>) => Promise<any>} */
   const post = (path, body, headers = {}) => invoke(path, 'POST', JSON.stringify(body), { 'content-type': 'application/json', ...headers });
   /**
