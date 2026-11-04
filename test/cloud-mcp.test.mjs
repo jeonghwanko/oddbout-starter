@@ -744,6 +744,9 @@ test('the sign-in-first address lists exactly what /mcp lists and says the same;
 // Claude's directory (2026-11-01) takes no AI image generation and Claude has no OpenAI file host: the same server at `<function>/claude`
 // lists only the tools a directory reviewer can run there.
 const HANGUL = /[ᄀ-ᇿ㄰-㆏가-힯]/;
+/** A JSON-RPC answer to a tool this address does not list: the SDK's unknown-tool error, no result (MCP 리뷰 2026-11-05: `error || isError` let a run pass). */
+const unknownTool = (answer, name) => assert.deepEqual([answer.result, answer.error?.code, /Tool (\S+) not found/.exec(answer.error?.message ?? '')?.[1]],
+  [undefined, -32602, name], JSON.stringify(answer));
 test('the directory edition lists only its tools, in English, with every hint; the other addresses keep theirs', async () => {
   const arena = { url: 'https://arena.test/oddbout-arena', key: 'k'.repeat(64), fetcher: async () => Response.json({ ok: true, fighters: [] }) };
   const handle = createCloudHandler({ db: dbFor(), arena, hosted: {} });
@@ -810,8 +813,7 @@ test('the directory edition lists only its tools, in English, with every hint; t
   for (const name of ['request_hosted_fighter', 'prepare_fighter_registration']) {
     const missing = await post(DIRECTORY_RESOURCE, 'tools/call', { name, arguments: {} });
     assert.notEqual(missing.status, 401, name);
-    const answer = await missing.json();
-    assert.ok(answer.error || answer.result?.isError === true, `${name}: ${JSON.stringify(answer)}`);
+    unknownTool(await missing.json(), name);
   }
   // At /mcp the same signed-out call still asks for the sign-in.
   assert.equal((await post(CLOUD_RESOURCE, 'tools/call', { name: 'prepare_fighter_registration', arguments: {} })).status, 401);
@@ -821,9 +823,7 @@ test('the directory edition lists only its tools, in English, with every hint; t
   assert.deepEqual((await (await post(DIRECTORY_RESOURCE, 'tools/call', { name: 'get_profile', arguments: {} }, true)).json()).result.structuredContent,
     { id: owner, email: 'test@example.com', nickname: 'ODDBOUT' });
   for (const name of ['request_hosted_fighter', 'prepare_fighter_registration', 'get_fighter_spec']) {
-    const unknown = await (await post(DIRECTORY_RESOURCE, 'tools/call', { name, arguments: {} }, true)).json();
-    assert.ok(unknown.error || unknown.result?.isError === true, `${name}: ${JSON.stringify(unknown)}`);
-    assert.equal(unknown.result?.structuredContent, undefined, name);
+    unknownTool(await (await post(DIRECTORY_RESOURCE, 'tools/call', { name, arguments: {} }, true)).json(), name);
   }
   // Its metadata names the address the gateway says it came through, and the Claude page; another named address does not move it.
   const metadataUrl = `${DIRECTORY_RESOURCE}/.well-known/oauth-protected-resource`;
@@ -1085,9 +1085,13 @@ test('every MCP request leaves one line: address, edition, method, tool, ChatGPT
 test('a cup entry reads the cup after 1, 1, 2, 3… poll intervals, not after every one (MCP 최적화 2026-11-05)', async t => {
   t.mock.method(console, 'log', () => {});
   const { arena, seen } = cupArena();
-  const handle = createCloudHandler({ db: dbFor(), arena: { ...arena, cupWaitMs: 300 } });
+  // Each pause as the call sets it (MCP 리뷰 2026-11-05: a window of three to five reads let other schedules pass). An interval of 13 ms
+  // tells them from the call's other timers.
+  const timeout = globalThis.setTimeout, pauses = [];
+  t.mock.method(globalThis, 'setTimeout', (callback, ms, ...rest) => { if (ms > 0 && ms % 13 === 0) pauses.push(ms); return timeout(callback, ms, ...rest); });
+  const handle = createCloudHandler({ db: dbFor(), arena: { ...arena, pollMs: 13, pollTries: 6, cupWaitMs: 10_000 } });
   const entered = toolJson(await call(handle, 'enter_cup', { fighterId: crypto.randomUUID(), idempotencyKey: crypto.randomUUID() }));
   assert.deepEqual([entered.state, entered.next], ['open', 'get_cup']);
-  // Reads after 20, 20, 40, 60 and 80 ms fit in 300 (the next would be at 320); a read every 20 ms was fourteen.
-  assert.ok(seen.polls >= 3 && seen.polls <= 5, `${seen.polls} polls`);
+  // The pauses before its six reads: 1, 1, 2, 3, 4 and 5 intervals (a read every interval would pause one interval each time).
+  assert.deepEqual(pauses, [13, 13, 26, 39, 52, 65]); assert.equal(seen.polls, 6);
 });
