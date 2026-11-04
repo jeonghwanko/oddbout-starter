@@ -1041,29 +1041,45 @@ test('a result goes once to a host that reads its text, as before to ChatGPT, an
   }
 });
 
-test('every MCP request leaves one line: edition, method, tool, ChatGPT or not, status, bytes and time — never the token or the account', async () => {
+test('every MCP request leaves one line: address, edition, method, tool, ChatGPT or not, status, bytes and time — never the token or the account', async () => {
   const lines = [], handle = cloudHandler({ db: dbFor(), log: line => lines.push(line) });
   const bytes = async response => Buffer.byteLength(await response.text());
+  const post = (url, body, headers = {}) => handle(new Request(url, { method: 'POST', headers: { 'content-type': 'application/json',
+    accept: 'application/json, text/event-stream', ...headers }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, ...body }) }));
   const listed = await bytes(await handle(request('tools/list')));
-  const profile = await (await handle(new Request(DIRECTORY_RESOURCE, { method: 'POST', headers: { 'content-type': 'application/json',
-    accept: 'application/json, text/event-stream', authorization: `Bearer ${token}` }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call',
-      params: { name: 'get_profile', arguments: {}, _meta: { 'openai/locale': 'ko' } } }) }))).text();
+  const profile = await (await post(DIRECTORY_RESOURCE, { method: 'tools/call', params: { name: 'get_profile', arguments: {}, _meta: { 'openai/locale': 'ko' } } },
+    { authorization: `Bearer ${token}` })).text();
   // The answer is sent whole after it is counted.
   assert.equal(JSON.parse(profile).result.structuredContent.id, owner);
   const denied = await handle(request('tools/call', { name: 'get_profile', arguments: {} }));
   assert.equal(denied.status, 401);
   const deniedBytes = await bytes(denied), unreadable = await bytes(await handle(new Request(CLOUD_RESOURCE, { method: 'POST', body: 'not json' })));
-  // No MCP message, no line: the metadata, a probe, a preflight.
+  // MCP 리뷰 2026-11-05: /signin is the full edition too, so the line names the address; ChatGPT's refused sign-in is named ChatGPT's (the
+  // body says so, not the sign-in); a refused browser origin is a POST at an MCP address too.
+  const signIn = await post(SIGN_IN_RESOURCE, { method: 'tools/list', params: {} });
+  assert.equal(signIn.status, 401);
+  const signInBytes = await bytes(signIn);
+  const chatDenied = await post(CLOUD_RESOURCE, { method: 'tools/call', params: { name: 'get_profile', arguments: {}, _meta: { 'openai/subject': 'user-1' } } });
+  assert.equal(chatDenied.status, 401);
+  const chatDeniedBytes = await bytes(chatDenied);
+  const foreign = await post(CLOUD_RESOURCE, { method: 'tools/list', params: {} }, { origin: 'https://evil.example' });
+  assert.equal(foreign.status, 403);
+  const foreignBytes = await bytes(foreign);
+  // No MCP message, no line: the metadata, a probe, a preflight, a path that is no MCP address.
   for (const [url, init] of [[`${CLOUD_RESOURCE}/.well-known/oauth-protected-resource`, {}], [CLOUD_RESOURCE, { method: 'HEAD' }],
-    [CLOUD_RESOURCE, { method: 'OPTIONS', headers: { origin: 'https://claude.ai' } }]]) await handle(new Request(url, init));
+    [CLOUD_RESOURCE, { method: 'OPTIONS', headers: { origin: 'https://claude.ai' } }], [SIGN_IN_RESOURCE, { method: 'HEAD' }],
+    [`${SIGN_IN_RESOURCE}/elsewhere`, { method: 'POST', body: '{}' }]]) await handle(new Request(url, init));
   const parsed = lines.map(line => JSON.parse(line));
   assert.deepEqual(parsed.map(({ ms, ...line }) => line), [
-    { mcp: 1, edition: 'full', method: 'tools/list', tool: null, compact: false, status: 200, bytes: listed },
-    { mcp: 1, edition: 'directory', method: 'tools/call', tool: 'get_profile', compact: true, status: 200, bytes: Buffer.byteLength(profile) },
-    { mcp: 1, edition: 'full', method: 'tools/call', tool: 'get_profile', compact: false, status: 401, bytes: deniedBytes },
-    { mcp: 1, edition: 'full', method: null, tool: null, compact: false, status: 400, bytes: unreadable }]);
+    { mcp: 1, route: 'mcp', edition: 'full', method: 'tools/list', tool: null, compact: false, status: 200, bytes: listed },
+    { mcp: 1, route: 'claude', edition: 'directory', method: 'tools/call', tool: 'get_profile', compact: true, status: 200, bytes: Buffer.byteLength(profile) },
+    { mcp: 1, route: 'mcp', edition: 'full', method: 'tools/call', tool: 'get_profile', compact: false, status: 401, bytes: deniedBytes },
+    { mcp: 1, route: 'mcp', edition: 'full', method: null, tool: null, compact: false, status: 400, bytes: unreadable },
+    { mcp: 1, route: 'signin', edition: 'full', method: 'tools/list', tool: null, compact: false, status: 401, bytes: signInBytes },
+    { mcp: 1, route: 'mcp', edition: 'full', method: 'tools/call', tool: 'get_profile', compact: true, status: 401, bytes: chatDeniedBytes },
+    { mcp: 1, route: 'mcp', edition: 'full', method: null, tool: null, compact: false, status: 403, bytes: foreignBytes }]);
   assert.ok(parsed.every(line => Number.isInteger(line.ms) && line.ms >= 0));
-  for (const secret of [token, owner, client, 'test@example.com', 'Bearer']) assert.ok(!lines.join('\n').includes(secret), secret);
+  for (const secret of [token, owner, client, 'test@example.com', 'Bearer', 'user-1']) assert.ok(!lines.join('\n').includes(secret), secret);
 });
 
 test('a cup entry reads the cup after 1, 1, 2, 3… poll intervals, not after every one (MCP 최적화 2026-11-05)', async t => {

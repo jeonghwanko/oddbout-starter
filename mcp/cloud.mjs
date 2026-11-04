@@ -145,7 +145,10 @@ export async function authenticateCloud(db, request, now = Date.now, edition = '
  * the request's `signal` (aborted when the client goes away) and the `deadline` its answer is due by (CALL_BUDGET_MS from its arrival).
  * @typedef {{ requestId?: string, protocol?: string | null, signal?: AbortSignal, deadline?: number }} Call
  */
-/** One MCP request as its log line names it (createCloudHandler). @typedef {{ edition: 'full' | 'directory', method: string | null, tool: string | null, compact: boolean }} RequestLine */
+/**
+ * One MCP request as its log line names it (createCloudHandler): `route`, the address it came to (/mcp and /signin are both the full edition).
+ * @typedef {{ route: 'mcp' | 'signin' | 'claude', edition: 'full' | 'directory', method: string | null, tool: string | null, compact: boolean }} RequestLine
+ */
 
 /**
  * One JSON line per tool call (MCP 점검 2026-11-03: a failed call left no trace, and nothing said which tools agents use or which protocol
@@ -381,9 +384,10 @@ function publishedToolList(result) {
 export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted = null, budgetMs = CALL_BUDGET_MS, log = console.log }) {
   const serve = mcpServing(65536);
   /**
-   * One line per MCP request (MCP 최적화 2026-11-05): its method, tool and edition, whether the host got ChatGPT's short text, and the status,
-   * bytes and time of the answer — the bytes are what the hosts' polling costs. Never the token, the account, the arguments or a URL. A
-   * request that is no MCP message (the metadata, a preflight, a probe) leaves none; a stream, which no tool sends, is passed on uncounted.
+   * One line per MCP request (MCP 최적화 2026-11-05): the address it came to, its method, tool and edition, whether the host got ChatGPT's
+   * short text, and the status, bytes and time of the answer — the bytes are what the hosts' polling costs. Never the token, the account,
+   * the arguments or a URL. Every POST at an MCP address leaves one, a refused origin's too (MCP 리뷰 2026-11-05); a request that is no MCP
+   * message (the metadata, a preflight, a probe, an unknown path) leaves none; a stream, which no tool sends, is passed on uncounted.
    */
   return async request => {
     const started = Date.now(), seen = /** @type {{ line?: RequestLine }} */ ({});
@@ -397,7 +401,7 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted =
   };
   /**
    * The request path.
-   * @param {Request} request @param {number} started @param {{ line?: RequestLine }} seen  filled in once the request is an MCP message
+   * @param {Request} request @param {number} started @param {{ line?: RequestLine }} seen  filled in for a POST at an MCP address
    * @returns {Promise<Response>}
    */
   async function respond(request, started, seen) {
@@ -407,6 +411,9 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted =
       ...(edition === 'directory' ? { resource_name: 'ODDBOUT', resource_documentation: DIRECTORY_DOCUMENTATION }
         : { resource_name: 'ODDBOUT character registration', resource_documentation: 'https://oddbout.com/docs.html' }) });
     if (route) return json({ error: 'not_found' }, 404);
+    /** @type {RequestLine} */
+    const line = { route: signInFirst ? 'signin' : edition === 'directory' ? 'claude' : 'mcp', edition, method: null, tool: null, compact: false };
+    if (request.method === 'POST') seen.line = line;
     const origin = request.headers.get('origin');
     if (origin !== null && !ALLOWED_ORIGINS.has(origin)) return json({ error: 'origin_not_allowed' }, 403);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: {
@@ -440,15 +447,15 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted =
       }
       return json({ error: 'method_not_allowed' }, 405, { allow: 'POST, OPTIONS' });
     }
-    /** @type {RequestLine} */
-    const line = { edition, method: null, tool: null, compact: false };
-    seen.line = line;
     let body;
     try { body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, 65536))); }
     catch { return json({ error: 'invalid_request' }, 400); }
     if (!body || Array.isArray(body) || typeof body.method !== 'string') return json({ error: 'invalid_request' }, 400);
     line.method = body.method.slice(0, 80);
     if (body.method === 'tools/call' && typeof body.params?.name === 'string') line.tool = body.params.name.slice(0, 80);
+    // Whether the host is ChatGPT is the body's to say, not the sign-in's: its refused calls are named so too (MCP 리뷰 2026-11-05).
+    const host = await hostOf(body);
+    line.compact = host.compact;
     const { identity, problem } = await identityFor(db, request, body, signInFirst, edition);
     if (problem) return signInProblem(problem);
     // A server per request on purpose: its tools close over this request's verified identity, so no state can carry one
@@ -460,8 +467,6 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted =
     /** @type {Call} */
     const call = { requestId: UUID.test(given) ? given.toLowerCase() : crypto.randomUUID(),
       protocol: /^\d{4}-\d{2}-\d{2}$/.test(version) ? version : null, signal: request.signal, deadline: started + budgetMs };
-    const host = await hostOf(body);
-    line.compact = host.compact;
     /** @type {Parameters<typeof cloudServer>[0]} */
     const options = { db, identity, fetcher, arena, hosted, host, edition, call };
     try {
