@@ -451,6 +451,23 @@ Runtime copy: fonts/BlackHanSans-Lettering.woff2
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 The modified font is redistributed under the same license and is not sold on its own.
 
+Gaegu (개구) Bold, Patrick Hand, Yomogi (よもぎ) — notebook handwriting subsets
+-------------------------------------------------------------------------------
+
+Gaegu: Copyright 2018 The Gaegu Project Authors (https://github.com/JIKJISOFT/Gaegu)
+Patrick Hand: Copyright (c) 2010-2012 Patrick Wagesreiter (mail@patrickwagesreiter.at)
+Yomogi: Copyright 2020 The Yomogi Project Authors (https://github.com/satsuyako/YomogiFont)
+Each released under the SIL Open Font License 1.1 (no Reserved Font Name).
+
+Source: https://github.com/google/fonts/tree/main/ofl/gaegu, /ofl/patrickhand, /ofl/yomogi
+License: https://openfontlicense.org/
+Full license texts: fonts/Gaegu-OFL.txt, fonts/PatrickHand-OFL.txt, fonts/Yomogi-OFL.txt
+Runtime copies: fonts/Gaegu-Notebook.woff2, fonts/PatrickHand-Notebook.woff2, fonts/Yomogi-Notebook.woff2
+  (modified: subset to the glyphs the notebook's handwritten lines use, re-encoded as WOFF2)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+The modified fonts are redistributed under the same license and are not sold on their own.
+
 Google Sans — sign-in button subset (site pages)
 ------------------------------------------------
 

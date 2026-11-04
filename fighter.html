@@ -78,6 +78,28 @@
         font-style: normal;
         font-display: block;
       }
+      /* 수첩 손글씨(무투장 수첩의 "어젯밤" 줄 — 언어마다 한 손, 쓰는 글자만 남긴 서브셋). 수첩이 열릴 때 받는다. */
+      @font-face {
+        font-family: "Gaegu";
+        src: url("./fonts/Gaegu-Notebook.woff2") format("woff2");
+        font-weight: 700;
+        font-style: normal;
+        font-display: block;
+      }
+      @font-face {
+        font-family: "Patrick Hand";
+        src: url("./fonts/PatrickHand-Notebook.woff2") format("woff2");
+        font-weight: 400;
+        font-style: normal;
+        font-display: block;
+      }
+      @font-face {
+        font-family: "Yomogi";
+        src: url("./fonts/Yomogi-Notebook.woff2") format("woff2");
+        font-weight: 400;
+        font-style: normal;
+        font-display: block;
+      }
       html,
       body {
         margin: 0;
@@ -163,7 +185,7 @@
       }
       html[data-boot-motion="reduce"] .boot-loading-ring { animation: none; }
     </style>
-  <script type="module" crossorigin src="/assets/fighter-tyL34MAX.js"></script>
+  <script type="module" crossorigin src="/assets/fighter-BMqej8AD.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-B0Z9INg1.js">
   <link rel="modulepreload" crossorigin href="/assets/_oddbout-analytics-DfJ7iKZO.js">
   <link rel="modulepreload" crossorigin href="/assets/pseudo-B3ZLOM_E.js">
@@ -180,22 +202,22 @@
   <link rel="modulepreload" crossorigin href="/assets/accountControl-D1V_Ykft.js">
   <link rel="modulepreload" crossorigin href="/assets/FighterIdentity-ByNvDHFC.js">
   <link rel="modulepreload" crossorigin href="/assets/leagueContent-H9xsvncs.js">
-  <link rel="modulepreload" crossorigin href="/assets/arenaRankings-B_EEBB_A.js">
+  <link rel="modulepreload" crossorigin href="/assets/arenaRankings-BD8QJkW0.js">
   <link rel="modulepreload" crossorigin href="/assets/arena-bout-rules-TByrQP64.js">
   <link rel="modulepreload" crossorigin href="/assets/UtcTime-BFPbMiHs.js">
   <link rel="modulepreload" crossorigin href="/assets/rankedDuels-Bwy1dHfO.js">
   <link rel="modulepreload" crossorigin href="/assets/RuntimeOptions-Cc2HqYGT.js">
   <link rel="modulepreload" crossorigin href="/assets/PhaserTextureFamilies-C8vBSGBz.js">
-  <link rel="modulepreload" crossorigin href="/assets/UiFeedback-DoM_i8Su.js">
+  <link rel="modulepreload" crossorigin href="/assets/UiFeedback-f-VZ05IF.js">
   <link rel="modulepreload" crossorigin href="/assets/CityFighterIds-BLg6b4th.js">
   <link rel="modulepreload" crossorigin href="/assets/ArenaRoster-viIU018c.js">
   <link rel="modulepreload" crossorigin href="/assets/TwitchArenaBout-B1EudwAr.js">
   <link rel="modulepreload" crossorigin href="/assets/FighterCombat-k1htHgeg.js">
   <link rel="modulepreload" crossorigin href="/assets/arena-concept-runtime-BHN1CmLz.js">
   <link rel="modulepreload" crossorigin href="/assets/ArenaArtCatalog-lashfPc-.js">
-  <link rel="modulepreload" crossorigin href="/assets/ArenaGoldDropView-DHr5gpti.js">
-  <link rel="modulepreload" crossorigin href="/assets/GameBoot-CFAsSNcy.js">
-  <link rel="modulepreload" crossorigin href="/assets/ArenaLayout-BdmTATBI.js">
+  <link rel="modulepreload" crossorigin href="/assets/ArenaGoldDropView-B1_2xwY_.js">
+  <link rel="modulepreload" crossorigin href="/assets/GameBoot-BObrSIGa.js">
+  <link rel="modulepreload" crossorigin href="/assets/ArenaLayout-CZv8r6G_.js">
   <link rel="stylesheet" crossorigin href="/assets/accountControl-DJTesTWn.css">
   <link rel="stylesheet" crossorigin href="/assets/fighter-1IPMv0AM.css">
 </head>
@@ -234,6 +256,6 @@
       for (const type of ["keydown", "keyup"]) homeLink.addEventListener(type, event => event.stopPropagation());
       if (bootParams.get("motion") === "reduce") document.documentElement.dataset.bootMotion = "reduce";
     </script>
-    <script>(()=>{const p={"en":["assets/en-1aJG8dNp.js","assets/en-Cu31Zfgs.js","assets/en-DB545Isa2.js","assets/en-Dlkc4kRO.js"],"ko":["assets/ko-C8kdGk-x.js","assets/ko-CbqNJq7o2.js","assets/ko-DBcoIe0S.js"],"ja":["assets/en-Dlkc4kRO.js","assets/ja-A_vkFuGy2.js","assets/ja-CiPG3aq1.js","assets/ja-aU023xkZ.js"]}[document.documentElement.lang];if(!p)return;for(const f of p){const l=document.createElement("link");l.rel="modulepreload";l.crossOrigin="";l.href="./"+f;document.head.append(l)}})()</script>
+    <script>(()=>{const p={"en":["assets/en-1aJG8dNp.js","assets/en-CH-W3Etd.js","assets/en-DB545Isa2.js","assets/en-Dlkc4kRO.js"],"ko":["assets/ko-C6wEs5Ld.js","assets/ko-CbqNJq7o2.js","assets/ko-DBcoIe0S.js"],"ja":["assets/en-Dlkc4kRO.js","assets/ja-A_vkFuGy2.js","assets/ja-CiPG3aq1.js","assets/ja-Ck6WZawn.js"]}[document.documentElement.lang];if(!p)return;for(const f of p){const l=document.createElement("link");l.rel="modulepreload";l.crossOrigin="";l.href="./"+f;document.head.append(l)}})()</script>
   </body>
 </html>
