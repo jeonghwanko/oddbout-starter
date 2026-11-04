@@ -14,8 +14,8 @@ import { registerWorkshopTools } from './cloud/workshop-tools.mjs';
 import { HOSTED_INSTRUCTIONS, registerHostedTools } from './cloud/hosted-tools.mjs';
 import { DIRECTORY_DESCRIPTIONS, DIRECTORY_INSTRUCTIONS, DIRECTORY_TITLES } from './cloud/directory-edition.mjs';
 import { mcpServing } from './cloud/serve.mjs';
-import { CLOUD_ISSUER, CLOUD_RESOURCE, DIRECTORY_DOCUMENTATION, DIRECTORY_RESOURCE, LEGACY_PUBLIC_RESOURCE, PUBLIC_DIRECTORY_RESOURCE, PUBLIC_RESOURCE,
-  PUBLIC_SIGN_IN_RESOURCE, SIGN_IN_RESOURCE } from './cloud/resources.mjs';
+import { ALLOWED_ORIGINS, CLOUD_ISSUER, CLOUD_RESOURCE, DIRECTORY_DOCUMENTATION, DIRECTORY_RESOURCE, LEGACY_PUBLIC_RESOURCE, PUBLIC_DIRECTORY_RESOURCE,
+  PUBLIC_RESOURCE, PUBLIC_SIGN_IN_RESOURCE, SIGN_IN_RESOURCE } from './cloud/resources.mjs';
 // The cloud MCP's tool families live in ./cloud/ (Edge-only, as this file); these names are this module's as before.
 export { CALL_BUDGET_MS, allowedFileUrl, compactText, downloadHostFile, timedFetch } from './cloud/common.mjs';
 export { STYLE_GUIDE } from './cloud/agent-tools.mjs';
@@ -295,10 +295,6 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
   registerCreatorSources({ register, fileSchema: FILE, identity, db, downloadFile: downloadHostFile, fetcher });
   return server;
 }
-
-/** Browser calls are taken from the agents that connect (ChatGPT, Grok, Cursor, Claude) and ODDBOUT's own site; a call with no origin is not a browser's. */
-const ALLOWED_ORIGINS = new Set(['https://chatgpt.com', 'https://chat.openai.com', 'https://platform.openai.com', 'https://oddbout.com',
-  'https://grok.com', 'https://www.grok.com', 'https://cursor.com', 'https://www.cursor.com', 'https://claude.ai', 'https://claude.com']);
 
 /**
  * Where a request goes: its route under the function, whether it came to the sign-in-first address, its edition, and the resource its OAuth

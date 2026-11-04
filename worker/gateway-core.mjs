@@ -1,9 +1,16 @@
 // @ts-check
 // Runtime-independent policy shared by Render and Cloudflare. No arbitrary upstreams.
-import { CLOUD_RESOURCE as UPSTREAM, LEGACY_PUBLIC_RESOURCE, PUBLIC_DIRECTORY_RESOURCE, PUBLIC_RESOURCE, PUBLIC_SIGN_IN_RESOURCE }
+import { ALLOWED_ORIGINS, CLOUD_RESOURCE as UPSTREAM, LEGACY_PUBLIC_RESOURCE, PUBLIC_DIRECTORY_RESOURCE, PUBLIC_RESOURCE, PUBLIC_SIGN_IN_RESOURCE }
   from '../mcp/cloud/resources.mjs';
 export { LEGACY_PUBLIC_RESOURCE, PUBLIC_DIRECTORY_RESOURCE, PUBLIC_RESOURCE, PUBLIC_SIGN_IN_RESOURCE };
 const METADATA = '/.well-known/oauth-protected-resource';
+/**
+ * The upstream paths whose GET and HEAD the gateway answers itself, as the function does (mcp/cloud.mjs: a 405, or a 403 for a browser origin
+ * it does not take): a probe cost a function call (MCP 최적화 2026-11-05). Not /signin, whose probe gets the sign-in check's 401.
+ */
+const PROBED_HERE = new Set(['', '/claude']);
+/** How long the Worker keeps a metadata answer: the same for every request at its host and path, changed only by a deploy. */
+const METADATA_CACHE_SECONDS = 300;
 const ROUTES = new Map([['/mcp', ''], ['/mcp' + METADATA, METADATA], [METADATA + '/mcp', METADATA]]);
 const SIGN_IN_ROUTES = new Map([['/signin', '/signin'], ['/signin' + METADATA, '/signin' + METADATA], [METADATA + '/signin', '/signin' + METADATA]]);
 const DIRECTORY_ROUTES = new Map([['/claude', '/claude'], ['/claude' + METADATA, '/claude' + METADATA], [METADATA + '/claude', '/claude' + METADATA]]);
@@ -46,18 +53,33 @@ export async function readGatewayBody(body, signal) {
   } finally { signal.removeEventListener('abort', abort); reader.releaseLock(); }
 }
 /**
+ * `cache`: where the Worker keeps the metadata answers (Workers' `caches.default`, MCP 최적화 2026-11-05) — a successful GET of one is the
+ * same for every request at its host and path, so it is kept METADATA_CACHE_SECONDS instead of calling the function each time. The client is
+ * still told no-store. The Node adapter keeps none.
  * @param {Request} request
- * @param {{ fetcher?: typeof fetch, headerTimeoutMs?: number, totalTimeoutMs?: number }} [options]
+ * @param {{ fetcher?: typeof fetch, headerTimeoutMs?: number, totalTimeoutMs?: number, cache?: Pick<Cache, 'match' | 'put'> | null }} [options]
  * @returns {Promise<Response | null>}
  */
-export async function gatewayFetch(request, { fetcher = fetch, headerTimeoutMs = 45_000, totalTimeoutMs = 160_000 } = {}) {
-  const url = new URL(request.url);
+export async function gatewayFetch(request, { fetcher = fetch, headerTimeoutMs = 45_000, totalTimeoutMs = 160_000, cache = null } = {}) {
+  const url = new URL(request.url), path = request.url.slice(url.origin.length);
   // Keep even an empty '?' significant; only exact, fixed paths belong to the gateway.
-  const route = gatewayRoute(url.hostname, request.url.slice(url.origin.length));
+  const route = gatewayRoute(url.hostname, path);
   if (!route) return null;
   if (route.challenge) return gatewayReply(request.method === 'GET' ? 200 : 405,
     request.method === 'GET' ? (route.branded ? BRANDED_DOMAIN_CHALLENGE : DOMAIN_CHALLENGE) : '', 'text/plain');
   if (!GATEWAY_METHODS.includes(request.method)) return gatewayReply(405, '{}');
+  if (['GET', 'HEAD'].includes(request.method) && route.path !== undefined && PROBED_HERE.has(route.path)) {
+    const origin = request.headers.get('origin'), refused = origin !== null && !ALLOWED_ORIGINS.has(origin);
+    return new Response(request.method === 'HEAD' ? null : refused ? '{"error":"origin_not_allowed"}' : '{"error":"method_not_allowed"}', {
+      status: refused ? 403 : 405, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff',
+        ...(refused ? {} : { allow: 'POST, OPTIONS' }), 'x-request-id': crypto.randomUUID() } });
+  }
+  const cacheKey = cache && request.method === 'GET' && route.path?.endsWith(METADATA) ? new Request(url.origin + path) : null;
+  if (cache && cacheKey) {
+    const kept = await cache.match(cacheKey).catch(() => undefined);
+    if (kept) return new Response(kept.body, { status: 200, headers: { 'content-type': kept.headers.get('content-type') ?? 'application/json',
+      'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'x-request-id': crypto.randomUUID() } });
+  }
   const control = new AbortController();
   const abort = () => control.abort();
   request.signal.addEventListener('abort', abort, { once: true });
@@ -86,6 +108,14 @@ export async function gatewayFetch(request, { fetcher = fetch, headerTimeoutMs =
     for (const [name, value] of response.headers) {
       if (['content-type', 'www-authenticate', 'retry-after', 'allow', 'access-control-allow-origin', 'access-control-allow-methods',
         'access-control-allow-headers', 'access-control-expose-headers'].includes(name) || name.startsWith('mcp-')) responseHeaders.set(name, value);
+    }
+    if (cache && cacheKey && response.status === 200) {
+      const body = await readGatewayBody(response.body, control.signal);
+      cleanup();
+      if (body === null) return gatewayReply(502, '{"error":"mcp_upstream_unavailable"}');
+      await cache.put(cacheKey, new Response(body, { headers: { 'content-type': responseHeaders.get('content-type') ?? 'application/json',
+        'cache-control': `public, max-age=${METADATA_CACHE_SECONDS}` } })).catch(() => {});
+      return new Response(body, { status: 200, headers: responseHeaders });
     }
     if (!response.body || request.method === 'HEAD' || [204, 205, 304].includes(response.status)) {
       void response.body?.cancel().catch(() => {});

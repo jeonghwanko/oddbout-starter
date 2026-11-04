@@ -105,3 +105,16 @@ does not support `redirect: error`. The compatibility flag `enable_request_signa
 propagates client disconnects before its default activation date.
 Timers stay active until stream completion/cancellation. Node pipelines also
 honor downstream backpressure and cancel the upstream on disconnect.
+
+## Answered without the function (2026-11-05)
+
+Two answers no longer cost a Supabase invocation. A `GET` or `HEAD` at `/mcp` or
+`/claude` gets the function's own answer from the core: `405` with
+`allow: POST, OPTIONS`, or `403 origin_not_allowed` for a browser origin outside
+`ALLOWED_ORIGINS` in [resources.mjs](../mcp/cloud/resources.mjs), which both
+share. `/signin` probes still reach the function, whose sign-in check answers
+them with `401`. The Worker also keeps each successful metadata `GET`
+(`.well-known/oauth-protected-resource…`) in `caches.default` for 300 seconds,
+keyed by host and path; clients are still told `cache-control: no-store`, and a
+deploy that changes the metadata shows within five minutes. Failures, `HEAD` and
+MCP calls are never kept. The Node adapter keeps no cache.
