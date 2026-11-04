@@ -8,6 +8,9 @@ creator-kit ZIP에는 제작·연결 안내와 이 문서 지도가 들어 있�
 
 ## 처음이라면
 
+- **먼저 영상으로 보려면**: [ODDBOUT × Twitch Cup](https://youtu.be/aLOsJlcQ2_c)(2분 50초, 영어)은 에이전트가 만든 선수를
+  등록하고 Twitch 시청자가 채팅으로 골라 4인 컵에 내보내는 흐름을, [ODDBOUT Showrunner](https://youtu.be/-GeIlI4Cf9w)(1분 54초,
+  영어)는 PayPal Sandbox로 결제한 에이전트 방송 작업이 기기를 바꾸거나 중단돼도 결제를 잃거나 두 번 청구하지 않고 이어지는 흐름을 보여 준다.
 - **ChatGPT/Dots에서 연결·계정·스킬만 확인하려는 사용자**: [CLOUD-MCP](CLOUD-MCP.md) → [ODDBOUT-PLUGIN](ODDBOUT-PLUGIN.md).
   기존 클라우드 플러그인을 선택한다. ZIP 가져오기나 VM 설치, 캐릭터 생성은 연결 확인에 필요하지 않다.
 - **선수를 만들려는 사용자·제작 에이전트**: [START-HERE](START-HERE.md) → [DOT-CREATION](DOT-CREATION.md) →
@@ -18,6 +21,9 @@ creator-kit ZIP에는 제작·연결 안내와 이 문서 지도가 들어 있�
   `--trust`). Claude Code는 CLAUDE.md의 `@AGENTS.md` 가져오기로 읽는다. 공통 규칙은 AGENTS.md 한 곳에만 쓴다.
 - **서비스나 생성 PC를 운영하는 사람**: [CREATOR-HOSTING](CREATOR-HOSTING.md), [CLOUD-MCP](CLOUD-MCP.md),
   [GENERATION-HOST](GENERATION-HOST.md)부터 읽는다. 운영 배포는 게임 저장소에서 한다(AGENTS.md).
+- **에이전트 방송(ODDBOUT Showrunner)을 돌리거나 고치는 사람**: [BROADCAST-SANDBOX](BROADCAST-SANDBOX.md) →
+  [BROADCAST-HOSTING](BROADCAST-HOSTING.md) → [PAYPAL-AGENT-BROADCAST-PLAN](PAYPAL-AGENT-BROADCAST-PLAN.md). 코드는 `broadcast/`에 있고,
+  결제는 PayPal Sandbox의 테스트 돈만 쓴다.
 
 ## 제작
 
@@ -88,6 +94,7 @@ creator-kit ZIP에는 제작·연결 안내와 이 문서 지도가 들어 있�
 | [DOTS-CLOUD-REGISTRATION-AUDIT](records/DOTS-CLOUD-REGISTRATION-AUDIT.md) | 2026-10-24 Dots 클라우드 생성·등록 점검 |
 | [DOTS-VM-ACCEPTANCE](records/DOTS-VM-ACCEPTANCE.md) | Dots VM 인수 시험(0.5.5 후보) |
 | [CLOUD-PLUGIN-REVIEW](records/CLOUD-PLUGIN-REVIEW.md), [PLUGIN-POLICY-AND-VIDEO](records/PLUGIN-POLICY-AND-VIDEO.md), [PLUGIN-REVIEW-CASES](records/PLUGIN-REVIEW-CASES.md) | 2026-10-22~24 플러그인 심사 준비와 상태 |
-| [KIT-RELEASES](records/KIT-RELEASES.md) | creator-kit 0.6.9부터 0.4.0까지의 릴리스와 검증 기록 |
+| [PAYPAL-GATES-2026-11-03](records/PAYPAL-GATES-2026-11-03.md) | 2026-11-03 PayPal Sandbox 방송 G0~G8 실행 준비 점검과 로컬 경기 재현 |
+| [KIT-RELEASES](records/KIT-RELEASES.md) | creator-kit 0.6.16부터 0.4.0까지의 릴리스와 검증 기록 |
 | [SUPABASE-BETA](records/SUPABASE-BETA.md) | 이전 초대 베타(v0.2)의 운영 기록 |
 | [research/](research/) | 개별 조사·실험 기록 |
