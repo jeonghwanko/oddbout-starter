@@ -29,34 +29,62 @@ export function createCommerceService({ store, paypal, merchantId = '', publicOr
     return store.creditCapture(owner, intent.id, { providerOrderId: verified.orderId, captureId: verified.captureId,
       amountCents: verified.amountMinor, currency: verified.currency, status: 'COMPLETED' });
   }
+  /** Historical topups predate product IDs; match their immutable server amounts without changing their input.
+   * @param {any} intent */
+  const productFor = intent => COMMERCE_CATALOG.products.find(item => item.amountCents === intent.amountCents
+    && item.credits === intent.credits && intent.currency === COMMERCE_CATALOG.currency);
+  /** Recover a persisted intent directly, including unknown creates, without creating or substituting any record.
+   * @param {string} owner @param {any} intent @param {string} [operationId] */
+  async function checkoutIntent(owner,intent,operationId) {
+    if (intent.status === 'credited') return { intentId: intent.id, status: intent.status };
+    const provider = payments();
+    if (intent.providerOrderId) {
+      const order = await provider.getOrder(intent.providerOrderId);
+      if (order.status === 'COMPLETED') return { intentId: intent.id, status: (await reconcile(owner, intent)).status };
+      let approval;
+      try { approval=validatedApprovalUrl(order,intent.providerOrderId); }
+      catch { throw new Problem(409,'checkout-not-approvable'); }
+      return { intentId: intent.id, status: intent.status, approvalUrl: approval };
+    }
+    // Reuse the original request only within the existing short, conservative provider replay window.
+    if (now() - Date.parse(intent.createdAt) > 5 * 60_000) throw new Problem(409, 'checkout-needs-reconciliation');
+    const operation = operationId ? await store.operation(owner,'get',{operationId:key(operationId)}) : null;
+    const callback = operation ? `${origin}/broadcast/${operation.kind === 'broadcast' ? '' : 'tasks/'}?operation=${key(operationId)}`
+      : `${origin}/broadcast/?intent=${encodeURIComponent(intent.id)}`;
+    const product = productFor(intent);
+    const description = `${COMMERCE_CATALOG.service.name}${product ? ' '+product.name : ''} - ${intent.credits.toLocaleString('en-US')} ${COMMERCE_CATALOG.service.creditName}`;
+    const order = await provider.createOrder({ requestId: `o-${intent.id}`, referenceId: intent.id,
+      amountMinor: intent.amountCents, currency: intent.currency, returnUrl: callback, cancelUrl: `${callback}&cancelled=1`,
+      description,brandName:COMMERCE_CATALOG.service.name });
+    await store.attachOrder(owner, intent.id, order.id);
+    return { intentId: intent.id, status: 'ordered', approvalUrl: order.approvalUrl };
+  }
   return {
     catalog: () => ({ ...COMMERCE_CATALOG, hosts, paypalConfigured: Boolean(paypal && merchantId) }),
     /** @param {string} owner */
     wallet: owner => store.wallet(owner),
-    /** @param {string} owner @param {unknown} input */
-    async checkout(owner, input) {
+    /** Recent purchases only. Owner/provider credentials and mutation keys never leave this view.
+     * @param {string} owner */
+    async purchases(owner) {
+      const intents = await store.listTopups(owner);
+      return {items:intents.map((/** @type {any} */ intent) => {
+        const product=productFor(intent);
+        return {id:intent.id,productId:product?.id ?? null,productName:product?.name ?? 'DON purchase',
+          credits:intent.credits,amountCents:intent.amountCents,currency:intent.currency,createdAt:intent.createdAt,
+          creditedAt:intent.creditedAt,status:intent.status,
+          canCheckout:intent.status !== 'credited' && Boolean(intent.providerOrderId || now()-Date.parse(intent.createdAt)<=5*60_000)};
+      }),limit:50};
+    },
+    /** Human recovery of this owner's exact saved purchase. @param {string} owner @param {string} intentId */
+    async recoverCheckout(owner,intentId) { return checkoutIntent(owner,await store.findTopup(owner,key(intentId))); },
+    /** @param {string} owner @param {unknown} input @param {string} [operationId] Trusted server linkage only. */
+    async checkout(owner, input, operationId) {
       const body = record(input), requestKey = key(body.requestKey);
       const product = COMMERCE_CATALOG.products.find(item => item.id === body.productId);
       if (!product) throw new Problem(422, 'unknown-product');
-      const provider = payments();
+      payments();
       const intent = await store.createTopup(owner, { requestKey, amountCents: product.amountCents, credits: product.credits, currency: COMMERCE_CATALOG.currency });
-      if (intent.status === 'credited') return { intentId: intent.id, status: intent.status };
-      if (intent.providerOrderId) {
-        const order = await provider.getOrder(intent.providerOrderId);
-        if (order.status === 'COMPLETED') return { intentId: intent.id, status: (await reconcile(owner, intent)).status };
-        let approval;
-        try { approval=validatedApprovalUrl(order,intent.providerOrderId); }
-        catch { throw new Problem(409,'checkout-not-approvable'); }
-        return { intentId: intent.id, status: intent.status, approvalUrl: approval };
-      }
-      // Never blindly replay an unknown create after the documented provider deduplication window.
-      // A short recovery window also keeps a retained local key from turning into a new provider order later.
-      if (now() - Date.parse(intent.createdAt) > 5 * 60_000) throw new Problem(409, 'checkout-needs-reconciliation');
-      const callback = `${origin}/broadcast/?intent=${encodeURIComponent(intent.id)}`;
-      const order = await provider.createOrder({ requestId: `o-${intent.id}`, referenceId: intent.id,
-        amountMinor: intent.amountCents, currency: intent.currency, returnUrl: callback, cancelUrl: `${callback}&cancelled=1` });
-      await store.attachOrder(owner, intent.id, order.id);
-      return { intentId: intent.id, status: 'ordered', approvalUrl: order.approvalUrl };
+      return checkoutIntent(owner,intent,operationId);
     },
     /** User approval is completed at PayPal; this endpoint only captures/reconciles that persisted order.
      * @param {string} owner @param {string} intentId */
@@ -65,6 +93,7 @@ export function createCommerceService({ store, paypal, merchantId = '', publicOr
       if (intent.status === 'credited') return intent;
       if (!intent.providerOrderId) throw new Problem(409, 'checkout-outcome-unknown');
       const provider = payments(), order = await provider.getOrder(intent.providerOrderId);
+      if (order.status === 'VOIDED') throw new Problem(409, 'paypal-order-voided');
       if (order.status !== 'COMPLETED') {
         if (order.status !== 'APPROVED') throw new Problem(409, 'paypal-approval-required');
         validateApprovedOrder(order,{orderId:intent.providerOrderId,referenceId:intent.id,
@@ -90,6 +119,14 @@ export function createCommerceService({ store, paypal, merchantId = '', publicOr
         const adjustment=await store.recordPaymentAdjustment({eventId:event.id,eventType:event.event_type,captureId,
           ...(related?.order_id===undefined?{}:{providerOrderId:related.order_id})});
         return {received:true,recorded:true,applied:adjustment.status==='needs_reconciliation',needsReconciliation:true};
+      }
+      // Approval can arrive after the phone/browser has closed. Verify and capture the SAME persisted order.
+      if (event.event_type === 'CHECKOUT.ORDER.APPROVED') {
+        if (typeof event.resource?.id !== 'string') throw new Problem(422, 'webhook-order-missing');
+        const intent = await store.lookupOrder(event.resource.id);
+        if (!intent) throw new Problem(409, 'webhook-order-unlinked');
+        await this.capture(intent.owner, intent.id);
+        return { received: true, applied: true };
       }
       if (event.event_type !== 'PAYMENT.CAPTURE.COMPLETED') return { received: true, applied: false };
       const orderId = event.resource?.supplementary_data?.related_ids?.order_id;

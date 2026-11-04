@@ -149,3 +149,15 @@ test('invalid price/currency/path/request IDs fail before HTTP', async () => {
   await assert.rejects(adapter.getOrder('../OTHER'), PayPalError);
   assert.equal(calls.length, 0);
 });
+
+test('batch success requires every recipient success and complete pagination',async()=>{
+  const data={batch_header:{payout_batch_id:'BATCH1',batch_status:'SUCCESS',sender_batch_header:{sender_batch_id:'LOCAL1'}},total_items:2,total_pages:1,
+    items:[{payout_item_id:'ITEM1',transaction_status:'SUCCESS'},{payout_item_id:'ITEM2',transaction_status:'UNCLAIMED'}]};
+  const {adapter,calls}=setup(url=>json(url.endsWith('/token')?token:data));
+  assert.equal((await adapter.getPayout('BATCH1')).status,'ITEMS_NEED_REVIEW');
+  data.items[1].transaction_status='SUCCESS';assert.equal((await adapter.getPayout('BATCH1')).status,'SUCCESS');
+  data.total_pages=2;assert.equal((await adapter.getPayout('BATCH1')).status,'ITEMS_NEED_REVIEW');
+  data.total_pages=1;data.total_items=3;assert.equal((await adapter.getPayout('BATCH1')).status,'ITEMS_NEED_REVIEW');
+  data.total_items=2;data.items[1].payout_item_id='ITEM1';assert.equal((await adapter.getPayout('BATCH1')).status,'ITEMS_NEED_REVIEW');
+  assert.match(calls[1].url,/page_size=1000&total_required=true/);
+});

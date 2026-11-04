@@ -4,6 +4,9 @@
 
 외부 HTTPS 데모의 구성·배포·실행 순서는 [BROADCAST-HOSTING](BROADCAST-HOSTING.md)을 따른다.
 
+VM 요청 → 휴대폰 승인·결제 → PC 복구는 [PAID-TASK-RECOVERY](PAID-TASK-RECOVERY.md)를 따른다.
+추가 Sandbox SQL, `ODDBOUT_PAID_OPERATIONS=1`, Auth redirect와 webhook 설정이 필요하며 기본값은 꺼짐이다.
+
 ## 1. 설치와 UI 미리보기
 
 필요 조건은 Node.js 22.12 이상과 npm이다.
@@ -27,7 +30,8 @@ DB와 Sandbox 설정 없이 실행하면 `preview-unconfigured` 모드다. 이 �
 먼저 테스트 전용 Supabase 프로젝트임을 프로젝트 참조 ID와 대시보드에서 확인한다. 아래 migration은 `commerce` 지갑·원장·예산·작업 schema와 RPC를 만든다. 이 SQL을 **격리된 개발/데모 프로젝트에만** 적용한다.
 
 - `supabase/sandbox/20261102115107_commerce_broadcast_ledger.sql`
-- 운영 또는 기존 프로덕션 프로젝트에 적용하지 않는다. 그래서 이 파일은 `supabase/migrations/` 밖에 있다: 운영 DB 절차·`supabase db push`·배포 drift watch는 이 SQL을 보지 않는다. 대상 프로젝트를 확인하고 SQL 편집기 등으로 이 파일 하나만 실행한다.
+- `supabase/sandbox/20261104090000_commerce_payouts.sql`(크리에이터 출전료 지급, 5-3절). 첫 파일 다음에 적용한다.
+- 운영 또는 기존 프로덕션 프로젝트에 적용하지 않는다. 그래서 이 파일들은 `supabase/migrations/` 밖에 있다: 운영 DB 절차·`supabase db push`·배포 drift watch는 이 SQL을 보지 않는다. 대상 프로젝트를 확인하고 SQL 편집기 등으로 이 두 파일만 순서대로 실행한다.
 - 운영 `ai-fighter`·`ai-fighter-mcp` Edge 함수와 Render는 commerce를 싣지 않는다(2026-11-03). Sandbox API·producer MCP·worker API는 `scripts/broadcast-demo.mjs` 서버에서만 돈다.
 
 서버 환경 변수는 코드의 실제 이름과 조건을 따른다.
@@ -46,7 +50,13 @@ DB와 Sandbox 설정 없이 실행하면 `preview-unconfigured` 모드다. 이 �
 | `PORT` | `ODDBOUT_BROADCAST_PORT`가 없을 때 쓰는 호스팅 플랫폼 포트. |
 | `ODDBOUT_BROADCAST_BIND_HOST` | 기본 `127.0.0.1`. HTTPS 프록시 뒤의 격리 데모에서만 `0.0.0.0`을 명시한다. HTTPS origin이 없으면 외부 bind를 거부한다. |
 | `ODDBOUT_BROADCAST_WORKERS_JSON` | worker API가 허용할 호스트별 worker token 설정 JSON. 비밀 토큰을 공개 문서·브라우저·저장소에 넣지 않는다. |
-| `ODDBOUT_BROADCAST_PRODUCERS_JSON` | 이미 승인된 세션 하나에 묶는 local producer grant 목록. 비어 있으면 `/mcp` producer 인증은 fail-closed다. 형식은 아래 설명을 참고한다. |
+| `ODDBOUT_BROADCAST_PRODUCERS_JSON` | 이미 승인된 세션 하나에 묶는 local producer grant 목록. 비어 있으면 `/mcp` producer 인증은 서버가 자동 producer에 발급한 grant만 받는다. 형식은 아래 설명을 참고한다. |
+| `ODDBOUT_BROADCAST_AUTO_PRODUCER` | `1`이면 시작된 모든 세션에 AI producer를 서버 안에서 자동 실행한다. 기본값은 끔(`0`)이다. `1`인데 `ODDBOUT_BROADCAST_MODEL`·`OPENAI_API_KEY`가 없으면 서버 시작을 거부한다. 5절을 참고한다. |
+| `ODDBOUT_BROADCAST_AUTO_PRODUCER_MAX_ACTIVE`, `ODDBOUT_BROADCAST_AUTO_PRODUCER_DAILY_CALLS` | 자동 producer의 동시 실행 상한(기본 3)과 UTC 하루 모델 호출 상한(기본 200). |
+| `ODDBOUT_BROADCAST_PRODUCER_STATE_DIR` | 자동 producer checkpoint 디렉터리. 기본 `.oddbout-broadcast/producers`. 재시작 후 재개하려면 영속 디스크에 둔다. |
+| `ODDBOUT_PAYOUTS`, `ODDBOUT_PAYOUT_RECEIVERS_JSON`, `ODDBOUT_PAYOUT_FEE_CENTS` | `1`이면 완료된 컵의 크리에이터 출전료를 PayPal Sandbox Payouts로 지급한다(기본 끔). 수취인은 선수 ID → Sandbox personal 계정 이메일 JSON이고, 출전료는 선수당 컵당 센트(기본 2). 5-3절을 참고한다. |
+| `ODDBOUT_PAYPAL_RECONCILIATION`, `ODDBOUT_PAYPAL_MCP_ENTRY` | `1`이면 공식 PayPal MCP 서버로 계정의 충전 기록을 PayPal과 대조한다(기본 끔). PayPal Sandbox 설정과 `npm ci --prefix deploy/paypal-mcp`가 필요하다. 경로를 바꿀 때만 `ODDBOUT_PAYPAL_MCP_ENTRY`를 쓴다. 5-2절을 참고한다. |
+| `ODDBOUT_BROADCAST_CONCIERGE`, `ODDBOUT_BROADCAST_CONCIERGE_DAILY_CALLS` | `1`이면 콘솔의 AI 컨시어지를 켠다(기본 끔). `ODDBOUT_BROADCAST_MODEL`·`OPENAI_API_KEY`가 필요하다. 하루 모델 호출 상한 기본 300. 6절 앞의 컨시어지 절을 참고한다. |
 
 `.env.example`은 비밀값이 없는 템플릿이다. `.env`가 아직 없을 때만 복사하고 기존 파일은 보존한다. 실제 값을 문서나 소스에 붙이지 말고 개발용 `.env` 또는 프로세스 환경에만 설정한다. `.env`는 Git에서 제외된다. npm 별칭은 `.env`를 자동 로드하지 않으므로 파일을 쓸 때는 Node `--env-file`로 명시한다.
 
@@ -134,6 +144,18 @@ producer는 승인된 broadcast ID에 대해서만 실행한다. 서버가 부�
 node --env-file=.env scripts/broadcast-producer.mjs --broadcast <approved-broadcast-uuid> --once
 ```
 
+### 자동 실행 (데모 서버)
+
+`ODDBOUT_BROADCAST_AUTO_PRODUCER=1`이면 데모 서버가 세션 시작(`POST /commerce/broadcasts`) 직후 그 세션의 producer를 자동으로 실행한다. 운영자가 grant를 provision하거나 CLI를 실행하지 않아도 된다. 시작 응답은 producer를 기다리지 않는다.
+
+- 서버는 세션마다 새 `obp_` grant를 프로세스 메모리에서 발급한다. 이 grant는 owner·broadcast·세션 `endsAt`에 묶인다. 토큰은 로그·파일·HTTP 응답에 나가지 않고, producer가 끝나면 폐기한다. 설정 grant(`ODDBOUT_BROADCAST_PRODUCERS_JSON`)와 같은 세션·도구 검사를 받는다.
+- producer는 같은 `/mcp` 핸들러에 MCP로 요청한다. 네트워크 대신 프로세스 내부 transport를 쓰므로 공개 HTTPS 주소로 되돌아 나가지 않는다.
+- 동시에 최대 `ODDBOUT_BROADCAST_AUTO_PRODUCER_MAX_ACTIVE`개를 실행하고 계정당 하나만 실행한다. 나머지는 도착 순서대로 기다린다.
+- UTC 하루 모델 호출이 `ODDBOUT_BROADCAST_AUTO_PRODUCER_DAILY_CALLS`에 도달하면 요청을 보내기 전에 거절한다. 그 producer는 결과 불명확으로 멈추고, 기록에는 `producer_daily_model_limit`가 남는다. 세션별 `ODDBOUT_BROADCAST_MAX_MODEL_CALLS`도 그대로 적용된다.
+- checkpoint는 `ODDBOUT_BROADCAST_PRODUCER_STATE_DIR/producer-<broadcastId>.json`에 저장한다. 서버가 다시 시작하면 끝나지 않은 producer를 이어서 실행한다. 끝난 producer(`stopped`/`unknown` 결과가 기록된 것)는 다시 실행하지 않는다. 재시작으로 모델 호출을 새로 사지 않게 하기 위해서다. 디스크가 휘발성이면(예: Render Free) 재시작 때 checkpoint가 사라진다. 그러면 원장의 작업 상태를 근거로 새 producer가 시작되고, 세션별 호출 상한도 새로 센다.
+- 콘솔은 `GET /commerce/broadcasts/<id>/producer`로 owner 본인 세션의 상태, 모델 호출 수, 최근 결정 5개를 본다. 모델이 쓴 문장은 데이터로 취급한다. `/broadcast/config`의 `autoProducer`가 자동 실행 여부를 알린다.
+- 사용자 `Stop`이나 예산·시간 소진은 기존 규칙대로 producer를 멈춘다. `unknown` 작업은 자동으로 풀지 않으며 운영자 해제 후에도 그 producer는 다시 시작하지 않는다.
+
 `--once`를 빼면 상태가 바뀔 때까지 polling한다. 중지하려면 `Ctrl+C`를 누른다. OpenAI API 호출 비용은 PayPal Sandbox 크레딧·방송 원장에 포함되지 않으며 별도로 청구될 수 있다. 알 수 없는 모델 응답을 성공이나 작업 완료로 간주하지 않는다.
 
 Producer는 checkpoint 파일과 별도 `.lock` 파일로 동일 상태 경로의 중복 실행을 막는다. 비정상 종료 시 `.lock`이 남아 다음 실행이 `producer_state_locked`로 fail-closed 될 수 있다. 같은 호스트에서 기록된 PID와 실제 프로세스를 확인하고, producer와 runner가 실행 중이지 않음을 확인한 뒤에만 orphan `.lock`을 제거한다. 원본 JSON 상태 파일과 request key는 보존한다. 상태 파일을 삭제하거나 새 request key로 재시도하지 않는다. producer의 `prepared`/`unknown` 요청은 자동 복구하지 않는다. host의 `unknown` 작업은 위의 운영자 해제(`scripts/broadcast-release.mjs`)로 닫는다. 불명확한 지출 결과는 원장을 확인하기 전까지 보류한다.
@@ -141,6 +163,39 @@ Producer는 checkpoint 파일과 별도 `.lock` 파일로 동일 상태 경로�
 브라우저 console은 사람 계정에 Supabase 로그인하며 access token은 메모리에만 둔다. 결제·승인·시작·컵 같은 변경 요청은 브라우저 owner journal에 request key와 입력을 먼저 기록하고, 실제 첫 fetch 직전에 dispatched 표시를 영속화한다. 첫 시도의 명시적 precondition 거절은 해당 request key를 지워 새 입력으로 다시 시작할 수 있지만, 이미 dispatch된 요청 뒤 인증 또는 precondition 거절이 와도 이전 시도가 서버에서 처리됐을 수 있어 원래 request key를 보존한다. 브라우저를 닫거나 네트워크가 끊겨도 같은 계정에서 그 key로 복구한다. 이전 journal에서 dispatched 표시가 없는 항목도 이미 시도된 것으로 취급한다. 만료된 approval draft는 quote가 `invalid-end-time`을 반환하고 브라우저 시각도 만료를 나타낼 때 approval 키만 정리한다. 만료된 approval은 새 session을 시작할 수 없으며 이 정리는 잔액을 소비하지 않는다. local `/mcp`는 일반 Supabase JWT와 production `af_mcp` grant를 거부하고, 서버 설정 `ODDBOUT_BROADCAST_PRODUCERS_JSON`에 등록된 별도 `obp_` grant만 받는다. 각 항목은 `owner` UUID, 이미 승인된 `broadcastId` UUID, `obp_`와 32개 이상의 URL-safe 난수 문자를 붙인 `token`, ISO `expiresAt`으로 구성된다. 해당 비밀은 격리 서버 설정과 producer의 비밀 환경에만 provision한다. 값이나 callback을 일반 대화에 붙여넣지 않는다. 이 local 설정은 기존 production cloud MCP connector의 `af_mcp` 권한을 바꾸지 않는다.
 
 Grant는 등록된 사용자·broadcast에 한정되고, 매 요청 때 broadcast 소유권과 상태를 확인한다. 사용 가능한 기간은 grant 만료와 세션 `endsAt` 중 먼저 도달하는 때까지이며 자동 갱신되지 않는다. Producer MCP는 6개 고정 도구(잔액·가격·세션·작업 조회, `host_cup`)만 제공한다. Checkout·승인·세션 시작·중지·다른 broadcast 접근은 허용하지 않는다. 이는 이미 승인된 Sandbox 세션의 producer 권한일 뿐 Twitch 계정 인증이나 live 송출 권한이 아니다. PayPal은 새 탭에서 승인한 뒤 원래 console 탭으로 돌아와 **Verify payment**를 선택한다. 비밀 없는 owner-scoped 작업 journal은 localStorage에서 불확실한 checkout·approval·작업을 같은 계정으로 복구하는 데 쓴다. journal에는 인증 token이 들어가지 않는다.
+
+## 5-1. AI 컨시어지 (데모 서버)
+
+`ODDBOUT_BROADCAST_CONCIERGE=1`이면 콘솔에 채팅 에이전트가 나타난다. 로그인한 사람의 목표("1시간, 100크레딧")를 받아 잔액·가격을 읽고, 견적을 내고, 크레딧이 모자라면 PayPal Sandbox 결제를 만든다.
+
+- 서버 `POST /commerce/concierge`가 OpenAI Responses API의 function calling으로 실행한다. 대화는 OpenAI에 저장하지 않는다(`store:false`). 추론 모델의 암호화된 reasoning 항목은 다음 호출에 그대로 돌려준다.
+- 도구는 `get_credit_balance`, `get_broadcast_prices`, `quote_broadcast`, `create_topup_checkout`, `confirm_topup` 다섯 개뿐이다. 예산 승인·세션 시작·중지·컵 요청 도구는 없다. 견적은 콘솔에 "Use this plan" 버튼으로 나타나고, 사람이 기존 승인 버튼으로 승인한다. `agent` 자격으로 들어온 요청(MCP)은 이 경로를 쓸 수 없다.
+- 결제 request key는 모델이 아니라 서버가 만든다. 대화 하나에서 크레딧 팩마다 key 하나를 쓰고, 그 결제가 충전될 때까지 재사용한다. 그래서 같은 요청을 반복하거나 재시도해도 PayPal 주문이 하나만 생긴다.
+- PayPal 승인 링크는 모델에게 주지 않는다. 서버가 화면에 버튼으로만 넘기고, 콘솔은 Sandbox origin을 검사한 뒤 표시한다. 사람은 PayPal에서 승인한 뒤 "승인했다"고 말하거나 기존 **Verify payment**를 누른다. `confirm_topup`은 capture 검증 후 `credited`일 때만 충전으로 알린다.
+- 대화는 서버 메모리에 2시간 보관하며 재시작하면 사라진다. 사라진 대화 ID로 요청하면 새 대화로 시작하고 `restarted: true`를 돌려준다. 이미 만든 결제는 콘솔의 결제 복구와 **Verify payment**로 이어 갈 수 있다.
+- 한도: 대화당 20턴, 턴당 모델 호출 6회, UTC 하루 모델 호출 `ODDBOUT_BROADCAST_CONCIERGE_DAILY_CALLS`(기본 300). 실패한 턴은 대화 기록에 남기지 않는다.
+
+## 5-2. PayPal 정산 대조 (데모 서버)
+
+`ODDBOUT_PAYPAL_RECONCILIATION=1`이면 콘솔에서 계정의 최근 충전 20건을 PayPal의 주문 기록과 대조한다(`POST /commerce/reconciliation`).
+
+- PayPal 공식 MCP 서버(`@paypal/mcp` 1.8.1)를 대조 한 번마다 stdio 하위 프로세스로 띄운다. `--tools=orders.get,transactions.list,payments.getRefunds`로 읽기 도구(`get_order`, `list_transactions`, `get_refund`)만 켜고, 그 밖의 도구를 내놓는 서버는 거부한다. Sandbox access token은 그 프로세스의 환경 변수로만 넘긴다.
+- 이 서버는 크리에이터 킷 의존성과 따로 `deploy/paypal-mcp/`에 잠금 파일로 고정한다. 설치: `npm ci --prefix deploy/paypal-mcp --ignore-scripts`. 설치되지 않았으면 서버 시작을 거부한다(`paypal-mcp-not-installed`).
+- 서버가 원장의 모든 충전에 대해 `get_order`를 직접 호출하고, 충전 때와 같은 검증(`validateCapturedOrder`)으로 결과를 정한다. 결과는 `matched`(일치), `mismatched`(capture ID·금액·상태 불일치, 환불, PayPal은 완료인데 미충전), `pending`(승인·capture 대기), `unavailable`(조회 실패), `no-order`(PayPal에 주문이 없음)다.
+- 모델과 키가 있으면 AI 감사자가 같은 읽기 도구로 불일치·대기 건이나 원장에 없는 PayPal 거래를 더 조사하고 설명한다. 결과는 서버 판정이 정하고, AI는 설명만 한다. Transaction Search 데이터는 몇 시간 늦을 수 있다.
+- 계정마다 한 번에 하나만 실행하고, 결과는 2분 동안 캐시한다. AI 감사자의 모델 호출은 대조당 6회, UTC 하루 100회까지다.
+- 이 기능은 원장 SQL의 `list_topups` 명령을 쓴다(2026-11-03 추가). 이전 버전 SQL을 이미 적용한 프로젝트는 `public.commerce_command` 함수만 이 파일의 정의로 바꾼다(`create function`을 `create or replace function`으로 실행).
+
+## 5-3. 크리에이터 출전료 지급 (데모 서버)
+
+`ODDBOUT_PAYOUTS=1`이면 완료된 컵마다 출전한 선수 네 명의 크리에이터에게 출전료를 PayPal Sandbox Payouts로 지급한다. 우승 상금이 아니라 출전료다. 컵 가격 25크레딧(Sandbox USD 0.25) 가운데 기본값으로 선수당 2센트, 컵당 8센트가 크리에이터 몫이다.
+
+- 수취인은 서버 설정 `ODDBOUT_PAYOUT_RECEIVERS_JSON`의 선수 ID → Sandbox personal 계정 이메일이다. 예: `{"kuma":"kuma.creator@personal.example.com"}`. 수취인이 없는 선수의 출전료는 쌓이지 않는다. 모델이나 요청이 수취인과 금액을 정하지 않는다.
+- 흐름: 지급안 제안(`POST /commerce/payouts`, 콘솔 버튼 또는 컨시어지의 `propose_creator_payouts`) → 세션 소유자가 콘솔에서 승인(`POST /commerce/payouts/<id>/approve`, `confirmed: true`, 같은 origin만; MCP agent 불가) → PayPal Payouts 배치 → 상태 조회(`GET /commerce/payouts/<id>`)로 `paid`/`failed` 확정. 제안만으로는 돈이 움직이지 않는다.
+- 이중 지급 방지: 지급 항목의 키는 (컵 작업, 선수)이므로 한 컵의 한 선수 출전료는 한 번만 지급안에 들어간다. 배치 ID를 PayPal `sender_batch_id`로, `p-<배치 ID>`를 `PayPal-Request-Id`로 쓴다. 응답을 잃은 승인은 같은 값으로 다시 보내므로 배치가 둘 생기지 않는다.
+- 첫 전송에 대한 명확한 4xx 거절(408·409·429 제외)만 배치를 `failed`(REJECTED)로 닫고 항목을 풀어 다시 제안할 수 있게 한다. 그 밖의 실패는 결과 불명확으로 `submitting`에 남고, 승인을 다시 눌러 같은 요청으로 재시도한다. 불명확한 전송 뒤의 재시도가 거절되면 PayPal이 이미 배치를 만들었을 수 있으므로 항목을 풀지 않는다. 운영자가 PayPal 대시보드에서 `sender_batch_id`(배치 ID)를 확인한다. PayPal의 DENIED·CANCELED는 항목을 푼다.
+- 배치 상태만 추적한다. 항목별 UNCLAIMED 등은 PayPal 대시보드에서 확인한다. Payouts webhook은 아직 처리하지 않으며 상태는 조회로 갱신한다.
+- PayPal Sandbox REST 앱에서 Payouts 기능을 켜야 한다. business 계정 잔액에서 지급된다. 실제 돈의 지급에는 별도 계약·세무·KYC 검토가 필요하며 이번 범위가 아니다.
 
 ## 6. 아직 제공하지 않는 기능
 
@@ -172,4 +227,5 @@ Grant는 등록된 사용자·broadcast에 한정되고, 매 요청 때 broadcas
 - OBS/호스트 doctor: `scripts/broadcast-host.mjs`, `broadcast/hosts.mjs`
 - render-only worker: `scripts/broadcast-runner.mjs`, `broadcast/runner.mjs`
 - 선택형 AI producer: `scripts/broadcast-producer.mjs`, `broadcast/producer.mjs`
-- 별도 Sandbox 원장 SQL(운영 migration 아님): `supabase/sandbox/20261102115107_commerce_broadcast_ledger.sql`
+- 별도 Sandbox 원장 SQL(운영 migration 아님): `supabase/sandbox/20261102115107_commerce_broadcast_ledger.sql`, `supabase/sandbox/20261104090000_commerce_payouts.sql`
+- 크리에이터 출전료 지급: `api/commerce/payouts.mjs`

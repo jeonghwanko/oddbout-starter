@@ -19,9 +19,9 @@ function row(value) {
  * @param {{rpc: (name:string,args:any)=>PromiseLike<{data:any,error:any}>}} db
  */
 export function createCommerceStore(db) {
-  /** @param {string|null} owner @param {string} command @param {any} [input] */
-  async function command(owner, command, input = {}) {
-    const { data, error } = await db.rpc('commerce_command', { p_owner: owner, p_command: command, p_input: input });
+  /** @param {string|null} owner @param {string} command @param {any} [input] @param {string} [rpc] */
+  async function command(owner, command, input = {}, rpc = 'commerce_command') {
+    const { data, error } = await db.rpc(rpc, { p_owner: owner, p_command: command, p_input: input });
     if (error) {
       const known = String(error.message ?? '').match(/^commerce:([a-z_-]+)/)?.[1];
       const status = known === 'not-found' ? 404 : known === 'insufficient-credits' ? 402
@@ -32,10 +32,40 @@ export function createCommerceStore(db) {
     return row(data);
   }
   return {
+    /** Ticket execution and settlement; owner is verified by the campaign handler.
+     * @param {string|null} owner @param {string} action @param {any} [input] */
+    campaignExecution: (owner, action, input = {}) => command(owner, action, input, 'commerce_campaign_execution'),
+    /** Leased payment recovery and operator diagnostics, service-role only.
+     * @param {string|null} owner @param {string} action @param {any} [input] */
+    recovery: (owner, action, input = {}) => command(owner, action, input, 'commerce_operation_recovery'),
+    /** Durable paid-task commands; owner is verified by the web/device handler.
+     * @param {string} owner @param {string} action @param {any} [input] */
+    operation: (owner, action, input = {}) => command(owner, action, input, 'commerce_operation'),
+    operationContinuations: () => command(null, 'continuations', {}, 'commerce_operation'),
+    /** Server-only device pairing. Secrets are hashed before persistence.
+     * @param {string|null} owner @param {string} action @param {any} [input] */
+    operationDevice: (owner, action, input = {}) => command(owner, action, input, 'commerce_operation_device'),
     /** @param {string} owner @param {any} input */
     createTopup: (owner, input) => command(owner, 'create_topup', input),
     /** @param {string} owner @param {string} intentId */
     findTopup: (owner, intentId) => command(owner, 'find_topup', { intentId }),
+    /** @param {string} owner */
+    listTopups: owner => command(owner, 'list_topups'),
+    /** Creator appearance fees (supabase/sandbox/20261104090000_commerce_payouts.sql).
+     * @param {string} owner @param {{broadcastId:string,requestKey:string,feeCents:number,receivers:Record<string,string>}} input */
+    proposePayout: (owner, input) => command(owner, 'propose', input, 'commerce_payout'),
+    /** @param {string} owner @param {string} broadcastId */
+    listPayouts: (owner, broadcastId) => command(owner, 'list', { broadcastId }, 'commerce_payout'),
+    /** @param {string} owner @param {string} batchId */
+    getPayout: (owner, batchId) => command(owner, 'get', { batchId }, 'commerce_payout'),
+    /** @param {string} owner @param {string} batchId */
+    approvePayout: (owner, batchId) => command(owner, 'approve', { batchId }, 'commerce_payout'),
+    /** @param {string} owner @param {string} batchId */
+    cancelPayout: (owner, batchId) => command(owner, 'cancel', { batchId }, 'commerce_payout'),
+    /** @param {string} owner @param {string} batchId @param {string} providerBatchId */
+    attachPayout: (owner, batchId, providerBatchId) => command(owner, 'attach', { batchId, providerBatchId }, 'commerce_payout'),
+    /** @param {string} owner @param {string} batchId @param {string} providerStatus */
+    settlePayout: (owner, batchId, providerStatus) => command(owner, 'settle', { batchId, providerStatus }, 'commerce_payout'),
     /** Trusted webhook reverse lookup. @param {string} providerOrderId */
     lookupOrder: providerOrderId => command(null, 'lookup_order', { providerOrderId }),
     /** Verified signed refund/reversal only. Owner is resolved from persisted capture, never the payload.

@@ -267,6 +267,10 @@ begin
     perform commerce.link_payment_adjustments(t.id);
     return to_jsonb(t);
 
+  elsif p_command='list_topups' then
+    -- Newest 50 of this owner's top-ups, for reconciliation against PayPal's own records.
+    return coalesce((select jsonb_agg(to_jsonb(x) order by x.created_at desc)
+      from (select * from commerce.topups where owner=p_owner order by created_at desc limit 50) x), '[]'::jsonb);
   elsif p_command='approve_budget' then
     select * into a from commerce.approvals where owner=p_owner and request_key=v_key;
     if found then

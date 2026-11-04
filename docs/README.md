@@ -69,6 +69,8 @@ creator-kit ZIP에는 제작·연결 안내와 이 문서 지도가 들어 있�
 | [ADMIN-AGENT](ADMIN-AGENT.md) | 운영자 화면이 하는 일을 에이전트가 `npm run admin`으로 하기(운영자 로그인 세션) |
 | [PAYPAL-AGENT-BROADCAST-PLAN](PAYPAL-AGENT-BROADCAST-PLAN.md) | PayPal Sandbox 재화와 AI 대회 방송 개발 계획 및 검증 기준 (개발 진행 중) |
 | [BROADCAST-SANDBOX](BROADCAST-SANDBOX.md) | 로컬 Sandbox 콘솔·호스트 doctor/runner·producer 실행과 현재 검증 범위 |
+| [SHOWRUNNER-PRODUCT](SHOWRUNNER-PRODUCT.md) | ODDBOUT Showrunner 상품명·아이콘·Studio Credits 구매와 사용 계약 |
+| [PAID-TASK-RECOVERY](PAID-TASK-RECOVERY.md) | 방송 의뢰·예산 승인·결제에서 기존 producer로 이어지는 기기 간 복구 |
 | [BROADCAST-HOSTING](BROADCAST-HOSTING.md) | 외부 심사용 HTTPS 데모, 격리 DB, 방송 호스트 연결과 G0~G8 통과 증거 |
 | [BROADCAST-ADVERSARIAL-REVIEW](BROADCAST-ADVERSARIAL-REVIEW.md) | 결제·권한·중복 실행·실패 복구의 적대적 재현, 수정과 남은 운영 한계 |
 | [NIGHTCROWN-BROADCAST-CONCEPT](NIGHTCROWN-BROADCAST-CONCEPT.md) | NIGHTCROWN 방송용 허구 콘셉트와 producer prompt 설정 제안 |

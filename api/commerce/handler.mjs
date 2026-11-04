@@ -2,7 +2,11 @@
 import { Problem, logFailure, readBody } from '../http.mjs';
 import { PayPalError } from './paypal.mjs';
 
-/** @typedef {ReturnType<typeof import('./service.mjs').createCommerceService>} Service */
+/** The demo server may add `producer` (its auto-producer status), `concierge` (its chat agent), `reconcile`
+ * (PayPal reconciliation) and `payouts` (creator appearance fees); other hosts serve without them.
+ * @typedef {ReturnType<typeof import('./service.mjs').createCommerceService> & {producer?:(owner:string,id:string)=>unknown,
+ *   concierge?:(owner:string,input:unknown)=>Promise<unknown>,reconcile?:(owner:string)=>Promise<unknown>,
+ *   payouts?:ReturnType<typeof import('./payouts.mjs').createPayoutService>}} Service */
 /** @param {{service:Service,authenticate:(request:Request)=>Promise<string|null>,publicOrigin:string,agent?:boolean}} options */
 export function createCommerceHandler({ service, authenticate, publicOrigin, agent = false }) {
   /** @param {Request} request @param {string[]} [segments] */
@@ -32,7 +36,12 @@ export function createCommerceHandler({ service, authenticate, publicOrigin, age
       }
       let data;
       if (route.join('/') === 'wallet' && method === 'GET') data = await service.wallet(owner);
+      else if (route.join('/') === 'purchases' && method === 'GET' && !agent) data = await service.purchases(owner);
       else if (route.join('/') === 'checkout' && method === 'POST') data = await service.checkout(owner, body);
+      else if (route.length === 3 && route[0] === 'topups' && route[2] === 'checkout' && method === 'POST') {
+        if (agent || origin !== publicOrigin || body?.confirmed !== true) throw new Problem(403, 'web-approval-required');
+        data = await service.recoverCheckout(owner,route[1]);
+      }
       else if (route.length === 3 && route[0] === 'topups' && route[2] === 'capture' && method === 'POST') data = await service.capture(owner, route[1]);
       else if (route.join('/') === 'quote' && method === 'POST') data = service.quote(body);
       else if (route.join('/') === 'approvals' && method === 'POST') {
@@ -40,10 +49,21 @@ export function createCommerceHandler({ service, authenticate, publicOrigin, age
         data = await service.approve(owner, body);
       } else if (route.join('/') === 'broadcasts' && method === 'POST') data = await service.start(owner, body);
       else if (route.join('/') === 'cups' && method === 'POST') data = await service.cup(owner, body);
+      // A person's console only: an agent credential never reaches another agent.
+      else if (route.join('/') === 'concierge' && method === 'POST' && service.concierge && !agent) data = await service.concierge(owner, body);
+      else if (route.join('/') === 'reconciliation' && method === 'POST' && service.reconcile && !agent) data = await service.reconcile(owner);
+      else if (route.join('/') === 'payouts' && method === 'POST' && service.payouts && !agent) data = await service.payouts.propose(owner, body);
+      else if (route.length === 3 && route[0] === 'payouts' && ['approve', 'cancel'].includes(route[2]) && method === 'POST' && service.payouts) {
+        // Money leaves only on the owner's own console click, like a budget approval.
+        if (agent || origin !== publicOrigin || body?.confirmed !== true) throw new Problem(403, 'web-approval-required');
+        data = route[2] === 'approve' ? await service.payouts.approve(owner, route[1]) : await service.payouts.cancel(owner, route[1]);
+      } else if (route.length === 2 && route[0] === 'payouts' && method === 'GET' && service.payouts && !agent) data = await service.payouts.get(owner, route[1]);
       else if (route.length === 3 && route[0] === 'broadcasts') {
         if (route[2] === 'stop' && method === 'POST') data = await service.stop(owner, route[1]);
         else if (route[2] === 'report' && method === 'GET') data = await service.report(owner, route[1]);
         else if (route[2] === 'jobs' && method === 'GET') data = await service.jobs(owner, route[1]);
+        else if (route[2] === 'producer' && method === 'GET' && service.producer) data = await service.producer(owner, route[1]);
+        else if (route[2] === 'payouts' && method === 'GET' && service.payouts && !agent) data = await service.payouts.list(owner, route[1]);
         else throw new Problem(404, 'not-found');
       } else if (route.length === 2 && route[0] === 'jobs' && method === 'GET') data = await service.job(owner, route[1]);
       else throw new Problem(404, 'not-found');

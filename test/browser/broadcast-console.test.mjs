@@ -44,7 +44,7 @@ test('budget review accepts spaces and Korean, shows errors beside the button an
   });
   await page.route('**/commerce/approvals', route => { approvals++; return route.abort(); });
   page.on('dialog', async dialog => { dialogs.push(dialog.message()); await dialog.dismiss(); });
-  await page.goto(origin + '/broadcast/');
+  await page.goto(origin + '/broadcast/operator/');
   await page.locator('#signout').waitFor();
   await page.locator('#hostId').selectOption('svl-mac-01');
   await page.locator('#maxCredits').fill('250');
@@ -83,7 +83,7 @@ test('Google-only account flow recovers from OAuth errors and clears identity on
         return {error:null};},
       async signOut(){cb('SIGNED_OUT',null);return {error:null};}
     }};}};` }));
-  await page.goto(origin + '/broadcast/');
+  await page.goto(origin + '/broadcast/operator/');
   await page.waitForFunction(() => !document.getElementById('google-signin').disabled);
   assert.equal(await page.locator('input[type="email"]').count(), 0);
   await page.getByRole('button', { name: 'Sign in with Google' }).click();
@@ -114,9 +114,9 @@ test('real browser: disabled integration, cross-tab payment fencing, rejection r
   t.after(() => browser.close());
   const errors = [], id = '11111111-1111-4111-8111-111111111111';
   const preview = await browser.newPage({ viewport: { width: 390, height: 844 } });
-  await preview.goto(origin + '/broadcast/');
+  await preview.goto(origin + '/broadcast/operator/');
   await preview.locator('#activity-summary').filter({ hasText: 'No balances or successful operations are simulated.' }).waitFor();
-  for (const selector of ['#topup-form button', '#host-cup', '#stop']) assert.equal(await preview.locator(selector).isDisabled(), true);
+  for (const selector of ['#topup-submit', '#host-cup', '#stop']) assert.equal(await preview.locator(selector).isDisabled(), true);
   assert.equal(await preview.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await preview.close();
 
@@ -135,14 +135,14 @@ test('real browser: disabled integration, cross-tab payment fencing, rejection r
   await context.route('**/commerce/broadcasts/*/jobs', route => route.fulfill({ json: { ok: true, data: [] } }));
   const tab1 = await context.newPage(), tab2 = await context.newPage();
   for (const page of [tab1, tab2]) page.on('pageerror', error => errors.push(error.message));
-  await tab1.goto(origin + '/broadcast/'); await tab1.locator('#signout').waitFor({ state: 'visible' });
-  assert.equal(await tab1.locator('#topup-form button').isDisabled(), true);
+  await tab1.goto(origin + '/broadcast/operator/'); await tab1.locator('#signout').waitFor({ state: 'visible' });
+  assert.equal(await tab1.locator('#topup-submit').isDisabled(), true);
   assert.match(await tab1.locator('#configuration-status').textContent(), /PayPal Sandbox is not configured/);
   commerceEnabled = false; await tab1.reload(); await tab1.locator('#signout').waitFor({ state: 'visible' });
   assert.equal(await tab1.locator('#host-cup').isDisabled(), true);
   assert.match(await tab1.locator('#configuration-status').textContent(), /Commerce is disabled/);
   commerceEnabled = true; paypalConfigured = true;
-  await Promise.all([tab1.reload(), tab2.goto(origin + '/broadcast/')]);
+  await Promise.all([tab1.reload(), tab2.goto(origin + '/broadcast/operator/')]);
   for (const page of [tab1, tab2]) { await page.locator('#signout').waitFor({ state: 'visible' }); await page.locator('#broadcastId').fill(id); }
 
   let release, requested; const gate = new Promise(resolve => { release = resolve; }), started = new Promise(resolve => { requested = resolve; });
@@ -230,7 +230,7 @@ test('real browser: disabled integration, cross-tab payment fencing, rejection r
   await tab1.locator('#refresh').click(); await tab1.waitForFunction(id => document.getElementById('report').textContent.includes(id), otherSession);
   spendingBlocked = true;
   await tab1.locator('#refresh').click(); await tab1.getByText(/Spending is frozen/).waitFor();
-  for (const selector of ['#topup-form button', '#budget-form button', '#broadcast-form button', '#host-cup']) assert.equal(await tab1.locator(selector).isDisabled(), true);
+  for (const selector of ['#topup-submit', '#budget-form button', '#broadcast-form button', '#host-cup']) assert.equal(await tab1.locator(selector).isDisabled(), true);
   assert.equal(await tab1.locator('#stop').isDisabled(), false);
   assert.equal(await tab1.locator('#available').textContent(), 'Blocked');
   await tab1.locator('#signout').click(); await tab1.locator('#signout').waitFor({ state: 'hidden' });

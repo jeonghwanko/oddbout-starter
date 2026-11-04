@@ -32,3 +32,5 @@ Asset sources:
 
 Logos retain their owners' trademark rights. These assets identify the connected
 services; they do not imply endorsement.
+
+- `don.svg`: original lime coin with a D monogram for the DON service balance.

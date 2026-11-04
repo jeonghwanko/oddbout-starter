@@ -1,5 +1,12 @@
 # Hosted PayPal Sandbox demo
 
+The customer storefront now uses Spotlight duration cards. See [SHOWRUNNER-PRODUCT](SHOWRUNNER-PRODUCT.md)
+for its additional Sandbox migration, arena adapter, fixed-credit billing and web playback boundary.
+The existing producer console remains available at `/broadcast/operator/`.
+
+For broadcast plans that continue through payment and device changes, apply the additional migrations and settings in
+[PAID-TASK-RECOVERY](PAID-TASK-RECOVERY.md) after the existing Sandbox is configured.
+
 This is a separate hackathon environment. Deployment preparation does not prove a
 payment, model call, Twitch stream or 24-hour run. The runner's `--live` mode remains
 blocked until Twitch channel/ingest verification is implemented.
@@ -9,7 +16,7 @@ blocked until Twitch channel/ingest verification is implemented.
 | Component | Location | Entry point |
 | --- | --- | --- |
 | Judge console, PayPal callbacks, commerce API, producer MCP, worker API | Dedicated HTTPS web service | `scripts/broadcast-demo.mjs` |
-| Wallet, reservations, jobs, accounting | Dedicated Supabase test project | `supabase/sandbox/20261102115107_commerce_broadcast_ledger.sql` |
+| Wallet, reservations, jobs, accounting, creator payouts | Dedicated Supabase test project | `supabase/sandbox/20261102115107_commerce_broadcast_ledger.sql`, then `supabase/sandbox/20261104090000_commerce_payouts.sql` |
 | Public battle page and built-in assets | Static HTTPS host | Cup repository's `dist/broadcast.html` |
 | Visible browser, OBS, persistent runner/producer checkpoints | Selected always-on PC or graphical host | `broadcast-runner.mjs`, `broadcast-producer.mjs` |
 
@@ -46,8 +53,8 @@ See [port binding](https://render.com/docs/web-services#port-binding),
 
 ## Enable the isolated Sandbox
 
-1. Confirm the test Supabase project name/reference before applying the single
-   Sandbox SQL file. Never apply it to the game's production project.
+1. Confirm the test Supabase project name/reference before applying the two
+   Sandbox SQL files in order (ledger, then payouts). Never apply them to the game's production project.
 2. Put its `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_PUBLISHABLE_KEY`
    in API secret settings. Allow Auth redirect `https://<console-host>/broadcast/`.
    Enable the Google provider with the ODDBOUT OAuth web client. Add this isolated
@@ -89,7 +96,23 @@ renderer/validator and saves JSON under `output/`. It does not claim a worker jo
 charge a wallet, call a model or start OBS/Twitch. Inspect incomplete records before
 another run. Completion proves rendering only.
 
-After the user approves a session in the console, provision its matching expiring
+To run the producer automatically for every started session, set
+`ODDBOUT_BROADCAST_AUTO_PRODUCER=1`, `ODDBOUT_BROADCAST_MODEL` and `OPENAI_API_KEY` on the API
+service. Its daily and concurrent limits, the state directory and restart behavior are in
+[BROADCAST-SANDBOX](BROADCAST-SANDBOX.md#자동-실행-데모-서버). Put
+`ODDBOUT_BROADCAST_PRODUCER_STATE_DIR` on a persistent disk so producers resume after a restart.
+To offer the console's AI concierge (balance, prices, quotes and PayPal Sandbox top-up, no approval
+or start), also set `ODDBOUT_BROADCAST_CONCIERGE=1`; see
+[BROADCAST-SANDBOX](BROADCAST-SANDBOX.md#5-1-ai-컨시어지-데모-서버).
+To pay creators an appearance fee per completed cup, set `ODDBOUT_PAYOUTS=1` and
+`ODDBOUT_PAYOUT_RECEIVERS_JSON` (fighter id to a Sandbox personal account email), and enable
+Payouts on the Sandbox REST app; the owner approves each payout in the console. See
+[BROADCAST-SANDBOX](BROADCAST-SANDBOX.md#5-3-크리에이터-출전료-지급-데모-서버).
+To let owners check their top-ups against PayPal through the official PayPal MCP server, set
+`ODDBOUT_PAYPAL_RECONCILIATION=1`; the Blueprint's build command already installs that server
+(`npm ci --prefix deploy/paypal-mcp`). See
+[BROADCAST-SANDBOX](BROADCAST-SANDBOX.md#5-2-paypal-정산-대조-데모-서버).
+Otherwise, after the user approves a session in the console, provision its matching expiring
 `obp_` producer grant. Select model, API account and spending limit before calling
 the model. Invocation/token limits are not a dollar billing cap; API cost is
 separate from Sandbox credits. Preserve checkpoint files and request keys.

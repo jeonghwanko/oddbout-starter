@@ -53,6 +53,13 @@ function matchesMoney(amount, expected, currency) {
   return BigInt(record.value.replace('.', '')) === BigInt(expected);
 }
 
+/** Sandbox payout receivers are email addresses the server configures. @param {unknown} value */
+export function payoutReceiver(value) {
+  const result = text(value, 254);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(result)) throw new PayPalError('paypal_invalid_input');
+  return result;
+}
+
 /** @param {string} value */
 function callbackUrl(value) {
   try {
@@ -79,6 +86,14 @@ function boundOrderUnit(order, expected, status) {
  * @param {unknown} order @param {OrderExpectation} expected */
 export function validateApprovedOrder(order, expected) { boundOrderUnit(order,expected,'APPROVED'); }
 
+/** Operator recovery of an unlinked provider order: verify the same merchant, intent, amount and currency.
+ * This is validation only, never a payment approval. @param {unknown} order @param {OrderExpectation} expected */
+export function validateOrderBinding(order, expected) {
+  const value = object(order);
+  if (!['CREATED','SAVED','APPROVED','VOIDED','COMPLETED','PAYER_ACTION_REQUIRED'].includes(value.status)) throw new PayPalError('paypal_capture_mismatch');
+  boundOrderUnit(order, expected, value.status);
+}
+
 /** A recovered checkout must obey the same approval-link contract as a new checkout.
  * @param {unknown} order @param {string} orderId */
 export function validatedApprovalUrl(order, orderId) {
@@ -102,6 +117,9 @@ export function validateCapturedOrder(order, expected) {
   const captures = object(unit.payments).captures;
   if (!Array.isArray(captures) || captures.length !== 1) fail();
   const capture = object(captures[0]);
+  if (!matchesMoney(capture.amount, expected.amountMinor, expected.currency)) fail();
+  if (capture.status === 'PENDING') throw new PayPalError('paypal_capture_pending', { outcomeUnknown: true });
+  if (['DECLINED', 'FAILED'].includes(capture.status)) throw new PayPalError('paypal_capture_failed');
   if (capture.status !== 'COMPLETED' || capture.final_capture !== true || !matchesMoney(capture.amount, expected.amountMinor, expected.currency)) fail();
   // Some Orders responses also include capture payee/order linkage. If present,
   // they must agree; the purchase unit remains the required merchant binding.
@@ -188,14 +206,16 @@ export function createPayPalSandbox({ clientId, clientSecret, merchantId, fetch:
   }
 
   return {
-    /** @param {{requestId:string,referenceId:string,amountMinor:number,currency:string,returnUrl:string,cancelUrl:string}} input */
+    /** @param {{requestId:string,referenceId:string,amountMinor:number,currency:string,returnUrl:string,cancelUrl:string,description?:string,brandName?:string}} input */
     async createOrder(input) {
       const requestId = text(input.requestId, 108);
       const referenceId = text(input.referenceId, 256);
       const amount = { currency_code: input.currency, value: money(input.amountMinor, input.currency) };
       const order = await api('/v2/checkout/orders', { method: 'POST', requestId, mutation: true, body: {
-        intent: 'CAPTURE', purchase_units: [{ reference_id: referenceId, amount, payee: { merchant_id: merchantId } }],
-        payment_source: { paypal: { experience_context: { return_url: callbackUrl(input.returnUrl), cancel_url: callbackUrl(input.cancelUrl), shipping_preference: 'NO_SHIPPING', user_action: 'PAY_NOW' } } },
+        intent: 'CAPTURE', purchase_units: [{ reference_id: referenceId, amount, payee: { merchant_id: merchantId },
+          ...(input.description === undefined ? {} : {description:text(input.description,127)}) }],
+        payment_source: { paypal: { experience_context: { return_url: callbackUrl(input.returnUrl), cancel_url: callbackUrl(input.cancelUrl), shipping_preference: 'NO_SHIPPING', user_action: 'PAY_NOW',
+          ...(input.brandName === undefined ? {} : {brand_name:text(input.brandName,127)}) } } },
       } });
       try {
         const orderId = id(order.id);
@@ -208,6 +228,41 @@ export function createPayPalSandbox({ clientId, clientSecret, merchantId, fetch:
     },
     /** @param {string} orderId */
     async getOrder(orderId) { return api(`/v2/checkout/orders/${id(orderId)}`); },
+    /** For the official PayPal MCP server process the reconciliation starts with read-only tools only. Never log it. */
+    accessToken,
+    /** Payouts v1. The caller persists the batch first and reuses requestId and senderBatchId on every retry.
+     * @param {{senderBatchId:string,requestId:string,items:{receiver:string,amountMinor:number,currency:string,senderItemId:string,note:string}[]}} input */
+    async createPayout({ senderBatchId, requestId, items }) {
+      if (!Array.isArray(items) || !items.length || items.length > 100) throw new PayPalError('paypal_invalid_input');
+      const result = await api('/v1/payments/payouts', { method: 'POST', requestId: text(requestId, 108), mutation: true, body: {
+        sender_batch_header: { sender_batch_id: text(senderBatchId, 127), email_subject: 'ODDBOUT appearance fees (Sandbox)',
+          email_message: 'Your fighter appeared in completed ODDBOUT Sandbox cups.' },
+        items: items.map(item => ({ recipient_type: 'EMAIL', receiver: payoutReceiver(item.receiver),
+          amount: { value: money(item.amountMinor, item.currency), currency: item.currency }, note: text(item.note, 4000), sender_item_id: id(item.senderItemId) })),
+      } });
+      try {
+        const header = object(result.batch_header);
+        return { payoutBatchId: id(header.payout_batch_id), status: id(header.batch_status) };
+      } catch { throw new PayPalError('paypal_invalid_response', { outcomeUnknown: true }); }
+    },
+    /** @param {string} payoutBatchId */
+    async getPayout(payoutBatchId) {
+      // We send at most 100 recipients. Request the entire bounded batch; batch SUCCESS alone
+      // means processing finished, not that every recipient received funds.
+      const result = await api(`/v1/payments/payouts/${id(payoutBatchId)}?page_size=1000&total_required=true`);
+      const header = object(result.batch_header), batchStatus = id(header.batch_status);
+      if (header.payout_batch_id !== payoutBatchId) throw new PayPalError('paypal_invalid_response');
+      const items = Array.isArray(result.items) ? result.items.map((/** @type {any} */ item) => ({
+        id: id(item.payout_item_id), status: id(item.transaction_status),
+        transactionId: typeof item.transaction_id === 'string' ? id(item.transaction_id) : null,
+        amount: item.payout_item?.amount ?? null,
+      })) : [];
+      const complete = items.length > 0 && items.length <= 100 && result.total_items === items.length
+        && result.total_pages === 1 && new Set(items.map((/** @type {any} */ item) => item.id)).size === items.length;
+      const paid = complete && items.every((/** @type {any} */ item) => item.status === 'SUCCESS');
+      return { payoutBatchId: id(header.payout_batch_id), status: batchStatus === 'SUCCESS' && !paid ? 'ITEMS_NEED_REVIEW' : batchStatus,
+        batchStatus, senderBatchId: header.sender_batch_header?.sender_batch_id ?? null, items };
+    },
     /** Supply original UTF-8 request text to preserve signed event formatting.
      * @param {{headers:Headers|Record<string,string>,body:object|string,webhookId:string}} input */
     async verifyWebhook({ headers, body, webhookId }) {

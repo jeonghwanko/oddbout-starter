@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // @ts-check
-import { readFile, stat, mkdir, open, rename, rm } from 'node:fs/promises';
+import { mkdir, open, rm } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createBroadcastProducer, createProducerMcp, createProducerModel } from '../broadcast/producer.mjs';
+import { loadJsonState, saveJsonState } from '../broadcast/producer-state.mjs';
 
 /** @param {string[]} argv */
 export function parseProducerArgs(argv) {
@@ -20,21 +21,6 @@ export function parseProducerArgs(argv) {
   }
   if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(broadcastId))throw new Error('producer_invalid_arguments');
   return {broadcastId,statePath:statePath??`.oddbout-broadcast/producer-${broadcastId}.json`,once};
-}
-
-/** @param {string} path @returns {Promise<import('../broadcast/producer.mjs').ProducerState|null>} */
-async function loadState(path) {
-  try {
-    const info=await stat(path);if(!info.isFile()||info.size>2*1024*1024)throw new Error();
-    return JSON.parse(await readFile(path,'utf8'));
-  } catch(/** @type {any} */ error){if(error?.code==='ENOENT')return null;throw new Error('producer_invalid_state');}
-}
-/** @param {string} path @param {import('../broadcast/producer.mjs').ProducerState} state */
-async function saveState(path,state) {
-  const temporary=`${path}.${process.pid}.tmp`;
-  const file=await open(temporary,'wx',0o600);
-  try{await file.writeFile(JSON.stringify(state));await file.sync();}finally{await file.close();}
-  await rename(temporary,path);
 }
 
 /** Explicit model/key and account-bound MCP access only; invoking this optional command
@@ -58,10 +44,10 @@ export async function runBroadcastProducer(argv,{env=process.env,onResult=()=>{}
     const path=resolve(args.statePath);await mkdir(dirname(path),{recursive:true,mode:0o700});lockPath=`${path}.lock`;
     try{lock=await open(lockPath,'wx',0o600);}catch{return {status:'unconfigured',reason:'producer_state_locked'};}
     await lock.writeFile(JSON.stringify({broadcastId:args.broadcastId,pid:process.pid,startedAt:new Date().toISOString()}));
-    const state=await loadState(path);
+    /** @type {import('../broadcast/producer.mjs').ProducerState|null} */ const state=await loadJsonState(path);
     if(state&&(state.broadcastId!==args.broadcastId||state.model!==model||state.maxModelCalls!==maxModelCalls))return {status:'unconfigured',reason:'producer_state_scope_mismatch'};
     mcp=await createProducerMcp({url,token});
-    const producer=createBroadcastProducer({broadcastId:args.broadcastId,model,mcp,modelCall,maxModelCalls,state,checkpoint:value=>saveState(path,value)});
+    const producer=createBroadcastProducer({broadcastId:args.broadcastId,model,mcp,modelCall,maxModelCalls,state,checkpoint:value=>saveJsonState(path,value)});
     let last='';
     return args.once?await producer.step({signal:controller.signal}):await producer.run({signal:controller.signal,onResult:result=>{
       const key=JSON.stringify(result);if(key!==last){last=key;onResult(result);}

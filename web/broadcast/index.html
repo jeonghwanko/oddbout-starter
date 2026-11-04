@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light" />
     <meta name="theme-color" content="#f7f6f0" />
-    <title>ODDBOUT · Broadcast Studio</title>
+    <title>ODDBOUT Showrunner · Studio</title>
     <link rel="stylesheet" href="./style.css" />
-    <link rel="icon" href="./assets/kuma.webp" type="image/webp" />
+    <link rel="icon" href="./assets/showrunner.svg" type="image/svg+xml" />
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
@@ -56,9 +56,21 @@
             d="M8 3h8v6a4 4 0 0 1-8 0Zm0 2H4v3a4 4 0 0 0 4 4m8-7h4v3a4 4 0 0 1-4 4m-4 1v7m-4 1h8"
           />
         </symbol>
+        <symbol id="i-chat" viewBox="0 0 24 24">
+          <path d="M4 5h16v11H9l-5 4Zm4 4h8m-8 3h5" />
+        </symbol>
         <symbol id="i-info" viewBox="0 0 24 24">
           <circle cx="12" cy="12" r="9" />
           <path d="M12 11v6m0-10v1" />
+        </symbol>
+        <symbol id="i-check" viewBox="0 0 24 24">
+          <path d="M12 3 5 6v5c0 5 3 8 7 10 4-2 7-5 7-10V6Zm-3 9 2 2 4-4" />
+        </symbol>
+        <symbol id="i-bell" viewBox="0 0 24 24">
+          <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" />
+        </symbol>
+        <symbol id="i-bracket" viewBox="0 0 24 24">
+          <path d="M5 4v5h5M19 4v5h-5M5 9v3a2 2 0 0 0 2 2h3v6m9-11v3a2 2 0 0 1-2 2h-3v6" />
         </symbol>
       </defs>
     </svg>
@@ -70,9 +82,9 @@
             alt="ODDBOUT Fight Club"
             width="378"
             height="80" /></a
-        ><span class="studio-label">Broadcast Studio</span>
+        ><span class="studio-label">ODDBOUT Showrunner</span>
         <nav aria-label="Studio">
-          <a href="#wallet">Wallet</a><a href="#setup">Setup</a
+          <a href="#saved-broadcasts">Saved broadcasts</a><a href="/broadcast/tasks/">Saved cups</a><a href="#wallet">DON</a><a href="#setup">Setup</a
           ><a href="#control">Control</a>
         </nav>
         <div class="account">
@@ -108,11 +120,12 @@
     <main id="main" class="shell">
       <section class="intro" aria-labelledby="page-title">
         <div class="intro-copy">
-          <span class="badge"><span class="dot"></span> SANDBOX STUDIO</span>
+          <div class="showrunner-brand"><img src="./assets/showrunner.svg" alt="" width="36" height="36"><span id="showrunner-brand-name">ODDBOUT Showrunner</span></div>
+          <span class="badge"><span class="dot"></span> AI TOURNAMENT PRODUCER</span>
           <h1 id="page-title">
-            Small setup.<br /><span>Big fight energy.</span>
+            Run your next<br /><span>fight night.</span>
           </h1>
-          <p>Your fighters. Your budget. Your show.</p>
+          <p>Set a budget. Your AI producer runs the tournament. Creators can earn appearance fees.</p>
         </div>
         <div class="fighter-poster" aria-hidden="true">
           <span class="poster-caption">THE NEXT ROUND IS YOURS</span>
@@ -135,6 +148,7 @@
           >
         </div>
       </section>
+      <aside class="sandbox-notice" aria-label="Test environment"><span aria-hidden="true">TEST</span><p><strong>Test environment</strong> · DON and PayPal Sandbox only. No real charges.</p></aside>
       <p
         id="login-status"
         class="inline-status"
@@ -152,9 +166,9 @@
         <div class="section-heading">
           <h2 id="wallet-title">
             <svg class="icon" aria-hidden="true"><use href="#i-wallet" /></svg>
-            Your credits
+            DON
           </h2>
-          <span class="section-note">Test credits only · No real charges</span>
+          <span class="section-note">Your balance and purchases</span>
         </div>
         <div class="wallet-grid">
           <article class="wallet-card">
@@ -162,7 +176,7 @@
               <span class="metric-label">Available</span>
               <div>
                 <output id="available">—</output
-                ><span class="credit-unit">credits</span>
+                ><span class="credit-unit">DON</span>
               </div>
             </div>
             <div class="wallet-secondary">
@@ -175,7 +189,7 @@
           </article>
           <form id="topup-form" class="panel topup-panel">
             <div class="topup-heading">
-              <h3>Add a little firepower.</h3>
+              <h3>Choose a credit pack</h3>
               <img
                 src="./assets/paypal.png"
                 alt="PayPal"
@@ -183,17 +197,18 @@
                 height="26"
               />
             </div>
-            <label class="field" for="productId"
-              >Credit package<select id="productId" name="productId" required>
+            <label class="sr-only" for="productId"
+              >Credit pack<select id="productId" name="productId" required>
                 <option value="">Loading packages…</option>
               </select></label
-            ><button class="button button-paypal" type="submit">
-              Top up with PayPal
+            ><div id="package-cards" class="package-cards" role="group" aria-label="DON packs"></div>
+            <button id="topup-submit" class="button button-paypal full-width" type="submit" disabled>
+              Select a pack
               <svg class="icon" aria-hidden="true">
                 <use href="#i-external" />
               </svg>
             </button>
-            <p class="field-hint">Review your test payment on PayPal.</p>
+            <p class="field-hint">One-time purchase. No subscription.</p>
           </form>
         </div>
         <p
@@ -202,6 +217,12 @@
           role="status"
           aria-live="polite"
         ></p>
+        <section id="purchase-history" class="purchases-panel" hidden aria-labelledby="purchases-title">
+          <div class="section-heading"><h3 id="purchases-title">Recent purchases</h3><button id="purchases-refresh" class="button button-secondary button-small" type="button">Refresh</button></div>
+          <p class="purchases-caption">The 50 latest purchases on this account.</p>
+          <p id="purchases-status" class="purchases-status" role="status" aria-live="polite"></p>
+          <div id="purchase-list" class="purchases-list" aria-live="polite"></div>
+        </section>
         <div class="panel payment-recovery" id="payment-recovery" hidden>
           <div>
             <h3>Finish your top-up</h3>
@@ -232,6 +253,142 @@
           </details>
         </div>
       </section>
+      <section
+        id="reconcile"
+        class="section-block"
+        aria-labelledby="reconcile-title"
+        hidden
+      >
+        <div class="section-heading">
+          <h2 id="reconcile-title">
+            <svg class="icon" aria-hidden="true"><use href="#i-check" /></svg>
+            PayPal reconciliation
+          </h2>
+          <span class="section-note">Sandbox only · Read-only check</span>
+        </div>
+        <div id="reconcile-panel" class="panel reconcile-panel">
+          <p class="reconcile-intro">
+            Compare your top-ups with PayPal's own records. The server looks up
+            each order through the official PayPal MCP server and an AI auditor
+            explains the result. Nothing is changed.
+          </p>
+          <div class="reconcile-controls">
+            <button
+              id="reconcile-run"
+              class="button button-secondary"
+              type="button"
+              disabled
+            >
+              <svg class="icon" aria-hidden="true"><use href="#i-check" /></svg>
+              <span id="reconcile-run-label">Check with PayPal</span>
+            </button>
+            <p
+              id="reconcile-status"
+              class="reconcile-status"
+              role="status"
+              aria-live="polite"
+            ></p>
+          </div>
+          <div id="reconcile-result" class="reconcile-result" hidden>
+            <p class="reconcile-meta">
+              <span id="reconcile-checked"></span
+              ><span id="reconcile-calls"></span>
+            </p>
+            <ul
+              id="reconcile-totals"
+              class="reconcile-totals"
+              aria-label="Results by status"
+            ></ul>
+            <p id="reconcile-empty" class="reconcile-empty" hidden>
+              No PayPal top-ups on your account yet, so there is nothing to
+              check.
+            </p>
+            <ul id="reconcile-rows" class="reconcile-rows"></ul>
+            <section
+              id="reconcile-auditor"
+              class="reconcile-auditor"
+              aria-labelledby="reconcile-auditor-title"
+              hidden
+            >
+              <h3 id="reconcile-auditor-title">AI auditor</h3>
+              <p id="reconcile-summary" class="reconcile-summary"></p>
+              <p id="reconcile-auditor-note" class="reconcile-auditor-note">
+                AI-written explanation. The list above is the record.
+              </p>
+            </section>
+          </div>
+        </div>
+      </section>
+      <section
+        id="concierge"
+        class="section-block"
+        aria-labelledby="concierge-title"
+        hidden
+      >
+        <div class="section-heading">
+          <h2 id="concierge-title">
+            <svg class="icon" aria-hidden="true"><use href="#i-chat" /></svg>
+            Ask the AI concierge
+          </h2>
+          <span class="section-note">Sandbox only · You approve every budget</span>
+        </div>
+        <div class="panel concierge-panel">
+          <p class="concierge-intro">
+            Describe the show you want. The concierge can price a plan, start a
+            PayPal Sandbox top-up and fill in your setup. You review and
+            approve the budget yourself.
+          </p>
+          <div
+            id="concierge-log"
+            class="chat-log"
+            role="log"
+            aria-label="Concierge conversation"
+          ></div>
+          <div class="chat-chips" role="group" aria-label="Example prompts">
+            <button class="chat-chip" type="button">
+              Plan a one-hour show for 100 credits
+            </button>
+            <button class="chat-chip" type="button">
+              Add credits so I can run 8 cups
+            </button>
+          </div>
+          <form id="concierge-form" class="chat-form">
+            <label class="sr-only" for="concierge-input"
+              >Message the concierge</label
+            >
+            <textarea
+              id="concierge-input"
+              name="message"
+              rows="2"
+              maxlength="1000"
+              autocomplete="off"
+              placeholder="Ask for a plan or a top-up…"
+            ></textarea>
+            <div class="chat-form-row">
+              <span id="concierge-count" class="chat-count" aria-hidden="true"
+                >0 / 1000</span
+              ><button
+                id="concierge-new"
+                class="button button-secondary button-small"
+                type="button"
+                disabled
+              >
+                New chat</button
+              ><button
+                id="concierge-send"
+                class="button button-primary"
+                type="submit"
+                disabled
+              >
+                Send
+                <svg class="icon" aria-hidden="true">
+                  <use href="#i-arrow" />
+                </svg>
+              </button>
+            </div>
+          </form>
+        </div>
+      </section>
       <div class="workspace-grid">
         <section
           id="setup"
@@ -249,11 +406,6 @@
           </div>
           <form id="budget-form" class="panel form-panel">
             <div class="form-grid">
-              <label class="field" for="hostId"
-                >Broadcast host<select id="hostId" name="hostId" required>
-                  <option value="">Choose a host</option>
-                </select></label
-              >
               <label class="field" for="channelId"
                 >Session name<input
                   id="channelId"
@@ -289,12 +441,23 @@
                   required
               /></label>
               <div class="field field-full">
-                <label for="fighterIds">Fighter lineup</label>
+                <span id="fighter-lineup-label">Fighter lineup</span>
                 <div
                   id="fighter-lineup"
                   class="lineup"
+                  role="group"
+                  aria-labelledby="fighter-lineup-label"
                   aria-label="Selected fighters"
                 ></div>
+              </div>
+              <details id="execution-settings" class="execution-settings field-full" open>
+                <summary>Advanced execution settings</summary>
+                <div class="execution-settings-grid">
+                  <label class="field" for="hostId">Broadcast host<select id="hostId" name="hostId" required>
+                    <option value="">Choose a host</option>
+                  </select></label>
+                  <div class="field">
+                    <label for="fighterIds">Fighter IDs</label>
                 <input
                   id="fighterIds"
                   name="fighterIds"
@@ -304,10 +467,11 @@
                   spellcheck="false"
                   required
                   aria-describedby="fighters-hint"
-                /><span class="field-hint" id="fighters-hint"
-                  >4 unique fighter IDs, separated by commas.</span
-                >
-              </div>
+                />
+                    <span class="field-hint" id="fighters-hint">4 unique fighter IDs, separated by commas.</span>
+                  </div>
+                </div>
+              </details>
             </div>
             <div class="approval-callout">
               <svg class="icon" aria-hidden="true"><use href="#i-info" /></svg>
@@ -323,6 +487,33 @@
               <svg class="icon" aria-hidden="true"><use href="#i-arrow" /></svg>
             </button>
           </form>
+          <section id="paid-broadcast-review" class="paid-broadcast-review" hidden aria-labelledby="paid-review-title">
+            <h3 id="paid-review-title">Review this broadcast</h3>
+            <dl id="paid-review-summary" class="paid-review-summary"></dl>
+            <p id="paid-operation-status" class="paid-operation-status" role="status" aria-live="polite"></p>
+            <div id="paid-approval" hidden>
+              <label class="consent"><input id="paid-consent" type="checkbox"><span id="paid-consent-copy">I approve up to this credit limit for this broadcast, and authorize the producer to start automatically once funding is available.</span></label>
+              <button id="paid-approve" class="button button-primary" type="button" disabled>Approve broadcast</button>
+            </div>
+            <div id="paid-funding" class="paid-funding" hidden>
+              <p>Approve the Sandbox checkout to add credits. The approved producer will start this broadcast when funding is confirmed.</p>
+              <button id="paid-checkout" class="button button-paypal" type="button">Continue PayPal checkout</button>
+              <a id="paid-paypal-link" class="button button-paypal" hidden target="_blank" rel="noopener noreferrer">Open PayPal Sandbox</a>
+            </div>
+            <div id="paid-renewal" hidden>
+              <h4>Approve a new deadline</h4>
+              <label class="field" for="paid-new-deadline">New deadline<input id="paid-new-deadline" type="datetime-local"></label>
+              <label class="consent"><input id="paid-renew-consent" type="checkbox">I approve this same broadcast and credit limit until the new deadline, including automatic producer start when funded.</label>
+              <button id="paid-renew" class="button button-secondary" type="button" disabled>Approve new deadline</button>
+            </div>
+            <p id="paid-operation-result" class="paid-operation-result" hidden></p>
+            <button id="paid-cancel" class="button button-secondary button-small" type="button" hidden>Cancel broadcast</button>
+          </section>
+          <section id="saved-broadcasts" class="saved-broadcasts" hidden aria-labelledby="saved-broadcasts-title">
+            <div class="section-heading"><h3 id="saved-broadcasts-title">Saved broadcasts</h3><button id="paid-refresh" class="button button-secondary button-small" type="button">Refresh</button></div>
+            <div id="paid-broadcast-list" class="paid-broadcast-list" aria-live="polite"></div>
+            <button id="paid-more" class="button button-secondary button-small" type="button" hidden>Load older broadcasts</button>
+          </section>
         </section>
         <section
           id="control"
@@ -367,14 +558,16 @@
               </button>
             </form>
             <div class="session-controls">
-              <label class="field" for="broadcastId"
-                >Current session<input
+              <details id="session-reference" class="session-reference" open>
+                <summary>Session reference</summary>
+                <label class="field" for="broadcastId">Current session ID<input
                   id="broadcastId"
                   name="broadcastId"
                   type="text"
                   autocomplete="off"
                   placeholder="No session yet"
-              /></label>
+                /></label>
+              </details>
               <div class="button-row">
                 <button
                   id="host-cup"
@@ -408,6 +601,56 @@
                 </button>
               </div>
             </div>
+            <section
+              id="producer-card"
+              class="producer-card"
+              aria-labelledby="producer-title"
+              hidden
+            >
+              <div class="producer-head">
+                <h3 id="producer-title">AI producer</h3>
+                <span
+                  id="producer-state"
+                  class="producer-state"
+                  data-state="none"
+                  role="status"
+                ></span>
+              </div>
+              <p class="producer-meta">
+                <span id="producer-model"></span
+                ><span id="producer-calls"></span>
+              </p>
+              <p id="producer-result" class="producer-result" hidden></p>
+              <ol id="producer-decisions" class="producer-decisions"></ol>
+            </section>
+            <section
+              id="payouts-card"
+              class="payouts-card"
+              aria-labelledby="payouts-title"
+              hidden
+            >
+              <div class="payouts-head">
+                <h3 id="payouts-title" tabindex="-1">Creator payouts</h3>
+                <span class="payouts-tag">Sandbox</span>
+              </div>
+              <p id="payouts-intro" class="payouts-intro"></p>
+              <button
+                id="payout-propose"
+                class="button button-secondary button-small full-width"
+                type="button"
+                disabled
+              >
+                Propose payout
+              </button>
+              <p
+                id="payouts-status"
+                class="payouts-status"
+                role="status"
+                aria-live="polite"
+              ></p>
+              <ol id="payouts-list" class="payouts-list"></ol>
+              <p id="payouts-empty" class="payouts-empty" hidden></p>
+            </section>
             <p class="rehearsal-note">
               Rehearsal mode. Twitch streaming is not connected.
             </p>
@@ -420,6 +663,11 @@
           <p id="activity-summary" role="status" aria-live="polite">
             Sign in to get your show started.
           </p>
+          <section id="show-summary" class="show-summary" hidden aria-labelledby="show-summary-title">
+            <h3 id="show-summary-title">Tournament summary</h3>
+            <div id="show-summary-metrics" class="show-summary-metrics"></div>
+            <p id="show-summary-winners" class="show-summary-winners"></p>
+          </section>
           <div id="active-jobs" class="jobs-list" aria-live="polite"></div>
           <details class="technical-details">
             <summary>Session details</summary>
@@ -446,7 +694,7 @@ Waiting for account and broadcast status.</pre
         ></a>
       </footer>
     </main>
-    <script src="./supabase.js"></script>
+    <script src="/broadcast/supabase.js"></script>
     <script type="module" src="./app.mjs"></script>
   </body>
 </html>

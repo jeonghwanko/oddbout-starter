@@ -11,10 +11,22 @@ const hostDecision=()=>({action:'host_cup',fighterIds:[...fighters],reason:'The 
 const waitDecision=()=>({action:'wait',fighterIds:null,reason:'Wait for a meaningful server-state change.',episode:null});
 const json=(value,status=200)=>new Response(JSON.stringify(value),{status,headers:{'content-type':'application/json'}});
 
+test('Spotlight response bounds verbose display labels without changing the execution decision',async()=>{
+  const episode='SPOTLIGHT: '+ 'x'.repeat(200),reason='x'.repeat(450);
+  const modelCall=createProducerModel({model,apiKey:'fixture',fetchImpl:async()=>{
+    return json({model,status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({...hostDecision(),episode,reason})}]}]});
+  }});
+  const result=await modelCall({program:'SPOTLIGHT'});
+  assert.equal(result.decision.action,'host_cup');assert.deepEqual(result.decision.fighterIds,fighters);
+  assert.equal(result.decision.episode.length,120);assert.equal(result.decision.reason.length,400);
+  assert.equal(result.observation.labelLengths.episode,episode.length);
+});
+
 /** Only the external MCP/Responses HTTP boundaries are simulated. Production SDK,
  * response parsing, scope/budget checks, decisions and persistence orchestration execute. */
 async function fixture(t,{decision=hostDecision(),maxModelCalls=24}={}) {
-  const endsAt=new Date(Date.now()+3_600_000).toISOString();
+  // Mid-way through a five-minute bucket: minutesRemaining must not tick down between two quick steps.
+  const endsAt=new Date(Date.now()+3_600_000+150_000).toISOString();
   const report={broadcast:{id:broadcastId,status:'running',channelId:'channel',hostId:'current-pc',endsAt,
     reservedCredits:100,allocatedCredits:0,spentCredits:0},approval:{fighterIds:[...fighters],allowedTools:['host_cup'],priceVersion:'prices-v1',
     channelId:'channel',hostId:'current-pc',endsAt,maxCredits:100},jobs:[]};

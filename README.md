@@ -8,6 +8,9 @@ ODDBOUT is a fighting game where you play with a character you create. This repo
 
 [Play ODDBOUT](https://oddbout.com/fighter.html) · [Manage your fighters](https://oddbout.com/creator.html?lang=en) · [Site guide](https://oddbout.com/docs.html?lang=en) · [Creation guide](docs/START-HERE.md) · [Report a problem](https://github.com/jeonghwanko/oddbout-starter/issues)
 
+PayPal Sandbox developers: [Paid task recovery across VM, phone and PC](docs/PAID-TASK-RECOVERY.md)
+includes the isolated deployment, MCP setup, verification and hackathon demo guide.
+
 ## Install the Codex plugin
 
 Install the local custom plugin from this Git repository: [Codex installation guide](docs/LOCAL-PLUGIN.md#install-the-codex-skill-from-git). It adds the creation skill and reuses your existing ODDBOUT MCP. No directory approval or creator-kit ZIP is required. Login stays a separate user action.
