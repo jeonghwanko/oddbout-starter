@@ -225,13 +225,14 @@ Cursor의 Grok Bot이 02:21Z에 로그인 먼저 주소로 연결한 뒤 토큰�
 ## Claude 디렉터리판 (2026-11-01)
 
 Anthropic의 Claude 커넥터 디렉터리에 내는 주소는 `https://mcp.oddbout.com/claude`(`PUBLIC_DIRECTORY_RESOURCE`)다. 같은 서버이지만 심사자가 Claude에서
-실제로 돌릴 수 있는 도구 32종만 등록한다(`mcp/cloud/directory-edition.mjs`의 `DIRECTORY_TITLES`). 함수 주소로는 `…/ai-fighter-mcp/claude`(`DIRECTORY_RESOURCE`)다.
+실제로 돌릴 수 있는 도구 35종만 등록한다(`mcp/cloud/directory-edition.mjs`의 `DIRECTORY_TITLES`). 함수 주소로는 `…/ai-fighter-mcp/claude`(`DIRECTORY_RESOURCE`)다.
 
-- 운영 51종에서 24종을 뺐고, 묶인 쓰기 도구 둘을 일곱으로 나눴다(아래). 뺀 이유는 이렇다. 디렉터리 정책은 디자인용이 아닌 AI 이미지·영상·오디오 생성을 받지 않으므로 호스팅 생성 10종(그림 올리기 표 셋 포함)을 뺐다. 파일 인자는 OpenAI 파일 호스트만
+- 운영 55종에서 25종을 뺐고, 묶인 쓰기 도구 둘을 일곱으로 나눴다(아래). 뺀 이유는 이렇다. 디렉터리 정책은 디자인용이 아닌 AI 이미지·영상·오디오 생성을 받지 않으므로 호스팅 생성 10종(그림 올리기 표 셋 포함)을 뺐다. 파일 인자는 OpenAI 파일 호스트만
   받으므로(`allowedFileUrl`) 파일 등록·프로필 세트·제작 원본·파일 진단을 뺐다. Claude에서 할 수 없는 제작·등록으로 이끄는 `get_fighter_spec`·`check_creation_readiness`도 뺐다.
   등록하지 않은 도구는 이 판에 없는 도구다. 부르면 SDK의 알 수 없는 도구 오류가 나고 실행되지 않는다.
 - 디렉터리는 전 세계에 노출되므로 title을 영어로 쓴다. 이 판은 title을 annotation에도 한 번 더 넣는다(Anthropic 점검표가 hint와 함께 title을 본다).
-  그 밖의 annotation·입력 스키마·인증 표시는 원래 도구와 같다. 설명은 세 개를 바꿨다.
+  그 밖의 annotation·입력 스키마는 원래 도구와 같다. OpenAI 앱의 도구 메타데이터(`_meta`의 `securitySchemes`·`openai/fileParams`·`openai/profile`과
+  맨 위 `securitySchemes`)는 2026-11-05부터 이 판에 없다. 설명은 세 개를 바꿨다.
   - `enter_fighter`: 원래 설명은 뺀 `submit_profile_set`을 가리키고 대화에서 동작을 보여 주라고 한다. 이 판에서는 사용자가 제작자 사이트의 미리보기에서 동작을 본다.
     프로필 세트가 없으면 이 커넥터로는 올릴 수 없다고 말하고, 사이트에서 만든 선수는 등록 때 함께 들어가며 그 밖에는 ChatGPT의 ODDBOUT 앱에서 올린다고 안내한다.
   - `withdraw_fighter`·`write_world_post`: 한국어 상태 이름(제작 중, 정사)을 뺐다. 시험이 이 판의 도구와 지침에 한글이 없는지 본다.
@@ -248,7 +249,7 @@ Anthropic의 Claude 커넥터 디렉터리에 내는 주소는 `https://mcp.oddb
   메타데이터의 `resource_documentation`은 Claude 연결 안내 `https://oddbout.com/cloud-plugin/claude.html`(`DIRECTORY_DOCUMENTATION`)이다.
 - 게이트웨이는 `mcp.oddbout.com` 호스트에서만 `/claude`, `/claude/.well-known/oauth-protected-resource`, `/.well-known/oauth-protected-resource/claude`를
   함수의 `/claude`로 넘기고 `x-oddbout-public-resource: https://mcp.oddbout.com/claude`를 붙인다. 함수는 이 값일 때만 그 주소를 광고한다. 로그인 먼저 주소와 같은 방식이다.
-- `/mcp`·`/signin`의 도구·title·지침은 바뀌지 않는다(시험이 `/mcp` 51종을 센다 — 그림 올리기 표 셋을 더해).
+- `/mcp`의 도구·title·지침은 바뀌지 않는다(시험이 `/mcp` 55종과 그 목록의 sha256을 본다). `/signin`은 아래 [로그인 먼저 주소의 도구](#로그인-먼저-주소의-도구-2026-11-05).
 - 연결을 주소에 묶는다(2026-11-01, `20261101150000_ai_fighter_mcp_session_edition.sql`). Supabase Auth는 클라이언트가 요청한 `resource`(RFC 8707)를
   토큰에 넣지 않는다. `aud`는 토큰 훅의 고정 목록이고, 훅 입력에도 요청 주소가 없다. 그래서 토큰만으로는 어느 주소용인지 알 수 없다.
   - OAuth 세션의 첫 로그인 호출이 그 세션을 그 판에 묶는다(`af_mcp_session_editions`): `/mcp`·`/signin`은 `full`, `/claude`는 `directory`다.
@@ -258,8 +259,8 @@ Anthropic의 Claude 커넥터 디렉터리에 내는 주소는 `https://mcp.oddb
     `af_mcp_expired_token_state`는 그대로 두고 이 함수가 부른다(삭제 함수들이 앞의 것을 쓴다).
   - 이전 세션은 다음 호출의 판에 묶인다. 지금까지 모든 커넥터는 `full` 주소를 썼다. 행에는 사용자 id가 없고 세션이 끝나도 남지만 해가 없다.
   - 배포는 DB가 먼저다. 함수가 먼저 나가면 없는 함수를 불러 로그인 확인이 모두 503이 된다. 앞의 함수 코드는 옛 함수를 부르므로 DB만 먼저 나가도 괜찮다.
-- 32종 중 26종은 대결장 키(`ODDBOUT_ARENA_AGENT_KEY`)가 있을 때만 등록된다. 키가 빠지면 이 판은 6종만 보인다. 배포 확인의 "32종"이 이것을 잡는다.
-- 배포 순서는 DB 마이그레이션 → 함수(`fighter:mcp`) → Render(`worker:deploy`)다. 그 뒤 운영에서 `/claude`의 `tools/list`가 32종인지, 토큰 없는 `get_profile`이 위 401을 받는지,
+- 35종 중 29종은 대결장 키(`ODDBOUT_ARENA_AGENT_KEY`)가 있을 때만 등록된다. 키가 빠지면 이 판은 6종만 보인다. 배포 확인의 "35종"이 이것을 잡는다.
+- 배포 순서는 DB 마이그레이션 → 함수(`fighter:mcp`) → Render(`worker:deploy`)다. 그 뒤 운영에서 `/claude`의 `tools/list`가 35종인지, 토큰 없는 `get_profile`이 위 401을 받는지,
   메타데이터의 `resource`가 접속 주소와 같은지 읽기 요청으로 확인한다.
 - 제출 전 필수 조건: Claude 연결 안내 페이지 `https://oddbout.com/cloud-plugin/claude.html`(·`claude.ko.html`)이 200으로 답해야 한다. 메타데이터의 `resource_documentation`이다.
   이 페이지는 `website/cloud-plugin/content.mjs`의 `claude` 키로 만들고 사이트 게시에 함께 나간다(`scripts/build-cloud-plugin-site.mjs`).
@@ -269,6 +270,24 @@ Anthropic의 Claude 커넥터 디렉터리에 내는 주소는 `https://mcp.oddb
   심사 계정의 선수는 프로필 세트가 승인됐거나 정면 판정을 통과한 상태여야 한다. 아니면 심사자의 `enter_fighter`가 `profile-set-required`로 끝난다.
 - 디렉터리 심사는 메타데이터 탐색에 10초 한도를 둔다. `mcp.oddbout.com`은 Render 무료 서버라 잠들면 그보다 오래 걸린다.
   2026-11-01 사용자 결정: 당분간 무료를 계속 쓰고, 사무실 PC의 crontab이 14분마다 `/health`를 불러 깨워 둔다. 그 PC가 꺼져 있으면 다시 잠드므로 심사 기간에는 켜 둔다.
+
+## 로그인 먼저 주소의 도구 (2026-11-05)
+
+`/signin`(Grok·Cursor·Gemini CLI·터미널 에이전트)에는 OpenAI 파일 호스트가 없다. 파일 인자는 그 호스트의 주소만 받으므로(`allowedFileUrl`) 파일 도구는
+거기서 한 번도 성공할 수 없었다. 그래서 이 주소는 `FILE_HOST_TOOLS` 여덟 종(`prepare_fighter_registration`·`upload_fighter_asset`·`prepare_profile_set`·
+`upload_profile_set_asset`·`verify_creator_file_input`·`store_creator_source`·`get_creator_source`·`prepare_creator_source_download`)을 등록하지 않는다.
+대결장 키와 호스팅 생성이 있으면 `/mcp` 55종, `/signin` 47종이다(둘 다 없으면 21종과 13종). 부르면 알 수 없는 도구 오류다.
+
+- 판(`edition`)은 그대로 `full`이다. 세션이 판에 묶이므로(`af_mcp_session_editions`) 새 판을 만들지 않고, 요청 경로(`signInFirst`)로 정한다.
+  Supabase 주소의 `/signin`도 같다.
+- OpenAI 앱의 도구 메타데이터(`_meta`의 `securitySchemes`·`openai/fileParams`·`openai/profile`, 맨 위 `securitySchemes`)를 싣지 않는다. 남은 도구의
+  title·설명·입력 스키마·annotation·`outputSchema`는 `/mcp`와 같다. 설명은 `enter_fighter` 하나만 다르다: 뺀 프로필 세트 업로드 도구 대신, 이 커넥터로는
+  올릴 수 없고 ChatGPT의 ODDBOUT 앱이나 제작 키트에서 올린다고 적는다. 한국어 상태 이름은 그대로다.
+- 서버 지침, `get_fighter_spec`(overview의 `registration.assetUpload: 'none'`, `profileSet.order`, creation 단계), `check_creation_readiness`
+  (`delivery.inputCapability: 'none'`, `nextAction`), `get_registered_fighter`·`enter_fighter`의 `next`(`frontNext`의 `uploads`), 호스팅 작업의 `next`도
+  뺀 도구를 부르지 않고 같은 문장(`NO_FILES`)으로 파일이 어디로 가는지 말한다. `request_hosted_fighter`는 남는다(`pictureUploads`). 스키마는 그대로이고
+  `_meta`만 빠진다.
+- `directory`는 이제 "한국어 상태 이름을 빼는 디렉터리판"만 뜻하고, 업로드 도구가 없다는 것은 `uploads`(= `/mcp`일 때만 참)가 따로 말한다.
 
 ## 사용 흐름
 

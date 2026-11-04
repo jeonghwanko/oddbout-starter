@@ -74,23 +74,29 @@ export const CREATOR_PAGE = 'https://oddbout.com/creator.html';
  */
 export const siteUrl = ({ fighterId, jobId, submissionId }) => fighterId ? `${CREATOR_PAGE}#fighter=${fighterId}&view=motions`
   : jobId ? `${CREATOR_PAGE}#job=${jobId}` : submissionId ? `${CREATOR_PAGE}#submission=${submissionId}` : null;
+/**
+ * What an address without the upload tools says of files (2026-11-05): the sign-in-first address lists none, since only ChatGPT's file host
+ * gives the files they take (allowedFileUrl). The directory edition says it its own way (directory-edition.mjs).
+ */
+export const NO_FILES = 'This connector takes no files: the user uploads a package or a profile set from the ODDBOUT app in ChatGPT or with the creator kit.';
 /** What an agent does with a `siteUrl`: one sentence, shared by every result that carries one. */
 export const SITE_URL_NEXT = 'The user can follow this on the ODDBOUT website too: give him siteUrl to watch progress, pick a look, review the motions and enter the fighter (출전).';
 /**
  * 정면 판정 (2026-11-03 사용자: "MCP 서버에서 이거 체크해서 정면샷 제작해야 출전할 수 있다고 알려줘야"): what an agent tells the user about his
  * fighter's front before the entry (출전), from the API's `front` (af_fighter_front). Null when the entry asks for nothing more of it.
- * `directory`: the directory edition, which has no upload tools and keeps ODDBOUT's Korean state names out (directory-edition.mjs).
- * @param {any} front @param {{ directory?: boolean }} [options]
+ * `directory`: the directory edition, which keeps ODDBOUT's Korean state names out (directory-edition.mjs) and has no get_fighter_spec.
+ * `uploads`: whether this address has the upload tools — only /mcp, whose host (ChatGPT) attaches files (2026-11-05: not /signin either).
+ * @param {any} front @param {{ directory?: boolean, uploads?: boolean }} [options]
  * @returns {string | null}
  */
-export function frontNext(front, { directory = false } = {}) {
+export function frontNext(front, { directory = false, uploads = !directory } = {}) {
   if (!front?.required || front.ok) return null;
   const cannot = directory ? 'The fighter cannot enter public play yet' : 'He cannot enter (출전) yet';
   const after = directory ? 'It can enter once front.ok.' : 'He can enter once front.ok.';
   const painting = 'a full-body front painting of this fighter: one character, whole from head to soles, facing the viewer straight on'
     + (directory ? '' : ' (get_fighter_spec overview: profileSet)');
-  // The upload tools take files a host attaches (ChatGPT's); the directory edition has none (리뷰 2026-11-03).
-  const upload = directory ? 'This connector cannot upload it: the user uploads it from the ODDBOUT app in ChatGPT or with the creator kit.'
+  // The upload tools take files a host attaches (ChatGPT's); the directory edition has none (리뷰 2026-11-03), nor /signin (2026-11-05).
+  const upload = !uploads ? 'This connector cannot upload it: the user uploads it from the ODDBOUT app in ChatGPT or with the creator kit.'
     : 'It goes in through prepare_profile_set, upload_profile_set_asset and submit_profile_set, which take files this host attaches (as ChatGPT '
       + 'does); otherwise the user uploads it from the ODDBOUT app in ChatGPT.';
   const reason = String(front.reason ?? '');
@@ -109,7 +115,7 @@ export function frontNext(front, { directory = false } = {}) {
       + `only if he wants. ${upload} ${after}`;
   }
   if (front.status === 'uploading') return `${cannot}: its front painting was never submitted (${front.profileSetId}). `
-    + (directory ? 'Tell the user to finish it where it was started. ' : 'Finish its upload (upload_profile_set_asset) and submit_profile_set. ') + after;
+    + (!uploads ? 'Tell the user to finish it where it was started. ' : 'Finish its upload (upload_profile_set_asset) and submit_profile_set. ') + after;
   if (front.frontCheck === 'stalled') return `${cannot}: ODDBOUT could not check its front painting (${front.profileSetId}) automatically, and an `
     + `operator will look at it. Nothing to upload now: tell the user and read get_registered_fighter again later. ${after}`;
   return `${cannot}: ODDBOUT is checking its front painting (${front.profileSetId}) — the file first, then whether it shows one character, `
