@@ -95,7 +95,7 @@ const spent = job => Number.isSafeInteger(job.tokens) && /** @type {number} */ (
 const HOSTED_FOLLOWED = new Set(['queued', 'appearance', 'appearance_ready', 'motions', 'motion_ready', 'submitting', 'needs_review']);
 /**
  * What the agent does next with a job, and (siteUrl, 2026-11-03) where the user can follow it on the site. `uploads`: whether this address
- * lists the upload tools (only /mcp, 2026-11-05); without them a step names none.
+ * lists the upload tools (the full edition's do); without them a step names none.
  * @param {HostedJob} job @param {{ uploads?: boolean }} [options]
  */
 export function hostedNext(job, { uploads = true } = {}) {
@@ -286,7 +286,7 @@ export function pictureLinkShape(value, fullLength = value.length) {
 
 /**
  * `identity` is null only on a signed-out call, which register lets reach the public tools alone: the account tools cast it.
- * `uploads`: whether this address lists the upload tools (only /mcp, 2026-11-05): next names them only there.
+ * `uploads`: whether this address lists the upload tools (the full edition's do): next names them only there.
  * @param {{ register: Register, db: any, identity: Identity | null, invoke: Invoke, fetcher: typeof fetch, hosted: Hosted, uploads?: boolean }} options
  */
 export function registerHostedTools({ register, db, identity, invoke, fetcher, hosted, uploads = true }) {

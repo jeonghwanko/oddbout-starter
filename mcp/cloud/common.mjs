@@ -75,7 +75,7 @@ export const CREATOR_PAGE = 'https://oddbout.com/creator.html';
 export const siteUrl = ({ fighterId, jobId, submissionId }) => fighterId ? `${CREATOR_PAGE}#fighter=${fighterId}&view=motions`
   : jobId ? `${CREATOR_PAGE}#job=${jobId}` : submissionId ? `${CREATOR_PAGE}#submission=${submissionId}` : null;
 /**
- * What an address without the upload tools says of files (2026-11-05): the sign-in-first address lists none, since only ChatGPT's file host
+ * What an address without the upload tools says of files (2026-11-05), since only OpenAI's file host
  * gives the files they take (allowedFileUrl). The directory edition says it its own way (directory-edition.mjs).
  */
 export const NO_FILES = 'This connector takes no files: the user uploads a package or a profile set from the ODDBOUT app in ChatGPT or with the creator kit.';
@@ -85,7 +85,7 @@ export const SITE_URL_NEXT = 'The user can follow this on the ODDBOUT website to
  * 정면 판정 (2026-11-03 사용자: "MCP 서버에서 이거 체크해서 정면샷 제작해야 출전할 수 있다고 알려줘야"): what an agent tells the user about his
  * fighter's front before the entry (출전), from the API's `front` (af_fighter_front). Null when the entry asks for nothing more of it.
  * `directory`: the directory edition, which keeps ODDBOUT's Korean state names out (directory-edition.mjs) and has no get_fighter_spec.
- * `uploads`: whether this address has the upload tools — only /mcp, whose host (ChatGPT) attaches files (2026-11-05: not /signin either).
+ * `uploads`: whether this address has the upload tools — the full edition (/mcp, /signin), where ChatGPT and Codex attach files.
  * @param {any} front @param {{ directory?: boolean, uploads?: boolean }} [options]
  * @returns {string | null}
  */
@@ -95,7 +95,7 @@ export function frontNext(front, { directory = false, uploads = !directory } = {
   const after = directory ? 'It can enter once front.ok.' : 'He can enter once front.ok.';
   const painting = 'a full-body front painting of this fighter: one character, whole from head to soles, facing the viewer straight on'
     + (directory ? '' : ' (get_fighter_spec overview: profileSet)');
-  // The upload tools take files a host attaches (ChatGPT's); the directory edition has none (리뷰 2026-11-03), nor /signin (2026-11-05).
+  // The upload tools take files a host attaches (ChatGPT's); the directory edition has none (리뷰 2026-11-03).
   const upload = !uploads ? 'This connector cannot upload it: the user uploads it from the ODDBOUT app in ChatGPT or with the creator kit.'
     : 'It goes in through prepare_profile_set, upload_profile_set_asset and submit_profile_set, which take files this host attaches (as ChatGPT '
       + 'does); otherwise the user uploads it from the ODDBOUT app in ChatGPT.';

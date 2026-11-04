@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
-import { createCloudHandler as cloudHandler, FILE_HOST_TOOLS, hostedNext, scopedDatabase, authenticateCloud, GROK_RECONNECT_PAGE, SIGN_IN_PROBLEMS, allowedFileUrl, downloadHostFile, compactText, timedFetch, CLOUD_RESOURCE, CLOUD_ISSUER, PUBLIC_RESOURCE, LEGACY_PUBLIC_RESOURCE, SIGN_IN_RESOURCE, PUBLIC_SIGN_IN_RESOURCE, DIRECTORY_RESOURCE, PUBLIC_DIRECTORY_RESOURCE, DIRECTORY_DOCUMENTATION } from '../mcp/cloud.mjs';
+import { createCloudHandler as cloudHandler, scopedDatabase, authenticateCloud, GROK_RECONNECT_PAGE, SIGN_IN_PROBLEMS, allowedFileUrl, downloadHostFile, compactText, timedFetch, CLOUD_RESOURCE, CLOUD_ISSUER, PUBLIC_RESOURCE, LEGACY_PUBLIC_RESOURCE, SIGN_IN_RESOURCE, PUBLIC_SIGN_IN_RESOURCE, DIRECTORY_RESOURCE, PUBLIC_DIRECTORY_RESOURCE, DIRECTORY_DOCUMENTATION } from '../mcp/cloud.mjs';
 import { DIRECTORY_INSTRUCTIONS, DIRECTORY_TITLES } from '../mcp/cloud/directory-edition.mjs';
-import { NO_FILES, frontNext } from '../mcp/cloud/common.mjs';
+import { frontNext } from '../mcp/cloud/common.mjs';
 import { createHash } from 'node:crypto';
 import { verifiedUserId } from '../api/http.mjs';
 import { safeClientRedirect, authorizationId } from '../web/cloud-connect/connect.mjs';
@@ -707,60 +707,38 @@ test('the sign-in-first address asks every request for a sign-in; mcp.oddbout.co
   assert.equal((await handle(new Request(`${SIGN_IN_RESOURCE}/elsewhere`, { method: 'POST' }))).status, 404);
 });
 
-// 2026-11-05: at the sign-in-first address (Grok, Cursor, Gemini CLI) no host gives the files that only OpenAI's file host does (allowedFileUrl),
-// and none reads OpenAI's tool metadata. /mcp, which ChatGPT's app pins (1.0.3), keeps its list to the byte.
-test('the sign-in-first address lists no file-host tool and no OpenAI metadata, and nothing there names a tool it drops; /mcp keeps its list', async () => {
+// MCP 리뷰 2026-11-05: /signin is where the docs send Codex (docs/CLOUD-MCP.md), whose native file input reaches the upload tools through
+// OpenAI's file hosts; a /signin without them (#328) broke that. It lists what /mcp lists, to the byte, and says the same. /mcp, which
+// ChatGPT's app pins (1.0.3), keeps its list to the byte.
+test('the sign-in-first address lists exactly what /mcp lists and says the same; /mcp keeps its list to the byte', async () => {
   const arena = { url: 'https://arena.test/oddbout-arena', key: 'k'.repeat(64), fetcher: async () => Response.json({ ok: true, fighters: [] }) };
   const db = { ...dbFor(), rpc: async name => ({ data: name === 'af_account' ? { invited: true, accessMode: 'open', canSubmit: true } : name === 'af_mcp_session_state' ? 'usable' : true }) };
-  const ask = handle => (url, method, params = {}) => handle(new Request(url, { method: 'POST', headers: { 'content-type': 'application/json',
-    accept: 'application/json, text/event-stream', authorization: `Bearer ${token}` }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) }))
-    .then(response => response.json());
-  const post = ask(createCloudHandler({ db, arena, hosted: {} }));
-  const toolsAt = async (url, through = post) => (await through(url, 'tools/list')).result.tools;
-  const [signIn, full] = [await toolsAt(SIGN_IN_RESOURCE), await toolsAt(CLOUD_RESOURCE)];
-  assert.deepEqual([signIn.length, full.length], [47, 55]);
-  assert.deepEqual(full.map(t => t.name).filter(name => !signIn.some(t => t.name === name)).sort(), [...FILE_HOST_TOOLS].sort());
-  // Without the arena and the hosted tools every one of them goes: 21 at /mcp, 13 here.
-  const bare = ask(createCloudHandler({ db }));
-  assert.deepEqual([(await toolsAt(SIGN_IN_RESOURCE, bare)).length, (await toolsAt(CLOUD_RESOURCE, bare)).length], [13, 21]);
-  // /mcp's list, to the byte (sha256 of its tools). Changed on purpose only once since 219e35d1 (c537ac22…): the creator-source tools' ids
-  // took the short UUID_ARG pattern (2026-11-05, −480 B; none of the tools ChatGPT's app review pins).
-  assert.equal(createHash('sha256').update(JSON.stringify(full)).digest('hex'), 'd807a06428d4a31bd99b09f9f7daa6f6197f92a67473711e5c663b31a2807b96');
-  for (const tool of signIn) {
-    const same = full.find(t => t.name === tool.name);
-    assert.deepEqual([tool._meta, tool.securitySchemes], [undefined, undefined], tool.name);
-    assert.deepEqual([tool.title, tool.inputSchema, tool.annotations, tool.outputSchema], [same.title, same.inputSchema, same.annotations, same.outputSchema], tool.name);
-    for (const name of FILE_HOST_TOOLS) assert.equal(JSON.stringify(tool).includes(name), false, `${tool.name} names ${name}`);
+  const hello = { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'codex', version: '1' } };
+  for (const [setup, options, count] of [['arena and hosted', { arena, hosted: {} }, 55], ['bare', {}, 21]]) {
+    const handle = createCloudHandler({ db, ...options });
+    const text = (url, method, params = {}) => handle(new Request(url, { method: 'POST', headers: { 'content-type': 'application/json',
+      accept: 'application/json, text/event-stream', authorization: `Bearer ${token}` }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) }))
+      .then(response => response.text());
+    const [signIn, full] = [await text(SIGN_IN_RESOURCE, 'tools/list'), await text(CLOUD_RESOURCE, 'tools/list')];
+    assert.equal(signIn, full, setup);
+    const tools = JSON.parse(full).result.tools;
+    assert.equal(tools.length, count, setup);
+    // The upload tools with OpenAI's file metadata, and the top-level securitySchemes, at both.
+    const upload = tools.find(t => t.name === 'prepare_fighter_registration');
+    assert.deepEqual([upload._meta['openai/fileParams'], upload.securitySchemes], [['manifest'], [{ type: 'oauth2', scopes: ['openid', 'email', 'profile'] }]], setup);
+    // /mcp's list, to the byte (sha256 of its tools). Changed on purpose only once since 219e35d1 (c537ac22…): the creator-source tools' ids
+    // took the short UUID_ARG pattern (2026-11-05, −480 B; none of the tools ChatGPT's app review pins).
+    if (count === 55) assert.equal(createHash('sha256').update(JSON.stringify(tools)).digest('hex'), 'd807a06428d4a31bd99b09f9f7daa6f6197f92a67473711e5c663b31a2807b96');
+    // The instructions, and what the creation guide and the readiness check answer, are the same at both.
+    const [signInHello, fullHello] = [await text(SIGN_IN_RESOURCE, 'initialize', hello), await text(CLOUD_RESOURCE, 'initialize', hello)];
+    assert.equal(signInHello, fullHello, setup); assert.match(JSON.parse(fullHello).result.instructions, /Use host file attachments/);
+    for (const [name, args] of [['get_fighter_spec', { section: 'overview' }], ['get_fighter_spec', { section: 'creation' }], ['check_creation_readiness', { purpose: 'generation' }]]) {
+      const answer = async url => text(url, 'tools/call', { name, arguments: args });
+      assert.equal(await answer(SIGN_IN_RESOURCE), await answer(CLOUD_RESOURCE), `${setup}: ${name} ${JSON.stringify(args)}`);
+    }
+    const overview = toolJson(JSON.parse(await text(SIGN_IN_RESOURCE, 'tools/call', { name: 'get_fighter_spec', arguments: { section: 'overview' } })).result);
+    assert.equal(overview.data.registration.assetUpload, 'openai-fileParams', setup);
   }
-  // One description named the profile set's upload tools; it says where a painting goes instead, and keeps ODDBOUT's Korean names.
-  assert.deepEqual(signIn.filter(t => t.description !== full.find(f => f.name === t.name).description).map(t => t.name), ['enter_fighter']);
-  const enter = signIn.find(t => t.name === 'enter_fighter').description;
-  assert.match(enter, /this connector cannot upload one: the user uploads a new painting from the ODDBOUT app in ChatGPT or with the creator kit/);
-  assert.match(enter, /\(출전\)/);
-  // Its instructions and what its tools answer name none of them either; /mcp's still do.
-  const hello = { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'grok', version: '1' } };
-  const [instructions, fullInstructions] = [(await post(SIGN_IN_RESOURCE, 'initialize', hello)).result.instructions, (await post(CLOUD_RESOURCE, 'initialize', hello)).result.instructions];
-  assert.ok(instructions.includes(NO_FILES)); assert.ok(!instructions.includes('host file attachments')); assert.ok(fullInstructions.includes('Use host file attachments'));
-  const call = async (url, name, args) => toolJson((await post(url, 'tools/call', { name, arguments: args })).result);
-  const overview = await call(SIGN_IN_RESOURCE, 'get_fighter_spec', { section: 'overview' }), creation = await call(SIGN_IN_RESOURCE, 'get_fighter_spec', { section: 'creation' });
-  const ready = await call(SIGN_IN_RESOURCE, 'check_creation_readiness', { purpose: 'generation' });
-  assert.deepEqual([overview.data.registration.assetUpload, ready.delivery.inputCapability, creation.data.files], ['none', 'none', NO_FILES]);
-  assert.ok(ready.nextAction.includes(NO_FILES)); assert.ok(overview.data.profileSet.order.some(step => step.includes(NO_FILES)));
-  const registered = { status: 'submitted', submission: { stage: 'registered', fighterId: 'f-1' }, profileSetId: null };
-  const fronts = [{ required: true, ok: false }, { required: true, ok: false, profileSetId: 'p', status: 'uploading' },
-    { required: true, ok: false, profileSetId: 'p', status: 'rejected', frontCheck: 'fail' }];
-  for (const text of [instructions, JSON.stringify(overview), JSON.stringify(creation), JSON.stringify(ready), hostedNext(registered, { uploads: false }),
-    ...fronts.map(front => frontNext(front, { uploads: false }))]) {
-    for (const name of FILE_HOST_TOOLS) assert.equal(text.includes(name), false, `${name} in ${text.slice(0, 80)}`);
-  }
-  assert.match(frontNext(fronts[0], { uploads: false }), /^He cannot enter \(출전\) yet[\s\S]*cannot upload it: the user uploads it from the ODDBOUT app in ChatGPT/);
-  assert.match(hostedNext(registered, { uploads: false }), /cannot upload one; the user uploads it from the ODDBOUT app in ChatGPT/);
-  const fullOverview = await call(CLOUD_RESOURCE, 'get_fighter_spec', { section: 'overview' });
-  assert.equal(fullOverview.data.registration.assetUpload, 'openai-fileParams'); assert.ok(JSON.stringify(fullOverview).includes('upload_profile_set_asset'));
-  assert.match(hostedNext(registered), /prepare_profile_set can upload one/); assert.match(frontNext(fronts[1]), /upload_profile_set_asset/);
-  // A dropped tool called there is unknown, as at /claude.
-  const unknown = (await post(SIGN_IN_RESOURCE, 'tools/call', { name: 'prepare_fighter_registration', arguments: {} }));
-  assert.ok(unknown.error || unknown.result?.isError === true, JSON.stringify(unknown));
 });
 
 // Claude's directory (2026-11-01) takes no AI image generation and Claude has no OpenAI file host: the same server at `<function>/claude`
@@ -810,6 +788,13 @@ test('the directory edition lists only its tools, in English, with every hint; t
   // A fighter without its profile set is told where one comes from: this connector takes no files.
   assert.match(tools.find(t => t.name === 'enter_fighter').description, /made on the ODDBOUT website gets it at registration/);
   assert.match(full.find(t => t.name === 'enter_fighter').description, /submit_profile_set/);
+  // What its tools answer of a fighter's front (frontNext, in get_registered_fighter and enter_fighter) names none of them either.
+  for (const front of [{ required: true, ok: false }, { required: true, ok: false, profileSetId: 'p', status: 'uploading' },
+    { required: true, ok: false, profileSetId: 'p', status: 'rejected', frontCheck: 'fail' }]) {
+    const next = frontNext(front, { directory: true });
+    for (const name of dropped) assert.equal(next.includes(name), false, `${name} in ${next}`);
+    assert.doesNotMatch(next, HANGUL); assert.match(next, /cannot upload it: the user uploads it from the ODDBOUT app in ChatGPT|finish it where it was started/);
+  }
   assert.equal(full.find(t => t.name === 'get_profile').title, 'ODDBOUT 연결 계정');
   const instructions = async url => (await (await post(url, 'initialize', hello)).json()).result.instructions;
   assert.equal(await instructions(DIRECTORY_RESOURCE), DIRECTORY_INSTRUCTIONS);

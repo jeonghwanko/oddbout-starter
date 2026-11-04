@@ -249,7 +249,10 @@ Anthropic의 Claude 커넥터 디렉터리에 내는 주소는 `https://mcp.oddb
   메타데이터의 `resource_documentation`은 Claude 연결 안내 `https://oddbout.com/cloud-plugin/claude.html`(`DIRECTORY_DOCUMENTATION`)이다.
 - 게이트웨이는 `mcp.oddbout.com` 호스트에서만 `/claude`, `/claude/.well-known/oauth-protected-resource`, `/.well-known/oauth-protected-resource/claude`를
   함수의 `/claude`로 넘기고 `x-oddbout-public-resource: https://mcp.oddbout.com/claude`를 붙인다. 함수는 이 값일 때만 그 주소를 광고한다. 로그인 먼저 주소와 같은 방식이다.
-- `/mcp`의 도구·title·지침은 바뀌지 않는다(시험이 `/mcp` 55종과 그 목록의 sha256을 본다). `/signin`은 아래 [로그인 먼저 주소의 도구](#로그인-먼저-주소의-도구-2026-11-05).
+- `/mcp`의 title·설명·지침은 그대로다(시험이 `/mcp` 55종과 그 목록의 sha256을 본다). 2026-11-05에 바뀐 것은 하나다: 제작 원본 도구 셋
+  (`store_creator_source`·`get_creator_source`·`prepare_creator_source_download`)의 id 입력 스키마가 zod `uuid()`(`format: uuid`와 168자 패턴)에서
+  `UUID_ARG`의 짧은 패턴으로 바뀌어 목록이 480바이트 줄었다(59,470 → 58,990 B). ChatGPT 앱 심사가 고정한 도구는 아니다.
+  `/signin`은 아래 [로그인 먼저 주소의 도구](#로그인-먼저-주소의-도구-2026-11-05).
 - 연결을 주소에 묶는다(2026-11-01, `20261101150000_ai_fighter_mcp_session_edition.sql`). Supabase Auth는 클라이언트가 요청한 `resource`(RFC 8707)를
   토큰에 넣지 않는다. `aud`는 토큰 훅의 고정 목록이고, 훅 입력에도 요청 주소가 없다. 그래서 토큰만으로는 어느 주소용인지 알 수 없다.
   - OAuth 세션의 첫 로그인 호출이 그 세션을 그 판에 묶는다(`af_mcp_session_editions`): `/mcp`·`/signin`은 `full`, `/claude`는 `directory`다.
@@ -273,21 +276,15 @@ Anthropic의 Claude 커넥터 디렉터리에 내는 주소는 `https://mcp.oddb
 
 ## 로그인 먼저 주소의 도구 (2026-11-05)
 
-`/signin`(Grok·Cursor·Gemini CLI·터미널 에이전트)에는 OpenAI 파일 호스트가 없다. 파일 인자는 그 호스트의 주소만 받으므로(`allowedFileUrl`) 파일 도구는
-거기서 한 번도 성공할 수 없었다. 그래서 이 주소는 `FILE_HOST_TOOLS` 여덟 종(`prepare_fighter_registration`·`upload_fighter_asset`·`prepare_profile_set`·
-`upload_profile_set_asset`·`verify_creator_file_input`·`store_creator_source`·`get_creator_source`·`prepare_creator_source_download`)을 등록하지 않는다.
-대결장 키와 호스팅 생성이 있으면 `/mcp` 55종, `/signin` 47종이다(둘 다 없으면 21종과 13종). 부르면 알 수 없는 도구 오류다.
+`/signin`은 `/mcp`와 같은 것을 등록한다. 도구, `_meta`(`securitySchemes`·`openai/fileParams`·`openai/profile`), 맨 위 `securitySchemes`, 서버 지침과
+도구가 답하는 문장까지 바이트로 같다(시험이 대결장 키·호스팅 생성이 있을 때 55종과 없을 때 21종에서 `tools/list`·`initialize`를 비교한다).
 
-- 판(`edition`)은 그대로 `full`이다. 세션이 판에 묶이므로(`af_mcp_session_editions`) 새 판을 만들지 않고, 요청 경로(`signInFirst`)로 정한다.
-  Supabase 주소의 `/signin`도 같다.
-- OpenAI 앱의 도구 메타데이터(`_meta`의 `securitySchemes`·`openai/fileParams`·`openai/profile`, 맨 위 `securitySchemes`)를 싣지 않는다. 남은 도구의
-  title·설명·입력 스키마·annotation·`outputSchema`는 `/mcp`와 같다. 설명은 `enter_fighter` 하나만 다르다: 뺀 프로필 세트 업로드 도구 대신, 이 커넥터로는
-  올릴 수 없고 ChatGPT의 ODDBOUT 앱이나 제작 키트에서 올린다고 적는다. 한국어 상태 이름은 그대로다.
-- 서버 지침, `get_fighter_spec`(overview의 `registration.assetUpload: 'none'`, `profileSet.order`, creation 단계), `check_creation_readiness`
-  (`delivery.inputCapability: 'none'`, `nextAction`), `get_registered_fighter`·`enter_fighter`의 `next`(`frontNext`의 `uploads`), 호스팅 작업의 `next`도
-  뺀 도구를 부르지 않고 같은 문장(`NO_FILES`)으로 파일이 어디로 가는지 말한다. `request_hosted_fighter`는 남는다(`pictureUploads`). 스키마는 그대로이고
-  `_meta`만 빠진다.
-- `directory`는 이제 "한국어 상태 이름을 빼는 디렉터리판"만 뜻하고, 업로드 도구가 없다는 것은 `uploads`(= `/mcp`일 때만 참)가 따로 말한다.
+- 까닭: 위 연결 안내가 Codex를 `/signin`에 붙이고, Codex의 네이티브 파일 입력은 OpenAI 파일 호스트를 거쳐 업로드 도구에 닿는다(아래 2026-10-25
+  파일 전달 재현, `website/cloud-plugin/review-20261025/native-registration-evidence.json`). #328이 이 주소에서 파일 도구 여덟 종과 OpenAI 메타데이터를
+  뺐다가 그 길을 막을 수 있어 되돌렸다(MCP 리뷰 2026-11-05).
+- 판(`edition`)은 그대로 `full`이다. 세션이 판에 묶이므로(`af_mcp_session_editions`) 새 판을 만들지 않는다. Supabase 주소의 `/signin`도 같다.
+- 업로드 도구가 없는 주소는 `/claude`뿐이다. 그 판의 문장은 `uploads`(디렉터리판이 아닐 때 참)가 거짓일 때의 문장이다(`frontNext`, `NO_FILES`).
+  `directory`는 "한국어 상태 이름을 빼는 디렉터리판"을 뜻한다.
 
 ## 사용 흐름
 
@@ -426,7 +423,9 @@ ODDBOUT의 생성 워커가 사용자의 말(과 그림 1~2장)로 선수를 만
 ### 그림 올리기 표 (2026-11-01)
 
 ChatGPT 밖의 에이전트(Grok·Claude·Gemini CLI·Codex CLI·Cursor의 Grok Bot)는 파일 인자가 없다. 그래서 대화에서 만든 그림이나 사용자가 그린 그림을
-표로 보낸다. 그림은 원화의 참고다. 추천 조합(GPT 원화 + Grok 영상)은 그대로다. 호스팅 생성에 딸린 도구라 Claude 디렉터리판(`/claude`)에는 없다.
+표로 보낸다. 다만 2026-10-25 기록(아래 "보관 안내·안전 표시·파일 전달 재현")은 로컬 Codex의 네이티브 파일 입력이 OpenAI 파일 호스트를 거쳐 업로드 도구에
+닿았다고 적는다. 어느 Codex 표면(CLI·앱·IDE)이 그 입력을 갖는지는 기록이 가리지 않으므로 두 길이 다 있다: 파일 입력이 있으면 파일 인자, 없으면 표.
+그림은 원화의 참고다. 추천 조합(GPT 원화 + Grok 영상)은 그대로다. 호스팅 생성에 딸린 도구라 Claude 디렉터리판(`/claude`)에는 없다.
 
 - `start_picture_upload`가 표를 만든다(`af_generation_upload_tickets`, 마이그레이션 `20261101100000`). 표 하나는 30분 동안 그림 둘을 받는다.
   표를 주기 전에 신청의 검사를 먼저 한다(3차 리뷰 2026-11-01): MCP가 서비스 스위치(`generations/capabilities`)를 보고, API가 에이전트가 넘긴
