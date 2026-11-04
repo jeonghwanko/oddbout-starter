@@ -59,6 +59,7 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
       const [builtins, first] = await Promise.all([call('fighters'), invoke('roster')]);
       if (!builtins.ok) return builtins;
       const registered = [];
+      // The pages one after another: each one's cursor is the last fighter of the page before (keyset), not known up front.
       for (let cursor = null, page = 0; page < 5; page++) {
         /** @type {any} */
         const list = page === 0 ? first : await invoke(`roster?after=${encodeURIComponent(cursor)}`);
@@ -118,9 +119,11 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
       // A cup is fought in about seven seconds: wait for it here so the agent needs no second call (MCP 점검 2026-10-27).
       // The wait ends by the call's deadline (counted from its request, the issue included: 2026-11-03) or CUP_WAIT_MS, each read bounded by
       // the time left; a client that went away ends it at once. The cup is made either way: an open one is read with get_cup.
+      // Its reads come after 1, 1, 2, 3, 4… seconds (MCP 최적화 2026-11-05): a read a second took twelve reads to wait twelve seconds for a
+      // cup that ran long; seven now wait 22.
       const deadline = Math.min(due, Date.now() + (arena.cupWaitMs ?? CUP_WAIT_MS)), pollMs = arena.pollMs ?? 1000;
-      for (let i = 0; i < (arena.pollTries ?? 12) && Date.now() + pollMs < deadline && !signal.aborted; i++) {
-        await pause(pollMs, signal);
+      for (let i = 0, wait = pollMs; i < (arena.pollTries ?? 12) && Date.now() + wait < deadline && !signal.aborted; i++, wait = pollMs * Math.max(1, i)) {
+        await pause(wait, signal);
         if (signal.aborted) break;
         const cup = await arenaCall(arena, `cup?id=${issued.ticket}`, undefined, undefined, timeLeft(deadline, 20000), { signal }).catch(() => null);
         if (cup?.ok && cup.cup && cup.cup.state !== 'open') return { ...issued, cup: cup.cup };

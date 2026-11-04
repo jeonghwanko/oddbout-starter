@@ -145,6 +145,7 @@ export async function authenticateCloud(db, request, now = Date.now, edition = '
  * the request's `signal` (aborted when the client goes away) and the `deadline` its answer is due by (CALL_BUDGET_MS from its arrival).
  * @typedef {{ requestId?: string, protocol?: string | null, signal?: AbortSignal, deadline?: number }} Call
  */
+/** One MCP request as its log line names it (createCloudHandler). @typedef {{ edition: 'full' | 'directory', method: string | null, tool: string | null, compact: boolean }} RequestLine */
 
 /**
  * One JSON line per tool call (MCP 점검 2026-11-03: a failed call left no trace, and nothing said which tools agents use or which protocol
@@ -246,7 +247,17 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
       _meta: { securitySchemes: publicTool ? [{ type: 'noauth' }] : AUTH,
         ...(files.length ? { 'openai/fileParams': files } : {}), ...(profile ? { 'openai/profile': true } : {}) } },
     async (/** @type {Record<string, unknown>} */ args, /** @type {import('@modelcontextprotocol/server').ServerContext | undefined} */ ctx) => {
-      if (!publicTool && !identity) return { ...output({ ok: false, code: 'authentication-required' }),
+      /**
+       * The result as this host reads it. A host other than ChatGPT reads the text, which holds the whole JSON: the same value again as
+       * structuredContent doubled every result it got (MCP 최적화 2026-11-05). ChatGPT reads the structured result beside its short text, and
+       * a tool with an outputSchema (get_profile) must send it.
+       * @param {Record<string, unknown>} value @param {boolean} [short]  compactText, for ChatGPT's answer
+       */
+      const reply = (value, short = false) => {
+        const result = output(value, short);
+        return host.compact === true || profile ? result : { content: result.content, ...(result.isError ? { isError: true } : {}) };
+      };
+      if (!publicTool && !identity) return { ...reply({ ok: false, code: 'authentication-required' }),
         _meta: { 'mcp/www_authenticate': [`Bearer resource_metadata="${CLOUD_RESOURCE}/.well-known/oauth-protected-resource"`] } };
       const started = Date.now(), signals = [ctx?.mcpReq?.signal, call.signal].filter(signal => signal !== undefined);
       // The SDK's signal ends with a cancellation; the request's, when the client goes away (2026-07-28 reads a closed stream as one).
@@ -259,8 +270,8 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
       try { value = await run(/** @type {Parameters<typeof run>[0]} */ (args), context); }
       catch (error) { failure = error; value = { ok: false, code: error instanceof Problem ? error.message : 'cloud-operation-unavailable' }; }
       logCall({ tool: name, edition, client: identity?.claims.client_id ?? null, call, started, value, failure });
-      if (failure !== undefined) return output(value);
-      const result = output(value, host.compact === true);
+      if (failure !== undefined) return reply(value);
+      const result = reply(value, host.compact === true);
       // A diagnostic failure is useful data; keep it readable by hosts that throw away tool errors.
       return diagnostic ? { ...result, isError: false } : result;
     });
@@ -362,12 +373,32 @@ function publishedToolList(result) {
  * @param {{url: string, key: string, fetcher?: typeof fetch, cupWaitMs?: number, pollMs?: number, pollTries?: number} | null} [options.arena]
  * @param {{pollMs?: number} | null} [options.hosted]
  * @param {number} [options.budgetMs]  one call's budget from its arrival (CALL_BUDGET_MS; shorter in tests)
+ * @param {(line: string) => void} [options.log]  where each MCP request's line goes (console.log)
  * @returns {(request: Request) => Promise<Response>}
  */
-export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted = null, budgetMs = CALL_BUDGET_MS }) {
+export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted = null, budgetMs = CALL_BUDGET_MS, log = console.log }) {
   const serve = mcpServing(65536);
+  /**
+   * One line per MCP request (MCP 최적화 2026-11-05): its method, tool and edition, whether the host got ChatGPT's short text, and the status,
+   * bytes and time of the answer — the bytes are what the hosts' polling costs. Never the token, the account, the arguments or a URL. A
+   * request that is no MCP message (the metadata, a preflight, a probe) leaves none; a stream, which no tool sends, is passed on uncounted.
+   */
   return async request => {
-    const started = Date.now();
+    const started = Date.now(), seen = /** @type {{ line?: RequestLine }} */ ({});
+    const response = await respond(request, started, seen);
+    if (!seen.line) return response;
+    const counted = response.body === null ? new Uint8Array()
+      : (response.headers.get('content-type') ?? '').startsWith('application/json') ? new Uint8Array(await response.arrayBuffer()) : null;
+    log(JSON.stringify({ mcp: 1, ...seen.line, status: response.status, bytes: counted?.length ?? null, ms: Date.now() - started }));
+    return counted === null || response.body === null ? response
+      : new Response(counted.length ? counted : null, { status: response.status, statusText: response.statusText, headers: response.headers });
+  };
+  /**
+   * The request path.
+   * @param {Request} request @param {number} started @param {{ line?: RequestLine }} seen  filled in once the request is an MCP message
+   * @returns {Promise<Response>}
+   */
+  async function respond(request, started, seen) {
     const { route, signInFirst, edition, resource } = routeOf(request);
     if (route === '.well-known/oauth-protected-resource' && request.method === 'GET') return json({ resource,
       authorization_servers: [CLOUD_ISSUER], scopes_supported: ['openid', 'email', 'profile'],
@@ -407,10 +438,15 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted =
       }
       return json({ error: 'method_not_allowed' }, 405, { allow: 'POST, OPTIONS' });
     }
+    /** @type {RequestLine} */
+    const line = { edition, method: null, tool: null, compact: false };
+    seen.line = line;
     let body;
     try { body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, 65536))); }
     catch { return json({ error: 'invalid_request' }, 400); }
     if (!body || Array.isArray(body) || typeof body.method !== 'string') return json({ error: 'invalid_request' }, 400);
+    line.method = body.method.slice(0, 80);
+    if (body.method === 'tools/call' && typeof body.params?.name === 'string') line.tool = body.params.name.slice(0, 80);
     const { identity, problem } = await identityFor(db, request, body, signInFirst, edition);
     if (problem) return signInProblem(problem);
     // A server per request on purpose: its tools close over this request's verified identity, so no state can carry one
@@ -422,8 +458,10 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted =
     /** @type {Call} */
     const call = { requestId: UUID.test(given) ? given.toLowerCase() : crypto.randomUUID(),
       protocol: /^\d{4}-\d{2}-\d{2}$/.test(version) ? version : null, signal: request.signal, deadline: started + budgetMs };
+    const host = await hostOf(body);
+    line.compact = host.compact;
     /** @type {Parameters<typeof cloudServer>[0]} */
-    const options = { db, identity, fetcher, arena, hosted, host: await hostOf(body), edition, call };
+    const options = { db, identity, fetcher, arena, hosted, host, edition, call };
     try {
       const response = await serve(cloudServer(options), request, body);
       if (body.method === 'tools/list' && response.status === 200) return json(publishedToolList(await response.json()));
@@ -433,5 +471,5 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted =
         ms: Date.now() - started, ok: false, code: 'mcp_unavailable', ...failureDetail(error) }));
       return json({ error: 'mcp_unavailable' }, 503);
     }
-  };
+  }
 }

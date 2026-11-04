@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createCloudHandler, allowedFileUrl, CLOUD_ISSUER, CLOUD_RESOURCE } from '../mcp/cloud.mjs';
 import { FILE_PROBE_LIMIT } from '../mcp/file-input-probe.mjs';
+// A tool's JSON: a host other than ChatGPT gets it as the text only (MCP 최적화 2026-11-05).
+const toolJson = result => result.structuredContent ?? JSON.parse(result.content[0].text);
 
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -46,7 +48,7 @@ test('wire descriptor exposes the complete official file-input schema and keeps 
 });
 
 test('authenticated tool hashes actual receiver bytes without persisting or exposing the URL', async () => {
-  const r = runtime(), result = await r.call(), receipt = result.body.result.structuredContent;
+  const r = runtime(), result = await r.call(), receipt = toolJson(result.body.result);
   assert.equal(result.status, 200);
   assert.equal(receipt.ok, true);
   assert.equal(receipt.bytes, png.length);
@@ -72,7 +74,7 @@ test('missing, wrong-audience and revoked authentication cannot trigger a file f
 
 test('actual file identity is reported on a size/hash mismatch rather than echoing expected values', async () => {
   const result = await runtime().call({ ...args, expectedBytes: png.length + 1, expectedSha256: '0'.repeat(64) });
-  const receipt = result.body.result.structuredContent;
+  const receipt = toolJson(result.body.result);
   assert.equal(receipt.ok, false);
   assert.equal(result.body.result.isError, false);
   assert.equal(receipt.sha256, digest(png));
@@ -84,8 +86,8 @@ test('URL origin restrictions reject non-host inputs before network access', asy
   for (const url of ['http://files.oaiusercontent.com/x', 'https://127.0.0.1/x', 'https://files.oaiusercontent.com.evil.test/x',
     'https://user:password@files.oaiusercontent.com/x', 'https://files.oaiusercontent.com:444/x', 'https://files.oaiusercontent.com/x#fragment']) {
     const r = runtime(), result = await r.call({ ...args, file: { ...file, download_url: url } });
-    assert.equal(result.body.result.structuredContent.code, 'unsupported-file-origin');
-    assert.equal(result.body.result.structuredContent.ok, false);
+    assert.equal(toolJson(result.body.result).code, 'unsupported-file-origin');
+    assert.equal(toolJson(result.body.result).ok, false);
     assert.equal(result.body.result.isError, false);
     assert.equal(r.calls.length, 0);
   }
@@ -95,7 +97,7 @@ test('declared and streamed oversized responses are bounded', async () => {
   for (const fetcher of [async () => new Response('small', { headers: { 'content-length': String(FILE_PROBE_LIMIT + 1) } }),
     async () => new Response(new Uint8Array(FILE_PROBE_LIMIT + 1))]) {
     const result = await runtime({ fetcher }).call();
-    assert.equal(result.body.result.structuredContent.code, 'body-limit');
+    assert.equal(toolJson(result.body.result).code, 'body-limit');
   }
 });
 
@@ -104,7 +106,7 @@ test('probe accepts only exact observed Azure hosts without changing registratio
     const url = `https://${host}/existing.png?sig=do-not-echo`;
     assert.equal(allowedFileUrl(url), false);
     const r = runtime(), result = await r.call({ ...args, file: { ...file, download_url: url } });
-    assert.equal(result.body.result.structuredContent.ok, true);
+    assert.equal(toolJson(result.body.result).ok, true);
     assert.equal(r.calls.length, 1);
   }
   for (const rejected of ['https://another-tenant.blob.core.windows.net/x',
@@ -113,7 +115,7 @@ test('probe accepts only exact observed Azure hosts without changing registratio
     'https://oaisdmntprnznorth.blob.core.windows.net:444/x',
     'https://user:secret@oaisdmntprnznorth.blob.core.windows.net/x']) {
     const blocked = runtime(), denied = await blocked.call({ ...args, file: { ...file, download_url: rejected } });
-    assert.equal(denied.body.result.structuredContent.code, 'unsupported-file-origin');
+    assert.equal(toolJson(denied.body.result).code, 'unsupported-file-origin');
     assert.equal(blocked.calls.length, 0);
   }
 });
@@ -121,7 +123,7 @@ test('probe accepts only exact observed Azure hosts without changing registratio
 test('rejected origin diagnostics disclose only host properties, never signed paths or credentials', async () => {
   const r = runtime(), result = await r.call({ ...args, file: { ...file,
     download_url: 'https://secretuser:secretpass@example.test:444/private-path?sig=private-signature#private-fragment' } });
-  assert.deepEqual(result.body.result.structuredContent.rejectedOrigin,
+  assert.deepEqual(toolJson(result.body.result).rejectedOrigin,
     { protocol: 'https:', hostname: 'example.test', port: '444', hasUserInfo: true, hasFragment: true });
   assert.equal(r.calls.length, 0);
   for (const secret of ['secretuser', 'secretpass', 'private-path', 'private-signature', 'private-fragment'])
@@ -130,7 +132,7 @@ test('rejected origin diagnostics disclose only host properties, never signed pa
 
 test('a MIME label cannot substitute for a PNG header', async () => {
   const result = await runtime({ fetcher: async () => new Response('not an image') }).call({ ...args, file: { ...file, mime_type: 'image/png' } });
-  assert.equal(result.body.result.structuredContent.code, 'png-required');
+  assert.equal(toolJson(result.body.result).code, 'png-required');
 });
 
 test('upstream denial, redirect and thrown network errors do not expose secrets or report success', async () => {
@@ -138,8 +140,8 @@ test('upstream denial, redirect and thrown network errors do not expose secrets 
     async () => Response.redirect('https://127.0.0.1/private'),
     async () => { throw new Error(file.download_url); }]) {
     const result = await runtime({ fetcher }).call();
-    assert.equal(result.body.result.structuredContent.ok, false);
-    assert.equal(result.body.result.structuredContent.code, 'file-download-unavailable');
+    assert.equal(toolJson(result.body.result).ok, false);
+    assert.equal(toolJson(result.body.result).code, 'file-download-unavailable');
     assert.ok(!JSON.stringify(result).includes('do-not-echo'));
   }
 });

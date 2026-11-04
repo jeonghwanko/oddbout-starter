@@ -15,18 +15,25 @@ async function connector(g, hosted, fetcher = async () => new Response(png(512, 
   const downloads = [];
   const db = { ...g.db, auth: { getClaims: async () => ({ data: { claims } }) },
     rpc: (name, args) => name === 'af_mcp_session_state' ? { data: 'usable' } : g.db.rpc(name, args) };
-  const handle = createCloudHandler({ db, hosted, budgetMs, fetcher: async (...args) => { downloads.push(args[0]); return fetcher(...args); } });
-  let loseResponse = false;
+  const handle = createCloudHandler({ db, hosted, budgetMs, log: () => {}, fetcher: async (...args) => { downloads.push(args[0]); return fetcher(...args); } });
+  let loseResponse = false, bytes = 0;
   const rpc = async (method, params) => {
     const response = await handle(new Request(CLOUD_RESOURCE, { method: 'POST',
     headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: 'Bearer signed-connector-token-for-test' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params: meta && method === 'tools/call' ? { ...params, _meta: meta } : params }) }));
     if (loseResponse) { loseResponse = false; await response.body?.cancel(); throw new Error('simulated lost response'); }
-    return (await response.json()).result;
+    const text = await response.text();
+    bytes = Buffer.byteLength(text);
+    return JSON.parse(text).result;
   };
+  // A tool's JSON: a host other than ChatGPT gets it as the text only (MCP 최적화 2026-11-05).
+  const toolJson = result => result.structuredContent ?? JSON.parse(result.content[0].text);
   return { downloads, loseNextResponse: () => { loseResponse = true; }, tools: async () => (await rpc('tools/list', {})).tools,
-    call: async (name, args) => (await rpc('tools/call', { name, arguments: args })).structuredContent,
-    text: async (name, args) => (await rpc('tools/call', { name, arguments: args })).content[0].text };
+    call: async (name, args) => toolJson(await rpc('tools/call', { name, arguments: args })),
+    raw: (name, args) => rpc('tools/call', { name, arguments: args }),
+    text: async (name, args) => (await rpc('tools/call', { name, arguments: args })).content[0].text,
+    // The last answer's HTTP body, in bytes.
+    bytes: () => bytes };
 }
 
 test('hosted generation tools list only when configured', async () => {
@@ -94,7 +101,9 @@ test('an agent asks ODDBOUT for a fighter, passes the picks and registers it in 
     assert.equal((await g.sql.query('select count(*)::int as n from public.af_generation_uploads')).rows[0].n, 1);
     const jobId = made.job.id;
     const listed = await call('get_hosted_fighter', {});
-    assert.equal(listed.capabilities.hosted, true); assert.equal(listed.jobs[0].next, made.next);
+    // The list holds each job in short (MCP 최적화 2026-11-05); its next says to read one by its id.
+    assert.equal(listed.capabilities.hosted, true); assert.equal(listed.jobs[0].id, made.job.id); assert.equal(listed.jobs[0].next, undefined);
+    assert.match(listed.next, /jobId/);
     // 보유 토큰 (2026-10-31): an open request does not use his tokens up; the balance does, and nothing was spent yet.
     assert.equal(listed.used, false); assert.deepEqual(listed.tokens, { granted: 500000, spent: 0, balance: 500000 });
 
@@ -520,7 +529,7 @@ test('a picture address an agent reports is noted by its kind (and an http host)
   const g = await generation();
   try {
     const logged = t.mock.method(console, 'log', () => {});
-    const { call, downloads } = await connector(g, {});
+    const { call, raw, downloads } = await connector(g, {});
     const noted = await call('report_picture_link', { url: 'https://images.example.test/u/1234/gen/abc.png?sig=secret', madeBy: 'grok' });
     assert.deepEqual([noted.ok, noted.fetched, noted.kept, noted.observed.hostname], [true, false, false, 'images.example.test']);
     assert.equal(downloads.length, 0);
@@ -528,7 +537,7 @@ test('a picture address an agent reports is noted by its kind (and an http host)
     assert.ok(line && line.includes('"madeBy":"grok"') && !line.includes('secret') && !line.includes('1234'), line);
     // The maker is one of a few words, never free text.
     const probes = () => logged.mock.calls.filter(c => String(c.arguments[0]).includes('picture-link-probe')).length, seen = probes();
-    assert.equal(await call('report_picture_link', { url: 'https://images.example.test/a.png', madeBy: 'Kim Minsu' }), undefined);
+    assert.equal((await raw('report_picture_link', { url: 'https://images.example.test/a.png', madeBy: 'Kim Minsu' })).isError, true);
     assert.equal(probes(), seen);
   } finally { await g.sql.close(); }
 });
@@ -630,13 +639,114 @@ test('a wait on a working job returns when a picture or the progress changes, no
     // A draft is a picture event: the wait ends with it, and the read shows it.
     await g.work('PUT', `jobs/${held.id}/artifacts/draft-walk-0`, webp(400, 600), { 'x-generation-lease': held.leaseToken, 'content-type': 'image/webp' });
     const drafted = await timed(() => progress({ event: { kind: 'drafts', seq: 1, clips: [{ clip: 'walk', name: 'draft-walk-0' }] } }));
-    assert.ok(drafted.ms < 3000, `${drafted.ms} ms`); assert.deepEqual(drafted.read.job.drafts.map(d => d.clip), ['walk']);
+    assert.ok(drafted.ms < 3000, `${drafted.ms} ms`);
+    // In short while it only asks to be watched (MCP 최적화 2026-11-05): what changed, the new picture and the pictures there are by name.
+    assert.deepEqual([drafted.read.watch, drafted.read.changed, drafted.read.pictures.drafts, drafted.read.picture.clip], [true, ['pictures'], ['walk'], 'walk']);
+    assert.match(drafted.read.picture.url, /draft-walk-0\.webp/);
     assert.match(drafted.read.next, /waitSeconds 25/);
     // So is a step of the progress.
     const stepped = await timed(() => progress({ progress: 25 }));
-    assert.ok(stepped.ms < 3000, `${stepped.ms} ms`); assert.equal(stepped.read.job.progress, 25);
+    assert.ok(stepped.ms < 3000, `${stepped.ms} ms`); assert.equal(stepped.read.job.progress, 25); assert.deepEqual(stepped.read.changed, ['progress']);
     // A lease renewal changes nothing the user sees: the wait runs its time.
     const renewed = await timed(() => progress({}), 1);
-    assert.ok(renewed.ms >= 900, `${renewed.ms} ms`); assert.equal(renewed.read.job.progress, 25);
+    assert.ok(renewed.ms >= 900, `${renewed.ms} ms`); assert.equal(renewed.read.job.progress, 25); assert.deepEqual(renewed.read.changed, []);
+  } finally { await g.sql.close(); }
+});
+
+// 감시 응답 줄이기 (MCP 최적화 2026-11-05): a chat that watched read the whole job — every picture's signed URL and the long next — at each
+// 25-second wait. A job in its motions, with Storage-length signed URLs, two looks, the side view, his faces and nine drafts.
+async function motionsJob(g, options = {}) {
+  await g.healthy();
+  const storage = g.db.storage.from;
+  g.db.storage.from = bucket => ({ ...storage(bucket), createSignedUrls: async paths => ({ data: paths.map(path => ({ path,
+    signedUrl: `https://storage.test/storage/v1/object/sign/${bucket}/${path}?token=${'t'.repeat(300)}` })) }) });
+  const c = await connector(g, { pollMs: 10 }, undefined, options);
+  const jobId = (await c.call('request_hosted_fighter', { description: '빨간 글러브를 낀 고양이 복서, 귀가 크다', language: 'ko', idempotencyKey: crypto.randomUUID() })).job.id;
+  let held = (await g.work('POST', 'claim', {})).body.job;
+  const finish = result => g.work('POST', 'finish', { jobId, leaseToken: held.leaseToken, outcome: 'ok', result });
+  const artifact = name => g.work('PUT', `jobs/${jobId}/artifacts/${name}`, webp(400, 600), { 'x-generation-lease': held.leaseToken, 'content-type': 'image/webp' });
+  const progress = body => g.work('POST', 'progress', { jobId, leaseToken: held.leaseToken, ...body });
+  await finish({ brief: { profile: { name: '빨간 주먹' } } });
+  held = (await g.work('POST', 'claim', {})).body.job;
+  for (const name of ['look-a-0', 'look-b-0']) await artifact(name);
+  await finish({ candidates: ['look-a-0', 'look-b-0'] });
+  await c.call('choose_hosted_look', { jobId, choose: 'a' });
+  held = (await g.work('POST', 'claim', {})).body.job;
+  for (const kind of ['side', 'expressions']) { await artifact(`${kind}-0-a`); await progress({ event: { kind, outcome: 'chosen', artifact: `${kind}-0-a` } }); }
+  const clips = ['walk', 'run', 'fightIdle', 'combo', 'slam', 'dash', 'block', 'hit', 'groggy', 'fall'];
+  let seq = 0;
+  const drafts = async count => {
+    const list = clips.slice(0, count).map(clip => ({ clip, name: `draft-${clip.toLowerCase()}-0` }));
+    for (const { name } of list) await artifact(name);
+    return progress({ progress: 40 + count, event: { kind: 'drafts', seq: ++seq, clips: list } });
+  };
+  await drafts(9);
+  // A watch that the worker's `send` ends (or its time, with none).
+  const watch = (send, waitSeconds = 5) => Promise.all([c.call('get_hosted_fighter', { jobId, waitSeconds }),
+    send ? new Promise(done => setTimeout(done, 150)).then(send) : null]).then(([read]) => read);
+  return { ...c, jobId, drafts, watch, finish };
+}
+
+test('a watch on a job that only asks to be watched answers in short; without a wait, at a decision and at the end it stays whole', async () => {
+  const g = await generation();
+  try {
+    const { call, bytes, jobId, drafts, watch, finish } = await motionsJob(g);
+    // Without waitSeconds: the whole job, as before.
+    const full = await call('get_hosted_fighter', { jobId }), fullBytes = bytes();
+    assert.deepEqual([full.job.status, full.job.drafts.length, full.job.candidates.length], ['motions', 9, 2]);
+    assert.ok(full.job.side.url && full.job.expressions.url); assert.match(full.next, /eleven motions[\s\S]*waitSeconds 25/);
+    // A wait the tenth draft ends: the job's state, what changed, that draft's URL only, and the pictures by name.
+    const watched = await watch(() => drafts(10)), watchedBytes = bytes();
+    assert.deepEqual(Object.keys(watched).sort(), ['changed', 'job', 'next', 'ok', 'picture', 'pictures', 'siteUrl', 'watch']);
+    assert.deepEqual(watched.job, { id: jobId, status: 'motions', progress: 50 });
+    assert.deepEqual(watched.changed, ['progress', 'pictures']);
+    assert.deepEqual([watched.picture.kind, watched.picture.clip], ['draft', 'fall']); assert.match(watched.picture.url, /draft-fall-0\.webp\?token=/);
+    assert.deepEqual(watched.pictures, { drafts: ['walk', 'run', 'fightIdle', 'combo', 'slam', 'dash', 'block', 'hit', 'groggy', 'fall'], side: true, expressions: true });
+    assert.equal(watched.siteUrl, full.siteUrl);
+    assert.ok(!watched.next.includes('\n')); assert.match(watched.next, /show him picture[\s\S]*waitSeconds 25[\s\S]*Without waitSeconds it returns the whole job/);
+    // One signed URL instead of every picture's: a small answer, whatever the job holds.
+    assert.equal((JSON.stringify(watched).match(/token=/g) ?? []).length, 1);
+    assert.ok(watchedBytes < 2048 && watchedBytes * 4 < fullBytes, `watch ${watchedBytes} bytes, full ${fullBytes}`);
+    // A wait that saw nothing change says so, with no picture.
+    const quiet = await watch(null, 1);
+    assert.deepEqual([quiet.watch, quiet.changed, quiet.picture], [true, [], undefined]);
+    // A decision point (the motions ready for his answer) is the whole job and its next, waited for or not.
+    await finish({ preview: ['idle', 'walk', 'run'].map(clip => ({ clip, name: `motion-${clip}-0` })) });
+    const ready = await watch(null, 1);
+    assert.equal(ready.watch, undefined); assert.equal(ready.job.status, 'motion_ready'); assert.equal(ready.job.preview.length, 3);
+    assert.match(ready.next, /register_hosted_fighter/);
+    // So is the end.
+    await g.sql.query("update public.af_generation_jobs set status = 'failed', error_code = 'stage-attempts' where id = $1", [jobId]);
+    const failed = await watch(null, 1);
+    assert.equal(failed.watch, undefined); assert.match(failed.next, /failed \(stage-attempts\)/);
+  } finally { await g.sql.close(); }
+});
+
+test('ChatGPT\'s watch is the same short answer, in its structured result beside the text', async () => {
+  const g = await generation();
+  try {
+    const { raw, jobId, drafts } = await motionsJob(g, { meta: { 'openai/locale': 'ko' } });
+    const [read] = await Promise.all([raw('get_hosted_fighter', { jobId, waitSeconds: 5 }), new Promise(done => setTimeout(done, 150)).then(() => drafts(10))]);
+    assert.equal(read.structuredContent.watch, true); assert.equal(read.structuredContent.picture.clip, 'fall');
+    assert.ok(read.content[0].text === JSON.stringify(read.structuredContent) || read.content[0].text.startsWith('Full result in structuredContent'));
+  } finally { await g.sql.close(); }
+});
+
+test('the recent list holds each request in short and says to read one by its id; the balance and the service stay', async () => {
+  const g = await generation();
+  try {
+    const { call, jobId } = await motionsJob(g);
+    for (let i = 0; i < 4; i++) await g.sql.query(`insert into public.af_generation_jobs(owner_id, idempotency_key, description, language, status, created_at)
+      values ($1, $2, 'An older cat boxer', 'en', 'cancelled', now() - interval '1 day')`, [g.owner, crypto.randomUUID()]);
+    const listed = await call('get_hosted_fighter', {}), whole = await call('get_hosted_fighter', { jobId });
+    assert.equal(listed.jobs.length, 5); assert.equal(listed.jobs[0].id, jobId);
+    for (const job of listed.jobs) assert.deepEqual(Object.keys(job), ['id', 'status', 'progress', 'error', 'description', 'name', 'createdAt', 'updatedAt',
+      'tokens', 'submission', 'agent', 'siteUrl']);
+    assert.deepEqual(listed.jobs[0], { id: jobId, status: 'motions', progress: whole.job.progress, error: null, description: whole.job.description,
+      name: '빨간 주먹', createdAt: whole.job.createdAt, updatedAt: whole.job.updatedAt, tokens: whole.job.tokens, submission: null, agent: null,
+      siteUrl: whole.siteUrl });
+    assert.ok(!JSON.stringify(listed).includes('token='), 'no signed URL in the list');
+    assert.deepEqual([listed.used, listed.tokens.balance, listed.capabilities.hosted], [false, 500000, true]);
+    assert.match(listed.next, /read one by its jobId/);
   } finally { await g.sql.close(); }
 });
