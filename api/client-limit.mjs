@@ -94,4 +94,5 @@ export function createClientLimiter({ db, secret, source, now = () => new Date()
 export const CLIENT_LIMITS = Object.freeze({
   duel: { bucket: 'duel-start', limit: 25, windowSeconds: 86_400 },          // global: 100 a day
   deviceLogin: { bucket: 'device-login-start', limit: 10, windowSeconds: 600 }, // global: 120 per 10 minutes
+  hostPairing: { bucket: 'host-pairing-start', limit: 10, windowSeconds: 600 }, // global: 120 per 10 minutes
 });

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { migratedDatabase } from './helpers/fighter-database.mjs';
 import { createHandler, sha256 } from '../api/handler.mjs';
-import { normalizeUserCode } from '../api/device-login.mjs';
+import { formatUserCode, newUserCode, normalizeUserCode } from '../api/device-login.mjs';
 
 /** The real migrations in PGlite, behind a supabase-js-shaped rpc and a token → user map for auth. */
 async function server() {
@@ -79,6 +79,8 @@ test('polling is paced, codes expire, secrets are validated, and start/poll are 
   // The spec tells clients that this server supports device login.
   const spec = await (await handle(new Request('https://test/ai-fighter/spec'))).json();
   assert.equal(spec.data.registration.deviceLogin, 'v1');
+  // …and that it pairs generation PCs (api/host-pairing.mjs): a runner checks this before it opens the site.
+  assert.equal(spec.data.registration.hostPairing, 'v1');
 });
 
 test('Postgres caps unauthenticated starts and per-user approvals, and hides the table from clients', async () => {
@@ -105,4 +107,18 @@ test('Postgres caps unauthenticated starts and per-user approvals, and hides the
   await pg.query('reset role');
   assert.equal(normalizeUserCode(' bcdf-ghjk '), 'BCDFGHJK');
   assert.equal(normalizeUserCode('BCDF-GHJA'), null);
+});
+
+// 내 PC 연결 (2026-11-05): the generation PC's pairing (api/host-pairing.mjs) makes its public code the same way, from its own table.
+test('a host pairing shares the code alphabet, never the codes: neither approval finds the other kind', async () => {
+  const { post } = await server();
+  // Rejection sampling: bytes 240 and up are skipped, so each of the 20 letters stays equally likely.
+  assert.equal(newUserCode(() => Uint8Array.from([255, 240, 0, 1, 19, 20, 39, 239, 2, 3, 250, 4])), 'BCZBZZDF');
+  for (let i = 0; i < 50; i++) assert.ok(normalizeUserCode(formatUserCode(newUserCode(n => crypto.getRandomValues(new Uint8Array(n))))));
+  const pairing = await (await post('generations/host/pairings', { name: 'DESKTOP-7Q2K', platform: 'windows' })).json();
+  const device = await (await post('device-logins')).json();
+  const asDevice = await post('device-logins/approve', { userCode: pairing.userCode }, 'fixture-owner-token');
+  assert.deepEqual([asDevice.status, (await asDevice.json()).code], [404, 'device-login-not-found']);
+  const asPairing = await post('generations/host/pairings/approve', { userCode: device.userCode }, 'fixture-owner-token');
+  assert.deepEqual([asPairing.status, (await asPairing.json()).code], [404, 'pairing-not-found']);
 });

@@ -610,6 +610,8 @@ URL 재발급과 신규 접수가 열린 상태에서 다른 계정의 키 조�
   `POST /generations/host`(이름·`billing` `subscription`|`api-key`·약관 동의) →
   운영자 승인(`af_generation_hosts.approved`) → `POST /generations/host/keys`(워커 열쇠, 한 번만 보인다, 90일, 둘까지) →
   `PATCH /generations/host`(켜짐·`any` 받기·하루 한도 0~50), `DELETE /generations/host/keys`(열쇠 모두 끄기). 공개 목록은 `GET /generations/hosts`.
+  PC 연결(2026-11-05)은 `POST /generations/host/pairings`(PC, 로그인 없음) → 사이트의 `…/pairings/<코드>`·`…/pairings/approve` → PC의 `…/pairings/token`이다.
+  MCP 도구는 없다: 연결은 사이트에서 주인이 누른다([생성 호스트 되기](GENERATION-HOST.md)).
 - 하루 한도와 심장 박동은 호스트마다 `af_generation_hosts`에 있다(공식 호스트는 한도 0 = 멈춤으로만 쓰고, 시작은 토큰 예산이 정한다). `af_generation_settings`에는 서비스 스위치 `enabled`·대기열 상한·하루 토큰 예산이 있다.
 
 ## 공방과 연대기 도구(4단계, 2026-10-27)

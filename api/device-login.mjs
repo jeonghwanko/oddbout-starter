@@ -24,8 +24,8 @@ export function normalizeUserCode(value) {
 /** @type {(code: string) => string} */
 export const formatUserCode = code => `${code.slice(0, 4)}-${code.slice(4)}`;
 
-/** @param {(n: number) => Uint8Array} random */
-function userCode(random) {
+/** A fresh code of eight letters (the host pairing's too, api/host-pairing.mjs). @param {(n: number) => Uint8Array} random */
+export function newUserCode(random) {
   let code = '';
   // Rejection sampling keeps the 20 letters uniform.
   while (code.length < 8) for (const byte of random(16)) if (byte < 240 && code.length < 8) code += ALPHABET[byte % 20];
@@ -62,7 +62,7 @@ export function createDeviceLoginHandler({ db, creatorLink = null, limiter = nul
     const hash = await sha256(new TextEncoder().encode(deviceCode));
     for (let attempt = 0; ; attempt++) {
       try {
-        const row = await call('af_device_login_start', { p_device_code_hash: hash, p_user_code: userCode(random), p_ttl_seconds: DEVICE_LOGIN_TTL_SECONDS });
+        const row = await call('af_device_login_start', { p_device_code_hash: hash, p_user_code: newUserCode(random), p_ttl_seconds: DEVICE_LOGIN_TTL_SECONDS });
         return { ok: true, stage: 'device-login', deviceCode, userCode: formatUserCode(row.userCode), expiresAt: row.expiresAt,
           interval: DEVICE_POLL_INTERVAL_SECONDS };
       } catch (/** @type {any} */ error) {

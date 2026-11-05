@@ -3,6 +3,7 @@ import { updateFighterProfile } from './fighter-profile.mjs';
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { createAccountHandler } from './account.mjs';
 import { createDeviceLoginHandler } from './device-login.mjs';
+import { createHostPairingHandler, hostPairingRoute } from './host-pairing.mjs';
 import { createAdminHandler } from './admin.mjs';
 import { createDuelHandler } from './duels.mjs';
 import { createFighterStatisticsHandler } from './fighter-statistics.mjs';
@@ -73,6 +74,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
   const statisticsHandler = createFighterStatisticsHandler({ db });
   const accountHandler = createAccountHandler({ db, creatorLink });
   const deviceLoginHandler = createDeviceLoginHandler({ db, creatorLink, limiter });
+  const hostPairingHandler = createHostPairingHandler({ db, limiter });
   /** @param {string} name @param {Record<string, unknown>} args */
   async function rpc(name, args) { const { data, error } = await db.rpc(name, args); check(error); return data; }
   /** @param {Submission} row */
@@ -145,6 +147,8 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
       }
       if (parts[0] === 'admin') return adminHandler(request, parts);
       if (workshopRoute(parts)) return workshopHandler(request, parts);
+      // 내 PC 연결 (2026-11-05): start and poll are the PC's, with no account; the site's view and approve verify the user themselves.
+      if (hostPairingRoute(parts)) return hostPairingHandler(request, parts);
       if (generationRoute(parts)) return generationHandler(request, parts);
       if (parts[0] === 'duels' || parts[0] === 'rankings') return duelHandler(request,parts);
       if (parts[0] === 'fighters' && parts[2] === 'statistics') return statisticsHandler(request, parts);
@@ -159,7 +163,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
       if (parts.length === 1 && ['me', 'access-requests', 'creator-handoffs'].includes(parts[0])) return accountHandler(request, parts);
       if (method === 'GET' && parts.join('/') === 'spec') return json({ ok: true, stage: 'public-contract', data: { ...spec,
         registration: { available: true, mode: 'open', auth: 'supabase-user-jwt', assetUpload: 'authenticated-binary',
-          approvalRequired: false, publication: 'owner-entry-after-file-validation', moderation: 'post-publication', deviceLogin: 'v1', profileUpdate: 'v1',
+          approvalRequired: false, publication: 'owner-entry-after-file-validation', moderation: 'post-publication', deviceLogin: 'v1', hostPairing: 'v1', profileUpdate: 'v1',
           fighterEntry: 'v1', dailySubmissionLimit: 5, revisionsCountTowardLimit: false, profileSet: 'v1' }, profileSet: PROFILE_SET_SPEC } });
       // Validated, active packages are public; uploads and removed packages remain private. The list holds entered fighters only (출전,
       // 2026-10-30): one in production is served at his own address, for his owner's previews and practice, and meets nobody else.
