@@ -1,6 +1,6 @@
 {
   "name": "oddbout",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Connect Claude Code, Codex or Gemini CLI to ODDBOUT's hosted MCP in one command: npx -y oddbout@latest connect",
   "type": "module",
   "bin": {

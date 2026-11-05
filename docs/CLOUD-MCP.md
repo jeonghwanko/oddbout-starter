@@ -118,7 +118,8 @@ MCP 인가 명세(2025-11-25)는 redirect를 `localhost` 또는 https로 정하�
   - `local`로 부르고 같은 경고를 둔다. 이름 옆에는 `claude://claude.ai`처럼 스킴을 함께 보여, Claude 웹(`claude.ai`)과 헷갈리지 않게 한다.
   - 위험은 loopback과 같은 종류다. 이 PC의 다른 프로그램이 `claude:` 스킴을 가로챌 수 있지만, 코드는 앱의 PKCE 검증값 없이 쓸 수 없다.
   - Mac 앱과 다른 버전의 주소는 확인하지 않았다. 다른 주소면 이 화면이 "지원하는 연결 요청이 아닙니다"로 거절한다.
-  - 사이트 게시(`site:build`·`site:publish`) 뒤 앱의 연결 버튼으로 실제 로그인을 한 번 확인한다.
+  - 게시(#347, 사이트 빌드 `339c5e6a`) 뒤 2026-11-06 Windows(Claude 4.16336.0.0)에서 앱의 연결 버튼으로 실제 로그인을 확인했다. 터미널 로그인을
+    지운 뒤 `/mcp` → `oddbout` → Connect를 누르고 oddbout.com에서 승인했다(사용자 확인). Mac 앱은 확인하지 않았다.
 - 서버 주소는 로그인 먼저 주소다. 공개 주소는 로그인 없이 답하므로 CLI가 인증이 필요 없다고 본다. 로그인 먼저 주소는 POST·GET·HEAD에 401을 준다.
   Gemini CLI는 연결 전에 HEAD로 묻는다.
 - MCP 함수의 Origin 허용 목록은 바꾸지 않는다. 이 CLI들은 브라우저가 아니라 Origin을 보내지 않는다.
@@ -137,15 +138,32 @@ stdout에 JSON 답 하나(`status`·`next`·`say`·`run`·`rules`·`verify`·`de
    (로그인 먼저 주소가 먼저, 그다음 공개 주소). 다른 서버가 이미 `oddbout` 이름을 쓰면 알리고 그대로 둔다. 있는 서버를 지우거나 고치지 않는다.
    Gemini CLI의 `mcp add`는 같은 이름을 묻지 않고 덮어쓴다(0.67 실측). 그래서 설정 파일을 읽지 못하면 추가하지 않는다.
 3. 로그인은 호스트 자신의 MCP 클라이언트가 한다(동적 등록 + PKCE). CLI는 토큰을 보거나 받거나 쓰지 않는다.
-   - Claude Code: `claude mcp login oddbout`. 그 뒤 `claude mcp get oddbout`의 상태로 확인한다. 로그인 먼저 주소에서 "Connected"는 로그인이 된 것이다.
-   - Codex: `codex mcp add`가 곧바로 로그인한다. codex-rs는 설정을 먼저 저장하고 브라우저 콜백을 300초 기다린다. `codex mcp list --json`의
+   - Claude Code: `claude mcp login`은 stdin이 터미널이 아니면 시작하지 않는다. 브라우저 방식이어도 "stdin isn't a terminal"로 끝난다(2.1.283, 11-05
+     재현. 0.1.0이 stdin을 닫고 실행해서 실제 PC에서 2초 만에 실패했다). 그래서 에이전트의 명령 도구처럼 터미널이 없으면 로그인을 실행하지 않는다.
+     답은 남은 한 단계가 Claude Code의 `/mcp` → `oddbout` → Authenticate라고 말한다. 사람이 터미널에서 직접 실행하면(`process.stdin.isTTY`)
+     `claude mcp login oddbout`에 그 터미널을 넘긴다. 출력은 stderr로 바로 가서 stdout에는 JSON 답만 남는다. 그 뒤 `claude mcp get oddbout`의 상태로
+     확인한다. 로그인 먼저 주소에서 "Connected"는 로그인이 된 것이다.
+   - Codex: `codex mcp add`가 곧바로 로그인한다. codex-rs는 설정을 먼저 저장하고 브라우저 콜백을 300초 기다린다. 이 방식에는 터미널 검사가 없다
+     (`perform_oauth_login`; `--no-browser`만 stdin을 읽고, 터미널이 아니면 한 줄을 읽는다). `codex mcp list --json`의
      `auth_status`가 `o_auth`면 로그인된 것이다. 저장만 되고 로그인이 안 된 서버에는 `codex mcp login`만 한다.
    - Gemini CLI: CLI 로그인 명령이 없다. 다시 시작한 뒤 `/mcp auth oddbout`이다. 신뢰하지 않은 폴더에서는 사용자 서버도 꺼진다.
    - 브라우저를 기다리는 시간은 기본 110초(`--wait`)다. Claude Code 명령의 기본 제한 2분 안에 답하기 위해서다. 넘기면 같은 명령을 다시 실행하라고 답한다.
 4. Codex와 Claude Code에는 `create-fighter` 스킬을 설치한다(아래 스킬). Gemini CLI에는 아직 주지 않는다.
 5. 마지막 답은 ODDBOUT 도구가 있는 대화에서 `get_profile`로 계정을 확인하라고 한다. 실행 중인 세션은 새 서버를 세션을 시작할 때 읽는다.
-   Claude Code는 `/mcp`에서 `oddbout`을 다시 연결하고, 목록에 없으면 `claude --continue`로 다시 연다. 스킬은 `/reload-plugins`로 읽는다.
-   Codex는 `codex resume --last`다.
+   - Claude Code 터미널: `/mcp`에서 `oddbout`을 다시 연결하고, 목록에 없으면 `claude --continue`로 다시 연다. 스킬은 `/reload-plugins`로 읽는다.
+   - Claude 데스크톱 앱(Code 탭, `CLAUDE_CODE_ENTRYPOINT=claude-desktop`): 위 방법이 통하지 않는다(Windows 실측). 이미 열린 세션은 밖에서
+     추가한 서버를 종류 "other", 상태 needs_auth로만 알고, `/mcp` 창에는 목록도 연결 버튼도 없다. `/mcp reconnect oddbout`은 "Reconnect, enable,
+     and disable aren't available in this session"이고 `claude --continue`도 없다(11-05).
+     앱을 다시 시작할 필요는 없다. 터미널에서 로그인한 뒤 새 세션을 열자 `oddbout`이 종류 "user", 상태 connected, 도구 42개였고 `get_profile`이
+     계정을 돌려줬다(11-06, 별도 확인 세션).
+     앱 자신의 `/mcp` → `oddbout` → 연결(Connect)은 `claude://claude.ai/mcp-auth-callback/sdk`로 돌아온다. 동의 화면이 처음에는 이 앱 스킴을
+     거절했고, #347부터 그 주소 하나를 받는다(위 Claude 데스크톱 앱). 11-06 Windows에서 그 버튼으로 끝까지 로그인됐다.
+     그래서 답은 새 세션을 열고 `/mcp` → `oddbout` → Connect를 누른 뒤 브라우저에서 승인하라고 한다(브라우저가 Claude를 열지 물으면 허용).
+     동의 화면이 그 로그인을 거절하면(받지 않는 주소를 쓰는 다른 OS·앱 버전) 터미널에서 `claude mcp login oddbout`으로 한 번 로그인하고 새 세션을 열라고 한다.
+     새 세션은 이 대화를 이어받지 않으므로 거기서 계정 확인을 부탁하라고 한다. Mac과 다른 앱 버전은 확인하지 않았다.
+   - 손으로 `--host claude`로 실행해 어느 쪽인지 모르면 `/mcp` → Authenticate(데스크톱 앱은 Connect)를 주고, 데스크톱 앱이 거절되면 터미널 로그인을 준다.
+     답의 `details.surface`가 `terminal`·`desktop`·`unknown`이다.
+   - Codex는 `codex resume --last`다.
 
 `npx -y oddbout@latest check`는 아무것도 바꾸지 않고 상태만 답한다. 다시 실행해도 이미 있는 것은 그대로 둔다.
 가짜 `claude`·`codex`·`gemini`로 정확한 명령과 두 번째 실행을 확인하는 테스트가 `test/oddbout-connect.test.mjs`다.
@@ -161,7 +179,7 @@ stdout에 JSON 답 하나(`status`·`next`·`say`·`run`·`rules`·`verify`·`de
 손으로 할 때도 같은 이름과 주소를 쓴다.
 
 ```bash
-# Claude Code: 추가한 뒤 로그인(브라우저가 열린다). Claude Code 안에서는 /mcp → oddbout → Authenticate
+# Claude Code: 추가한 뒤 터미널에서 로그인(브라우저가 열린다). 에이전트를 통해서는 안 된다: Claude Code 안에서 /mcp → oddbout → Authenticate
 claude mcp add --transport http --scope user oddbout https://mcp.oddbout.com/signin
 claude mcp login oddbout
 # Codex: 추가하면 곧바로 로그인한다. 브라우저가 열리지 않았거나 끊겼으면 codex mcp login oddbout

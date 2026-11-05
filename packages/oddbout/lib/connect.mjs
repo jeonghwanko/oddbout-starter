@@ -38,7 +38,7 @@ const PLUGIN = 'oddbout@oddbout';
  *   error?: string }} ServerResult
  */
 /** @typedef {{ code: number | null, stdout: string, stderr: string, timedOut: boolean, seconds: number, error?: string }} RunResult */
-/** @typedef {{ command: string, exitCode: number | null, seconds: number, timedOut?: boolean, output?: string }} Action */
+/** @typedef {{ command: string, exitCode: number | null, seconds: number, timedOut?: boolean, output?: string, terminal?: boolean }} Action */
 /**
  * @typedef {{ state: 'present' | 'installed' | 'would-install' | 'skipped' | 'not-offered' | 'other-marketplace' | 'failed', plugin?: string,
  *   reason?: string }} SkillResult
@@ -183,11 +183,21 @@ export function findExecutable(name, env, platform) {
 const SAFE_ARG = /^[A-Za-z0-9_@:/.=#,+-]+$/;
 const OUTPUT_LIMIT = 8 * 1024 * 1024;
 /**
+ * A host command's stdio. `terminal` hands it this process's terminal: stdin as it is, and its output straight to our stderr, so stdout
+ * keeps only the JSON reply. Claude Code's `mcp login` refuses to start without a terminal on stdin ("stdin isn't a terminal", 2.1.283,
+ * reproduced 2026-11-05), even in its browser mode; every other command runs detached from the terminal with its output captured.
+ * @param {boolean} terminal @returns {import('node:child_process').StdioOptions}
+ */
+export function spawnStdio(terminal) {
+  return terminal ? ['inherit', 2, 2] : ['ignore', 'pipe', 'pipe'];
+}
+
+/**
  * @param {string} file @param {string[]} args
- * @param {{ env: Env, cwd: string, timeoutMs: number, echo?: boolean }} options
+ * @param {{ env: Env, cwd: string, timeoutMs: number, echo?: boolean, terminal?: boolean }} options
  * @returns {Promise<RunResult>}
  */
-export function runCommand(file, args, { env, cwd, timeoutMs, echo = false }) {
+export function runCommand(file, args, { env, cwd, timeoutMs, echo = false, terminal = false }) {
   for (const arg of args) if (!SAFE_ARG.test(arg)) throw new Error(`Refusing an argument with special characters: ${arg}`);
   const windows = process.platform === 'win32', started = Date.now();
   return new Promise(resolve => {
@@ -203,7 +213,7 @@ export function runCommand(file, args, { env, cwd, timeoutMs, echo = false }) {
     /** @type {import('node:child_process').ChildProcess} */
     let child;
     try {
-      child = spawn(windows ? `"${file}"` : file, args, { cwd, env, shell: windows, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+      child = spawn(windows ? `"${file}"` : file, args, { cwd, env, shell: windows, windowsHide: true, stdio: spawnStdio(terminal) });
     } catch (/** @type {any} */ error) { finish(null, String(error?.message ?? error)); return; }
     timer = setTimeout(() => { timedOut = true; killTree(child); }, timeoutMs);
     child.stdout?.on('data', chunk => { if (stdout.length < OUTPUT_LIMIT) stdout += chunk; if (echo) process.stderr.write(chunk); });
@@ -227,9 +237,9 @@ function outputTail(result) {
 
 /**
  * @typedef {{
- *   host: Host, bin: string, env: Env, cwd: string, mutate: boolean, remote: boolean, waitMs: number,
+ *   host: Host, bin: string, env: Env, cwd: string, mutate: boolean, remote: boolean, interactive: boolean, waitMs: number,
  *   actions: Action[], notes: string[],
- *   run: (args: string[], options?: { timeoutMs?: number, echo?: boolean, record?: boolean }) => Promise<RunResult>
+ *   run: (args: string[], options?: { timeoutMs?: number, echo?: boolean, terminal?: boolean, record?: boolean }) => Promise<RunResult>
  * }} Context
  */
 
@@ -379,13 +389,17 @@ async function ensureServer(ctx, name) {
   // A public-address server answers signed out, so whether it is signed in is unknown: get_profile tells, and its error names the fix.
   if (server.auth === 'unknown') return { state, server, others: plan.others, signIn: loginTried ? 'failed' : 'unknown' };
   if (loginTried) return { state, server, others: plan.others, signIn: 'failed' };
+  // Claude Code's login needs a terminal on stdin. Run by an agent's command tool there is none, and Claude Code's own /mcp panel signs in.
+  if (ctx.host === 'claude-code' && !ctx.interactive) return { state, server, others: plan.others, signIn: 'in-session' };
   if (!ctx.mutate) return { state, server, others: plan.others, signIn: 'needed' };
 
   if (ctx.host === 'claude-code' && (await ctx.run(['mcp', 'login', '--help'], { timeoutMs: 20_000 })).code !== 0) {
     return { state, server, others: plan.others, signIn: 'unsupported' };
   }
   process.stderr.write(`Opening your browser to sign in to ODDBOUT (waiting up to ${Math.round(ctx.waitMs / 1000)}s)…\n`);
-  const login = await ctx.run(['mcp', 'login', server.name], { timeoutMs: ctx.waitMs, echo: true, record: true });
+  // Codex signs in through its browser callback with no terminal (codex-rs perform_oauth_login), so its output stays captured.
+  const terminal = ctx.host === 'claude-code';
+  const login = await ctx.run(['mcp', 'login', server.name], { timeoutMs: ctx.waitMs, echo: !terminal, terminal, record: true });
   if (login.timedOut) return { state, server, others: plan.others, signIn: 'timed-out' };
   if (ctx.host === 'codex') {
     const again = (await listServers(ctx)).servers.find(entry => entry.name === server?.name);
@@ -405,25 +419,72 @@ export const RULES = [
   'Connecting does not ask you to create, generate or register a fighter. Wait for the user to ask.',
 ];
 
-/** How the running session gets the new server and skill. @param {Host} host @param {string} name */
-function loadHint(host, name) {
-  if (host === 'claude-code') {
-    return `If ODDBOUT's tools are not available to you yet, ask the user to type /mcp and reconnect ${name} there (or choose Authenticate if it asks); if ${name} is not listed, to exit and run \`claude --continue\` to reopen this conversation.`;
+/** @typedef {'terminal' | 'desktop' | 'unknown'} ClaudeSurface */
+/**
+ * Where Claude Code runs: its terminal CLI or the Claude desktop app (Code tab). Both read ~/.claude.json and its sign-ins, but a desktop
+ * session cannot take in a server added from outside ("Reconnect, enable, and disable aren't available in this session") and has no
+ * `claude --continue`; a new session does, with no restart of the app (2026-11-05/06, Windows). The app's own /mcp → Connect signs in with
+ * the redirect `claude://claude.ai/mcp-auth-callback/sdk`, which ODDBOUT's consent page accepts since #347 (that exact address); a sign-in
+ * through it was confirmed on 2026-11-06 (Claude 4.16336.0.0, Windows; the Mac app's callback was not read). A terminal sign-in stays the
+ * fallback for an app whose callback the page does not take. Unknown when someone runs this by hand.
+ * @param {Env} env @returns {ClaudeSurface}
+ */
+export function claudeSurface(env) {
+  if (env.CLAUDE_CODE_ENTRYPOINT === 'claude-desktop' || env.CLAUDE_CODE_DESKTOP_APP_VERSION) return 'desktop';
+  return env.CLAUDECODE === '1' ? 'terminal' : 'unknown';
+}
+
+/** @param {string} name */
+const terminalSignIn = name => `sign in once from a terminal (PowerShell or Terminal, not this chat) with \`claude mcp login ${name}\`, then start a new session`;
+/** @param {string} name */
+const desktopConnect = name => `type /mcp, choose ${name}, choose Connect, and approve in your browser with Google (let the browser open Claude when it asks)`;
+/**
+ * How Claude Code takes in the new server: `load` and `signIn` for the user, `agent` for the agent.
+ * @param {ClaudeSurface} surface @param {string} name
+ */
+function claudeSteps(surface, name) {
+  const terminalLoad = `type /mcp and reconnect ${name}; if it isn't listed there, exit and run \`claude --continue\` to come back here`;
+  if (surface === 'desktop') {
+    return {
+      load: 'The Claude app takes in a new connection in a new session: start one (no need to restart the app).',
+      signIn: `Start a new session in the Claude app (no need to restart it), then ${desktopConnect(name)}. If ODDBOUT refuses that sign-in, ${terminalSignIn(name)}.`,
+      agent: `This is the Claude desktop app: a running session cannot take in a server added from outside (/mcp reconnect is not available) and there is no \`claude --continue\`, but a new session does, without restarting the app. If ODDBOUT's tools are not available to you, ask the user to start a new session and there ${desktopConnect(name)}. If ODDBOUT's consent page refuses that sign-in (an app version or system whose return address it does not take), ask them to ${terminalSignIn(name)}. The new session does not carry this conversation, so tell the user to ask it to check their ODDBOUT account.`,
+    };
   }
+  if (surface === 'terminal') {
+    return {
+      load: `If I can't see ODDBOUT yet, ${terminalLoad}.`,
+      signIn: `Type /mcp, choose ${name}, then Authenticate, and approve in your browser with Google. If ${name} isn't in the /mcp list yet, exit and run \`claude --continue\` first.`,
+      agent: `If ODDBOUT's tools are not available to you yet, ask the user to type /mcp and reconnect ${name} there (or choose Authenticate if it asks); if ${name} is not listed, to exit and run \`claude --continue\` to reopen this conversation.`,
+    };
+  }
+  return {
+    load: 'Claude Code takes in a new connection in a new session: in a terminal, start `claude` again (`claude --continue` reopens the last conversation); in the Claude desktop app, start a new session.',
+    signIn: `In Claude Code, type /mcp, choose ${name}, then Authenticate (Connect in the desktop app), and approve in your browser with Google; start a new session first if ${name} isn't listed. If ODDBOUT refuses the desktop app's sign-in, ${terminalSignIn(name)}.`,
+    agent: `If ODDBOUT's tools are not available to you, ask the user to start a new session (in a terminal, \`claude --continue\`). If ${name} is not signed in: /mcp → ${name} → Authenticate (Connect in the desktop app); if ODDBOUT refuses the desktop app's sign-in, ${terminalSignIn(name)}.`,
+  };
+}
+
+/** How the running session gets the new server and skill. @param {Host} host @param {string} name @param {ClaudeSurface} surface */
+function loadHint(host, name, surface) {
+  if (host === 'claude-code') return claudeSteps(surface, name).agent;
   if (host === 'codex') return 'Codex loads MCP servers and skills when a session starts: if ODDBOUT\'s tools are not available to you, ask the user to exit and run `codex resume --last` to continue this conversation with them.';
   return 'Gemini CLI loads MCP servers when it starts: if ODDBOUT\'s tools are not available to you, ask the user to restart Gemini CLI in a trusted folder.';
 }
 
-/** @param {Host} host @param {string} name */
-function userLoad(host, name) {
-  if (host === 'claude-code') return `If I can't see ODDBOUT yet, type /mcp and reconnect ${name}; if it isn't listed there, exit and run \`claude --continue\` to come back here.`;
+/** @param {Host} host @param {string} name @param {ClaudeSurface} surface */
+function userLoad(host, name, surface) {
+  if (host === 'claude-code') return claudeSteps(surface, name).load;
   if (host === 'codex') return 'Codex picks up new connections in a new session: exit and run `codex resume --last` to come back to this conversation.';
   return 'Restart Gemini CLI so it loads the connection.';
 }
 
-/** @param {SkillResult} skill @param {Host} host */
-function skillLine(skill, host) {
-  if (skill.state === 'installed') return host === 'claude-code' ? 'I also installed the create-fighter skill (type /reload-plugins to load it now).' : 'I also installed the create-fighter skill.';
+/** @param {SkillResult} skill @param {Host} host @param {ClaudeSurface} surface */
+function skillLine(skill, host, surface) {
+  if (skill.state === 'installed') {
+    if (host !== 'claude-code') return 'I also installed the create-fighter skill.';
+    return surface === 'desktop' ? 'I also installed the create-fighter skill; it loads in the new session.' : 'I also installed the create-fighter skill (type /reload-plugins to load it now).';
+  }
   if (skill.state === 'present') return 'The create-fighter skill was already installed.';
   if (skill.state === 'failed') return 'The create-fighter skill could not be installed; the connection works without it.';
   return '';
@@ -440,21 +501,22 @@ function remoteSignIn(host, name) {
 
 /**
  * @param {{ host: Host, name: string, mode: 'connect' | 'check', remote: { remote: boolean, reasons: string[] },
- *   server: ServerResult, skill: SkillResult, ctx: Pick<Context, 'actions' | 'notes'>, binary: string, hostSource: string }} input
+ *   server: ServerResult, skill: SkillResult, ctx: Pick<Context, 'actions' | 'notes'>, binary: string, hostSource: string,
+ *   surface?: ClaudeSurface }} input
  */
-export function compose({ host, name, mode, remote, server, skill, ctx, binary, hostSource }) {
+export function compose({ host, name, mode, remote, server, skill, ctx, binary, hostSource, surface = 'unknown' }) {
   const label = HOSTS[host].label;
   const used = server.server?.name ?? name;
   const details = {
-    host, hostSource, binary, remote: remote.remote, remoteReasons: remote.reasons,
+    host, hostSource, binary, ...(host === 'claude-code' ? { surface } : {}), remote: remote.remote, remoteReasons: remote.reasons,
     server: server.server ? { ...server.server, kind: addressKind(server.server.url), state: server.state } : null,
     otherOddboutServers: server.others.map(other => ({ name: other.name, url: other.url, scope: other.scope, kind: addressKind(other.url) })),
     signIn: server.signIn, skill, actions: ctx.actions, notes: ctx.notes, docs: DOCS,
   };
   const base = { oddbout: mode, version: VERSION, host, rules: RULES, details };
   const again = `${COMMAND} connect --host ${HOSTS[host].bin}${name === SERVER_NAME ? '' : ` --name ${name}`}`;
-  const verify = { tool: 'get_profile', arguments: {}, show: 'only the user\'s ODDBOUT nickname and that the connection works', ifToolsMissing: loadHint(host, used) };
-  const extra = [skillLine(skill, host), details.otherOddboutServers.length ? `You also have ${details.otherOddboutServers.map(other => `\`${other.name}\` (${other.url})`).join(', ')}; I left ${details.otherOddboutServers.length > 1 ? 'them' : 'it'} as ${details.otherOddboutServers.length > 1 ? 'they are' : 'it is'}.` : '']
+  const verify = { tool: 'get_profile', arguments: {}, show: 'only the user\'s ODDBOUT nickname and that the connection works', ifToolsMissing: loadHint(host, used, surface) };
+  const extra = [skillLine(skill, host, surface), details.otherOddboutServers.length ? `You also have ${details.otherOddboutServers.map(other => `\`${other.name}\` (${other.url})`).join(', ')}; I left ${details.otherOddboutServers.length > 1 ? 'them' : 'it'} as ${details.otherOddboutServers.length > 1 ? 'they are' : 'it is'}.` : '']
     .filter(Boolean).join(' ');
   const join = (/** @type {string[]} */ parts) => parts.filter(Boolean).join(' ');
 
@@ -480,7 +542,7 @@ export function compose({ host, name, mode, remote, server, skill, ctx, binary, 
   const changed = server.state === 'added' || server.signIn === 'done' || skill.state === 'installed';
   if (server.signIn === 'not-needed' || server.signIn === 'done') {
     return { ...base, status: 'connected', next: 'verify', run: null, verify,
-      say: join([`ODDBOUT is connected to ${label} as \`${used}\` and signed in.`, extra, changed ? userLoad(host, used) : '',
+      say: join([`ODDBOUT is connected to ${label} as \`${used}\` and signed in.`, extra, changed ? userLoad(host, used, surface) : '',
         changed ? 'Then I\'ll check your account with get_profile.' : 'I\'ll check your account with get_profile.']) };
   }
   if (server.signIn === 'timed-out') {
@@ -491,21 +553,31 @@ export function compose({ host, name, mode, remote, server, skill, ctx, binary, 
     return { ...base, status: 'sign-in-needed', next: 'user-signs-in', run: null, verify,
       say: join([`ODDBOUT is added to ${label} as \`${used}\`.`, remoteSignIn(host, used), extra, 'Tell me when you\'ve signed in and I\'ll check your account.']) };
   }
+  if (server.signIn === 'in-session' && host === 'claude-code') {
+    // Run from an agent's command tool, which has no terminal: Claude Code's login cannot start there, so its own /mcp panel signs in (the
+    // desktop app's from a new session).
+    const why = surface === 'unknown' ? '' : surface === 'desktop' ? 'The Claude app signs in from its own /mcp screen.' : 'Claude Code signs in from its own screen.';
+    return { ...base, status: 'sign-in-needed', next: 'user-signs-in', run: null, verify,
+      say: join([`ODDBOUT is added to Claude Code as \`${used}\`.`, extra,
+        `One step is left, and only you can do it.${why ? ` ${why}` : ''}`, claudeSteps(surface, used).signIn,
+        surface === 'desktop' ? 'In the new session, ask me to check your ODDBOUT account.' : 'Then I\'ll check your account with get_profile.']) };
+  }
   if (server.signIn === 'in-session') {
     return { ...base, status: 'sign-in-needed', next: 'user-signs-in', run: null, verify,
       say: join([`ODDBOUT is added to Gemini CLI as \`${used}\`.`, 'Restart Gemini CLI (it loads servers when it starts; Gemini skips them in a folder you haven\'t trusted), then type',
         `/mcp auth ${used} and approve in your browser with Google.`, extra, 'Then I\'ll check your account with get_profile.']) };
   }
   if (server.signIn === 'failed' || server.signIn === 'unsupported') {
-    const how = host === 'codex' ? `run \`codex mcp login ${used}\`` : `type /mcp, choose ${used}, then Authenticate`;
+    const how = host === 'codex' ? `To sign in, run \`codex mcp login ${used}\` and approve in your browser with Google.` : claudeSteps(surface, used).signIn;
     return { ...base, status: 'sign-in-needed', next: 'user-signs-in', run: null, verify,
-      say: join([`ODDBOUT is added to ${label} as \`${used}\`, but the sign-in didn't complete.`, `To sign in, ${how}, and approve in your browser with Google.`, extra]) };
+      say: join([`ODDBOUT is added to ${label} as \`${used}\`, but the sign-in didn't complete.`, how, extra]) };
   }
   // Signed in or not is unknown (a public-address server, or `check`): get_profile settles it.
-  const fix = host === 'codex' ? `codex mcp login ${used}` : host === 'claude-code' ? `claude mcp login ${used}` : `/mcp auth ${used}`;
+  const fix = host === 'codex' ? `run \`codex mcp login ${used}\` and approve in the browser` : host === 'claude-code' ? `follow these steps: ${claudeSteps(surface, used).signIn}`
+    : `type \`/mcp auth ${used}\` and approve in the browser`;
   return { ...base, status: 'registered', next: 'verify', run: null,
-    verify: { ...verify, ifSignInRequired: `If get_profile says ODDBOUT needs a sign-in (authentication-required), ask the user to run \`${fix}\` and approve in the browser.` },
-    say: join([`ODDBOUT is set up in ${label} as \`${used}\`.`, extra, changed ? userLoad(host, used) : '',
+    verify: { ...verify, ifSignInRequired: `If get_profile says ODDBOUT needs a sign-in (authentication-required), ask the user to ${fix}` },
+    say: join([`ODDBOUT is set up in ${label} as \`${used}\`.`, extra, changed ? userLoad(host, used, surface) : '',
       `${changed ? 'Then I' : 'I'}'ll check your account with get_profile; if it asks for a sign-in, you'll approve it in your browser.`]) };
 }
 
@@ -529,11 +601,13 @@ Never writes a token: the agent's own MCP client signs in.`;
 
 /**
  * @param {string[]} argv
- * @param {{ env?: Env, cwd?: string, platform?: NodeJS.Platform, write?: (text: string) => void }} [io]
+ * `interactive`: whether this runs in a terminal someone types in (stdin is one), not in an agent's command tool.
+ * @param {{ env?: Env, cwd?: string, platform?: NodeJS.Platform, write?: (text: string) => void, interactive?: boolean }} [io]
  * @returns {Promise<number>}
  */
 export async function main(argv, io = {}) {
   const env = io.env ?? process.env, cwd = io.cwd ?? process.cwd(), platform = io.platform ?? process.platform;
+  const interactive = io.interactive ?? Boolean(process.stdin.isTTY);
   const write = io.write ?? (text => process.stdout.write(text));
   const reply = (/** @type {object} */ value, code = 0) => { write(JSON.stringify(value, null, 2) + '\n'); return code; };
   const fail = (/** @type {string} */ say, code = 1, extra = {}) => reply({ oddbout: 'error', version: VERSION, status: 'failed', next: 'stop', say, run: null, rules: RULES, ...extra }, code);
@@ -587,12 +661,13 @@ export async function main(argv, io = {}) {
   const remote = options.local === null ? detectRemote(env, platform, isFile) : { remote: !options.local, reasons: [options.local ? 'flag --local' : 'flag --remote'] };
   /** @type {Context} */
   const ctx = {
-    host, bin: binary, env, cwd, mutate: mode === 'connect', remote: remote.remote, waitMs: options.wait * 1000, actions: [], notes: [],
-    async run(args, { timeoutMs = 60_000, echo = false, record = false } = {}) {
-      const result = await runCommand(binary, args, { env, cwd, timeoutMs, echo });
+    host, bin: binary, env, cwd, mutate: mode === 'connect', remote: remote.remote, interactive, waitMs: options.wait * 1000, actions: [], notes: [],
+    async run(args, { timeoutMs = 60_000, echo = false, terminal = false, record = false } = {}) {
+      const result = await runCommand(binary, args, { env, cwd, timeoutMs, echo, terminal });
       if (record) {
+        // A command given the terminal wrote to it directly, so there is no output to keep.
         ctx.actions.push({ command: [HOSTS[host].bin, ...args].join(' '), exitCode: result.code, seconds: result.seconds,
-          ...(result.timedOut ? { timedOut: true } : {}), ...(result.code !== 0 ? { output: outputTail(result) } : {}) });
+          ...(result.timedOut ? { timedOut: true } : {}), ...(terminal ? { terminal: true } : result.code !== 0 ? { output: outputTail(result) } : {}) });
       }
       return result;
     },
@@ -603,6 +678,7 @@ export async function main(argv, io = {}) {
   /** @type {SkillResult} */
   const skill = options.skill ? await ensureSkill(ctx) : { state: 'skipped' };
   const server = await ensureServer(ctx, options.name);
-  const result = compose({ host, name: options.name, mode, remote, server, skill, ctx, binary, hostSource: options.host ? 'flag' : 'environment' });
+  const result = compose({ host, name: options.name, mode, remote, server, skill, ctx, binary, hostSource: options.host ? 'flag' : 'environment',
+    surface: claudeSurface(env) });
   return reply(result, result.status === 'failed' ? 1 : 0);
 }

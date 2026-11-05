@@ -9,8 +9,15 @@ Your agent runs the command and follows its reply. You approve the Google sign-i
 1. Finds the agent it runs in (or asks which one, through its reply).
 2. Adds ODDBOUT's MCP server, `oddbout` at `https://mcp.oddbout.com/signin`, with the agent's own command
    (`claude mcp add`, `codex mcp add`, `gemini mcp add`). If the agent already has an ODDBOUT server, it uses that one instead.
-3. Opens your browser for the sign-in with the agent's own login (`claude mcp login`; `codex mcp add` signs in by itself).
-   In Gemini CLI you type `/mcp auth oddbout` after a restart.
+3. Starts the sign-in where the agent allows it:
+   - **Codex**: `codex mcp add` opens your browser by itself.
+   - **Claude Code**: one step is yours. Claude Code signs in only with a terminal attached, and an agent's command has none, so the reply
+     asks you to type `/mcp`, choose `oddbout`, then Authenticate. When you run the command yourself in a terminal, it runs
+     `claude mcp login oddbout` there and your browser opens.
+   - **Claude desktop app (Code tab)**: start a new session in the app, then type `/mcp`, choose `oddbout`, choose Connect and approve in
+     your browser (let the browser open Claude when it asks). If ODDBOUT refuses that sign-in, for example on an app version whose return
+     address it does not take, sign in once from a terminal with `claude mcp login oddbout` and start a new session.
+   - **Gemini CLI**: restart it, then type `/mcp auth oddbout`.
 4. Installs the `create-fighter` skill in Codex and Claude Code (skills only: no second MCP server).
 5. Tells your agent to confirm with ODDBOUT's `get_profile` that it reaches your account.
 
@@ -58,8 +65,14 @@ link on your computer, sign in, and paste the address your browser ends on only 
 
 ## After connecting
 
-Agents load new MCP servers when a session starts. In Claude Code, type `/mcp` and reconnect `oddbout`, or exit and run `claude --continue`;
-`/reload-plugins` loads the skill. In Codex, run `codex resume --last`. Then ask the agent to check your ODDBOUT account.
+Agents load new MCP servers when a session starts.
+
+- **Claude Code in a terminal**: type `/mcp` and reconnect `oddbout`, or exit and run `claude --continue`; `/reload-plugins` loads the skill.
+- **Claude desktop app (Code tab)**: a session that was already open cannot pick up the new server, and `/mcp reconnect` is not available there.
+  Start a new session (the app does not need a restart) and sign in there from `/mcp`. The reply detects the desktop app and gives these steps.
+- **Codex**: run `codex resume --last`.
+
+Then ask the agent to check your ODDBOUT account.
 
 Source and docs: [oddbout-starter](https://github.com/jeonghwanko/oddbout-starter/tree/main/packages/oddbout) ·
 [connection guide](https://github.com/jeonghwanko/oddbout-starter/blob/main/docs/CLOUD-MCP.md). MIT license.
