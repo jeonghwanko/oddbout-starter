@@ -9,8 +9,9 @@ creator-kit ZIP에는 제작·연결 안내와 이 문서 지도가 들어 있�
 ## 처음이라면
 
 - **먼저 영상으로 보려면**: [ODDBOUT × Twitch Cup](https://youtu.be/aLOsJlcQ2_c)(2분 50초, 영어)은 에이전트가 만든 선수를
-  등록하고 Twitch 시청자가 채팅으로 골라 4인 컵에 내보내는 흐름을, [ODDBOUT Showrunner](https://youtu.be/-GeIlI4Cf9w)(1분 54초,
-  영어)는 PayPal Sandbox로 결제한 에이전트 방송 작업이 기기를 바꾸거나 중단돼도 결제를 잃거나 두 번 청구하지 않고 이어지는 흐름을 보여 준다.
+  등록하고 Twitch 시청자가 채팅으로 골라 4인 컵에 내보내는 흐름을, [ODDBOUT Showrunner](https://youtu.be/DW9NkqZrJnQ)(2분 45초,
+  영어)는 PayPal Sandbox로 결제한 에이전트 방송 작업이 기기를 바꾸거나 중단돼도 결제를 잃거나 두 번 청구하지 않고 이어지는 흐름과,
+  마지막 1분에 실제 Sandbox 사이트에서 충전부터 PayPal MCP 정산, 출전료 지급까지를 보여 준다.
 - **ChatGPT/Dots에서 연결·계정·스킬만 확인하려는 사용자**: [CLOUD-MCP](CLOUD-MCP.md) → [ODDBOUT-PLUGIN](ODDBOUT-PLUGIN.md).
   기존 클라우드 플러그인을 선택한다. ZIP 가져오기나 VM 설치, 캐릭터 생성은 연결 확인에 필요하지 않다.
 - **선수를 만들려는 사용자·제작 에이전트**: [START-HERE](START-HERE.md) → [DOT-CREATION](DOT-CREATION.md) →

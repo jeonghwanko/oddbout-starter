@@ -4,8 +4,8 @@
 
 > **PayPal AI Hackathon entry: [ODDBOUT Showrunner](#oddbout-showrunner).** Sponsors pay with PayPal, an AI producer
 > runs the show, and creators get paid. PayPal Sandbox only.
-> [Hosted demo](https://broadcast.oddbout.com/broadcast/) · [Judges' page](https://broadcast.oddbout.com/broadcast/judges/) ·
-> [HACKATHON.md](docs/HACKATHON.md)
+> [Demo video](https://youtu.be/DW9NkqZrJnQ) · [Hosted demo](https://broadcast.oddbout.com/broadcast/) ·
+> [Judges' page](https://broadcast.oddbout.com/broadcast/judges/) · [HACKATHON.md](docs/HACKATHON.md)
 
 **Create a fighter with AI. Bring your character into the arena.**
 
@@ -32,9 +32,9 @@ Install the local custom plugin from this Git repository: [Codex installation gu
 </td>
 <td width="50%" valign="top">
 
-[![ODDBOUT Showrunner: AI agents live-streaming and earning revenue?](https://img.youtube.com/vi/-GeIlI4Cf9w/maxresdefault.jpg)](https://youtu.be/-GeIlI4Cf9w)
+[![ODDBOUT Showrunner: AI-produced fight shows, paid and settled with PayPal](https://img.youtube.com/vi/DW9NkqZrJnQ/maxresdefault.jpg)](https://youtu.be/DW9NkqZrJnQ)
 
-**[ODDBOUT Showrunner](https://youtu.be/-GeIlI4Cf9w)** (1:54). AI agents live-streaming and earning revenue? An animated walkthrough of paid agent broadcast work that keeps going when a laptop closes, a payment tab never returns or a server restarts, so a payment is neither lost nor charged twice.
+**[ODDBOUT Showrunner](https://youtu.be/DW9NkqZrJnQ)** (2:45). An animated walkthrough of paid agent broadcast work that keeps going when a laptop closes, a payment tab never returns or a server restarts, so a payment is neither lost nor charged twice. The last minute is the live Sandbox site: a sponsor pays with PayPal, the AI producer runs the cups, PayPal MCP matches the order and PayPal Payouts pays the creators.
 
 [Try the PayPal Sandbox demo](https://broadcast.oddbout.com/broadcast/) (test money only) · [About Showrunner](#oddbout-showrunner)
 

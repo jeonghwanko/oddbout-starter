@@ -7,7 +7,8 @@ Then it checks the payment with PayPal and pays the fighters' creators.
 
 - Hosted demo: <https://broadcast.oddbout.com/broadcast/> (PayPal Sandbox, test money only)
 - Judges' page: <https://broadcast.oddbout.com/broadcast/judges/> (this write-up as one page, with a sample clip to upload)
-- Demo video: coming soon
+- Demo video: <https://youtu.be/DW9NkqZrJnQ> (2:45). An animated walkthrough, then the same money flow on the live Sandbox
+  site, recorded with a fresh account on Nov 5, 2026 ([record](records/SUBMISSION-REHEARSAL-2026-11-05.md))
 - Source: this repository ([MIT](../LICENSE)) and the arena renderer,
   [oddbout-twitch-cup](https://github.com/jeonghwanko/oddbout-twitch-cup)
 

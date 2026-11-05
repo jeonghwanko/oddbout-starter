@@ -23,7 +23,6 @@
 .j-actions .button{min-height:46px}
 .j-button-ghost{border:1px solid #4a636c;color:#fff}
 .j-button-ghost:hover{border-color:#8ea39b}
-.j-soon{display:inline-flex;align-items:center;min-height:46px;padding:0 6px;color:#a8bab2;font-size:15px;font-weight:600}
 .j-hero .j-hero-note{margin-top:14px;color:#a8bab2;font-size:14px}
 .j-hero-note a{color:#fff}
 .j-faces{display:flex;flex:none;padding-left:8px}
