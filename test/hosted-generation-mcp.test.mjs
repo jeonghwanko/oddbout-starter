@@ -5,8 +5,9 @@ import { PICTURE_PAGE, TICKET_UPLOAD_URL, pictureLinkShape } from '../mcp/cloud/
 import { CREATOR_PAGE, siteUrl } from '../mcp/cloud/common.mjs';
 import { generation, png, webp } from './helpers/generation-database.mjs';
 
+// list_generation_hosts is browse_oddbout's view hosts, get_picture_upload and report_picture_link get_hosted_fighter's (MCP 통합 1단계, 2026-11-05).
 const HOSTED = ['request_hosted_fighter', 'get_hosted_fighter', 'choose_hosted_look', 'revise_hosted_motion', 'register_hosted_fighter', 'cancel_hosted_fighter',
-  'list_generation_hosts', 'start_picture_upload', 'get_picture_upload', 'report_picture_link'];
+  'start_picture_upload'];
 
 // The cloud MCP over the hosted generation API on a real (PGlite) database: the agent carries the user's words and answers, the worker the rest.
 async function connector(g, hosted, fetcher = async () => new Response(png(512, 512)), { budgetMs, clientId = crypto.randomUUID(), meta } = {}) {
@@ -46,6 +47,9 @@ test('hosted generation tools list only when configured', async () => {
     assert.deepEqual(on.find(t => t.name === 'request_hosted_fighter')._meta['openai/fileParams'], ['picture', 'secondPicture']);
     assert.equal(on.find(t => t.name === 'register_hosted_fighter').annotations.destructiveHint, true);
     assert.equal(on.find(t => t.name === 'get_hosted_fighter').annotations.readOnlyHint, true);
+    // The hosted reads are views: get_hosted_fighter's job (its default) and the pictures; the hosts are browse_oddbout's, listed only while hosted generation is on.
+    assert.deepEqual(on.find(t => t.name === 'get_hosted_fighter').inputSchema.properties.view, { default: 'job', type: 'string', enum: ['job', 'upload', 'link'] });
+    for (const name of ['list_generation_hosts', 'get_picture_upload', 'report_picture_link']) assert.ok(!on.some(t => t.name === name), name);
     for (const name of ['request_hosted_fighter', 'choose_hosted_look', 'revise_hosted_motion'])
       assert.equal(on.find(t => t.name === name).annotations.idempotentHint, false, name);
   } finally { await g.sql.close(); }

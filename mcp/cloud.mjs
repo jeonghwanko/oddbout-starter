@@ -13,6 +13,7 @@ import { registerProfileSetTools } from './cloud/profile-set-tools.mjs';
 import { registerWorkshopTools } from './cloud/workshop-tools.mjs';
 import { HOSTED_INSTRUCTIONS, registerHostedTools } from './cloud/hosted-tools.mjs';
 import { DIRECTORY_DESCRIPTIONS, DIRECTORY_INSTRUCTIONS, DIRECTORY_TITLES } from './cloud/directory-edition.mjs';
+import { aliasCall, memberOf, mergingRegister, renameTools } from './cloud/merged-tools.mjs';
 import { mcpServing } from './cloud/serve.mjs';
 import { ALLOWED_ORIGINS, CLOUD_ISSUER, CLOUD_RESOURCE, DIRECTORY_DOCUMENTATION, DIRECTORY_RESOURCE, LEGACY_PUBLIC_RESOURCE, PUBLIC_DIRECTORY_RESOURCE,
   PUBLIC_RESOURCE, PUBLIC_SIGN_IN_RESOURCE, SIGN_IN_RESOURCE } from './cloud/resources.mjs';
@@ -45,8 +46,10 @@ export function validCloudAudience(aud) {
  * while the arena key is configured (`ODDBOUT_ARENA_AGENT_KEY`), so a release of this code alone does not change the published tool list.
  */
 export const PUBLIC_TOOLS = new Set(['get_fighter_spec', 'get_style_guide', 'list_fighters', 'get_rankings', 'get_fighter_record', 'get_cup', 'read_bout',
-  'get_fighter_story', 'get_world', 'list_generation_hosts', 'prepare_fighter_packaging']);
-/** Public tools that spend an arena budget: a signed-in caller's call counts on his owner (MCP 점검, 2026-10-27). */
+  'get_fighter_story', 'get_world', 'list_generation_hosts', 'prepare_fighter_packaging',
+  // The full edition's merged public reads (cloud/merged-tools.mjs); the names above still answer as their views.
+  'browse_oddbout']);
+/** Public tools (a merged tool's view counts as its member) that spend an arena budget: a signed-in caller's call counts on his owner (MCP 점검, 2026-10-27). */
 export const OWNER_BUDGET_TOOLS = new Set(['read_bout']);
 /**
  * A host's own anonymous user id (`_meta["openai/subject"]` — the Apps SDK sends it "for the purposes of rate limiting"), as a UUID-shaped key.
@@ -154,12 +157,13 @@ export async function authenticateCloud(db, request, now = Date.now, edition = '
  * One JSON line per tool call (MCP 점검 2026-11-03: a failed call left no trace, and nothing said which tools agents use or which protocol
  * version they speak — the 2026-07-28 move waits on that). Only ODDBOUT's own names and codes, never arguments, tokens, URLs or the owner.
  * A failure of the server's (a bug, or a 5xx with what failed behind it) goes to the error log with failureDetail.
- * @param {{ tool: string, edition: string, client: string | null, call: Call, started: number, value: Record<string, unknown>, failure?: unknown }} line
+ * @param {{ tool: string, via?: string, edition: string, client: string | null, call: Call, started: number, value: Record<string, unknown>, failure?: unknown }} line
  */
-function logCall({ tool, edition, client, call, started, value, failure }) {
+function logCall({ tool, via, edition, client, call, started, value, failure }) {
   const code = typeof value.code === 'string' ? value.code.slice(0, 80) : undefined;
   const fault = failure !== undefined && !(failure instanceof Problem && failure.status < 500);
-  (fault ? console.error : console.log)(JSON.stringify({ stage: 'mcp-call', tool, edition, client, protocol: call.protocol ?? null,
+  // A merged tool's call is logged under its view's member (the name the logs always had), `via` the tool the host called.
+  (fault ? console.error : console.log)(JSON.stringify({ stage: 'mcp-call', tool, ...(via && via !== tool ? { via } : {}), edition, client, protocol: call.protocol ?? null,
     requestId: call.requestId ?? null, ms: Date.now() - started, ok: value.ok !== false, ...(code ? { code } : {}), ...(fault ? failureDetail(failure) : {}) }));
 }
 
@@ -203,7 +207,8 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
   // openai/fileParams, openai/profile). The directory edition lists neither, and its texts name no upload tool (`uploads`).
   const fileHost = !directory, openaiMeta = fileHost;
   const server = new McpServer({ name: 'oddbout-cloud', version: '1.0.0' }, {
-    instructions: directory ? DIRECTORY_INSTRUCTIONS : (hosted ? HOSTED_INSTRUCTIONS : '') + 'For creation in the user’s workspace, use the user’s own generation account. '
+    // The full edition's texts name merged tools by their views (cloud/merged-tools.mjs).
+    instructions: directory ? DIRECTORY_INSTRUCTIONS : renameTools((hosted ? HOSTED_INSTRUCTIONS : '') + 'For creation in the user’s workspace, use the user’s own generation account. '
       + 'Verify get_profile matches the intended registration account, especially after adding or switching connected accounts. '
       + 'Call this cloud connector’s check_creation_readiness before first generation, '
       + 'after a workspace restart and before registration. It checks account access; '
@@ -218,7 +223,7 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
       + 'use the supported host file route without bypassing network policy. Never ask for tokens or callback URLs in chat. '
       + 'A refused ODDBOUT sign-in (401 invalid_token) states its reason: tell the user that reason; it is not an outage, and when it asks '
       + 'to reconnect ODDBOUT in the connector settings, scheduled retries cannot fix it. Only a 503 asks for a retry. '
-      + 'A queued submission is not registered; inspect its status. Reuse one UUID for retries of identical bytes.',
+      + 'A queued submission is not registered; inspect its status. Reuse one UUID for retries of identical bytes.'),
     // A 2026-07-28 client may keep the list and the discovery answer for five minutes (the SDK's default is 0: ask every time). At an
     // address the list is the same for every caller, signed in or not, and changes only with a deploy; private, since editions differ by address.
     cacheHints: { 'tools/list': LIST_CACHE, 'server/discover': LIST_CACHE } });
@@ -248,7 +253,7 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
   // make something new on every call told retrying clients they could repeat them (MCP 점검 2026-10-29).
   /** @type {Register} */
   const registerTool = (name, title, description, inputSchema, run, { write = false, publish = false, openWorld = false,
-    idempotent = write ? undefined : true, files = [], profile = false, publicTool = false, diagnostic = false } = {}) => {
+    idempotent = write ? undefined : true, files = [], profile = false, publicTool = false, diagnostic = false, logAs } = {}) => {
     if (typeof idempotent !== 'boolean') throw Error(`${name}: a write tool states idempotent`);
     // Register types each tool's args; the SDK parses them with inputSchema before run sees them.
     server.registerTool(name, { title, description, inputSchema: z.object(/** @type {z.ZodRawShape} */ (inputSchema)),
@@ -280,19 +285,21 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
       let failure;
       try { value = await run(/** @type {Parameters<typeof run>[0]} */ (args), context); }
       catch (error) { failure = error; value = { ok: false, code: error instanceof Problem ? error.message : 'cloud-operation-unavailable' }; }
-      logCall({ tool: name, edition, client: identity?.claims.client_id ?? null, call, started, value, failure });
+      logCall({ tool: logAs ? logAs(args) : name, via: name, edition, client: identity?.claims.client_id ?? null, call, started, value, failure });
       if (failure !== undefined) return reply(value);
       const result = reply(value, host.compact === true);
       // A diagnostic failure is useful data; keep it readable by hosts that throw away tool errors.
-      return diagnostic ? { ...result, isError: false } : result;
+      return (typeof diagnostic === 'function' ? diagnostic(args) : diagnostic) ? { ...result, isError: false } : result;
     });
   };
-  // The directory edition registers only its tools, under their titles there; any other is unknown to it, not refused.
+  // The directory edition registers only its tools, under their titles there; any other is unknown to it, not refused. The full edition
+  // merges read tools of one kind into one tool with a view (cloud/merged-tools.mjs), registered once every family has registered.
+  const merging = directory ? null : mergingRegister(/** @type {import('./cloud/merged-tools.mjs').RegisterAny} */ (/** @type {unknown} */ (registerTool)));
   /** @type {Register} */
-  const register = directory ? (name, title, description, inputSchema, run, options) => {
+  const register = merging ? merging.register : (name, title, description, inputSchema, run, options) => {
     const directoryTitle = DIRECTORY_TITLES.get(name);
     if (directoryTitle) registerTool(name, directoryTitle, DIRECTORY_DESCRIPTIONS.get(name) ?? description, inputSchema, run, options);
-  } : registerTool;
+  };
   registerRegistrationTools({ register, db, identity, invoke, fetcher, recordAgent, hosted: Boolean(hosted) && !directory, directory, uploads: fileHost });
   registerPackagingPreparation({ register, invoke });
   registerProfileSetTools({ register, db, identity, invoke, fetcher });
@@ -304,6 +311,7 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
   if (hosted && !directory) registerHostedTools({ register, db, identity, invoke, fetcher, hosted, uploads: fileHost });
   registerFileInputProbe({ register, fileSchema: FILE, identity, downloadFile: downloadHostFile, fetcher });
   registerCreatorSources({ register, fileSchema: FILE, identity, db, downloadFile: downloadHostFile, fetcher });
+  merging?.finish();
   return server;
 }
 
@@ -344,7 +352,9 @@ async function identityFor(db, request, body, signInFirst, edition) {
   // A tool the directory edition does not list is unknown there, signed in or not: no sign-in to reach a "not found".
   if (edition === 'directory' && tool !== null && !DIRECTORY_TITLES.has(tool)) return { identity: null };
   if (signInFirst || (tool !== null && !PUBLIC_TOOLS.has(tool))) return signInOf(db, request, edition);
-  if (OWNER_BUDGET_TOOLS.has(tool) && request.headers.has('authorization')) return { identity: (await signInOf(db, request, edition)).identity };
+  if (OWNER_BUDGET_TOOLS.has(/** @type {string} */ (memberOf(tool, body.params?.arguments))) && request.headers.has('authorization')) {
+    return { identity: (await signInOf(db, request, edition)).identity };
+  }
   return { identity: null };
 }
 
@@ -456,6 +466,8 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted =
     if (!body || Array.isArray(body) || typeof body.method !== 'string') return json({ error: 'invalid_request' }, 400);
     line.method = body.method.slice(0, 80);
     if (body.method === 'tools/call' && typeof body.params?.name === 'string') line.tool = body.params.name.slice(0, 80);
+    // A merged-away tool's own name (a host's older list) is its merged tool's view; the request line keeps the name the host called.
+    if (edition === 'full') body = aliasCall(body);
     // Whether the host is ChatGPT is the body's to say, not the sign-in's: its refused calls are named so too (MCP 리뷰 2026-11-05).
     const host = await hostOf(body);
     line.compact = host.compact;

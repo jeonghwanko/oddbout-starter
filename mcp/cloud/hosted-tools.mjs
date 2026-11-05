@@ -7,6 +7,7 @@ import spec from '../../contracts/ai-fighter/v1/spec.json' with { type: 'json' }
 import { profileLimits } from '../../contracts/ai-fighter/profile-limits.mjs';
 import { CREATOR_PAGE, LIBRARY_FILE_HOSTS, SITE_URL_NEXT, UUID_ARG, allowedFileUrl, downloadHostFile, fileSchema, pause, siteUrl, timeLeft, unavailable, within } from './common.mjs';
 import { TICKET_UPLOAD_URL } from './resources.mjs';
+import { toolRef } from './merged-tools.mjs';
 /**
  * @typedef {import('./common.mjs').Identity} Identity
  * @typedef {import('./common.mjs').Hosted} Hosted
@@ -159,7 +160,7 @@ function hostedStep(job, uploads = true) {
         // Not a promise (2026-11-03, 레온: his set was refused by the file check while this said he could enter once it was checked).
         + (job.profileSetId ? `His chosen front went in as his profile set (${job.profileSetId}). Before he enters, read get_registered_fighter: its `
           + 'front says whether the set passed ODDBOUT\'s checks, and its next what to do if not. The home and the arena show it once an operator approves it. '
-          + (job.expressions?.url ? 'His six arena faces were sent with it; get_profile_set says whether they passed the check (sheetErrors when not).' : '')
+          + (job.expressions?.url ? `His six arena faces were sent with it; ${toolRef('get_profile_set')} says whether they passed the check (sheetErrors when not).` : '')
           : 'His profile set (front picture) did not go in with it: '
             + (uploads ? 'prepare_profile_set can upload one.' : 'this connector cannot upload one; the user uploads it from the ODDBOUT app in ChatGPT or with the creator kit.'));
       if (job.submission?.stage === 'rejected') return `The server check refused the package. A person at ODDBOUT will look at it.${spent(job)}`;
@@ -446,14 +447,14 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
         ...(host && host !== 'oddbout' ? { host, hostConsent: hostConsent === true } : {}) }), { 'content-type': 'application/json' });
       if (!made.ok) {
         return made.code === 'rate-limit' ? { ...made, next: 'The account\'s twelve tickets or twelve pictures of the last 24 hours may be used, '
-          + 'or too many calls came this minute: get_picture_upload with no ticketId lists the tickets to reuse; else wait.' } : made;
+          + `or too many calls came this minute: ${toolRef('get_picture_upload')} with no ticketId lists the tickets to reuse; else wait.` } : made;
       }
       const { secret, ...ticket } = made.ticket;
       return { ok: true, ticket, page: `${PICTURE_PAGE}${ticket.id}`,
         ...(secret ? { command: `curl -sS -H "${UPLOAD_TICKET_HEADER}: ${secret}" --data-binary "@<file>" ${TICKET_UPLOAD_URL}` } : {}),
         next: `Give the user the page link (PNG, JPEG or WebP, up to 4 MB, 64 to 4096 pixels a side; a picture made in this chat: the user saves it `
           + `first, then adds it there)${secret ? ', or run the command with the file '
-          + '(one with no answer or a 5xx: get_picture_upload before running it again)' : ''}. When he says the pictures are in, get_picture_upload with ticket.id.` };
+          + `(one with no answer or a 5xx: ${toolRef('get_picture_upload')} before running it again)` : ''}. When he says the pictures are in, ${toolRef('get_picture_upload')} with ticket.id.` };
     }, { write: true, idempotent: false });
   register('get_picture_upload', '올린 그림 확인', 'The pictures a start_picture_upload ticket took (at most two), each with its address for ten '
     + 'minutes, and why it takes no more (closed: full, expired, day-limit). Show the user the pictures and ask that they are his to use; '

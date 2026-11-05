@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { createCloudHandler as cloudHandler, scopedDatabase, authenticateCloud, GROK_RECONNECT_PAGE, SIGN_IN_PROBLEMS, allowedFileUrl, downloadHostFile, compactText, timedFetch, CLOUD_RESOURCE, CLOUD_ISSUER, PUBLIC_RESOURCE, LEGACY_PUBLIC_RESOURCE, SIGN_IN_RESOURCE, PUBLIC_SIGN_IN_RESOURCE, DIRECTORY_RESOURCE, PUBLIC_DIRECTORY_RESOURCE, DIRECTORY_DOCUMENTATION } from '../mcp/cloud.mjs';
 import { DIRECTORY_INSTRUCTIONS, DIRECTORY_TITLES } from '../mcp/cloud/directory-edition.mjs';
+import { ALIASES } from '../mcp/cloud/merged-tools.mjs';
 import { frontNext } from '../mcp/cloud/common.mjs';
 import { createHash } from 'node:crypto';
 import { verifiedUserId } from '../api/http.mjs';
@@ -28,7 +29,8 @@ test('MCP discovery, file schemas, profile identity and HTTP auth challenge inte
   const init=await (await handle(request('initialize',{protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'test',version:'1'}}))).json();
   assert.equal(init.result.serverInfo.name,'oddbout-cloud');
   const list=await (await handle(request('tools/list'))).json();
-  assert.equal(list.result.tools.length,21);
+  // MCP 통합 1단계 (2026-11-05): 21 until the creator-file reads became check_creator_file's views.
+  assert.equal(list.result.tools.length,20);
   for(const name of ['prepare_fighter_registration','upload_fighter_asset','store_creator_source','prepare_profile_set','upload_profile_set_asset']) {
     const t=list.result.tools.find(t=>t.name===name), f=t.inputSchema.properties[t._meta['openai/fileParams'][0]];
     assert.deepEqual(new Set(f.required),new Set(['download_url','file_id']));
@@ -415,8 +417,13 @@ test('agent tools list only with the arena key; reads are public, spars and cups
   assert.equal((await names(createCloudHandler({ db: dbFor() }))).includes('spar'), false);
   assert.equal((await names(createCloudHandler({ db: dbFor(), arena: { url: arena.url, key: null } }))).includes('spar'), false);
   const listed = await names(createCloudHandler({ db: dbFor(), arena }));
-  for (const tool of ['get_style_guide', 'list_fighters', 'get_rankings', 'get_fighter_record', 'get_cup', 'read_bout', 'spar', 'enter_cup', 'update_fighter_style', 'update_fighter_profile'])
+  for (const tool of ['browse_oddbout', 'spar', 'enter_cup', 'update_fighter_style', 'update_fighter_profile'])
     assert.ok(listed.includes(tool), tool);
+  // The public reads are browse_oddbout's views (MCP 통합 1단계, 2026-11-05); their own names are no longer listed but still answer (below).
+  for (const tool of ['get_style_guide', 'list_fighters', 'get_rankings', 'get_fighter_record', 'get_cup', 'read_bout']) assert.equal(listed.includes(tool), false, tool);
+  const browse = (await (await createCloudHandler({ db: dbFor(), arena })(request('tools/list'))).json()).result.tools.find(t => t.name === 'browse_oddbout');
+  assert.deepEqual(browse.inputSchema.properties.view.enum, ['fighters', 'rankings', 'record', 'cup', 'bout', 'story', 'world', 'style_guide']);
+  assert.deepEqual([browse.annotations.readOnlyHint, browse.securitySchemes], [true, [{ type: 'noauth' }]]);
   // Public reads need no connected account and send no key.
   const signedOut = createCloudHandler({ db: { auth: { getClaims: async () => ({ data: null }) }, rpc: async () => ({ data: false }) }, arena });
   const guide = toolJson((await (await signedOut(request('tools/call', { name: 'get_style_guide', arguments: {} }))).json()).result);
@@ -435,7 +442,7 @@ test('agent tools list only with the arena key; reads are public, spars and cups
   // The cup's idempotency key goes to the arena lowercase (its UUID check is), as the agent's own (2026-11-03); a call without one is refused.
   const cupKey = crypto.randomUUID();
   const entered = toolJson(await call(handle, 'enter_cup', { fighterId: fighter, idempotencyKey: cupKey.toUpperCase() }));
-  assert.deepEqual(entered.echo, { owner, fighter, idempotencyKey: cupKey }); assert.equal(entered.state, 'open'); assert.equal(entered.next, 'get_cup');
+  assert.deepEqual(entered.echo, { owner, fighter, idempotencyKey: cupKey }); assert.equal(entered.state, 'open'); assert.equal(entered.next, 'browse_oddbout(view=cup)');
   const unkeyed = calls.length;
   assert.equal((await call(handle, 'enter_cup', { fighterId: fighter })).isError, true); assert.equal(calls.length, unkeyed, 'no cup without a key');
   assert.equal(toolJson(await call(handle, 'read_bout', { cupId: fighter })).code, 'invalid-bout');
@@ -647,7 +654,7 @@ test('a cup entry stops waiting at its deadline and hands over to get_cup', asyn
   } };
   const handle = createCloudHandler({ db: dbFor(), arena }), started = Date.now();
   const entered = toolJson(await call(handle, 'enter_cup', { fighterId: crypto.randomUUID(), idempotencyKey: crypto.randomUUID() }));
-  assert.deepEqual([entered.state, entered.next], ['open', 'get_cup']);
+  assert.deepEqual([entered.state, entered.next], ['open', 'browse_oddbout(view=cup)']);
   assert.ok(Date.now() - started < 1000, `waited ${Date.now() - started} ms`);
 });
 
@@ -714,7 +721,7 @@ test('the sign-in-first address lists exactly what /mcp lists and says the same;
   const arena = { url: 'https://arena.test/oddbout-arena', key: 'k'.repeat(64), fetcher: async () => Response.json({ ok: true, fighters: [] }) };
   const db = { ...dbFor(), rpc: async name => ({ data: name === 'af_account' ? { invited: true, accessMode: 'open', canSubmit: true } : name === 'af_mcp_session_state' ? 'usable' : true }) };
   const hello = { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'codex', version: '1' } };
-  for (const [setup, options, count] of [['arena and hosted', { arena, hosted: {} }, 55], ['bare', {}, 21]]) {
+  for (const [setup, options, count] of [['arena and hosted', { arena, hosted: {} }, 42], ['bare', {}, 20]]) {
     const handle = createCloudHandler({ db, ...options });
     const text = (url, method, params = {}) => handle(new Request(url, { method: 'POST', headers: { 'content-type': 'application/json',
       accept: 'application/json, text/event-stream', authorization: `Bearer ${token}` }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) }))
@@ -726,9 +733,15 @@ test('the sign-in-first address lists exactly what /mcp lists and says the same;
     // The upload tools with OpenAI's file metadata, and the top-level securitySchemes, at both.
     const upload = tools.find(t => t.name === 'prepare_fighter_registration');
     assert.deepEqual([upload._meta['openai/fileParams'], upload.securitySchemes], [['manifest'], [{ type: 'oauth2', scopes: ['openid', 'email', 'profile'] }]], setup);
-    // /mcp's list, to the byte (sha256 of its tools). Changed on purpose only once since 219e35d1 (c537ac22…): the creator-source tools' ids
-    // took the short UUID_ARG pattern (2026-11-05, −480 B; none of the tools ChatGPT's app review pins).
-    if (count === 55) assert.equal(createHash('sha256').update(JSON.stringify(tools)).digest('hex'), 'd807a06428d4a31bd99b09f9f7daa6f6197f92a67473711e5c663b31a2807b96');
+    // /mcp's list, to the byte (sha256 of its tools). Changed on purpose twice since 219e35d1 (c537ac22…): the creator-source tools' ids
+    // took the short UUID_ARG pattern (2026-11-05, −480 B; d807a064…), then read tools of one kind merged into views (MCP 통합 1단계,
+    // 2026-11-05: 55 tools to 42, −3,004 B). Neither touched a tool ChatGPT's app review pins: those keep their bytes (below).
+    if (count === 42) assert.equal(createHash('sha256').update(JSON.stringify(tools)).digest('hex'), 'a2fd5d1eb3402e984be179feeb38fd926fe718502ccede76da6f2326217c855d');
+    // The tools ChatGPT's app review 1.0.3 covers (docs/records/CLOUD-PLUGIN-REVIEW.md), to the byte as before the merge, while it is pending.
+    const reviewed = ['get_fighter_spec', 'get_profile', 'open_creator_homepage', 'check_creation_readiness', 'list_my_fighters', 'prepare_fighter_deletion',
+      'delete_fighter', 'prepare_fighter_registration', 'upload_fighter_asset', 'submit_fighter_registration', 'get_fighter_submission', 'get_registered_fighter'];
+    if (count === 42) assert.equal(createHash('sha256').update(JSON.stringify(reviewed.map(name => tools.find(t => t.name === name)))).digest('hex'),
+      'dfd4b809f9cf1894fa6037d54a1e5c4f3dff14b55bd5e0543ab730c535c05127');
     // The instructions, and what the creation guide and the readiness check answer, are the same at both.
     const [signInHello, fullHello] = [await text(SIGN_IN_RESOURCE, 'initialize', hello), await text(CLOUD_RESOURCE, 'initialize', hello)];
     assert.equal(signInHello, fullHello, setup); assert.match(JSON.parse(fullHello).result.instructions, /Use host file attachments/);
@@ -759,16 +772,17 @@ test('the directory edition lists only its tools, in English, with every hint; t
   // /mcp keeps all its tools: ChatGPT's submitted plugin is pinned to its list. Here set_fighter_relation and manage_world split by kind of write.
   const split = ['propose_fighter_relation', 'answer_fighter_relation', 'end_fighter_relation', 'create_world', 'update_world', 'remove_world_fighter',
     'set_fighter_world'];
-  assert.deepEqual([tools.length, full.length], [35, 55]);
+  assert.deepEqual([tools.length, full.length], [35, 42]);
   assert.deepEqual(tools.map(t => t.name).sort(), [...DIRECTORY_TITLES.keys()].sort());
-  const dropped = full.map(t => t.name).filter(name => !DIRECTORY_TITLES.has(name));
+  // What this edition does not have: the full edition's tools, and the reads it merged into views (MCP 통합 1단계, 2026-11-05), by their own names.
+  const dropped = [...full.map(t => t.name), ...ALIASES.keys()].filter(name => !DIRECTORY_TITLES.has(name));
   for (const name of ['request_hosted_fighter', 'list_generation_hosts', 'prepare_fighter_registration', 'submit_profile_set', 'store_creator_source',
     'verify_creator_file_input', 'get_fighter_spec', 'check_creation_readiness', 'set_fighter_relation', 'manage_world',
     // 그림 올리기 표 (2026-11-01): pictures for a hosted fighter, which the directory does not take.
     'start_picture_upload', 'get_picture_upload', 'report_picture_link']) assert.ok(dropped.includes(name), name);
   for (const tool of tools) {
-    const same = full.find(t => t.name === tool.name);
-    assert.equal(same === undefined, split.includes(tool.name), tool.name);
+    const same = full.find(t => t.name === tool.name), alias = ALIASES.get(tool.name);
+    assert.equal(same === undefined, split.includes(tool.name) || alias !== undefined, tool.name);
     assert.equal(tool.title, DIRECTORY_TITLES.get(tool.name)); assert.match(tool.title, /^[\x20-\x7e]+$/, tool.name);
     // The listing is worldwide: no Korean anywhere in what Claude reads of a tool (ODDBOUT's own state names included).
     assert.doesNotMatch(JSON.stringify(tool), HANGUL, tool.name);
@@ -779,6 +793,12 @@ test('the directory edition lists only its tools, in English, with every hint; t
     if (same) {
       assert.deepEqual([tool.annotations, tool.inputSchema], [{ title: tool.title, ...same.annotations }, same.inputSchema], tool.name);
       assert.equal(same.annotations.title, undefined, tool.name);
+    } else if (alias) {
+      // A read the full edition merged is a view there (its own name still answers there); here it keeps its name and arguments.
+      const merged = full.find(t => t.name === alias.tool);
+      assert.ok(merged.inputSchema.properties.view.enum.includes(alias.view), tool.name);
+      assert.deepEqual([tool.annotations.readOnlyHint, tool.annotations.destructiveHint, merged.annotations.readOnlyHint], [true, false, true], tool.name);
+      for (const key of Object.keys(tool.inputSchema.properties ?? {})) assert.ok(key in merged.inputSchema.properties, `${tool.name} ${key}`);
     } else {
       // A split write is public and may change the public name (nickname) or remove something; only opening a world makes a new one each time.
       assert.deepEqual(tool.annotations, { title: tool.title, readOnlyHint: false, destructiveHint: true, openWorldHint: true, idempotentHint: tool.name !== 'create_world' }, tool.name);
@@ -892,7 +912,7 @@ test('enter_cup ends by the call budget counted from the request, its issue incl
   const handle = createCloudHandler({ db: dbFor(), arena, budgetMs: 400 });
   const started = Date.now();
   const entered = toolJson(await call(handle, 'enter_cup', { fighterId: crypto.randomUUID(), idempotencyKey: crypto.randomUUID() }));
-  assert.equal(entered.state, 'open'); assert.equal(entered.next, 'get_cup');
+  assert.equal(entered.state, 'open'); assert.equal(entered.next, 'browse_oddbout(view=cup)');
   // The wait once started after the issue: 150 ms of issue, then the whole CUP_WAIT_MS.
   assert.ok(Date.now() - started < 1500, `${Date.now() - started} ms`); assert.ok(seen.polls >= 1 && seen.polls < 20, `${seen.polls} polls`);
 });
@@ -982,7 +1002,7 @@ test('a 2026-07-28 client discovers, lists and calls the same tools; the list ke
       requestInit: { headers: { authorization: `Bearer ${token}` } } }));
     try {
       assert.equal(client.getNegotiatedProtocolVersion(), '2026-07-28');
-      assert.equal((await client.listTools()).tools.length, 21);
+      assert.equal((await client.listTools()).tools.length, 20);
       assert.deepEqual((await client.callTool({ name: 'get_profile', arguments: {} })).structuredContent, { id: owner, email: 'test@example.com', nickname: 'ODDBOUT' });
     } finally { await client.close(); }
   }
@@ -994,7 +1014,7 @@ test('a 2026-07-28 client discovers, lists and calls the same tools; the list ke
   assert.deepEqual([lists[0].result.ttlMs, lists[0].result.cacheScope], [300_000, 'private']);
   const legacyList = await (await handle(new Request(CLOUD_RESOURCE, { method: 'POST', headers: { 'content-type': 'application/json',
     accept: 'application/json, text/event-stream' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }) }))).json();
-  assert.equal(legacyList.result.tools.length, 21); assert.equal('ttlMs' in legacyList.result, false);
+  assert.equal(legacyList.result.tools.length, 20); assert.equal('ttlMs' in legacyList.result, false);
   // The call's log line names the era it spoke.
   const lines = logged.mock.calls.map(entry => JSON.parse(entry.arguments[0])).filter(line => line.tool === 'get_profile');
   assert.deepEqual(lines.map(line => line.protocol), ['2026-07-28', '2026-07-28']);
@@ -1009,7 +1029,7 @@ test('a 2026-07-28 client discovers, lists and calls the same tools; the list ke
   await legacy.connect(new StreamableHTTPClientTransport(new URL(CLOUD_RESOURCE), { fetch: (url, init) => handle(new Request(url, init)) }));
   try {
     assert.equal(legacy.getNegotiatedProtocolVersion(), '2025-11-25');
-    assert.equal((await legacy.listTools()).tools.length, 21);
+    assert.equal((await legacy.listTools()).tools.length, 20);
   } finally { await legacy.close(); }
 });
 
@@ -1091,7 +1111,7 @@ test('a cup entry reads the cup after 1, 1, 2, 3… poll intervals, not after ev
   t.mock.method(globalThis, 'setTimeout', (callback, ms, ...rest) => { if (ms > 0 && ms % 13 === 0) pauses.push(ms); return timeout(callback, ms, ...rest); });
   const handle = createCloudHandler({ db: dbFor(), arena: { ...arena, pollMs: 13, pollTries: 6, cupWaitMs: 10_000 } });
   const entered = toolJson(await call(handle, 'enter_cup', { fighterId: crypto.randomUUID(), idempotencyKey: crypto.randomUUID() }));
-  assert.deepEqual([entered.state, entered.next], ['open', 'get_cup']);
+  assert.deepEqual([entered.state, entered.next], ['open', 'browse_oddbout(view=cup)']);
   // The pauses before its six reads: 1, 1, 2, 3, 4 and 5 intervals (a read every interval would pause one interval each time).
   assert.deepEqual(pauses, [13, 13, 26, 39, 52, 65]); assert.equal(seen.polls, 6);
 });
