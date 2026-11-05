@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CALL_TOOLS, createTally, toolName, versionsEvent } from './generation-worker.mjs';
-import { MODELS } from './generation-stages.mjs';
+import { JUDGE, MODELS, VIDEO_REQUESTED } from './generation-stages.mjs';
 import { entry } from './ledger-report.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -35,10 +35,12 @@ test('calls are runs, failures and seconds per command, small enough for the fin
   assert.ok(JSON.stringify(event).length < 1500, JSON.stringify(event).length);
 });
 
-test('the versions event names the kit, the engine and the models, and a commit it cannot read is null', async () => {
+test('the versions event names the kit, the engine and the models asked for, and a commit it cannot read is null', async () => {
   const seen = [];
   const event = await versionsEvent('/kit', async dir => { seen.push(dir); return dir === '/kit' ? 'a'.repeat(40) : null; });
-  assert.deepEqual(event, { kind: 'versions', kit: 'a'.repeat(40), engine: null, image: MODELS.image, text: MODELS.text });
+  // Requested only (2026-11-05): what codex recorded comes with the stage's end, as its `models` event, never copied from these.
+  assert.deepEqual(event, { kind: 'versions', kit: 'a'.repeat(40), engine: null,
+    requested: { text: MODELS.text, imageAgent: MODELS.image, judge: JUDGE.model, judgeEffort: JUDGE.effort, video: VIDEO_REQUESTED } });
   assert.deepEqual(seen, ['/kit', path.join('/kit', 'vendor', 'sprite-gen')]);
   assert.ok(JSON.stringify(event).length < 2000);
 });

@@ -8,7 +8,8 @@
 | 출처 | 내용 |
 |---|---|
 | `af_generation_events` | `appearance-answer`(a/b 선택 또는 수정 요청), `motion-answer`(수정 요청한 클립), `register`, `cancelled`, `claimed`·`finished`(단계 시작·끝) |
-| `versions` 이벤트(이번에 추가) | 워커가 단계를 시작할 때 보낸다: 킷 커밋(`kit`), 엔진 커밋(`engine`), 이미지·텍스트 모델. 읽지 못한 커밋은 `null` |
+| `versions` 이벤트(이번에 추가) | 워커가 단계를 시작할 때 보낸다: 킷 커밋(`kit`), 엔진 커밋(`engine`), 단계가 **요청한** 모델(`requested`: 텍스트 `text`, 이미지 에이전트 `imageAgent`, 판정 `judge`·`judgeEffort`, 영상 `video` — 호스트가 정하지 않아 `engine-default`). 읽지 못한 커밋은 `null`. 2026-11-05 전에는 같은 상수를 `image`·`text`로 보냈다. 관측한 모델이 아니다 |
+| `models` 이벤트(2026-11-05) | 단계가 끝날 때 보낸다: 실행 종류(`role`: `brief`·`judge`·`image`·`video`)마다 요청한 모델(`requested`, 판정은 `requestedEffort`)과 **관측한** 모델(`observed`)·추론 강도(`effort`)·codex CLI(`cli`), 횟수 `n`. 관측은 codex가 그 세션 기록(rollout의 `turn_context`)에 남긴 값이고, 이미지는 sprite-gen 보고서가 세션에서 읽은 에이전트 모델(`model_source` rollout·state-db일 때만)이다. codex 이미지 도구 뒤의 이미지 모델(`imageModel`)과 Grok 영상 모델은 기록되지 않아 언제나 `unknown`이다. 요청한 값을 관측 칸에 베끼지 않는다. 2000바이트를 넘으면 뒤의 종류부터 뺀다(`more`) |
 | `gait` 이벤트(2026-10-29) | 걷기·달리기 갈래가 끝날 때마다: 결과(`ok`·`review`·`retry`)와 코드, 통과한 테이크, 시도한 컷마다 거절 사유(엔진) 또는 판정이 떨어뜨린 항목과 찍힌·낸 칸 수(`from`·`frames`), 박자 jolt, RIFE가 만든 칸 수. 2000바이트를 넘으면 오래된 컷부터 뺀다(`more`) |
 | `finished.calls`(이번에 채움) | 그 단계에서 og로 돈 명령별 `[실행 수, 실패 수, 초]`(`sprite gen`, `sprite video-set`, `codex` …). 12개 명령까지 이름을 남기고 나머지는 `other`로 합친다(이벤트 2000바이트 제한) |
 | `af_decision_reviews` | 범위(design·look-a·look-b·walk·run)별 Decisions 리포트 |

@@ -233,6 +233,23 @@ test('a child that ends without reading its input ends its run with its own code
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
+test('a run hands its output to a reader as it goes to the log, and a reader that throws never stops it', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'run-')), log = path.join(dir, 'worker.log');
+  try {
+    // codex exec's header names its session on stderr (the stage reads it: generation-stages codexSessionId).
+    const script = 'process.stderr.write("session id: 019a7f2e-1c3d-7a00-9b1e-0123456789ab\\n"); process.stdout.write("done\\n")';
+    let seen = '';
+    assert.equal(await run(process.execPath, ['-e', script], { cwd: dir, log, onOutput: chunk => { seen += chunk; } }), 0);
+    assert.match(seen, /session id: 019a7f2e-1c3d-7a00-9b1e-0123456789ab/);
+    assert.match(seen, /done/);
+    assert.equal(await run(process.execPath, ['-e', script], { cwd: dir, log, onOutput: () => { throw Error('reader'); } }), 0);
+    // The log's appends are not awaited by the run: both runs' lines land there all the same.
+    const logged = async () => (await readFile(log, 'utf8').catch(() => '')).match(/session id:/g)?.length ?? 0;
+    for (const until = Date.now() + 5000; await logged() < 2 && Date.now() < until;) await new Promise(done => setTimeout(done, 20));
+    assert.equal(await logged(), 2);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
 // Process groups: the worker and og run on a Linux host.
 const linuxOnly ={ skip: process.platform !== 'linux' && 'process groups are the Linux host\'s' };
 test('a run whose child exited while something it left holds the output ends anyway, and a stopped run that ignores SIGTERM gets SIGKILL', linuxOnly, async () => {

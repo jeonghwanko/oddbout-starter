@@ -6,7 +6,7 @@
 // sends the rate-limit reading with its heartbeat (for the operator) and each stage's tokens with its result: the server starts a new request
 // to ODDBOUT while the day's tokens are under its budget (af_generation_official_wait).
 // A host installs host/'s files flat into one bin folder (og self-update, scripts/host.mjs HOST_FILES): this file imports nothing local.
-import { open, readdir, stat } from 'node:fs/promises';
+import { open, readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 
 /** How much of a rollout's end is read for its last `token_count` (a session's file grows with its turns). */
@@ -144,4 +144,37 @@ export async function codexTokensSince(sessions, sinceMs) {
     sum.output += whole(usage.output_tokens); sum.reasoning += whole(usage.reasoning_output_tokens);
   }
   return sum;
+}
+
+/** A codex session id as codex names its rollouts (`rollout-<time>-<id>.jsonl`). */
+const SESSION_ID = /^[0-9a-f][0-9a-f-]{7,63}$/i;
+/**
+ * What codex recorded for one session (모델 드리프트, 2026-11-05): `model` and `effort` from its rollout's last `turn_context` record, its
+ * `cli_version` and `model_provider` from its `session_meta` record — the keys the pinned sprite-gen reads for its image runs
+ * (`codex_provider._session_facts`, checked there against rollouts of codex 0.153.4 and 0.165.0). What codex recorded it ran the turn with,
+ * not a copy of `-m`; a key it did not write stays null. Null when no rollout of that session was written since the day before `sinceMs`
+ * (a codex that keeps no rollout, an id that is not one), or it cannot be read.
+ * @param {string} sessions
+ * @param {string} id
+ * @param {number} [sinceMs]
+ * @returns {Promise<{ model: string | null, effort: string | null, cliVersion: string | null, modelProvider: string | null } | null>}
+ */
+export async function codexSessionFacts(sessions, id, sinceMs = Date.now()) {
+  if (typeof id !== 'string' || !SESSION_ID.test(id)) return null;
+  const file = (await rolloutsSince(sessions, sinceMs)).find(name => path.basename(name).endsWith(`-${id}.jsonl`));
+  const text = file ? await readFile(file, 'utf8').catch(() => null) : null;
+  if (text === null) return null;
+  /** @type {Record<string, string>} */
+  const facts = {};
+  /** @type {Record<string, string[]>} */
+  const keys = { turn_context: ['model', 'effort'], session_meta: ['cli_version', 'model_provider'] };
+  for (const line of text.split('\n')) {
+    if (!line.includes('"turn_context"') && !line.includes('"session_meta"')) continue;
+    let record;
+    try { record = JSON.parse(line); } catch { continue; }
+    const payload = record?.payload;
+    if (!payload || typeof payload !== 'object') continue;
+    for (const key of keys[record.type] ?? []) if (typeof payload[key] === 'string' && payload[key]) facts[key] = payload[key];
+  }
+  return { model: facts.model ?? null, effort: facts.effort ?? null, cliVersion: facts.cli_version ?? null, modelProvider: facts.model_provider ?? null };
 }

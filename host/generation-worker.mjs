@@ -11,9 +11,9 @@ import { appendFile, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/pro
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { ASKS, FRONT_JUDGE_SCHEMA, GROK_LIMITED, MODELS, briefCommand, createStages, frontJobId, frontJudgePrompt, frontVerdict, ogJobId }
+import { ASKS, FRONT_JUDGE_SCHEMA, GROK_LIMITED, REQUESTED_MODELS, createStages, frontJobId, frontJudgePrompt, frontVerdict, judgeCommand, ogJobId }
   from './generation-stages.mjs';
-import { codexTokensSince, codexUsage } from './codex-usage.mjs';
+import { codexSessionFacts, codexTokensSince, codexUsage } from './codex-usage.mjs';
 
 // <root>/bin holds this file in both installs (/srv/oddbout-gen on ODDBOUT's PC, a host's own folder in user mode).
 const ROOT = process.env.OG_ROOT || path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -61,11 +61,14 @@ const gitHead = dir => new Promise(resolve => execFile('git', ['-C', dir, 'rev-p
 /**
  * What made a stage's work (measurement, 2026-10-29): the kit and engine commits and the models, sent as a `versions` event when the
  * stage starts, so each number in docs/MEASUREMENT.md can be read per release. A commit that cannot be read is null, never a failure.
+ * The models are the ones the stage asks for (`requested`, 2026-11-05): what codex recorded comes when the stage ends, as its `models` event.
  */
 export async function versionsEvent(kit, head = gitHead) {
   const [kitRef, engine] = await Promise.all([head(kit), head(path.join(kit, 'vendor', 'sprite-gen'))]);
-  return { kind: 'versions', kit: kitRef, engine, image: MODELS.image, text: MODELS.text };
+  return { kind: 'versions', kit: kitRef, engine, requested: { ...REQUESTED_MODELS } };
 }
+/** How much of a run's output the stage may read back (`og(args, { capture: true })`): codex exec's header, which names its session, comes first. */
+export const CAPTURE_BYTES = 32 * 1024;
 
 /** `npm run sprite -- gen …` → `sprite gen`, `codex exec …` → `codex`: the command a stage ran through og, without its arguments. */
 export const toolName = args => {
@@ -260,14 +263,14 @@ export const errorCode = (error, fallback = 'stage-error') => String(error?.code
 export const STOP_GRACE_MS = 90_000, OUTPUT_DRAIN_MS = 10_000;
 
 /**
- * One child process in its own process group; its output appended to the job's log. Resolves its exit code (signals count as 128 + n).
- * Stopping it signals the whole group, and og passes the signal on to the command it runs (above).
+ * One child process in its own process group; its output appended to the job's log (and handed to `onOutput`, when given). Resolves its
+ * exit code (signals count as 128 + n). Stopping it signals the whole group, and og passes the signal on to the command it runs (above).
  */
-export function run(command, args, { cwd, log, stdin, signal, graceMs = STOP_GRACE_MS, drainMs = OUTPUT_DRAIN_MS }) {
+export function run(command, args, { cwd, log, stdin, signal, graceMs = STOP_GRACE_MS, drainMs = OUTPUT_DRAIN_MS, onOutput = null }) {
   return new Promise(resolve => {
     if (signal?.aborted) return resolve(128 + 15);   // stopped before it began: nothing started
     const child = spawn(command, args, { cwd, stdio: ['pipe', 'pipe', 'pipe'], detached: true });
-    const write = chunk => { appendFile(log, chunk).catch(() => {}); };
+    const write = chunk => { appendFile(log, chunk).catch(() => {}); try { onOutput?.(chunk); } catch { /* a reader never stops the run */ } };
     child.stdout.on('data', write); child.stderr.on('data', write);
     // A child that ends without reading its input closes the pipe: the write's EPIPE is not the run's outcome (its exit code is),
     // and with no listener it was an uncaught exception that ended the worker and every stage on it (CI, 2026-11-02).
@@ -354,7 +357,7 @@ export function createFrontCheck({ api, og, python, kit, say, providerDown, work
         }
         const schema = path.join(dir, 'schema.json');
         await writeFile(schema, JSON.stringify(FRONT_JUDGE_SCHEMA));
-        const code = await runner(og, ['run', ogId, '--', ...briefCommand({ schema, out, refs: [png] })], { cwd: kit, log, stdin: frontJudgePrompt(), signal });
+        const code = await runner(og, ['run', ogId, '--', ...judgeCommand({ schema, out, refs: [png] })], { cwd: kit, log, stdin: frontJudgePrompt(), signal });
         if (code === 75) { await giveBack('codex cannot run here now'); await providerDown(ASKS); return 'failed'; }
         if (code === 3) { await giveBack('og did not start it'); return 'failed'; }
         verdict = code === 0 ? await savedVerdict(out) : null;
@@ -463,13 +466,18 @@ export async function main({ once = false } = {}) {
       .then(text => text.includes('export const lowMarginFeet'), () => false);
     const dispatches = createDispatches(dir);
     const stages = createStages({
-      og: (args, { stdin } = {}) => unlessStopped(controller.signal, async () => {
+      og: (args, { stdin, capture = false } = {}) => unlessStopped(controller.signal, async () => {
         const started = Date.now(), record = await dispatches.begin(args);
-        const code = await run(og, ['run', ogId, '--', ...args], { cwd: kit, log, stdin, signal: controller.signal });
+        // `capture`: the start of the run's output comes back too (a codex run's header names its session; generation-stages codexSessionId).
+        let output = '';
+        const onOutput = capture ? chunk => { if (output.length < CAPTURE_BYTES) output += String(chunk).slice(0, CAPTURE_BYTES - output.length); } : null;
+        const code = await run(og, ['run', ogId, '--', ...args], { cwd: kit, log, stdin, signal: controller.signal, onOutput });
         await dispatches.end(record, code);
         tally.add(args, code, Date.now() - started);
-        return { code };
+        return capture ? { code, output } : { code };
       }),
+      // What codex recorded for a run's session (its rollout under this worker's sessions folder), for the verdicts and the `models` event.
+      codexSession: (id, sinceMs) => codexSessionFacts(sessions, id, sinceMs),
       api, signal: controller.signal, lowMarginFeetTaken,
       fetchBytes: async url => { const r = await fetch(url, { signal: AbortSignal.timeout(60_000) }); if (!r.ok) throw new Error(`download ${r.status}`); return new Uint8Array(await r.arrayBuffer()); },
       motionsPy: args => unlessStopped(controller.signal, () => run(python, ['-I', path.join(ROOT, 'bin', 'motions.py'), ...args], { cwd: kit, log, signal: controller.signal })
