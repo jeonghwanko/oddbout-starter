@@ -79,6 +79,8 @@ export const copy = {
     accountChoice:'이 계정으로 연결할까요?', continueAccount:'이 계정으로 계속', switchAccount:'다른 계정 사용', switchingAccount:'다른 계정으로 로그인할 준비를 하고 있습니다.',
     noRequest:'{at} ODDBOUT 연결을 시작해 주세요.', failed:'요청이 만료되었거나 연결할 수 없습니다. {at} 다시 시도해 주세요.',
     unsafe:'지원하는 연결 요청이 아닙니다. 권한을 승인하지 않았습니다.', googleAccount:'ODDBOUT 계정', connecting:'Google 로그인으로 이동합니다.', approving:'연결을 마무리하고 있습니다.',
+    doneTitle:'{to} 연결을 넘겼습니다', handedOff:'브라우저가 앱을 열지 물으면 허용하세요. 앱에서 연결된 것이 보이면 이 창은 닫아도 됩니다.',
+    deniedHandedOff:'연결을 취소했습니다. 이 창은 닫아도 됩니다.', openApp:'앱이 열리지 않으면 다시 열기',
     emailOption:'이메일 계정으로 로그인', emailLabel:'이메일', passwordLabel:'비밀번호', emailSignIn:'로그인', emailConnecting:'로그인하고 있습니다.', emailFailed:'이메일 또는 비밀번호를 확인해 주세요.',
     localWarning:'승인하면 이 컴퓨터에서 실행 중인 앱(터미널·편집기의 에이전트나 Claude 데스크톱 앱)이 연결을 받습니다. 방금 직접 연결을 시작했을 때만 승인하세요.', returnLocal:'연결 안내 보기'
   },
@@ -93,6 +95,8 @@ export const copy = {
     accountChoice:'Connect with this account?', continueAccount:'Continue with this account', switchAccount:'Use another account', switchingAccount:'Preparing sign-in with another account.',
     noRequest:'Start the ODDBOUT connection from {name}.', failed:'This request expired or could not be completed. Start again from {name}.',
     unsafe:'This connection request is not supported. No access was approved.', googleAccount:'ODDBOUT account', connecting:'Opening Google sign-in.', approving:'Completing your connection.',
+    doneTitle:'Handed off to {name}', handedOff:'If your browser asks to open the app, allow it. Once the app shows the connection, you can close this window.',
+    deniedHandedOff:'Connection cancelled. You can close this window.', openApp:'Open the app again',
     emailOption:'Sign in with an email account', emailLabel:'Email', passwordLabel:'Password', emailSignIn:'Sign in', emailConnecting:'Signing in.', emailFailed:'Check your email and password and try again.',
     localWarning:'If you approve, an app running on this computer (an agent in your terminal or editor, or the Claude desktop app) receives the connection. Approve only if you just started this connection yourself.', returnLocal:'See how to connect'
   }
@@ -104,7 +108,8 @@ export async function start({ document = globalThis.document, location = globalT
   let savedLanguage;
   try { savedLanguage = sessionStorage.getItem('oddbout-connect-language'); } catch {}
   let language = connectionLocale(new URLSearchParams(location.search).get('lang'), savedLanguage, navigator.language);
-  let mode = 'loading', statusKey = 'loading', accountEmail = null, clientLabel = '', agent = null;
+  // `appUrl`: where an approval went when that is an app's own scheme (the Claude desktop app), for the link that opens it again.
+  let mode = 'loading', statusKey = 'loading', accountEmail = null, clientLabel = '', agent = null, appUrl = null;
   const render = () => {
     // The return link needs a place to go: an agent not yet known is Dots (where most requests start); the other words stay general.
     const named = agentWords[language][agent ?? 'any'], back = agentWords[language][agent ?? 'dots'];
@@ -118,10 +123,14 @@ export async function start({ document = globalThis.document, location = globalT
     for (const element of document.querySelectorAll('[data-copy]')) element.textContent = words[element.dataset.copy];
     for (const button of document.querySelectorAll('[data-lang]')) button.setAttribute('aria-pressed', String(button.dataset.lang === language));
     byId('status').textContent = words[statusKey];
-    byId('step-number').textContent = mode === 'consent' ? '02' : '01';
-    byId('step-label').textContent = words[mode === 'consent' ? 'stepConsent' : 'stepConnect'];
-    byId('panel-title').textContent = words[mode === 'consent' ? 'consentTitle' : mode === 'account' ? 'accountChoice' : mode === 'error' ? 'errorTitle' : 'panelTitle'];
+    // The page names the agent it serves once it knows it; it was Dots' page first, and an app on this computer has no brand to show.
+    byId('eyebrow').textContent = ['dots', 'grok', 'claude'].includes(agent ?? '') ? `${agentWords.en[/** @type {'dots' | 'grok' | 'claude'} */ (agent)].name.toUpperCase()} × ODDBOUT` : 'ODDBOUT';
+    const reviewing = mode === 'consent' || mode === 'done';
+    byId('step-number').textContent = reviewing ? '02' : '01';
+    byId('step-label').textContent = words[reviewing ? 'stepConsent' : 'stepConnect'];
+    byId('panel-title').textContent = words[mode === 'consent' ? 'consentTitle' : mode === 'done' ? 'doneTitle' : mode === 'account' ? 'accountChoice' : mode === 'error' ? 'errorTitle' : 'panelTitle'];
     byId('login').hidden = mode !== 'login'; byId('consent').hidden = mode !== 'consent';
+    byId('open-app').hidden = mode !== 'done' || !appUrl; if (appUrl) byId('open-app').href = appUrl;
     byId('account-choice').hidden = mode !== 'account';
     byId('local-warning').hidden = agent !== 'local';
     byId('existing-account').textContent = accountEmail || '';
@@ -151,9 +160,13 @@ export async function start({ document = globalThis.document, location = globalT
   const auth = supabase.createClient('https://ztfxxhtmtrvxvuxlqmgz.supabase.co',
     'sb_publishable_6UkV7tRAQ1P4qss5cTYSwQ_kVxSIv_V', { auth: { flowType: 'pkce', storage: sessionStorage,
       storageKey: 'oddbout-cloud-consent', detectSessionInUrl: true, persistSession: true } }).auth;
-  const go = value => {
+  /** @param {string} value @param {'handedOff' | 'deniedHandedOff'} [done] */
+  const go = (value, done = 'handedOff') => {
     if (!safeClientRedirect(value)) throw new Error('unsafe-redirect');
     sessionStorage.removeItem(key); location.replace(value);
+    // A web callback or loopback page replaces this one. An app's own scheme (the Claude desktop app, 2026-11-06) hands the answer to the app
+    // and leaves this page as it was, "completing" with a disabled button: say it went to the app, and offer to open it again.
+    if (!/^https?:/i.test(value)) { appUrl = done === 'handedOff' ? value : null; state('done', done); }
   };
   const fail = () => state('error', 'failed');
   const { data: { session }, error } = await auth.getSession();
@@ -219,7 +232,7 @@ export async function start({ document = globalThis.document, location = globalT
     try {
       const result = await auth.oauth[action === 'approve' ? 'approveAuthorization' : 'denyAuthorization'](id, { skipBrowserRedirect: true });
       if (result.error || !result.data?.redirect_url) throw new Error('consent-failed');
-      go(result.data.redirect_url);
+      go(result.data.redirect_url, action === 'approve' ? 'handedOff' : 'deniedHandedOff');
     } catch { fail(); byId('approve').disabled = byId('deny').disabled = false; }
   };
   }

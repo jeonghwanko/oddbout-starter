@@ -5,12 +5,12 @@
 <title>ODDBOUT · 에이전트 연결</title><link rel="icon" href="/art/ui/oddbout-logo.webp" type="image/webp">
 <link rel="preload" href="/fonts/Pretendard-Bold.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/cloud-connect/connect.css?v=d606ccd99ed2">
-<script defer src="/cloud-connect/supabase.js"></script><script type="module" src="/cloud-connect/connect.mjs?v=db7cc58844df"></script></head>
+<script defer src="/cloud-connect/supabase.js"></script><script type="module" src="/cloud-connect/connect.mjs?v=04a99eca0d12"></script></head>
 <body>
 <header class="site-header"><a class="brand" href="/"><img src="/art/ui/oddbout-logo.webp" alt="ODDBOUT Fight Club" width="376" height="76"></a>
 <nav class="languages" aria-label="Language"><button type="button" data-lang="en" lang="en">EN</button><span aria-hidden="true">/</span><button type="button" data-lang="ko" lang="ko">KR</button></nav></header>
 <main>
-<section class="intro" aria-labelledby="headline"><p class="eyebrow"><span class="dot" aria-hidden="true"></span>DOTS × ODDBOUT</p>
+<section class="intro" aria-labelledby="headline"><p class="eyebrow"><span class="dot" aria-hidden="true"></span><span id="eyebrow">ODDBOUT</span></p>
 <h1 id="headline"><span data-copy="headline1">나의 캐릭터,</span><span class="accent" data-copy="headline2">링 위로.</span></h1>
 <p class="lead" data-copy="lead">Google 계정을 연결하고<br>에이전트에서 캐릭터를 등록하세요.</p>
 <div class="club-line" aria-hidden="true"><span>YOUR FIGHTER.</span><span>YOUR FIGHT.</span></div></section>
@@ -30,6 +30,7 @@
 <p class="permission-note" data-copy="permissionNote">생성 구독이나 결제 권한은 포함되지 않습니다.</p>
 <p id="local-warning" class="local-warning" role="note" data-copy="localWarning" hidden>승인하면 이 컴퓨터에서 실행 중인 앱(터미널·편집기의 에이전트나 Claude 데스크톱 앱)이 연결을 받습니다. 방금 직접 연결을 시작했을 때만 승인하세요.</p>
 <button id="approve" class="primary"><span data-copy="approve">연결 승인</span><span aria-hidden="true">↗</span></button><button id="deny" class="text-button" data-copy="cancel">취소</button></section>
+<a id="open-app" class="text-button" href="#" data-copy="openApp" hidden>앱이 열리지 않으면 다시 열기</a>
 <p id="login-note" class="connection-note" data-copy="loginNote">PC 설치 없이 연결됩니다.</p>
 <a id="retry-link" class="text-button" href="https://chatgpt.com/dots/home" data-copy="returnDots" hidden>Dots로 돌아가기</a>
 </section>
