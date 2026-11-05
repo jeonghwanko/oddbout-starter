@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { start, copy, agentOf, fillAgent, agentWords } from '../web/cloud-connect/connect.mjs';
 
 function harness({ session = { user: { email: 'review@example.test', is_anonymous: false } }, language = 'en', signOutError = null,
-  details = { redirect_url: 'https://chatgpt.com/connector_platform/oauth/callback' }, approved = null } = {}) {
+  details = { redirect_url: 'https://chatgpt.com/connector_platform/oauth/callback' }, approved = null, denied = null } = {}) {
   const elements = new Map(), calls = [], redirects = [], values = new Map();
   const element = id => {
     if (!elements.has(id)) elements.set(id, { hidden: false, disabled: false, value: '', textContent: '', setAttribute() {} });
@@ -21,6 +21,7 @@ function harness({ session = { user: { email: 'review@example.test', is_anonymou
         return { data: details, error: null };
       },
       approveAuthorization: async () => ({ data: { redirect_url: approved }, error: null }),
+      denyAuthorization: async () => ({ data: { redirect_url: denied }, error: null }),
     },
   };
   const env = {
@@ -147,8 +148,35 @@ test('the Claude desktop app is consented as an app on this computer and its app
   assert.equal(h.element('client').textContent, 'Claude · claude://claude.ai');
   assert.equal(h.element('local-warning').hidden, false);
   assert.match(copy.ko.localWarning, /Claude 데스크톱 앱/); assert.match(copy.en.localWarning, /Claude desktop app/);
+  assert.equal(h.element('eyebrow').textContent, 'ODDBOUT');
   await h.element('approve').onclick();
   assert.deepEqual(h.redirects, ['claude://claude.ai/mcp-auth-callback/sdk?code=abc&state=xyz']);
+  // The app scheme leaves this page where it was (2026-11-06: it stayed on "completing" with a disabled button): it says the app has it.
+  assert.equal(h.element('consent').hidden, true);
+  assert.equal(h.element('panel-title').textContent, '이 컴퓨터의 앱으로 연결을 넘겼습니다');
+  assert.equal(h.element('status').textContent, copy.ko.handedOff);
+  assert.equal(h.element('step-number').textContent, '02');
+  assert.deepEqual([h.element('open-app').hidden, h.element('open-app').href], [false, 'claude://claude.ai/mcp-auth-callback/sdk?code=abc&state=xyz']);
+});
+
+test('a cancelled app request says so and offers no app link', async () => {
+  const h = harness({ language: 'en', details: { redirect_uri: 'claude://claude.ai/mcp-auth-callback/sdk', client: { name: 'Claude' } },
+    denied: 'claude://claude.ai/mcp-auth-callback/sdk?error=access_denied&state=xyz' });
+  await start(h.env); await h.element('continue-account').onclick();
+  await h.element('deny').onclick();
+  assert.deepEqual(h.redirects, ['claude://claude.ai/mcp-auth-callback/sdk?error=access_denied&state=xyz']);
+  assert.equal(h.element('panel-title').textContent, 'Handed off to an app on this computer');
+  assert.equal(h.element('status').textContent, copy.en.deniedHandedOff);
+  assert.equal(h.element('open-app').hidden, true);
+});
+
+test('a loopback approval leaves the page to its callback, with no hand-off state', async () => {
+  const h = harness({ details: { redirect_uri: 'http://127.0.0.1:52381/callback', client: { name: 'Codex' } },
+    approved: 'http://127.0.0.1:52381/callback?code=abc&state=xyz' });
+  await start(h.env); await h.element('continue-account').onclick();
+  await h.element('approve').onclick();
+  assert.deepEqual(h.redirects, ['http://127.0.0.1:52381/callback?code=abc&state=xyz']);
+  assert.equal(h.element('consent').hidden, false); assert.equal(h.element('open-app').hidden, true);
 });
 
 test('a web agent shows no local warning', async () => {
@@ -156,6 +184,8 @@ test('a web agent shows no local warning', async () => {
   await start(h.env); await h.element('continue-account').onclick();
   assert.equal(h.element('consent').hidden, false); assert.equal(h.element('local-warning').hidden, true);
   assert.equal(h.element('client').textContent, 'Claude · claude.ai');
+  // The page names the web agent it serves (it said DOTS × ODDBOUT for every agent until 2026-11-06).
+  assert.equal(h.element('eyebrow').textContent, 'CLAUDE × ODDBOUT');
   // Claude keeps its connectors under Customize (2026-10-29); settings/connectors only says they moved.
   assert.equal(h.element('retry-link').href, 'https://claude.ai/customize/connectors');
 });
