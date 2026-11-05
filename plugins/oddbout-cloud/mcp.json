@@ -3,23 +3,7 @@
   "mcpServers": {
     "oddbout": {
       "type": "streamable-http",
-      "url": "https://mcp.oddbout.com/mcp",
-      "extensions": {
-        "com.openai": {
-          "auth": {
-            "type": "mixed",
-            "client": {
-              "mode": "dcr"
-            },
-            "baseScopes": [
-              "openid",
-              "email",
-              "profile"
-            ],
-            "oidcEnabled": true
-          }
-        }
-      }
+      "url": "https://mcp.oddbout.com/mcp"
     }
   }
 }
