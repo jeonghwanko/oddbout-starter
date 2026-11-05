@@ -107,9 +107,18 @@ Claude Code, Codex(CLI·앱·IDE 확장이 설정을 함께 쓴다), Gemini CLI�
 MCP 인가 명세(2025-11-25)는 redirect를 `localhost` 또는 https로 정하고, 동의 화면에 redirect 호스트를 보이고 loopback이면 경고하라고 한다.
 
 - 동의 화면(`web/cloud-connect/connect.mjs`의 `agentOf`)은 loopback 주소(`127.0.0.1`·`[::1]`·`localhost`, http, 아무 포트·경로)를 `local`로 받는다.
-  그 밖의 127/8 주소, `0.0.0.0`, 닮은 호스트, 계정 정보가 든 주소, 앱 스킴(`cursor://`)은 받지 않는다.
+  그 밖의 127/8 주소, `0.0.0.0`, 닮은 호스트, 계정 정보가 든 주소, 앱 스킴(`cursor://`)은 받지 않는다. 앱 스킴의 예외는 아래 Claude 데스크톱 앱 하나다.
 - `local` 요청은 "이 컴퓨터의 앱"으로 부른다. 클라이언트 이름은 클라이언트가 스스로 정한 값이라 믿지 않는다. 이름 옆에 돌아갈 호스트와 포트를 보이고,
   승인 버튼 위에 경고(`localWarning`)를 둔다. 오류 때 링크는 사이트의 내 에이전트(`creator.html#view=agents`)다.
+- Claude 데스크톱 앱(Code 탭, 2026-11-06, 사용자 결정): 앱의 `/mcp` 연결 버튼은 `claude://claude.ai/mcp-auth-callback/sdk`로 돌아오는 로그인을 시작한다
+  (Windows의 Claude 4.16336.0.0 앱 코드와 로그 `redirectScheme=custom`에서 읽었다). 동의 화면이 이 주소를 거절해서, 앱에 추가한 서버는 터미널의
+  `claude mcp login`으로만 로그인할 수 있었다.
+  - 이 주소 하나를 글자 그대로 받는다. 승인이 붙이는 쿼리만 허용하고, 다른 경로·호스트·포트·대소문자·`#`·`claude:claude.ai/…` 같은 표기는 받지 않는다.
+    URL로 해석하면 점 세그먼트나 `//` 없는 표기가 같은 주소로 바뀌므로 문자열로 비교한다.
+  - `local`로 부르고 같은 경고를 둔다. 이름 옆에는 `claude://claude.ai`처럼 스킴을 함께 보여, Claude 웹(`claude.ai`)과 헷갈리지 않게 한다.
+  - 위험은 loopback과 같은 종류다. 이 PC의 다른 프로그램이 `claude:` 스킴을 가로챌 수 있지만, 코드는 앱의 PKCE 검증값 없이 쓸 수 없다.
+  - Mac 앱과 다른 버전의 주소는 확인하지 않았다. 다른 주소면 이 화면이 "지원하는 연결 요청이 아닙니다"로 거절한다.
+  - 사이트 게시(`site:build`·`site:publish`) 뒤 앱의 연결 버튼으로 실제 로그인을 한 번 확인한다.
 - 서버 주소는 로그인 먼저 주소다. 공개 주소는 로그인 없이 답하므로 CLI가 인증이 필요 없다고 본다. 로그인 먼저 주소는 POST·GET·HEAD에 401을 준다.
   Gemini CLI는 연결 전에 HEAD로 묻는다.
 - MCP 함수의 Origin 허용 목록은 바꾸지 않는다. 이 CLI들은 브라우저가 아니라 Origin을 보내지 않는다.

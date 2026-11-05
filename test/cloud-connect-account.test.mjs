@@ -100,14 +100,23 @@ test('each agent comes back only to its own callback addresses', () => {
 
 // An app on this computer (2026-10-29): Claude Code, Codex and Gemini CLI register a loopback callback on a port of their own. Only the loopback
 // literals and localhost over http, any port and path; a look-alike host, credentials, another 127/8 address, https or an app scheme are refused.
+// One app scheme is the exception (2026-11-06): the Claude desktop app's /mcp sign-in comes back on claude://claude.ai/mcp-auth-callback/sdk,
+// that address character for character, alone or with its query; any other path, host, port, case, fragment or spelling is refused.
 test('an app on this computer comes back on a loopback callback, nowhere else', () => {
   for (const local of ['http://127.0.0.1:52381/callback', 'http://127.0.0.1:52381/callback/b7f1c0de?code=x&state=y', 'http://localhost:7777/oauth/callback',
-    'http://localhost:3118/callback', 'http://[::1]:8080/cb', 'http://127.0.0.1/callback', 'http://LOCALHOST:7777/oauth/callback'])
+    'http://localhost:3118/callback', 'http://[::1]:8080/cb', 'http://127.0.0.1/callback', 'http://LOCALHOST:7777/oauth/callback',
+    'claude://claude.ai/mcp-auth-callback/sdk', 'claude://claude.ai/mcp-auth-callback/sdk?code=abc&state=xyz'])
     assert.equal(agentOf(local), 'local', local);
   for (const refused of ['http://127.0.0.1.evil.example:7777/callback', 'http://localhost.evil.example/callback', 'http://user@127.0.0.1:7777/callback',
     'http://user:pass@localhost:7777/callback', 'http://127.0.0.2:7777/callback', 'http://0.0.0.0:7777/callback', 'http://192.168.0.10:7777/callback',
     'https://localhost:7777/callback', 'http://localhost.:7777/callback', 'cursor://anysphere.cursor-mcp/oauth/callback', 'vscode://callback',
-    'javascript://localhost/%0aalert(1)', 'file://localhost/etc/passwd'])
+    'javascript://localhost/%0aalert(1)', 'file://localhost/etc/passwd',
+    'claude://claude.ai/mcp-auth-callback/sdk/', 'claude://claude.ai/mcp-auth-callback/sdkx', 'claude://claude.ai/mcp-auth-callback',
+    'claude://claude.ai/mcp-auth-callback/sdk/x', 'claude://evil.example/mcp-auth-callback/sdk', 'claude://user@claude.ai/mcp-auth-callback/sdk',
+    'claude://claude.ai:443/mcp-auth-callback/sdk', 'claude://claude.ai/mcp-auth-callback/sdk#x', 'claude://claude.ai/mcp-auth-callback/sdk?code=a#x',
+    'claude:claude.ai/mcp-auth-callback/sdk', 'claude://Claude.ai/mcp-auth-callback/sdk', 'CLAUDE://claude.ai/mcp-auth-callback/sdk',
+    'claude://claude.ai/mcp-auth-callback/./sdk', 'claude://claude.ai/mcp-auth-callback/x/../sdk', ' claude://claude.ai/mcp-auth-callback/sdk',
+    'claude://claude.ai/api/mcp/auth_callback'])
     assert.equal(agentOf(refused), null, refused);
 });
 
@@ -125,6 +134,21 @@ test('a local app is consented as an app on this computer, with its host and por
   assert.equal(h.element('retry-link').href, 'https://oddbout.com/creator.html#view=agents');
   await h.element('approve').onclick();
   assert.deepEqual(h.redirects, ['http://localhost:7777/oauth/callback?code=abc&state=xyz']);
+});
+
+// The Claude desktop app (2026-11-06): consented as an app on this computer, named with its scheme so it does not read as claude.ai, warned,
+// and its approval goes back to the app's own address.
+test('the Claude desktop app is consented as an app on this computer and its approval goes back to the app', async () => {
+  const h = harness({ language: 'ko', details: { redirect_uri: 'claude://claude.ai/mcp-auth-callback/sdk', client: { name: 'Claude' } },
+    approved: 'claude://claude.ai/mcp-auth-callback/sdk?code=abc&state=xyz' });
+  await start(h.env); await h.element('continue-account').onclick();
+  assert.equal(h.element('consent').hidden, false);
+  assert.equal(h.element('panel-title').textContent, '이 컴퓨터의 앱에 연결할까요?');
+  assert.equal(h.element('client').textContent, 'Claude · claude://claude.ai');
+  assert.equal(h.element('local-warning').hidden, false);
+  assert.match(copy.ko.localWarning, /Claude 데스크톱 앱/); assert.match(copy.en.localWarning, /Claude desktop app/);
+  await h.element('approve').onclick();
+  assert.deepEqual(h.redirects, ['claude://claude.ai/mcp-auth-callback/sdk?code=abc&state=xyz']);
 });
 
 test('a web agent shows no local warning', async () => {

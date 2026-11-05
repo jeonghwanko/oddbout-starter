@@ -10,7 +10,13 @@
  * http only for loopback). The MCP authorization spec (2025-11-25) allows `localhost` or https redirects, and asks a consent screen to show the
  * redirect host and warn on loopback ones: the code goes to whatever listens on that port of this computer, and the client's name is its own
  * claim. So the consent names it as an app on this computer, shows host and port, and warns (`localWarning`). An app scheme (`cursor://`) is
- * still not accepted.
+ * still not accepted, with one exception below.
+ *
+ * The Claude desktop app (2026-11-06, the user's decision): its own /mcp Connect signs in with the callback `claude://claude.ai/mcp-auth-callback/sdk`
+ * (read from Claude 4.16336.0.0 for Windows and its log, `redirectScheme=custom`), and the consent refused it, so a server added to the app
+ * could be signed in only from a terminal. That one address, exactly (any query, no other path, host, port, credentials or fragment), is an app
+ * on this computer too: the same class of risk as loopback (another program could claim the `claude:` scheme), and PKCE still keeps the code
+ * useless without the app's verifier. Other app schemes stay refused. The Mac app's callback was not read.
  */
 const AGENTS = {
   dots: { hosts: { 'chatgpt.com': null, 'chat.openai.com': null }, home: 'https://chatgpt.com/dots/home' },
@@ -22,9 +28,15 @@ const AGENTS = {
 };
 /** The loopback literals RFC 8252 names (`[::1]` is how a URL spells IPv6's), and `localhost`, which the CLIs use. */
 const LOOPBACK = new Set(['127.0.0.1', '[::1]', 'localhost']);
+/** The Claude desktop app's sign-in callback, the only app-scheme address accepted (above). */
+const CLAUDE_APP_CALLBACK = 'claude://claude.ai/mcp-auth-callback/sdk';
 /** Which agent a callback address belongs to (`dots`, `grok`, `claude`, `local`), or null for an address no agent may use. */
 export function agentOf(value) {
   try {
+    // The Claude desktop app: that address character for character (a parsed URL would let `claude:claude.ai/…` or dot segments through),
+    // alone or followed by the query its approval adds, never a fragment. Every other `claude:` address is refused below.
+    const raw = String(value);
+    if ((raw === CLAUDE_APP_CALLBACK || raw.startsWith(CLAUDE_APP_CALLBACK + '?')) && !raw.includes('#')) return 'local';
     const u = new URL(value);
     if (u.protocol === 'http:' && LOOPBACK.has(u.hostname) && !u.username && !u.password) return 'local';
     if (u.protocol !== 'https:' || u.username || u.password || u.port) return null;
@@ -68,7 +80,7 @@ export const copy = {
     noRequest:'{at} ODDBOUT 연결을 시작해 주세요.', failed:'요청이 만료되었거나 연결할 수 없습니다. {at} 다시 시도해 주세요.',
     unsafe:'지원하는 연결 요청이 아닙니다. 권한을 승인하지 않았습니다.', googleAccount:'ODDBOUT 계정', connecting:'Google 로그인으로 이동합니다.', approving:'연결을 마무리하고 있습니다.',
     emailOption:'이메일 계정으로 로그인', emailLabel:'이메일', passwordLabel:'비밀번호', emailSignIn:'로그인', emailConnecting:'로그인하고 있습니다.', emailFailed:'이메일 또는 비밀번호를 확인해 주세요.',
-    localWarning:'승인하면 이 컴퓨터에서 실행 중인 앱(터미널·편집기의 에이전트)이 연결을 받습니다. 방금 직접 연결을 시작했을 때만 승인하세요.', returnLocal:'연결 안내 보기'
+    localWarning:'승인하면 이 컴퓨터에서 실행 중인 앱(터미널·편집기의 에이전트나 Claude 데스크톱 앱)이 연결을 받습니다. 방금 직접 연결을 시작했을 때만 승인하세요.', returnLocal:'연결 안내 보기'
   },
   en: {
     title:'ODDBOUT · Connect to {name}', headline1:'Your fighter.', headline2:'Into the ring.',
@@ -82,7 +94,7 @@ export const copy = {
     noRequest:'Start the ODDBOUT connection from {name}.', failed:'This request expired or could not be completed. Start again from {name}.',
     unsafe:'This connection request is not supported. No access was approved.', googleAccount:'ODDBOUT account', connecting:'Opening Google sign-in.', approving:'Completing your connection.',
     emailOption:'Sign in with an email account', emailLabel:'Email', passwordLabel:'Password', emailSignIn:'Sign in', emailConnecting:'Signing in.', emailFailed:'Check your email and password and try again.',
-    localWarning:'If you approve, an app running on this computer (an agent in your terminal or editor) receives the connection. Approve only if you just started this connection yourself.', returnLocal:'See how to connect'
+    localWarning:'If you approve, an app running on this computer (an agent in your terminal or editor, or the Claude desktop app) receives the connection. Approve only if you just started this connection yourself.', returnLocal:'See how to connect'
   }
 };
 export async function start({ document = globalThis.document, location = globalThis.location,
@@ -196,9 +208,11 @@ export async function start({ document = globalThis.document, location = globalT
   if (!safeClientRedirect(details.data.redirect_uri)) { state('error', 'unsafe'); return; }
   learn(details.data.redirect_uri);
   accountEmail = session.user.email;
-  // The host the approval goes to; for an app on this computer its port too, the one thing that tells two local apps apart.
+  // The host the approval goes to; for an app on this computer its port too, the one thing that tells two local apps apart, and for the
+  // Claude desktop app its scheme, so `claude://claude.ai` does not read as Claude's website.
   const back = new URL(details.data.redirect_uri);
-  clientLabel = (details.data.client.name ?? agentWords.en[agent].name) + ' · ' + (agent === 'local' ? back.host : back.hostname);
+  clientLabel = (details.data.client.name ?? agentWords.en[agent].name) + ' · '
+    + (agent !== 'local' ? back.hostname : back.protocol === 'http:' ? back.host : `${back.protocol}//${back.host}`);
   state('consent', 'consent');
   for (const action of ['approve', 'deny']) byId(action).onclick = async () => {
     byId('approve').disabled = byId('deny').disabled = true; statusKey = 'approving'; render();
