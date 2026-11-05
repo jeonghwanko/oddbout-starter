@@ -63,6 +63,8 @@ Normal password sign-in + dedicated OAuth client + PKCE + consent/revocation alr
 
 The current environment has no `ODDBOUT_REVIEW_CREDENTIAL_FILE`. Targeted checks of the local starter/game workspaces and game environment-file variable names did not locate reviewer credentials. The published portal's Metadata & Skills view did not expose Review details. Historical records establish that credentials were saved in private reviewer fields, not that they can be recovered here. Passwords/tokens must stay outside repository, ZIP and conversation.
 
+The three available native ODDBOUT connections were also checked with `get_profile`: each returned an identity, and none matched the dedicated reviewer. They were not used as substitute reviewer accounts; their private identity values are not included here.
+
 Independent live public probes (not reviewer runs):
 
 - `get_fighter_spec(section=overview)`: 200, `ok=true`.
