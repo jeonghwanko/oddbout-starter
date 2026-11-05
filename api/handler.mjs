@@ -10,7 +10,7 @@ import { createWorkshopHandler, workshopRoute } from './workshop.mjs';
 import { attachJobProfileSet, createGenerationHandler, generationRoute } from './generations.mjs';
 import { createFighterDeletionHandler, deletionRoute } from './fighter-deletion.mjs';
 import { createFighterEntryHandler, entryRoute } from './fighter-entry.mjs';
-import { Problem, UUID, bearerToken, jsonResponse, logFailure, readBody, rpcProblem, sha256, verifiedUserId } from './http.mjs';
+import { Problem, UUID, bearerToken, jsonResponse, logFailure, logSkipped, readBody, rpcProblem, sha256, unavailable, verifiedUserId } from './http.mjs';
 import { BUCKET, SUBMISSION_STATUS, checkedManifest, objectKey, storeAsset } from './submissions.mjs';
 import { PROFILE_SET_SPEC, createProfileSetHandler, profileSetRoute, profileSetWorkerRoute, rosterProfileSet } from './profile-sets.mjs';
 
@@ -89,7 +89,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
     const signed = new Map((Array.isArray(data) ? data : []).map(item => [item.path, item]));
     return paths.map(key => {
       const item = signed.get(key);
-      if (error || !item || item.error || typeof item.signedUrl !== 'string') throw new Problem(503, 'storage-unavailable');
+      if (error || !item || item.error || typeof item.signedUrl !== 'string') throw unavailable('storage-unavailable', error);
       return item.signedUrl;
     });
   }
@@ -262,9 +262,10 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
           if (!/^[a-f0-9]{64}$/.test(body.manifestSha256 ?? '') || typeof body.passed !== 'boolean' || !body.result || Array.isArray(body.result)) throw new Problem(400, 'invalid-result');
           const completed = await rpc('af_finish', { p_id: body.submissionId, p_lease: body.leaseToken,
             p_sha: body.manifestSha256, p_passed: body.passed, p_result: body.result });
-          try { await analytics?.registered(completed); } catch { /* Analytics must never break registration. */ }
+          // Neither step below ever breaks registration; a failure leaves one log line (logSkipped), and his owner can upload a set himself.
+          try { await analytics?.registered(completed); } catch (error) { logSkipped('api', 'registered-analytics', error); }
           // A hosted fighter's profile set (2026-10-31): his chosen front, kept on his job, becomes his set now that he is registered.
-          try { await attachJobProfileSet(db, completed); } catch { /* A set never breaks registration; his owner can upload one. */ }
+          try { await attachJobProfileSet(db, completed); } catch (error) { logSkipped('api', 'job-profile-set', error); }
           return json(await present(completed));
         }
         // An infrastructure failure under the caller's own lease: requeue without spending one of the package's attempts.

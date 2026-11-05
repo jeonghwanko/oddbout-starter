@@ -1,7 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Problem, logFailure, rpcProblem } from '../api/http.mjs';
+import { readFile } from 'node:fs/promises';
+import { DATABASE_TIMEOUT_MS, Problem, logFailure, logSkipped, rpcProblem, skipped, unavailable } from '../api/http.mjs';
 import { createHandler } from '../api/handler.mjs';
+import { attachJobProfileSet } from '../api/generations.mjs';
 
 // API 점검 2026-11-03: a 503 used to leave no trace. A 5xx now writes one JSON line; a 4xx, the caller's, writes none.
 const TOKEN = 'fixture-bearer-token-that-must-not-be-logged';
@@ -56,4 +58,35 @@ test('the admin route logs one line when its database call fails, and answers th
   const response = await handle(request());
   assert.equal(response.status, 503); assert.deepEqual(await response.json(), { ok: false, code: 'admin-unavailable' });
   assert.deepEqual(lines(error).map(line => [line.scope, line.code, line.error.code]), [['admin', 'admin-unavailable', '42501']]);
+});
+
+// A step a route goes on without (a usage reading, a token count, a cleanup record) used to fail with no trace: it logs one line now.
+test('a skipped step logs its scope, step, code and the error behind it, never its details, and the catch resolves to null', async t => {
+  const error = capture(t);
+  const database = { message: 'canceling statement due to statement timeout', code: '57014', details: 'Key (owner)=(someone@example.com)' };
+  logSkipped('generation', 'record-usage', rpcProblem(database, {}));
+  assert.equal(await Promise.reject(new TypeError('fetch failed')).catch(skipped('generation', 'host-usage')), null);
+  const [usage, host] = lines(error);
+  assert.deepEqual(usage, { stage: 'api-skipped', scope: 'generation', step: 'record-usage', code: 'database-unavailable',
+    error: { message: database.message, code: '57014' } });
+  assert.deepEqual([host.stage, host.step, host.code, host.error], ['api-skipped', 'host-usage', undefined, { name: 'TypeError', message: 'fetch failed' }]);
+  assert.ok(!error.mock.calls.map(call => call.arguments[0]).join('\n').includes('someone@example.com'));
+});
+
+test('a database-unavailable from a route keeps the database error behind it, for the request log line', async () => {
+  const database = { message: 'connection terminated unexpectedly', code: '08006' };
+  const query = { select: () => query, eq: () => query, maybeSingle: async () => ({ data: null, error: database }) };
+  const failure = await attachJobProfileSet({ from: () => query }, { id: crypto.randomUUID(), status: 'registered', fighter_id: crypto.randomUUID() })
+    .then(() => null, caught => caught);
+  assert.ok(failure instanceof Problem); assert.equal(failure.status, 503); assert.equal(failure.message, 'database-unavailable');
+  assert.equal(failure.cause, database);
+  assert.deepEqual(unavailable('storage-unavailable', undefined).cause, undefined);
+});
+
+test('both Edge entries end every database, Storage and Auth call by the same timeout', async () => {
+  for (const name of ['ai-fighter', 'ai-fighter-mcp']) {
+    const entry = await readFile(new URL(`../supabase/functions/${name}/index.ts`, import.meta.url), 'utf8');
+    assert.match(entry, /createClient\(url, secret, \{[^\n]*global: \{ fetch: timedFetch\(\) \}/, name);
+  }
+  assert.equal(DATABASE_TIMEOUT_MS, 15_000);
 });

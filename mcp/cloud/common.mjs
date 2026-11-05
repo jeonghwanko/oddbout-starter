@@ -1,7 +1,7 @@
 // @ts-check
 // The cloud MCP's shared pieces: tool argument schemas and annotations, results as hosts read them, host file downloads and arena calls.
 import { z } from 'zod';
-import { Problem, readBody } from '../../api/http.mjs';
+import { DATABASE_TIMEOUT_MS, Problem, readBody, timedFetch, unavailable, within } from '../../api/http.mjs';
 import { compactText } from '../tool-result.mjs';
 
 /**
@@ -29,26 +29,16 @@ import { compactText } from '../tool-result.mjs';
  * fetches stops by this deadline and says what to read next.
  */
 export const CALL_BUDGET_MS = 25_000;
-/** One database or Storage call's limit: supabase-js sets none, so a stalled call held its tool, and every call's sign-in check, until the Edge limit. */
-export const DATABASE_TIMEOUT_MS = 15_000;
+// The database limit, timedFetch and `unavailable` are api/http.mjs's: the public `ai-fighter` function uses them too.
+export { DATABASE_TIMEOUT_MS, timedFetch, unavailable, within };
 /** The time left before `deadline`, at most `cap`, at least 1 ms. @param {number} deadline @param {number} cap */
 export const timeLeft = (deadline, cap) => Math.max(1, Math.min(cap, deadline - Date.now()));
-/** `signal`, also aborted after `ms`. @param {AbortSignal | null | undefined} signal @param {number} ms */
-export const within = (signal, ms) => signal ? AbortSignal.any([signal, AbortSignal.timeout(ms)]) : AbortSignal.timeout(ms);
 /** A wait that ends early when `signal` aborts. @param {number} ms @param {AbortSignal} signal @returns {Promise<void>} */
 export const pause = (ms, signal) => new Promise(done => {
   if (signal.aborted) return done();
   const timer = setTimeout(() => { signal.removeEventListener('abort', stop); done(); }, ms), stop = () => { clearTimeout(timer); done(); };
   signal.addEventListener('abort', stop, { once: true });
 });
-/**
- * fetch with DATABASE_TIMEOUT_MS on every call: the Edge entry hands it to supabase-js. A caller's own signal still applies.
- * @param {number} [ms] @param {typeof fetch} [base]
- * @returns {typeof fetch}
- */
-export const timedFetch = (ms = DATABASE_TIMEOUT_MS, base = fetch) => (input, init = {}) => base(input, { ...init, signal: within(init.signal, ms) });
-/** A 5xx Problem that keeps what failed behind its code, for the call's log line. @param {string} code @param {unknown} cause */
-export const unavailable = (code, cause) => Object.assign(new Problem(503, code), { cause });
 
 /**
  * A file the host attaches (ChatGPT's fileParams fill it). `error` replaces zod's messages for a value of the wrong shape, which the agent
