@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <meta name="theme-color" content="#f7f6f0" />
+    <meta name="description" content="ODDBOUT Showrunner, a PayPal AI Hackathon entry: sponsors pay with PayPal, an AI producer runs fighter cups with their promo, and creators are paid through PayPal Payouts. PayPal Sandbox only." />
+    <title>ODDBOUT Showrunner · For judges</title>
+    <link rel="stylesheet" href="/broadcast/shop.css" />
+    <link rel="stylesheet" href="/broadcast/judges.css" />
+    <link rel="icon" href="/broadcast/assets/showrunner.svg" type="image/svg+xml" />
+  </head>
+  <body class="judges">
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="https://oddbout.com/" aria-label="ODDBOUT home"><img src="/broadcast/assets/oddbout-logo.webp" alt="ODDBOUT Fight Club" width="378" height="80" /></a>
+        <a class="studio-brand" href="/broadcast/"><img src="/broadcast/assets/showrunner.svg" alt="" width="34" height="34" /><span>Showrunner</span></a>
+        <span class="entry-pill">PayPal AI Hackathon entry</span>
+        <a class="toplink" href="/broadcast/" target="_blank" rel="noopener">Open the demo →<span class="visually-hidden"> (opens in a new tab)</span></a>
+      </div>
+    </header>
+
+    <main id="main" class="judges-shell">
+      <section class="j-hero" aria-labelledby="page-title">
+        <div class="j-hero-copy">
+          <h1 id="page-title">Sponsors pay with PayPal.<br /><span>An AI producer runs the show.</span><br />Creators get paid.</h1>
+          <p>ODDBOUT Showrunner turns one PayPal payment into an hour of AI-produced fighter cups with your promo in the breaks. Then it checks the payment with PayPal and pays the fighters' creators.</p>
+          <div class="j-actions">
+            <a class="button button-primary" href="/broadcast/" target="_blank" rel="noopener">Try the Sandbox demo<span class="visually-hidden"> (opens in a new tab)</span></a>
+            <a class="button j-button-ghost" href="https://github.com/jeonghwanko/oddbout-starter">Source on GitHub</a>
+            <span class="j-soon">Demo video · coming soon</span>
+          </div>
+          <p class="j-hero-note">PayPal Sandbox only. No real money moves. The full write-up is <a href="https://github.com/jeonghwanko/oddbout-starter/blob/main/docs/HACKATHON.md">docs/HACKATHON.md</a>.</p>
+        </div>
+        <div class="j-faces" aria-hidden="true">
+          <img src="/broadcast/assets/quickcat.webp" alt="" width="112" height="112" />
+          <img src="/broadcast/assets/beotim.webp" alt="" width="112" height="112" />
+          <img src="/broadcast/assets/kungjjak.webp" alt="" width="112" height="112" />
+          <img src="/broadcast/assets/eoridung.webp" alt="" width="112" height="112" />
+        </div>
+      </section>
+
+      <section class="j-section" aria-labelledby="loop-title">
+        <div class="j-section-head">
+          <h2 id="loop-title">The money loop</h2>
+          <p>Real records from our Nov 4, 2026 Sandbox rehearsal (times in KST). Test money only. <a href="https://github.com/jeonghwanko/oddbout-starter/blob/main/docs/records/SPOTLIGHT-INTEGRATION-2026-11-04.md">Full record</a></p>
+        </div>
+        <ol class="j-loop">
+          <li>
+            <span class="j-seq">1</span>
+            <span class="j-tag j-tag-pp">PayPal Checkout</span>
+            <h3>Sponsor pays</h3>
+            <p>Orders v2: the buyer approves and our server captures. DON is credited only after a verified capture.</p>
+            <code>order 88V317260P462440Y<br />capture 4PK99542NL408204G</code>
+          </li>
+          <li>
+            <span class="j-seq">2</span>
+            <span class="j-tag">Ledger</span>
+            <h3>One ticket, one debit</h3>
+            <p>Spotlight · 1 hour costs 300 DON. Four fighters are assigned at purchase.</p>
+            <code>46,725 → 46,425 DON<br />extra charges: 0</code>
+          </li>
+          <li>
+            <span class="j-seq">3</span>
+            <span class="j-tag j-tag-ai">AI · MCP</span>
+            <h3>The AI producer runs the show</h3>
+            <p>The On-Air Agent schedules cups through ODDBOUT's MCP tool <code class="j-inline">host_cup</code>, inside the ticket's allowance.</p>
+            <code>4 cups · 12 verified bouts</code>
+          </li>
+          <li>
+            <span class="j-seq">4</span>
+            <span class="j-tag j-tag-pp">PayPal MCP</span>
+            <h3>The payment is reconciled</h3>
+            <p>The official PayPal MCP server's <code class="j-inline">get_order</code> confirms the capture that funded this ticket.</p>
+            <code>matched · 04:41:29 KST</code>
+          </li>
+          <li>
+            <span class="j-seq">5</span>
+            <span class="j-tag j-tag-pp">PayPal Payouts</span>
+            <h3>Creators get paid</h3>
+            <p>Appearance fees go out after the owner approves. “Paid” requires every recipient item to report SUCCESS.</p>
+            <code>batch BG2R7YQFNCV22<br />USD 0.32 · SUCCESS</code>
+          </li>
+        </ol>
+        <p class="j-small">Each fighter earns USD 0.02 per completed cup: four fighters × four cups = USD 0.32. This Sandbox maps all four fighters to one test receiver, so PayPal sent a single item, <code class="j-inline">U4FN6P272QXHU</code>.</p>
+      </section>
+
+      <section class="j-section" aria-labelledby="try-title">
+        <div class="j-section-head">
+          <h2 id="try-title">Try it in 10 minutes</h2>
+          <p>Each step shows what you should see.</p>
+        </div>
+        <h3 class="visually-hidden">What you need</h3>
+        <ul class="j-need">
+          <li>Any Google account</li>
+          <li>The PayPal Sandbox buyer login from our Devpost testing instructions</li>
+          <li>A short MP4, or <a href="/broadcast/assets/sample-promo.mp4" download="oddbout-sample-promo.mp4">our sample clip</a> (6 s, 31 KB)</li>
+        </ul>
+        <h3 class="visually-hidden">Steps and expected results</h3>
+        <ol class="j-steps">
+          <li><span>Sign in with Google.</span><em>Your DON shows 0</em></li>
+          <li><span>Add DON → Starter, USD 10. Approve with the Sandbox buyer.</span><em>“1,000 DON added”</em></li>
+          <li><span>Choose 1 hour for 300 DON.</span><em>A ticket with four fighters</em></li>
+          <li><span>Add your promotion: the MP4 and a promo URL, then Save Promotion.</span><em>An AI-written sponsor introduction</em></li>
+          <li><span>Add to Calendar → On-Air Agent → tick the check → Start.</span><em>“Agent running”</em></li>
+          <li><span>Wait for the first cup, about 5 minutes, then open Watch broadcast.</span><em>Your promo break and a replay of the verified bout</em></li>
+          <li><span>Press End broadcast and confirm. The current cup finishes.</span><em>“Finished”</em></li>
+          <li><span>Press Check settlement.</span><em>Settlement shows “Matched”</em></li>
+          <li><span>Tick the approval for the creator fees and press Pay with PayPal.</span><em>“Paid · PayPal batch … · every recipient SUCCESS”</em></li>
+        </ol>
+        <p class="j-small">One graphical runner serves this demo. If Start says another broadcast is using the host, your ticket is saved: try again in a few minutes. Ending after the first cup keeps the runner free for the next judge.</p>
+      </section>
+
+      <div class="j-two">
+        <section class="j-section" aria-labelledby="paypal-title">
+          <h2 id="paypal-title">Where PayPal does the work</h2>
+          <dl class="j-dl">
+            <div><dt>Orders v2 · Checkout</dt><dd>Create, buyer approval, server capture. A COMPLETED capture is checked against the payee, amount, currency and the account's own top-up before any DON is credited.</dd></div>
+            <div><dt>Webhooks</dt><dd>Signatures are verified with PayPal's verification API. Capture events use the same credit function as the synchronous capture, and a capture ID credits once. Refund and reversal events are stored once per event ID and freeze spending.</dd></div>
+            <div><dt>Official PayPal MCP server</dt><dd><code class="j-inline">@paypal/mcp</code>, started with only the read tools <code class="j-inline">get_order</code>, <code class="j-inline">list_transactions</code> and <code class="j-inline">get_refund</code>, and refused if it offers more. The server compares each top-up that funded the ticket with <code class="j-inline">get_order</code>.</dd></div>
+            <div><dt>Payouts</dt><dd>Creator appearance fees, sent only after the owner approves. A retry reuses the same batch ID, so it can never create a second batch. A refund or reversal freezes payment.</dd></div>
+          </dl>
+        </section>
+        <section class="j-section" aria-labelledby="ai-title">
+          <h2 id="ai-title">Where AI does the work</h2>
+          <dl class="j-dl">
+            <div><dt>On-Air Agent</dt><dd>A model reads the ticket's lineup and remaining time and proposes the next move: host a cup, wait or stop. The server validates each proposal and hosts cups only through ODDBOUT's MCP tool <code class="j-inline">host_cup</code>, with a grant scoped to that one broadcast. It cannot pay or change prices, limits or payouts. On Nov 4 the model was Sol 6.1.</dd></div>
+            <div><dt>Sponsor introduction</dt><dd>Written from the promo URL's hostname only, labeled as a paid sponsor break, with no product claims. The owner reviews it before pressing Start.</dd></div>
+            <div><dt>Settlement auditor</dt><dd>Explains the PayPal MCP check to the owner and may call the same read-only tools to look into a mismatch. The server's comparison decides the result, never the model.</dd></div>
+            <div><dt>Bounded by design</dt><dd>Model calls are capped per broadcast and per day. An unusable AI answer shows Retry Agent, which continues the same ticket with no extra charge.</dd></div>
+          </dl>
+        </section>
+      </div>
+
+      <section class="j-section" aria-labelledby="built-title">
+        <div class="j-section-head">
+          <h2 id="built-title">Built during the hackathon</h2>
+          <p>The submission period opened Oct 1, 2026. Not part of this entry: the ODDBOUT game with its fighters and bout engine, developed in a separate repository, and the fighter creator kit this repository has held since its first commit on Oct 19, 2026. Showrunner's payments, AI producer, reconciliation and payouts were added from Nov 2. Dates are GitHub times in UTC.</p>
+        </div>
+        <ul class="j-log">
+          <li><time datetime="2026-11-02">Nov 2</time><span>Fenced tournament renderer for agent broadcasts</span><a href="https://github.com/jeonghwanko/oddbout-twitch-cup/pull/1">twitch-cup #1</a></li>
+          <li><time datetime="2026-11-02">Nov 2</time><span>PayPal Sandbox credits and scoped agent broadcasts</span><a href="https://github.com/jeonghwanko/oddbout-starter/pull/264">starter #264</a></li>
+          <li><time datetime="2026-11-02">Nov 2</time><span>Sandbox hardening: kept out of production; an unknown job no longer holds a host</span><a href="https://github.com/jeonghwanko/oddbout-starter/pull/266">starter #266</a></li>
+          <li><time datetime="2026-11-02">Nov 2</time><span>Winner card held between broadcast bouts</span><a href="https://github.com/jeonghwanko/oddbout-twitch-cup/pull/2">twitch-cup #2</a></li>
+          <li><time datetime="2026-11-02">Nov 2</time><span>Isolated hosted PayPal Sandbox and reproducible cup checks</span><a href="https://github.com/jeonghwanko/oddbout-starter/pull/290">starter #290</a></li>
+          <li><time datetime="2026-11-02">Nov 2</time><span>Broadcast Studio refresh and Google sign-in</span><a href="https://github.com/jeonghwanko/oddbout-starter/pull/296">starter #296</a></li>
+          <li><time datetime="2026-11-03">Nov 3</time><span>Broadcast audio fix and Sandbox endurance package</span><a href="https://github.com/jeonghwanko/oddbout-starter/pull/302">starter #302</a></li>
+          <li><time datetime="2026-11-04">Nov 4</time><span>Spotlight tickets, PayPal MCP reconciliation, creator Payouts, paid-task recovery</span><a href="https://github.com/jeonghwanko/oddbout-starter/pull/329">starter #329</a></li>
+          <li><time datetime="2026-11-04">Nov 4</time><span>MIT license for the Twitch Cup code, with art terms in NOTICE (open pull request)</span><a href="https://github.com/jeonghwanko/oddbout-twitch-cup/pull/4">twitch-cup #4</a></li>
+          <li><time datetime="2026-11-04">Nov 4</time><span>Read-only Spotlight playback adapter (open pull request)</span><a href="https://github.com/jeonghwanko/oddbout-twitch-cup/pull/5">twitch-cup #5</a></li>
+        </ul>
+      </section>
+
+      <section class="j-section j-limits" aria-labelledby="limits-title">
+        <h2 id="limits-title">What this demo does not claim</h2>
+        <ul>
+          <li>PayPal Sandbox only. No live payments or real customers.</li>
+          <li>Creator payouts always wait for a person to approve them.</li>
+          <li>One graphical runner serves the demo, so one broadcast runs at a time.</li>
+          <li>The watch page replays verified bouts on the web. It is not a Twitch stream.</li>
+          <li>Our Nov 4 run was ended after about 20 minutes. A full hour, including the second sponsor break, is not yet verified on the hosted demo.</li>
+          <li>Live Twitch or YouTube output and 24-hour runs are planned work and not verified.</li>
+        </ul>
+      </section>
+    </main>
+
+    <footer class="j-footer">
+      <p><a href="https://github.com/jeonghwanko/oddbout-starter">oddbout-starter</a> (Showrunner and the creator kit) is <a href="https://github.com/jeonghwanko/oddbout-starter/blob/main/LICENSE">MIT licensed</a>; its bundled sprite-gen keeps its Apache-2.0 license. <a href="https://github.com/jeonghwanko/oddbout-twitch-cup">oddbout-twitch-cup</a> code becomes MIT when <a href="https://github.com/jeonghwanko/oddbout-twitch-cup/pull/4">#4</a> merges; its artwork, voices, fighter names and logos stay under its NOTICE.</p>
+      <p>Fonts: DM Sans and Space Grotesk under the SIL Open Font License (<a href="/broadcast/assets/dm-sans-OFL.txt">DM Sans</a>, <a href="/broadcast/assets/space-grotesk-OFL.txt">Space Grotesk</a>). PayPal and Google marks belong to their owners.</p>
+    </footer>
+  </body>
+</html>

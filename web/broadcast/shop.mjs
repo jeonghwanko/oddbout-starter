@@ -1,7 +1,7 @@
 import { createOperationJournal } from './operations.mjs';
 import {parseMediaLink} from './media-links.mjs';
 import {mountExternal} from './external-player.mjs';
-import {createExecutionPanel} from './execution.mjs';
+import {createExecutionPanel,progressTrail} from './execution.mjs';
 
 const $ = id => document.getElementById(id);
 const AUTH_KEY = 'oddbout-paid-auth';
@@ -12,7 +12,7 @@ let config, session, client, journal, campaignProduct, campaignProducts=[], sele
 let orders = [], selectedOrder = null, nextCursor = null, orderRevision = 0, selectionRevision = 0, accountEpoch = 0, orderTimer;
 let selectedFile = null, selectedFileDuration = null, previewObjectUrl = '', fileRevision = 0, busy = false, topupBusy = false;
 let mediaMode='upload',previewedLink='',disposeExternal=()=>{};
-const executionPanel=createExecutionPanel({api,getOwner:()=>session?.user.id,getJournal:()=>journal,onStatus:order=>{
+const executionPanel=createExecutionPanel({api,getOwner:()=>session?.user.id,getJournal:()=>journal,fighterName,fighterPhoto,onStatus:order=>{
   if(selectedOrder?.id!==order.id)return;selectedOrder={...selectedOrder,...order};$('purchase-state').textContent=plannedState(order);
   if(hostOrderId)$('host-status').textContent=`${plannedState(order)} · ${formattedTime(order.startedAt)}`;
   if(order.executionStatus==='completed'&&$('shop-status').textContent==='Broadcast started.')message('');
@@ -37,14 +37,23 @@ function campaignState(order) { return order?.status ?? order?.state ?? 'unknown
 function plain(value,max=400) { return typeof value === 'string' ? value.slice(0,max) : ''; }
 function fighterName(id) { return FIGHTER_NAMES[id] ?? plain(id,64).replace(/([a-z])([A-Z])/g,'$1 $2').replace(/^./,letter=>letter.toUpperCase()); }
 function donIcon(){const img=document.createElement('img');img.className='don-icon';img.src='/broadcast/assets/don.svg';img.alt='';img.width=32;img.height=32;return img;}
+/** Portraits exist only for the allowlisted fighters served from /broadcast/assets/. */
+function fighterPhoto(id,size=56){
+  if(!Object.hasOwn(FIGHTER_NAMES,id))return null;
+  const photo=document.createElement('img');photo.src='/broadcast/assets/'+id+'.webp';photo.alt='';photo.width=size;photo.height=size;return photo;
+}
 function fighterLineup(ids){
   const list=document.createElement('ul');list.className='fighter-lineup';list.setAttribute('aria-label','Your fighters');
   for(const id of ids??[]){
     const item=document.createElement('li'),label=document.createElement('span');label.textContent=fighterName(id);
-    if(Object.hasOwn(FIGHTER_NAMES,id)){const photo=document.createElement('img');photo.src='/broadcast/assets/'+id+'.webp';photo.alt='';photo.width=56;photo.height=56;item.append(photo);}
+    const photo=fighterPhoto(id);if(photo)item.append(photo);
     item.append(label);list.append(item);
   }
   return list;
+}
+/** The ticket list knows purchase, schedule and start only; settlement and creator payouts appear in On-Air Agent. */
+function ticketTrail(order){
+  return progressTrail([{label:'Paid',done:true,paypal:true},{label:'Scheduled',done:Boolean(order.scheduledAt||order.startedAt)},{label:'On air',done:Boolean(order.startedAt)}]);
 }
 function money(cents,currency='USD') {
   if (!Number.isSafeInteger(cents) || cents < 0) return 'Price unavailable';
@@ -243,7 +252,7 @@ function renderOrders() {
     const body=document.createElement('div'),title=document.createElement('h3'),meta=document.createElement('p');
     title.textContent=displayName(order);meta.textContent=order.createdAt?new Date(order.createdAt).toLocaleDateString():'';body.append(title,meta);
     const state=document.createElement('span');state.className='broadcast-status';state.textContent=plannedState(order);card.append(body,state);
-    card.append(fighterLineup(order.fighterIds));
+    card.append(fighterLineup(order.fighterIds),ticketTrail(order));
     const watch=safeWatchUrl(order.watchUrl??(order.watchToken?'/broadcast/watch/?show='+encodeURIComponent(order.watchToken):''));
     if(order.scheduledAt||campaignState(order)==='started'){const link=document.createElement('a');link.className='button button-secondary button-small';link.href=hostUrl(order.id);link.textContent='On-Air Agent →';card.append(link);}
     if(campaignState(order)==='started'&&watch){const link=document.createElement('a');link.href=watch;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Watch broadcast';card.append(link);}

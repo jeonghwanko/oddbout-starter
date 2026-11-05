@@ -138,6 +138,13 @@ export function createBroadcastDemo(env = process.env) {
   for(const [path,file] of [...files]) if(path.startsWith('/broadcast/')&&!path.startsWith('/broadcast/operator/')) {
     if(path!=='/broadcast/')files.set(path.replace('/broadcast/','/broadcast/operator/'),file);
   }
+  // The judges' entry page (static, no scripts) and the sample sponsor clip it links. Added after the legacy loop
+  // so they have no /broadcast/operator/ copies.
+  files.set('/broadcast/judges/', ['web/broadcast/judges.html', 'text/html; charset=utf-8']);
+  // Every link on the page is absolute, so the address typed without the trailing slash serves the same page.
+  files.set('/broadcast/judges', ['web/broadcast/judges.html', 'text/html; charset=utf-8']);
+  files.set('/broadcast/judges.css', ['web/broadcast/judges.css', 'text/css; charset=utf-8']);
+  files.set('/broadcast/assets/sample-promo.mp4', ['web/broadcast/assets/sample-promo.mp4', 'video/mp4']);
   const server = createServer(async (req, res) => {
     try {
       // Proxy health checks may use an internal Host. This route exposes liveness only.

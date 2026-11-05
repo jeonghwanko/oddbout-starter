@@ -24,7 +24,8 @@ creator-kit ZIP에는 제작·연결 안내와 이 문서 지도가 들어 있�
 - **에이전트 방송(ODDBOUT Showrunner)을 돌리거나 고치는 사람**: [SHOWRUNNER-PRODUCT](SHOWRUNNER-PRODUCT.md)(무엇을 파는지) →
   [BROADCAST-SANDBOX](BROADCAST-SANDBOX.md) → [BROADCAST-HOSTING](BROADCAST-HOSTING.md) → [PAID-TASK-RECOVERY](PAID-TASK-RECOVERY.md) →
   [PAYPAL-AGENT-BROADCAST-PLAN](PAYPAL-AGENT-BROADCAST-PLAN.md). 코드는 `broadcast/`(방송 실행), `api/commerce/`(결제·원장),
-  `web/broadcast/`(상점·방송 화면)에 있고, 결제는 PayPal Sandbox의 테스트 돈만 쓴다.
+  `web/broadcast/`(상점·방송 화면)에 있고, 결제는 PayPal Sandbox의 테스트 돈만 쓴다. PayPal AI Hackathon 출품 내용과
+  심사자용 체험 순서는 [HACKATHON](HACKATHON.md)에 있다.
 
 ## 제작
 
@@ -77,6 +78,7 @@ creator-kit ZIP에는 제작·연결 안내와 이 문서 지도가 들어 있�
 | [PAYPAL-AGENT-BROADCAST-PLAN](PAYPAL-AGENT-BROADCAST-PLAN.md) | PayPal Sandbox 재화와 AI 대회 방송 개발 계획 및 검증 기준 (개발 진행 중) |
 | [BROADCAST-SANDBOX](BROADCAST-SANDBOX.md) | 로컬 Sandbox 콘솔·호스트 doctor/runner·producer 실행과 현재 검증 범위 |
 | [SHOWRUNNER-PRODUCT](SHOWRUNNER-PRODUCT.md) | ODDBOUT Showrunner 상품명·아이콘·Studio Credits 구매와 사용 계약 |
+| [HACKATHON](HACKATHON.md) | PayPal AI Hackathon 출품 안내(영어): 돈의 흐름과 11/04 Sandbox 증거, 심사자용 10분 체험, 해커톤 기간에 만든 것과 한계 |
 | [PAID-TASK-RECOVERY](PAID-TASK-RECOVERY.md) | 방송 의뢰·예산 승인·결제에서 기존 producer로 이어지는 기기 간 복구 |
 | [BROADCAST-HOSTING](BROADCAST-HOSTING.md) | 외부 심사용 HTTPS 데모, 격리 DB, 방송 호스트 연결과 G0~G8 통과 증거 |
 | [BROADCAST-ADVERSARIAL-REVIEW](BROADCAST-ADVERSARIAL-REVIEW.md) | 결제·권한·중복 실행·실패 복구의 적대적 재현, 수정과 남은 운영 한계 |

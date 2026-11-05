@@ -2,6 +2,11 @@
 
 **English** | [한국어](README.ko.md)
 
+> **PayPal AI Hackathon entry: [ODDBOUT Showrunner](#oddbout-showrunner).** Sponsors pay with PayPal, an AI producer
+> runs the show, and creators get paid. PayPal Sandbox only.
+> [Hosted demo](https://broadcast.oddbout.com/broadcast/) · [Judges' page](https://broadcast.oddbout.com/broadcast/judges/) ·
+> [HACKATHON.md](docs/HACKATHON.md)
+
 **Create a fighter with AI. Bring your character into the arena.**
 
 ODDBOUT is a fighting game where you play with a character you create. This repository contains the open-source tools for making that character. Work with an AI assistant to turn a description or reference image into artwork, animations, and a fighter package for the game. The tools and docs also use the name AI Fighter. It also holds [ODDBOUT Showrunner](#oddbout-showrunner), an experimental agent broadcast that runs ODDBOUT cups on a PayPal Sandbox budget.
@@ -216,8 +221,10 @@ It is still in development. It uses PayPal Sandbox test money only, never live p
 blocked until Twitch channel verification exists. [Try the Sandbox demo](https://broadcast.oddbout.com/broadcast/), or read:
 
 - [Product and purchase flow](docs/SHOWRUNNER-PRODUCT.md): Spotlight tickets, promotion media, scheduling, settlement and payouts
+- [PayPal AI Hackathon entry](docs/HACKATHON.md): the money loop with our Nov 4 Sandbox evidence, a 10-minute
+  walkthrough for judges and what was built during the hackathon
 - [Paid task recovery across VM, phone and PC](docs/PAID-TASK-RECOVERY.md): for PayPal Sandbox developers, the isolated
-  deployment, the paid-task MCP setup, verification and the hackathon demo guide
+  deployment, the paid-task MCP setup and verification
 - [Local setup and current checks (Korean)](docs/BROADCAST-SANDBOX.md) and [the hosted demo](docs/BROADCAST-HOSTING.md)
 - [The plan and acceptance gates (Korean)](docs/PAYPAL-AGENT-BROADCAST-PLAN.md)
 

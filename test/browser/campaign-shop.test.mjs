@@ -33,7 +33,9 @@ for(const sourceKind of ['upload','youtube','twitch'])test(`broadcast purchase, 
   const media=createCampaignMedia({db:{storage:{from:()=>storage}},modelCall:async()=>({output:[{type:'message',content:[{type:'output_text',text:'This is a paid sponsor break. Watch this clip from oddbout.com and follow the sponsor link to learn more.'}]}],observation:{}}),
     fetchImpl:async url=>String(url).includes('spotlight.html')?new Response('spotlight-player.mjs'):new Response(files.get(new URL(url).pathname.slice(1)))});
   const payouts=createPayoutService({store:f.store,feeCents:1,receivers:Object.fromEntries(COMMERCE_CATALOG.fighters.map(id=>[id,id+'@personal.example.com'])),paypal:{createPayout:async()=>({payoutBatchId:'BROWSER_PAYOUT'}),getPayout:async()=>({status:'SUCCESS'})}});
-  const execution=createCampaignExecution({store:f.store,hostId:'svl-mac-01',payouts,supervisor:{ensure(){},status:()=>({state:'running'})},reconciler:{run:async(owner,ids)=>({checkedAt:new Date().toISOString(),source:'paypal-mcp',rows:ids.map(intentId=>({intentId,result:'matched'}))})}});
+  let producerDecisions=[];
+  const execution=createCampaignExecution({store:f.store,hostId:'svl-mac-01',payouts,supervisor:{ensure(){},status:()=>({state:'running',decisions:producerDecisions})},reconciler:{run:async(owner,ids)=>({checkedAt:new Date().toISOString(),source:'paypal-mcp',
+    rows:ids.map(intentId=>({intentId,result:'matched'})),summary:'The ticket top-up matches PayPal.',toolCalls:ids.map(()=>({name:'get_order',ok:true,by:'server'}))})}});
   await f.store.claimJob('svl-mac-01:browser',{hostId:'svl-mac-01',leaseSeconds:90});
   const service=createCampaignService({db:{rpc},...media,...(sourceKind==='upload'?{execution}:{})});
   const authenticate=async req=>req.headers.get('authorization')?.replace('Bearer fixture-','')??null;
@@ -60,6 +62,9 @@ for(const sourceKind of ['upload','youtube','twitch'])test(`broadcast purchase, 
   await page.goto(ORIGIN+'/broadcast/');await page.locator('#signout').waitFor();
   assert.equal(await page.locator('[data-campaign-product-id]').count(),3);
   assert.doesNotMatch(await page.locator('body').innerText(),/Run the ring|Set up your show|Session name|Credit limit|Broadcast host/);
+  const how=page.locator('.how-it-works');assert.equal(await how.isVisible(),true);
+  assert.deepEqual(await how.locator('li strong').allTextContents(),['Pay with PayPal','An AI producer runs your show','Creators get paid']);
+  assert.equal(await page.getByRole('link',{name:'Hackathon judges: start here →'}).getAttribute('href'),'/broadcast/judges/');
   await page.waitForFunction(()=>document.getElementById('wallet-available').textContent==='1,000');
   assert.ok((await page.locator('#wallet').boundingBox()).y<(await page.locator('#spotlight').boundingBox()).y);
   await page.locator('#add-credits').click();await page.locator('#credit-packs').waitFor();
@@ -92,7 +97,13 @@ for(const sourceKind of ['upload','youtube','twitch'])test(`broadcast purchase, 
   await page.locator('#save-schedule').click();await page.locator('#open-host').waitFor();
   assert.equal((await service.get(OWNER,order.id)).startedAt,null);
   await page.locator('#calendar-agenda').getByRole('link',{name:'On-Air Agent →'}).waitFor();
+  // The ticket list carries no settlement or payout state, so cards show only the steps it knows.
+  const ticketTrail=page.locator('#broadcast-list').getByRole('list',{name:'Ticket progress'});
+  await ticketTrail.locator('li',{hasText:'Scheduled (done)'}).waitFor();
+  assert.deepEqual(await ticketTrail.locator('li').allTextContents(),['Paid (done)','Scheduled (done)','On air (not yet)']);
+  assert.match(await ticketTrail.locator('li').first().getAttribute('class'),/is-paypal/);
   await page.locator('#open-host').click();await page.locator('#publish-consent').waitFor();
+  assert.equal(await page.locator('.how-it-works').isVisible(),false);
   assert.equal(await page.locator('#host-heading').isVisible(),true);
   if(sourceKind==='upload'){
     await page.waitForFunction(()=>document.getElementById('media-preview').readyState>=1,{},{timeout:10000});
@@ -114,11 +125,31 @@ for(const sourceKind of ['upload','youtube','twitch'])test(`broadcast purchase, 
     const job=await f.store.claimJob('svl-mac-01:browser',{hostId:'svl-mac-01',leaseSeconds:90});
     const result={protocolVersion:1,jobId:job.id,leaseToken:job.leaseToken,seed:job.seed,winnerId:job.fighterIds[0],bouts:[[0,1],[2,3],[0,2]].map(([a,b],i)=>({leftId:job.fighterIds[a],rightId:job.fighterIds[b],winnerId:job.fighterIds[a],winner:0,seed:(job.seed+i)>>>0,how:'decision',ms:100,hp:[1,0],contacts:[0,0],digest:'1234abcd'}))};
     await f.store.completeJob('svl-mac-01:browser',{jobId:job.id,leaseToken:job.leaseToken,outcome:'succeeded',result});
+    producerDecisions=[{sequence:1,at:new Date().toISOString(),action:'host_cup',fighterIds:job.fighterIds,reason:'Open with the purchased lineup.',
+      episode:'SPOTLIGHT: Browser Exhibition Cup',outcome:{jobId:job.id,status:'succeeded'},answeredModel:null}];
     await page.locator('#execution-refresh').click();await page.locator('#execution-results').getByText('1 completed cup',{exact:true}).waitFor();
+    const decision=page.locator('#execution-decisions > li');assert.equal(await decision.count(),1);
+    assert.match(await decision.locator('.decision-when').textContent(),/^#1 · \d{2}:\d{2}$/);
+    assert.equal(await decision.locator('.decision-action').textContent(),'host_cup');
+    assert.equal(await decision.locator('.decision-title').textContent(),'SPOTLIGHT: Browser Exhibition Cup');
+    assert.equal(await decision.locator('.decision-fighters img').count(),4);
+    assert.equal(await decision.locator('.execution-badge').textContent(),'succeeded');
     await page.locator('#execution-stop').click();await page.locator('#execution-end').click();await page.locator('#execution-state').getByText('Finished',{exact:true}).waitFor();
+    assert.deepEqual(await page.locator('#execution-trail li').allTextContents(),['Paid (done)','Scheduled (done)','On air · 1 cup (done)','Settled (not yet)','Creators paid (not yet)']);
     await page.locator('#execution-reconcile').click();await page.locator('#execution-consent').waitFor();
+    await page.locator('#execution-settlement-badge').getByText('Matched',{exact:true}).waitFor();
+    assert.equal(await page.locator('#execution-settlement').textContent(),'Checked with the official PayPal MCP server · get_order');
+    const facts=Object.fromEntries(await page.locator('#execution-settlement-facts > div').evaluateAll(rows=>rows.map(row=>[row.querySelector('dt').textContent,row.querySelector('dd').textContent])));
+    // The fixture's audit rows carry no PayPal amount, so the card must not invent a USD figure.
+    assert.deepEqual({...facts,Checked:Boolean(facts.Checked)},{'PayPal order':'EXISTING',Capture:'CREDIT','Funding for this ticket':'900 DON',Checked:true});
+    assert.equal(await page.locator('#execution-audit-text').textContent(),'The ticket top-up matches PayPal.');
     assert.equal(await page.locator('#execution-pay').isDisabled(),true);await page.locator('#execution-consent').check();await page.locator('#execution-pay').click();
     await page.locator('#execution-fees').getByText('$0.04 paid',{exact:true}).waitFor();
+    assert.equal(await page.locator('#execution-payout-receipts .execution-receipt').textContent(),'Paid · PayPal batch BROWSER_PAYOUT · every recipient SUCCESS');
+    assert.equal(await page.locator('#execution-fees-badge').textContent(),'Paid via PayPal Payouts');
+    const fees=page.locator('#execution-payout-list > li');assert.equal(await fees.count(),5);
+    assert.match(await fees.first().textContent(),/ · 1 cup\$0\.01$/);assert.equal(await fees.last().textContent(),'Total$0.04');
+    assert.deepEqual(await page.locator('#execution-trail li').allTextContents(),['Paid (done)','Scheduled (done)','On air · 1 cup (done)','Settled (done)','Creators paid (done)']);
     await page.screenshot({path:fileURLToPath(new URL('../../output/showrunner-tests/integrated-host-desktop.png',import.meta.url)),fullPage:true});
     await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     await page.screenshot({path:fileURLToPath(new URL('../../output/showrunner-tests/integrated-host-mobile.png',import.meta.url)),fullPage:true});await page.setViewportSize({width:1280,height:900});
@@ -150,6 +181,7 @@ for(const sourceKind of ['upload','youtube','twitch'])test(`broadcast purchase, 
   await page.goto(ORIGIN+'/broadcast/');await page.locator('#broadcast-list').getByText(sourceKind==='upload'?'Finished':'Started',{exact:true}).waitFor();
   assert.equal(await page.locator('#wallet #broadcast-list article').count(),1);
   assert.equal(await page.locator('#wallet #broadcast-list .fighter-lineup img').count(),4);
+  assert.deepEqual(await page.locator('#broadcast-list').getByRole('list',{name:'Ticket progress'}).locator('li').allTextContents(),['Paid (done)','Scheduled (done)','On air (done)']);
   assert.doesNotMatch(await page.locator('body').innerText(),/Studio Credits/);
   assert.deepEqual((await service.get(OWNER,order.id)).fighterIds,lineup);assert.equal((await f.store.wallet(OWNER)).balanceCredits,100);
   await mkdir(new URL('../../output/showrunner-tests/',import.meta.url),{recursive:true});

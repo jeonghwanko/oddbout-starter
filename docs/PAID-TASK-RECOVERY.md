@@ -175,17 +175,10 @@ Refunds/reversals block further spending. Never create replacement work merely t
 Local tests do not certify a physical-phone run, actual Sandbox payment, Google OAuth configuration or
 a deployed release. Record those separately; do not reuse earlier WP5 transactions as new evidence.
 
-## Hackathon demo (2:40)
+## Hackathon demo
 
-| Time | Show |
-| --- | --- |
-| 0:00–0:25 | Request a broadcast in the concierge; show its ordinary budget review. |
-| 0:25–0:55 | Approve and pay on the phone, then close the page before returning. |
-| 0:55–1:30 | Open Studio on a fresh PC; the same producer is already continuing. |
-| 1:30–2:10 | Show the actual rendered result and the original session report; label any edited wait. |
-| 2:10–2:40 | Reconcile payment and review creator payout; show one funding record and correct charges. |
-
-Opening: “Your agent disconnected after you paid. Your task should not disappear with it.”
-PayPal processes payment; this application binds consent, funding and execution durably. Keep the
-cup brief as a real workload. Submit pinned source, deployment instructions and measured evidence;
-do not present fixtures as a completed live rehearsal.
+The PayPal AI Hackathon submission now tells the Spotlight money loop: a sponsor pays with PayPal, the AI producer
+runs the ticket, the payment is reconciled through the official PayPal MCP server, and creators are paid with Payouts.
+Its judge walkthrough is [Try it in 10 minutes](HACKATHON.md#try-it-in-10-minutes) in HACKATHON.md. The recovery
+described here ships in the same product (starter #329); the [deployed acceptance run](#deployed-acceptance-run)
+above shows it on its own.
