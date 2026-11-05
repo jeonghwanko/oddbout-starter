@@ -612,18 +612,18 @@
     "onChange": "Keep previous context and selections, report only affected requirements, recheck affected items. Never silently mix revisions.",
     "unavailable": "Appearance consultation may continue. Do not invent controls/timing, advance a rules-dependent group, generate or package against an unverified current contract."
   },
-  "revision": "b482c2b982d68f36af731b1000f17d9cffd888aa5453596ef1931eb56986e530",
+  "revision": "f7b9c90c4fe8368ca3d4be5e706f54860af6c07351d192ac2cb0f3387462275a",
   "provenance": {
-    "sourceCommit": "a856d9887af9e09fd7bccd3e78922c436b063bb6",
+    "sourceCommit": "0473593ff46f82d650e275ddc84605c740cd1ac2",
     "sourceDirty": false,
     "sourceFiles": {
-      "tools/ai-fighter/creation-context.mjs": "e25f8fcac9b72a9aace46009164f955b097be3412d88c3a0047c9898ee6140e9",
-      "tools/ai-fighter/export-creation-context.mjs": "67d772fa9c0bab21a98e637db0da0b93c3f3453fde52029ce5ef5c5251f9579a",
-      "contracts/ai-fighter/v1/contract-source.mjs": "d302ba31b83057e32c402f0b522c9579c8e2f0c28c214e203d4393afc6c7bd42",
+      "tools/ai-fighter/creation-context.mjs": "b0425b8c55843cb17031bb63d8bbd44c66de5a4b88b843f6984e30b2be649b8e",
+      "tools/ai-fighter/export-creation-context.mjs": "7f0a7318215e927bcbd3e280ceabab388f681bfebd019dcc49a99eb1ea8c21a4",
+      "contracts/ai-fighter/v1/contract-source.mjs": "6c34a93137bf0a4d0ac5172be72bba32b7d33388c17abed23b0e0edd19073970",
       "src/world/native-city-combat.json": "20ebcbfddb44bb35e7d5f48fa3a2c1e85e9d46c0b67feb35fbfeeef4630d7c0d",
-      "src/app/InputBindings.ts": "7674099997083795b4f6f701cbb8ac3dfcafaf78ae53776e3ca7a80147ceeadb",
-      "src/render/effects/NativeCityFightFeel.ts": "9942a2a06982d302b53c7d2f764e35af1e55d0e76754f90e2e1d8e7eb3b9348e",
-      "src/render/effects/CombatPresentation.ts": "ba46230f581f26d3c62c6498f4f5adf0700e70f18048228bc0391876565732ee"
+      "src/app/InputBindings.ts": "45f8fe13b3b1821cd18a20a97cf52b8eb60f2dc4464e3faae3c0940bb2e97e04",
+      "src/render/effects/NativeCityFightFeel.ts": "f8dd8d864838c309d300b3aa018ab7f221af319cc5606401a31418d64815f3eb",
+      "src/render/effects/CombatPresentation.ts": "5bfe4d824c650a0b45ba700616b75002945f2888bd8f2c9b552723d9a478d6d4"
     },
     "generated": true
   }
