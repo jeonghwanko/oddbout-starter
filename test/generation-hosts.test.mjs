@@ -425,3 +425,155 @@ test('a removed host is refused everywhere: approval, the operator list, a job h
     assert.equal((await sql.query('select (public.af_generation_claim_for($1)).id as id', [applied.id])).rows[0].id, null);
   } finally { await sql.close(); }
 });
+
+// 내 PC 연결, 코드 복사 없이 (2026-11-05): the PC starts a pairing with no account and opens the site; the owner presses Connect there; the
+// PC's poll gets its worker key once (api/host-pairing.mjs).
+test('a PC pairs without a copied code: the site shows its name and OS, Connect makes a host, the poll gets the key once', async () => {
+  const { sql, call, healthy } = await generation();
+  const theirs = 'other-token-0123456789';
+  const { sha256 } = await import('../api/handler.mjs');
+  try {
+    await healthy();
+    const started = await call('POST', 'generations/host/pairings', { name: ' DESKTOP-7Q2K ', platform: 'windows' }, null);
+    assert.equal(started.status, 200);
+    const { pairingCode, userCode, url, interval, expiresAt } = started.body;
+    assert.match(pairingCode, /^ohp_[a-f0-9]{64}$/);
+    assert.match(userCode, /^[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$/);
+    assert.equal(url, `https://oddbout.com/creator.html#pc=${userCode}`);
+    assert.equal(interval, 5);
+    assert.ok(Date.parse(expiresAt) - Date.now() > 9 * 60_000);
+    // Only the secret's hash is kept.
+    const [row] = (await sql.query('select * from public.af_generation_host_pairings')).rows;
+    assert.equal(row.secret_hash, await sha256(new TextEncoder().encode(pairingCode)));
+    assert.ok(!JSON.stringify(row).includes(pairingCode));
+    const poll = () => call('POST', 'generations/host/pairings/token', { pairingCode }, null);
+    const unpaced = () => sql.query("update public.af_generation_host_pairings set polled_at = now() - interval '10 seconds'");
+    assert.equal((await poll()).body.status, 'pending');
+    const fast = await poll();
+    assert.deepEqual([fast.status, fast.body.code], [429, 'slow-down']);
+
+    // The site shows the code's PC to a signed-in owner; dashes and case do not matter.
+    assert.equal((await call('GET', `generations/host/pairings/${userCode}`, undefined, null)).status, 401);
+    const shown = (await call('GET', `generations/host/pairings/${userCode.toLowerCase().replace('-', '')}`, undefined, theirs)).body.pairing;
+    assert.deepEqual([shown.userCode, shown.name, shown.platform], [userCode, 'DESKTOP-7Q2K', 'windows']);
+    // Connect: he had no host, so one is made with a default name, his subscription, the terms accepted; no key on the site.
+    assert.equal((await call('POST', 'generations/host/pairings/approve', { userCode }, null)).status, 401);
+    const approved = (await call('POST', 'generations/host/pairings/approve', { userCode }, theirs)).body;
+    assert.deepEqual([approved.host.name, approved.host.approved, approved.pc.name, approved.pc.platform], ['My PC', false, 'DESKTOP-7Q2K', 'windows']);
+    assert.equal(approved.key, undefined);
+    const mine = (await call('GET', 'generations/host', undefined, theirs)).body.host;
+    assert.deepEqual([mine.id, mine.name, mine.billing, mine.keys.length], [approved.host.id, 'My PC', 'subscription', 0]);
+    // Approved once: neither the same nor another account can approve it again, and the site no longer shows it.
+    assert.equal((await call('POST', 'generations/host/pairings/approve', { userCode })).body.code, 'pairing-not-found');
+    assert.equal((await call('GET', `generations/host/pairings/${userCode}`, undefined, theirs)).status, 404);
+
+    await unpaced();
+    const granted = (await poll()).body;
+    assert.equal(granted.status, 'approved');
+    assert.match(granted.key, /^afw_[a-f0-9]{64}$/);
+    assert.deepEqual([granted.host, granted.name, granted.approved], [approved.host.id, 'My PC', false]);
+    // The key is the host's, made from the join code the approval kept (labelled with the PC's OS); the code is spent. The PC connects
+    // before it installs, so its first heartbeat tells how setup goes.
+    const beat = await call('POST', 'generation-worker/heartbeat', { health: { ok: false, setup: 'python', platform: 'windows', codex: false, grok: false } }, granted.key);
+    assert.equal(beat.status, 200);
+    const [key] = (await sql.query('select label from public.af_workers where host_id = $1 and enabled', [approved.host.id])).rows;
+    assert.match(key.label, /^host-pair-windows-\d{4}-\d{2}-\d{2}$/);
+    assert.equal((await sql.query('select count(*)::int as n from public.af_generation_host_joins where host_id = $1 and used_at is null', [approved.host.id])).rows[0].n, 0);
+    assert.equal((await sql.query('select join_hash from public.af_generation_host_pairings')).rows[0].join_hash, null);
+    await unpaced();
+    const again = await poll();
+    assert.deepEqual([again.status, again.body.code], [410, 'pairing-consumed']);
+    assert.equal((await sql.query('select count(*)::int as n from public.af_workers where host_id = $1', [approved.host.id])).rows[0].n, 1);
+  } finally { await sql.close(); }
+});
+
+test('Connect keeps his host and its name, brings a removed one back, five an hour; codes expire and the start is checked', async () => {
+  const { sql, db, call, healthy } = await generation();
+  const theirs = 'other-token-0123456789';
+  const { createHandler } = await import('../api/handler.mjs');
+  const handle = createHandler({ db });
+  try {
+    await healthy();
+    const start = async (pc = { name: 'mac-studio', platform: 'macos' }) => (await call('POST', 'generations/host/pairings', pc, null)).body;
+    const approve = code => call('POST', 'generations/host/pairings/approve', { userCode: code }, theirs);
+    const poll = pairingCode => call('POST', 'generations/host/pairings/token', { pairingCode }, null);
+    // His host keeps its name and billing.
+    const applied = (await call('POST', 'generations/host', { name: '고양이 공방', billing: 'api-key', termsAccepted: true }, theirs)).body.host;
+    const first = await start();
+    assert.equal((await approve(first.userCode)).body.host.id, applied.id);
+    assert.equal((await approve(first.userCode)).status, 404);
+    assert.equal((await poll(first.pairingCode)).body.name, '고양이 공방');
+    assert.equal((await call('GET', 'generations/host', undefined, theirs)).body.host.billing, 'api-key');
+    // Removed, then Connected again: the same host comes back, not approved, with his name.
+    assert.equal((await call('DELETE', 'generations/host', undefined, theirs)).status, 200);
+    const second = await start({ name: 'ubuntu-box', platform: 'linux' });
+    const back = (await approve(second.userCode)).body.host;
+    assert.deepEqual([back.id, back.name, back.approved], [applied.id, '고양이 공방', false]);
+    assert.equal((await sql.query('select removed_at from public.af_generation_hosts where id = $1', [applied.id])).rows[0].removed_at, null);
+    // Removed between Connect and the poll: the PC gets no key.
+    const third = await start();
+    await approve(third.userCode);
+    await call('DELETE', 'generations/host', undefined, theirs);
+    assert.equal((await poll(third.pairingCode)).body.code, 'join-code-invalid');
+    // Five Connects an hour per account: three made above, two more, then no sixth until an hour has passed.
+    for (let i = 0; i < 2; i++) assert.equal((await approve((await start()).userCode)).status, 200);
+    const sixth = await start();
+    const refused = await approve(sixth.userCode);
+    assert.deepEqual([refused.status, refused.body.code], [429, 'rate-limit']);
+    await sql.query("update public.af_generation_host_pairings set approved_at = now() - interval '61 minutes' where approved_at is not null");
+    assert.equal((await approve(sixth.userCode)).status, 200);
+    // A disabled account cannot Connect.
+    await sql.query('update public.af_creators set enabled = false where owner_id = (select owner_id from public.af_generation_hosts where id = $1)', [applied.id]);
+    assert.equal((await approve((await start()).userCode)).body.code, 'account-disabled');
+    await sql.query('update public.af_creators set enabled = true where not enabled');
+
+    // A Connect in the code's last seconds still reaches the PC; past ten minutes the PC hears it expired and the site finds nothing.
+    const late = await start();
+    await sql.query("update public.af_generation_host_pairings set expires_at = now() + interval '2 seconds' where status = 'pending'");
+    await approve(late.userCode);
+    assert.equal((await sql.query("select count(*)::int as n from public.af_generation_host_pairings where status = 'approved' and expires_at < now() + interval '50 seconds'")).rows[0].n, 0);
+    const gone = await start();
+    await sql.query("update public.af_generation_host_pairings set expires_at = now() - interval '1 second' where status = 'pending'");
+    const expired = await poll(gone.pairingCode);
+    assert.deepEqual([expired.status, expired.body.code], [410, 'pairing-expired']);
+    assert.equal((await call('GET', `generations/host/pairings/${gone.userCode}`, undefined, theirs)).status, 404);
+    assert.equal((await approve(gone.userCode)).body.code, 'pairing-not-found');
+
+    // What a PC may say, and the secret's form.
+    for (const pc of [{ name: '', platform: 'windows' }, { name: 'x'.repeat(41), platform: 'windows' }, { name: 'a\nb', platform: 'linux' },
+      { name: 'pc', platform: 'android' }, { name: 'pc' }])
+      assert.equal((await call('POST', 'generations/host/pairings', pc, null)).body.code, 'invalid-pc', JSON.stringify(pc));
+    assert.equal((await call('POST', 'generations/host/pairings', { name: 'pc', platform: 'linux', owner: 'me' }, null)).body.code, 'invalid-body');
+    assert.equal((await poll('ohp_short')).status, 400);
+    assert.equal((await poll(`ohp_${'0'.repeat(64)}`)).body.code, 'pairing-not-found');
+    assert.equal((await call('GET', 'generations/host/pairings/AEIO-UAEI', undefined, theirs)).body.code, 'invalid-user-code');
+    assert.equal((await call('GET', 'generations/host/pairings', undefined, null)).status, 405);
+    // Only the site's two routes answer a browser; the PC's start and poll do not.
+    const raw = (method, route) => handle(new Request(`http://localhost/ai-fighter/${route}`, { method }));
+    assert.equal((await raw('OPTIONS', 'generations/host/pairings/approve')).headers.get('access-control-allow-origin'), '*');
+    assert.equal((await raw('OPTIONS', 'generations/host/pairings/BCDF-GHJK')).headers.get('access-control-allow-origin'), '*');
+    assert.equal((await raw('OPTIONS', 'generations/host/pairings')).headers.get('access-control-allow-origin'), null);
+    assert.equal((await raw('OPTIONS', 'generations/host/pairings/token')).headers.get('access-control-allow-origin'), null);
+  } finally { await sql.close(); }
+});
+
+test('Postgres brakes unauthenticated pairing starts, refuses a shared open code, and hides the table from clients', async () => {
+  const { sql, owner } = await generation();
+  try {
+    const hash = n => n.toString(16).padStart(64, '0');
+    const start = (n, code) => sql.query("select public.af_generation_host_pairing_start($1, $2, 'pc', 'linux', 600)", [hash(n), code]);
+    await start(1, 'BCDFGHJK');
+    await assert.rejects(start(2, 'BCDFGHJK'), /user-code-collision/);
+    await sql.query(`insert into public.af_generation_host_pairings(secret_hash, user_code, pc_name, platform, status, owner_id, join_hash, expires_at)
+      select lpad(to_hex(g), 64, '0'), 'ZZZZZZZZ', 'pc', 'linux', 'approved', $1, lpad(to_hex(g), 64, '0'), now() + interval '10 minutes'
+      from generate_series(1000, 1118) g`, [owner]);
+    await assert.rejects(start(3, 'CCCCCCCC'), /rate-limit/);
+    await sql.query("update public.af_generation_host_pairings set created_at = now() - interval '1 hour' where created_at > now() - interval '1 hour'");
+    await start(3, 'CCCCCCCC');
+    await assert.rejects(sql.query("select public.af_generation_host_pairing_start($1, 'DDDDDDDD', 'pc', 'linux', 30)", [hash(4)]), /invalid-ttl/);
+    await sql.query('set role anon');
+    await assert.rejects(sql.query('select * from public.af_generation_host_pairings'), /permission denied/);
+    await assert.rejects(sql.query('select public.af_generation_host_pairing_view($1)', ['BCDFGHJK']), /permission denied/);
+    await sql.query('reset role');
+  } finally { await sql.close(); }
+});

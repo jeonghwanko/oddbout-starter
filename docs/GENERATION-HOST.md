@@ -67,6 +67,39 @@ npm run host -- join ohj_…                   # 붙이기 코드(30분 안에 �
   살아 있는 열쇠는 두 개까지다. 세 번째 PC를 붙이면 가장 오래된 열쇠가 꺼진다.
 - 로그아웃해도 워커가 돌게 하려면 한 번 `sudo loginctl enable-linger $USER`를 한다. `host:start`가 필요하면 알려 준다.
 
+### 코드 복사 없이 연결(2026-11-05)
+
+`npx oddbout-host` 러너(만드는 중)는 붙이기 코드 대신 이 연결을 쓴다. 러너가 나올 때까지 위의 붙이기 코드 명령이 그대로 대안이다.
+PC가 먼저 묻고 사이트에서 "연결"을 누르는, 기기 로그인(`device-logins`)과 같은 방식이다(`api/host-pairing.mjs`, 이관 `20261105230000_oddbout_generation_host_pairings`).
+
+1. 러너가 `GET /spec`의 `registration.hostPairing`이 `v1`인지 본다. 없으면 붙이기 코드로 간다.
+2. `POST /generations/host/pairings` `{ "name": "<PC 이름, 한 줄 1~40자>", "platform": "windows" | "macos" | "linux" }` (로그인 없음) →
+   `pairingCode`(비밀, `ohp_…`, 서버는 해시만 둔다), `userCode`(`BCDF-GHJK`), `expiresAt`(10분), `interval`(5), `url`(`creator.html#pc=<userCode>`).
+   러너는 `userCode`를 화면에 보이고 `url`을 브라우저로 연다.
+3. 사이트(로그인): `GET /generations/host/pairings/<userCode>`가 PC 이름·OS를 보이고, "연결"이 `POST /generations/host/pairings/approve` `{ "userCode" }`를 부른다.
+   호스트가 없으면 `My PC`(구독)로 만든다. 있으면 이름·결제를 두고, 지운 호스트는 되살린다. 버튼의 약관 링크를 보고 누르는 것이 호스트 약속 동의다.
+   계정마다 한 시간에 5번까지다.
+4. 러너는 `POST /generations/host/pairings/token` `{ "pairingCode" }`를 `interval`초마다 `pending`이 아닐 때까지 부른다. `approved`면 `key`(워커 열쇠,
+   이때 한 번만 온다 — 바로 `worker.env`에 쓴다)·`host`·`name`·`approved`·`expiresAt`이 온다. 열쇠는 붙이기 코드의 것과 같다(90일, 셋째 PC는 가장 오래된 열쇠를 끈다).
+   `429 slow-down`은 더 천천히, `410 pairing-expired`·`pairing-consumed`·`join-code-invalid`는 처음부터 다시다.
+
+코드는 공개 값이다. 연결은 주인의 로그인으로만 되고, 사이트는 코드·PC 이름·OS를 보여서 내 PC 화면과 맞춰 보게 한다. 내가 시작하지 않은 코드의
+"연결"을 누르면 그 PC가 내 호스트의 열쇠를 받는다(남의 신청은 승인된 호스트만 받는다).
+
+### 하트비트 `health`
+
+워커는 1분마다 `POST /generation-worker/heartbeat` `{ "health": { … } }`를 보낸다. `health`는 2 KB 안의 자유 객체이고 서버는 그대로 둔다.
+연결이 설치보다 먼저라서, 러너는 연결 직후부터 이 객체로 설치 진행을 알린다(서버 변경 없음).
+
+| 키 | 값 |
+| --- | --- |
+| `ok` | 지금 일을 받을 수 있다. 이것과 3분 안의 심장 박동이 "켜짐"이다 |
+| `codex`, `grok` | 그 구독의 마지막 로그인·작은 호출 확인(계획의 "codex ok·grok ok"). 사이트의 Codex·Grok 카드가 이 키를 읽으므로 `codex_ok`·`grok_ok` 같은 새 이름은 쓰지 않는다 |
+| `at` | 그 확인 시각(ISO) |
+| `setup` | 러너의 설치 단계: `kit` → `python` → `sprite` → `ffmpeg` → `grok-login` → `codex-login`(선택) → `ready`. 실패는 `<단계>-failed` |
+| `platform` | `windows` · `macos` · `linux` |
+| `runner` | `oddbout-host` 버전(예: `0.1.0`) |
+
 ## 운영
 
 | 하고 싶은 것 | 명령 |
