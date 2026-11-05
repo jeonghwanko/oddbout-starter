@@ -123,12 +123,13 @@ export const REQUESTED_MODELS = Object.freeze({ text: MODELS.text, imageAgent: M
 
 /**
  * A judge verdict's key (2026-11-05): what decides a judge's answer besides the pictures — the model and reasoning effort asked for, the
- * prompt it read and the schema it answered in. Before, a verdict in the job folder was found by its path alone, so a stage run after a
- * model or prompt change took an earlier judge's verdict as the current judge's. Each part is hashed first: the key holds no player text.
+ * prompt it read, the schema it answered in, and whether it ran outside the kit (`isolated`: no project instructions beside its prompt —
+ * `briefCommand` `cwd`). Before, a verdict in the job folder was found by its path alone, so a stage run after a model or prompt change took
+ * an earlier judge's verdict as the current judge's. Each part is hashed first: the key holds no player text.
  */
 export const JUDGE_KEY_VERSION = 1;
-export const judgeKey = ({ model = JUDGE.model, effort = JUDGE.effort, prompt, schema }) =>
-  reviewHash(JSON.stringify({ version: JUDGE_KEY_VERSION, model, effort, prompt: reviewHash(prompt), schema: reviewHash(schema) }));
+export const judgeKey = ({ model = JUDGE.model, effort = JUDGE.effort, isolated = true, prompt, schema }) =>
+  reviewHash(JSON.stringify({ version: JUDGE_KEY_VERSION, model, effort, isolated, prompt: reviewHash(prompt), schema: reviewHash(schema) }));
 /**
  * JUDGE_CACHE_RULE — a job keeps every verdict it already holds (2026-11-05). Its earlier stage runs acted on them: a side take chosen, a
  * walk taken, a run refused and filmed again. Judged again mid-job a pass can turn into a fail and buy a take nobody asked for (hard rule 2:
@@ -146,8 +147,9 @@ const known = value => typeof value === 'string' && value.trim() ? value.trim().
 export const observedCodex = facts => ({ model: known(facts?.model), effort: known(facts?.effort), cli: known(facts?.cliVersion),
   session: known(facts?.session) });
 /** A verdict's `judge` record: its key, the parts as asked, and what codex recorded for the run that answered. */
-export const judgeRecord = ({ prompt, schema, facts = null }) => ({ key: judgeKey({ prompt, schema }), keyVersion: JUDGE_KEY_VERSION,
-  model: JUDGE.model, effort: JUDGE.effort, promptSha256: reviewHash(prompt), schemaSha256: reviewHash(schema), observed: observedCodex(facts) });
+export const judgeRecord = ({ prompt, schema, facts = null, isolated = true }) => ({ key: judgeKey({ prompt, schema, isolated }),
+  keyVersion: JUDGE_KEY_VERSION, model: JUDGE.model, effort: JUDGE.effort, isolated, promptSha256: reviewHash(prompt), schemaSha256: reviewHash(schema),
+  observed: observedCodex(facts) });
 /** The loop review's `judge` line (it goes into the review the package carries): who judged, as the verdict records it. */
 export function judgeLabel(record, status) {
   const judge = record?.judge;
@@ -259,12 +261,21 @@ export function briefPrompt(job, refCount) {
   ].join('\n');
 }
 
-/** The codex command of the brief (run through `og run`); the prompt is its stdin. `effort`: a reasoning effort, or the host's codex config's. */
-export const briefCommand = ({ schema, out, refs, model = MODELS.text, effort = null }) => ['codex', 'exec', '-m', model, '--skip-git-repo-check',
-  '--sandbox', 'read-only', ...CODEX_TOOLS_OFF.flatMap(feature => ['--disable', feature]), '-c', 'mcp_servers={}',
-  ...(effort ? ['-c', `model_reasoning_effort="${effort}"`] : []), '--output-schema', schema, '-o', out, ...refs.flatMap(ref => ['-i', ref]), '-'];
+/**
+ * The codex command of the brief (run through `og run`); the prompt is its stdin. `effort`: a reasoning effort, or the host's codex config's.
+ * `cwd` (2026-11-05): the folder codex runs in, outside the kit. og runs every command in the kit, and codex reads a project's AGENTS.md
+ * from its git root down to its working folder into the model's instructions (sprite-gen isolates its own codex checks for that reason,
+ * `facing_vision.codex_inspect`), so the brief and the judges read the kit's agent instructions as well as their prompt, and every edit of
+ * that file changed what they read. Every path the command names is absolute.
+ */
+export const briefCommand = ({ schema, out, refs, model = MODELS.text, effort = null, cwd = null }) => ['codex', 'exec', '-m', model,
+  '--skip-git-repo-check', ...(cwd ? ['-C', cwd] : []), '--sandbox', 'read-only', ...CODEX_TOOLS_OFF.flatMap(feature => ['--disable', feature]),
+  '-c', 'mcp_servers={}', ...(effort ? ['-c', `model_reasoning_effort="${effort}"`] : []), '--output-schema', schema, '-o', out,
+  ...refs.flatMap(ref => ['-i', ref]), '-'];
 /** A judge's codex command: the brief's, every tool off, on JUDGE's model and reasoning effort. */
-export const judgeCommand = ({ schema, out, refs }) => briefCommand({ schema, out, refs, model: JUDGE.model, effort: JUDGE.effort });
+export const judgeCommand = ({ schema, out, refs, cwd = null }) => briefCommand({ schema, out, refs, model: JUDGE.model, effort: JUDGE.effort, cwd });
+/** The folder the worker gives codex's text runs (under its root, beside the kit, never inside it): `<root>/codex-cwd`. */
+export const CODEX_CWD = 'codex-cwd';
 
 /**
  * The brief codex wrote, checked again here (the schema is the model's instruction, not a guarantee): every field, lengths, the stats'
@@ -764,13 +775,18 @@ export const extOf = type => ({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/
  * worker's API client; `fetchBytes(url)`; `toWebp(png, webp)` re-encodes a still (at most 1024 px); `motionsPy(args)` runs motions.py
  * on the kit's sprite-gen venv (pixels only, no provider) and resolves `{ code }`. Calls may overlap: `og` waits for a free codex slot.
  * `og(args, { capture: true })` also resolves the run's output (its start: codex exec's header names its session), and
- * `codexSession(id, sinceMs)` what codex recorded for that session ({ model, effort, cliVersion }), or null.
+ * `codexSession(id, sinceMs)` what codex recorded for that session ({ model, effort, cliVersion }), or null. `codexCwd`: the folder outside
+ * the kit the brief and the judges run in (`briefCommand` `cwd`; the worker's `<root>/codex-cwd`), made before each run; null runs them in
+ * og's folder, the kit, as before 2026-11-05 (and their verdicts' keys say so: `isolated` false).
  */
 export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy = async () => ({ code: 127 }), gaitStaggerMs = GAIT_STAGGER_MS,
   alignPauseMs = ALIGN_PAUSE_MS, earlyPollMs = EARLY_POLL_MS, earlyGraceMs = EARLY_GRACE_MS, signal = null, lowMarginFeetTaken = true,
-  codexSession = async () => null, styleAnchor = path.join(path.dirname(fileURLToPath(import.meta.url)), STYLE_ANCHOR_FILE) }) {
+  codexSession = async () => null, codexCwd = null, styleAnchor = path.join(path.dirname(fileURLToPath(import.meta.url)), STYLE_ANCHOR_FILE) }) {
   // The models this stage run asked for and observed (`createModelLog`), sent as its `models` event when it ends (`observed`).
   let models = createModelLog();
+  /** The folder a codex text run starts in, there when it starts (a host's cleanup may have removed it). */
+  const codexDir = async () => { if (codexCwd) await mkdir(codexCwd, { recursive: true }); return codexCwd; };
+  const isolated = Boolean(codexCwd);
   /** What codex recorded for the run whose output this is (`codexSessionId`, `codexSession`), or null: no session named. */
   const observeCodex = async (output, since) => {
     const session = codexSessionId(output);
@@ -808,20 +824,20 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
    * `{ verdict, record, status }`, or `{ code }` when codex gave no verdict (its exit; 0 with an answer that is not one).
    */
   async function judge({ verdictFile, answerFile, schemaFile, prompt, refs, parse, cached = true }) {
-    const schema = await readFile(schemaFile, 'utf8').catch(() => ''), key = judgeKey({ prompt, schema });
+    const schema = await readFile(schemaFile, 'utf8').catch(() => ''), key = judgeKey({ prompt, schema, isolated });
     if (cached) {
       const saved = await readFile(verdictFile, 'utf8').then(JSON.parse, () => null), verdict = parse(saved);
       if (verdict) return { verdict, record: saved, status: verdictKeyStatus(saved, key) };
     }
     await rm(answerFile, { force: true });
-    const since = Date.now();
-    const { code, output } = await og(judgeCommand({ schema: schemaFile, out: answerFile, refs }), { stdin: prompt, capture: true });
+    const cwd = await codexDir(), since = Date.now();
+    const { code, output } = await og(judgeCommand({ schema: schemaFile, out: answerFile, refs, cwd }), { stdin: prompt, capture: true });
     if (code !== 0) return { code };
     const facts = await observeCodex(output, since);
     models.note(codexEntry('judge', JUDGE.model, JUDGE.effort, facts));
     const answer = await readFile(answerFile, 'utf8').then(JSON.parse, () => null), verdict = parse(answer);
     if (!verdict) return { code: 0 };
-    const record = { ...answer, judge: judgeRecord({ prompt, schema, facts }) };
+    const record = { ...answer, judge: judgeRecord({ prompt, schema, facts, isolated }) };
     await writeFile(verdictFile, JSON.stringify(record));
     return { verdict, record, status: 'keyed' };
   }
@@ -885,8 +901,8 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
     }
     const schema = path.join(dir, 'brief-schema.json'), out = path.join(dir, 'brief.json');
     await writeFile(schema, JSON.stringify(BRIEF_SCHEMA));
-    const since = Date.now();
-    const { code, output } = await og(briefCommand({ schema, out, refs }), { stdin: briefPrompt(job, refs.length), capture: true });
+    const cwd = await codexDir(), since = Date.now();
+    const { code, output } = await og(briefCommand({ schema, out, refs, cwd }), { stdin: briefPrompt(job, refs.length), capture: true });
     // The brief names no effort (the host's codex config chooses): what its session recorded is noted beside the model asked for.
     if (code === 0) models.note(codexEntry('brief', MODELS.text, 'config', await observeCodex(output, since)));
     if (code === ASK_EXIT) return asOutcome(ASKED);

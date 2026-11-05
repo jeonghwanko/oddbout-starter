@@ -11,8 +11,8 @@ import { appendFile, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/pro
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { ASKS, FRONT_JUDGE_SCHEMA, GROK_LIMITED, REQUESTED_MODELS, createStages, frontJobId, frontJudgePrompt, frontVerdict, judgeCommand, ogJobId }
-  from './generation-stages.mjs';
+import { ASKS, CODEX_CWD, FRONT_JUDGE_SCHEMA, GROK_LIMITED, REQUESTED_MODELS, createStages, frontJobId, frontJudgePrompt, frontVerdict, judgeCommand,
+  ogJobId } from './generation-stages.mjs';
 import { codexSessionFacts, codexTokensSince, codexUsage } from './codex-usage.mjs';
 
 // <root>/bin holds this file in both installs (/srv/oddbout-gen on ODDBOUT's PC, a host's own folder in user mode).
@@ -69,6 +69,23 @@ export async function versionsEvent(kit, head = gitHead) {
 }
 /** How much of a run's output the stage may read back (`og(args, { capture: true })`): codex exec's header, which names its session, comes first. */
 export const CAPTURE_BYTES = 32 * 1024;
+
+/**
+ * The project instructions codex would read in `dir` (2026-11-05): an AGENTS.md or AGENTS.override.md in every folder from the git checkout
+ * `dir` lies in down to `dir`, or in `dir` alone outside a checkout. The worker's codex folder (`<root>/codex-cwd`) should have none; one
+ * found is logged when the worker starts, since the brief and the judges would read it beside their prompts.
+ * @param {string} dir
+ * @returns {Promise<string[]>}
+ */
+export async function projectDocsAt(dir) {
+  const folders = [];
+  for (let at = path.resolve(dir); ; at = path.dirname(at)) {
+    folders.push(at);
+    if (existsSync(path.join(at, '.git'))) break;
+    if (path.dirname(at) === at) { folders.splice(1); break; }   // no checkout above: codex reads the folder itself only
+  }
+  return folders.reverse().flatMap(folder => ['AGENTS.md', 'AGENTS.override.md'].map(name => path.join(folder, name))).filter(file => existsSync(file));
+}
 
 /** `npm run sprite -- gen …` → `sprite gen`, `codex exec …` → `codex`: the command a stage ran through og, without its arguments. */
 export const toolName = args => {
@@ -324,9 +341,11 @@ export async function closeFrontFolders(output) {
  * before codex is asked again. Answers `judged`, `idle` (nothing queued), `off` (this host checks none) or `failed` (the loop waits).
  * @param {{ api: { frontClaim: () => Promise<any>, frontFinish: (set: any, verdict: any) => Promise<any>, frontRelease: (set: any) => Promise<any> },
  *   og: string, python: string, kit: string, say: (line: string) => Promise<unknown>, providerDown: (code: string) => Promise<boolean>,
- *   worked?: () => void, fetcher?: typeof fetch, runner?: typeof run, now?: () => Date }} deps
+ *   worked?: () => void, fetcher?: typeof fetch, runner?: typeof run, now?: () => Date, codexCwd?: string | null }} deps
+ *   `codexCwd`: the folder outside the kit codex runs in (generation-stages `briefCommand` `cwd`).
  */
-export function createFrontCheck({ api, og, python, kit, say, providerDown, worked = () => {}, fetcher = fetch, runner = run, now = () => new Date() }) {
+export function createFrontCheck({ api, og, python, kit, say, providerDown, worked = () => {}, fetcher = fetch, runner = run, now = () => new Date(),
+  codexCwd = null }) {
   /** @returns {Promise<'judged' | 'idle' | 'off' | 'failed'>} */
   return async function checkFront() {
     const claimed = await api.frontClaim().catch(error => ({ ok: false, code: error.message }));
@@ -357,7 +376,9 @@ export function createFrontCheck({ api, og, python, kit, say, providerDown, work
         }
         const schema = path.join(dir, 'schema.json');
         await writeFile(schema, JSON.stringify(FRONT_JUDGE_SCHEMA));
-        const code = await runner(og, ['run', ogId, '--', ...judgeCommand({ schema, out, refs: [png] })], { cwd: kit, log, stdin: frontJudgePrompt(), signal });
+        if (codexCwd) await mkdir(codexCwd, { recursive: true });
+        const code = await runner(og, ['run', ogId, '--', ...judgeCommand({ schema, out, refs: [png], cwd: codexCwd })],
+          { cwd: kit, log, stdin: frontJudgePrompt(), signal });
         if (code === 75) { await giveBack('codex cannot run here now'); await providerDown(ASKS); return 'failed'; }
         if (code === 3) { await giveBack('og did not start it'); return 'failed'; }
         verdict = code === 0 ? await savedVerdict(out) : null;
@@ -382,6 +403,10 @@ export async function main({ once = false } = {}) {
   // The providers run with HOME=<root> (og), so codex keeps its sessions there.
   const sessions = path.join(process.env.CODEX_HOME || path.join(ROOT, '.codex'), 'sessions');
   const say = line => appendFile(workerLog, `${new Date().toISOString()} ${line}\n`).catch(() => {});
+  // The brief and the judges run here, beside the kit, never inside it (generation-stages briefCommand `cwd`).
+  const codexCwd = path.join(ROOT, CODEX_CWD);
+  await mkdir(codexCwd, { recursive: true });
+  for (const file of await projectDocsAt(codexCwd)) await say(`codex folder ${codexCwd} reads ${file}: the brief and the judges read it beside their prompts`);
 
   let health = { ok: false, codex: false, grok: false, at: null }, checkedAt = 0, beatAt = 0, prunedAt = 0;
   const cooldowns = createCooldowns();
@@ -428,7 +453,7 @@ export async function main({ once = false } = {}) {
     return true;
   }
 
-  const checkFront = createFrontCheck({ api, og, python, kit, say, providerDown, worked: () => cooldowns.worked(['codex']) });
+  const checkFront = createFrontCheck({ api, og, python, kit, say, providerDown, worked: () => cooldowns.worked(['codex']), codexCwd });
   // The front queue is asked once a minute while it is empty (a claim every idle turn would double this PC's calls), at once after a
   // verdict, after a failure only once FRONT_RETRY_MS (doubling) has passed, and never on a host that checks none.
   let frontDue = 0, frontWait = FRONT_RETRY_MS;
@@ -477,7 +502,7 @@ export async function main({ once = false } = {}) {
         return capture ? { code, output } : { code };
       }),
       // What codex recorded for a run's session (its rollout under this worker's sessions folder), for the verdicts and the `models` event.
-      codexSession: (id, sinceMs) => codexSessionFacts(sessions, id, sinceMs),
+      codexSession: (id, sinceMs) => codexSessionFacts(sessions, id, sinceMs), codexCwd,
       api, signal: controller.signal, lowMarginFeetTaken,
       fetchBytes: async url => { const r = await fetch(url, { signal: AbortSignal.timeout(60_000) }); if (!r.ok) throw new Error(`download ${r.status}`); return new Uint8Array(await r.arrayBuffer()); },
       motionsPy: args => unlessStopped(controller.signal, () => run(python, ['-I', path.join(ROOT, 'bin', 'motions.py'), ...args], { cwd: kit, log, signal: controller.signal })

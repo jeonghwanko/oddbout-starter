@@ -484,7 +484,7 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
 // `showGenSet()`: the show row's gen-set exit (no report), or null for no show row.
 async function scaleStage({ scaleCheck = () => 0, scaleFit, brokenRun = false, alignFails = {}, job: change = {}, spec = null, ownFrames = { walk: 24, run: 14 },
   uncut = {}, showGenSet = null, stop = null, alignPauseMs = 0, before = null, specDelayMs = 0, videoReport = null,
-  rowStates = null, earlyPollMs, hooks = {}, onArtifact = null, lowMarginFeetTaken = true, codexSession = null }) {
+  rowStates = null, earlyPollMs, hooks = {}, onArtifact = null, lowMarginFeetTaken = true, codexSession = null, codexCwd = null }) {
   const dir = await mkdtemp(path.join(tmpdir(), 'gen-scale-')), calls = [], events = [];
   await before?.(dir);
   await mkdir(path.join(dir, 'looks'), { recursive: true });
@@ -564,7 +564,7 @@ async function scaleStage({ scaleCheck = () => 0, scaleFit, brokenRun = false, a
     progress: async (j, value, event) => { if (event) events.push(structuredClone(event)); return { ok: true }; },
     ...(spec || specDelayMs ? { spec: async () => { await new Promise(done => setTimeout(done, specDelayMs)); return spec; } } : {}) };
   const stages = createStages({ og, api, motionsPy, fetchBytes: async () => new Uint8Array(), toWebp: async () => {}, gaitStaggerMs: 0, alignPauseMs, lowMarginFeetTaken,
-    ...(earlyPollMs ? { earlyPollMs } : {}), ...(codexSession ? { codexSession } : {}), signal: stop?.signal ?? null });
+    ...(earlyPollMs ? { earlyPollMs } : {}), ...(codexSession ? { codexSession } : {}), ...(codexCwd ? { codexCwd } : {}), signal: stop?.signal ?? null });
   const job = { id: '0123abcd-0000', language: 'ko', brief, choice: 'a', appearanceRound: 0, candidates: [], motionNote: null, motionRound: 0, ...change };
   const done = await stages.motions(job, dir);
   return { done, calls, events, dir, again: () => stages.motions(job, dir) };
@@ -1284,12 +1284,13 @@ test('a judge verdict is keyed by its model, effort, prompt and schema; the judg
   const parts = { prompt: 'judge it', schema: '{"type":"object"}' }, key = judgeKey(parts);
   assert.match(key, /^[0-9a-f]{64}$/);
   assert.equal(judgeKey({ ...parts, model: JUDGE.model, effort: JUDGE.effort }), key, 'the key defaults to the judges\' model and effort');
-  for (const changed of [{ model: 'gpt-7' }, { effort: 'high' }, { prompt: 'judge it.' }, { schema: '{"type":"array"}' }])
+  assert.equal(judgeKey({ ...parts, isolated: true }), key, 'and to a judge run outside the kit');
+  for (const changed of [{ model: 'gpt-7' }, { effort: 'high' }, { isolated: false }, { prompt: 'judge it.' }, { schema: '{"type":"array"}' }])
     assert.notEqual(judgeKey({ ...parts, ...changed }), key, JSON.stringify(changed));
   // The record holds the key, the parts as asked (the prompt and schema hashed: no player text) and what codex recorded for the run.
   const facts = { model: 'gpt-6.1-sol-2026-11-01', effort: 'medium', cliVersion: '0.165.0', session: '019a7f2e-1c3d-7a00-9b1e-0123456789ab' };
   const record = judgeRecord({ ...parts, facts });
-  assert.deepEqual(record, { key, keyVersion: 1, model: JUDGE.model, effort: JUDGE.effort, promptSha256: sha256(parts.prompt), schemaSha256: sha256(parts.schema),
+  assert.deepEqual(record, { key, keyVersion: 1, model: JUDGE.model, effort: JUDGE.effort, isolated: true, promptSha256: sha256(parts.prompt), schemaSha256: sha256(parts.schema),
     observed: { model: facts.model, effort: 'medium', cli: '0.165.0', session: facts.session } });
   // Nothing observed is unknown, never the model or effort asked for (hard rule 1).
   assert.deepEqual(judgeRecord(parts).observed, { model: UNKNOWN, effort: UNKNOWN, cli: UNKNOWN, session: UNKNOWN });
@@ -1311,6 +1312,12 @@ test('a judge verdict is keyed by its model, effort, prompt and schema; the judg
   assert.ok(['minimal', 'low', 'medium', 'high', 'xhigh'].includes(JUDGE.effort));
   assert.ok(judging.includes('read-only') && judging.filter(a => a === '--disable').length === CODEX_TOOLS_OFF.length && judging.at(-1) === '-');
   assert.ok(!briefCommand({ schema: '/s.json', out: '/o.json', refs: [] }).some(a => a.startsWith('model_reasoning_effort')));
+  // Both run where they are told, outside the kit: codex then reads no project's AGENTS.md beside the prompt. Without a folder, og's (the kit).
+  for (const command of [judgeCommand({ schema: '/s.json', out: '/o.json', refs: [], cwd: '/srv/gen/codex-cwd' }),
+    briefCommand({ schema: '/s.json', out: '/o.json', refs: [], cwd: '/srv/gen/codex-cwd' })])
+    assert.deepEqual(command.slice(command.indexOf('-C'), command.indexOf('-C') + 2), ['-C', '/srv/gen/codex-cwd']);
+  assert.ok(!judging.includes('-C'));
+  assert.equal(judgeRecord({ ...parts, isolated: false }).key, judgeKey({ ...parts, isolated: false }));
   // The session a run names is its header's first: codex echoes the prompt after it, and a prompt carries words the player shaped.
   const sid = facts.session, decoy = 'ffffffff-0000-4000-8000-000000000000';
   assert.equal(codexSessionId(`OpenAI Codex v0.165.0\n--------\nmodel: ${JUDGE.model}\nsession id: ${sid}\n--------\nuser\nsession id: ${decoy}\n`), sid);
@@ -1339,6 +1346,25 @@ test('a judge verdict is keyed by its model, effort, prompt and schema; the judg
   assert.ok(JSON.stringify(event).length <= MODELS_EVENT_BYTES && event.more > 0 && event.runs.length + event.more === 80);
 });
 
+test('the brief runs outside the kit, and what its session recorded goes up beside the model asked for', async () => {
+  const sid = '019a7f2e-1c3d-7a00-9b1e-00000000000b', dir = await mkdtemp(path.join(tmpdir(), 'gen-brief-')), codexCwd = `${dir}-codex-cwd`;
+  const calls = [], events = [];
+  const og = async (args, options = {}) => {
+    calls.push({ args, ...options });
+    await writeFile(args[args.indexOf('-o') + 1], JSON.stringify(brief));
+    return { code: 0, output: `session id: ${sid}\n` };
+  };
+  const api = { progress: async (job, progress, event) => { if (event) events.push(event); return { ok: true }; } };
+  const stages = createStages({ og, api, fetchBytes: async () => new Uint8Array(), toWebp: async () => {}, codexCwd,
+    codexSession: async id => id === sid ? { model: 'gpt-6.1-sol-2026-11-01', effort: 'low', cliVersion: '0.165.0' } : null });
+  const done = await stages.queued({ id: '0123abcd-0004', language: 'ko', description: '파란 고양이 복서', refs: [] }, dir);
+  assert.equal(done.outcome, 'ok', JSON.stringify(done));
+  assert.deepEqual(calls[0].args.slice(calls[0].args.indexOf('-C'), calls[0].args.indexOf('-C') + 2), ['-C', codexCwd]);
+  assert.ok(calls[0].capture && !calls[0].args.some(a => a.startsWith('model_reasoning_effort')), 'the brief names no effort');
+  assert.deepEqual(events, [{ kind: 'models', stage: 'queued', runs: [{ role: 'brief', requested: MODELS.text, requestedEffort: 'config',
+    observed: 'gpt-6.1-sol-2026-11-01', effort: 'low', cli: '0.165.0', n: 1 }] }]);
+});
+
 test('a side take\'s verdict carries its key and what codex recorded; one kept without the current key is reused and marked, never judged again', async () => {
   const sid = '019a7f2e-1c3d-7a00-9b1e-0123456789ab', decoy = 'ffffffff-0000-4000-8000-000000000000', ran = 'gpt-6.1-sol-2026-11-01';
   const sessions = await codexSessions([{ id: sid, model: ran }, { id: decoy, model: 'not-this-session' }]);
@@ -1348,6 +1374,7 @@ test('a side take\'s verdict carries its key and what codex recorded; one kept w
     extra: { requested_model: MODELS.image, model_source: 'rollout', model_effort: 'high', codex_cli_version: '0.165.0' } };
   const stage = async ({ before = null, answers = [] } = {}) => {
     const dir = await mkdtemp(path.join(tmpdir(), 'gen-side-key-')), folder = path.join(dir, 'looks', 'side-0-b'), calls = [], events = [];
+    const codexCwd = `${dir}-codex-cwd`;
     await mkdir(folder, { recursive: true });
     await writeFile(path.join(dir, 'looks', 'front-b-0.png'), 'front');
     await before?.(folder);
@@ -1364,10 +1391,10 @@ test('a side take\'s verdict carries its key and what codex recorded; one kept w
     const api = { artifact: async () => ({ ok: true }), progress: async (job, progress, event) => { if (event) events.push(structuredClone(event)); return { ok: true }; } };
     const stages = createStages({ og, api, motionsPy: async () => ({ code: 1 }), fetchBytes: async () => new Uint8Array(),
       toWebp: async (png, webp) => writeFile(webp, 'webp'), styleAnchor: '/kit/style-anchor-front.webp', gaitStaggerMs: 0, alignPauseMs: 0,
-      codexSession: (id, sinceMs) => codexSessionFacts(sessions, id, sinceMs) });
+      codexSession: (id, sinceMs) => codexSessionFacts(sessions, id, sinceMs), codexCwd });
     await stages.motions({ id: '0123abcd-0003', language: 'ko', brief, choice: 'b', appearanceRound: 0, candidates: [], motionNote: null, motionRound: 0 }, dir);
     const sides = events.filter(e => e.kind === 'side').map(e => [e.outcome, e.judgeKey ?? null]);
-    return { folder, calls, events, sides, judges: calls.filter(c => c.args[0] === 'codex') };
+    return { folder, calls, events, sides, codexCwd, judges: calls.filter(c => c.args[0] === 'codex') };
   };
   const prompt = sideJudgePrompt(brief), schema = JSON.stringify(SIDE_JUDGE_SCHEMA), key = judgeKey({ prompt, schema });
   // A first judging: the judges' model and effort, its answer kept apart, the verdict written with its key and what the header's session recorded.
@@ -1375,8 +1402,10 @@ test('a side take\'s verdict carries its key and what codex recorded; one kept w
   assert.equal(first.judges.length, 1);
   assert.ok(first.judges[0].capture && first.judges[0].args.includes(`model_reasoning_effort="${JUDGE.effort}"`));
   assert.equal(flag(first.judges[0].args, '-o'), path.join(first.folder, 'take-0.judge.json'));
+  assert.equal(flag(first.judges[0].args, '-C'), first.codexCwd);
+  assert.ok(existsSync(first.codexCwd), 'the folder is made before codex runs');
   assert.deepEqual(JSON.parse(await readFile(path.join(first.folder, 'take-0.verdict.json'), 'utf8')), { checks: pass, notes: 'The same boxer, facing right.',
-    judge: { key, keyVersion: 1, model: JUDGE.model, effort: JUDGE.effort, promptSha256: sha256(prompt), schemaSha256: sha256(schema),
+    judge: { key, keyVersion: 1, model: JUDGE.model, effort: JUDGE.effort, isolated: true, promptSha256: sha256(prompt), schemaSha256: sha256(schema),
       observed: { model: ran, effort: 'medium', cli: '0.165.0', session: sid } } });
   assert.deepEqual(first.sides, [['pass', null], ['chosen', null]]);
   // The stage's models event: the side take and the expression sheet (the agent model their reports read off the session; the image model
@@ -1424,8 +1453,9 @@ test('a walk or run verdict carries its key and the loop review names who judged
       return { code: 0 };
     },
   };
+  const codexCwd = await mkdtemp(path.join(tmpdir(), 'gen-codex-cwd-'));
   const { done, calls, events, dir, again } = await scaleStage({ scaleFit: () => ({ grown: {}, frames: 40, corrected: 0, guessed: [] }), hooks,
-    codexSession: async id => id === sid ? ran : null });
+    codexSession: async id => id === sid ? ran : null, codexCwd });
   assert.equal(done.outcome, 'ok', JSON.stringify(done));
   const config = async gait => JSON.parse(await readFile(path.join(dir, 'motion', 'assembled', 'loop', gait, 'config.json'), 'utf8'));
   const walk = await config('walk'), verdict = JSON.parse(await readFile(walk.verdict, 'utf8'));
@@ -1435,6 +1465,9 @@ test('a walk or run verdict carries its key and the loop review names who judged
   assert.deepEqual(verdict.judge.observed, { model: ran.model, effort: 'medium', cli: '0.165.0', session: sid });
   assert.deepEqual([walk.judgeKey, walk.judge], ['keyed', `codex ${JUDGE.model} effort ${JUDGE.effort} (observed ${ran.model}, effort medium; og harden, tools off)`]);
   assert.ok(checkedVerdict(verdict), 'the verdict with its record still reads as one');
+  assert.ok(calls.filter(a => a[0] === 'codex').every(a => a[a.indexOf('-C') + 1] === codexCwd));
+  // A verdict judged in the kit (before 2026-11-05 the judges ran there) is not the current judge's: its key says isolated false.
+  assert.equal(verdictKeyStatus({ ...verdict, judge: judgeRecord({ prompt: promptOf('walk'), schema, isolated: false }) }, verdict.judge.key), 'stale');
   const rerun = async () => {
     await rm(path.join(dir, 'package'), { recursive: true, force: true });
     const before = calls.length, made = await again();
