@@ -70,7 +70,7 @@ creator-kit ZIP에는 제작·연결 안내와 이 문서 지도가 들어 있�
 | 문서 | 다루는 것 |
 | --- | --- |
 | [CREATOR-HOSTING](CREATOR-HOSTING.md) | ODDBOUT 사이트·API·검증 작업자의 호스팅 구성 |
-| [CLOUD-MCP](CLOUD-MCP.md) | 단일 호스팅 MCP(`mcp.oddbout.com`) 연결과 계정 확인을 통한 등록 |
+| [CLOUD-MCP](CLOUD-MCP.md) | 단일 호스팅 MCP(`mcp.oddbout.com`) 연결과 계정 확인을 통한 등록. 터미널 에이전트의 한 줄 연결(`npx -y oddbout@latest connect`, `packages/oddbout`) |
 | [MCP-GATEWAY](MCP-GATEWAY.md) | Cloudflare 중계·Render 예비 경로의 구현, DNSSEC 이전 순서와 검증 |
 | [GENERATION-HOST](GENERATION-HOST.md) | 호스팅 생성 신청을 실제로 그리는 생성 PC 되기 |
 | [SINGLE-SUBSCRIPTION-HOSTS](SINGLE-SUBSCRIPTION-HOSTS.md) | 구독이 하나뿐인 호스트를 받을 수 있는지와 그 설계(구현 전) |

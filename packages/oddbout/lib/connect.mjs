@@ -23,7 +23,7 @@ export const COMMAND = 'npx -y oddbout@latest';
 const SUPABASE_FUNCTION = 'https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter-mcp';
 const REPOSITORY = 'jeonghwanko/oddbout-starter';
 const REPOSITORY_URL = `https://github.com/${REPOSITORY}`;
-const DOCS = `${REPOSITORY_URL}/blob/main/docs/CLOUD-MCP.md#터미널편집기-에이전트-2026-10-29`;
+const DOCS = `${REPOSITORY_URL}/blob/main/docs/CLOUD-MCP.md#한-줄로-연결하기-2026-11-05`;
 /** The skills-only package Codex and Claude Code install from this repository (plugins/oddbout-codex); it declares no MCP server. */
 const PLUGIN = 'oddbout@oddbout';
 

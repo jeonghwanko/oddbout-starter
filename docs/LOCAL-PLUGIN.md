@@ -27,6 +27,14 @@ Do not create a second wrapper plugin.
 
 ## Install the Codex skill from Git
 
+To connect ODDBOUT and install this skill in one step, paste this into Codex (Claude Code and Gemini CLI too):
+
+> Connect ODDBOUT: run `npx -y oddbout@latest connect` and follow what it prints.
+
+It runs the commands below for you, reuses an ODDBOUT server you already have, and leaves the Google sign-in to your
+browser ([how it works](CLOUD-MCP.md#한-줄로-연결하기-2026-11-05)). Codex asks to run it outside its sandbox: it writes
+`~/.codex/config.toml` and opens your browser. The rest of this section is the same setup by hand.
+
 This is a local custom plugin distributed through this public Git repository, not an
 OpenAI directory listing or a Dots cloud App. It adds the `create-fighter` skill and
 reuses your existing ODDBOUT MCP connection. No public-directory approval is needed.
@@ -51,18 +59,19 @@ Adding a bundled MCP alongside an existing server can create two connections, so
 skill and the account connection are configured separately.
 
 Inspect **Settings → MCP servers**, or run `codex mcp list`.
-If any existing server uses `https://mcp.oddbout.com/mcp`, reuse its name and settings.
-Do not add another server, remove it, or log out just to install this plugin.
-Only if that endpoint is absent, add it once:
+If any existing server uses an ODDBOUT address (`https://mcp.oddbout.com/signin`, `https://mcp.oddbout.com/mcp`, or the
+`…supabase.co/functions/v1/ai-fighter-mcp` addresses of older guides), reuse its name and settings; earlier versions of this
+guide named it `oddbout-mcp`. Do not add another server, remove it, or log out just to install this plugin.
+Only if no ODDBOUT server is there, add it once. Codex starts the browser sign-in right away:
 
 ```sh
-codex mcp add oddbout-mcp --url https://mcp.oddbout.com/mcp
+codex mcp add oddbout --url https://mcp.oddbout.com/signin
 ```
 
-When ready to sign in (use the existing server's name if different):
+If the browser did not open or you closed it, sign in again (use the existing server's name if different):
 
 ```sh
-codex mcp login oddbout-mcp
+codex mcp login oddbout
 ```
 
 Complete Google sign-in and ODDBOUT consent in your browser. Do not paste callback

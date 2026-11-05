@@ -13,6 +13,10 @@
 준비된 VM을 재사용하고, 필요할 때 **ODDBOUT 연결 → 본인 Google 로그인 → 연결 승인**으로 진행합니다.
 VM 도메인 허용·Republish는 초기 환경 준비자의 단계이며 캐릭터마다 사용자에게 반복 요구하지 않습니다.
 
+Claude Code·Codex·Gemini CLI에서 ODDBOUT 계정을 연결하려면 이 한 줄을 붙여 넣으세요. 브라우저에서 Google 로그인을 한 번 승인하면 됩니다.
+
+> Connect ODDBOUT: run `npx -y oddbout@latest connect` and follow what it prints.
+
 **캐릭터는 글로 설명해도 되고, 참고 이미지를 함께 보내도 됩니다.**
 예: “큰 주황 글러브를 낀 하얀 고양이 복서. 귀엽고 살짝 건방진 표정, 굵은 선의 만화풍.”
 이미지가 있으면 “얼굴은 유지하고 옷만 복서로 바꿔줘”처럼 유지할 것과 바꿀 것을 알려주세요.
@@ -100,6 +104,9 @@ GPT만 사용 가능하면 둘 다 GPT로 제안한다. 사용자가 지정한 �
    이미 준비된 환경은 다시 설치하지 않는다. 생성 계정·구독·API 과금 선택은 본인 것만 사용한다.
 4. ODDBOUT 클라우드 MCP가 연결되어 있으면 `get_fighter_spec`의 `overview`, `creation`, 필요한 `schema`를 읽는다.
    `guide`는 위의 로컬 `creation:tool` 경로로 읽는다.
+   Claude Code·Codex·Gemini CLI에서 연결이 없고 사용자가 연결을 원하면 `npx -y oddbout@latest connect`를 실행하고 그 JSON 답의
+   `say`·`next`·`rules`를 따른다([한 줄로 연결하기](CLOUD-MCP.md#한-줄로-연결하기-2026-11-05)). 로그인은 사용자의 브라우저에서만 하고, 콜백 주소·코드·토큰을
+   대화로 받지 않는다. 연결은 생성·등록을 승인하지 않는다.
    연결 전에는 저장소에 포함된 `contracts/ai-fighter/v1/`의 계약으로 로컬 제작을 시작할 수 있다.
    홈페이지 방문이나 MCP 연결 완료를 원화 상담의 선행 조건으로 두지 않는다. 실제 패키지 제작 전에는 라이브 규격도 확인한다.
 5. 제작·패키징·검수는 [전체 제작 안내](DOT-CREATION.md)를 따른다. 사용자 피드백과 현재 묶음은 작업 폴더의

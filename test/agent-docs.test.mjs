@@ -12,7 +12,7 @@ const docs = ['AGENTS.md', 'CLAUDE.md', 'plugins/ai-fighter/skills/create-fighte
   'plugins/ai-fighter/skills/create-fighter/references/workspace.md', 'docs/README.md', 'docs/START-HERE.md'];
 // The game repository's deploy scripts, which these docs name.
 const gameScripts = ['fighter:edge', 'fighter:mcp'];
-const repositoryPath = /^(?:api|contracts|deploy|docs|examples|host|mcp|plugins|scripts|server|supabase|test|tools|vendor|web|website|worker)\//;
+const repositoryPath = /^(?:api|contracts|deploy|docs|examples|host|mcp|packages|plugins|scripts|server|supabase|test|tools|vendor|web|website|worker)\//;
 // A checkout made without its submodule (a new worktree, a clone without --recurse-submodules) has no engine files;
 // CI checks out the submodule, so it still checks these names.
 const engineCheckedOut = existsSync(path.join(root, 'vendor/sprite-gen/SKILL.md'));
