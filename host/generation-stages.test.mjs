@@ -11,7 +11,7 @@ import { ALIGN_AGAIN, BEAT_LIMIT, GROK_LIMITED, BRIEF_SCHEMA, ONE_STRIDE_OF, GAI
   submissionOutcome, withProfile, EXTRACT_REDRAWS, extractFailedRows, ENGINE_SEAM_MAX, loopTaken, HOUSE_COLOURING, LOOK_CHECKS, SIDE_CHECKS, SIDE_COLOURING, SIDE_TAKES,
   lookJudgePrompt, sideJudgePrompt, sidePrompt, EXPRESSION_CELLS, expressionsPrompt, expressionsName, MODELS,
   JUDGE, UNKNOWN, MODELS_EVENT_BYTES, SIDE_JUDGE_SCHEMA, codexSessionId, createModelLog, imageEntry, judgeCommand, judgeKey, judgeLabel, judgeRecord,
-  verdictKeyStatus } from './generation-stages.mjs';
+  verdictKeyStatus, videoEntry, VIDEO_REQUESTED, REQUESTED_MODELS } from './generation-stages.mjs';
 import { codexSessionFacts } from './codex-usage.mjs';
 import { ENGINE_SEAM_MAX as REVIEW_SEAM_MAX, ENGINE_CUE_RHYTHM as REVIEW_CUE_RHYTHM, lowMarginFeet as reviewLowMarginFeet } from '../tools/ai-fighter/gait.mjs';
 import { parseEnv, parseHealth } from './generation-worker.mjs';
@@ -287,6 +287,11 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
       const gait = flag(args, '--states'), item = path.join(flag(args, '--out-dir'), `side-${gait}`);
       await mkdir(path.join(item, 'loop'), { recursive: true }); await mkdir(path.join(item, 'frames', 'keyed'), { recursive: true });
       await writeFile(path.join(item, 'frames.report.json'), '{"fps":24}');
+      // The clip's report as the engine writes it: the walk's and the run's first take name xAI's model; the run's retake comes from an
+      // engine that wrote no `model_reported`, and its `model` (the one asked for, copied) is not read as xAI's.
+      const retake = /-s\d+-/.test(flag(args, '--out-dir'));
+      await writeFile(path.join(item, 'clip.report.json'), JSON.stringify(retake ? { model: flag(args, '--model') }
+        : { model: 'grok-imagine-video-1.5-20261101', requested_model: flag(args, '--model'), model_reported: 'grok-imagine-video-1.5-20261101' }));
       await writeFile(path.join(item, 'loop', `side-${gait}.strip.json`), JSON.stringify({ frames: 27 }));
     }
     if (tool === 'video-loop') { await mkdir(flag(args, '--out-dir'), { recursive: true });
@@ -368,8 +373,15 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
   for (const e of drafts) assert.deepEqual(e.clips.map(d => d.clip), order.filter(clip => e.clips.some(d => d.clip === clip)));
   assert.deepEqual(events.filter(e => !['drafts', 'gait', 'models'].includes(e.kind)), [{ kind: 'scale-check', corrected: 12, frames: 40, guessed: [] }]);
   // Its three judges, on the judges' model and effort; this og names no codex session, so nothing was observed and nothing is claimed.
-  assert.deepEqual(events.filter(e => e.kind === 'models'), [{ kind: 'models', stage: 'motions', runs: [{ role: 'judge', requested: JUDGE.model,
-    requestedEffort: JUDGE.effort, observed: UNKNOWN, effort: UNKNOWN, cli: UNKNOWN, n: 3 }] }]);
+  // Its three clips, asked for by name: two whose reports name xAI's model, one whose report names none (unknown, never the one asked for).
+  const modelEvents = events.filter(e => e.kind === 'models');
+  assert.deepEqual(modelEvents.map(e => [e.kind, e.stage, e.more]), [['models', 'motions', undefined]]);
+  const runsOf = role => modelEvents[0].runs.filter(r => r.role === role).sort((a, b) => a.observed.localeCompare(b.observed));
+  assert.deepEqual(runsOf('judge'), [{ role: 'judge', requested: JUDGE.model, requestedEffort: JUDGE.effort, observed: UNKNOWN, effort: UNKNOWN,
+    cli: UNKNOWN, n: 3 }]);
+  assert.deepEqual(runsOf('video'), [{ role: 'video', requested: MODELS.video, observed: 'grok-imagine-video-1.5-20261101', n: 2 },
+    { role: 'video', requested: MODELS.video, observed: UNKNOWN, n: 1 }]);
+  assert.equal(modelEvents[0].runs.length, 3);
   // Each gait says how it ended and every cut tried: the walk's loop cut broke its beat, its auto cut passed the judge.
   const walkEvent = events.find(e => e.kind === 'gait' && e.gait === 'walk');
   assert.deepEqual([walkEvent.outcome, walkEvent.take, walkEvent.tried.map(t => [t.cut, t.reasons ?? (t.passed ? 'passed' : t.judge)])],
@@ -395,6 +407,7 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
   assert.ok(flag(videos[1], '--motion').startsWith('run=It runs naturally in place') && flag(videos[2], '--motion').startsWith('run=It runs in place with long'));
   assert.ok(videos.every(a => flag(a, '--motion').includes('It throws no punches, kicks or strikes')));
   assert.ok(videos.every(a => flag(a, '--key') === 'green'));
+  assert.ok(videos.every(a => flag(a, '--model') === MODELS.video), 'every clip names the video model');
   // The first take films the look; the run's retake films the relaxed, depth-shaded still, drawn once from the look, in its own folder.
   const m = path.join(dir, 'motion');
   assert.deepEqual(videos.map(a => [path.basename(flag(a, '--out-dir')).replace(/-[0-9a-f]{8}$/, '-<words>'), flag(a, '--base')]), [
@@ -1335,6 +1348,15 @@ test('a judge verdict is keyed by its model, effort, prompt and schema; the judg
   assert.deepEqual(imageEntry(report), { role: 'image', requested: MODELS.image, observed: report.model, effort: 'high', cli: '0.165.0', imageModel: UNKNOWN });
   assert.equal(imageEntry({ ...report, extra: { ...report.extra, model_source: 'state-db' } }).observed, report.model);
   assert.equal(imageEntry({ provider: 'codex', model: MODELS.image }).observed, UNKNOWN);
+  // A Grok clip's model is what xAI's polls named (the engine's `model_reported`), never the report's `model`, which falls back to the one
+  // asked for; the host asks for MODELS.video by name.
+  assert.equal(VIDEO_REQUESTED, MODELS.video);
+  assert.equal(REQUESTED_MODELS.video, MODELS.video);
+  assert.equal(MODELS.video, 'grok-imagine-video-1.5');
+  const clip = { kind: 'sprite-gen-video-report', model: 'grok-imagine-video-1.5-20261101', requested_model: MODELS.video, model_reported: 'grok-imagine-video-1.5-20261101' };
+  assert.deepEqual(videoEntry(clip), { role: 'video', requested: MODELS.video, observed: 'grok-imagine-video-1.5-20261101' });
+  for (const unread of [{ ...clip, model_reported: null }, { kind: clip.kind, model: MODELS.video }, { ...clip, model_reported: '  ' }, { ...clip, model_reported: 15 }, null])
+    assert.deepEqual(videoEntry(unread), { role: 'video', requested: MODELS.video, observed: UNKNOWN });
   // The models event counts each kind of run and stays under the progress route's limit.
   const log = createModelLog();
   assert.equal(log.event('motions'), null);
@@ -1511,7 +1533,7 @@ test('og health asks codex with the hosted stages\' model (a login that refuses 
   const og = await readFile(path.join(path.dirname(fileURLToPath(import.meta.url)), 'og'), 'utf8');
   assert.equal(og.match(/^CODEX_MODEL=\$\{OG_CODEX_MODEL:-([^}]+)\}$/m)?.[1], MODELS.text);
   assert.match(og, /codex exec --skip-git-repo-check --sandbox read-only -m "\$CODEX_MODEL"/);
-  assert.deepEqual(MODELS, { text: 'gpt-6.1-sol', image: 'gpt-6.1-sol' });
+  assert.deepEqual(MODELS, { text: 'gpt-6.1-sol', image: 'gpt-6.1-sol', video: 'grok-imagine-video-1.5' });
 });
 
 test('the expression sheet says the creators\' agents\' cells, colours as the front and keeps the arena\'s order (KO last)', async () => {

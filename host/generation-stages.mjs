@@ -105,8 +105,11 @@ export async function extractFailedRows(run) {
 /**
  * The text model for the brief and the image model for the looks, on the host's subscription. `gpt-6.1-sol` since 2026-11-03 (사용자: "gpt에
  * 6.1 sol을 사용하도록 모델 수정해줘"): a ChatGPT login refused it on 2026-10-30 and answered it on 2026-11-03 (a text call on the operator's VM).
+ * The Grok video model every walk and run clip asks for (`video-set --model`, 2026-11-05): until then the host named none and sprite-gen's
+ * own default filmed, `grok-imagine-video-1.5` since its `video` verb was written (2026-09-08), so naming it changes what no clip asks for.
+ * A stage run again over a clip filmed before still reuses it: the engine counts a clip report with no `requested_model` as that default.
  */
-export const MODELS = Object.freeze({ text: 'gpt-6.1-sol', image: 'gpt-6.1-sol' });
+export const MODELS = Object.freeze({ text: 'gpt-6.1-sol', image: 'gpt-6.1-sol', video: 'grok-imagine-video-1.5' });
 /**
  * The judges (모델 드리프트, 2026-11-05): the brief's text model with an explicit reasoning effort. Until then no judge named one, so each
  * host's codex login config chose it, and none recorded what it ran with. `medium` is a choice, not a measurement of what the judges ran with
@@ -115,8 +118,8 @@ export const MODELS = Object.freeze({ text: 'gpt-6.1-sol', image: 'gpt-6.1-sol' 
 export const JUDGE = Object.freeze({ model: MODELS.text, effort: 'medium' });
 /** What no tool reported. Never a copy of the model or effort that was asked for (AGENTS.md hard rule 1). */
 export const UNKNOWN = 'unknown';
-/** The Grok video model: the host names none, so sprite-gen's default films (its report cannot tell what xAI said from what was asked). */
-export const VIDEO_REQUESTED = 'engine-default';
+/** The Grok video model the stage asks for (`MODELS.video`). Before 2026-11-05 the host named none and the `versions` event said `engine-default`. */
+export const VIDEO_REQUESTED = MODELS.video;
 /** The models a stage asks for, as the `versions` event names them: requested only. What codex recorded is the stage's `models` event. */
 export const REQUESTED_MODELS = Object.freeze({ text: MODELS.text, imageAgent: MODELS.image, judge: JUDGE.model, judgeEffort: JUDGE.effort,
   video: VIDEO_REQUESTED });
@@ -167,8 +170,8 @@ export const codexSessionId = output => /session id: ([0-9a-f][0-9a-f-]{7,63})\b
  * A stage's `models` event (2026-11-05): what each kind of run asked for and what was observed, counted. A codex text run (the brief, a
  * judge): the model and effort its session recorded. An image run: the agent model its sprite-gen report read off the session (`model_source`
  * rollout or state-db; any other report's `model` may be the `--model` copied) — the image model behind codex's image tool codex never
- * records. A Grok clip: unknown (the engine's report names xAI's model or, failing it, the one asked, and does not say which). Kept under
- * the progress route's 2000 bytes: the last kinds give way first (`more` counts them).
+ * records. A Grok clip: the model xAI's polls named (`videoEntry`), else unknown. Kept under the progress route's 2000 bytes: the last kinds
+ * give way first (`more` counts them).
  */
 export const MODELS_EVENT_BYTES = 1900;
 export function createModelLog() {
@@ -195,7 +198,12 @@ export function imageEntry(report) {
   return { role: 'image', requested: MODELS.image, observed: read ? known(report.model) : UNKNOWN, effort: known(extra.model_effort),
     cli: known(extra.codex_cli_version), imageModel: UNKNOWN };
 }
-export const VIDEO_ENTRY = Object.freeze({ role: 'video', requested: VIDEO_REQUESTED, observed: UNKNOWN });
+/**
+ * A Grok clip's entry, from its `clip.report.json`: `model_reported`, the model xAI's polls named (sprite-gen-agent, 2026-11-05). A report
+ * without one is unknown: an engine before then wrote none, and xAI may name none. Never its `model`, which holds xAI's model or, failing it,
+ * the one asked for, and does not say which.
+ */
+export const videoEntry = report => ({ role: 'video', requested: VIDEO_REQUESTED, observed: known(report?.model_reported) });
 // Codex features that reach files, a shell, a browser, the computer, plugins, hooks, sub-agents or a new image: all off for the brief
 // (`og harden` turns the same off for the service's codex as a whole, image generation kept for the looks).
 export const CODEX_TOOLS_OFF = Object.freeze(['shell_tool', 'unified_exec', 'browser_use', 'browser_use_external', 'computer_use', 'apps', 'code_mode_host',
@@ -807,8 +815,11 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
     for (const name of (await readdir(folder).catch(() => [])).sort())
       if (name.endsWith('.json') && name !== 'set.report.json' && !name.endsWith('.attempt.json')) await noteImage(path.join(folder, name), since);
   };
-  /** A clip video-set filmed in this run (its item's `clip.report.json`). */
-  const noteVideo = async (item, since) => { if (await fresh(path.join(item, 'clip.report.json'), since)) models.note(VIDEO_ENTRY); };
+  /** A clip video-set filmed in this run (its item's `clip.report.json`): the model xAI named, else unknown (`videoEntry`). */
+  const noteVideo = async (item, since) => {
+    const report = path.join(item, 'clip.report.json');
+    if (await fresh(report, since)) models.note(videoEntry(await readFile(report, 'utf8').then(JSON.parse, () => null)));
+  };
   /** A stage's model observations go up as one event when it ends (a courtesy: one that fails never changes its outcome). */
   const observed = (name, stage) => async (job, dir) => {
     models = createModelLog();
@@ -1169,7 +1180,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       // sprite-gen's gait witness (2026-11-01), where a walk/run cut defaults to motion-auto — the cut cutsOf() makes only as a fallback.
       const since = Date.now();
       const { code } = await og(sprite('video-set', '--base', `side@right=${input.still}`, '--facing', 'right', '--states', gait, '--key', input.key,
-        '--anchor', 'none', '--out-dir', clip, '--character', character, '--concurrency', '1', ...motion));
+        '--anchor', 'none', '--out-dir', clip, '--character', character, '--concurrency', '1', '--model', MODELS.video, ...motion));
       await noteVideo(item, since);
       // 75: sprite-gen's codex question (its report says so — codex is down) or og refusing grok's account (no report — grok is down).
       if (code === ASK_EXIT) return failedRun('video', code, path.join(clip, 'set.report.json'), since, GROK_LIMITED);
