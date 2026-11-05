@@ -32,9 +32,9 @@ ODDBOUT은 직접 만든 캐릭터로 플레이하는 대전 게임입니다. �
 </td>
 <td width="50%" valign="top">
 
-[![ODDBOUT Showrunner: AI 에이전트가 생방송으로 돈을 번다?](https://img.youtube.com/vi/-GeIlI4Cf9w/maxresdefault.jpg)](https://youtu.be/-GeIlI4Cf9w)
+[![ODDBOUT Showrunner: AI가 진행하는 격투 방송, 결제와 정산은 PayPal로](https://img.youtube.com/vi/DW9NkqZrJnQ/maxresdefault.jpg)](https://youtu.be/DW9NkqZrJnQ)
 
-**[ODDBOUT Showrunner](https://youtu.be/-GeIlI4Cf9w)** (1분 54초, 영어). AI 에이전트가 생방송으로 돈을 번다? 노트북이 닫히거나, 결제 탭이 돌아오지 않거나, 서버가 다시 시작돼도 유료 방송 작업이 이어져 결제를 잃지도 두 번 청구하지도 않는 흐름을 애니메이션 도표로 보여 줍니다.
+**[ODDBOUT Showrunner](https://youtu.be/DW9NkqZrJnQ)** (2분 45초, 영어). 노트북이 닫히거나, 결제 탭이 돌아오지 않거나, 서버가 다시 시작돼도 유료 방송 작업이 이어져 결제를 잃지도 두 번 청구하지도 않는 흐름을 애니메이션 도표로 보여 줍니다. 마지막 1분은 실제 Sandbox 사이트 화면입니다. 스폰서가 PayPal로 결제하고, AI 프로듀서가 컵을 진행하고, PayPal MCP가 주문을 대조하고, PayPal Payouts가 크리에이터에게 출전료를 보냅니다.
 
 [PayPal Sandbox 데모 해 보기](https://broadcast.oddbout.com/broadcast/)(테스트 돈만 씀) · [Showrunner 소개](#oddbout-showrunner)
 
