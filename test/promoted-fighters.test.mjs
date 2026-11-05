@@ -37,6 +37,8 @@ test('a promoted fighter: off the roster and writes, his story, relations and wo
     const row = (await f.sql.query('select * from af_fighters where id=$1', [mine])).rows[0];
     assert.equal(row.review_state, 'rejected'); assert.equal(row.runtime_approved, false); assert.equal(row.duel_approved, false);
     assert.equal(row.promoted_to, 'velora');
+    // His slot is released as a deletion releases it (사용자: 선수 칸을 돌려준다).
+    assert.equal(row.account_slot, null); assert.notEqual(row.deleted_at, null); assert.equal(row.entered_at, null);
     assert.equal((await f.sql.query("select count(*)::int as n from af_moderation_events where fighter_id=$1 and action='promote'", [mine])).rows[0].n, 1);
     await assert.rejects(promote(version + 1), /review-conflict/);
 
@@ -68,5 +70,18 @@ test('a promoted fighter: off the roster and writes, his story, relations and wo
     await assert.rejects(f.sql.query("update af_fighters set deleted_at=now(), account_slot=null where id=$1", [mine]), /fighter-promoted/);
     await assert.rejects(f.sql.query("update af_fighters set promoted_to=null where id=$1", [mine]), /fighter-promoted/);
     await assert.rejects(f.sql.query("update af_fighters set promoted_to='x' where id=$1", [theirs]), /af_fighters_promoted_retired/);
+    // No edit of his public story (사용자: 정사 쓰기도 막는다): canon by his owner (409), a proposal accepted into canon, his profile or style.
+    const canon = await call('PUT', `fighters/${mine}/canon`, { base: 0, sheet: { personality: '새 정사' } });
+    assert.equal(canon.status, 409); assert.equal(canon.body.code, 'fighter-promoted');
+    await assert.rejects(f.sql.query("insert into af_fighter_canon(fighter_id, version, sheet, author_id) values($1, 9, '{}', $2)", [mine, f.owner]), /fighter-promoted/);
+    await assert.rejects(f.sql.query("update af_fighters set profile = profile || '{\"name\":\"x\"}' where id=$1", [mine]), /fighter-promoted/);
+    const edit = await f.request(mine, row.manifest_sha, { ...example.profile, description: '고친 소개' });
+    assert.notEqual(edit.status, 200);
+    // His released slot counts no more: with room for one fighter, his owner registers another.
+    await f.sql.query('insert into af_creators(owner_id) values($1) on conflict (owner_id) do nothing', [f.owner]);
+    await f.sql.query('update af_creators set fighter_limit = 1 where owner_id=$1', [f.owner]);
+    const again = await f.register();
+    assert.equal(typeof again.fighter_id, 'string');
+    assert.equal((await f.sql.query('select account_slot from af_fighters where id=$1', [again.fighter_id])).rows[0].account_slot, 1);
   } finally { await f.sql.close(); }
 });

@@ -194,9 +194,9 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
         if (!fighter) {
           // A registered fighter promoted to an official package (20261105200000) is retired and off the list, but his package is still
           // served read-only at his address: an old shared bout replays him by this id. He is not runtime-approved, and says whom he became.
-          const { data: promoted, error: promotedError } = await db.from('af_fighters').select('id,submission_id,manifest_sha,promoted_to,deleted_at')
+          const { data: promoted, error: promotedError } = await db.from('af_fighters').select('id,submission_id,manifest_sha,promoted_to')
             .eq('id', parts[1]).maybeSingle(); check(promotedError);
-          if (!promoted?.promoted_to || promoted.deleted_at) return reply({ ok: false, code: 'not-found' }, 404);
+          if (!promoted?.promoted_to) return reply({ ok: false, code: 'not-found' }, 404);
           const { data: row, error: readError } = await db.from('af_submissions').select('*').eq('id', promoted.submission_id).eq('status', 'registered').maybeSingle();
           check(readError);
           if (!row || row.manifest_sha !== promoted.manifest_sha) return reply({ ok: false, code: 'not-found' }, 404);
@@ -242,8 +242,10 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
         if (method === 'PUT' && parts.length === 4 && parts[2] === 'assets') return json(await storeAsset(db, row, parts[3], request));
       }
       if (method === 'GET' && parts[0] === 'fighters' && parts.length === 2) {
-        const { data, error } = await db.from('af_fighters').select('id,submission_id,manifest_sha,profile,status,review_state,runtime_approved,runtime_scope,duel_approved,created_at,moderation_reason,deleted_at,entered_at').eq('id', requireId(parts[1])).eq('owner_id', owner).maybeSingle();
+        const { data, error } = await db.from('af_fighters').select('id,submission_id,manifest_sha,profile,status,review_state,runtime_approved,runtime_scope,duel_approved,created_at,moderation_reason,deleted_at,entered_at,promoted_to').eq('id', requireId(parts[1])).eq('owner_id', owner).maybeSingle();
         check(error); if (!data) throw new Problem(404, 'not-found');
+        // A promoted fighter (20261105200000) left his owner's fighters with his slot: he is the official `promotedTo` now.
+        if (data.promoted_to) return json({ ok: true, stage: 'promoted', fighterId: data.id, promotedTo: data.promoted_to });
         if (data.deleted_at) return json({ ok: true, stage: 'deleted', fighterId: data.id, deletedAt: data.deleted_at });
         // His current combat (2026-10-27): the stats, the fighting style and the skill clip's kind — what a style edit starts from.
         const { data: current, error: currentError } = await db.from('af_submissions').select('manifest').eq('id', data.submission_id)

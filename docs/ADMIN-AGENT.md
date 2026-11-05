@@ -30,7 +30,7 @@
 | `profile-front <id> <세트 폴더> --reason <글>` | 승인된 세트가 없는 선수의 세트 전체(정면·얼굴 칸·시트)를 주인 이름으로 올림 | (화면 없음) |
 | `fighters [--status active\|removed\|all] [--search <글>] [--page <n>]` | 선수 목록(20명씩) | 선수 |
 | `fighter-remove <id> --version <n> --reason <글>` · `fighter-restore …` | 선수 내리기 · 복원(사유는 제작자에게 보임) | 선수 |
-| `fighter-promote <id> <정식 id> --version <n> --reason <글>` | 게임에 정식 선수로 올린 등록 선수를 내린다. 명단·대결·컵에서 빠지고 이야기·관계·세계는 정식 id로 남는다. 복원·삭제할 수 없다 | 선수 |
+| `fighter-promote <id> <정식 id> --version <n> --reason <글>` | 게임에 정식 선수로 올린 등록 선수를 내린다. 명단·대결·컵에서 빠지고 이야기·관계·세계는 정식 id로 남는다. 주인의 선수 칸을 돌려준다. 복원·삭제·정사·프로필·스타일 고치기를 할 수 없다(운영자 고치기도) | 선수 |
 | `fighter <id>` | 선수 한 명: 주인, 패키지 해시, 출전, 전투 스타일, 최근 운영자 수정 5개 | (화면 없음) |
 | `replace-package <id> <패키지 폴더 또는 fighter.json> --reason <글>` | 그 선수의 원화·애니메이션 패키지 교체. 출전 중이면 출전 유지 | (화면 없음) |
 | `edit-profile <id> --reason <글> [--profile <JSON 또는 @파일>] [--style <JSON, null 또는 @파일>]` | 프로필 문구·전투 스타일 고치기. 출전 유지 | (화면 없음) |
