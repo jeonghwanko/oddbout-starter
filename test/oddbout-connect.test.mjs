@@ -5,7 +5,8 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { addressKind, detectHost, detectRemote, main, planServer, SIGN_IN_URL, spawnStdio, stripJsonComments } from '../packages/oddbout/lib/connect.mjs';
+import { addressKind, claudeSurface, detectHost, detectRemote, main, planServer, SIGN_IN_URL, spawnStdio, stripJsonComments }
+  from '../packages/oddbout/lib/connect.mjs';
 import { CLOUD_RESOURCE, DIRECTORY_RESOURCE, LEGACY_PUBLIC_RESOURCE, PUBLIC_DIRECTORY_RESOURCE, PUBLIC_RESOURCE, PUBLIC_SIGN_IN_RESOURCE,
   SIGN_IN_RESOURCE } from '../mcp/cloud/resources.mjs';
 
@@ -164,6 +165,31 @@ test('Claude Code in a terminal: the login gets the terminal, then the run is co
 test('only a login handed the terminal inherits stdin; its output goes to stderr so stdout keeps the reply', () => {
   assert.deepEqual(spawnStdio(true), ['inherit', 2, 2]);
   assert.deepEqual(spawnStdio(false), ['ignore', 'pipe', 'pipe']);
+});
+
+test('the Claude desktop app gets its own steps: quit and reopen it, a new session, then /mcp → Connect', async () => {
+  // In the desktop app (Code tab) a running session cannot reconnect a server added from outside, its /mcp window does not list it, and it
+  // has no `claude --continue` (2026-11-05, Windows); the terminal CLI's steps do not work there.
+  assert.equal(claudeSurface({ CLAUDECODE: '1', CLAUDE_CODE_ENTRYPOINT: 'claude-desktop' }), 'desktop');
+  assert.equal(claudeSurface({ CLAUDECODE: '1', CLAUDE_CODE_ENTRYPOINT: 'cli' }), 'terminal');
+  assert.equal(claudeSurface({}), 'unknown');
+  const box = await sandbox();
+  try {
+    const desktop = await box.run(['connect'], { CLAUDECODE: '1', CLAUDE_CODE_ENTRYPOINT: 'claude-desktop' });
+    assert.equal(desktop.reply.status, 'sign-in-needed');
+    assert.equal(desktop.reply.details.surface, 'desktop');
+    assert.match(desktop.reply.say, /Quit the Claude app completely \(not just this window\), reopen it and start a new session; then open \/mcp, choose oddbout, choose Connect/);
+    assert.match(desktop.reply.say, /it loads in the new session/);
+    assert.doesNotMatch(desktop.reply.say, /claude --continue|reconnect|reload-plugins/);
+    assert.match(desktop.reply.verify.ifToolsMissing, /desktop app.*\/mcp reconnect is not available/);
+    assert.match(desktop.reply.verify.ifToolsMissing, /does not carry this conversation/);
+
+    // Run by hand with --host claude, the surface is unknown: both ways are given.
+    const byHand = await box.run(['connect', '--host', 'claude']);
+    assert.equal(byHand.reply.details.surface, 'unknown');
+    assert.match(byHand.reply.say, /Authenticate \(Connect in the desktop app\)/);
+    assert.match(byHand.reply.say, /in the desktop app, quit the Claude app completely/);
+  } finally { await box.cleanup(); }
 });
 
 test('Codex: the add signs in by itself; the skill comes from the repository marketplace; a second run changes nothing', async () => {

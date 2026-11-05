@@ -19,7 +19,7 @@ Claude Code·Codex·Gemini CLI에 이 한 줄을 붙여 넣으세요.
 
 > Connect ODDBOUT: run `npx -y oddbout@latest connect` and follow what it prints.
 
-에이전트가 호스팅 ODDBOUT MCP(`oddbout`, `https://mcp.oddbout.com/signin`)를 추가하고, 브라우저에서 Google 로그인을 한 번 승인하면 Codex·Claude Code에는 제작 스킬도 설치됩니다. Claude Code에서는 그 로그인을 직접 시작합니다: `/mcp`를 입력하고 `oddbout`을 고른 뒤 Authenticate를 누르세요(Claude Code는 자기 화면이나 터미널에서만 로그인합니다). 마지막에 `get_profile`로 내 계정을 확인합니다. 토큰을 묻지 않고, 이미 있는 ODDBOUT 서버는 그대로 씁니다([동작 방식](docs/CLOUD-MCP.md#한-줄로-연결하기-2026-11-05), [`oddbout` 패키지](packages/oddbout/README.md)). 브라우저의 claude.ai·ChatGPT·Grok은 제작자 페이지의 내 에이전트에서 연결합니다.
+에이전트가 호스팅 ODDBOUT MCP(`oddbout`, `https://mcp.oddbout.com/signin`)를 추가하고, 브라우저에서 Google 로그인을 한 번 승인하면 Codex·Claude Code에는 제작 스킬도 설치됩니다. Claude Code에서는 그 로그인을 직접 시작합니다: `/mcp`를 입력하고 `oddbout`을 고른 뒤 Authenticate를 누르세요(Claude Code는 자기 화면이나 터미널에서만 로그인합니다). Claude 데스크톱 앱에서는 먼저 앱을 완전히 끄고 다시 열어 새 세션을 시작한 뒤 `/mcp` → `oddbout` → 연결(Connect)을 누르세요. 마지막에 `get_profile`로 내 계정을 확인합니다. 토큰을 묻지 않고, 이미 있는 ODDBOUT 서버는 그대로 씁니다([동작 방식](docs/CLOUD-MCP.md#한-줄로-연결하기-2026-11-05), [`oddbout` 패키지](packages/oddbout/README.md)). 브라우저의 claude.ai·ChatGPT·Grok은 제작자 페이지의 내 에이전트에서 연결합니다.
 
 Codex 스킬만 손으로 설치하려면 [설치 안내](docs/LOCAL-PLUGIN.md#install-the-codex-skill-from-git)를 보세요. 제작 스킬을 추가하고 기존 ODDBOUT MCP를 재사용합니다. 공개 디렉터리 심사나 creator-kit ZIP은 필요하지 않습니다.
 

@@ -419,25 +419,66 @@ export const RULES = [
   'Connecting does not ask you to create, generate or register a fighter. Wait for the user to ask.',
 ];
 
-/** How the running session gets the new server and skill. @param {Host} host @param {string} name */
-function loadHint(host, name) {
-  if (host === 'claude-code') {
-    return `If ODDBOUT's tools are not available to you yet, ask the user to type /mcp and reconnect ${name} there (or choose Authenticate if it asks); if ${name} is not listed, to exit and run \`claude --continue\` to reopen this conversation.`;
+/** @typedef {'terminal' | 'desktop' | 'unknown'} ClaudeSurface */
+/**
+ * Where Claude Code runs: its terminal CLI or the Claude desktop app (Code tab). Both read ~/.claude.json, but a desktop session cannot
+ * reconnect a server added from outside ("Reconnect, enable, and disable aren't available in this session"), its /mcp window does not list
+ * one until the app starts again, and it has no `claude --continue` (2026-11-05, Windows). Unknown when someone runs this by hand.
+ * @param {Env} env @returns {ClaudeSurface}
+ */
+export function claudeSurface(env) {
+  if (env.CLAUDE_CODE_ENTRYPOINT === 'claude-desktop' || env.CLAUDE_CODE_DESKTOP_APP_VERSION) return 'desktop';
+  return env.CLAUDECODE === '1' ? 'terminal' : 'unknown';
+}
+
+const RESTART_APP = 'quit the Claude app completely (not just this window), reopen it and start a new session';
+/**
+ * How Claude Code takes in the new server: `load` and `signIn` for the user, `agent` for the agent.
+ * @param {ClaudeSurface} surface @param {string} name
+ */
+function claudeSteps(surface, name) {
+  const terminalLoad = `type /mcp and reconnect ${name}; if it isn't listed there, exit and run \`claude --continue\` to come back here`;
+  if (surface === 'desktop') {
+    return {
+      load: `The Claude app takes in a new connection only when it starts: ${RESTART_APP}.`,
+      signIn: `${RESTART_APP[0].toUpperCase()}${RESTART_APP.slice(1)}; then open /mcp, choose ${name}, choose Connect if it asks, and approve in your browser with Google.`,
+      agent: `This is the Claude desktop app: a session there cannot reconnect a server added from outside (/mcp reconnect is not available), /mcp does not list it until the app starts again, and there is no \`claude --continue\`. If ODDBOUT's tools are not available to you, ask the user to ${RESTART_APP}, then open /mcp and choose ${name} → Connect if it asks. The new session does not carry this conversation, so tell the user to ask it to check their ODDBOUT account.`,
+    };
   }
+  if (surface === 'terminal') {
+    return {
+      load: `If I can't see ODDBOUT yet, ${terminalLoad}.`,
+      signIn: `Type /mcp, choose ${name}, then Authenticate, and approve in your browser with Google. If ${name} isn't in the /mcp list yet, exit and run \`claude --continue\` first.`,
+      agent: `If ODDBOUT's tools are not available to you yet, ask the user to type /mcp and reconnect ${name} there (or choose Authenticate if it asks); if ${name} is not listed, to exit and run \`claude --continue\` to reopen this conversation.`,
+    };
+  }
+  return {
+    load: `Claude Code takes in a new connection in a new session: in a terminal, start \`claude\` again (\`claude --continue\` reopens the last conversation); in the Claude desktop app, ${RESTART_APP}.`,
+    signIn: `In Claude Code, open /mcp, choose ${name}, then Authenticate (Connect in the desktop app), and approve in your browser with Google. If ${name} isn't listed, start a new session first; in the desktop app, ${RESTART_APP}.`,
+    agent: `If ODDBOUT's tools are not available to you, ask the user to start a new session: in a terminal, \`claude --continue\`; in the Claude desktop app, ${RESTART_APP}, then /mcp → ${name} → Connect if it asks.`,
+  };
+}
+
+/** How the running session gets the new server and skill. @param {Host} host @param {string} name @param {ClaudeSurface} surface */
+function loadHint(host, name, surface) {
+  if (host === 'claude-code') return claudeSteps(surface, name).agent;
   if (host === 'codex') return 'Codex loads MCP servers and skills when a session starts: if ODDBOUT\'s tools are not available to you, ask the user to exit and run `codex resume --last` to continue this conversation with them.';
   return 'Gemini CLI loads MCP servers when it starts: if ODDBOUT\'s tools are not available to you, ask the user to restart Gemini CLI in a trusted folder.';
 }
 
-/** @param {Host} host @param {string} name */
-function userLoad(host, name) {
-  if (host === 'claude-code') return `If I can't see ODDBOUT yet, type /mcp and reconnect ${name}; if it isn't listed there, exit and run \`claude --continue\` to come back here.`;
+/** @param {Host} host @param {string} name @param {ClaudeSurface} surface */
+function userLoad(host, name, surface) {
+  if (host === 'claude-code') return claudeSteps(surface, name).load;
   if (host === 'codex') return 'Codex picks up new connections in a new session: exit and run `codex resume --last` to come back to this conversation.';
   return 'Restart Gemini CLI so it loads the connection.';
 }
 
-/** @param {SkillResult} skill @param {Host} host */
-function skillLine(skill, host) {
-  if (skill.state === 'installed') return host === 'claude-code' ? 'I also installed the create-fighter skill (type /reload-plugins to load it now).' : 'I also installed the create-fighter skill.';
+/** @param {SkillResult} skill @param {Host} host @param {ClaudeSurface} surface */
+function skillLine(skill, host, surface) {
+  if (skill.state === 'installed') {
+    if (host !== 'claude-code') return 'I also installed the create-fighter skill.';
+    return surface === 'desktop' ? 'I also installed the create-fighter skill; it loads in the new session.' : 'I also installed the create-fighter skill (type /reload-plugins to load it now).';
+  }
   if (skill.state === 'present') return 'The create-fighter skill was already installed.';
   if (skill.state === 'failed') return 'The create-fighter skill could not be installed; the connection works without it.';
   return '';
@@ -454,21 +495,22 @@ function remoteSignIn(host, name) {
 
 /**
  * @param {{ host: Host, name: string, mode: 'connect' | 'check', remote: { remote: boolean, reasons: string[] },
- *   server: ServerResult, skill: SkillResult, ctx: Pick<Context, 'actions' | 'notes'>, binary: string, hostSource: string }} input
+ *   server: ServerResult, skill: SkillResult, ctx: Pick<Context, 'actions' | 'notes'>, binary: string, hostSource: string,
+ *   surface?: ClaudeSurface }} input
  */
-export function compose({ host, name, mode, remote, server, skill, ctx, binary, hostSource }) {
+export function compose({ host, name, mode, remote, server, skill, ctx, binary, hostSource, surface = 'unknown' }) {
   const label = HOSTS[host].label;
   const used = server.server?.name ?? name;
   const details = {
-    host, hostSource, binary, remote: remote.remote, remoteReasons: remote.reasons,
+    host, hostSource, binary, ...(host === 'claude-code' ? { surface } : {}), remote: remote.remote, remoteReasons: remote.reasons,
     server: server.server ? { ...server.server, kind: addressKind(server.server.url), state: server.state } : null,
     otherOddboutServers: server.others.map(other => ({ name: other.name, url: other.url, scope: other.scope, kind: addressKind(other.url) })),
     signIn: server.signIn, skill, actions: ctx.actions, notes: ctx.notes, docs: DOCS,
   };
   const base = { oddbout: mode, version: VERSION, host, rules: RULES, details };
   const again = `${COMMAND} connect --host ${HOSTS[host].bin}${name === SERVER_NAME ? '' : ` --name ${name}`}`;
-  const verify = { tool: 'get_profile', arguments: {}, show: 'only the user\'s ODDBOUT nickname and that the connection works', ifToolsMissing: loadHint(host, used) };
-  const extra = [skillLine(skill, host), details.otherOddboutServers.length ? `You also have ${details.otherOddboutServers.map(other => `\`${other.name}\` (${other.url})`).join(', ')}; I left ${details.otherOddboutServers.length > 1 ? 'them' : 'it'} as ${details.otherOddboutServers.length > 1 ? 'they are' : 'it is'}.` : '']
+  const verify = { tool: 'get_profile', arguments: {}, show: 'only the user\'s ODDBOUT nickname and that the connection works', ifToolsMissing: loadHint(host, used, surface) };
+  const extra = [skillLine(skill, host, surface), details.otherOddboutServers.length ? `You also have ${details.otherOddboutServers.map(other => `\`${other.name}\` (${other.url})`).join(', ')}; I left ${details.otherOddboutServers.length > 1 ? 'them' : 'it'} as ${details.otherOddboutServers.length > 1 ? 'they are' : 'it is'}.` : '']
     .filter(Boolean).join(' ');
   const join = (/** @type {string[]} */ parts) => parts.filter(Boolean).join(' ');
 
@@ -494,7 +536,7 @@ export function compose({ host, name, mode, remote, server, skill, ctx, binary, 
   const changed = server.state === 'added' || server.signIn === 'done' || skill.state === 'installed';
   if (server.signIn === 'not-needed' || server.signIn === 'done') {
     return { ...base, status: 'connected', next: 'verify', run: null, verify,
-      say: join([`ODDBOUT is connected to ${label} as \`${used}\` and signed in.`, extra, changed ? userLoad(host, used) : '',
+      say: join([`ODDBOUT is connected to ${label} as \`${used}\` and signed in.`, extra, changed ? userLoad(host, used, surface) : '',
         changed ? 'Then I\'ll check your account with get_profile.' : 'I\'ll check your account with get_profile.']) };
   }
   if (server.signIn === 'timed-out') {
@@ -509,8 +551,8 @@ export function compose({ host, name, mode, remote, server, skill, ctx, binary, 
     // Run from an agent's command tool, which has no terminal: Claude Code's login cannot start there, so its own panel signs in.
     return { ...base, status: 'sign-in-needed', next: 'user-signs-in', run: null, verify,
       say: join([`ODDBOUT is added to Claude Code as \`${used}\`.`, extra,
-        `One step is left, and only you can do it: Claude Code signs in from its own screen. Type /mcp, choose ${used}, then Authenticate, and approve in your browser with Google.`,
-        `If ${used} isn't in the /mcp list yet, exit and run \`claude --continue\` first.`, 'Then I\'ll check your account with get_profile.']) };
+        'One step is left, and only you can do it: Claude Code signs in from its own screen.', claudeSteps(surface, used).signIn,
+        surface === 'desktop' ? 'In the new session, ask me to check your ODDBOUT account.' : 'Then I\'ll check your account with get_profile.']) };
   }
   if (server.signIn === 'in-session') {
     return { ...base, status: 'sign-in-needed', next: 'user-signs-in', run: null, verify,
@@ -518,15 +560,16 @@ export function compose({ host, name, mode, remote, server, skill, ctx, binary, 
         `/mcp auth ${used} and approve in your browser with Google.`, extra, 'Then I\'ll check your account with get_profile.']) };
   }
   if (server.signIn === 'failed' || server.signIn === 'unsupported') {
-    const how = host === 'codex' ? `run \`codex mcp login ${used}\`` : `type /mcp, choose ${used}, then Authenticate`;
+    const how = host === 'codex' ? `To sign in, run \`codex mcp login ${used}\` and approve in your browser with Google.` : claudeSteps(surface, used).signIn;
     return { ...base, status: 'sign-in-needed', next: 'user-signs-in', run: null, verify,
-      say: join([`ODDBOUT is added to ${label} as \`${used}\`, but the sign-in didn't complete.`, `To sign in, ${how}, and approve in your browser with Google.`, extra]) };
+      say: join([`ODDBOUT is added to ${label} as \`${used}\`, but the sign-in didn't complete.`, how, extra]) };
   }
   // Signed in or not is unknown (a public-address server, or `check`): get_profile settles it.
-  const fix = host === 'codex' ? `run \`codex mcp login ${used}\`` : host === 'claude-code' ? `type /mcp, choose ${used}, then Authenticate` : `type \`/mcp auth ${used}\``;
+  const fix = host === 'codex' ? `run \`codex mcp login ${used}\` and approve in the browser` : host === 'claude-code' ? `follow these steps: ${claudeSteps(surface, used).signIn}`
+    : `type \`/mcp auth ${used}\` and approve in the browser`;
   return { ...base, status: 'registered', next: 'verify', run: null,
-    verify: { ...verify, ifSignInRequired: `If get_profile says ODDBOUT needs a sign-in (authentication-required), ask the user to ${fix} and approve in the browser.` },
-    say: join([`ODDBOUT is set up in ${label} as \`${used}\`.`, extra, changed ? userLoad(host, used) : '',
+    verify: { ...verify, ifSignInRequired: `If get_profile says ODDBOUT needs a sign-in (authentication-required), ask the user to ${fix}` },
+    say: join([`ODDBOUT is set up in ${label} as \`${used}\`.`, extra, changed ? userLoad(host, used, surface) : '',
       `${changed ? 'Then I' : 'I'}'ll check your account with get_profile; if it asks for a sign-in, you'll approve it in your browser.`]) };
 }
 
@@ -627,6 +670,7 @@ export async function main(argv, io = {}) {
   /** @type {SkillResult} */
   const skill = options.skill ? await ensureSkill(ctx) : { state: 'skipped' };
   const server = await ensureServer(ctx, options.name);
-  const result = compose({ host, name: options.name, mode, remote, server, skill, ctx, binary, hostSource: options.host ? 'flag' : 'environment' });
+  const result = compose({ host, name: options.name, mode, remote, server, skill, ctx, binary, hostSource: options.host ? 'flag' : 'environment',
+    surface: claudeSurface(env) });
   return reply(result, result.status === 'failed' ? 1 : 0);
 }

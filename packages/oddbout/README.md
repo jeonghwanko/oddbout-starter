@@ -62,8 +62,15 @@ link on your computer, sign in, and paste the address your browser ends on only 
 
 ## After connecting
 
-Agents load new MCP servers when a session starts. In Claude Code, type `/mcp` and reconnect `oddbout`, or exit and run `claude --continue`;
-`/reload-plugins` loads the skill. In Codex, run `codex resume --last`. Then ask the agent to check your ODDBOUT account.
+Agents load new MCP servers when a session starts.
+
+- **Claude Code in a terminal**: type `/mcp` and reconnect `oddbout`, or exit and run `claude --continue`; `/reload-plugins` loads the skill.
+- **Claude desktop app (Code tab)**: a session that was already open cannot pick up the new server, and `/mcp reconnect` is not available there.
+  Quit the app completely (not just the window), reopen it and start a new session, then open `/mcp`, choose `oddbout` and Connect if it asks.
+  The reply detects the desktop app and gives these steps.
+- **Codex**: run `codex resume --last`.
+
+Then ask the agent to check your ODDBOUT account.
 
 Source and docs: [oddbout-starter](https://github.com/jeonghwanko/oddbout-starter/tree/main/packages/oddbout) ·
 [connection guide](https://github.com/jeonghwanko/oddbout-starter/blob/main/docs/CLOUD-MCP.md). MIT license.

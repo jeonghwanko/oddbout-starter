@@ -140,8 +140,14 @@ stdout에 JSON 답 하나(`status`·`next`·`say`·`run`·`rules`·`verify`·`de
    - 브라우저를 기다리는 시간은 기본 110초(`--wait`)다. Claude Code 명령의 기본 제한 2분 안에 답하기 위해서다. 넘기면 같은 명령을 다시 실행하라고 답한다.
 4. Codex와 Claude Code에는 `create-fighter` 스킬을 설치한다(아래 스킬). Gemini CLI에는 아직 주지 않는다.
 5. 마지막 답은 ODDBOUT 도구가 있는 대화에서 `get_profile`로 계정을 확인하라고 한다. 실행 중인 세션은 새 서버를 세션을 시작할 때 읽는다.
-   Claude Code는 `/mcp`에서 `oddbout`을 다시 연결하고, 목록에 없으면 `claude --continue`로 다시 연다. 스킬은 `/reload-plugins`로 읽는다.
-   Codex는 `codex resume --last`다.
+   - Claude Code 터미널: `/mcp`에서 `oddbout`을 다시 연결하고, 목록에 없으면 `claude --continue`로 다시 연다. 스킬은 `/reload-plugins`로 읽는다.
+   - Claude 데스크톱 앱(Code 탭, `CLAUDE_CODE_ENTRYPOINT=claude-desktop`): 위 방법이 통하지 않는다(11-05 Windows 실측). 이미 열린 세션은 밖에서
+     추가한 서버를 종류 "other", 상태 needs_auth로만 알고, `/mcp` 창에는 목록도 연결 버튼도 없다. `/mcp reconnect oddbout`은 "Reconnect, enable,
+     and disable aren't available in this session"이고 `claude --continue`도 없다. 그래서 답은 앱을 완전히 끄고(창만 닫지 말고) 다시 열어 새 세션을
+     시작한 뒤 `/mcp` → `oddbout` → 연결(Connect)을 하라고 한다. 새 세션은 이 대화를 이어받지 않으므로 거기서 계정 확인을 부탁하라고 한다.
+     다시 열기만으로 서버가 보이고 연결되는지는 아직 확인하지 않았다.
+   - 손으로 `--host claude`로 실행해 어느 쪽인지 모르면 두 방법을 모두 준다. 답의 `details.surface`가 `terminal`·`desktop`·`unknown`이다.
+   - Codex는 `codex resume --last`다.
 
 `npx -y oddbout@latest check`는 아무것도 바꾸지 않고 상태만 답한다. 다시 실행해도 이미 있는 것은 그대로 둔다.
 가짜 `claude`·`codex`·`gemini`로 정확한 명령과 두 번째 실행을 확인하는 테스트가 `test/oddbout-connect.test.mjs`다.
