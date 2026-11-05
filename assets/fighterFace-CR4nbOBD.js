@@ -1,1 +1,0 @@
-import{t as e}from"./arena-concept-runtime-BHN1CmLz.js";var t=e.art;function n(e){let n=t[e];return n?`/${n.faceImage}`:null}function r(e,t){let r=n(t);return r?(e.src=r,e.width=e.height=192,!0):!1}export{r as t};
