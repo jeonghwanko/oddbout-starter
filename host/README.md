@@ -13,11 +13,30 @@ ODDBOUT 제작자 페이지·에이전트의 **호스팅 생성 신청**(글과 
 `og`는 자기 위쪽 폴더에 `host.env`가 있으면 사용자 설치로 돈다. 두 설치 모두 codex·grok은 **설치 폴더를 HOME으로** 돈다. 그래서 그 PC 사람의
 `~/.codex`(MCP 서버·플러그인·셸 도구)와 개인 로그인이 생성에 쓰이지 않는다.
 
+### Windows·macOS: `og.mjs` (2026-11-05)
+
+`og.mjs`는 bash `og`의 사용자 설치를 Node로 옮긴 것이다. bash·flock·`timeout`·systemd 없이 Windows·macOS·Linux에서 돈다. 공식 호스트는 bash `og`를 그대로 쓴다.
+`<root>/bin/og.mjs` 옆 폴더에 `host.env`가 있어야 돈다(`node <root>/bin/og.mjs <명령>`). 명령과 출력은 bash og와 같다. 공식 호스트의 수동 흐름(`new·deliver·close·self-update`)은 거절한다.
+
+| bash `og` | `og.mjs` |
+| --- | --- |
+| codex 칸 = `flock` 슬롯 파일 | 한 프로세스 안의 세마포어(모두 아니면 없음, 순서대로). `og.mjs worker run`이 워커를 **같은 프로세스**에서 돌리고(`generation-worker.mjs` `main({ og, python })`), 모든 단계의 실행이 이 세마포어를 함께 쓴다. 다른 터미널에서 손으로 부른 `og.mjs run`은 워커의 칸과 따로 센다 |
+| `timeout --kill-after=30` | 타이머 + 트리 종료: 프로세스 그룹에 SIGTERM, 30초 뒤 SIGKILL. Windows는 그룹도 SIGTERM도 없어 `taskkill /T /F`로 바로 끝낸다(`mcp/generation-connection.mjs` 방식) — 멈춘 sprite-gen은 리포트를 쓰지 못한다. 시간 초과는 124(강제 종료면 137), 워커가 멈추면 143 |
+| systemd 슬라이스(메모리 상한) | Linux만(같은 `oddbout-host.slice`). 다른 OS는 상한이 없어 `host.env`에 `SLOTS`가 없으면 codex 칸 2개, 메모리 12GB 미만이면 경고한다 |
+| `npm run <스크립트> -- …`, `codex`·`grok` 셸 래퍼 | 킷 `package.json`의 `node …` 명령을 바로 돌린다(`sprite` → `node scripts/sprite-gen.mjs`). codex·grok은 npm 패키지의 스크립트를 node로 돌린다(`codexCommand` 방식, `--prefix` 설치의 `node_modules/.bin`도 찾는다). Windows는 셸 없이 `.cmd`를 시작하지 않는다 |
+| `env -i HOME=<root>` | 같은 깨끗한 환경. Windows는 `USERPROFILE`·`APPDATA`·`LOCALAPPDATA`·`TEMP`도 설치 폴더 안으로 두고, 프로그램이 꼭 쓰는 `SystemRoot` 같은 값만 넘긴다. `CODEX_HOME=<root>/.codex`를 명시한다 |
+| `og worker install`(systemd 사용자 서비스) | Linux만. Windows·macOS는 터미널에서 `og.mjs worker run`을 앞에 띄워 둔다(Ctrl-C는 실행 중인 명령을 먼저 끝내고 장부를 닫는다) |
+
+워커는 `og`·`python`을 주입받는다: 주지 않으면 지금처럼 `<root>/bin/og`(bash)와 킷 venv의 Python(`spritePython`, Windows는 `.venv\Scripts\python.exe`)이다.
+워커는 `og.mjs`를 import하지 않는다(공식 PC 설치에는 그 파일이 없다). 시험: `og-node.test.mjs`(이 PC의 OS에서 사용자 설치 사례 전체, bash og와 도구 목록·`explain` 일치).
+아직 사람이 확인하지 않은 것: 실제 codex·grok·sprite-gen으로 Windows·Apple silicon Mac에서 선수 한 명을 끝까지(계획 1.3·1.6의 실기 검증).
+
 ## 파일
 
 | 파일 | 하는 일 |
 | --- | --- |
 | `og` | 모든 제공자 호출의 관문: 계정 고정(`login`), codex 칸, 메모리 상한(systemd 슬라이스), 장부, codex 기능 끄기(`harden`), 워커 서비스(`worker key·install·uninstall·start·stop·log`), 정리(`prune`), 고리 정렬의 RIFE(`rife torch|ncnn` — NVIDIA GPU면 PyTorch로 약 2배). 서비스 설치만: 운영자 수동 흐름(`new·deliver·close`)과 `self-update` |
+| `og.mjs` | `og`의 사용자 설치를 Node로 옮긴 것(Windows·macOS·Linux, 위 표). `createOg`가 워커에 주는 `run`·`health`·`prune`과 명령줄 |
 | `generation-worker.mjs` | 워커: 1분마다 심장 박동, 1시간마다 `og health`, 하루 한 번 `og prune`, 한 번에 한 작업의 한 단계를 임대해 돌리고 결과를 올린다. 공식 호스트는 단계와 단계 사이에 주인이 올린 프로필 정면 하나를 codex(도구 끔)로 판정한다(정면 판정, 2026-11-03: 전신·정면·한 명, `og run <날짜>-front-<세트>`, 5분 한도). 대기열이 비면 1분마다, 판정을 마치면 바로 다음을, 실패하면 15분부터 두 배씩(최대 한 시간) 쉬었다 묻는다. codex가 못 돌거나(종료 75) og가 시작하지 않은(종료 3) 시도는 돌려주어 세지 않는다. 판정 중에도 심장 박동을 보내고, 같은 날 같은 세트의 판정이 폴더에 남아 있으면 codex에 다시 묻지 않고 그것을 보낸다. 건강 확인 때마다 열린 채 남은 판정 폴더를 닫는다. 커뮤니티 호스트에는 서버가 `frontChecks: false`로 답해 다시 묻지 않는다. `og health`는 단계가 쓰는 모델(`gpt-6.1-sol`, og의 `OG_CODEX_MODEL`)로 codex를 물어, 그 모델을 거절하는 로그인은 작업을 받지 않는다(2026-11-03) |
 | `generation-stages.mjs` | 단계: 브리프·외형·동작·제출의 명령과 프롬프트, 결과 검사 |
 | `style-anchor-front.webp` | 화풍 기준 그림(우리 정면 원화, 사이트 `art/oddbout/style-anchor-front.webp`와 같은 파일). 정면 후보·옆모습·판정에 마지막 참조로 붙인다 |

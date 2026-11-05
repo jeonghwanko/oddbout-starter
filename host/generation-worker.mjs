@@ -17,6 +17,9 @@ import { codexSessionFacts, codexTokensSince, codexUsage } from './codex-usage.m
 
 // <root>/bin holds this file in both installs (/srv/oddbout-gen on ODDBOUT's PC, a host's own folder in user mode).
 const ROOT = process.env.OG_ROOT || path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+/** The kit's sprite-gen venv Python (scripts/sprite-gen.mjs `spritePython`): Windows keeps a venv's programs in Scripts\ as .exe. */
+export const spritePython = (kit, platform = process.platform) =>
+  path.join(kit, 'vendor', 'sprite-gen', '.venv', ...(platform === 'win32' ? ['Scripts', 'python.exe'] : ['bin', 'python']));
 export const TIMING = Object.freeze({ heartbeatMs: 60_000, healthMs: 3_600_000, idleMs: 15_000, renewMs: 60_000, errorMs: 60_000, pruneMs: 86_400_000,
   askedRecheckMs: 900_000 });
 /**
@@ -280,29 +283,47 @@ export const errorCode = (error, fallback = 'stage-error') => String(error?.code
 export const STOP_GRACE_MS = 90_000, OUTPUT_DRAIN_MS = 10_000;
 
 /**
+ * Signals a child and everything it started: its process group (spawned detached) on Linux and macOS. Windows has no process groups and
+ * no SIGTERM, and a child's own kill() ends only the child (an npm or codex launcher leaves its native program running), so there it is
+ * `taskkill /T /F` on the child's tree at once, whatever the signal (mcp/generation-connection.mjs stops a device login the same way).
+ */
+export function stopTree(child, sig, platform = process.platform) {
+  if (platform === 'win32') {
+    if (Number.isInteger(child.pid)) execFile('taskkill', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true }, () => {});
+    return;
+  }
+  try { process.kill(-child.pid, sig); } catch { try { child.kill(sig); } catch {} }
+}
+/** A child of its own process group where there are groups: Windows has none (detached there opens a console of its own). */
+const ownGroup = { detached: process.platform !== 'win32', windowsHide: true };
+
+/**
  * One child process in its own process group; its output appended to the job's log (and handed to `onOutput`, when given). Resolves its
  * exit code (signals count as 128 + n). Stopping it signals the whole group, and og passes the signal on to the command it runs (above).
+ * On Windows a stopped child's tree ends at once and resolves 137 (killed). `env`: the child's environment (og.mjs: the install's).
+ * One that cannot start (a .cmd Windows refuses without a shell, a missing program) resolves 127.
  */
-export function run(command, args, { cwd, log, stdin, signal, graceMs = STOP_GRACE_MS, drainMs = OUTPUT_DRAIN_MS, onOutput = null }) {
+export function run(command, args, { cwd, log, stdin, signal, graceMs = STOP_GRACE_MS, drainMs = OUTPUT_DRAIN_MS, onOutput = null, env = undefined }) {
   return new Promise(resolve => {
     if (signal?.aborted) return resolve(128 + 15);   // stopped before it began: nothing started
-    const child = spawn(command, args, { cwd, stdio: ['pipe', 'pipe', 'pipe'], detached: true });
-    const write = chunk => { appendFile(log, chunk).catch(() => {}); try { onOutput?.(chunk); } catch { /* a reader never stops the run */ } };
+    let child;
+    try { child = spawn(command, args, { cwd, env, stdio: ['pipe', 'pipe', 'pipe'], ...ownGroup }); } catch { return resolve(127); }
+    const write = chunk => { if (log) appendFile(log, chunk).catch(() => {}); try { onOutput?.(chunk); } catch { /* a reader never stops the run */ } };
     child.stdout.on('data', write); child.stderr.on('data', write);
     // A child that ends without reading its input closes the pipe: the write's EPIPE is not the run's outcome (its exit code is),
     // and with no listener it was an uncaught exception that ended the worker and every stage on it (CI, 2026-11-02).
     child.stdin.on('error', () => {});
     child.stdin.end(stdin ?? '');
-    const group = sig => { try { process.kill(-child.pid, sig); } catch { try { child.kill(sig); } catch {} } };
     /** @type {NodeJS.Timeout | undefined} */ let kill;
     /** @type {NodeJS.Timeout | undefined} */ let drain;
-    const stop = () => { group('SIGTERM'); kill = setTimeout(() => group('SIGKILL'), graceMs); };
+    let stopped = false;
+    const stop = () => { stopped = true; stopTree(child, 'SIGTERM'); kill = setTimeout(() => stopTree(child, 'SIGKILL'), graceMs); };
     let ended = false;
     const end = code => {
       if (ended) return;
       ended = true; clearTimeout(kill); clearTimeout(drain); signal?.removeEventListener('abort', stop); resolve(code);
     };
-    const codeOf = (code, sig) => code ?? 128 + (sig === 'SIGKILL' ? 9 : 15);
+    const codeOf = (code, sig) => stopped && process.platform === 'win32' ? 128 + 9 : code ?? 128 + (sig === 'SIGKILL' ? 9 : 15);
     signal?.addEventListener('abort', stop, { once: true });
     child.on('exit', (code, sig) => { drain = setTimeout(() => end(codeOf(code, sig)), drainMs); });
     child.on('close', (code, sig) => end(codeOf(code, sig)));
@@ -321,16 +342,33 @@ export function run(command, args, { cwd, log, stdin, signal, graceMs = STOP_GRA
  */
 export function readOutput(command, args, { limitMs, graceMs = STOP_GRACE_MS, drainMs = OUTPUT_DRAIN_MS }) {
   return new Promise(resolve => {
-    let output = '', ended = false, kill, drain;
-    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+    let output = '', ended = false, kill, drain, child;
+    try { child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], ...ownGroup }); } catch { return resolve(output); }
     child.stdout?.on('data', d => { output += d; }); child.stderr?.on('data', d => { output += d; });
-    const group = sig => { try { process.kill(-child.pid, sig); } catch { try { child.kill(sig); } catch {} } };
-    const limit = setTimeout(() => { group('SIGTERM'); kill = setTimeout(() => group('SIGKILL'), graceMs); }, limitMs);
+    const limit = setTimeout(() => { stopTree(child, 'SIGTERM'); kill = setTimeout(() => stopTree(child, 'SIGKILL'), graceMs); }, limitMs);
     const end = () => { if (ended) return; ended = true; clearTimeout(limit); clearTimeout(kill); clearTimeout(drain); resolve(output); };
     child.on('exit', () => { drain = setTimeout(end, drainMs); });
     child.on('close', end);
     child.on('error', end);
   });
+}
+
+/** How long the worker waits for `og health` (a codex slot, then each provider) or `og prune`: past it, nothing said. */
+export const OG_READ_MS = 600_000;
+/**
+ * og as the worker calls it: `run(job, args, options)` (`og run <job> -- …`, resolves its exit code), `health()` and `prune(days)` (resolve
+ * what og said). A path is bash og (ODDBOUT's own PC, the Linux hosts installed with it): a process for each call. og.mjs (Windows, macOS,
+ * any host without bash) hands over its own object (createOg), which runs here, so every stage's runs share one codex semaphore.
+ * @param {string | { run: (job: string, args: string[], options: any) => Promise<number>, health: () => Promise<string>, prune: (days: number) => Promise<string> }} og
+ * @param {typeof run} [runner]
+ */
+export function ogClient(og, runner = run) {
+  if (typeof og !== 'string') return og;
+  return {
+    run: (job, args, options) => runner(og, ['run', job, '--', ...args], options),
+    health: () => readOutput(og, ['health'], { limitMs: OG_READ_MS }),
+    prune: days => readOutput(og, ['prune', String(days)], { limitMs: OG_READ_MS }),
+  };
 }
 
 /** A front check's limit: one picture, one codex answer (its lease is fifteen minutes). */
@@ -363,12 +401,13 @@ export async function closeFrontFolders(output) {
  * not run (codex cannot run here now, og did not start it) is given back; a verdict the folder already holds (its finish was lost) is sent
  * before codex is asked again. Answers `judged`, `idle` (nothing queued), `off` (this host checks none) or `failed` (the loop waits).
  * @param {{ api: { frontClaim: () => Promise<any>, frontFinish: (set: any, verdict: any) => Promise<any>, frontRelease: (set: any) => Promise<any> },
- *   og: string, python: string, kit: string, say: (line: string) => Promise<unknown>, providerDown: (code: string) => Promise<boolean>,
+ *   og: Parameters<typeof ogClient>[0], python: string, kit: string, say: (line: string) => Promise<unknown>, providerDown: (code: string) => Promise<boolean>,
  *   worked?: () => void, fetcher?: typeof fetch, runner?: typeof run, now?: () => Date, codexCwd?: string | null }} deps
- *   `codexCwd`: the folder outside the kit codex runs in (generation-stages `briefCommand` `cwd`).
+ *   `codexCwd`: the folder outside the kit codex runs in (generation-stages `briefCommand` `cwd`). `og`: ogClient's.
  */
 export function createFrontCheck({ api, og, python, kit, say, providerDown, worked = () => {}, fetcher = fetch, runner = run, now = () => new Date(),
   codexCwd = null }) {
+  const ogRun = ogClient(og, runner);
   /** @returns {Promise<'judged' | 'idle' | 'off' | 'failed'>} */
   return async function checkFront() {
     const claimed = await api.frontClaim().catch(error => ({ ok: false, code: error.message }));
@@ -400,8 +439,7 @@ export function createFrontCheck({ api, og, python, kit, say, providerDown, work
         const schema = path.join(dir, 'schema.json');
         await writeFile(schema, JSON.stringify(FRONT_JUDGE_SCHEMA));
         if (codexCwd) await mkdir(codexCwd, { recursive: true });
-        const code = await runner(og, ['run', ogId, '--', ...judgeCommand({ schema, out, refs: [png], cwd: codexCwd })],
-          { cwd: kit, log, stdin: frontJudgePrompt(), signal });
+        const code = await ogRun.run(ogId, judgeCommand({ schema, out, refs: [png], cwd: codexCwd }), { cwd: kit, log, stdin: frontJudgePrompt(), signal });
         if (code === 75) { await giveBack('codex cannot run here now'); await providerDown(ASKS); return 'failed'; }
         if (code === 3) { await giveBack('og did not start it'); return 'failed'; }
         verdict = code === 0 ? await savedVerdict(out) : null;
@@ -415,29 +453,32 @@ export function createFrontCheck({ api, og, python, kit, say, providerDown, work
   };
 }
 
-/** The worker's loop. `once`: one claim, for a manual run. */
-export async function main({ once = false } = {}) {
-  const env = parseEnv(await readFile(path.join(ROOT, 'worker.env'), 'utf8'));
+/**
+ * The worker's loop. `once`: one claim, for a manual run. `og`: bash og's path (`<root>/bin/og`, the default) or og.mjs's runner, and
+ * `python`: the kit's sprite-gen Python (spritePython) — injected by og.mjs `worker run` on a host without bash.
+ * @param {{ once?: boolean, root?: string, og?: Parameters<typeof ogClient>[0], python?: string }} [options]
+ */
+export async function main({ once = false, root = ROOT, og: ogGiven, python: pythonGiven } = {}) {
+  const env = parseEnv(await readFile(path.join(root, 'worker.env'), 'utf8'));
   if (!/^https:\/\//.test(env.ODDBOUT_GENERATION_API ?? '') || !/^afw_[a-f0-9]{64}$/.test(env.ODDBOUT_GENERATION_WORKER_KEY ?? ''))
     throw new Error('worker.env needs ODDBOUT_GENERATION_API (https) and ODDBOUT_GENERATION_WORKER_KEY (afw_…)');
   const api = createApi({ base: env.ODDBOUT_GENERATION_API.replace(/\/$/, ''), key: env.ODDBOUT_GENERATION_WORKER_KEY });
-  const og = path.join(ROOT, 'bin', 'og'), kit = path.join(ROOT, 'kit'), python = path.join(kit, 'vendor', 'sprite-gen', '.venv', 'bin', 'python');
-  const workerLog = path.join(ROOT, 'worker.log');
+  const og = ogClient(ogGiven ?? path.join(root, 'bin', 'og')), kit = path.join(root, 'kit'), python = pythonGiven ?? spritePython(kit);
+  const workerLog = path.join(root, 'worker.log');
   // The providers run with HOME=<root> (og), so codex keeps its sessions there.
-  const sessions = path.join(process.env.CODEX_HOME || path.join(ROOT, '.codex'), 'sessions');
+  const sessions = path.join(process.env.CODEX_HOME || path.join(root, '.codex'), 'sessions');
   const say = line => appendFile(workerLog, `${new Date().toISOString()} ${line}\n`).catch(() => {});
   // The brief and the judges run here, beside the kit, never inside it (generation-stages briefCommand `cwd`).
-  const codexCwd = path.join(ROOT, CODEX_CWD);
+  const codexCwd = path.join(root, CODEX_CWD);
   await mkdir(codexCwd, { recursive: true });
   for (const file of await projectDocsAt(codexCwd)) await say(`codex folder ${codexCwd} reads ${file}: the brief and the judges read it beside their prompts`);
 
   let health = { ok: false, codex: false, grok: false, at: null }, checkedAt = 0, beatAt = 0, prunedAt = 0;
   const cooldowns = createCooldowns();
-  const quiet = (args, limitMs) => readOutput(og, args, { limitMs });
   async function keepAlive() {
     if (Date.now() - checkedAt >= TIMING.healthMs) {
       // A health check waits for a codex slot like any run; past ten minutes it counts as not healthy.
-      health = cooldowns.apply(parseHealth(await quiet(['health'], 600_000))); checkedAt = Date.now();
+      health = cooldowns.apply(parseHealth(await og.health())); checkedAt = Date.now();
       await say(`health codex=${health.codex} grok=${health.grok}`);
       for (const name of await closeFrontFolders(path.join(kit, 'output'))) await say(`front folder ${name} closed`);
       // Jobs that ended while they waited for their requester (cancelled, expired): closed here, so og setup can update again.
@@ -450,7 +491,7 @@ export async function main({ once = false } = {}) {
     if (Date.now() - prunedAt >= TIMING.pruneMs) {
       // Between jobs only (this loop runs no stage meanwhile); og prune keeps open jobs and recent closed ones.
       prunedAt = Date.now();
-      await say(`prune ${(await quiet(['prune', String(keepDays(env.ODDBOUT_GENERATION_KEEP_DAYS))], 600_000)).trim().split('\n').at(-1) ?? ''}`);
+      await say(`prune ${(await og.prune(keepDays(env.ODDBOUT_GENERATION_KEEP_DAYS))).trim().split('\n').at(-1) ?? ''}`);
     }
     if (Date.now() - beatAt >= TIMING.heartbeatMs) {
       const reply = await api.heartbeat(health, await codexUsage(sessions).catch(() => null)).catch(error => ({ ok: false, code: error.message }));
@@ -512,7 +553,7 @@ export async function main({ once = false } = {}) {
         // `capture`: the start of the run's output comes back too (a codex run's header names its session; generation-stages codexSessionId).
         let output = '';
         const onOutput = capture ? chunk => { if (output.length < CAPTURE_BYTES) output += String(chunk).slice(0, CAPTURE_BYTES - output.length); } : null;
-        const code = await run(og, ['run', ogId, '--', ...args], { cwd: kit, log, stdin, signal: controller.signal, onOutput });
+        const code = await og.run(ogId, args, { cwd: kit, log, stdin, signal: controller.signal, onOutput });
         await dispatches.end(record, code);
         tally.add(args, code, Date.now() - started);
         return capture ? { code, output } : { code };
@@ -521,7 +562,7 @@ export async function main({ once = false } = {}) {
       codexSession: (id, sinceMs) => codexSessionFacts(sessions, id, sinceMs), codexCwd,
       api, signal: controller.signal, lowMarginFeetTaken,
       fetchBytes: async url => { const r = await fetch(url, { signal: AbortSignal.timeout(60_000) }); if (!r.ok) throw new Error(`download ${r.status}`); return new Uint8Array(await r.arrayBuffer()); },
-      motionsPy: args => unlessStopped(controller.signal, () => run(python, ['-I', path.join(ROOT, 'bin', 'motions.py'), ...args], { cwd: kit, log, signal: controller.signal })
+      motionsPy: args => unlessStopped(controller.signal, () => run(python, ['-I', path.join(root, 'bin', 'motions.py'), ...args], { cwd: kit, log, signal: controller.signal })
         .then(code => ({ code }))),
       // Method 5: at 6 libwebp's slowest alpha search took 3–7 s per transparent look instead of 0.1–0.2 s, for 1 % fewer bytes. `size`: the
       // longest side kept (1024), or `<width>x<height>` exactly (the expression sheet, which its profile set takes at 1536 × 1024).

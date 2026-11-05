@@ -41,12 +41,15 @@ export const defaultRoot = (env = process.env) =>
 export const installed = root => existsSync(path.join(root, 'host.env')) && existsSync(path.join(root, 'bin', 'og'));
 
 /**
- * `KEY=value` lines og reads one key at a time (never sourced). Values are checked here: og puts some on PATH.
- * @param {{ nodeBin: string, python?: string, toolPath?: string, slots?: number, memory?: string }} options
+ * `KEY=value` lines og reads one key at a time (never sourced). Values are checked here: og puts some on PATH. On Windows (host/og.mjs)
+ * a folder may also start with its drive (`C:\…`), and TOOL_PATH separates folders with `;`, as PATH does there.
+ * @param {{ nodeBin: string, python?: string, toolPath?: string, slots?: number, memory?: string, platform?: NodeJS.Platform }} options
  */
-export function hostEnv({ nodeBin, python = '', toolPath = '', slots = 3, memory = '8G' }) {
-  const dir = /^\/[^:\n=]*$/;
-  if (!dir.test(nodeBin) || (python && !dir.test(python)) || (toolPath && !toolPath.split(':').every(d => dir.test(d)))) throw new Error('host-env-path');
+export function hostEnv({ nodeBin, python = '', toolPath = '', slots = 3, memory = '8G', platform = process.platform }) {
+  const posix = /^\/[^:\n=]*$/, windows = /^[A-Za-z]:[\\/][^:;\r\n=]*$/;
+  /** @type {(d: string) => boolean} */
+  const dir = d => posix.test(d) || (platform === 'win32' && windows.test(d));
+  if (!dir(nodeBin) || (python && !dir(python)) || (toolPath && !toolPath.split(platform === 'win32' ? ';' : ':').every(dir))) throw new Error('host-env-path');
   if (![2, 3].includes(slots) || !/^([4-9]|[1-5][0-9]|6[0-4])G$/.test(memory)) throw new Error('host-env-limits');
   return ['# Written by npm run host:setup (scripts/host.mjs). og reads these keys one by one; it never sources this file.',
     `NODE_BIN=${nodeBin}`, `PYTHON=${python}`, `TOOL_PATH=${toolPath}`, `SLOTS=${slots}`, `MEMORY=${memory}`, ''].join('\n');

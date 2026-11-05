@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, readdir } from 'node:fs/promises';
+import { copyFile, mkdtemp, readFile, readdir } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -22,6 +22,20 @@ test('the modules a host installs load from the flat bin folder they run in', as
   for (const name of HOST_FILES.filter(name => name.endsWith('.mjs') && name !== 'generation-worker.mjs')) {
     await import(pathToFileURL(path.join(bin, name)).href);
   }
+});
+
+// og.mjs (a host's og on Windows and macOS, 2026-11-05) runs from the same flat folder: it may import only what a host installs. The
+// worker never imports it (ODDBOUT's own PC runs bash og and has no og.mjs); og.mjs hands itself to the worker instead.
+test('og.mjs loads from the flat bin folder beside the files a host installs, and the worker does not need it', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'host-layout-og-'));
+  await installFiles(root, here);
+  const bin = path.join(root, 'bin');
+  await copyFile(path.join(here, 'og.mjs'), path.join(bin, 'og.mjs'));
+  for (const name of localImports(await readFile(path.join(bin, 'og.mjs'), 'utf8'))) assert.ok(HOST_FILES.includes(name.slice(2)), `og.mjs imports ${name}`);
+  const og = await import(pathToFileURL(path.join(bin, 'og.mjs')).href);
+  assert.equal(typeof og.createOg, 'function');
+  // The test above pins the worker's static imports; nor may it load og.mjs later.
+  assert.doesNotMatch(await readFile(path.join(bin, 'generation-worker.mjs'), 'utf8'), /import\(\s*['"`][^'"`]*og\.mjs/);
 });
 
 test('og self-update carries every file a host installs', async () => {
