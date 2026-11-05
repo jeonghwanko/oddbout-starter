@@ -124,6 +124,24 @@
         /* 2026-11-04 메뉴 리뉴얼: 위 막대는 검은 단색 하나(빗금·선 없음) — 아래 하늘 바탕 화면과 선 없이 면으로 나뉜다. */
         background: #141020;
       }
+      /* 2026-11-06 구단 운영 공개: 로고 옆 노란 알약 하나(구단 페이지 ?club=1 로) — 위 막대의 검은 면 위 단색, 테·그림자 없음. */
+      .game-club {
+        display: inline-flex;
+        align-items: center;
+        min-height: 36px;
+        margin-left: 12px;
+        padding: 0 16px;
+        border-radius: 999px;
+        background: #ffe23d;
+        color: #141020;
+        font: 800 15px/1 Pretendard, "Malgun Gothic", Arial, sans-serif;
+        text-decoration: none;
+        white-space: nowrap;
+      }
+      .game-club:focus-visible {
+        outline: 3px solid #f27949;
+        outline-offset: 3px;
+      }
       .game-home {
         display: inline-flex;
         align-items: center;
@@ -185,7 +203,7 @@
       }
       html[data-boot-motion="reduce"] .boot-loading-ring { animation: none; }
     </style>
-  <script type="module" crossorigin src="/assets/fighter-dYnaQW9e.js"></script>
+  <script type="module" crossorigin src="/assets/fighter-ClKBqpLM.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-B0Z9INg1.js">
   <link rel="modulepreload" crossorigin href="/assets/_oddbout-analytics-DfJ7iKZO.js">
   <link rel="modulepreload" crossorigin href="/assets/pseudo-B3ZLOM_E.js">
@@ -199,24 +217,24 @@
   <link rel="modulepreload" crossorigin href="/assets/oddboutSession-DSAoLzZC.js">
   <link rel="modulepreload" crossorigin href="/assets/catalog-CEcV9Fij.js">
   <link rel="modulepreload" crossorigin href="/assets/localeLoader-Ds4pezaf.js">
-  <link rel="modulepreload" crossorigin href="/assets/accountControl-DLpoLVr6.js">
+  <link rel="modulepreload" crossorigin href="/assets/accountControl-CGkAM-La.js">
   <link rel="modulepreload" crossorigin href="/assets/FighterIdentity-C-a2FKLG.js">
   <link rel="modulepreload" crossorigin href="/assets/arenaRankings-V6eb7uKv.js">
   <link rel="modulepreload" crossorigin href="/assets/arena-bout-rules-DeO3fhoZ.js">
   <link rel="modulepreload" crossorigin href="/assets/UtcTime-BFPbMiHs.js">
   <link rel="modulepreload" crossorigin href="/assets/rankedDuels-XdUkrZTT.js">
-  <link rel="modulepreload" crossorigin href="/assets/RuntimeOptions-CjFZAoSL.js">
+  <link rel="modulepreload" crossorigin href="/assets/RuntimeOptions-DKQFwshO.js">
   <link rel="modulepreload" crossorigin href="/assets/PhaserTextureFamilies-C8vBSGBz.js">
-  <link rel="modulepreload" crossorigin href="/assets/UiFeedback-C3pbbIC7.js">
+  <link rel="modulepreload" crossorigin href="/assets/UiFeedback-CkytYjl9.js">
   <link rel="modulepreload" crossorigin href="/assets/CityFighterIds-Cn4Dlo0-.js">
   <link rel="modulepreload" crossorigin href="/assets/ArenaRoster-DG-1FLPy.js">
-  <link rel="modulepreload" crossorigin href="/assets/TwitchArenaBout-BUNdzgjk.js">
   <link rel="modulepreload" crossorigin href="/assets/FighterCombat-BtEAbMu-.js">
   <link rel="modulepreload" crossorigin href="/assets/arena-concept-runtime-DnFSv7m0.js">
   <link rel="modulepreload" crossorigin href="/assets/ArenaArtCatalog-BYp4EWR6.js">
-  <link rel="modulepreload" crossorigin href="/assets/ArenaGoldDropView-DVz1wLZs.js">
-  <link rel="modulepreload" crossorigin href="/assets/GameBoot-BaH7Oxr4.js">
-  <link rel="modulepreload" crossorigin href="/assets/ArenaBracketPlate-Dgi2G8fm.js">
+  <link rel="modulepreload" crossorigin href="/assets/ArenaGoldDropView-MODjh80f.js">
+  <link rel="modulepreload" crossorigin href="/assets/TwitchArenaBout-Bl3Ehf_2.js">
+  <link rel="modulepreload" crossorigin href="/assets/GameBoot-B60FZe3R.js">
+  <link rel="modulepreload" crossorigin href="/assets/ArenaBracketPlate-BjFg85Vo.js">
   <link rel="stylesheet" crossorigin href="/assets/accountControl-DJTesTWn.css">
   <link rel="stylesheet" crossorigin href="/assets/fighter-1IPMv0AM.css">
 </head>
@@ -255,6 +273,6 @@
       for (const type of ["keydown", "keyup"]) homeLink.addEventListener(type, event => event.stopPropagation());
       if (bootParams.get("motion") === "reduce") document.documentElement.dataset.bootMotion = "reduce";
     </script>
-    <script>(()=>{const p={"en":["assets/en-1aJG8dNp.js","assets/en-Ckkb7tjq.js","assets/en-Dlkc4kRO.js"],"ko":["assets/ko-BwRyDRa4.js","assets/ko-DBcoIe0S.js"],"ja":["assets/en-Dlkc4kRO.js","assets/ja-BFqdislq.js","assets/ja-CiPG3aq1.js"]}[document.documentElement.lang];if(!p)return;for(const f of p){const l=document.createElement("link");l.rel="modulepreload";l.crossOrigin="";l.href="./"+f;document.head.append(l)}})()</script>
+    <script>(()=>{const p={"en":["assets/en-B-p_FWYB.js","assets/en-DAlx_uWF.js","assets/en-Dlkc4kRO.js"],"ko":["assets/ko-ChwhRoc7.js","assets/ko-G1en-jRM.js"],"ja":["assets/en-Dlkc4kRO.js","assets/ja-D3NPAdna.js","assets/ja-OcogOMpF.js"]}[document.documentElement.lang];if(!p)return;for(const f of p){const l=document.createElement("link");l.rel="modulepreload";l.crossOrigin="";l.href="./"+f;document.head.append(l)}})()</script>
   </body>
 </html>
