@@ -505,7 +505,8 @@ export function compose({ host, name, mode, remote, server, skill, ctx, binary, 
   const fix = host === 'codex' ? `codex mcp login ${used}` : host === 'claude-code' ? `claude mcp login ${used}` : `/mcp auth ${used}`;
   return { ...base, status: 'registered', next: 'verify', run: null,
     verify: { ...verify, ifSignInRequired: `If get_profile says ODDBOUT needs a sign-in (authentication-required), ask the user to run \`${fix}\` and approve in the browser.` },
-    say: join([`ODDBOUT is set up in ${label} as \`${used}\`.`, extra, userLoad(host, used), 'Then I\'ll check your account with get_profile; if it asks for a sign-in, you\'ll approve it in your browser.']) };
+    say: join([`ODDBOUT is set up in ${label} as \`${used}\`.`, extra, changed ? userLoad(host, used) : '',
+      `${changed ? 'Then I' : 'I'}'ll check your account with get_profile; if it asks for a sign-in, you'll approve it in your browser.`]) };
 }
 
 // ---- Command line --------------------------------------------------------------------------------------------------------------------
