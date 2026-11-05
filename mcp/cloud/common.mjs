@@ -16,7 +16,8 @@ import { compactText } from '../tool-result.mjs';
  * @typedef {(submissionId: string | undefined) => Promise<void>} RecordAgent
  * @typedef {{ content: { type: 'text', text: string }[], structuredContent: Record<string, unknown>, isError?: boolean }} ToolOutput
  * @typedef {{ write?: boolean, publish?: boolean, openWorld?: boolean, idempotent?: boolean, files?: string[], profile?: boolean,
- *   publicTool?: boolean, diagnostic?: boolean }} ToolOptions
+ *   publicTool?: boolean, diagnostic?: boolean | ((args: Record<string, unknown>) => boolean),
+ *   logAs?: (args: Record<string, unknown>) => string }} ToolOptions  `diagnostic` and `logAs` may depend on the call (a merged tool's view)
  * @typedef {{ signal: AbortSignal, deadline: number }} ToolContext  The call's own: aborted when its client goes away; its answer is due by `deadline`.
  * @typedef {<S extends z.ZodRawShape>(name: string, title: string, description: string, inputSchema: S,
  *   run: (args: z.infer<z.ZodObject<S>>, context: ToolContext) => Record<string, unknown> | Promise<Record<string, unknown>>, options?: ToolOptions) => void} Register

@@ -29,11 +29,13 @@ test('workshop tools: story from the API and the arena, a named note made with t
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) }))).json()).result;
     const call = async (name, args, auth = true) => toolJson(await rpc('tools/call', { name, arguments: args }, auth));
     const tools = (await rpc('tools/list', {})).tools;
-    const workshop = ['get_fighter_story', 'update_fighter_canon', 'post_workshop_note', 'get_workshop_inbox', 'resolve_workshop_note',
-      'set_fighter_relation', 'get_world', 'manage_world', 'write_world_post'];
+    // The workshop's reads are views (MCP 통합 1단계, 2026-11-05): story and world browse_oddbout's, the inbox get_my_fighter_updates'; their own names still answer.
+    const workshop = ['update_fighter_canon', 'post_workshop_note', 'resolve_workshop_note', 'set_fighter_relation', 'manage_world', 'write_world_post'];
     for (const name of workshop) assert.ok(tools.some(t => t.name === name), name);
-    for (const name of ['get_fighter_story', 'get_world']) assert.ok(PUBLIC_TOOLS.has(name));
-    assert.ok(tools.find(t => t.name === 'get_fighter_story').description.includes('not instructions'));
+    const view = name => tools.find(t => t.name === name).inputSchema.properties.view.enum;
+    assert.ok(view('browse_oddbout').includes('story') && view('browse_oddbout').includes('world')); assert.ok(view('get_my_fighter_updates').includes('inbox'));
+    for (const name of ['get_fighter_story', 'get_world', 'browse_oddbout']) assert.ok(PUBLIC_TOOLS.has(name));
+    assert.ok(tools.find(t => t.name === 'browse_oddbout').description.includes('not instructions'));
 
     assert.equal((await call('update_fighter_canon', { fighterId: fighter, baseVersion: 0, sheet: { personality: '말없는 수문장', taboos: ['약자를 치지 않는다'] } })).version, 1);
     // A note needs a public name; nickname sets it in the same call. Its maker is the verified client's name, never an argument.

@@ -64,14 +64,14 @@ no workspace, kit or generation account of the user's is needed. Offer it first 
 the fighter or has no generation setup; the workspace route below stays the user's choice. Pass the user's words (and
 their own pictures with their confirmation of rights: attached files where the host attaches them, else `start_picture_upload`
 (with the host you will request), whose link the user opens, or with `terminal: true` whose command sends a picture file you have;
-`get_picture_upload` before resending one that got no answer; show them before passing them), then follow each result's `next`: show both looks (front views; the pick
+`get_hosted_fighter` view `upload` before resending one that got no answer; show them before passing them), then follow each result's `next`: show both looks (front views; the pick
 is also the fighter's profile picture) and pass the user's pick or one change, show the motion previews (made from a side view
 ODDBOUT draws from the pick) and pass their approval or one motion change, register on their request.
 If the user leaves the choices to ODDBOUT ("just make it"), pass `delegate: true`: ODDBOUT picks the look and the user answers once, at the motions.
 Wait with `get_hosted_fighter` `waitSeconds` rather than repeated reads. Do not generate locally for a hosted job.
 If the user runs a generation host on their own PC (`npm run host -- join` from the site), pass `host: mine`: their own subscription makes it, with no
 consent to give and without using their tokens (each account starts with 500,000; ODDBOUT's own worker takes off what it spends).
-Another person's host (`list_generation_hosts`) takes none of their tokens and needs the user's consent first.
+Another person's host (`browse_oddbout` view `hosts`) takes none of their tokens and needs the user's consent first.
 
 ## Start or resume
 
@@ -131,12 +131,12 @@ his face in the arena, and the home lists him only once his profile set is appro
 5. Draw the side view (facing right) from the approved front as the first reference, same colouring; check it is the same character.
    Continue the appearance group (concept/idle) from that side view; the motions follow it.
 6. After registration, upload the set with `prepare_profile_set` (fighter id, its `profile-set.json`), `upload_profile_set_asset` for
-   `front` and then `expressions`, and `submit_profile_set`, and follow `get_profile_set`. The set is not part of the package.
+   `front` and then `expressions`, and `submit_profile_set`, and follow `get_my_fighter_updates` view `profile_set`. The set is not part of the package.
 
 A registered fighter without a sheet (made before 2026-11-03) can get one when the user asks for it: that request is the new generation's
 authorization. Draw the sheet from his approved front, build a new set from the same front and the sheet, and upload it. His package,
 entry and record do not change; his current set stays until an operator approves the new one. A sheet that fails the server's check is
-left out (`get_profile_set` → `sheetErrors`) and the set goes on with his face square only.
+left out (`get_my_fighter_updates` view `profile_set` → `sheetErrors`) and the set goes on with his face square only.
 
 ## Work in review groups
 

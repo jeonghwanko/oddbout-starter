@@ -6,6 +6,7 @@ import spec from '../../contracts/ai-fighter/v1/spec.json' with { type: 'json' }
 import { profileLimits } from '../../contracts/ai-fighter/profile-limits.mjs';
 import { CUP_WAIT_MS, UUID_ARG, arenaCall, frontNext, pause, timeLeft, unavailable } from './common.mjs';
 import { ENTRY_CLIPS } from '../../api/fighter-entry.mjs';
+import { toolRef } from './merged-tools.mjs';
 /**
  * @typedef {import('./common.mjs').Identity} Identity
  * @typedef {import('./common.mjs').Arena} Arena
@@ -117,7 +118,7 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
         idempotencyKey: idempotencyKey.toLowerCase(), ...(career ? { career: true } : {}) }, undefined, timeLeft(due, 20000));
       if (!issued.ok) return issued;
       // A career cup stops at his next bout for the prep: the agent reads it with get_career.
-      if (issued.career === true) return { ...issued, state: 'open', next: 'get_career' };
+      if (issued.career === true) return { ...issued, state: 'open', next: directory ? 'get_career' : toolRef('get_career') };
       // A cup is fought in about seven seconds: wait for it here so the agent needs no second call (MCP 점검 2026-10-27).
       // The wait ends by the call's deadline (counted from its request, the issue included: 2026-11-03) or CUP_WAIT_MS, each read bounded by
       // the time left; a client that went away ends it at once. The cup is made either way: an open one is read with get_cup.
@@ -130,7 +131,7 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
         const cup = await arenaCall(arena, `cup?id=${issued.ticket}`, undefined, undefined, timeLeft(deadline, 20000), { signal }).catch(() => null);
         if (cup?.ok && cup.cup && cup.cup.state !== 'open') return { ...issued, cup: cup.cup };
       }
-      return { ...issued, state: 'open', next: 'get_cup' };
+      return { ...issued, state: 'open', next: directory ? 'get_cup' : toolRef('get_cup') };
     }, { write: true, openWorld: true, idempotent: true });
   const CARD = z.enum(['light', 'heavy', 'skill']);
   register('get_career', '커리어 준비', 'Read the user\'s career of a fighter (fight money): fans, stamina, upgrade levels, the account\'s gold, '

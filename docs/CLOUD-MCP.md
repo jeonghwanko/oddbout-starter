@@ -249,7 +249,8 @@ Anthropic의 Claude 커넥터 디렉터리에 내는 주소는 `https://mcp.oddb
   메타데이터의 `resource_documentation`은 Claude 연결 안내 `https://oddbout.com/cloud-plugin/claude.html`(`DIRECTORY_DOCUMENTATION`)이다.
 - 게이트웨이는 `mcp.oddbout.com` 호스트에서만 `/claude`, `/claude/.well-known/oauth-protected-resource`, `/.well-known/oauth-protected-resource/claude`를
   함수의 `/claude`로 넘기고 `x-oddbout-public-resource: https://mcp.oddbout.com/claude`를 붙인다. 함수는 이 값일 때만 그 주소를 광고한다. 로그인 먼저 주소와 같은 방식이다.
-- `/mcp`의 title·설명·지침은 그대로다(시험이 `/mcp` 55종과 그 목록의 sha256을 본다). 2026-11-05에 바뀐 것은 하나다: 제작 원본 도구 셋
+- `/mcp`의 title·설명·지침은 디렉터리판 때문에 바뀌지 않았다(시험이 `/mcp` 목록의 sha256을 본다). 같은 날 따로 바뀐 것은 둘이다. 하나는
+  [읽기 도구 통합](#읽기-도구-통합-1단계-2026-11-05)(55종 → 42종)이고, 다른 하나는: 제작 원본 도구 셋
   (`store_creator_source`·`get_creator_source`·`prepare_creator_source_download`)의 id 입력 스키마가 zod `uuid()`(`format: uuid`와 168자 패턴)에서
   `UUID_ARG`의 짧은 패턴으로 바뀌어 목록이 480바이트 줄었다(59,470 → 58,990 B). ChatGPT 앱 심사가 고정한 도구는 아니다.
   `/signin`은 아래 [로그인 먼저 주소의 도구](#로그인-먼저-주소의-도구-2026-11-05).
@@ -277,7 +278,8 @@ Anthropic의 Claude 커넥터 디렉터리에 내는 주소는 `https://mcp.oddb
 ## 로그인 먼저 주소의 도구 (2026-11-05)
 
 `/signin`은 `/mcp`와 같은 것을 등록한다. 도구, `_meta`(`securitySchemes`·`openai/fileParams`·`openai/profile`), 맨 위 `securitySchemes`, 서버 지침과
-도구가 답하는 문장까지 바이트로 같다(시험이 대결장 키·호스팅 생성이 있을 때 55종과 없을 때 21종에서 `tools/list`·`initialize`를 비교한다).
+도구가 답하는 문장까지 바이트로 같다(시험이 대결장 키·호스팅 생성이 있을 때 42종과 없을 때 20종에서 `tools/list`·`initialize`를 비교한다.
+[읽기 도구 통합](#읽기-도구-통합-1단계-2026-11-05) 전에는 55종과 21종).
 
 - 까닭: 위 연결 안내가 Codex를 `/signin`에 붙이고, Codex의 네이티브 파일 입력은 OpenAI 파일 호스트를 거쳐 업로드 도구에 닿는다(아래 2026-10-25
   파일 전달 재현, `website/cloud-plugin/review-20261025/native-registration-evidence.json`). #328이 이 주소에서 파일 도구 여덟 종과 OpenAI 메타데이터를
@@ -285,6 +287,33 @@ Anthropic의 Claude 커넥터 디렉터리에 내는 주소는 `https://mcp.oddb
 - 판(`edition`)은 그대로 `full`이다. 세션이 판에 묶이므로(`af_mcp_session_editions`) 새 판을 만들지 않는다. Supabase 주소의 `/signin`도 같다.
 - 업로드 도구가 없는 주소는 `/claude`뿐이다. 그 판의 문장은 `uploads`(디렉터리판이 아닐 때 참)가 거짓일 때의 문장이다(`frontNext`, `NO_FILES`).
   `directory`는 "한국어 상태 이름을 빼는 디렉터리판"을 뜻한다.
+
+## 읽기 도구 통합 1단계 (2026-11-05)
+
+`/mcp`·`/signin`의 도구가 55종(목록 58,990 B, 대화마다 약 14k 토큰)이었다. OpenAI는 한 턴 시작에 함수 20개 미만을 권한다. 같은 종류의 읽기 도구를
+도구 하나의 `view`로 묶어 42종(55,986 B)으로 줄였다(`mcp/cloud/merged-tools.mjs`). 대결장 키·호스팅 생성이 없으면 21종 → 20종이다.
+
+| 도구 | `view` → 원래 도구 |
+| --- | --- |
+| `browse_oddbout`(로그인 없음) | `fighters` → `list_fighters`, `rankings` → `get_rankings`, `record` → `get_fighter_record`, `cup` → `get_cup`, `bout` → `read_bout`, `story` → `get_fighter_story`, `world` → `get_world`, `style_guide` → `get_style_guide`, `hosts` → `list_generation_hosts` |
+| `get_hosted_fighter` | `job`(기본) → 원래 `get_hosted_fighter`, `upload` → `get_picture_upload`, `link` → `report_picture_link` |
+| `get_my_fighter_updates` | `profile_set` → `get_profile_set`, `career` → `get_career`, `inbox` → `get_workshop_inbox` |
+| `check_creator_file` | `input` → `verify_creator_file_input`, `source` → `get_creator_source` |
+
+- 묶는 기준: 읽기 도구끼리, 같은 로그인끼리만 묶는다. 호스트는 도구마다 승인 여부(`readOnlyHint`·`destructiveHint`)를 정하고, 로그인 필요 여부는
+  도구 이름으로 정한다(`PUBLIC_TOOLS`, ChatGPT의 `securitySchemes`). 그래서 읽기와 쓰기를 섞으면 읽기도 승인을 묻는다.
+- 각 view는 원래 도구의 코드·인자·답을 그대로 쓴다. 합친 스키마는 모든 인자를 선택으로 두고, view가 원래 도구의 인자 스키마로 다시 검사한다.
+  빠진 인자는 `invalid-arguments`와 그 view가 받는 인자(`next`)로 답한다. 로그 줄의 `tool`은 원래 도구 이름이고 `via`가 합친 도구다.
+  `read_bout`의 대결장 예산(`OWNER_BUDGET_TOOLS`)도 view의 원래 도구로 판단한다.
+- 원래 이름도 답한다(`aliasCall`): 예전 목록을 가진 호스트(도구를 새로 고치기 전의 ChatGPT, 목록을 5분 두는 2026-07-28 클라이언트)가 부르면
+  그 view로 바꿔 부른다. 목록에는 나오지 않는다. 키트의 스킬·문서와 게임 문맥이 옛 이름을 적어도 동작한다. 합친 도구의 설명은 view마다 `(was …)`로 옛 이름을 적는다.
+- `/mcp`의 설명·지침·결과 문장은 옛 이름 대신 `browse_oddbout(view=cup)`처럼 적는다(`renameTools`, `toolRef`).
+- 손대지 않은 것:
+  - ChatGPT 앱 심사 1.0.3이 다루는 도구(`get_fighter_spec`, `get_profile`, `open_creator_homepage`, `check_creation_readiness`, `list_my_fighters`,
+    `get_registered_fighter`, `get_fighter_submission`, 삭제·등록 도구)는 심사가 끝날 때까지 이름과 정의를 바이트까지 그대로 둔다
+    ([공개 심사 기록](records/CLOUD-PLUGIN-REVIEW.md)). 시험이 이 열두 도구의 sha256을 본다. 2단계(쓰기 도구)와 함께 심사 뒤 한 번에 갱신한다.
+  - `/claude` 디렉터리판은 원래 이름 35종 그대로다(통합도, 별칭도 없다).
+  - 설명 문장은 줄이지 않았다. 제품 규칙을 담고 있어서 묶음으로 줄이지 않는다(목록 바이트 시험의 규칙).
 
 ## 사용 흐름
 
@@ -357,6 +386,7 @@ creator-kit 소스는 계정·등록에 호스팅 ODDBOUT MCP 하나를 쓰도�
 
 등록 뒤에 에이전트가 할 일이다. 선수를 싸우게 해 보고, 기록을 읽고, 전투 스타일을 고친다. 도구는 함수에 결과 함수 열쇠
 (`ODDBOUT_ARENA_AGENT_KEY`, 게임 `oddbout-arena`와 같은 값)가 있을 때만 목록에 나온다. 열쇠 없이 이 코드만 올리면 도구 목록은 그대로다.
+`/mcp`에서 아래 읽기 도구는 `browse_oddbout`·`get_my_fighter_updates`의 view다([읽기 도구 통합](#읽기-도구-통합-1단계-2026-11-05)). 원래 이름도 답한다.
 
 | 도구 | 로그인 | 하는 일 |
 | --- | --- | --- |
@@ -417,8 +447,8 @@ ODDBOUT의 생성 워커가 사용자의 말(과 그림 1~2장)로 선수를 만
 | `register_hosted_fighter` | 사용자가 동작을 승인한 뒤 등록. 프로필은 워커 초안 위에 사용자가 바꾼 칸만 얹는다(언어별 이름·대사는 칸별로). 다른 선수와 같은 서버 검사를 거친다 |
 | `cancel_hosted_fighter` | 신청 취소. 이미 쓴 토큰은 돌아오지 않는다(보유 토큰, 2026-10-31) |
 | `start_picture_upload` | 그림 올리기 표(30분, 그림 둘). 사이트 링크(`page`)를 주고, `terminal: true`면 터미널 명령(`command`)도 준다. 아래 |
-| `get_picture_upload` | 표가 받은 그림(`uploads`: id·크기·`url` 10분·`used`·`usable`)과 닫힌 까닭(`closed`) |
-| `report_picture_link` | 진단: 에이전트가 가진 그림 주소의 종류·호스트만 서버 로그에 남긴다. 가져오지도 보관하지도 않는다. 아래 |
+| `get_picture_upload`(`/mcp`에서 `get_hosted_fighter` view `upload`) | 표가 받은 그림(`uploads`: id·크기·`url` 10분·`used`·`usable`)과 닫힌 까닭(`closed`) |
+| `report_picture_link`(`/mcp`에서 `get_hosted_fighter` view `link`) | 진단: 에이전트가 가진 그림 주소의 종류·호스트만 서버 로그에 남긴다. 가져오지도 보관하지도 않는다. 아래 |
 
 ### 그림 올리기 표 (2026-11-01)
 
@@ -605,7 +635,7 @@ URL 재발급과 신규 접수가 열린 상태에서 다른 계정의 키 조�
 - 신청의 `host`: `oddbout`(기본, 공식 호스트), `any`(승인된 호스트 누구나), 호스트 id. `any`와 호스트 id는 사용자의 글과 그림이 그 호스트 PC로 가므로
   `hostConsent: true`가 있어야 한다. 브리프(안전 판정)는 늘 공식 호스트가 쓴다. 그 뒤 단계를 처음 가져간 호스트가 끝까지 맡는다.
   공식 호스트는 다른 호스트가 켜져 있으면 `any` 신청을 3분 기다려 준다.
-- `list_generation_hosts`(로그인 없음): 승인되고 켜진 호스트의 id·이름·켜짐·`any` 받기·오늘 남은 수.
+- `list_generation_hosts`(로그인 없음, `/mcp`에서 `browse_oddbout` view `hosts`): 승인되고 켜진 호스트의 id·이름·켜짐·`any` 받기·오늘 남은 수.
 - 호스트 되기와 생성기 설치·운영은 `npm run host -- …`([생성 호스트 되기](GENERATION-HOST.md), 생성기 `host/`)가 아래 API를 부른다(사이트 화면은 다음 단계):
   `POST /generations/host`(이름·`billing` `subscription`|`api-key`·약관 동의) →
   운영자 승인(`af_generation_hosts.approved`) → `POST /generations/host/keys`(워커 열쇠, 한 번만 보인다, 90일, 둘까지) →
@@ -618,6 +648,7 @@ URL 재발급과 신규 접수가 열린 상태에서 다른 계정의 키 조�
 경로는 같은 API(`api/workshop.mjs`, 마이그레이션 `20261027200000_oddbout_workshop`·`20261027210000_oddbout_open_worlds`·
 `20261027230000_oddbout_workshop_hardening`)다. 이 MCP가
 쓴 공방 글과 사연 판에는 OAuth 클라이언트 이름이 남는다(`createHandler`의 `agentClient` — 도구 인자에서 받지 않는다).
+`/mcp`에서 `get_fighter_story`·`get_world`는 `browse_oddbout`, `get_workshop_inbox`는 `get_my_fighter_updates`의 view다([읽기 도구 통합](#읽기-도구-통합-1단계-2026-11-05)).
 
 | 도구 | 로그인 | 하는 일 |
 | --- | --- | --- |
