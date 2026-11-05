@@ -110,7 +110,24 @@ test('a host install runs og as its own account: providers signed in inside the 
     assert.equal(og(['worker', 'key', 'https://example.supabase.co/functions/v1/ai-fighter'], `afw_${'c'.repeat(64)}\n`).status, 0);
     assert.equal(statSync(path.join(root, 'worker.env')).mode & 0o777, 0o600);
     assert.equal(og(['harden']).status, 0);
-    assert.match(await readFile(path.join(root, '.codex', 'config.toml'), 'utf8'), /^shell_tool = false$/m);
+    const configFile = path.join(root, '.codex', 'config.toml'), config = await readFile(configFile, 'utf8');
+    assert.match(config, /^shell_tool = false$/m);
+    // Project instructions off (2026-11-05): a top-level key, so before the [features] table og appends (after it, it would be that table's).
+    const docs = /^project_doc_max_bytes = 0$/m;
+    assert.ok(docs.test(config) && config.search(docs) < config.indexOf('[features]'), config);
+    // A config hardened before (features only): og harden adds the line at the top, once, and keeps one [features] table.
+    await writeFile(configFile, `model = "gpt-6.1-sol"\n${config.replace(/^# og harden \(project docs\).*\nproject_doc_max_bytes = 0\n\n/, '')}`);
+    assert.ok(!docs.test(await readFile(configFile, 'utf8')));
+    assert.equal(og(['harden']).status, 0);
+    assert.equal(og(['harden']).status, 0);
+    const hardened = await readFile(configFile, 'utf8');
+    assert.equal(hardened.match(/^project_doc_max_bytes = 0$/gm)?.length, 1);
+    assert.ok(hardened.startsWith('# og harden (project docs)') && hardened.match(/^\[features\]$/gm)?.length === 1, hardened);
+    // An operator's own value is theirs to change: og harden stops and says so.
+    await writeFile(configFile, `project_doc_max_bytes = 4096\n${hardened.replace(/^# og harden \(project docs\).*\nproject_doc_max_bytes = 0\n\n/, '')}`);
+    const own = og(['harden']);
+    assert.notEqual(own.status, 0); assert.match(own.stderr, /sets project_doc_max_bytes — set it to 0 there by hand/);
+    await writeFile(configFile, hardened);
     assert.equal(og(['worker', 'install']).status, 0);
     const unit = await readFile(path.join(units, 'oddbout-host-worker.service'), 'utf8');
     assert.match(unit, new RegExp(`^ExecStart=${root}/bin/og worker run$`, 'm')); assert.match(unit, /^Slice=oddbout-host\.slice$/m);
