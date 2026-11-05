@@ -38,7 +38,7 @@ const PLUGIN = 'oddbout@oddbout';
  *   error?: string }} ServerResult
  */
 /** @typedef {{ code: number | null, stdout: string, stderr: string, timedOut: boolean, seconds: number, error?: string }} RunResult */
-/** @typedef {{ command: string, exitCode: number | null, seconds: number, timedOut?: boolean, output?: string }} Action */
+/** @typedef {{ command: string, exitCode: number | null, seconds: number, timedOut?: boolean, output?: string, terminal?: boolean }} Action */
 /**
  * @typedef {{ state: 'present' | 'installed' | 'would-install' | 'skipped' | 'not-offered' | 'other-marketplace' | 'failed', plugin?: string,
  *   reason?: string }} SkillResult
@@ -183,11 +183,21 @@ export function findExecutable(name, env, platform) {
 const SAFE_ARG = /^[A-Za-z0-9_@:/.=#,+-]+$/;
 const OUTPUT_LIMIT = 8 * 1024 * 1024;
 /**
+ * A host command's stdio. `terminal` hands it this process's terminal: stdin as it is, and its output straight to our stderr, so stdout
+ * keeps only the JSON reply. Claude Code's `mcp login` refuses to start without a terminal on stdin ("stdin isn't a terminal", 2.1.283,
+ * reproduced 2026-11-05), even in its browser mode; every other command runs detached from the terminal with its output captured.
+ * @param {boolean} terminal @returns {import('node:child_process').StdioOptions}
+ */
+export function spawnStdio(terminal) {
+  return terminal ? ['inherit', 2, 2] : ['ignore', 'pipe', 'pipe'];
+}
+
+/**
  * @param {string} file @param {string[]} args
- * @param {{ env: Env, cwd: string, timeoutMs: number, echo?: boolean }} options
+ * @param {{ env: Env, cwd: string, timeoutMs: number, echo?: boolean, terminal?: boolean }} options
  * @returns {Promise<RunResult>}
  */
-export function runCommand(file, args, { env, cwd, timeoutMs, echo = false }) {
+export function runCommand(file, args, { env, cwd, timeoutMs, echo = false, terminal = false }) {
   for (const arg of args) if (!SAFE_ARG.test(arg)) throw new Error(`Refusing an argument with special characters: ${arg}`);
   const windows = process.platform === 'win32', started = Date.now();
   return new Promise(resolve => {
@@ -203,7 +213,7 @@ export function runCommand(file, args, { env, cwd, timeoutMs, echo = false }) {
     /** @type {import('node:child_process').ChildProcess} */
     let child;
     try {
-      child = spawn(windows ? `"${file}"` : file, args, { cwd, env, shell: windows, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+      child = spawn(windows ? `"${file}"` : file, args, { cwd, env, shell: windows, windowsHide: true, stdio: spawnStdio(terminal) });
     } catch (/** @type {any} */ error) { finish(null, String(error?.message ?? error)); return; }
     timer = setTimeout(() => { timedOut = true; killTree(child); }, timeoutMs);
     child.stdout?.on('data', chunk => { if (stdout.length < OUTPUT_LIMIT) stdout += chunk; if (echo) process.stderr.write(chunk); });
@@ -227,9 +237,9 @@ function outputTail(result) {
 
 /**
  * @typedef {{
- *   host: Host, bin: string, env: Env, cwd: string, mutate: boolean, remote: boolean, waitMs: number,
+ *   host: Host, bin: string, env: Env, cwd: string, mutate: boolean, remote: boolean, interactive: boolean, waitMs: number,
  *   actions: Action[], notes: string[],
- *   run: (args: string[], options?: { timeoutMs?: number, echo?: boolean, record?: boolean }) => Promise<RunResult>
+ *   run: (args: string[], options?: { timeoutMs?: number, echo?: boolean, terminal?: boolean, record?: boolean }) => Promise<RunResult>
  * }} Context
  */
 
@@ -379,13 +389,17 @@ async function ensureServer(ctx, name) {
   // A public-address server answers signed out, so whether it is signed in is unknown: get_profile tells, and its error names the fix.
   if (server.auth === 'unknown') return { state, server, others: plan.others, signIn: loginTried ? 'failed' : 'unknown' };
   if (loginTried) return { state, server, others: plan.others, signIn: 'failed' };
+  // Claude Code's login needs a terminal on stdin. Run by an agent's command tool there is none, and Claude Code's own /mcp panel signs in.
+  if (ctx.host === 'claude-code' && !ctx.interactive) return { state, server, others: plan.others, signIn: 'in-session' };
   if (!ctx.mutate) return { state, server, others: plan.others, signIn: 'needed' };
 
   if (ctx.host === 'claude-code' && (await ctx.run(['mcp', 'login', '--help'], { timeoutMs: 20_000 })).code !== 0) {
     return { state, server, others: plan.others, signIn: 'unsupported' };
   }
   process.stderr.write(`Opening your browser to sign in to ODDBOUT (waiting up to ${Math.round(ctx.waitMs / 1000)}s)…\n`);
-  const login = await ctx.run(['mcp', 'login', server.name], { timeoutMs: ctx.waitMs, echo: true, record: true });
+  // Codex signs in through its browser callback with no terminal (codex-rs perform_oauth_login), so its output stays captured.
+  const terminal = ctx.host === 'claude-code';
+  const login = await ctx.run(['mcp', 'login', server.name], { timeoutMs: ctx.waitMs, echo: !terminal, terminal, record: true });
   if (login.timedOut) return { state, server, others: plan.others, signIn: 'timed-out' };
   if (ctx.host === 'codex') {
     const again = (await listServers(ctx)).servers.find(entry => entry.name === server?.name);
@@ -491,6 +505,13 @@ export function compose({ host, name, mode, remote, server, skill, ctx, binary, 
     return { ...base, status: 'sign-in-needed', next: 'user-signs-in', run: null, verify,
       say: join([`ODDBOUT is added to ${label} as \`${used}\`.`, remoteSignIn(host, used), extra, 'Tell me when you\'ve signed in and I\'ll check your account.']) };
   }
+  if (server.signIn === 'in-session' && host === 'claude-code') {
+    // Run from an agent's command tool, which has no terminal: Claude Code's login cannot start there, so its own panel signs in.
+    return { ...base, status: 'sign-in-needed', next: 'user-signs-in', run: null, verify,
+      say: join([`ODDBOUT is added to Claude Code as \`${used}\`.`, extra,
+        `One step is left, and only you can do it: Claude Code signs in from its own screen. Type /mcp, choose ${used}, then Authenticate, and approve in your browser with Google.`,
+        `If ${used} isn't in the /mcp list yet, exit and run \`claude --continue\` first.`, 'Then I\'ll check your account with get_profile.']) };
+  }
   if (server.signIn === 'in-session') {
     return { ...base, status: 'sign-in-needed', next: 'user-signs-in', run: null, verify,
       say: join([`ODDBOUT is added to Gemini CLI as \`${used}\`.`, 'Restart Gemini CLI (it loads servers when it starts; Gemini skips them in a folder you haven\'t trusted), then type',
@@ -502,9 +523,9 @@ export function compose({ host, name, mode, remote, server, skill, ctx, binary, 
       say: join([`ODDBOUT is added to ${label} as \`${used}\`, but the sign-in didn't complete.`, `To sign in, ${how}, and approve in your browser with Google.`, extra]) };
   }
   // Signed in or not is unknown (a public-address server, or `check`): get_profile settles it.
-  const fix = host === 'codex' ? `codex mcp login ${used}` : host === 'claude-code' ? `claude mcp login ${used}` : `/mcp auth ${used}`;
+  const fix = host === 'codex' ? `run \`codex mcp login ${used}\`` : host === 'claude-code' ? `type /mcp, choose ${used}, then Authenticate` : `type \`/mcp auth ${used}\``;
   return { ...base, status: 'registered', next: 'verify', run: null,
-    verify: { ...verify, ifSignInRequired: `If get_profile says ODDBOUT needs a sign-in (authentication-required), ask the user to run \`${fix}\` and approve in the browser.` },
+    verify: { ...verify, ifSignInRequired: `If get_profile says ODDBOUT needs a sign-in (authentication-required), ask the user to ${fix} and approve in the browser.` },
     say: join([`ODDBOUT is set up in ${label} as \`${used}\`.`, extra, changed ? userLoad(host, used) : '',
       `${changed ? 'Then I' : 'I'}'ll check your account with get_profile; if it asks for a sign-in, you'll approve it in your browser.`]) };
 }
@@ -529,11 +550,13 @@ Never writes a token: the agent's own MCP client signs in.`;
 
 /**
  * @param {string[]} argv
- * @param {{ env?: Env, cwd?: string, platform?: NodeJS.Platform, write?: (text: string) => void }} [io]
+ * `interactive`: whether this runs in a terminal someone types in (stdin is one), not in an agent's command tool.
+ * @param {{ env?: Env, cwd?: string, platform?: NodeJS.Platform, write?: (text: string) => void, interactive?: boolean }} [io]
  * @returns {Promise<number>}
  */
 export async function main(argv, io = {}) {
   const env = io.env ?? process.env, cwd = io.cwd ?? process.cwd(), platform = io.platform ?? process.platform;
+  const interactive = io.interactive ?? Boolean(process.stdin.isTTY);
   const write = io.write ?? (text => process.stdout.write(text));
   const reply = (/** @type {object} */ value, code = 0) => { write(JSON.stringify(value, null, 2) + '\n'); return code; };
   const fail = (/** @type {string} */ say, code = 1, extra = {}) => reply({ oddbout: 'error', version: VERSION, status: 'failed', next: 'stop', say, run: null, rules: RULES, ...extra }, code);
@@ -587,12 +610,13 @@ export async function main(argv, io = {}) {
   const remote = options.local === null ? detectRemote(env, platform, isFile) : { remote: !options.local, reasons: [options.local ? 'flag --local' : 'flag --remote'] };
   /** @type {Context} */
   const ctx = {
-    host, bin: binary, env, cwd, mutate: mode === 'connect', remote: remote.remote, waitMs: options.wait * 1000, actions: [], notes: [],
-    async run(args, { timeoutMs = 60_000, echo = false, record = false } = {}) {
-      const result = await runCommand(binary, args, { env, cwd, timeoutMs, echo });
+    host, bin: binary, env, cwd, mutate: mode === 'connect', remote: remote.remote, interactive, waitMs: options.wait * 1000, actions: [], notes: [],
+    async run(args, { timeoutMs = 60_000, echo = false, terminal = false, record = false } = {}) {
+      const result = await runCommand(binary, args, { env, cwd, timeoutMs, echo, terminal });
       if (record) {
+        // A command given the terminal wrote to it directly, so there is no output to keep.
         ctx.actions.push({ command: [HOSTS[host].bin, ...args].join(' '), exitCode: result.code, seconds: result.seconds,
-          ...(result.timedOut ? { timedOut: true } : {}), ...(result.code !== 0 ? { output: outputTail(result) } : {}) });
+          ...(result.timedOut ? { timedOut: true } : {}), ...(terminal ? { terminal: true } : result.code !== 0 ? { output: outputTail(result) } : {}) });
       }
       return result;
     },

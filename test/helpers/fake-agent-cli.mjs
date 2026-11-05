@@ -1,7 +1,7 @@
 // A stand-in for `claude`, `codex` and `gemini` on PATH (test/oddbout-connect.test.mjs). It logs every call to FAKE_AGENT_LOG and keeps
 // each host's state the way the real one does: Claude Code's servers in $CLAUDE_CONFIG_DIR/.claude.json, Gemini CLI's in
 // $GEMINI_CLI_HOME/.gemini/settings.json, the rest (sign-ins, Codex servers, plugins) in FAKE_AGENT_STATE. FAKE_AGENT_LOGIN picks how a
-// sign-in ends: ok (default), fail or hang (never returns, as a browser sign-in nobody finishes).
+// sign-in ends: ok (default), fail or hang (never returns, as a browser sign-in nobody finishes). `claude mcp login` needs a terminal.
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -47,6 +47,11 @@ if (host === 'claude') {
     out(`${args[2]}:\n  Scope: User config (available in all your projects)\n  Status: ${status}\n  Type: http\n  URL: ${entry.url}`);
   } else if (command === 'mcp login --help') out('Usage: claude mcp login [options] <name>');
   else if (args[0] === 'mcp' && args[1] === 'login') {
+    // As Claude Code 2.1.283: no terminal on stdin, no sign-in, browser or not. A test cannot open a terminal, so FAKE_AGENT_TERMINAL=1
+    // stands in for one where the CLI was given it.
+    if (!process.stdin.isTTY && env.FAKE_AGENT_TERMINAL !== '1') {
+      process.stderr.write(`Couldn't complete authentication for "${args[2]}": stdin isn't a terminal, so authentication can't be completed here.\n`); exit(1);
+    }
     if (!(await signIn())) { process.stderr.write('Authentication failed\n'); exit(1); }
     state.claude.signedIn.push(args[2]); save(); out(`Authenticated with ${args[2]}.`);
   } else { process.stderr.write(`fake claude: unexpected ${command}\n`); exit(64); }

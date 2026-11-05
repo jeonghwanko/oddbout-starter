@@ -5,7 +5,7 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { addressKind, detectHost, detectRemote, planServer, SIGN_IN_URL, stripJsonComments } from '../packages/oddbout/lib/connect.mjs';
+import { addressKind, detectHost, detectRemote, main, planServer, SIGN_IN_URL, spawnStdio, stripJsonComments } from '../packages/oddbout/lib/connect.mjs';
 import { CLOUD_RESOURCE, DIRECTORY_RESOURCE, LEGACY_PUBLIC_RESOURCE, PUBLIC_DIRECTORY_RESOURCE, PUBLIC_RESOURCE, PUBLIC_SIGN_IN_RESOURCE,
   SIGN_IN_RESOURCE } from '../mcp/cloud/resources.mjs';
 
@@ -49,7 +49,18 @@ async function sandbox() {
     try { reply = JSON.parse(stdout); } catch { assert.fail(`not one JSON reply:\n${stdout}\n${stderr}`); }
     return { code, reply, stderr, calls: (await calls()).slice(before) };
   };
-  return { dir, home, cwd, base, run, cleanup: () => rm(dir, { recursive: true, force: true }) };
+  /**
+   * As someone running it in their own terminal: `main` in this process with `interactive` set, since a test cannot open a terminal.
+   * The fake's FAKE_AGENT_TERMINAL=1 stands in for the terminal the CLI hands Claude Code's login.
+   * @param {string[]} args @param {Record<string, string>} [env] @returns {Promise<{ code: number, reply: any, calls: string[] }>}
+   */
+  const runInTerminal = async (args, env = {}) => {
+    const before = (await calls()).length;
+    let stdout = '';
+    const code = await main(args, { env: { ...base, FAKE_AGENT_TERMINAL: '1', ...env }, cwd, interactive: true, write: text => { stdout += text; } });
+    return { code, reply: JSON.parse(stdout), calls: (await calls()).slice(before) };
+  };
+  return { dir, home, cwd, base, run, runInTerminal, cleanup: () => rm(dir, { recursive: true, force: true }) };
 }
 
 const MUTATING = /\b(mcp add|mcp login [^-]|mcp remove|marketplace add|plugin install|plugin add)\b/;
@@ -94,7 +105,9 @@ test('host and browser detection', () => {
   assert.equal(JSON.parse(stripJsonComments('{"a": "x // y", /* c */ "b": 1 // d\n}')).a, 'x // y');
 });
 
-test('Claude Code: one run adds the server, signs in and installs the skill; a second run changes nothing', async () => {
+test('Claude Code from an agent: adds the server and the skill, leaves the sign-in to /mcp; a second run changes nothing', async () => {
+  // An agent's command tool gives no terminal, and Claude Code's `mcp login` refuses without one (2.1.283; the fake does the same).
+  // 0.1.0 ran it anyway: it failed in 2 s and opened no browser (user report, 2026-11-05).
   const box = await sandbox();
   try {
     const first = await box.run(['connect'], { CLAUDECODE: '1' });
@@ -105,28 +118,52 @@ test('Claude Code: one run adds the server, signs in and installs the skill; a s
       'claude plugin install oddbout@oddbout --scope user',
       'claude mcp add --transport http --scope user oddbout https://mcp.oddbout.com/signin',
       'claude mcp get oddbout',
-      'claude mcp login --help',
-      'claude mcp login oddbout',
-      'claude mcp get oddbout',
     ]);
-    assert.equal(first.reply.status, 'connected');
-    assert.equal(first.reply.next, 'verify');
+    assert.equal(first.reply.status, 'sign-in-needed');
+    assert.equal(first.reply.next, 'user-signs-in');
+    assert.equal(first.reply.details.signIn, 'in-session');
     assert.equal(first.reply.verify.tool, 'get_profile');
     assert.equal(first.reply.run, null);
     assert.equal(first.reply.details.skill.state, 'installed');
-    assert.deepEqual(first.reply.details.server, { name: 'oddbout', url: SIGN_IN_URL, scope: 'user', auth: 'signed-in', kind: 'sign-in-first', state: 'added' });
-    assert.match(first.reply.say, /\/mcp/);
+    assert.deepEqual(first.reply.details.server, { name: 'oddbout', url: SIGN_IN_URL, scope: 'user', auth: 'not-signed-in', kind: 'sign-in-first', state: 'added' });
+    assert.match(first.reply.say, /Type \/mcp, choose oddbout, then Authenticate/);
+    assert.match(first.reply.say, /only you can do it/);
     assert.ok(first.reply.rules.some((/** @type {string} */ rule) => /callback\/redirect URL in chat/.test(rule)));
     const config = JSON.parse(await readFile(path.join(box.base.CLAUDE_CONFIG_DIR, '.claude.json'), 'utf8'));
     assert.deepEqual(config.mcpServers, { oddbout: { type: 'http', url: SIGN_IN_URL } });
 
     const second = await box.run(['connect'], { CLAUDECODE: '1' });
     assert.deepEqual(second.calls, ['claude plugin marketplace list --json', 'claude plugin list --json', 'claude mcp get oddbout']);
-    assert.equal(second.reply.status, 'connected');
+    assert.equal(second.reply.status, 'sign-in-needed');
     assert.equal(second.reply.details.server.state, 'present');
     assert.equal(second.reply.details.skill.state, 'present');
     assert.deepEqual(second.reply.details.actions, []);
   } finally { await box.cleanup(); }
+});
+
+test('Claude Code in a terminal: the login gets the terminal, then the run is connected and idempotent', async () => {
+  const box = await sandbox();
+  try {
+    const first = await box.runInTerminal(['connect', '--no-skill'], { CLAUDECODE: '1' });
+    assert.deepEqual(first.calls, [
+      'claude mcp add --transport http --scope user oddbout https://mcp.oddbout.com/signin',
+      'claude mcp get oddbout',
+      'claude mcp login --help',
+      'claude mcp login oddbout',
+      'claude mcp get oddbout',
+    ]);
+    assert.equal(first.reply.status, 'connected');
+    assert.equal(first.reply.details.signIn, 'done');
+    assert.deepEqual(first.reply.details.actions.at(-1), { command: 'claude mcp login oddbout', exitCode: 0, seconds: first.reply.details.actions.at(-1).seconds, terminal: true });
+    const second = await box.runInTerminal(['connect', '--no-skill'], { CLAUDECODE: '1' });
+    assert.deepEqual(second.calls, ['claude mcp get oddbout']);
+    assert.equal(second.reply.status, 'connected');
+  } finally { await box.cleanup(); }
+});
+
+test('only a login handed the terminal inherits stdin; its output goes to stderr so stdout keeps the reply', () => {
+  assert.deepEqual(spawnStdio(true), ['inherit', 2, 2]);
+  assert.deepEqual(spawnStdio(false), ['ignore', 'pipe', 'pipe']);
 });
 
 test('Codex: the add signs in by itself; the skill comes from the repository marketplace; a second run changes nothing', async () => {
@@ -234,7 +271,7 @@ test('Codex over SSH: the add is given only the time to save the server, and the
 test('a browser sign-in that never finishes ends at --wait with the same command to resume', async () => {
   const box = await sandbox();
   try {
-    const { reply, calls } = await box.run(['connect', '--no-skill', '--wait', '5'], { CLAUDECODE: '1', FAKE_AGENT_LOGIN: 'hang' });
+    const { reply, calls } = await box.runInTerminal(['connect', '--no-skill', '--wait', '5'], { CLAUDECODE: '1', FAKE_AGENT_LOGIN: 'hang' });
     assert.equal(calls.at(-1), 'claude mcp login oddbout');
     assert.equal(reply.status, 'sign-in-pending');
     assert.equal(reply.next, 'rerun');
