@@ -118,7 +118,8 @@ MCP 인가 명세(2025-11-25)는 redirect를 `localhost` 또는 https로 정하�
   - `local`로 부르고 같은 경고를 둔다. 이름 옆에는 `claude://claude.ai`처럼 스킴을 함께 보여, Claude 웹(`claude.ai`)과 헷갈리지 않게 한다.
   - 위험은 loopback과 같은 종류다. 이 PC의 다른 프로그램이 `claude:` 스킴을 가로챌 수 있지만, 코드는 앱의 PKCE 검증값 없이 쓸 수 없다.
   - Mac 앱과 다른 버전의 주소는 확인하지 않았다. 다른 주소면 이 화면이 "지원하는 연결 요청이 아닙니다"로 거절한다.
-  - 사이트 게시(`site:build`·`site:publish`) 뒤 앱의 연결 버튼으로 실제 로그인을 한 번 확인한다.
+  - 게시(#347, 사이트 빌드 `339c5e6a`) 뒤 2026-11-06 Windows(Claude 4.16336.0.0)에서 앱의 연결 버튼으로 실제 로그인을 확인했다. 터미널 로그인을
+    지운 뒤 `/mcp` → `oddbout` → Connect를 누르고 oddbout.com에서 승인했다(사용자 확인). Mac 앱은 확인하지 않았다.
 - 서버 주소는 로그인 먼저 주소다. 공개 주소는 로그인 없이 답하므로 CLI가 인증이 필요 없다고 본다. 로그인 먼저 주소는 POST·GET·HEAD에 401을 준다.
   Gemini CLI는 연결 전에 HEAD로 묻는다.
 - MCP 함수의 Origin 허용 목록은 바꾸지 않는다. 이 CLI들은 브라우저가 아니라 Origin을 보내지 않는다.
@@ -155,13 +156,12 @@ stdout에 JSON 답 하나(`status`·`next`·`say`·`run`·`rules`·`verify`·`de
      and disable aren't available in this session"이고 `claude --continue`도 없다(11-05).
      앱을 다시 시작할 필요는 없다. 터미널에서 로그인한 뒤 새 세션을 열자 `oddbout`이 종류 "user", 상태 connected, 도구 42개였고 `get_profile`이
      계정을 돌려줬다(11-06, 별도 확인 세션).
-     앱 자신의 `/mcp` → `oddbout` → 연결(Connect)은 지금 실패한다. 앱(Claude 4.16336.0.0, Windows)은 돌아갈 주소로
-     `claude://claude.ai/mcp-auth-callback/sdk`를 쓰고(main.log `mcpAuthenticate … redirectScheme=custom`), 동의 화면의 `agentOf`
-     (`web/cloud-connect/connect.mjs`)는 앱 스킴을 설계대로 받지 않는다("지원하는 연결 요청이 아닙니다"). 그래서 답은 터미널에서 한 번
-     로그인하라고 한다: `claude mcp login oddbout`, 또는 터미널에서 직접 `npx -y oddbout@latest connect`(터미널이 있으면 로그인까지 한다).
-     그다음 앱에서 새 세션을 열라고 한다. 앱의 연결 버튼으로는 보내지 않는다. 새 세션은 이 대화를 이어받지 않으므로 거기서 계정 확인을 부탁하라고 한다.
-     그 `claude://` 주소를 동의 화면이 받을지는 보안 결정이라 사용자에게 묻는 중이다. Mac과 다른 앱 버전은 확인하지 않았다.
-   - 손으로 `--host claude`로 실행해 어느 쪽인지 모르면 두 방법을 모두 준다(터미널 CLI는 `/mcp` → Authenticate, 데스크톱 앱은 터미널 로그인).
+     앱 자신의 `/mcp` → `oddbout` → 연결(Connect)은 `claude://claude.ai/mcp-auth-callback/sdk`로 돌아온다. 동의 화면이 처음에는 이 앱 스킴을
+     거절했고, #347부터 그 주소 하나를 받는다(위 Claude 데스크톱 앱). 11-06 Windows에서 그 버튼으로 끝까지 로그인됐다.
+     그래서 답은 새 세션을 열고 `/mcp` → `oddbout` → Connect를 누른 뒤 브라우저에서 승인하라고 한다(브라우저가 Claude를 열지 물으면 허용).
+     동의 화면이 그 로그인을 거절하면(받지 않는 주소를 쓰는 다른 OS·앱 버전) 터미널에서 `claude mcp login oddbout`으로 한 번 로그인하고 새 세션을 열라고 한다.
+     새 세션은 이 대화를 이어받지 않으므로 거기서 계정 확인을 부탁하라고 한다. Mac과 다른 앱 버전은 확인하지 않았다.
+   - 손으로 `--host claude`로 실행해 어느 쪽인지 모르면 `/mcp` → Authenticate(데스크톱 앱은 Connect)를 주고, 데스크톱 앱이 거절되면 터미널 로그인을 준다.
      답의 `details.surface`가 `terminal`·`desktop`·`unknown`이다.
    - Codex는 `codex resume --last`다.
 

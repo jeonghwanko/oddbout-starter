@@ -14,9 +14,9 @@ Your agent runs the command and follows its reply. You approve the Google sign-i
    - **Claude Code**: one step is yours. Claude Code signs in only with a terminal attached, and an agent's command has none, so the reply
      asks you to type `/mcp`, choose `oddbout`, then Authenticate. When you run the command yourself in a terminal, it runs
      `claude mcp login oddbout` there and your browser opens.
-   - **Claude desktop app (Code tab)**: sign in once from a terminal (`claude mcp login oddbout`, or this command run in a terminal), then
-     start a new session in the app. The app's own `/mcp` → Connect does not work with ODDBOUT yet: ODDBOUT's sign-in page does not accept
-     the app's `claude://` return address.
+   - **Claude desktop app (Code tab)**: start a new session in the app, then type `/mcp`, choose `oddbout`, choose Connect and approve in
+     your browser (let the browser open Claude when it asks). If ODDBOUT refuses that sign-in, for example on an app version whose return
+     address it does not take, sign in once from a terminal with `claude mcp login oddbout` and start a new session.
    - **Gemini CLI**: restart it, then type `/mcp auth oddbout`.
 4. Installs the `create-fighter` skill in Codex and Claude Code (skills only: no second MCP server).
 5. Tells your agent to confirm with ODDBOUT's `get_profile` that it reaches your account.
@@ -69,7 +69,7 @@ Agents load new MCP servers when a session starts.
 
 - **Claude Code in a terminal**: type `/mcp` and reconnect `oddbout`, or exit and run `claude --continue`; `/reload-plugins` loads the skill.
 - **Claude desktop app (Code tab)**: a session that was already open cannot pick up the new server, and `/mcp reconnect` is not available there.
-  After the terminal sign-in, start a new session; the app does not need a restart. The reply detects the desktop app and gives these steps.
+  Start a new session (the app does not need a restart) and sign in there from `/mcp`. The reply detects the desktop app and gives these steps.
 - **Codex**: run `codex resume --last`.
 
 Then ask the agent to check your ODDBOUT account.

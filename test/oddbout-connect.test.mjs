@@ -167,10 +167,11 @@ test('only a login handed the terminal inherits stdin; its output goes to stderr
   assert.deepEqual(spawnStdio(false), ['ignore', 'pipe', 'pipe']);
 });
 
-test('the Claude desktop app signs in from a terminal, then a new session; never its own /mcp → Connect', async () => {
+test('the Claude desktop app: a new session, then its own /mcp → Connect; a terminal sign-in only if ODDBOUT refuses it', async () => {
   // In the desktop app (Code tab) a running session cannot take in a server added from outside and has no `claude --continue`; a new
-  // session does, with no restart (2026-11-06). Its own /mcp → Connect sends the redirect claude://claude.ai/mcp-auth-callback/sdk, which
-  // ODDBOUT's consent page refuses (web/cloud-connect/connect.mjs agentOf), so the reply must not send desktop users there.
+  // session does, with no restart (2026-11-06). Its /mcp → Connect returns to claude://claude.ai/mcp-auth-callback/sdk, which the consent
+  // page accepts since #347; a sign-in through it worked on 2026-11-06 (Windows). An app whose address the page does not take falls back to
+  // the terminal login.
   assert.equal(claudeSurface({ CLAUDECODE: '1', CLAUDE_CODE_ENTRYPOINT: 'claude-desktop' }), 'desktop');
   assert.equal(claudeSurface({ CLAUDECODE: '1', CLAUDE_CODE_ENTRYPOINT: 'cli' }), 'terminal');
   assert.equal(claudeSurface({}), 'unknown');
@@ -179,19 +180,19 @@ test('the Claude desktop app signs in from a terminal, then a new session; never
     const desktop = await box.run(['connect'], { CLAUDECODE: '1', CLAUDE_CODE_ENTRYPOINT: 'claude-desktop' });
     assert.equal(desktop.reply.status, 'sign-in-needed');
     assert.equal(desktop.reply.details.surface, 'desktop');
-    assert.match(desktop.reply.say, /Sign in once from a terminal \(PowerShell or Terminal, not this chat\): run `claude mcp login oddbout`/);
-    assert.match(desktop.reply.say, /start a new session in the Claude app \(no need to restart it\)/);
-    assert.match(desktop.reply.say, /own \/mcp → Connect does not work with ODDBOUT yet/);
+    assert.match(desktop.reply.say, /Start a new session in the Claude app \(no need to restart it\), then type \/mcp, choose oddbout, choose Connect, and approve in your browser/);
+    assert.match(desktop.reply.say, /let the browser open Claude when it asks/);
+    assert.match(desktop.reply.say, /If ODDBOUT refuses that sign-in, sign in once from a terminal .* with `claude mcp login oddbout`/);
     assert.match(desktop.reply.say, /it loads in the new session/);
-    assert.doesNotMatch(desktop.reply.say, /claude --continue|reconnect|reload-plugins|quit the Claude app|choose Connect/);
-    assert.match(desktop.reply.verify.ifToolsMissing, /do not send them to \/mcp → Connect/);
+    assert.doesNotMatch(desktop.reply.say, /claude --continue|reconnect|reload-plugins|quit the Claude app|does not work/);
+    assert.match(desktop.reply.verify.ifToolsMissing, /start a new session and there type \/mcp, choose oddbout, choose Connect/);
     assert.match(desktop.reply.verify.ifToolsMissing, /does not carry this conversation/);
 
-    // Run by hand with --host claude, the surface is unknown: the terminal panel for the CLI, a terminal sign-in for the desktop app.
+    // Run by hand with --host claude, the surface is unknown: /mcp in either Claude Code, the terminal login as the desktop fallback.
     const byHand = await box.run(['connect', '--host', 'claude']);
     assert.equal(byHand.reply.details.surface, 'unknown');
-    assert.match(byHand.reply.say, /In the Claude Code terminal, type \/mcp, choose oddbout, then Authenticate/);
-    assert.match(byHand.reply.say, /For the Claude desktop app, sign in once from a terminal/);
+    assert.match(byHand.reply.say, /type \/mcp, choose oddbout, then Authenticate \(Connect in the desktop app\)/);
+    assert.match(byHand.reply.say, /If ODDBOUT refuses the desktop app's sign-in, sign in once from a terminal/);
   } finally { await box.cleanup(); }
 });
 

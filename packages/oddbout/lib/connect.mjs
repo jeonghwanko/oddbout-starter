@@ -424,8 +424,9 @@ export const RULES = [
  * Where Claude Code runs: its terminal CLI or the Claude desktop app (Code tab). Both read ~/.claude.json and its sign-ins, but a desktop
  * session cannot take in a server added from outside ("Reconnect, enable, and disable aren't available in this session") and has no
  * `claude --continue`; a new session does, with no restart of the app (2026-11-05/06, Windows). The app's own /mcp → Connect signs in with
- * the redirect `claude://claude.ai/mcp-auth-callback/sdk` (app 4.16336.0.0, Windows), an app scheme ODDBOUT's consent page refuses
- * (`web/cloud-connect/connect.mjs` agentOf), so desktop users sign in once from a terminal. Unknown when someone runs this by hand.
+ * the redirect `claude://claude.ai/mcp-auth-callback/sdk`, which ODDBOUT's consent page accepts since #347 (that exact address); a sign-in
+ * through it was confirmed on 2026-11-06 (Claude 4.16336.0.0, Windows; the Mac app's callback was not read). A terminal sign-in stays the
+ * fallback for an app whose callback the page does not take. Unknown when someone runs this by hand.
  * @param {Env} env @returns {ClaudeSurface}
  */
 export function claudeSurface(env) {
@@ -434,7 +435,9 @@ export function claudeSurface(env) {
 }
 
 /** @param {string} name */
-const terminalSignIn = name => `sign in once from a terminal (PowerShell or Terminal, not this chat): run \`claude mcp login ${name}\`, or \`${COMMAND} connect\`, and approve in your browser with Google`;
+const terminalSignIn = name => `sign in once from a terminal (PowerShell or Terminal, not this chat) with \`claude mcp login ${name}\`, then start a new session`;
+/** @param {string} name */
+const desktopConnect = name => `type /mcp, choose ${name}, choose Connect, and approve in your browser with Google (let the browser open Claude when it asks)`;
 /**
  * How Claude Code takes in the new server: `load` and `signIn` for the user, `agent` for the agent.
  * @param {ClaudeSurface} surface @param {string} name
@@ -444,8 +447,8 @@ function claudeSteps(surface, name) {
   if (surface === 'desktop') {
     return {
       load: 'The Claude app takes in a new connection in a new session: start one (no need to restart the app).',
-      signIn: `${terminalSignIn(name)[0].toUpperCase()}${terminalSignIn(name).slice(1)}. Then start a new session in the Claude app (no need to restart it). The app's own /mcp → Connect does not work with ODDBOUT yet.`,
-      agent: `This is the Claude desktop app: a running session cannot take in a server added from outside (/mcp reconnect is not available) and there is no \`claude --continue\`, but a new session does, without restarting the app. If ODDBOUT's tools are not available to you, ask the user to start a new session. If ${name} is not signed in, do not send them to /mcp → Connect: the app's claude:// sign-in is refused by ODDBOUT's consent page. Ask them to ${terminalSignIn(name)}, then start a new session. The new session does not carry this conversation, so tell the user to ask it to check their ODDBOUT account.`,
+      signIn: `Start a new session in the Claude app (no need to restart it), then ${desktopConnect(name)}. If ODDBOUT refuses that sign-in, ${terminalSignIn(name)}.`,
+      agent: `This is the Claude desktop app: a running session cannot take in a server added from outside (/mcp reconnect is not available) and there is no \`claude --continue\`, but a new session does, without restarting the app. If ODDBOUT's tools are not available to you, ask the user to start a new session and there ${desktopConnect(name)}. If ODDBOUT's consent page refuses that sign-in (an app version or system whose return address it does not take), ask them to ${terminalSignIn(name)}. The new session does not carry this conversation, so tell the user to ask it to check their ODDBOUT account.`,
     };
   }
   if (surface === 'terminal') {
@@ -457,8 +460,8 @@ function claudeSteps(surface, name) {
   }
   return {
     load: 'Claude Code takes in a new connection in a new session: in a terminal, start `claude` again (`claude --continue` reopens the last conversation); in the Claude desktop app, start a new session.',
-    signIn: `In the Claude Code terminal, type /mcp, choose ${name}, then Authenticate, and approve in your browser with Google (start a new session first if ${name} isn't listed). For the Claude desktop app, ${terminalSignIn(name)}, then start a new session there: the app's own /mcp → Connect does not work with ODDBOUT yet.`,
-    agent: `If ODDBOUT's tools are not available to you, ask the user to start a new session (in a terminal, \`claude --continue\`). If ${name} is not signed in: in the terminal CLI, /mcp → ${name} → Authenticate; in the Claude desktop app, ${terminalSignIn(name)} (the app's own Connect is refused by ODDBOUT's consent page), then a new session.`,
+    signIn: `In Claude Code, type /mcp, choose ${name}, then Authenticate (Connect in the desktop app), and approve in your browser with Google; start a new session first if ${name} isn't listed. If ODDBOUT refuses the desktop app's sign-in, ${terminalSignIn(name)}.`,
+    agent: `If ODDBOUT's tools are not available to you, ask the user to start a new session (in a terminal, \`claude --continue\`). If ${name} is not signed in: /mcp → ${name} → Authenticate (Connect in the desktop app); if ODDBOUT refuses the desktop app's sign-in, ${terminalSignIn(name)}.`,
   };
 }
 
@@ -551,9 +554,9 @@ export function compose({ host, name, mode, remote, server, skill, ctx, binary, 
       say: join([`ODDBOUT is added to ${label} as \`${used}\`.`, remoteSignIn(host, used), extra, 'Tell me when you\'ve signed in and I\'ll check your account.']) };
   }
   if (server.signIn === 'in-session' && host === 'claude-code') {
-    // Run from an agent's command tool, which has no terminal: Claude Code's login cannot start there. The terminal CLI signs in from its own
-    // /mcp panel; the desktop app's panel is refused by ODDBOUT's consent page, so it signs in from a terminal.
-    const why = surface === 'terminal' ? 'Claude Code signs in from its own screen.' : surface === 'desktop' ? 'The sign-in has to come from a terminal.' : '';
+    // Run from an agent's command tool, which has no terminal: Claude Code's login cannot start there, so its own /mcp panel signs in (the
+    // desktop app's from a new session).
+    const why = surface === 'unknown' ? '' : surface === 'desktop' ? 'The Claude app signs in from its own /mcp screen.' : 'Claude Code signs in from its own screen.';
     return { ...base, status: 'sign-in-needed', next: 'user-signs-in', run: null, verify,
       say: join([`ODDBOUT is added to Claude Code as \`${used}\`.`, extra,
         `One step is left, and only you can do it.${why ? ` ${why}` : ''}`, claudeSteps(surface, used).signIn,
