@@ -129,7 +129,7 @@ Oct 19, 2026 (`git log --reverse` shows `api/`, `worker/`, `mcp/` and `scripts/`
 first appears on Nov 2: `broadcast/` and `api/commerce/` have no earlier history. The arena repository's history starts
 Nov 2, extracted from the game with nine built-in fighters and a bout-only host.
 
-Dates are GitHub merge times (UTC); the two open pull requests show when they were opened.
+Dates are GitHub merge times (UTC).
 
 | Date | Change | Pull request |
 | --- | --- | --- |
@@ -141,8 +141,9 @@ Dates are GitHub merge times (UTC); the two open pull requests show when they we
 | Nov 2 | Broadcast Studio refresh and Google sign-in | [starter #296](https://github.com/jeonghwanko/oddbout-starter/pull/296) |
 | Nov 3 | Broadcast audio fix and Sandbox endurance package | [starter #302](https://github.com/jeonghwanko/oddbout-starter/pull/302) |
 | Nov 4 | Spotlight tickets, PayPal MCP reconciliation, creator Payouts, paid-task recovery | [starter #329](https://github.com/jeonghwanko/oddbout-starter/pull/329) |
-| Nov 4 (opened) | MIT license for the Twitch Cup code, with art terms in NOTICE | [twitch-cup #4](https://github.com/jeonghwanko/oddbout-twitch-cup/pull/4) (open) |
-| Nov 4 (opened) | Read-only Spotlight playback adapter, already served by the hosted arena | [twitch-cup #5](https://github.com/jeonghwanko/oddbout-twitch-cup/pull/5) (open) |
+| Nov 5 | MIT license for the Twitch Cup code, with art terms in NOTICE | [twitch-cup #4](https://github.com/jeonghwanko/oddbout-twitch-cup/pull/4) |
+| Nov 5 | Read-only Spotlight playback adapter, served by the hosted arena | [twitch-cup #5](https://github.com/jeonghwanko/oddbout-twitch-cup/pull/5) |
+| Nov 5 | The money flow on screen (ticket and host-room progress, settlement and payout receipts) and the judges' page | [starter #333](https://github.com/jeonghwanko/oddbout-starter/pull/333) |
 
 ## What this demo does not claim
 
@@ -178,7 +179,7 @@ store, never in the repository.
 
 - oddbout-starter (Showrunner and the creator kit): [MIT](../LICENSE). The bundled [sprite-gen](../vendor/sprite-gen)
   submodule keeps its own Apache-2.0 license and NOTICE.
-- oddbout-twitch-cup: the code becomes MIT when [#4](https://github.com/jeonghwanko/oddbout-twitch-cup/pull/4) merges.
+- oddbout-twitch-cup: the code is [MIT](https://github.com/jeonghwanko/oddbout-twitch-cup/blob/main/LICENSE).
   Its artwork, voices, fighter names and logos stay under the terms in its NOTICE.
 - DM Sans and Space Grotesk ship under the SIL Open Font License (`web/broadcast/assets/*-OFL.txt`). PayPal and Google
   marks belong to their owners.
