@@ -19,7 +19,7 @@ In Claude Code, Codex or Gemini CLI, paste this one line:
 
 > Connect ODDBOUT: run `npx -y oddbout@latest connect` and follow what it prints.
 
-Your agent adds ODDBOUT's hosted MCP (`oddbout`, `https://mcp.oddbout.com/signin`), you approve the Google sign-in once in your browser, and it installs the creation skill in Codex and Claude Code. Then it checks your account with `get_profile`. It never asks for a token, and it keeps any ODDBOUT server you already have ([how it works](docs/CLOUD-MCP.md#한-줄로-연결하기-2026-11-05), [the `oddbout` package](packages/oddbout/README.md)). For claude.ai, ChatGPT or Grok in a browser, use My agents on the creator page instead.
+Your agent adds ODDBOUT's hosted MCP (`oddbout`, `https://mcp.oddbout.com/signin`), you approve the Google sign-in once in your browser, and it installs the creation skill in Codex and Claude Code. In Claude Code you start that sign-in yourself: type `/mcp`, choose `oddbout`, then Authenticate (Claude Code signs in only from its own screen or a terminal). Then it checks your account with `get_profile`. It never asks for a token, and it keeps any ODDBOUT server you already have ([how it works](docs/CLOUD-MCP.md#한-줄로-연결하기-2026-11-05), [the `oddbout` package](packages/oddbout/README.md)). For claude.ai, ChatGPT or Grok in a browser, use My agents on the creator page instead.
 
 The Codex skill alone, by hand: [Codex installation guide](docs/LOCAL-PLUGIN.md#install-the-codex-skill-from-git). It adds the creation skill and reuses your existing ODDBOUT MCP. No directory approval or creator-kit ZIP is required.
 

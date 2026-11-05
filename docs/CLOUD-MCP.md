@@ -128,8 +128,13 @@ stdout에 JSON 답 하나(`status`·`next`·`say`·`run`·`rules`·`verify`·`de
    (로그인 먼저 주소가 먼저, 그다음 공개 주소). 다른 서버가 이미 `oddbout` 이름을 쓰면 알리고 그대로 둔다. 있는 서버를 지우거나 고치지 않는다.
    Gemini CLI의 `mcp add`는 같은 이름을 묻지 않고 덮어쓴다(0.67 실측). 그래서 설정 파일을 읽지 못하면 추가하지 않는다.
 3. 로그인은 호스트 자신의 MCP 클라이언트가 한다(동적 등록 + PKCE). CLI는 토큰을 보거나 받거나 쓰지 않는다.
-   - Claude Code: `claude mcp login oddbout`. 그 뒤 `claude mcp get oddbout`의 상태로 확인한다. 로그인 먼저 주소에서 "Connected"는 로그인이 된 것이다.
-   - Codex: `codex mcp add`가 곧바로 로그인한다. codex-rs는 설정을 먼저 저장하고 브라우저 콜백을 300초 기다린다. `codex mcp list --json`의
+   - Claude Code: `claude mcp login`은 stdin이 터미널이 아니면 시작하지 않는다. 브라우저 방식이어도 "stdin isn't a terminal"로 끝난다(2.1.283, 11-05
+     재현. 0.1.0이 stdin을 닫고 실행해서 실제 PC에서 2초 만에 실패했다). 그래서 에이전트의 명령 도구처럼 터미널이 없으면 로그인을 실행하지 않는다.
+     답은 남은 한 단계가 Claude Code의 `/mcp` → `oddbout` → Authenticate라고 말한다. 사람이 터미널에서 직접 실행하면(`process.stdin.isTTY`)
+     `claude mcp login oddbout`에 그 터미널을 넘긴다. 출력은 stderr로 바로 가서 stdout에는 JSON 답만 남는다. 그 뒤 `claude mcp get oddbout`의 상태로
+     확인한다. 로그인 먼저 주소에서 "Connected"는 로그인이 된 것이다.
+   - Codex: `codex mcp add`가 곧바로 로그인한다. codex-rs는 설정을 먼저 저장하고 브라우저 콜백을 300초 기다린다. 이 방식에는 터미널 검사가 없다
+     (`perform_oauth_login`; `--no-browser`만 stdin을 읽고, 터미널이 아니면 한 줄을 읽는다). `codex mcp list --json`의
      `auth_status`가 `o_auth`면 로그인된 것이다. 저장만 되고 로그인이 안 된 서버에는 `codex mcp login`만 한다.
    - Gemini CLI: CLI 로그인 명령이 없다. 다시 시작한 뒤 `/mcp auth oddbout`이다. 신뢰하지 않은 폴더에서는 사용자 서버도 꺼진다.
    - 브라우저를 기다리는 시간은 기본 110초(`--wait`)다. Claude Code 명령의 기본 제한 2분 안에 답하기 위해서다. 넘기면 같은 명령을 다시 실행하라고 답한다.
@@ -152,7 +157,7 @@ stdout에 JSON 답 하나(`status`·`next`·`say`·`run`·`rules`·`verify`·`de
 손으로 할 때도 같은 이름과 주소를 쓴다.
 
 ```bash
-# Claude Code: 추가한 뒤 로그인(브라우저가 열린다). Claude Code 안에서는 /mcp → oddbout → Authenticate
+# Claude Code: 추가한 뒤 터미널에서 로그인(브라우저가 열린다). 에이전트를 통해서는 안 된다: Claude Code 안에서 /mcp → oddbout → Authenticate
 claude mcp add --transport http --scope user oddbout https://mcp.oddbout.com/signin
 claude mcp login oddbout
 # Codex: 추가하면 곧바로 로그인한다. 브라우저가 열리지 않았거나 끊겼으면 codex mcp login oddbout

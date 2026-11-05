@@ -14,6 +14,7 @@
 VM 도메인 허용·Republish는 초기 환경 준비자의 단계이며 캐릭터마다 사용자에게 반복 요구하지 않습니다.
 
 Claude Code·Codex·Gemini CLI에서 ODDBOUT 계정을 연결하려면 이 한 줄을 붙여 넣으세요. 브라우저에서 Google 로그인을 한 번 승인하면 됩니다.
+Claude Code에서는 마지막에 `/mcp` → `oddbout` → Authenticate로 그 로그인을 직접 시작합니다.
 
 > Connect ODDBOUT: run `npx -y oddbout@latest connect` and follow what it prints.
 
