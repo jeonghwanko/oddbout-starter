@@ -269,6 +269,7 @@ Both routes:
 | `deploy/` | Service and creation-environment settings (JSON); several ship in the kit |
 | `tools/ai-fighter/` | Package validator, contract builder, gait and contact evidence |
 | `plugins/` | Plugin sources: `ai-fighter` (skill `create-fighter`) and `oddbout-cloud` (hosted-MCP plugin). `ai-fighter/local-files.mjs` holds the shared path confinement, rename retry and file hashing, beside the launcher that imports it |
+| `packages/oddbout` | The npm package behind `npx -y oddbout@latest connect`, which connects a terminal agent to the hosted MCP (`docs/CLOUD-MCP.md`) |
 | `vendor/sprite-gen` | The pinned generation engine, a Git submodule ([sprite-gen](#sprite-gen)) |
 | `website/`, `web/` | Pages `npm run site:build` builds into the creator site (plugin review sites, cloud connect) |
 | `examples/sparring-bot` | A geometric test fixture, never a generated character |

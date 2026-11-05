@@ -1,0 +1,34 @@
+{
+  "name": "oddbout",
+  "version": "0.1.0",
+  "description": "Connect Claude Code, Codex or Gemini CLI to ODDBOUT's hosted MCP in one command: npx -y oddbout@latest connect",
+  "type": "module",
+  "bin": {
+    "oddbout": "bin/oddbout.mjs"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "oddbout",
+    "mcp",
+    "claude-code",
+    "codex",
+    "gemini-cli",
+    "onboarding"
+  ],
+  "homepage": "https://oddbout.com",
+  "bugs": "https://github.com/jeonghwanko/oddbout-starter/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeonghwanko/oddbout-starter.git",
+    "directory": "packages/oddbout"
+  },
+  "license": "MIT"
+}

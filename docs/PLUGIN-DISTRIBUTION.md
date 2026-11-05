@@ -155,6 +155,19 @@ do not run unreviewed commands or recipes from someone else's project.
 The build report and checksum describe only that build. The ZIP must be rebuilt after source changes.
 Other OS/CPU combinations are not yet validated; do not advertise them as supported.
 
+## The `oddbout` npm package (2026-11-05)
+
+`packages/oddbout` is published to npm on its own as `oddbout` (the name was unclaimed on 2026-11-05). `npx -y oddbout@latest connect`
+runs it ([one-line connection](CLOUD-MCP.md#한-줄로-연결하기-2026-11-05)). It has no dependencies and is not part of the creator-kit ZIP.
+Publishing needs the maintainer's npm account and an explicit decision; no workflow publishes it.
+
+1. Merge to `main` first. The CLI installs the skill from `main`'s `.claude-plugin/marketplace.json` and `.agents/plugins/`, and the
+   docs that name the command reach anyone who pulls `main` at once.
+2. Raise `version` in `packages/oddbout/package.json`. Run `node --test test/oddbout-connect.test.mjs`, then in `packages/oddbout`
+   `npm pack --dry-run` (five files: `LICENSE`, `README.md`, `bin/oddbout.mjs`, `lib/connect.mjs`, `package.json`) and
+   `npm publish --access public`.
+3. Check what users get: `npx -y oddbout@latest --version` prints the new version and `npx -y oddbout@latest check` answers in JSON.
+
 ## Listing links in 0.2.1
 
 Version 0.2.1 sets the following published URLs in `extensions.com.openai.interface`:

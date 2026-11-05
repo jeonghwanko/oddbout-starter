@@ -1,0 +1,17 @@
+{
+  "name": "oddbout",
+  "owner": { "name": "ODDBOUT" },
+  "metadata": {
+    "description": "ODDBOUT's create-fighter skill for Claude Code. The account connection is the hosted ODDBOUT MCP, added separately (npx -y oddbout@latest connect)."
+  },
+  "plugins": [
+    {
+      "name": "oddbout",
+      "source": "./plugins/oddbout-codex",
+      "description": "Create, review and register ODDBOUT fighters with your connected ODDBOUT MCP. Skills only: declares no MCP server and does not sign you in.",
+      "license": "MIT",
+      "homepage": "https://oddbout.com",
+      "repository": "https://github.com/jeonghwanko/oddbout-starter"
+    }
+  ]
+}

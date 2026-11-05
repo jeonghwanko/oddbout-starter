@@ -13,9 +13,15 @@ ODDBOUT은 직접 만든 캐릭터로 플레이하는 대전 게임입니다. �
 
 [게임하기](https://oddbout.com/fighter.html) · [내 선수 관리](https://oddbout.com/creator.html?lang=ko) · [사이트 가이드](https://oddbout.com/docs.html?lang=ko) · [제작 시작 안내](docs/START-HERE.md) · [문제 제보](https://github.com/jeonghwanko/oddbout-starter/issues)
 
-## Codex 플러그인 설치
+## 코딩 에이전트 연결하기
 
-이 Git 저장소에서 로컬 커스텀 플러그인을 설치할 수 있습니다: [설치 안내](docs/LOCAL-PLUGIN.md#install-the-codex-skill-from-git). 제작 스킬을 추가하고 기존 ODDBOUT MCP를 재사용합니다. 공개 디렉터리 심사나 creator-kit ZIP은 필요하지 않으며 로그인은 사용자가 별도로 진행합니다.
+Claude Code·Codex·Gemini CLI에 이 한 줄을 붙여 넣으세요.
+
+> Connect ODDBOUT: run `npx -y oddbout@latest connect` and follow what it prints.
+
+에이전트가 호스팅 ODDBOUT MCP(`oddbout`, `https://mcp.oddbout.com/signin`)를 추가하고, 브라우저에서 Google 로그인을 한 번 승인하면 Codex·Claude Code에는 제작 스킬도 설치됩니다. 마지막에 `get_profile`로 내 계정을 확인합니다. 토큰을 묻지 않고, 이미 있는 ODDBOUT 서버는 그대로 씁니다([동작 방식](docs/CLOUD-MCP.md#한-줄로-연결하기-2026-11-05), [`oddbout` 패키지](packages/oddbout/README.md)). 브라우저의 claude.ai·ChatGPT·Grok은 제작자 페이지의 내 에이전트에서 연결합니다.
+
+Codex 스킬만 손으로 설치하려면 [설치 안내](docs/LOCAL-PLUGIN.md#install-the-codex-skill-from-git)를 보세요. 제작 스킬을 추가하고 기존 ODDBOUT MCP를 재사용합니다. 공개 디렉터리 심사나 creator-kit ZIP은 필요하지 않습니다.
 
 ## 영상으로 보기
 
@@ -70,7 +76,7 @@ ODDBOUT은 직접 만든 캐릭터로 플레이하는 대전 게임입니다. �
 | 길 | 하는 일 | 이럴 때 |
 | --- | --- | --- |
 | **ODDBOUT에 맡기기** | [내 선수](https://oddbout.com/creator.html?lang=ko)에서 만들고 싶은 선수를 한 줄로 적고, 원하면 쓸 권리가 있는 그림을 두 장까지 더합니다. 정면 두 장 가운데 하나를 고르고, 동작을 확인해(마음에 들지 않는 동작은 다시 만들기) 등록한 뒤, 동작을 확인하고 출전합니다. | 가장 빠른 시작. 가입하면 50만 토큰을 받고, ODDBOUT이 내 선수를 만들며 쓴 만큼 줄어듭니다. 신청은 한 번에 하나, 하루 세 건까지입니다. 하루 몫이 차면 신청은 차례를 기다립니다. |
-| **에이전트와 대화로** | [내 선수](https://oddbout.com/creator.html?lang=ko#view=agents) → 내 에이전트에서 쓰는 에이전트(ChatGPT/Codex/Dots, Grok, Claude, Gemini)를 골라 안내를 따릅니다. 내 Google 계정으로 호스팅 ODDBOUT MCP에 연결됩니다([연결 안내](docs/CLOUD-MCP.md)). 그다음 대화에서 @ODDBOUT에 선수를 부탁합니다. | 대화로 만들고 고치기. 만드는 방식은 맡기기와 같습니다. ChatGPT에서는 그림을 첨부하고, 다른 에이전트는 그림을 올릴 링크를 줍니다. |
+| **에이전트와 대화로** | [내 선수](https://oddbout.com/creator.html?lang=ko#view=agents) → 내 에이전트에서 쓰는 에이전트(ChatGPT/Codex/Dots, Grok, Claude, Gemini)를 골라 안내를 따릅니다. 내 Google 계정으로 호스팅 ODDBOUT MCP에 연결됩니다([연결 안내](docs/CLOUD-MCP.md)). Claude Code·Codex·Gemini CLI에서는 [위의 한 줄](#코딩-에이전트-연결하기)로 연결합니다. 그다음 대화에서 @ODDBOUT에 선수를 부탁합니다. | 대화로 만들고 고치기. 만드는 방식은 맡기기와 같습니다. ChatGPT에서는 그림을 첨부하고, 다른 에이전트는 그림을 올릴 링크를 줍니다. |
 | **내 PC로** | 내 에이전트 → 고급 → 내 PC로 만들기에서 호스트 이름을 정하고 호스트 약속에 동의한 뒤, 내 ChatGPT·SuperGrok 구독이 있는 Linux PC에서 나온 세 줄 명령을 실행합니다([생성 호스트 안내](docs/GENERATION-HOST.md)). | 내 구독으로 더 만들기. 승인이 필요 없고 내 토큰도 쓰지 않습니다. |
 | **아무 도구로 만들어 사이트에 올리기** | 아무 도구로 [패키지 규격](contracts/ai-fighter/v1/README.md)에 맞춰 패키지를 만들고 `npm run validate`나 로그인 없이 [사이트 가이드의 검사기](https://oddbout.com/docs.html?lang=ko#bring-your-own)로 검사합니다. 그다음 [내 선수](https://oddbout.com/creator.html?lang=ko)에서 새 선수 만들기 → 다른 방법 → 완성된 패키지 올리기를 고릅니다. | 다른 곳에서 이미 만든 선수나 나만의 도구. |
 | **직접 만들기** | 로컬 도구를 쓸 수 있는 AI와 이 키트를 돌려 원화와 동작을 하나하나 고릅니다([아래](#로컬-키트로-캐릭터-만들기)). | 프레임마다 직접 정하고 싶을 때. |

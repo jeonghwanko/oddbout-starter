@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "oddbout",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "ODDBOUT creation and review skills for Codex. Reuses your existing ODDBOUT MCP connection; does not register a second server or sign you in.",
   "license": "MIT",
   "repository": "https://github.com/jeonghwanko/oddbout-starter",

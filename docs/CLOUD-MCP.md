@@ -58,8 +58,9 @@ npm run mcp:check -- --probe
 추정하지 말고 호스트의 실제 항목이나 사용자에게 확인한다. 도구 갱신·선택에 대한 [공식 안내](https://developers.openai.com/api/docs/guides/custom-mcp-server#how-to-use)를 따른다.
 
 Grok 연결(2026-10-27, 주소 2026-10-28·11-01): grok.com → 커넥터(`https://grok.com/connectors`) → New Connector → Custom. Cursor의 Grok Bot도 같다. 서버 URL은
-우리 도메인의 **로그인 먼저 주소** `https://mcp.oddbout.com/signin`이다(`PUBLIC_SIGN_IN_RESOURCE`). Claude·터미널 에이전트가 쓰는 Supabase 주소
-`https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter-mcp/signin`(`SIGN_IN_RESOURCE`)과 같은 서버다. Grok에만 11-01에 주소를 옮긴 까닭은
+우리 도메인의 **로그인 먼저 주소** `https://mcp.oddbout.com/signin`이다(`PUBLIC_SIGN_IN_RESOURCE`). 사이트의 Claude 카드가 쓰는 Supabase 주소
+`https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter-mcp/signin`(`SIGN_IN_RESOURCE`)과 같은 서버다. 터미널 에이전트도 11-05부터 이 주소를 쓴다
+([터미널·편집기 에이전트](#터미널편집기-에이전트-2026-10-29)). Grok에만 11-01에 주소를 옮긴 까닭은
 [우리 도메인의 로그인 먼저 주소](#우리-도메인의-로그인-먼저-주소-2026-11-01)에 있다. Grok의 커스텀 커넥터에는
 인증을 고르는 칸이 없고, 첫 요청의 답으로 로그인이 필요한지 정한다. 위 공개 주소는 공개 도구를 로그인 없이 답하므로 Grok이 계정 없이 붙어 버렸다(2026-10-28 실제 시도).
 로그인 먼저 주소는 같은 서버이고 모든 요청에 401과 `WWW-Authenticate`(`…/signin/.well-known/oauth-protected-resource`)로 로그인을 먼저 요구한다.
@@ -94,6 +95,11 @@ MCP 함수의 Origin 허용 목록에 `claude.ai`·`claude.com`이 있다. 2026-
 Claude가 인증을 OAuth로 감지한다. 그래서 "로그인 없음"을 "지금 로그인"으로 바꾸는 단계가 없어진다. Grok에서 같은 주소로 실제 연결을 확인했다(2026-10-29).
 Claude에서는 아직 실제로 확인하지 않았다. 게시 뒤 한 번 연결해 확인한다(게임 `8bf1ed8e7`). OAuth 클라이언트는 그대로 "자동으로 등록"을 고른다.
 
+claude.ai에는 아직 두 주소가 나간다(2026-11-05 점검). 위 사이트 카드(게임 `kaito_web/src/platform/oddboutAgentGrants.ts`의 `AGENT_CONNECT_URLS.claude`)는
+선수를 만들 수 있는 로그인 먼저 주소를 준다. Claude 안내 페이지 `cloud-plugin/claude.html`(`website/cloud-plugin/content.mjs`의 `claude`)은 디렉터리판
+`https://mcp.oddbout.com/claude`를 준다. 그 페이지는 디렉터리 등록의 안내 문서(`DIRECTORY_DOCUMENTATION`)라 그 판을 설명하고, 디렉터리판은 선수를 만들지 못한다.
+디렉터리에 오르기 전 커스텀 커넥터로 어느 판을 줄지는 정할 일로 남긴다. 터미널 에이전트의 주소는 아래 한 가지다.
+
 ## 터미널·편집기 에이전트 (2026-10-29)
 
 Claude Code, Codex(CLI·앱·IDE 확장이 설정을 함께 쓴다), Gemini CLI는 자기 PC의 loopback 콜백(`http://127.0.0.1:<포트>/…`,
@@ -108,17 +114,77 @@ MCP 인가 명세(2025-11-25)는 redirect를 `localhost` 또는 https로 정하�
   Gemini CLI는 연결 전에 HEAD로 묻는다.
 - MCP 함수의 Origin 허용 목록은 바꾸지 않는다. 이 CLI들은 브라우저가 아니라 Origin을 보내지 않는다.
 
+### 한 줄로 연결하기 (2026-11-05)
+
+에이전트 대화창에 이 한 줄을 붙여 넣는다.
+
+> Connect ODDBOUT: run `npx -y oddbout@latest connect` and follow what it prints.
+
+npm 패키지 `oddbout`(소스 [packages/oddbout](../packages/oddbout/README.md))는 ElevenLabs의 에이전트 온보딩처럼 에이전트가 실행하는 CLI다.
+stdout에 JSON 답 하나(`status`·`next`·`say`·`run`·`rules`·`verify`·`details`)를 내고, 에이전트는 그 답을 따른다.
+
+1. 환경 변수로 호스트를 안다: Claude Code `CLAUDECODE=1`, Codex `CODEX_THREAD_ID` 등, Gemini CLI `GEMINI_CLI=1`. 모르면 답으로 묻는다(`--host`).
+2. 호스트 자신의 명령으로 서버 `oddbout`을 `https://mcp.oddbout.com/signin`에 추가한다. ODDBOUT 서버가 이미 있으면 이름과 상관없이 그것을 쓴다
+   (로그인 먼저 주소가 먼저, 그다음 공개 주소). 다른 서버가 이미 `oddbout` 이름을 쓰면 알리고 그대로 둔다. 있는 서버를 지우거나 고치지 않는다.
+   Gemini CLI의 `mcp add`는 같은 이름을 묻지 않고 덮어쓴다(0.67 실측). 그래서 설정 파일을 읽지 못하면 추가하지 않는다.
+3. 로그인은 호스트 자신의 MCP 클라이언트가 한다(동적 등록 + PKCE). CLI는 토큰을 보거나 받거나 쓰지 않는다.
+   - Claude Code: `claude mcp login oddbout`. 그 뒤 `claude mcp get oddbout`의 상태로 확인한다. 로그인 먼저 주소에서 "Connected"는 로그인이 된 것이다.
+   - Codex: `codex mcp add`가 곧바로 로그인한다. codex-rs는 설정을 먼저 저장하고 브라우저 콜백을 300초 기다린다. `codex mcp list --json`의
+     `auth_status`가 `o_auth`면 로그인된 것이다. 저장만 되고 로그인이 안 된 서버에는 `codex mcp login`만 한다.
+   - Gemini CLI: CLI 로그인 명령이 없다. 다시 시작한 뒤 `/mcp auth oddbout`이다. 신뢰하지 않은 폴더에서는 사용자 서버도 꺼진다.
+   - 브라우저를 기다리는 시간은 기본 110초(`--wait`)다. Claude Code 명령의 기본 제한 2분 안에 답하기 위해서다. 넘기면 같은 명령을 다시 실행하라고 답한다.
+4. Codex와 Claude Code에는 `create-fighter` 스킬을 설치한다(아래 스킬). Gemini CLI에는 아직 주지 않는다.
+5. 마지막 답은 ODDBOUT 도구가 있는 대화에서 `get_profile`로 계정을 확인하라고 한다. 실행 중인 세션은 새 서버를 세션을 시작할 때 읽는다.
+   Claude Code는 `/mcp`에서 `oddbout`을 다시 연결하고, 목록에 없으면 `claude --continue`로 다시 연다. 스킬은 `/reload-plugins`로 읽는다.
+   Codex는 `codex resume --last`다.
+
+`npx -y oddbout@latest check`는 아무것도 바꾸지 않고 상태만 답한다. 다시 실행해도 이미 있는 것은 그대로 둔다.
+가짜 `claude`·`codex`·`gemini`로 정확한 명령과 두 번째 실행을 확인하는 테스트가 `test/oddbout-connect.test.mjs`다.
+
+- **SSH·컨테이너**: 브라우저가 그 PC의 loopback 콜백에 닿지 않는다. VS Code 원격과 Codespaces는 `BROWSER` 도우미와 포트 전달로 닿으므로 원격으로 보지 않는다.
+  원격이면 CLI는 서버만 추가한다. Codex의 `add`에는 저장할 시간만 준다. 그리고 그 PC의 터미널(`ssh -t`)에서 호스트의 `--no-browser` 로그인을 하라고 답한다
+  (`claude mcp login oddbout --no-browser`, `codex mcp login oddbout --no-browser`). 브라우저가 마지막에 연 주소는 그 터미널 입력에만 붙여 넣는다.
+  대화에는 붙여 넣지 않는다(AGENTS.md 하드 규칙 4). 판정이 틀리면 `--local`·`--remote`로 바꾼다.
+- **Codex 샌드박스**: `CODEX_SANDBOX`·`CODEX_SANDBOX_NETWORK_DISABLED`가 있으면 아무것도 하지 않는다. `~/.codex/config.toml`을 쓰고, 스킬을 받고, 브라우저를 열어야 해서다.
+  샌드박스 밖에서 다시 실행하라고 답한다.
+- **claude.ai 커넥터**: Claude Code는 claude.ai 계정으로 로그인하면 claude.ai 커넥터도 불러온다. CLI는 그것을 보지 않는다. 둘 다 있으면 도구가 두 번 보일 수 있다.
+
+손으로 할 때도 같은 이름과 주소를 쓴다.
+
 ```bash
-# Claude Code: 추가한 뒤 Claude Code에서 /mcp → oddbout → Authenticate
-claude mcp add --transport http --scope user oddbout https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter-mcp/signin
-# Codex: 추가한 뒤 로그인(브라우저가 열린다)
-codex mcp add oddbout --url https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter-mcp/signin
-codex mcp login oddbout
-# Gemini CLI: 추가한 뒤 Gemini CLI에서 /mcp auth oddbout
-gemini mcp add --transport http --scope user oddbout https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter-mcp/signin
+# Claude Code: 추가한 뒤 로그인(브라우저가 열린다). Claude Code 안에서는 /mcp → oddbout → Authenticate
+claude mcp add --transport http --scope user oddbout https://mcp.oddbout.com/signin
+claude mcp login oddbout
+# Codex: 추가하면 곧바로 로그인한다. 브라우저가 열리지 않았거나 끊겼으면 codex mcp login oddbout
+codex mcp add oddbout --url https://mcp.oddbout.com/signin
+# Gemini CLI: 추가한 뒤 Gemini CLI를 다시 시작하고 /mcp auth oddbout
+gemini mcp add --transport http --scope user oddbout https://mcp.oddbout.com/signin
 ```
 
-로그인은 같은 PC의 브라우저가 loopback 콜백에 닿아야 한다. SSH로 접속한 원격 PC·컨테이너에서는 브라우저가 그 PC의 loopback에 닿지 않는다.
+주소(2026-11-05): 터미널 에이전트는 `https://mcp.oddbout.com/signin`(`PUBLIC_SIGN_IN_RESOURCE`)을 쓴다. 10-29의 Supabase 주소는 무료 Render 서버를
+거치지 않으려는 선택이었다(게임 `oddboutAgentGrants.ts`의 설명). 이제 Cloudflare Worker가 MCP 요청을 Supabase로 바로 보낸다
+(`x-oddbout-gateway: cloudflare`, 11-05 실측: POST·HEAD는 401과 `WWW-Authenticate`, 두 메타데이터 위치 모두 200). 이 호스트는 루트의 보호 자원 메타데이터도 답한다
+([우리 도메인의 로그인 먼저 주소](#우리-도메인의-로그인-먼저-주소-2026-11-01)). 요청 본문 한도 64 KiB는 함수 자신의 한도(`mcp/cloud.mjs`)라 주소와 상관없다.
+Supabase 주소로 이미 추가한 서버는 그대로 동작하고, CLI도 그 서버를 쓴다. 예전 안내의 Codex `oddbout-mcp`(공개 주소 `/mcp`)도 CLI가 찾아서 쓴다.
+사이트의 Claude·Gemini 카드 명령(게임 `AGENT_TERMINAL_COMMANDS`)은 아직 Supabase 주소다. 게임 쪽에서 맞출 일이다.
+
+#### 스킬 (2026-11-05)
+
+Codex의 `.agents/plugins/marketplace.json`과 Claude Code의 `.claude-plugin/marketplace.json`이 같은 `plugins/oddbout-codex`를 가리킨다. 스킬만 있고 MCP 선언은
+없으므로 두 번째 연결을 만들지 않는다. 둘 다 그 두 경로만 희소 체크아웃한다.
+
+```bash
+codex plugin marketplace add https://github.com/jeonghwanko/oddbout-starter --ref main --sparse .agents/plugins --sparse plugins/oddbout-codex
+codex plugin add oddbout@oddbout
+claude plugin marketplace add https://github.com/jeonghwanko/oddbout-starter.git --sparse .claude-plugin plugins/oddbout-codex
+claude plugin install oddbout@oddbout --scope user
+```
+
+Claude Code 2.1.283으로 브랜치에서 실측했다: 얕은 부분 클론(`--depth 1`, `blob:none`)이라 509 KB, 4~9초였다. 같은 명령을 다시 실행해도 바뀌는 것이 없었다.
+`owner/repo` 형식은 SSH(`git@github.com:`)로 클론했으므로 HTTPS 주소를 쓴다. GitHub SSH 키가 없을 때 HTTPS로 돌아가는지는 확인하지 않았다.
+Claude Code는 루트의 `plugin.json`에서 판 0.1.0을 읽었다. `.claude-plugin/plugin.json`은 선택 사항이다.
+
+로그인은 같은 PC의 브라우저가 loopback 콜백에 닿아야 한다. SSH로 접속한 원격 PC·컨테이너에서는 브라우저가 그 PC의 loopback에 닿지 않는다(위 SSH·컨테이너).
 사이트의 내 에이전트는 등록 이름으로 칸을 고른다: `Codex` → Codex, `Claude Code` → Claude, `Gemini CLI MCP Client` → Gemini.
 이 에이전트들은 그림 파일을 [그림 올리기 표](#그림-올리기-표-2026-11-01)의 명령 한 줄로 보낸다.
 

@@ -24,6 +24,7 @@
     "worker/**/*.mjs",
     "cloudflare/**/*.mjs",
     "mcp/**/*.mjs",
-    "scripts/**/*.mjs"
+    "scripts/**/*.mjs",
+    "packages/**/*.mjs"
   ]
 }

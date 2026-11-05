@@ -13,9 +13,15 @@ ODDBOUT is a fighting game where you play with a character you create. This repo
 
 [Play ODDBOUT](https://oddbout.com/fighter.html) · [Manage your fighters](https://oddbout.com/creator.html?lang=en) · [Site guide](https://oddbout.com/docs.html?lang=en) · [Creation guide](docs/START-HERE.md) · [Report a problem](https://github.com/jeonghwanko/oddbout-starter/issues)
 
-## Install the Codex plugin
+## Connect your coding agent
 
-Install the local custom plugin from this Git repository: [Codex installation guide](docs/LOCAL-PLUGIN.md#install-the-codex-skill-from-git). It adds the creation skill and reuses your existing ODDBOUT MCP. No directory approval or creator-kit ZIP is required. Login stays a separate user action.
+In Claude Code, Codex or Gemini CLI, paste this one line:
+
+> Connect ODDBOUT: run `npx -y oddbout@latest connect` and follow what it prints.
+
+Your agent adds ODDBOUT's hosted MCP (`oddbout`, `https://mcp.oddbout.com/signin`), you approve the Google sign-in once in your browser, and it installs the creation skill in Codex and Claude Code. Then it checks your account with `get_profile`. It never asks for a token, and it keeps any ODDBOUT server you already have ([how it works](docs/CLOUD-MCP.md#한-줄로-연결하기-2026-11-05), [the `oddbout` package](packages/oddbout/README.md)). For claude.ai, ChatGPT or Grok in a browser, use My agents on the creator page instead.
+
+The Codex skill alone, by hand: [Codex installation guide](docs/LOCAL-PLUGIN.md#install-the-codex-skill-from-git). It adds the creation skill and reuses your existing ODDBOUT MCP. No directory approval or creator-kit ZIP is required.
 
 ## Watch
 
@@ -82,7 +88,7 @@ walks through each.
 | Way | What you do | Good for |
 | --- | --- | --- |
 | **Leave it to ODDBOUT** | On [My fighters](https://oddbout.com/creator.html?lang=en), say in one line what fighter you want, and add up to two pictures you may use if you like. Pick one of two fronts, check the motions (redo the ones you want changed), register, and enter the fighter once you have checked its moves. | The quickest start. Signing up gives you 500,000 tokens; what ODDBOUT uses making your fighters comes off them. One request at a time, up to three a day; on a full day your request waits its turn. |
-| **Talk to your agent** | On [My fighters](https://oddbout.com/creator.html?lang=en#view=agents) → My agents, pick the agent you use (ChatGPT/Codex/Dots, Grok, Claude or Gemini) and follow its steps: it connects to the hosted ODDBOUT MCP with your Google account ([cloud connection guide](docs/CLOUD-MCP.md)). Then ask @ODDBOUT for a fighter in your chat. | Making and editing fighters from a conversation. ODDBOUT makes it as above. In ChatGPT you attach pictures; other agents give you an upload link. |
+| **Talk to your agent** | On [My fighters](https://oddbout.com/creator.html?lang=en#view=agents) → My agents, pick the agent you use (ChatGPT/Codex/Dots, Grok, Claude or Gemini) and follow its steps: it connects to the hosted ODDBOUT MCP with your Google account ([cloud connection guide](docs/CLOUD-MCP.md)). In Claude Code, Codex or Gemini CLI, the [one line above](#connect-your-coding-agent) does it. Then ask @ODDBOUT for a fighter in your chat. | Making and editing fighters from a conversation. ODDBOUT makes it as above. In ChatGPT you attach pictures; other agents give you an upload link. |
 | **Your own PC** | On My agents → Advanced → Make on my PC, name a host, accept the host terms and run the three-line command it gives on a Linux PC with your ChatGPT and SuperGrok subscriptions ([generation host guide](docs/GENERATION-HOST.md)). | More fighters on your own subscriptions: no approval, and none of your tokens. |
 | **Make it with any tool, upload on the site** | Make the package with any tool, following the [package contract](contracts/ai-fighter/v1/README.md), and check it with `npm run validate`, or with no sign-in in the [site guide's checker](https://oddbout.com/docs.html?lang=en#bring-your-own). Then on [My fighters](https://oddbout.com/creator.html?lang=en) choose New fighter → Other ways → Upload a finished package. | A fighter you already made elsewhere, or a tool of your own. |
 | **Make it yourself** | Run this kit with an assistant that can use local tools, and choose every concept and motion ([below](#create-with-the-local-kit)). | Full control over each frame. |

@@ -5,8 +5,8 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-// Keep the strict-check coverage contract aligned with tsconfig.json, including broadcast runtimes.
-const CHECKED = ['api', 'broadcast', 'worker', 'cloudflare', 'mcp', 'scripts'];
+// Keep the strict-check coverage contract aligned with tsconfig.json, including broadcast runtimes and the npm packages (packages/oddbout).
+const CHECKED = ['api', 'broadcast', 'worker', 'cloudflare', 'mcp', 'scripts', 'packages'];
 
 test('every module tsc covers opts into type checking', async () => {
   assert.deepEqual(JSON.parse(await readFile(new URL('../tsconfig.json', import.meta.url), 'utf8')).include, CHECKED.map(dir => `${dir}/**/*.mjs`));
