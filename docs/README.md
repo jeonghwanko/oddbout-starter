@@ -21,9 +21,10 @@ creator-kit ZIP에는 제작·연결 안내와 이 문서 지도가 들어 있�
   `--trust`). Claude Code는 CLAUDE.md의 `@AGENTS.md` 가져오기로 읽는다. 공통 규칙은 AGENTS.md 한 곳에만 쓴다.
 - **서비스나 생성 PC를 운영하는 사람**: [CREATOR-HOSTING](CREATOR-HOSTING.md), [CLOUD-MCP](CLOUD-MCP.md),
   [GENERATION-HOST](GENERATION-HOST.md)부터 읽는다. 운영 배포는 게임 저장소에서 한다(AGENTS.md).
-- **에이전트 방송(ODDBOUT Showrunner)을 돌리거나 고치는 사람**: [BROADCAST-SANDBOX](BROADCAST-SANDBOX.md) →
-  [BROADCAST-HOSTING](BROADCAST-HOSTING.md) → [PAYPAL-AGENT-BROADCAST-PLAN](PAYPAL-AGENT-BROADCAST-PLAN.md). 코드는 `broadcast/`에 있고,
-  결제는 PayPal Sandbox의 테스트 돈만 쓴다.
+- **에이전트 방송(ODDBOUT Showrunner)을 돌리거나 고치는 사람**: [SHOWRUNNER-PRODUCT](SHOWRUNNER-PRODUCT.md)(무엇을 파는지) →
+  [BROADCAST-SANDBOX](BROADCAST-SANDBOX.md) → [BROADCAST-HOSTING](BROADCAST-HOSTING.md) → [PAID-TASK-RECOVERY](PAID-TASK-RECOVERY.md) →
+  [PAYPAL-AGENT-BROADCAST-PLAN](PAYPAL-AGENT-BROADCAST-PLAN.md). 코드는 `broadcast/`(방송 실행), `api/commerce/`(결제·원장),
+  `web/broadcast/`(상점·방송 화면)에 있고, 결제는 PayPal Sandbox의 테스트 돈만 쓴다.
 
 ## 제작
 
