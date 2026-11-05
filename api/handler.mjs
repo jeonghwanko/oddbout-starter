@@ -191,7 +191,21 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
         }
         if (parts.length !== 2 || !UUID.test(parts[1])) return reply({ ok: false, code: 'not-found' }, 404);
         const { data: fighter, error } = await query.eq('id', parts[1]).maybeSingle(); check(error);
-        if (!fighter || fighter.runtime_manifest_sha !== fighter.manifest_sha) return reply({ ok: false, code: 'not-found' }, 404);
+        if (!fighter) {
+          // A registered fighter promoted to an official package (20261105200000) is retired and off the list, but his package is still
+          // served read-only at his address: an old shared bout replays him by this id. He is not runtime-approved, and says whom he became.
+          const { data: promoted, error: promotedError } = await db.from('af_fighters').select('id,submission_id,manifest_sha,promoted_to,deleted_at')
+            .eq('id', parts[1]).maybeSingle(); check(promotedError);
+          if (!promoted?.promoted_to || promoted.deleted_at) return reply({ ok: false, code: 'not-found' }, 404);
+          const { data: row, error: readError } = await db.from('af_submissions').select('*').eq('id', promoted.submission_id).eq('status', 'registered').maybeSingle();
+          check(readError);
+          if (!row || row.manifest_sha !== promoted.manifest_sha) return reply({ ok: false, code: 'not-found' }, 404);
+          const urls = await signedUrls(row, 600);
+          const files = row.manifest.assets.map(/** @param {{ id: string }} asset @param {number} index */ (asset, index) => ({ id: asset.id, downloadUrl: urls[index] }));
+          return reply({ ok: true, fighterId: promoted.id, manifestSha256: promoted.manifest_sha, runtimeApproved: false, runtimeScope: null,
+            duelApproved: false, entered: false, promotedTo: promoted.promoted_to, manifestText: row.manifest_text, files });
+        }
+        if (fighter.runtime_manifest_sha !== fighter.manifest_sha) return reply({ ok: false, code: 'not-found' }, 404);
         const { data: row, error: readError } = await db.from('af_submissions').select('*').eq('id', fighter.submission_id).eq('status', 'registered').maybeSingle();
         check(readError);
         if (!row || row.manifest_sha !== fighter.manifest_sha) return reply({ ok: false, code: 'not-found' }, 404);

@@ -12,7 +12,7 @@ const CORS = ADMIN_EDIT_CORS;
 /** @type {(body: any, status?: number) => Response} */
 const reply = (body, status = 200) => jsonResponse(body, status, CORS);
 /** @type {Record<string, number>} */
-const statuses = { 'admin-required': 403, 'not-found': 404, 'review-conflict': 409, 'beta-capacity': 409, 'fighter-deleted': 409,
+const statuses = { 'admin-required': 403, 'not-found': 404, 'review-conflict': 409, 'beta-capacity': 409, 'fighter-deleted': 409, 'fighter-promoted': 409,
   'invalid-query': 400, 'invalid-review': 400, 'validation-incomplete': 409, 'registration-open': 410 };
 // A small JSON body with only the named keys.
 /** @param {Request} request @param {string[]} keys */
@@ -142,6 +142,17 @@ export function createAdminHandler({ db, present }) {
         // A removal withdraws his profile sets (20261031100000); their public copies go after it commits. A restore does not bring them back.
         if (body.action === 'remove') await cleanupPublicFiles(db, parts[2].toLowerCase());
         return reply({ ok: true, moderation });
+      }
+      // 정식 선수로 올리기 (2026-11-05, 20261105200000): retire a registered fighter whose package is now the official `official`. His
+      // profile sets stay (his story shows them), so no public file is cleaned up.
+      if (parts.length === 4 && parts[1] === 'fighters' && parts[3] === 'promotion' && request.method === 'POST') {
+        if (!UUID.test(parts[2])) throw new Problem(400, 'invalid-review');
+        const body = await smallBody(request, ['version', 'official', 'reason']);
+        if (!Number.isSafeInteger(body.version) || body.version < 0 || typeof body.official !== 'string'
+          || !/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(body.official) || body.official.length > 32 || typeof body.reason !== 'string') throw new Problem(400, 'invalid-review');
+        const reason = body.reason.trim();
+        if (!reason || reason.length>500 || reason.includes('\0') || !reason.isWellFormed()) throw new Problem(400, 'invalid-review');
+        return reply({ ok: true, promotion: await rpc('af_promote_fighter', { p_actor: actor, p_fighter: parts[2], p_version: body.version, p_official: body.official, p_reason: reason }) });
       }
       if (parts.length === 2 && parts[1] === 'access-requests' && request.method === 'GET') {
         const query = new URL(request.url).searchParams, page = query.get('page') ?? '0', status = query.get('status') ?? 'pending', search = (query.get('search') ?? '').trim();

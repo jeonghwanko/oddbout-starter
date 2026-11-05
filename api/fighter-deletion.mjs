@@ -11,7 +11,7 @@ import { cleanupPublicFiles } from './profile-sets.mjs';
 export const SITE_CLIENT = '00000000-0000-0000-0000-000000000000';
 const CORS = { methods: 'POST, OPTIONS', headers: 'Authorization, Content-Type' };
 const STATUS = Object.freeze({ 'authentication-required': 401, 'account-disabled': 403, 'not-found': 404, 'rate-limit': 429,
-  'invalid-deletion-confirmation': 409, 'deletion-confirmation-expired': 409, 'fighter-changed': 409, 'fighter-deleted': 409,
+  'invalid-deletion-confirmation': 409, 'deletion-confirmation-expired': 409, 'fighter-changed': 409, 'fighter-deleted': 409, 'fighter-promoted': 409,
   'deletion-name-mismatch': 422 });
 
 /** Is this path the deletion's? @param {string[]} parts */

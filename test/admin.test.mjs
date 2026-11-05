@@ -22,6 +22,7 @@ test('admin-only post-publication moderation, stale actions, audit, and retired 
       af_admin_account: ['p_actor'], af_admin_requests: ['p_actor','p_status','p_search','p_page'],
       af_admin_review: ['p_actor','p_owner','p_version','p_decision','p_reason'],
       af_admin_fighters:['p_actor','p_status','p_search','p_page'],af_moderate_fighter:['p_actor','p_fighter','p_version','p_action','p_reason'],
+      af_promote_fighter:['p_actor','p_fighter','p_version','p_official','p_reason'],
     };
     const tokens = { 'fixture-admin-token': admin, 'fixture-person-token': first };
     const handle = createHandler({ db: {
@@ -70,6 +71,16 @@ test('admin-only post-publication moderation, stale actions, audit, and retired 
     assert.equal((await call(route,undefined,{action:'restore',version:1,reason:'Test resolved'})).status,200);
     row=(await sql.query('select * from af_fighters where id=$1',[fighter])).rows[0];assert.equal(row.runtime_approved,true);assert.equal(row.duel_approved,true);
     assert.equal((await sql.query('select count(*)::int as n from af_moderation_events')).rows[0].n,2);
+    // 정식 선수로 올리기 (2026-11-05): the promotion route, its body checked; promoted, he is not restored.
+    const promotion='fighters/'+fighter+'/promotion',promote={version:2,official:'velora',reason:'Promoted'};
+    assert.equal((await call(promotion,'fixture-person-token',promote)).status,403);
+    assert.equal((await call(promotion,undefined,{...promote,official:'Velora'})).status,400);
+    assert.equal((await call(promotion,undefined,{...promote,extra:1})).status,400);
+    const promoted=await call(promotion,undefined,promote);assert.equal(promoted.status,200);
+    assert.equal((await promoted.json()).promotion.promotedTo,'velora');
+    assert.equal((await call(promotion,undefined,{...promote,version:3})).status,409);
+    assert.equal((await call(route,undefined,{action:'restore',version:3,reason:'Back'})).status,409);
+    assert.equal((await sql.query("select count(*)::int as n from af_moderation_events where action='promote'")).rows[0].n,1);
     await sql.exec('reset role; set role authenticated');
     await assert.rejects(sql.query('select * from af_moderation_events'),/permission denied/);
     await assert.rejects(sql.query('select af_moderate_fighter($1,$2,2,$3,$4)',[admin,fighter,'remove','forged']),/permission denied/);

@@ -25,6 +25,12 @@ test('each command names its route, and refuses a bad id, value or command befor
   assert.equal(plan(['show', JOB.toUpperCase()]).route, `generations/${JOB}`);
   assert.equal(plan(['fighters', '--status', 'all', '--search', '냥', '--page', '2']).route, 'fighters?status=all&search=%EB%83%A5&page=2');
   assert.deepEqual(plan(['fighter-remove', JOB, '--version', '3', '--reason', '규칙 위반']).body, { action: 'remove', version: 3, reason: '규칙 위반' });
+  // 정식 선수로 올리기 (2026-11-05): the official id is the second argument.
+  const promote = plan(['fighter-promote', JOB, 'velora', '--version', '1', '--reason', '정식 선수로 올림']);
+  assert.equal(promote.route, `fighters/${JOB}/promotion`); assert.deepEqual(promote.body, { version: 1, official: 'velora', reason: '정식 선수로 올림' });
+  assert.match(promote.change, /velora/);
+  assert.throws(() => plan(['fighter-promote', JOB, 'Velora!', '--version', '1', '--reason', 'x']), /invalid-id:official/);
+  assert.throws(() => plan(['fighter-promote', JOB, '--version', '1', '--reason', 'x']), /invalid-id:official/);
   assert.deepEqual(plan(['host-withdraw', JOB]).body, { approved: false });
   assert.equal(plan(['profiles', '--status', 'approved']).route, 'profile-sets?status=approved');
   assert.throws(() => plan(['show', 'd242bcce']), /invalid-id:job/);

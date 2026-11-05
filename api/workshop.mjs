@@ -101,7 +101,9 @@ export function createWorkshopHandler({ db, authenticate, rpc: profileRpc, agent
     if (!data) throw new Problem(404, 'fighter-not-found');
     const notes = data.notes.slice(0, 20);
     return { ok: true, fighter, canon: data.canon, versions: data.versions, notes, hasMore: data.notes.length > 20,
-      nextBefore: data.notes.length > 20 ? notes.at(-1).createdAt : null, relations: data.relations };
+      nextBefore: data.notes.length > 20 ? notes.at(-1).createdAt : null, relations: data.relations,
+      // A registered fighter promoted to an official package (20261105200000): the official id his story now belongs to.
+      promotedTo: data.promotedTo ?? null };
   }
   /** @param {string} id */
   async function world(id) {
@@ -110,7 +112,7 @@ export function createWorkshopHandler({ db, authenticate, rpc: profileRpc, agent
     if (!data) throw new Problem(404, 'world-not-found');
     const overview = await call('af_world_overview', { p_world: id }), chronicle = await call('af_world_chronicle', { p_world: id });
     return { ok: true, world: overview.world, owner: overview.owner ?? null, memberCount: overview.memberCount,
-      fighters: overview.characters.map(/** @param {{ fighter_id: string, name: string, faction?: string | null }} c */ c => ({ id: c.fighter_id, name: c.name, faction: c.faction ?? null })), chronicle };
+      fighters: overview.characters.map(/** @param {{ fighter_id: string, name: string, faction?: string | null, promoted_to?: string | null }} c */ c => ({ id: c.fighter_id, name: c.name, faction: c.faction ?? null, promotedTo: c.promoted_to ?? null })), chronicle };
   }
   return async (request, parts) => {
     /** @type {(body: any, status?: number) => Response} */
