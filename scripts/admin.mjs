@@ -6,7 +6,7 @@
 //   hosts | host-approve <host> | host-withdraw <host>
 //   profiles [--status review|approved|rejected] | profile-approve <set> | profile-reject <set> --reason <text>
 //   fighters [--status active|removed|all] [--search <text>] [--page <n>] | fighter-remove <fighter> --version <n> --reason <text>
-//   fighter-restore <fighter> --version <n> --reason <text>
+//   fighter-restore <fighter> --version <n> --reason <text> | fighter-promote <fighter> <official id> --version <n> --reason <text>
 //   fighter <fighter> | replace-package <fighter> <package dir or fighter.json> --reason <text> [--key <uuid>]
 //   edit-profile <fighter> --reason <text> [--profile <json or @file>] [--style <json, null or @file>]
 //   storage | storage-remove (<submission>... | --oldest <n>)
@@ -66,7 +66,7 @@ function id(value, what) {
  * @param {string[]} positional @param {Record<string, string | true>} flags
  * @returns {Call}
  */
-export function planCall([command, target], flags) {
+export function planCall([command, target, official], flags) {
   const query = (/** @type {Record<string, string>} */ values) => new URLSearchParams(values).toString();
   switch (command) {
     case 'whoami': return { method: 'GET', route: 'me' };
@@ -106,6 +106,14 @@ export function planCall([command, target], flags) {
       const action = command === 'fighter-remove' ? 'remove' : 'restore';
       return { method: 'POST', route: `fighters/${id(target, 'fighter')}/moderation`, body: { action, version, reason },
         change: `선수 ${target}을 ${action === 'remove' ? '내립니다' : '복원합니다'}. 제작자에게 보이는 사유: ${reason}` };
+    }
+    // 정식 선수로 올리기 (2026-11-05): the registered fighter retires; his story, relations and world place go with the official id.
+    case 'fighter-promote': {
+      const version = Number(text(flags.version, 'version')), reason = text(flags.reason, 'reason');
+      if (!Number.isSafeInteger(version) || version < 0) throw new Error('invalid-value:--version');
+      if (!official || !/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(official) || official.length > 32) throw new Error('invalid-id:official');
+      return { method: 'POST', route: `fighters/${id(target, 'fighter')}/promotion`, body: { version, official, reason },
+        change: `선수 ${target}을 정식 선수 ${official}(으)로 올리고 등록판을 내립니다(명단·대결·컵에서 빠지고 이야기·관계·세계는 ${official}로). 제작자에게 보이는 사유: ${reason}` };
     }
     default: throw new Error(`unknown-command:${command ?? ''}`);
   }
@@ -362,6 +370,7 @@ export const USAGE = [
   'npm run admin -- profiles [--status review|approved|rejected] | profile-approve <set> --yes | profile-reject <set> --reason <text> --yes',
   'npm run admin -- fighters [--status active|removed|all] [--search <text>] [--page <n>]',
   'npm run admin -- fighter-remove|fighter-restore <fighter> --version <n> --reason <text> --yes',
+  'npm run admin -- fighter-promote <fighter> <official id> --version <n> --reason <text> --yes',
   'npm run admin -- fighter <fighter> | replace-package <fighter> <package dir|fighter.json> --reason <text> [--key <uuid>] --yes',
   'npm run admin -- edit-profile <fighter> --reason <text> [--profile <json|@file>] [--style <json|null|@file>] --yes',
   'npm run admin -- storage | storage-remove (<submission>... | --oldest <n>) --yes',
@@ -375,6 +384,7 @@ const HINTS = /** @type {Record<string, string>} */ ({
   'admin-required': '이 세션의 계정은 운영자가 아닙니다. 운영자 계정으로 npm run login (VM이면 --device) 하세요.',
   'client-sign-in-required': '세션 파일이 없거나 만료됐습니다. npm run login (VM이면 npm run login -- --device) 하세요.',
   'review-conflict': '상태가 이미 바뀌었습니다. 목록을 다시 읽으세요.',
+  'fighter-promoted': '정식 선수로 올린 선수입니다. 복원하거나 지울 수 없습니다(이야기·관계·세계가 정식 선수의 것입니다).',
   'not-found': '대상을 찾지 못했습니다.',
   'fighter-not-found': '선수를 찾지 못했습니다(지운 선수이거나 id가 틀렸습니다).',
   'fighter-unchanged': '운영 패키지와 같은 내용입니다. 바꿀 것이 없습니다.',
