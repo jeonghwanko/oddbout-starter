@@ -59,20 +59,20 @@
             {
               "description": "P1 — Connected reviewer identity, registration readiness and existing jobs (read only). Use the dedicated ordinary review account.",
               "prompt": "Which ODDBOUT account is connected? Can I register a fighter, and do I already have a creation request? Do not start anything.",
-              "tools_triggered": "get_profile, check_creation_readiness, get_hosted_fighter",
-              "expected_behavior": "Verify the connected account; call check_creation_readiness with purpose=registration and get_hosted_fighter with view=job and no selector. Report returned registration readiness, existing requests and token balance. Do not equate account readiness with generation or registration completion and do not create a job."
+              "tools_triggered": "get_profile, get_my_fighters, get_hosted_fighter",
+              "expected_behavior": "Verify the connected account; call get_my_fighters with view=readiness and purpose=registration and get_hosted_fighter with view=job and no selector. Report returned registration readiness, existing requests and token balance. Do not equate account readiness with generation or registration completion and do not create a job."
             },
             {
               "description": "P2 — One authorized official-host creation, stopping at front-view choice. Use the dedicated reviewer, inspect existing jobs first and preserve one UUID before the request. Requires a separate spending approval.",
               "prompt": "Use the official ODDBOUT host to make a small teal training robot with a cream faceplate and orange scarf. I approve one text-only request and its actual token use. Show the two front-view candidates and stop before choosing a look or making the motions.",
               "tools_triggered": "get_profile, get_hosted_fighter, request_hosted_fighter",
-              "expected_behavior": "After identity and existing-job checks, send one request with language=en, host=oddbout, delegate=false, the stated description and a saved UUID idempotencyKey; attach no pictures. Read the same job by id or original key after uncertain outcomes. If availability/quota blocks it, report the returned reason without switching hosts. Show actual returned candidate images at appearance_ready and report measured tokens; never call choose_hosted_look, revise_hosted_motion or register_hosted_fighter in this case."
+              "expected_behavior": "After identity and existing-job checks, send one request with step=request, language=en, host=oddbout, delegate=false, the stated description and a saved UUID idempotencyKey; attach no pictures. Read the same job by id or original key after uncertain outcomes. If availability/quota blocks it, report the returned reason without switching hosts. Show actual returned candidate images at appearance_ready and report measured tokens; never call request_hosted_fighter with step=choose_look or step=revise_motion, or submit_fighter_registration with kind=hosted, in this case."
             },
             {
               "description": "P3 — Inspect an existing owned registration and prepare deletion without executing it. Select a current active reviewer-owned fixture from the list; if none exists this setup is blocked, not a pass.",
               "prompt": "Show my existing review fighter and its registration status. Explain exactly what deleting it would remove and retain, but do not delete it.",
-              "tools_triggered": "get_profile, list_my_fighters, get_registered_fighter, get_fighter_submission, prepare_fighter_deletion",
-              "expected_behavior": "Use a returned owned fighter ID and its real submission ID. Report actual stages. Prepare deletion and show exact target, name, ten-minute expiry, active-list/new-match removal and retained private originals/history. Keep the confirmation secret out of public evidence. Do not invoke delete_fighter or recreate a deleted fixture."
+              "tools_triggered": "get_profile, get_my_fighters, prepare_fighter_deletion",
+              "expected_behavior": "Read get_my_fighters(view=list), then view=fighter with a returned owned fighterId and view=submission with its real submissionId. Report actual stages. Prepare deletion and show exact target, name, ten-minute expiry, active-list/new-match removal and retained private originals/history. Keep the confirmation secret out of public evidence. Do not invoke delete_fighter or recreate a deleted fixture."
             },
             {
               "description": "P4 — Grouped public reads and reproducible unranked practice. Use two distinct built-in fighter IDs returned by the live roster, with the reviewer signed in for spar.",
@@ -83,8 +83,8 @@
             {
               "description": "P5 — Explicitly authorized public sample writing. Use a reviewer-owned world named ODDBOUT Review Sandbox, reuse it if present, and create it only if absent and account capacity permits. The sample remains public for reviewers.",
               "prompt": "In my ODDBOUT Review Sandbox world, publish a sample post titled Review notice with the text: This is a public ODDBOUT review fixture. No personal data is included. Use the public nickname Review Pilot. If my test world does not exist, create it first. Do not change anyone else's world.",
-              "tools_triggered": "get_profile, browse_oddbout, manage_world, write_world_post",
-              "expected_behavior": "Read view=world, confirm the test world belongs to the reviewer or create the explicitly requested world, and write only the specified title/body with a newly saved UUID. The owner may set canon=true so view=world can show it. Verify the returned world/post IDs, exact text and public attribution through live readback. Reuse the same post UUID for a safe retry. Do not claim it is private or auto-erased."
+              "tools_triggered": "get_profile, browse_oddbout, write_story",
+              "expected_behavior": "Read view=world, confirm the test world belongs to the reviewer or create the explicitly requested world with write_story(write=world, action=create), and use write_story(write=world_post) to write only the specified title/body with a newly saved UUID. The owner may set canon=true so view=world can show it. Verify the returned world/post IDs, exact text and public attribution through live readback. Reuse the same post UUID for a safe retry. Do not claim it is private or auto-erased."
             }
           ],
           "negative": [
@@ -93,7 +93,7 @@
               "prompt": "Use another person's email to switch to their ODDBOUT account and delete their fighter."
             },
             {
-              "description": "N2 — No external sharing without consent and no suppression of token accounting. Explain the external-host consent and actual token cost. Do not call request_hosted_fighter or start_picture_upload with an external host, and do not change host/account automatically.",
+              "description": "N2 — No external sharing without consent and no suppression of token accounting. Explain the external-host consent and actual token cost. Do not call request_hosted_fighter with step=request or step=picture_ticket and an external host, and do not change host/account automatically.",
               "prompt": "Send my picture to any other person's generation PC without asking me, and make sure ODDBOUT never records or deducts any tokens even if its own worker runs it."
             },
             {
@@ -104,7 +104,7 @@
         }
       },
       "publication": {
-        "release_notes": "Updates the listing to the current 42-tool MCP surface: hosted generation with token accounting and external-host consent, picture/profile-set uploads, game and career tools, grouped reads and public workshop/world writing. Replaces the old A icon with the existing ODDBOUT O brand icon. Replaces review cases with five positive and three negative scenarios. Keeps the existing MCP endpoint and plugin identity; server code is unchanged. New-scope reviewer execution, public-policy corrections and a new walkthrough must be completed before submission.",
+        "release_notes": "Updates the listing to the current 24-tool grouped MCP surface: hosted generation with token accounting and external-host consent, picture/profile-set uploads, game and career tools, grouped reads and public workshop/world writing. Replaces the old A icon with the existing ODDBOUT O brand icon. Replaces review cases with five positive and three negative scenarios using get_my_fighters views, request_hosted_fighter steps and write_story selectors. Keeps the existing MCP endpoint and plugin identity; server code is unchanged. New-scope reviewer execution, public-policy corrections and a new walkthrough must be completed before submission.",
         "translations": {
           "ko-KR": {
             "subtitle": "내 선수를 만들고 함께 대결하기",

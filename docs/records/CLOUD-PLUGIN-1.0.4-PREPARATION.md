@@ -4,6 +4,29 @@ Status: **draft package; not uploaded, submitted or ready for submission**. The 
 
 Package: `oddbout-dots`; public plugin: `plugin_asdk_app_6adc695de1bc8191a604b42bbaa178af`; existing endpoint: `https://mcp.oddbout.com/mcp`.
 
+## Latest follow-up: stage 2, 24 tools (2026-11-06 KST)
+
+This follow-up supersedes the **initial 42-tool inventory/candidate** recorded in the numbered sections below. Main now contains PR #351 (`928b6d0e`, merged as `c73355c7`); the production endpoint actually returns **24 tools**. The live tools/list snapshot SHA-256 is `5c389cc7f682290f997492d1d7697799c13ebc27121b62713b464e23326476fb`.
+
+The new grouped names are `get_my_fighters`, `update_fighter`, `write_story`, `manage_career`; existing generation/registration/entry names now have selectors. The five compatibility reads remain listed: `list_my_fighters`, `get_registered_fighter`, `get_fighter_submission`, `check_creation_readiness`, `open_creator_homepage`. The intended later inventory is 19, **only after the portal confirms the replacement definition is live**. No server code or KEEP_LISTED entry was changed by this preparation.
+
+The user requested Rescan and Live-definition verification. The published 1.0.3 portal instead showed **Rescan disabled**, 42 previous Published definitions, and no `get_my_fighters` row. Its downloadable diagnostics JSON likewise contained 42 tools, without any of the four new grouped names. The connection drawer confirmed the correct URL and **Mixed Auth / DCR / openid email profile**, despite the overview's “No authentication” label.
+
+The existing scanner account was reconnected through the normal Google/OAuth flow (not the dedicated reviewer), preserving the configured endpoint and auth scope. After callback and page reload, **Rescan remained disabled**, the same setup warning remained, and the old 42 definitions were still shown. Consequently no rescan could be dispatched and **new-tool Live availability is not verified**. Do not remove the five compatibility reads on this evidence. The UI exposes no reason beyond “Scan unavailable” and “Account connected. No scan has finished since this connection.” A further portal/support diagnosis is needed; do not infer a server outage, alter authentication to no-auth, or bypass the disabled UI.
+
+The five positive/three negative cases now use the current selectors:
+
+- P1: `get_my_fighters(view=readiness, purpose=registration)`.
+- P2: `request_hosted_fighter(step=request)`; stop before `choose_look`, `revise_motion` or `submit_fighter_registration(kind=hosted)`.
+- P3: `get_my_fighters` views `list`, `fighter`, `submission`, plus unchanged deletion preparation.
+- P4: unchanged public browsing and authenticated unranked spar.
+- P5: `write_story(write=world, action=create)` and `write_story(write=world_post)`.
+- N2: prohibit unconsented external-host `request_hosted_fighter` steps `request` and `picture_ticket`.
+
+Local package checks passed against the new 24-tool snapshot; the five public reads, anonymous-profile 401 and missing-record-argument error were repeated successfully. These remain public protocol probes, not reviewer-account scenario results. Reviewer credentials remain unavailable: the user-specified `.secret` directory also contained no matching reviewer credential reference in its text files; `ai-fighter-open-registration-verification.json` contains service verification records, not the review password. No approved generation test has been dispatched.
+
+Current candidate: `output/review-20261106-stage2/oddbout-dots-1.0.4.zip`, **33,760 bytes**, SHA-256 `af5c226358f74db1e09718f7c75d138e3395985dd66f4feb81a4221656ca53b1`. The adjacent `SHA256SUMS.txt` records it. Inventory remains the two manifests and two brand icon files. The earlier candidate is retained as historical output and must not be uploaded. Screenshot evidence: `output/review-20261106-stage2/portal-rescan-disabled.png` (local, ignored). The PR remains draft; merge/upload/submission/publication are not authorized or performed.
+
 ## 1. Portal observation and update behavior
 
 The current portal contradicts the earlier unpublished-state note: 1.0.3 is **Published / 디렉터리에 공개됨**. The preceding authorized operation in this conversation had already returned “Plugin published!”. This preparation did not publish or cancel anything.
