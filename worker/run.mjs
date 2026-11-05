@@ -7,7 +7,7 @@ import { readBody, sha256 } from '../api/http.mjs';
 import { VALIDATOR_VERSION } from '../api/submissions.mjs';
 import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/validate.mjs';
 import { makePackageValidator } from '../mcp/package-access.mjs';
-import { RetryLater, runLeasedJob } from './leased-jobs.mjs';
+import { createBackoff, RetryLater, runLeasedJob } from './leased-jobs.mjs';
 
 const DOWNLOADS_AT_ONCE = 4;
 
@@ -102,7 +102,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   const config = process.env.AI_FIGHTER_WORKER_CONFIG;
   if (!config) throw new Error('Set AI_FIGHTER_WORKER_CONFIG to a private worker config file');
   const watch = process.argv.includes('--watch');
-  let idleMs = 15000;
+  const backoff = createBackoff();
   do {
     // Drain the queue: claim again at once after a finished job. Back off only while idle or failing.
     let waitMs = 0;
@@ -110,11 +110,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
       const result = await runOnce(config, process.argv.find(arg => /^[a-f0-9-]{36}$/.test(arg)));
       if (!watch || result.stage !== 'idle') console.log(JSON.stringify(result));
       // Idle or an infrastructure failure: back off. A finished job: claim the next at once.
-      if (result.stage === 'idle' || result.stage === 'retry-later') { waitMs = idleMs; idleMs = Math.min(idleMs * 2, 120000); } else idleMs = 15000;
+      if (result.stage === 'idle' || result.stage === 'retry-later') waitMs = backoff.next(); else backoff.reset();
     } catch (/** @type {any} */ error) {
       if (!watch || error.status === 401 || error.status === 403) throw error;
       console.error(JSON.stringify({ stage: 'retry-wait', code: 'worker-api-unavailable' }));
-      waitMs = idleMs; idleMs = Math.min(idleMs * 2, 120000);
+      waitMs = backoff.next();
     }
     if (!watch) break;
     if (waitMs) await new Promise(resolve => setTimeout(resolve, waitMs));

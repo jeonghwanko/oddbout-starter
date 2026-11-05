@@ -18,6 +18,22 @@ const FINISH_RETRY_MS = [1000, 3000];
 export class RetryLater extends Error {}
 
 /**
+ * The wait before the next claim after an infrastructure failure (and, for `run.mjs --watch`, after an empty queue): 15 s, doubling up to
+ * two minutes; a finished job starts it over. Each hand-back counts toward a package's ten infrastructure failures (af_release,
+ * 20261027235000), and the server's drain claimed a handed-back job again at once, so a short outage rejected a valid package as
+ * worker-infrastructure-limit within seconds (서빙 리뷰 2026-11-05). Spread out like this, ten failures take about fourteen minutes.
+ * @param {{ firstMs?: number, maxMs?: number }} [options]
+ */
+export function createBackoff({ firstMs = 15_000, maxMs = 120_000 } = {}) {
+  let wait = firstMs;
+  return {
+    /** The wait to take now; the one after it is twice as long. */
+    next() { const now = wait; wait = Math.min(wait * 2, maxMs); return now; },
+    reset() { wait = firstMs; },
+  };
+}
+
+/**
  * Claim one job and finish it, or answer idle. Any other error while working (a bug, a full disk) is not a verdict either: the job is
  * handed back as `worker-error`. Left to expire, each lease spent one of the job's three attempts and a valid package was rejected as
  * worker-attempt-limit (리뷰 2026-11-02).

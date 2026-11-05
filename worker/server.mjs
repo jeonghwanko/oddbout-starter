@@ -1,9 +1,11 @@
 // @ts-check
 import { createServer } from 'node:http';
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { validProjectUrl } from '../api/client.mjs';
 import { makePackageValidator } from '../mcp/package-access.mjs';
+import { createBackoff } from './leased-jobs.mjs';
 import { runWithConfig } from './run.mjs';
 import { runProfileSetWithConfig } from './profile-sets.mjs';
 import { cloudGateway } from './cloud-gateway.mjs';
@@ -11,13 +13,15 @@ import { cloudGateway } from './cloud-gateway.mjs';
 /**
  * HTTP-triggered worker. Supabase owns the durable queue and five-minute leases.
  * @param {{ wakeToken: string | undefined, run: () => Promise<{ stage: string, submissionId?: string, profileSetId?: string }>, log?: (line: string) => void,
- *   commit?: string | null }} options
+ *   commit?: string | null, backoff?: ReturnType<typeof createBackoff> }} options `backoff`: the waits after a hand-back or an API failure
  */
-export function createWorkerServer({ wakeToken, run, log = console.log, commit = null }) {
+export function createWorkerServer({ wakeToken, run, log = console.log, commit = null, backoff = createBackoff() }) {
   if (!/^[a-f0-9]{64}$/.test(wakeToken ?? '')) throw new Error('invalid-wake-token');
   /** @type {Promise<void> | null} */
   let active = null;
   let stopping = false, requested = false;
+  // Ends a wait at once when the service stops: Render's shutdown grace is shorter than the longest wait.
+  const resting = new AbortController();
   // The last queue outcome, for /health. A rejected worker credential cannot recover by retrying, so it is
   // reported distinctly instead of as an ordinary retry (the token expires; see docs/CREATOR-HOSTING.md).
   /** @type {{ status: string, since: string | null }} */
@@ -27,18 +31,29 @@ export function createWorkerServer({ wakeToken, run, log = console.log, commit =
   async function drain() {
     do {
       requested = false;
+      let waitMs = 0;
       try {
         while (!stopping) {
           const result = await run();
           observe('ok');
           // Never log credentials, signed URLs or package contents.
           log(JSON.stringify({ stage: result.stage, submissionId: result.submissionId, profileSetId: result.profileSetId }));
-          if (result.stage === 'idle' || result.stage === 'retry-later') break;
+          // A job handed back (an infrastructure failure) is queued again, and af_release's trigger wakes this server at once: claimed
+          // again without a wait, a short outage spent the package's ten infrastructure failures in seconds. A wake during the wait does
+          // not cut it short; a finished job or an empty queue starts the backoff over.
+          if (result.stage === 'retry-later') { waitMs = backoff.next(); break; }
+          backoff.reset();
+          if (result.stage === 'idle') break;
         }
       } catch (/** @type {any} */ error) {
         const rejected = error?.status === 401 || error?.status === 403;
         observe(rejected ? 'credential-rejected' : 'api-unavailable');
         log(JSON.stringify({ stage: rejected ? 'worker-credential-rejected' : 'retry-later' }));
+        waitMs = backoff.next();
+      }
+      if (waitMs && !stopping) {
+        log(JSON.stringify({ stage: 'retry-wait', waitMs }));
+        await delay(waitMs, undefined, { signal: resting.signal }).catch(() => {});
       }
     } while (requested && !stopping);
   }
@@ -79,6 +94,7 @@ export function createWorkerServer({ wakeToken, run, log = console.log, commit =
     server,
     async stop() {
       stopping = true;
+      resting.abort();
       server.close();
       server.closeIdleConnections();
       await active;
