@@ -290,6 +290,29 @@ export function run(command, args, { cwd, log, stdin, signal, graceMs = STOP_GRA
   });
 }
 
+/**
+ * A command whose output is read, not logged (og health, og prune): resolves what it printed, stdout and stderr together. A command that
+ * cannot start resolves what it printed so far (nothing): with no 'error' listener a missing og ended the worker, and its service restarted
+ * it into the same error. One still running at `limitMs` gets SIGTERM on its group, then SIGKILL after `graceMs`; as in `run`, it resolves
+ * when its output closes, or `drainMs` after it exited.
+ * @param {string} command @param {string[]} args
+ * @param {{ limitMs: number, graceMs?: number, drainMs?: number }} options
+ * @returns {Promise<string>}
+ */
+export function readOutput(command, args, { limitMs, graceMs = STOP_GRACE_MS, drainMs = OUTPUT_DRAIN_MS }) {
+  return new Promise(resolve => {
+    let output = '', ended = false, kill, drain;
+    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+    child.stdout?.on('data', d => { output += d; }); child.stderr?.on('data', d => { output += d; });
+    const group = sig => { try { process.kill(-child.pid, sig); } catch { try { child.kill(sig); } catch {} } };
+    const limit = setTimeout(() => { group('SIGTERM'); kill = setTimeout(() => group('SIGKILL'), graceMs); }, limitMs);
+    const end = () => { if (ended) return; ended = true; clearTimeout(limit); clearTimeout(kill); clearTimeout(drain); resolve(output); };
+    child.on('exit', () => { drain = setTimeout(end, drainMs); });
+    child.on('close', end);
+    child.on('error', end);
+  });
+}
+
 /** A front check's limit: one picture, one codex answer (its lease is fifteen minutes). */
 export const FRONT_CHECK_MS = 5 * 60_000;
 /** After a check that could not judge, the queue waits this long, doubled each time again, at most an hour (리뷰 2026-11-03). */
@@ -382,14 +405,7 @@ export async function main({ once = false } = {}) {
 
   let health = { ok: false, codex: false, grok: false, at: null }, checkedAt = 0, beatAt = 0, prunedAt = 0;
   const cooldowns = createCooldowns();
-  const quiet = async (args, limitMs) => {
-    let output = '';
-    const child = spawn(og, args, { stdio: ['ignore', 'pipe', 'pipe'], detached: true });
-    child.stdout.on('data', d => { output += d; }); child.stderr.on('data', d => { output += d; });
-    const limit = setTimeout(() => { try { process.kill(-child.pid, 'SIGTERM'); } catch {} }, limitMs);
-    await new Promise(resolve => child.on('close', resolve)); clearTimeout(limit);
-    return output;
-  };
+  const quiet = (args, limitMs) => readOutput(og, args, { limitMs });
   async function keepAlive() {
     if (Date.now() - checkedAt >= TIMING.healthMs) {
       // A health check waits for a codex slot like any run; past ten minutes it counts as not healthy.

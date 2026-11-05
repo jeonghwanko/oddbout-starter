@@ -11,7 +11,7 @@
 //   POST  admin/submissions/<id>/submit               to the validator queue
 //   PATCH admin/fighters/<id>/profile                 a profile or style edit (Idempotency-Key, X-Admin-Reason), as PATCH fighters/<id>/profile
 import { updateFighterProfile } from './fighter-profile.mjs';
-import { Problem, UUID, jsonResponse, logFailure, rpcProblem } from './http.mjs';
+import { Problem, UUID, jsonResponse, logFailure, rpcProblem, unavailable } from './http.mjs';
 import { SUBMISSION_STATUS, checkedManifest, storeAsset } from './submissions.mjs';
 
 export const ADMIN_EDIT_CORS = { methods: 'GET, POST, PUT, PATCH, OPTIONS', headers: 'Authorization, Content-Type, Idempotency-Key, X-Admin-Reason' };
@@ -46,7 +46,7 @@ export function createAdminFighterEdits({ db, present }) {
   async function fighter(id) {
     const { data, error } = await db.from('af_fighters').select('id,owner_id,submission_id,manifest_sha,profile,status,review_state,runtime_approved,duel_approved,entered_at,deleted_at,moderation_version,updated_at')
       .eq('id', id).maybeSingle();
-    if (error) throw new Problem(503, 'database-unavailable');
+    if (error) throw unavailable('database-unavailable', error);
     if (!data || data.deleted_at) throw new Problem(404, 'fighter-not-found');
     return data;
   }
@@ -54,17 +54,17 @@ export function createAdminFighterEdits({ db, present }) {
   async function adminSubmission(id) {
     const { data: edit, error: editError } = await db.from('af_admin_fighter_edits').select('submission_id').eq('submission_id', requireId(id))
       .eq('kind', 'package').maybeSingle();
-    if (editError) throw new Problem(503, 'database-unavailable');
+    if (editError) throw unavailable('database-unavailable', editError);
     if (!edit) throw new Problem(404, 'not-found');
     const { data, error } = await db.from('af_submissions').select('*').eq('id', edit.submission_id).maybeSingle();
-    if (error) throw new Problem(503, 'database-unavailable');
+    if (error) throw unavailable('database-unavailable', error);
     if (!data) throw new Problem(404, 'not-found');
     return data;
   }
   /** A submission's status (an edit's outcome in the detail), or null. @param {string} id */
   async function statusOf(id) {
     const { data, error } = await db.from('af_submissions').select('status').eq('id', id).maybeSingle();
-    if (error) throw new Problem(503, 'database-unavailable');
+    if (error) throw unavailable('database-unavailable', error);
     return data?.status ?? null;
   }
   return async (request, parts, actor) => {
@@ -77,10 +77,10 @@ export function createAdminFighterEdits({ db, present }) {
           // A fighter without a package yet (`submission_id` null) has no combat to show.
           const { data: current, error } = f.submission_id ? await db.from('af_submissions').select('manifest').eq('id', f.submission_id).maybeSingle()
             : { data: null, error: null };
-          if (error) throw new Problem(503, 'database-unavailable');
+          if (error) throw unavailable('database-unavailable', error);
           const { data: edits, error: editsError } = await db.from('af_admin_fighter_edits').select('actor,submission_id,kind,reason,kept_entry,created_at')
             .eq('fighter_id', id).order('created_at', { ascending: false }).limit(5);
-          if (editsError) throw new Problem(503, 'database-unavailable');
+          if (editsError) throw unavailable('database-unavailable', editsError);
           const manifest = current?.manifest;
           return json({ ok: true, fighter: { id: f.id, ownerId: f.owner_id, name: f.profile?.name ?? '', manifestSha256: f.manifest_sha,
             submissionId: f.submission_id, status: f.status, reviewState: f.review_state, runtimeApproved: f.runtime_approved, duelApproved: f.duel_approved,

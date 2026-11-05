@@ -4,7 +4,7 @@
 // `profile-sets/<id>/submit`); the Render validator decodes it and stores a 600-px card and a 192-px face (`worker/profile-sets/*`); an
 // operator approves it (admin.mjs), which copies the derived files to the public bucket; the roster names them (`rosterProfileSet`).
 // No Node-only imports: Deno and Node.
-import { Problem, UUID, jsonResponse, logFailure, readBody, rpcProblem, sha256 } from './http.mjs';
+import { Problem, UUID, jsonResponse, logFailure, logSkipped, readBody, rpcProblem, sha256, unavailable } from './http.mjs';
 import { BUCKET } from './submissions.mjs';
 import { probeImage } from './image-probe.mjs';
 import { PROFILE_SET_ASSETS, PROFILE_SET_LIMITS, PROFILE_SET_VERSION, parseProfileSet } from './profile-set-contract.mjs';
@@ -140,7 +140,7 @@ export async function signProfileSet(db, row, seconds) {
   if (!names.length) return {};
   const paths = names.map(name => profileSetKey(row.owner_id, row.id, name));
   const { data, error } = await db.storage.from(BUCKET).createSignedUrls(paths, seconds);
-  if (error || !Array.isArray(data)) throw new Problem(503, 'storage-unavailable');
+  if (error || !Array.isArray(data)) throw unavailable('storage-unavailable', error);
   const signed = new Map(data.map(item => [item?.path, item]));
   return Object.fromEntries(names.map((name, index) => {
     const item = signed.get(paths[index]);
@@ -161,7 +161,7 @@ export async function storeOnce(db, bucketName, path, bytes, hash, upsert = fals
   const { error } = await bucket.upload(path, bytes, { contentType: 'image/webp', cacheControl, upsert });
   if (!error) return true;
   const { data, error: getError } = await bucket.download(path);
-  if (getError || !data || data.size !== bytes.length || await sha256(new Uint8Array(await data.arrayBuffer())) !== hash) throw new Problem(503, 'storage-unavailable');
+  if (getError || !data || data.size !== bytes.length || await sha256(new Uint8Array(await data.arrayBuffer())) !== hash) throw unavailable('storage-unavailable', getError);
   return false;
 }
 
@@ -189,7 +189,7 @@ export function createProfileSetHandler({ db, authenticate }) {
     let query = db.from('af_profile_sets').select('*').eq('id', id.toLowerCase());
     if (owner) query = query.eq('owner_id', owner);
     const { data, error } = await query.maybeSingle();
-    if (error) throw new Problem(503, 'database-unavailable');
+    if (error) throw unavailable('database-unavailable', error);
     if (!data) throw new Problem(404, 'not-found');
     return data;
   }
@@ -209,7 +209,7 @@ export function createProfileSetHandler({ db, authenticate }) {
         if (method === 'GET') {
           const { data, error } = await db.from('af_profile_sets').select('*').eq('fighter_id', fighter).eq('owner_id', owner)
             .order('created_at', { ascending: false }).limit(10);
-          if (error) throw new Problem(503, 'database-unavailable');
+          if (error) throw unavailable('database-unavailable', error);
           return json({ ok: true, fighterId: fighter, profileSets: (data ?? []).map(/** @param {ProfileSetRow} row */ row => profileSetView(row)) });
         }
         if (method !== 'POST') throw new Problem(404, 'route-not-found');
@@ -312,7 +312,7 @@ export async function publishProfileSet(db, set) {
     const file = set.derived?.[name];
     if (!object(file) || typeof file.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(file.sha256)) throw new Problem(409, 'review-conflict');
     const { data, error } = await db.storage.from(BUCKET).download(profileSetKey(set.ownerId, set.id, name));
-    if (error || !data) throw new Problem(503, 'storage-unavailable');
+    if (error || !data) throw unavailable('storage-unavailable', error);
     const bytes = new Uint8Array(await data.arrayBuffer());
     // The private object can change only under a live validation lease; what the operator approves is what the validator recorded.
     if (bytes.length !== file.bytes || await sha256(bytes) !== file.sha256) throw new Problem(409, 'review-conflict');
@@ -335,8 +335,10 @@ export async function removePublicFiles(db, fighterId, paths) {
   let result = await remove();
   if (result?.error) result = await remove();
   if (!result?.error) return true;
-  await Promise.resolve().then(() => db.rpc('af_profile_set_cleanup_failed', { p_fighter: fighterId, p_paths: paths,
-    p_error: String(result.error?.message ?? result.error).slice(0, 200) })).catch(() => {});
+  // The record answers `{ error }` or throws as Storage does; one that did not land leaves the log line, the only trace of these copies.
+  const recorded = await Promise.resolve().then(() => db.rpc('af_profile_set_cleanup_failed', { p_fighter: fighterId, p_paths: paths,
+    p_error: String(result.error?.message ?? result.error).slice(0, 200) })).catch(caught => ({ error: caught }));
+  if (recorded?.error) logSkipped('profile-sets', 'public-cleanup-record', recorded.error);
   return false;
 }
 
@@ -373,7 +375,7 @@ export async function addOperatorSheet(db, { actor, setId, fighterId, key, reaso
   /** @param {string} name @param {Record<string, unknown>} args */
   const rpc = async (name, args) => { const { data, error } = await db.rpc(name, args); if (error) throw rpcProblem(error, PROFILE_SET_STATUS); return data; };
   const { data: from, error } = await db.from('af_profile_sets').select('*').eq('id', setId).maybeSingle();
-  if (error) throw new Problem(503, 'database-unavailable');
+  if (error) throw unavailable('database-unavailable', error);
   if (!from) throw new Problem(404, 'not-found');
   if (from.fighter_id !== fighterId) throw new Problem(409, 'fighter-mismatch');
   const probed = probeImage(bytes);
@@ -386,13 +388,13 @@ export async function addOperatorSheet(db, { actor, setId, fighterId, key, reaso
   const sha = await sha256(new TextEncoder().encode(text));
   // A retry after the set went past its upload (even approved, which supersedes `from`): the same set, for the same sheet only.
   const { data: earlier, error: earlierError } = await db.from('af_profile_sets').select('*').eq('owner_id', from.owner_id).eq('idempotency_key', key).maybeSingle();
-  if (earlierError) throw new Problem(503, 'database-unavailable');
+  if (earlierError) throw unavailable('database-unavailable', earlierError);
   if (earlier && (earlier.manifest_sha !== sha || earlier.based_on !== from.id)) throw new Problem(409, 'idempotency-conflict');
   if (earlier && earlier.status !== 'uploading') return profileSetView(earlier);
   if (earlier && uploadExpired(earlier)) throw new Problem(409, 'upload-expired');
   // His approved front, checked before anything is made (리뷰 2026-11-03: a set made first and left half-uploaded held his owner's upload).
   const { data: download, error: downloadError } = await db.storage.from(BUCKET).download(profileSetKey(from.owner_id, from.id, 'front'));
-  if (downloadError || !download) throw new Problem(503, 'storage-unavailable');
+  if (downloadError || !download) throw unavailable('storage-unavailable', downloadError);
   const frontBytes = new Uint8Array(await download.arrayBuffer());
   if (frontBytes.length !== front.bytes || await sha256(frontBytes) !== front.sha256) throw new Problem(409, 'review-conflict');
   /** @type {ProfileSetRow} */

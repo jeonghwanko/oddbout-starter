@@ -21,15 +21,38 @@
 // submitting: the package the motions stage left in the job folder, with the profile the creator confirmed, submitted under his account;
 //   before it, the chosen front and its face square (measured here on the uploaded WebP, `motions.py face-box`) and his expression sheet go to the job: the server
 //   makes them his profile set when the package is registered.
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { appendFile, copyFile, cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { appendFile, copyFile, cp, mkdir, open, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ASK_EXIT, NOT_STARTED_EXIT, judgeOutcome, readOutcome } from './sprite-outcome.mjs';
 // No OpenAI credentials or API calls on a generation host. Use its existing ODDBOUT worker identity.
 
 const reviewHash = bytes => createHash('sha256').update(bytes).digest('hex');
+// What a Windows virus scanner's brief hold on a just-written file makes a rename throw (as plugins/ai-fighter/local-files.mjs retries).
+const SCANNER_HOLDS = ['EPERM', 'EACCES', 'EBUSY'];
+/**
+ * Writes a whole file or none: the bytes go to a temporary name beside it, synced, then renamed over it. A stage resumes from these files
+ * (a picture that exists is not fetched again, `uploaded.json` means sent, `changes.json` holds every round's notes), so a crash or a
+ * full disk mid-write must not leave a torn copy that a later run reads as done. The temporary file is removed when anything fails.
+ * @param {string} file @param {string | Uint8Array} data
+ * @param {{ move?: (from: string, to: string) => Promise<void>, platform?: string }} [options]  for tests
+ */
+export async function writeWhole(file, data, { move = rename, platform = process.platform } = {}) {
+  const temp = `${file}.${process.pid}-${randomBytes(4).toString('hex')}.tmp`;
+  try {
+    const handle = await open(temp, 'wx');
+    try { await handle.writeFile(data); await handle.sync(); } finally { await handle.close(); }
+    for (let attempt = 0; ; attempt++) {
+      try { await move(temp, file); return; }
+      catch (/** @type {any} */ error) {
+        if (platform !== 'win32' || !SCANNER_HOLDS.includes(error.code) || attempt >= 6) throw error;
+        await new Promise(done => setTimeout(done, 25 * (attempt + 1)));
+      }
+    }
+  } catch (error) { await rm(temp, { force: true }); throw error; }
+}
 export const serverReviewEnabled = (job, api) => job.decisionsReview?.mode === 'shadow' && typeof api.decisions === 'function';
 /** What the server takes for one review image (api/decisions-review.mjs DECISIONS): its bytes and its longest side. */
 export const EVIDENCE_LIMIT = Object.freeze({ bytes: 2 * 1024 * 1024, side: 2048 });
@@ -78,7 +101,7 @@ export async function reviewOnServer({ api, job, dir, stage, scope, images, fit 
     // The server's daily or per-job review limit is not an outage: it is named, so the numbers can tell them apart.
     const report = reply.ok && reply.review ? reply.review
       : { ...record, status: 'unverified', errorCode: reply.code === 'review-limit' ? 'review-limit' : 'server-review-unavailable' };
-    await writeFile(out, JSON.stringify(report) + '\n');
+    await writeWhole(out, JSON.stringify(report) + '\n');
     return report;
   } catch {
     // Advisory failure never retries generation or passes a failed existing gate. Unknown requests stay started on disk/server.
@@ -749,7 +772,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
     const refs = [];
     for (const [i, ref] of job.refs.entries()) {
       const file = path.join(dir, 'refs', `ref-${i + 1}.${extOf(ref.contentType)}`);
-      if (!existsSync(file)) { await mkdir(path.dirname(file), { recursive: true }); await writeFile(file, await fetchBytes(ref.url)); }
+      if (!existsSync(file)) { await mkdir(path.dirname(file), { recursive: true }); await writeWhole(file, await fetchBytes(ref.url)); }
       refs.push(file);
     }
     // A revision starts from the look the creator saw first (candidate a of the round before).
@@ -841,7 +864,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
     const name = known ?? sideLookNames(job.appearanceRound)[index], front = name.startsWith('front-');
     const webp = path.join(dir, 'looks', `${name}.chosen.webp`);
     await mkdir(path.dirname(webp), { recursive: true });
-    if (!existsSync(webp)) await writeFile(webp, await fetchBytes(chosen.url));
+    if (!existsSync(webp)) await writeWhole(webp, await fetchBytes(chosen.url));
     return { file: webp, front, name };
   }
 
@@ -875,7 +898,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
         if (code !== 0) return { retry: `side-judge-exit-${code}` };
         verdict = await readJson(out).catch(() => null);
         if (!verdict) return { retry: 'side-judge-invalid' };
-        await writeFile(verdictFile, JSON.stringify(verdict));
+        await writeWhole(verdictFile, JSON.stringify(verdict));
       }
       const passed = sidePassed(verdict);
       await Promise.resolve(api.progress?.(job, undefined, { kind: 'side', take, outcome: passed ? 'pass' : 'fail',
@@ -937,7 +960,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
         return event({ outcome: 'failed', code: 'expressions-size' });
       if (!existsSync(webp)) await toWebp(png, webp, `${EXPRESSIONS_SIZE.width}x${EXPRESSIONS_SIZE.height}`);
       await api.artifact(job, name, await readFile(webp));
-      await writeFile(uploaded, JSON.stringify({ artifact: name }));
+      await writeWhole(uploaded, JSON.stringify({ artifact: name }));
       await event({ outcome: 'chosen', artifact: name });
     } catch (error) {
       // A stopped stage refuses the run before og starts it: nothing was sent.
@@ -1217,13 +1240,16 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
     await writeFile(brief, JSON.stringify({ language: job.language, ...job.brief }));
     // The creator's changes, every round kept (a later change never undoes an earlier one): this round's is added once.
     const changesFile = path.join(m, 'changes.json');
-    const changes = await readJson(changesFile).catch(() => []);
+    // None yet is a first round. One that cannot be read is an operator's to look at: reading it as none would rewrite it with this
+    // round's note alone, and the motions made again would drop every earlier round's change.
+    const changes = existsSync(changesFile) ? await readJson(changesFile).catch(() => null) : [];
+    if (!Array.isArray(changes)) return { outcome: 'review', result: { code: 'motion-changes-unreadable' } };
     if (job.motionNote && !changes.some(c => c.round === job.motionRound)) {
       const { clip, note } = job.motionNote;
       // idle is the look itself: a change to it is a new look (the appearance stage), not a motion.
       if (clip === 'idle' || typeof note !== 'string' || !note.trim()) return { outcome: 'review', result: { code: 'motion-revision-idle' } };
       changes.push({ round: job.motionRound, clip, note: note.trim() });
-      await writeFile(changesFile, JSON.stringify(changes));
+      await writeWhole(changesFile, JSON.stringify(changes));
     }
     const report = progress => Promise.resolve(api.progress?.(job, progress)).catch(() => {});
     // Previews as the branches pass (2026-10-28): the creator watches the action clips while the walk and run still film (the stage
@@ -1368,7 +1394,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
             const said = code === 75 ? ASKED : await failedRun('show', code, setReport, since);
             // Left out only when a request may have left: a run refused before any (a preflight) is tried again on the next stage run.
             const { charge } = judgeOutcome({ code, report: await readOutcome(setReport, { since }) });
-            if (said.review && charge !== 'not-charged') await writeFile(showLeftOut, JSON.stringify(said) + '\n');
+            if (said.review && charge !== 'not-charged') await writeWhole(showLeftOut, JSON.stringify(said) + '\n');
             return null;
           }
           if ((await og(sprite('extract', '--run-dir', showRows))).code !== 0) return null;

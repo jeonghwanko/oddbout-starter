@@ -1,6 +1,6 @@
 // @ts-check
 import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/validate.mjs';
-import { Problem, readBody, sha256, unstorableTextPath } from './http.mjs';
+import { Problem, readBody, sha256, unavailable, unstorableTextPath } from './http.mjs';
 
 const editable = new Set(['name', 'description', 'language', 'concept', 'moves', 'names', 'lines']);
 /**
@@ -34,13 +34,13 @@ export async function applyFighterEdit({ body, owner, id, key, db, rpc }) {
     || !/^[a-f0-9]{64}$/.test(body.expectedManifestSha256 ?? '') || !profileOk || !styleOk || body.profile === undefined && body.style === undefined)
     throw new Problem(422, 'invalid-profile');
   const { data: previous, error: previousError } = await db.from('af_submissions').select('*').eq('owner_id', owner).eq('idempotency_key', key).maybeSingle();
-  if (previousError) throw new Problem(503, 'database-unavailable');
+  if (previousError) throw unavailable('database-unavailable', previousError);
   if (previous && (previous.replaces_fighter !== id || !previous.validation?.profileBaseSubmission)) throw new Problem(409, 'idempotency-conflict');
   let query = db.from('af_submissions').select('*').eq('owner_id', owner)
     .eq('fighter_id', id).eq('manifest_sha', body.expectedManifestSha256).eq('status', 'registered');
   if (previous) query = query.eq('id', previous.validation.profileBaseSubmission);
   const { data: base, error } = await query.order('created_at', { ascending: false }).limit(1).maybeSingle();
-  if (error) throw new Problem(503, 'database-unavailable');
+  if (error) throw unavailable('database-unavailable', error);
   if (!base) throw new Problem(previous ? 409 : 404, previous ? 'idempotency-conflict' : 'fighter-not-found');
   const manifest = { ...base.manifest, profile: { ...base.manifest.profile, ...body.profile } };
   // `names: null` / `lines: null` remove the per-language names / bout lines (contract profile.names, profile.lines); leaving them out keeps them.

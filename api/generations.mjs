@@ -8,7 +8,7 @@ import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { profileLimits } from '../contracts/ai-fighter/profile-limits.mjs';
 import { text } from './canon.mjs';
 import { probeImage } from './image-probe.mjs';
-import { Problem, UUID, jsonResponse, logFailure, readBody, rpcCaller, rpcProblem, sha256 } from './http.mjs';
+import { Problem, UUID, jsonResponse, logFailure, logSkipped, readBody, rpcCaller, rpcProblem, sha256, skipped, unavailable } from './http.mjs';
 import { SUBMISSION_STATUS, checkedManifest, storeAsset } from './submissions.mjs';
 import { DECISIONS, reviewEvidence } from './decisions-review.mjs';
 import { benchmarkReview } from './decisions-benchmark.mjs';
@@ -132,13 +132,13 @@ export async function attachJobProfileSet(db, submission) {
   if (submission?.status !== 'registered' || !submission.fighter_id) return null;
   const { data: job, error } = await db.from('af_generation_jobs').select('id,owner_id,profile_front,profile_expressions,profile_set_id')
     .eq('submission_id', submission.id).maybeSingle();
-  if (error) throw new Problem(503, 'database-unavailable');
+  if (error) throw unavailable('database-unavailable', error);
   if (!job?.profile_front || job.profile_set_id) return job?.profile_set_id ?? null;
   const { artifact, face, ...front } = job.profile_front, sheet = job.profile_expressions;
   /** @type {(name: string) => Promise<Uint8Array<ArrayBuffer>>} */
   const artifactBytes = async name => {
     const { data: download, error: downloadError } = await db.storage.from(GENERATION_BUCKET).download(artifactPath(job.id, name));
-    if (downloadError || !download) throw new Problem(503, 'storage-unavailable');
+    if (downloadError || !download) throw unavailable('storage-unavailable', downloadError);
     return new Uint8Array(await download.arrayBuffer());
   };
   if (typeof artifact !== 'string' || !parseProfileSet(JSON.stringify({ version: PROFILE_SET_VERSION, front, face })).ok) return null;
@@ -147,7 +147,7 @@ export async function attachJobProfileSet(db, submission) {
   // His expression sheet (2026-11-03), checked as the front is: one that cannot be read or no longer matches is left out, and his set
   // goes in without it (리뷰: a sheet's storage error took the front's set down).
   const { artifact: sheetArtifact, ...expressions } = sheet && typeof sheet === 'object' ? sheet : { artifact: null };
-  const sheetBytes = typeof sheetArtifact === 'string' ? await artifactBytes(sheetArtifact).catch(() => null) : null;
+  const sheetBytes = typeof sheetArtifact === 'string' ? await artifactBytes(sheetArtifact).catch(skipped('generation', 'profile-set-sheet')) : null;
   const withSheet = Boolean(sheetBytes && sheetBytes.length === expressions.bytes && await sha256(sheetBytes) === expressions.sha256);
   /** @type {(name: string, args: Record<string, unknown>) => Promise<any>} */
   const rpc = async (name, args) => { const { data, error: rpcError } = await db.rpc(name, args); if (rpcError) throw new Problem(409, rpcError.message); return data; };
@@ -176,7 +176,7 @@ export async function attachJobProfileSet(db, submission) {
   }
   if (!set) return null;
   const { error: linkError } = await db.from('af_generation_jobs').update({ profile_set_id: set.id }).eq('id', job.id);
-  if (linkError) throw new Problem(503, 'database-unavailable');
+  if (linkError) throw unavailable('database-unavailable', linkError);
   return set.id;
 }
 
@@ -225,7 +225,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
   async function signed(paths) {
     if (!paths.length) return new Map();
     const { data, error } = await bucket().createSignedUrls(paths, GENERATION_LIMITS.signedSeconds);
-    if (error || !Array.isArray(data)) throw new Problem(503, 'storage-unavailable');
+    if (error || !Array.isArray(data)) throw unavailable('storage-unavailable', error);
     return new Map(data.filter(item => !item.error && typeof item.signedUrl === 'string').map(item => [item.path, item.signedUrl]));
   }
   /** @type {(row: Job) => string[]} */
@@ -237,7 +237,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     const wanted = [...new Set(ids.filter(Boolean))];
     if (!wanted.length) return new Map();
     const { data, error } = await db.from('af_generation_hosts').select('id,name,official').in('id', wanted);
-    if (error) throw new Problem(503, 'database-unavailable');
+    if (error) throw unavailable('database-unavailable', error);
     return new Map((data ?? []).map(/** @param {{ id: string, name: string, official: boolean }} h */ h => [h.id, { id: h.id, name: h.name, official: h.official === true }]));
   }
   // A job as its creator reads it: no lease, no prompt, no brief beyond its profile draft; pictures as signed URLs.
@@ -248,7 +248,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     if (row.status !== 'motions') return [];
     const { data: rows, error } = await db.from('af_generation_events').select('data').eq('job_id', row.id).eq('kind', 'drafts')
       .order('at', { ascending: false }).limit(DRAFT_EVENTS_READ);
-    if (error) throw new Problem(503, 'database-unavailable');
+    if (error) throw unavailable('database-unavailable', error);
     // Of the latest few, the list the worker sent last (its `seq`, 2026-11-01): a send it timed out on may land after a later one.
     // Lists without a `seq` (a worker before it) go by their time.
     const seqOf = (/** @type {any} */ r) => Number.isSafeInteger(r?.data?.seq) ? r.data.seq : -1;
@@ -267,7 +267,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     if (!row.choice || !['motions', 'motion_ready', 'submitting', 'submitted', 'needs_review'].includes(row.status)) return null;
     const { data, error } = await db.from('af_generation_events').select('data').eq('job_id', row.id).eq('kind', kind)
       .order('at', { ascending: false }).limit(5);
-    if (error) throw new Problem(503, 'database-unavailable');
+    if (error) throw unavailable('database-unavailable', error);
     const name = `${kind}-${row.appearance_revisions}-${row.choice}`;
     return (data ?? []).some(/** @param {{ data: any }} event */ event => event.data?.outcome === 'chosen' && event.data?.artifact === name) ? name : null;
   }
@@ -281,7 +281,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       const sums = await call('af_generation_job_tokens', { p_jobs: ids });
       if (!isObject(sums)) return null;
       return new Map(ids.map(job => { const n = Number(sums[job] ?? 0); return [job, Number.isSafeInteger(n) && n >= 0 ? n : 0]; }));
-    } catch { return null; }
+    } catch (error) { logSkipped('generation', 'job-tokens', error); return null; }
   }
   /** @param {Job} row @param {Map<string, number> | null} [taken]  Read for a list at once (jobTokens); read here when not given. */
   async function view(row, taken) {
@@ -295,7 +295,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       (async () => {
         if (!row.submission_id) return null;
         const { data, error } = await db.from('af_submissions').select('id,status,fighter_id').eq('id', row.submission_id).maybeSingle();
-        if (error) throw new Problem(503, 'database-unavailable');
+        if (error) throw unavailable('database-unavailable', error);
         return data ? { id: data.id, stage: data.status, fighterId: data.fighter_id ?? null } : null;
       })(),
       // 첫 선수 무료 (2026-10-30): a request to ODDBOUT on a full day waits for its looks; where it stands, for the page's line.
@@ -330,7 +330,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
   /** @param {string} owner @param {string} jobId @returns {Promise<Job>} */
   async function ownJob(owner, jobId) {
     const { data, error } = await db.from('af_generation_jobs').select('*').eq('id', id(jobId)).eq('owner_id', owner).maybeSingle();
-    if (error) throw new Problem(503, 'database-unavailable');
+    if (error) throw unavailable('database-unavailable', error);
     if (!data) throw new Problem(404, 'not-found');
     return data;
   }
@@ -361,7 +361,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
   /** @param {Job} row */
   async function jobSubmission(row) {
     const { data, error } = await db.from('af_submissions').select('*').eq('owner_id', row.owner_id).eq('idempotency_key', row.id).maybeSingle();
-    if (error) throw new Problem(503, 'database-unavailable');
+    if (error) throw unavailable('database-unavailable', error);
     if (!data) throw new Problem(404, 'not-found');
     return data;
   }
@@ -373,10 +373,10 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
    */
   async function ownHost(owner) {
     const { data, error } = await db.from('af_generation_hosts').select('*').eq('owner_id', owner).maybeSingle();
-    if (error) throw new Problem(503, 'database-unavailable');
+    if (error) throw unavailable('database-unavailable', error);
     if (!data || data.removed_at) return null;
     const { data: keys, error: keyError } = await db.from('af_workers').select('expires_at,enabled').eq('host_id', data.id);
-    if (keyError) throw new Problem(503, 'database-unavailable');
+    if (keyError) throw unavailable('database-unavailable', keyError);
     // On now, approved or not (not approved, he makes his own requests: 내 선수는 내 PC로).
     const live = data.enabled && Date.parse(data.worker_seen_at ?? '') > Date.now() - 180_000 && data.worker_health?.ok === true;
     const today = await call('af_generation_host_today', { p_host: data.id });
@@ -398,7 +398,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
   async function usableRefs(owner, refs) {
     if (new Set(refs).size !== refs.length) throw new Problem(422, 'invalid-refs');
     const { data, error } = await db.from('af_generation_uploads').select('id,job_id,created_at').eq('owner_id', owner).in('id', refs);
-    if (error) throw new Problem(503, 'database-unavailable');
+    if (error) throw unavailable('database-unavailable', error);
     /** @type {{ job_id: string | null, created_at: string }[]} */
     const found = data ?? [];
     if (found.length !== refs.length || !found.every(upload => upload.job_id === null && Date.parse(upload.created_at) > Date.now() - DAY_MS))
@@ -412,11 +412,11 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
    */
   async function ticketView(owner, ticketId, addresses = true) {
     const { data: ticket, error } = await db.from('af_generation_upload_tickets').select('id,expires_at').eq('id', id(ticketId)).eq('owner_id', owner).maybeSingle();
-    if (error) throw new Problem(503, 'database-unavailable');
+    if (error) throw unavailable('database-unavailable', error);
     if (!ticket) throw new Problem(404, 'not-found');
     const { data, error: uploadError } = await db.from('af_generation_uploads').select('id,path,content_type,bytes,width,height,job_id,created_at')
       .eq('ticket_id', ticket.id).order('created_at');
-    if (uploadError) throw new Problem(503, 'database-unavailable');
+    if (uploadError) throw unavailable('database-unavailable', uploadError);
     /** @type {{ id: string, path: string, content_type: string, bytes: number, width: number, height: number, job_id: string | null, created_at: string }[]} */
     const uploads = data ?? [];
     // Both pictures in says more than its time running out (3차 리뷰 2026-11-01: a ticket filled at minute 29 read as expired).
@@ -424,7 +424,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     if (!closed) {
       const { data: day, error: dayError } = await db.from('af_generation_uploads').select('id').eq('owner_id', owner)
         .gt('created_at', new Date(Date.now() - DAY_MS).toISOString());
-      if (dayError) throw new Problem(503, 'database-unavailable');
+      if (dayError) throw unavailable('database-unavailable', dayError);
       if ((day ?? []).length >= UPLOADS_A_DAY) closed = 'day-limit';
     }
     const urls = addresses ? await signed(uploads.map(upload => upload.path)) : new Map();
@@ -450,14 +450,17 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     if (image.width < min || image.height < min || image.width > max || image.height > max) throw new Problem(422, 'image-size');
     const upload = crypto.randomUUID(), path = `refs/${owner}/${upload}.${image.ext}`;
     const { error } = await bucket().upload(path, bytes, { contentType: image.type, upsert: false });
-    if (error) throw new Problem(503, 'storage-unavailable');
+    if (error) throw unavailable('storage-unavailable', error);
     const kept = { p_owner: owner, p_id: upload, p_path: path, p_type: image.type, p_bytes: bytes.length, p_width: image.width, p_height: image.height };
     // What the database answered (its refusal carries a code) keeps nothing. A call with no answer (the connection, a gateway's timeout)
     // keeps the picture, which a row the database did commit points to (2차 리뷰 2026-11-01: removing it left a usable id with no picture;
     // 3차: telling them apart by the code, not by the mapped name, which an unknown refusal shares with no answer).
     const { error: refused } = await db.rpc(ticket ? 'af_generation_ticket_upload' : 'af_generation_upload', ticket ? { ...kept, p_ticket: ticket } : kept);
     if (refused) {
-      if (refused.code) await bucket().remove([path]).catch(() => {});
+      if (refused.code) {
+        const removed = await Promise.resolve().then(() => bucket().remove([path])).catch(caught => ({ error: caught }));
+        if (removed?.error) logSkipped('generation', 'reference-cleanup', removed.error);
+      }
       throw rpcProblem(refused, STATUS, { contains: true });
     }
     return { id: upload, width: image.width, height: image.height };
@@ -486,7 +489,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     let host = body.host ?? 'oddbout';
     if (host === 'mine') {
       const { data: own, error: ownError } = await db.from('af_generation_hosts').select('id,removed_at').eq('owner_id', owner).maybeSingle();
-      if (ownError) throw new Problem(503, 'database-unavailable');
+      if (ownError) throw unavailable('database-unavailable', ownError);
       if (!own || own.removed_at) throw new Problem(404, 'host-not-found');
       host = own.id;
     }
@@ -537,14 +540,14 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     }
     if (method === 'GET' && route === 'generations') {
       const { data, error } = await db.from('af_generation_jobs').select('*').eq('owner_id', owner).order('created_at', { ascending: false }).limit(5);
-      if (error) throw new Problem(503, 'database-unavailable');
+      if (error) throw unavailable('database-unavailable', error);
       const rows = data ?? [], taken = await jobTokens(rows.map(/** @param {Job} row */ row => row.id));
       const jobs = await Promise.all(rows.map(/** @param {Job} row */ row => view(row, taken)));
       // Whether he may still ask (the request check's own rule over all his jobs): read from the newest five, it
       // fell out of view past five fighters made on his own PC (API 점검 2026-10-29).
       // His tokens (보유 토큰, 2026-10-31): granted, spent and the balance (null: not readable now); `used` is a balance at or below zero
       // (never for an operator), as the request check reads it (`af_generation_free_used`).
-      const tokens = accountTokens(await call('af_generation_balance', { p_owner: owner }).catch(() => null));
+      const tokens = accountTokens(await call('af_generation_balance', { p_owner: owner }).catch(skipped('generation', 'balance')));
       return { ok: true, jobs, used: await call('af_generation_free_used', { p_owner: owner }) === true, tokens,
         capabilities: await call('af_generation_capabilities', {}) };
     }
@@ -571,7 +574,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     if (method === 'GET' && route === 'generations/upload-tickets') {
       const { data, error } = await db.from('af_generation_upload_tickets').select('id').eq('owner_id', owner)
         .gt('created_at', new Date(Date.now() - DAY_MS).toISOString()).order('created_at', { ascending: false }).limit(UPLOADS_A_DAY);
-      if (error) throw new Problem(503, 'database-unavailable');
+      if (error) throw unavailable('database-unavailable', error);
       return { ok: true, tickets: await Promise.all((data ?? []).map((/** @type {{ id: string }} */ row) => ticketView(owner, row.id, false))) };
     }
     // The checks of a request without making it (MCP 점검 2026-10-29): the connector asks before it uploads the user's pictures, so a
@@ -645,7 +648,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       if (probeImage(bytes)?.type !== 'image/webp') throw new Problem(415, 'webp-required');
       // A stage made again writes its pictures again (a new round uses new names; a retried upload replaces its own).
       const { error } = await bucket().upload(artifactPath(row.id, parts[4]), bytes, { contentType: 'image/webp', upsert: true });
-      if (error) throw new Problem(503, 'storage-unavailable');
+      if (error) throw unavailable('storage-unavailable', error);
       return { ok: true, artifact: parts[4], bytes: bytes.length };
     }
     // 선수 프로필 세트 (2026-10-31): the chosen front (the job's own candidate) and its face square, kept on the job until the validator
@@ -657,7 +660,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       const chosen = candidatesOf(row)[row.choice === 'b' ? 1 : 0];
       if (typeof body.artifact !== 'string' || !chosen || body.artifact !== chosen || !chosen.startsWith('front-')) throw new Problem(422, 'invalid-artifact');
       const { data, error } = await bucket().download(artifactPath(row.id, chosen));
-      if (error || !data) throw new Problem(503, 'storage-unavailable');
+      if (error || !data) throw unavailable('storage-unavailable', error);
       const bytes = new Uint8Array(await data.arrayBuffer()), probed = probeImage(bytes);
       if (probed?.type !== 'image/webp' || bytes.length > PROFILE_SET_LIMITS.frontBytes) throw new Problem(422, 'invalid-profile-set');
       const front = { path: 'front.webp', bytes: bytes.length, sha256: await sha256(bytes), width: probed.width, height: probed.height };
@@ -668,7 +671,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       // The sheet in its own column: an API from before it reads `profile_front` alone (a rollback keeps the front's set).
       const { error: saveError } = await db.from('af_generation_jobs').update({ profile_front: profileFront, profile_expressions: sheet?.expressions ?? null })
         .eq('id', row.id);
-      if (saveError) throw new Problem(503, 'database-unavailable');
+      if (saveError) throw unavailable('database-unavailable', saveError);
       return { ok: true, profileFront, ...(sheet?.expressions ? { expressions: sheet.expressions } : {}), ...(sheet?.refused ? { expressionsRefused: sheet.refused } : {}) };
     }
     if (parts[1] === 'jobs' && parts[3] === 'submission') {
@@ -709,7 +712,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       if (!isObject(health) || JSON.stringify(health).length > 2000) throw new Problem(422, 'invalid-health');
       // The subscription's rate-limit reading (2026-10-31, host/codex-usage.mjs), kept for the operator: the budget is the day's tokens.
       // A reading that does not parse is left out, never the heartbeat.
-      if (usageReading(usage)) await call('af_generation_host_usage', { p_host: host, p_usage: usage }).catch(() => null);
+      if (usageReading(usage)) await call('af_generation_host_usage', { p_host: host, p_usage: usage }).catch(skipped('generation', 'host-usage'));
       return { ok: true, capabilities: await call('af_generation_host_heartbeat', { p_host: host, p_health: health }) };
     }
     // Which of this host's jobs are over for him (the worker closes their folders). A community host: his own jobs that ended. The official
@@ -721,7 +724,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       if (!jobs.length) return { ok: true, ended: [] };
       const ids = jobs.map(id), official = host ? null : await call('af_generation_official', {});
       const { data, error } = await db.from('af_generation_jobs').select('id,status,assigned_host').in('id', ids);
-      if (error) throw new Problem(503, 'database-unavailable');
+      if (error) throw unavailable('database-unavailable', error);
       /** @type {(row: { status: string }) => boolean} */
       const over = row => ['cancelled', 'expired', 'rejected', 'failed', 'submitted'].includes(row.status);
       return { ok: true, ended: /** @type {Pick<Job, 'id' | 'status' | 'assigned_host'>[]} */ (data ?? []).filter(row => host ? row.assigned_host === host && over(row)
@@ -731,7 +734,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       const row = await call('af_generation_claim_for', { p_host: host });
       if (!row?.id) return { ok: true, stage: 'idle' };
       const { data: refs, error } = await db.from('af_generation_uploads').select('id,path,content_type,width,height').eq('job_id', row.id);
-      if (error) throw new Problem(503, 'database-unavailable');
+      if (error) throw unavailable('database-unavailable', error);
       const candidates = candidatesOf(row);
       const urls = await signed([...(refs ?? []).map(/** @param {Upload} ref */ ref => ref.path), ...candidates.map(name => artifactPath(row.id, name))]);
       return { ok: true, job: { id: row.id, status: row.status, leaseToken: row.lease_token, owner: row.owner_id, createdAt: row.created_at, description: row.description,
@@ -762,7 +765,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
           || (p.note !== undefined && !PREVIEW_NOTES.includes(p.note))))) throw new Problem(422, 'invalid-result');
       // The stage's codex tokens (2026-10-31, host/codex-usage.mjs): kept per stage for the official host's daily budget
       // (af_generation_official_wait). Spent whatever the outcome; a count that cannot be kept never holds the result back.
-      if (stageTokens(result.tokens)) await call('af_generation_record_usage', { ...at, p_tokens: result.tokens }).catch(() => null);
+      if (stageTokens(result.tokens)) await call('af_generation_record_usage', { ...at, p_tokens: result.tokens }).catch(skipped('generation', 'record-usage'));
       const row = await call('af_generation_finish', { ...at, p_outcome: lease.outcome, p_result: result });
       return { ok: true, status: row.status };
     }
@@ -794,7 +797,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
         if (!UPLOAD_TICKET.test(secret)) throw new Problem(403, 'invalid-ticket');
         const { data: ticket, error } = await db.from('af_generation_upload_tickets').select('id,owner_id')
           .eq('secret_hash', await sha256(new TextEncoder().encode(secret))).maybeSingle();
-        if (error) throw new Problem(503, 'database-unavailable');
+        if (error) throw unavailable('database-unavailable', error);
         if (!ticket) throw new Problem(403, 'invalid-ticket');
         return json({ ok: true, upload: await keepPicture(request, ticket.owner_id, ticket.id) });
       }

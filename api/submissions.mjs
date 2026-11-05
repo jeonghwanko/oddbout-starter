@@ -3,7 +3,7 @@
 // the fighter.json checked the same way, its WebP assets stored the same way. No Node-only imports: Deno and Node.
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/validate.mjs';
-import { Problem, readBody, sha256, unstorableTextPath } from './http.mjs';
+import { Problem, readBody, sha256, unavailable, unstorableTextPath } from './http.mjs';
 
 export const BUCKET = 'ai-fighter-beta';
 // The Render validator (worker/run.mjs) stamps this on every receipt. af_settings.validator_versions lists the versions af_finish accepts.
@@ -63,7 +63,7 @@ export async function storeAsset(db, row, assetId, request) {
   if (error) {
     // An existing immutable object is a successful retry only if its actual bytes still match.
     const { data, error: getError } = await bucket.download(path);
-    if (getError || !data || data.size !== asset.bytes || await sha256(await data.arrayBuffer()) !== asset.sha256) throw new Problem(503, 'storage-unavailable');
+    if (getError || !data || data.size !== asset.bytes || await sha256(await data.arrayBuffer()) !== asset.sha256) throw unavailable('storage-unavailable', getError);
   }
   return { ok: true, stage: 'uploaded', assetId: asset.id, bytes: bytes.length };
 }
