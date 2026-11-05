@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
@@ -11,7 +11,7 @@ import { ALIGN_AGAIN, BEAT_LIMIT, GROK_LIMITED, BRIEF_SCHEMA, ONE_STRIDE_OF, GAI
   submissionOutcome, withProfile, EXTRACT_REDRAWS, extractFailedRows, ENGINE_SEAM_MAX, loopTaken, HOUSE_COLOURING, LOOK_CHECKS, SIDE_CHECKS, SIDE_COLOURING, SIDE_TAKES,
   lookJudgePrompt, sideJudgePrompt, sidePrompt, EXPRESSION_CELLS, expressionsPrompt, expressionsName, MODELS,
   JUDGE, UNKNOWN, MODELS_EVENT_BYTES, SIDE_JUDGE_SCHEMA, codexSessionId, createModelLog, imageEntry, judgeCommand, judgeKey, judgeLabel, judgeRecord,
-  verdictKeyStatus } from './generation-stages.mjs';
+  verdictKeyStatus, writeWhole } from './generation-stages.mjs';
 import { codexSessionFacts } from './codex-usage.mjs';
 import { ENGINE_SEAM_MAX as REVIEW_SEAM_MAX, ENGINE_CUE_RHYTHM as REVIEW_CUE_RHYTHM, lowMarginFeet as reviewLowMarginFeet } from '../tools/ai-fighter/gait.mjs';
 import { parseEnv, parseHealth } from './generation-worker.mjs';
@@ -450,6 +450,15 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
   assert.match(flag(refilm, '--motion'), /^walk=It walks naturally in place.*It throws no punches.* «shorter steps»\.$/);
   assert.equal(JSON.parse(await readFile(py.findLast(a => a[0] === 'assemble')[4], 'utf8')).length, 1);
   assert.equal((await stages.motions({ ...job, motionNote: { clip: 'idle', note: 'smile' }, motionRound: 3 }, dir)).result.code, 'motion-revision-idle');
+  // Every round's change is kept whole; a list that cannot be read stops for an operator instead of being rewritten with one round's note.
+  const changesFile = path.join(dir, 'motion', 'changes.json');
+  const kept = await readFile(changesFile, 'utf8');
+  assert.deepEqual(JSON.parse(kept).map(c => c.round), [1, 2]);
+  await writeFile(changesFile, '[{"round": 1, "clip": "slam-a", "no');
+  const torn = await stages.motions({ ...job, motionNote: { clip: 'run', note: 'faster' }, motionRound: 4 }, dir);
+  assert.deepEqual([torn.outcome, torn.result.code], ['review', 'motion-changes-unreadable']);
+  assert.equal(await readFile(changesFile, 'utf8'), '[{"round": 1, "clip": "slam-a", "no');
+  await writeFile(changesFile, kept);
   assert.equal(checkedVerdict({ identity: 'pass', anatomy: 'maybe', loop: 'pass', notes: 'x' }), null);
   assert.equal(namedFeet({ cycle_align: { foot: { feet: ['left', 'right'] } } }), true);
   assert.equal(namedFeet({ cycle_align: { foot: { feet: [null, null] } } }), false);
@@ -1688,4 +1697,26 @@ im.save("${path.join(dir, 'front.png')}")`;
   const face = JSON.parse(await readFile(path.join(dir, 'face.json'), 'utf8'));
   // The figure is 801 px tall from y 100: a 136 px square (17 %) at its top, centred on the head (x 150-250).
   assert.deepEqual(face, { x: 132, y: 100, side: 136 });
+});
+
+test('a resume-state file is written whole or not at all, and a scanner hold on Windows is retried', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'og-whole-')), file = path.join(dir, 'uploaded.json');
+  try {
+    await writeWhole(file, '{"artifact":"a"}');
+    await writeWhole(file, Buffer.from('{"artifact":"b"}'));
+    assert.equal(await readFile(file, 'utf8'), '{"artifact":"b"}');
+    // A rename that fails leaves the file as it was and no temporary copy beside it.
+    const refused = Object.assign(new Error('no space left on device'), { code: 'ENOSPC' });
+    await assert.rejects(writeWhole(file, '{"artifact":"c"}', { move: async () => { throw refused; } }), refused);
+    assert.equal(await readFile(file, 'utf8'), '{"artifact":"b"}');
+    assert.deepEqual(await readdir(dir), ['uploaded.json']);
+    // A Windows scanner's brief hold is retried; the same hold elsewhere is an error.
+    let holds = 2;
+    const held = async (from, to) => { if (holds-- > 0) throw Object.assign(new Error('busy'), { code: 'EBUSY' }); await rename(from, to); };
+    await writeWhole(file, '{"artifact":"d"}', { move: held, platform: 'win32' });
+    assert.equal(await readFile(file, 'utf8'), '{"artifact":"d"}');
+    holds = 1;
+    await assert.rejects(writeWhole(file, '{"artifact":"e"}', { move: held, platform: 'linux' }), { code: 'EBUSY' });
+    assert.deepEqual(await readdir(dir), ['uploaded.json']);
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });

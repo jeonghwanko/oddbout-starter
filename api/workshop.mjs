@@ -5,7 +5,7 @@
 // `20261027210000_oddbout_open_worlds.sql`). Another person's text is returned as data in its own field, never mixed into instructions.
 import { validateFighter } from '../contracts/ai-fighter/validate.mjs';
 import { applyFighterEdit } from './fighter-profile.mjs';
-import { Problem, UUID, jsonResponse, logFailure, readBody, rpcCaller } from './http.mjs';
+import { Problem, UUID, jsonResponse, logFailure, readBody, rpcCaller, unavailable } from './http.mjs';
 import { WORLD_COVERS, canonSheet, factionId, factions, nickname, note, text, worldCover, worldId, worldText, WORLD_LIMITS,
   RELATION_KINDS } from './canon.mjs';
 
@@ -62,10 +62,10 @@ export function createWorkshopHandler({ db, authenticate, rpc: profileRpc, agent
   /** @param {string} fighter @returns {Promise<{ owner: string, sha: string, manifest: any }>} */
   async function currentPackage(fighter) {
     const { data: f, error } = await db.from('af_fighters').select('owner_id,submission_id,manifest_sha').eq('id', fighter).maybeSingle();
-    if (error) throw new Problem(503, 'database-unavailable');
+    if (error) throw unavailable('database-unavailable', error);
     if (!f) throw new Problem(404, 'fighter-not-found');
     const { data: row, error: rowError } = await db.from('af_submissions').select('manifest').eq('id', f.submission_id).maybeSingle();
-    if (rowError) throw new Problem(503, 'database-unavailable');
+    if (rowError) throw unavailable('database-unavailable', rowError);
     if (!row) throw new Problem(404, 'fighter-not-found');
     return { owner: f.owner_id, sha: f.manifest_sha, manifest: row.manifest };
   }
@@ -86,7 +86,7 @@ export function createWorkshopHandler({ db, authenticate, rpc: profileRpc, agent
    */
   async function applyStyle(noteId, fighter, style, owner, pack) {
     const { data: made, error } = await db.from('af_submissions').select('id').eq('owner_id', owner).eq('idempotency_key', noteId).maybeSingle();
-    if (error) throw new Problem(503, 'database-unavailable');
+    if (error) throw unavailable('database-unavailable', error);
     if (made) return false;
     try { await applyFighterEdit({ body: { style, expectedManifestSha256: pack.sha }, owner, id: fighter, key: noteId, db, rpc: profileRpc }); }
     catch (problem) { if (!(problem instanceof Problem && problem.message === 'fighter-unchanged')) throw problem; }
@@ -106,7 +106,7 @@ export function createWorkshopHandler({ db, authenticate, rpc: profileRpc, agent
   /** @param {string} id */
   async function world(id) {
     const { data, error } = await db.from('af_worlds').select('id').eq('id', id).eq('published', true).eq('hidden', false).maybeSingle();
-    if (error) throw new Problem(503, 'database-unavailable');
+    if (error) throw unavailable('database-unavailable', error);
     if (!data) throw new Problem(404, 'world-not-found');
     const overview = await call('af_world_overview', { p_world: id }), chronicle = await call('af_world_chronicle', { p_world: id });
     return { ok: true, world: overview.world, owner: overview.owner ?? null, memberCount: overview.memberCount,
@@ -149,7 +149,7 @@ export function createWorkshopHandler({ db, authenticate, rpc: profileRpc, agent
         const noteId = id(parts[1]), body = fields(await readJson(request), ['decision']);
         if (!['accept', 'decline'].includes(body.decision)) throw new Problem(422, 'invalid-decision');
         const { data: n, error } = await db.from('af_fighter_notes').select('fighter_id,kind,state,proposal,hidden,resolved_version').eq('id', noteId).maybeSingle();
-        if (error) throw new Problem(503, 'database-unavailable');
+        if (error) throw unavailable('database-unavailable', error);
         if (!n || n.hidden) throw new Problem(404, 'not-found');
         // The answer first, under the note's lock (the database merges a proposal's canon fields over the sheet as it is then); a proposal's
         // style after it. A style his package cannot take refuses the accept before anything is written; an accepted proposal whose style

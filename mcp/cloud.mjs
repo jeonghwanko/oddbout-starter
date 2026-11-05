@@ -2,7 +2,7 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { createHandler } from '../api/handler.mjs';
-import { Problem, UUID, bearerToken, failureDetail, readBody } from '../api/http.mjs';
+import { Problem, UUID, bearerToken, failureDetail, logSkipped, readBody } from '../api/http.mjs';
 import { registerFileInputProbe } from './file-input-probe.mjs';
 import { registerCreatorSources } from './creator-sources.mjs';
 import { AUTH, CALL_BUDGET_MS, FILE, READ, downloadHostFile, output } from './cloud/common.mjs';
@@ -238,8 +238,11 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
   /** @type {RecordAgent} */
   const recordAgent = async submissionId => {
     if (!identity || !UUID.test(submissionId ?? '')) return;
-    try { await db.rpc('af_record_submission_agent', { p_owner: identity.owner, p_submission: submissionId, p_client: identity.claims.client_id }); }
-    catch { /* the maker is a label, not a gate */ }
+    // The maker is a label, not a gate: a failure (an `{ error }` answer, or a throw) leaves one log line and the call goes on.
+    const recorded = await Promise.resolve()
+      .then(() => db.rpc('af_record_submission_agent', { p_owner: identity.owner, p_submission: submissionId, p_client: identity.claims.client_id }))
+      .catch(caught => ({ error: caught }));
+    if (recorded?.error) logSkipped('mcp', 'record-agent', recorded.error);
   };
   // A write states whether repeating it with the same arguments is safe (idempotentHint). It once defaulted to yes, and three tools that
   // make something new on every call told retrying clients they could repeat them (MCP 점검 2026-10-29).

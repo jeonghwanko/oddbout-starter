@@ -145,6 +145,35 @@ export function failureDetail(error) {
 }
 
 /**
+ * One JSON line (stage `api-skipped`) for a step a route goes on without: a usage reading, a token count, a cleanup, a follow-up the
+ * answer never waits for. The caller's answer stays the same; the line is how a recording that never landed is found. Like logFailure,
+ * never the request's data: the step's name, the code a Problem carries and what failed behind it.
+ * @param {string} scope  the route family, e.g. 'generation'
+ * @param {string} step  what was skipped, e.g. 'record-usage'
+ * @param {unknown} error
+ */
+export function logSkipped(scope, step, error) {
+  const problem = error instanceof Problem ? error : null;
+  console.error(JSON.stringify({ stage: 'api-skipped', scope, step, ...(problem ? { code: problem.message } : {}), ...failureDetail(error) }));
+}
+/** A `.catch` for a skipped step: logs it (logSkipped) and resolves to null. @param {string} scope @param {string} step */
+export const skipped = (scope, step) => (/** @type {unknown} */ error) => { logSkipped(scope, step, error); return null; };
+
+/** A 5xx Problem that keeps what failed behind its code, for the request's log line (logFailure). @param {string} code @param {unknown} cause */
+export const unavailable = (code, cause) => Object.assign(new Problem(503, code), { cause });
+
+/** One database or Storage call's limit: supabase-js sets none, so a stalled call held its request until the Edge limit. */
+export const DATABASE_TIMEOUT_MS = 15_000;
+/** `signal`, also aborted after `ms`. @param {AbortSignal | null | undefined} signal @param {number} ms */
+export const within = (signal, ms) => signal ? AbortSignal.any([signal, AbortSignal.timeout(ms)]) : AbortSignal.timeout(ms);
+/**
+ * fetch with DATABASE_TIMEOUT_MS on every call: each Edge entry hands it to supabase-js. A caller's own signal still applies.
+ * @param {number} [ms] @param {typeof fetch} [base]
+ * @returns {typeof fetch}
+ */
+export const timedFetch = (ms = DATABASE_TIMEOUT_MS, base = fetch) => (input, init = {}) => base(input, { ...init, signal: within(init.signal, ms) });
+
+/**
  * One module's `db.rpc`: resolves to the function's data, or throws its refusal (rpcProblem).
  * @param {any} db
  * @param {Readonly<Record<string, number>>} statuses
