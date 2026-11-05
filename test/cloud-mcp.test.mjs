@@ -743,7 +743,8 @@ test('the sign-in-first address lists exactly what /mcp lists and says the same;
     // /mcp's list, to the byte (sha256 of its tools). Changed on purpose twice since 219e35d1 (c537ac22…): the creator-source tools' ids
     // took the short UUID_ARG pattern (2026-11-05, −480 B; d807a064…), then read tools of one kind merged into views (MCP 통합 1단계,
     // 2026-11-05: 55 tools to 42, −3,004 B). Neither touched a tool ChatGPT's app review pins: those keep their bytes (below).
-    if (count === 42) assert.equal(createHash('sha256').update(JSON.stringify(tools)).digest('hex'), 'a2fd5d1eb3402e984be179feeb38fd926fe718502ccede76da6f2326217c855d');
+    // 2026-11-06: the hosted look/motion revisions declare destructiveHint and non-refundable token use (portal findings).
+    if (count === 42) assert.equal(createHash('sha256').update(JSON.stringify(tools)).digest('hex'), 'ac6d43c8ddbcfa36ec08d1c44a20bb57224e8946ec9492ecdd4ed6b58de91336');
     // The tools ChatGPT's app review 1.0.3 covers (docs/records/CLOUD-PLUGIN-REVIEW.md), to the byte as before the merge, while it is pending.
     const reviewed = ['get_fighter_spec', 'get_profile', 'open_creator_homepage', 'check_creation_readiness', 'list_my_fighters', 'prepare_fighter_deletion',
       'delete_fighter', 'prepare_fighter_registration', 'upload_fighter_asset', 'submit_fighter_registration', 'get_fighter_submission', 'get_registered_fighter'];
