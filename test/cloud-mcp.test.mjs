@@ -548,6 +548,13 @@ test('every write tool says whether a retry is safe; the ones that make somethin
     start_picture_upload: false, store_creator_source: true, prepare_creator_source_download: true,
   });
   for (const tool of tools.filter(t => t.annotations.readOnlyHint)) assert.equal(tool.annotations.idempotentHint, true, tool.name);
+  // These advance/replace working artwork and can consume non-refundable generation tokens. Preserve the
+  // consequential-action signal independently of retry safety (public plugin scan, 2026-11-05).
+  for (const name of ['choose_hosted_look', 'revise_hosted_motion']) {
+    const tool = tools.find(t => t.name === name);
+    assert.equal(tool.annotations.destructiveHint, true, name);
+    assert.equal(tool.annotations.openWorldHint, false, name);
+  }
 });
 
 test('each edition\'s tools/list stays within its byte budget', async () => {

@@ -551,17 +551,17 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
   register('choose_hosted_look', '외형 고르기', 'Answer the two front-view looks of the connected user\'s hosted fighter with his words: '
     + 'choose a or b (it is also his profile picture; ODDBOUT then draws it from the side and makes the motions from that), '
     + 'or revise with one sentence (both looks are painted again). '
-    + 'Requires the user\'s answer. Revisions are not idempotent: '
+    + 'Requires the user\'s answer. Advances or replaces the working look; ODDBOUT-worker generation spends tokens that are not refunded. Revisions are not idempotent: '
     + 'after an unknown outcome, read get_hosted_fighter instead of repeating this call.',
     { jobId: JOB, choose: z.enum(['a', 'b']).optional(), revise: z.string().min(2).max(GENERATION_LIMITS.note).optional() },
     ({ jobId, choose, revise }) => (choose === undefined) === (revise === undefined) ? { ok: false, code: 'invalid-answer' }
-      : post(`generations/${jobId}/appearance`, choose !== undefined ? { choose } : { revise }).then(answered), { write: true, idempotent: false });
+      : post(`generations/${jobId}/appearance`, choose !== undefined ? { choose } : { revise }).then(answered), { write: true, publish: true, idempotent: false });
   register('revise_hosted_motion', '동작 하나 고치기', 'Ask ODDBOUT to make one motion of the connected user\'s hosted fighter again with his sentence; the other motions stay. '
-    + 'Not idle: the standing pose is the look itself. Requires the user\'s request. Not idempotent: '
+    + 'Not idle: the standing pose is the look itself. Requires the user\'s request. Replaces the working motion; ODDBOUT-worker generation spends tokens that are not refunded. Not idempotent: '
     + 'after an unknown outcome, read get_hosted_fighter instead of repeating this call.',
     // Not idle: it is the look itself (choose_hosted_look changes the look, before the motions).
     { jobId: JOB, clip: z.enum(/** @type {[string, ...string[]]} */ (Object.keys(spec.motions).filter(clip => clip !== 'idle'))), note: z.string().min(2).max(GENERATION_LIMITS.note) },
-    ({ jobId, clip, note }) => post(`generations/${jobId}/motions`, { revise: { clip, note } }).then(answered), { write: true, idempotent: false });
+    ({ jobId, clip, note }) => post(`generations/${jobId}/motions`, { revise: { clip, note } }).then(answered), { write: true, publish: true, idempotent: false });
   register('register_hosted_fighter', '맡긴 선수 등록', 'Register the connected user\'s hosted fighter once he approved its motions: '
     + 'ODDBOUT packages it and submits it under his account, through the same server check as any fighter. '
     + 'profile holds only what he changed in the draft (name, description, names, bout lines, stats summing to 9). '
