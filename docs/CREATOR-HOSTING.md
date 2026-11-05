@@ -113,6 +113,13 @@ requests only for queued work or an expired validation lease. An empty queue
 sends no keep-alive. A failed trigger does not roll back a submission.
 Render handles one validator job at a time; Supabase retains the durable queue,
 asset storage and results across restarts.
+A job handed back after an infrastructure failure (a download, the deadline, a
+crashed check) is claimed again only after a wait: 15 s, doubling up to two
+minutes, and a finished job starts it over (`createBackoff`,
+`worker/leased-jobs.mjs`, 2026-11-05). The wake its own hand-back sends does not
+cut the wait short. Ten hand-backs, the limit that rejects a package as
+`worker-infrastructure-limit`, now take about fourteen minutes instead of
+seconds.
 Hosted pg_net keeps its own PUBLIC grants despite attempted revokes by postgres.
 The signed-dispatch migration therefore sends a timestamp and HMAC valid for
 three minutes, rather than putting the durable wake key in pg_net's queue.

@@ -195,6 +195,98 @@ test('the worker learns which of its own jobs ended, and finds the folders it ha
   } finally { await sql.close(); }
 });
 
+// 사라진 호스트 (2026-11-05): only the host that took a job claims it again, so a job whose host never came back stayed in a working state for
+// good, holding its creator's request and free fighter (a registration under way cannot even be cancelled). A day after its last report,
+// every claim ends it: the stage it took and never finished goes to an operator (whether a paid run went out is only on that PC), a stage it
+// never took fails. Neither moves to another host, and the official host's jobs wait for it.
+test('a job whose community host is gone a day goes to an operator if its stage ran there, fails if not, and never moves', async () => {
+  const { sql, owner, call, work, healthy } = await generation();
+  const theirs = 'other-token-0123456789';
+  try {
+    await healthy();
+    await sql.query('update public.af_creators set hosted_credits = 5 where owner_id = $1', [owner]);
+    const applied = (await call('POST', 'generations/host', { name: '고양이 공방', billing: 'subscription', termsAccepted: true }, theirs)).body.host;
+    await sql.query('update public.af_generation_hosts set approved = true where id = $1', [applied.id]);
+    const key = (await call('POST', 'generations/host/keys', {}, theirs)).body.key;
+    const host = (path, body) => call('POST', `generation-worker/${path}`, body, key);
+    const official = (path, body) => work('POST', path, body);
+    const beat = () => host('heartbeat', { health: { ok: true, codex: true, grok: true } });
+    const finish = (send, c, outcome, result) => send('finish', { jobId: c.id, leaseToken: c.leaseToken, outcome, result });
+    const ask = body => call('POST', 'generations', { description: '빨간 글러브를 낀 고양이 복서', language: 'ko', ...body }, undefined,
+      { 'idempotency-key': crypto.randomUUID() });
+    const read = async id => (await call('GET', `generations/${id}`)).body.job;
+    const gone = since => sql.query(`update public.af_generation_hosts set worker_seen_at = now() - interval '${since}' where id = $1`, [applied.id]);
+    const lapse = id => sql.query("update public.af_generation_jobs set lease_expires_at = now() - interval '1 minute' where id = $1", [id]);
+    await beat();
+
+    // The host takes the looks of a request that named it, and its PC goes away under the lease.
+    const named = (await ask({ host: applied.id, hostConsent: true })).body.job;
+    let held = (await official('claim', {})).body.job; await finish(official, held, 'ok', { brief: { profile: {} } });
+    held = (await host('claim', {})).body.job;
+    assert.deepEqual([held.id, held.status], [named.id, 'appearance']);
+    await lapse(named.id);
+    // Off for a night: its job waits for it.
+    await gone('2 hours');
+    assert.equal((await official('claim', {})).body.stage, 'idle');
+    assert.deepEqual([(await read(named.id)).status, (await read(named.id)).host.assigned.name], ['appearance', '고양이 공방']);
+    // Gone a day: the stage it took may have sent a paid run, so an operator looks before anything runs again; the job stays its host's.
+    await gone('25 hours');
+    assert.equal((await official('claim', {})).body.stage, 'idle');
+    let job = await read(named.id);
+    assert.deepEqual([job.status, job.error, job.host.assigned.name], ['needs_review', 'appearance-host-lost', '고양이 공방']);
+    const [lost] = (await sql.query("select data from public.af_generation_events where job_id = $1 and kind = 'host-lost'", [named.id])).rows;
+    assert.deepEqual([lost.data.status, lost.data.to, lost.data.host], ['appearance', 'needs_review', applied.id]);
+    // Back again, the host has nothing to claim; the creator cancels and has his free fighter back.
+    await beat();
+    assert.equal((await host('claim', {})).body.stage, 'idle');
+    assert.equal((await call('DELETE', `generations/${named.id}`)).body.job.status, 'cancelled');
+    assert.equal((await sql.query('select public.af_generation_spends(j) as spends from public.af_generation_jobs j where id = $1', [named.id])).rows[0].spends, false);
+
+    // An open request: the host paints the looks and goes away before the motions the creator then chose. It never took them, so the
+    // job fails; it does not go to another host (the looks are on that PC). Its free fighter comes back, and the host, back, closes it.
+    const open = (await ask({ host: 'any', hostConsent: true })).body.job;
+    held = (await official('claim', {})).body.job; await finish(official, held, 'ok', { brief: { profile: {} } });
+    held = (await host('claim', {})).body.job;
+    assert.equal(held.id, open.id); await finish(host, held, 'ok', { candidates: ['look-a-0', 'look-b-0'] });
+    await gone('25 hours');
+    assert.equal((await call('POST', `generations/${open.id}/appearance`, { choose: 'a' })).body.job.status, 'motions');
+    assert.equal((await official('claim', {})).body.stage, 'idle');
+    job = await read(open.id);
+    assert.deepEqual([job.status, job.error, job.host.assigned.name], ['failed', 'host-lost', '고양이 공방']);
+    assert.equal((await sql.query('select public.af_generation_spends(j) as spends from public.af_generation_jobs j where id = $1', [open.id])).rows[0].spends, false);
+    await beat();
+    assert.deepEqual((await host('ended', { jobs: [open.id] })).body.ended, [open.id]);
+
+    // Registrations under way (no creator's cancel reaches them): one the host held goes to an operator, one it never took fails. A job
+    // that used its three leases still fails as before. The official host's job waits for it, however long it has been away. Any host's
+    // claim runs the rule: here a second PC's, the creator's own (an official claim would take the official host's job back).
+    const officialHost = (await sql.query('select id from public.af_generation_hosts where official')).rows[0].id;
+    const insert = async (status, hostId, leases, leased) => (await sql.query(`insert into public.af_generation_jobs(owner_id, idempotency_key,
+        description, language, status, brief, choice, profile, assigned_host, host_choice, requested_host, host_consent, stage_leases, lease_token,
+        lease_expires_at, started_at)
+      values ($1, gen_random_uuid(), '빨간 글러브를 낀 고양이 복서', 'ko', $2, '{}', 'a', $3, $4, 'host', $4, true, $5,
+        case when $6 then gen_random_uuid() end, case when $6 then now() - interval '1 minute' end, now()) returning id`,
+      [owner, status, status === 'submitting' ? '{}' : null, hostId, leases, leased])).rows[0].id;
+    const heldRegistration = await insert('submitting', applied.id, 1, true);
+    assert.equal((await call('DELETE', `generations/${heldRegistration}`)).body.code, 'generation-state');
+    const untaken = await insert('submitting', applied.id, 0, false), spent = await insert('motions', applied.id, 3, true);
+    await sql.query("update public.af_generation_jobs set host_choice = 'oddbout', requested_host = null, host_consent = false where id = $1",
+      [await insert('motions', officialHost, 1, true)]);
+    await sql.query("update public.af_generation_hosts set worker_seen_at = now() - interval '25 hours'");
+    await call('POST', 'generations/host', { name: '내 작업실', billing: 'subscription', termsAccepted: true });
+    const second = (await call('POST', 'generations/host/keys', {})).body.key;
+    assert.equal((await call('POST', 'generation-worker/claim', {}, second)).body.stage, 'idle');
+    const rows = Object.fromEntries((await sql.query("select id, status, error_code from public.af_generation_jobs where status not in ('cancelled', 'failed') or id = any($1)",
+      [[untaken, spent]])).rows.map(row => [row.id, [row.status, row.error_code]]));
+    assert.deepEqual(rows[heldRegistration], ['needs_review', 'submitting-host-lost']);
+    assert.deepEqual(rows[untaken], ['failed', 'host-lost']);
+    assert.deepEqual(rows[spent], ['failed', 'stage-attempts']);
+    assert.deepEqual(Object.values(rows).filter(([status]) => status === 'motions'), [['motions', null]]);
+    // Waiting for an operator, the registration can be cancelled now.
+    assert.equal((await call('DELETE', `generations/${heldRegistration}`)).body.job.status, 'cancelled');
+  } finally { await sql.close(); }
+});
+
 // 운영자 화면 (2026-10-28): the hosts (approve, withdraw) and the requests a stage left for the operator (run it again, or cancel).
 test('the admin approves and withdraws hosts, and runs a stopped stage again or cancels the request', async () => {
   const { sql, owner, call, work, healthy } = await generation();

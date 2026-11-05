@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ASKS, GROK_LIMITED, createStages } from './generation-stages.mjs';
 import { STAGE_LIMIT_MS, createApi, createCooldowns, createDispatches, dispatchUnknownOutcome, generates, healthAfter, reportStageTokens, run,
-  STAGE_STOPPED, TIMING, errorCode, projectDocsAt, stageLimitMs, timedOutOutcome, unlessStopped } from './generation-worker.mjs';
+  STAGE_STOPPED, TIMING, errorCode, projectDocsAt, readOutput, stageLimitMs, timedOutOutcome, unlessStopped } from './generation-worker.mjs';
 
 test('the codex folder\'s project instructions: every AGENTS.md from its checkout\'s root down to it, none beside the checkout', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'codex-cwd-'));
@@ -280,4 +280,14 @@ test('a run whose child exited while something it left holds the output ends any
     assert.equal(await stopped, 137);
     assert.ok(Date.now() - started < 2000, `${Date.now() - started} ms`);
   } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('a health or prune command that cannot start reads as nothing said, never as an uncaught error', async () => {
+  // A missing og once threw from the worker with no 'error' listener, and its service restarted it into the same error.
+  assert.equal(await readOutput(path.join(tmpdir(), `no-such-og-${process.pid}`), ['health'], { limitMs: 5000 }), '');
+  const said = await readOutput(process.execPath, ['-e', 'console.log("og: codex ok"); console.error("og: grok ok")'], { limitMs: 5000 });
+  assert.match(said, /^og: codex ok$/m); assert.match(said, /^og: grok ok$/m);
+  // One that outlives its limit is stopped and resolves what it printed.
+  const slow = await readOutput(process.execPath, ['-e', 'console.log("started"); setTimeout(() => {}, 60000)'], { limitMs: 300, graceMs: 500, drainMs: 200 });
+  assert.match(slow, /started/);
 });
