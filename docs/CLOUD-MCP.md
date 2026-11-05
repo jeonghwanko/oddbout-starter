@@ -141,12 +141,19 @@ stdout에 JSON 답 하나(`status`·`next`·`say`·`run`·`rules`·`verify`·`de
 4. Codex와 Claude Code에는 `create-fighter` 스킬을 설치한다(아래 스킬). Gemini CLI에는 아직 주지 않는다.
 5. 마지막 답은 ODDBOUT 도구가 있는 대화에서 `get_profile`로 계정을 확인하라고 한다. 실행 중인 세션은 새 서버를 세션을 시작할 때 읽는다.
    - Claude Code 터미널: `/mcp`에서 `oddbout`을 다시 연결하고, 목록에 없으면 `claude --continue`로 다시 연다. 스킬은 `/reload-plugins`로 읽는다.
-   - Claude 데스크톱 앱(Code 탭, `CLAUDE_CODE_ENTRYPOINT=claude-desktop`): 위 방법이 통하지 않는다(11-05 Windows 실측). 이미 열린 세션은 밖에서
+   - Claude 데스크톱 앱(Code 탭, `CLAUDE_CODE_ENTRYPOINT=claude-desktop`): 위 방법이 통하지 않는다(Windows 실측). 이미 열린 세션은 밖에서
      추가한 서버를 종류 "other", 상태 needs_auth로만 알고, `/mcp` 창에는 목록도 연결 버튼도 없다. `/mcp reconnect oddbout`은 "Reconnect, enable,
-     and disable aren't available in this session"이고 `claude --continue`도 없다. 그래서 답은 앱을 완전히 끄고(창만 닫지 말고) 다시 열어 새 세션을
-     시작한 뒤 `/mcp` → `oddbout` → 연결(Connect)을 하라고 한다. 새 세션은 이 대화를 이어받지 않으므로 거기서 계정 확인을 부탁하라고 한다.
-     다시 열기만으로 서버가 보이고 연결되는지는 아직 확인하지 않았다.
-   - 손으로 `--host claude`로 실행해 어느 쪽인지 모르면 두 방법을 모두 준다. 답의 `details.surface`가 `terminal`·`desktop`·`unknown`이다.
+     and disable aren't available in this session"이고 `claude --continue`도 없다(11-05).
+     앱을 다시 시작할 필요는 없다. 터미널에서 로그인한 뒤 새 세션을 열자 `oddbout`이 종류 "user", 상태 connected, 도구 42개였고 `get_profile`이
+     계정을 돌려줬다(11-06, 별도 확인 세션).
+     앱 자신의 `/mcp` → `oddbout` → 연결(Connect)은 지금 실패한다. 앱(Claude 4.16336.0.0, Windows)은 돌아갈 주소로
+     `claude://claude.ai/mcp-auth-callback/sdk`를 쓰고(main.log `mcpAuthenticate … redirectScheme=custom`), 동의 화면의 `agentOf`
+     (`web/cloud-connect/connect.mjs`)는 앱 스킴을 설계대로 받지 않는다("지원하는 연결 요청이 아닙니다"). 그래서 답은 터미널에서 한 번
+     로그인하라고 한다: `claude mcp login oddbout`, 또는 터미널에서 직접 `npx -y oddbout@latest connect`(터미널이 있으면 로그인까지 한다).
+     그다음 앱에서 새 세션을 열라고 한다. 앱의 연결 버튼으로는 보내지 않는다. 새 세션은 이 대화를 이어받지 않으므로 거기서 계정 확인을 부탁하라고 한다.
+     그 `claude://` 주소를 동의 화면이 받을지는 보안 결정이라 사용자에게 묻는 중이다. Mac과 다른 앱 버전은 확인하지 않았다.
+   - 손으로 `--host claude`로 실행해 어느 쪽인지 모르면 두 방법을 모두 준다(터미널 CLI는 `/mcp` → Authenticate, 데스크톱 앱은 터미널 로그인).
+     답의 `details.surface`가 `terminal`·`desktop`·`unknown`이다.
    - Codex는 `codex resume --last`다.
 
 `npx -y oddbout@latest check`는 아무것도 바꾸지 않고 상태만 답한다. 다시 실행해도 이미 있는 것은 그대로 둔다.
