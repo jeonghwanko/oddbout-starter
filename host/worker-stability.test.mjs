@@ -1,11 +1,26 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ASKS, GROK_LIMITED, createStages } from './generation-stages.mjs';
 import { STAGE_LIMIT_MS, createApi, createCooldowns, createDispatches, dispatchUnknownOutcome, generates, healthAfter, reportStageTokens, run,
-  STAGE_STOPPED, TIMING, errorCode, readOutput, stageLimitMs, timedOutOutcome, unlessStopped } from './generation-worker.mjs';
+  STAGE_STOPPED, TIMING, errorCode, projectDocsAt, readOutput, stageLimitMs, timedOutOutcome, unlessStopped } from './generation-worker.mjs';
+
+test('the codex folder\'s project instructions: every AGENTS.md from its checkout\'s root down to it, none beside the checkout', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'codex-cwd-'));
+  try {
+    // A kit checkout: its AGENTS.md reaches a folder anywhere inside it (og's job folders, which is why the judges no longer run there).
+    const kit = path.join(root, 'kit'), job = path.join(kit, 'output', 'job');
+    await mkdir(path.join(kit, '.git'), { recursive: true }); await mkdir(job, { recursive: true });
+    await writeFile(path.join(kit, 'AGENTS.md'), '# kit'); await writeFile(path.join(job, 'AGENTS.override.md'), '# job');
+    assert.deepEqual(await projectDocsAt(job), [path.join(kit, 'AGENTS.md'), path.join(job, 'AGENTS.override.md')]);
+    // The worker's folder beside the kit, in a checkout of its own with no instructions: nothing.
+    const host = path.join(root, 'host'), cwd = path.join(host, 'codex-cwd');
+    await mkdir(path.join(host, '.git'), { recursive: true }); await mkdir(cwd, { recursive: true });
+    assert.deepEqual(await projectDocsAt(cwd), []);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
 
 const brief = { profile: { name: 'Blue' }, look: { subject: 'A blue cat boxer', palette: ['blue'], prop: 'gloves', avoid: 'none' },
   motion: { temper: 'bold', attack: 'jab' } };
@@ -230,6 +245,23 @@ test('a child that ends without reading its input ends its run with its own code
   try {
     // More than a pipe holds, so the write is still going when the child has gone.
     assert.equal(await run(process.execPath, ['-e', 'process.exit(75)'], { cwd: dir, log, stdin: 'x'.repeat(1 << 20) }), 75);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('a run hands its output to a reader as it goes to the log, and a reader that throws never stops it', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'run-')), log = path.join(dir, 'worker.log');
+  try {
+    // codex exec's header names its session on stderr (the stage reads it: generation-stages codexSessionId).
+    const script = 'process.stderr.write("session id: 019a7f2e-1c3d-7a00-9b1e-0123456789ab\\n"); process.stdout.write("done\\n")';
+    let seen = '';
+    assert.equal(await run(process.execPath, ['-e', script], { cwd: dir, log, onOutput: chunk => { seen += chunk; } }), 0);
+    assert.match(seen, /session id: 019a7f2e-1c3d-7a00-9b1e-0123456789ab/);
+    assert.match(seen, /done/);
+    assert.equal(await run(process.execPath, ['-e', script], { cwd: dir, log, onOutput: () => { throw Error('reader'); } }), 0);
+    // The log's appends are not awaited by the run: both runs' lines land there all the same.
+    const logged = async () => (await readFile(log, 'utf8').catch(() => '')).match(/session id:/g)?.length ?? 0;
+    for (const until = Date.now() + 5000; await logged() < 2 && Date.now() < until;) await new Promise(done => setTimeout(done, 20));
+    assert.equal(await logged(), 2);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 

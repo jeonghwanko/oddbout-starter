@@ -23,7 +23,7 @@
 //   makes them his profile set when the package is registered.
 import { createHash, randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { appendFile, copyFile, cp, mkdir, open, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { appendFile, copyFile, cp, mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ASK_EXIT, NOT_STARTED_EXIT, judgeOutcome, readOutcome } from './sprite-outcome.mjs';
@@ -130,6 +130,95 @@ export async function extractFailedRows(run) {
  * 6.1 sol을 사용하도록 모델 수정해줘"): a ChatGPT login refused it on 2026-10-30 and answered it on 2026-11-03 (a text call on the operator's VM).
  */
 export const MODELS = Object.freeze({ text: 'gpt-6.1-sol', image: 'gpt-6.1-sol' });
+/**
+ * The judges (모델 드리프트, 2026-11-05): the brief's text model with an explicit reasoning effort. Until then no judge named one, so each
+ * host's codex login config chose it, and none recorded what it ran with. `medium` is a choice, not a measurement of what the judges ran with
+ * before: each verdict's `judge.observed` and the stage's `models` event now say what codex recorded.
+ */
+export const JUDGE = Object.freeze({ model: MODELS.text, effort: 'medium' });
+/** What no tool reported. Never a copy of the model or effort that was asked for (AGENTS.md hard rule 1). */
+export const UNKNOWN = 'unknown';
+/** The Grok video model: the host names none, so sprite-gen's default films (its report cannot tell what xAI said from what was asked). */
+export const VIDEO_REQUESTED = 'engine-default';
+/** The models a stage asks for, as the `versions` event names them: requested only. What codex recorded is the stage's `models` event. */
+export const REQUESTED_MODELS = Object.freeze({ text: MODELS.text, imageAgent: MODELS.image, judge: JUDGE.model, judgeEffort: JUDGE.effort,
+  video: VIDEO_REQUESTED });
+
+/**
+ * A judge verdict's key (2026-11-05): what decides a judge's answer besides the pictures — the model and reasoning effort asked for, the
+ * prompt it read, the schema it answered in, and whether it ran outside the kit (`isolated`: no project instructions beside its prompt —
+ * `briefCommand` `cwd`). Before, a verdict in the job folder was found by its path alone, so a stage run after a model or prompt change took
+ * an earlier judge's verdict as the current judge's. Each part is hashed first: the key holds no player text.
+ */
+export const JUDGE_KEY_VERSION = 1;
+export const judgeKey = ({ model = JUDGE.model, effort = JUDGE.effort, isolated = true, prompt, schema }) =>
+  reviewHash(JSON.stringify({ version: JUDGE_KEY_VERSION, model, effort, isolated, prompt: reviewHash(prompt), schema: reviewHash(schema) }));
+/**
+ * JUDGE_CACHE_RULE — a job keeps every verdict it already holds (2026-11-05). Its earlier stage runs acted on them: a side take chosen, a
+ * walk taken, a run refused and filmed again. Judged again mid-job a pass can turn into a fail and buy a take nobody asked for (hard rule 2:
+ * no paid retry without an explicit request). So a verdict in the folder is reused whatever its key says, and marked when it is not the
+ * current judge's: `unkeyed` (made before verdicts carried keys) or `stale` (another model, effort, prompt or schema made it). The mark goes
+ * to the `side` and `gait` events and the loop review's config. Every new verdict carries the current key. An operator who wants the
+ * current judge to look again removes that verdict file; the stage's next run judges it, keyed.
+ */
+export function verdictKeyStatus(record, key) {
+  const recorded = record?.judge?.key;
+  return typeof recorded !== 'string' ? 'unkeyed' : recorded === key ? 'keyed' : 'stale';
+}
+const known = value => typeof value === 'string' && value.trim() ? value.trim().slice(0, 80) : UNKNOWN;
+/** What codex recorded for one run (`codexSession`): its model, reasoning effort, CLI and session, each UNKNOWN where it recorded nothing. */
+export const observedCodex = facts => ({ model: known(facts?.model), effort: known(facts?.effort), cli: known(facts?.cliVersion),
+  session: known(facts?.session) });
+/** A verdict's `judge` record: its key, the parts as asked, and what codex recorded for the run that answered. */
+export const judgeRecord = ({ prompt, schema, facts = null, isolated = true }) => ({ key: judgeKey({ prompt, schema, isolated }),
+  keyVersion: JUDGE_KEY_VERSION, model: JUDGE.model, effort: JUDGE.effort, isolated, promptSha256: reviewHash(prompt), schemaSha256: reviewHash(schema),
+  observed: observedCodex(facts) });
+/** The loop review's `judge` line (it goes into the review the package carries): who judged, as the verdict records it. */
+export function judgeLabel(record, status) {
+  const judge = record?.judge;
+  if (status === 'unkeyed' || !judge) return 'codex, model and effort not recorded (a verdict from before judge keys; og harden, tools off)';
+  return `codex ${judge.model} effort ${judge.effort} (observed ${judge.observed?.model ?? UNKNOWN}, effort ${judge.observed?.effort ?? UNKNOWN}`
+    + `${status === 'stale' ? '; an earlier judge made it, its key is not the current one' : ''}; og harden, tools off)`;
+}
+/**
+ * The codex session a run's output names: the first `session id: <id>` of codex exec's header. The first, never the last: codex echoes its
+ * prompt after the header, and a prompt carries the look brief, which the player's words shaped.
+ */
+export const codexSessionId = output => /session id: ([0-9a-f][0-9a-f-]{7,63})\b/i.exec(String(output ?? ''))?.[1] ?? null;
+
+/**
+ * A stage's `models` event (2026-11-05): what each kind of run asked for and what was observed, counted. A codex text run (the brief, a
+ * judge): the model and effort its session recorded. An image run: the agent model its sprite-gen report read off the session (`model_source`
+ * rollout or state-db; any other report's `model` may be the `--model` copied) — the image model behind codex's image tool codex never
+ * records. A Grok clip: unknown (the engine's report names xAI's model or, failing it, the one asked, and does not say which). Kept under
+ * the progress route's 2000 bytes: the last kinds give way first (`more` counts them).
+ */
+export const MODELS_EVENT_BYTES = 1900;
+export function createModelLog() {
+  const counts = new Map();
+  return {
+    note(entry) { const key = JSON.stringify(entry); counts.set(key, (counts.get(key) ?? 0) + 1); },
+    event(stage) {
+      if (!counts.size) return null;
+      const event = { kind: 'models', stage, runs: [...counts].map(([key, n]) => ({ ...JSON.parse(key), n })) };
+      while (JSON.stringify(event).length > MODELS_EVENT_BYTES && event.runs.length) { event.runs.pop(); event.more = (event.more ?? 0) + 1; }
+      return event;
+    },
+  };
+}
+/** A codex text run's entry: `requestedEffort` 'config' when the call names none (the host's codex config chooses). */
+export const codexEntry = (role, requested, requestedEffort, facts) => {
+  const seen = observedCodex(facts);
+  return { role, requested, requestedEffort, observed: seen.model, effort: seen.effort, cli: seen.cli };
+};
+/** An image run's entry, from its sprite-gen report. */
+export function imageEntry(report) {
+  const extra = report?.extra && typeof report.extra === 'object' ? report.extra : {};
+  const read = ['rollout', 'state-db'].includes(extra.model_source);
+  return { role: 'image', requested: MODELS.image, observed: read ? known(report.model) : UNKNOWN, effort: known(extra.model_effort),
+    cli: known(extra.codex_cli_version), imageModel: UNKNOWN };
+}
+export const VIDEO_ENTRY = Object.freeze({ role: 'video', requested: VIDEO_REQUESTED, observed: UNKNOWN });
 // Codex features that reach files, a shell, a browser, the computer, plugins, hooks, sub-agents or a new image: all off for the brief
 // (`og harden` turns the same off for the service's codex as a whole, image generation kept for the looks).
 export const CODEX_TOOLS_OFF = Object.freeze(['shell_tool', 'unified_exec', 'browser_use', 'browser_use_external', 'computer_use', 'apps', 'code_mode_host',
@@ -195,10 +284,21 @@ export function briefPrompt(job, refCount) {
   ].join('\n');
 }
 
-/** The codex command of the brief (run through `og run`); the prompt is its stdin. */
-export const briefCommand = ({ schema, out, refs }) => ['codex', 'exec', '-m', MODELS.text, '--skip-git-repo-check', '--sandbox', 'read-only',
-  ...CODEX_TOOLS_OFF.flatMap(feature => ['--disable', feature]), '-c', 'mcp_servers={}', '--output-schema', schema, '-o', out,
+/**
+ * The codex command of the brief (run through `og run`); the prompt is its stdin. `effort`: a reasoning effort, or the host's codex config's.
+ * `cwd` (2026-11-05): the folder codex runs in, outside the kit. og runs every command in the kit, and codex reads a project's AGENTS.md
+ * from its git root down to its working folder into the model's instructions (sprite-gen isolates its own codex checks for that reason,
+ * `facing_vision.codex_inspect`), so the brief and the judges read the kit's agent instructions as well as their prompt, and every edit of
+ * that file changed what they read. Every path the command names is absolute.
+ */
+export const briefCommand = ({ schema, out, refs, model = MODELS.text, effort = null, cwd = null }) => ['codex', 'exec', '-m', model,
+  '--skip-git-repo-check', ...(cwd ? ['-C', cwd] : []), '--sandbox', 'read-only', ...CODEX_TOOLS_OFF.flatMap(feature => ['--disable', feature]),
+  '-c', 'mcp_servers={}', ...(effort ? ['-c', `model_reasoning_effort="${effort}"`] : []), '--output-schema', schema, '-o', out,
   ...refs.flatMap(ref => ['-i', ref]), '-'];
+/** A judge's codex command: the brief's, every tool off, on JUDGE's model and reasoning effort. */
+export const judgeCommand = ({ schema, out, refs, cwd = null }) => briefCommand({ schema, out, refs, model: JUDGE.model, effort: JUDGE.effort, cwd });
+/** The folder the worker gives codex's text runs (under its root, beside the kit, never inside it): `<root>/codex-cwd`. */
+export const CODEX_CWD = 'codex-cwd';
 
 /**
  * The brief codex wrote, checked again here (the schema is the model's instruction, not a guarantee): every field, lengths, the stats'
@@ -697,10 +797,78 @@ export const extOf = type => ({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/
  * The stages, given the worker's tools: `og(args, { stdin })` runs `og run <job> -- …` in the kit and resolves `{ code }`; `api` is the
  * worker's API client; `fetchBytes(url)`; `toWebp(png, webp)` re-encodes a still (at most 1024 px); `motionsPy(args)` runs motions.py
  * on the kit's sprite-gen venv (pixels only, no provider) and resolves `{ code }`. Calls may overlap: `og` waits for a free codex slot.
+ * `og(args, { capture: true })` also resolves the run's output (its start: codex exec's header names its session), and
+ * `codexSession(id, sinceMs)` what codex recorded for that session ({ model, effort, cliVersion }), or null. `codexCwd`: the folder outside
+ * the kit the brief and the judges run in (`briefCommand` `cwd`; the worker's `<root>/codex-cwd`), made before each run; null runs them in
+ * og's folder, the kit, as before 2026-11-05 (and their verdicts' keys say so: `isolated` false).
  */
 export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy = async () => ({ code: 127 }), gaitStaggerMs = GAIT_STAGGER_MS,
   alignPauseMs = ALIGN_PAUSE_MS, earlyPollMs = EARLY_POLL_MS, earlyGraceMs = EARLY_GRACE_MS, signal = null, lowMarginFeetTaken = true,
-  styleAnchor = path.join(path.dirname(fileURLToPath(import.meta.url)), STYLE_ANCHOR_FILE) }) {
+  codexSession = async () => null, codexCwd = null, styleAnchor = path.join(path.dirname(fileURLToPath(import.meta.url)), STYLE_ANCHOR_FILE) }) {
+  // The models this stage run asked for and observed (`createModelLog`), sent as its `models` event when it ends (`observed`).
+  let models = createModelLog();
+  /** The folder a codex text run starts in, there when it starts (a host's cleanup may have removed it). */
+  const codexDir = async () => { if (codexCwd) await mkdir(codexCwd, { recursive: true }); return codexCwd; };
+  const isolated = Boolean(codexCwd);
+  /** What codex recorded for the run whose output this is (`codexSessionId`, `codexSession`), or null: no session named. */
+  const observeCodex = async (output, since) => {
+    const session = codexSessionId(output);
+    if (!session) return null;
+    return { ...(await Promise.resolve(codexSession(session, since)).catch(() => null) ?? {}), session };
+  };
+  // A report this run wrote (one kept from an earlier stage run made nothing now); mtime's coarse clocks get two seconds.
+  const fresh = async (file, since) => { try { return (await stat(file)).mtimeMs >= since - 2000; } catch { return false; } };
+  /** An image run's sprite-gen report, noted for the `models` event. */
+  const noteImage = async (report, since) => {
+    if (!await fresh(report, since)) return;
+    const read = await readFile(report, 'utf8').then(JSON.parse, () => null);
+    if (read?.provider) models.note(imageEntry(read));
+  };
+  /** Every row gen-set drew in this run (its per-row reports are `gen` reports). */
+  const noteRows = async (run, since) => {
+    const folder = path.join(run, 'reports', 'gen-set');
+    for (const name of (await readdir(folder).catch(() => [])).sort())
+      if (name.endsWith('.json') && name !== 'set.report.json' && !name.endsWith('.attempt.json')) await noteImage(path.join(folder, name), since);
+  };
+  /** A clip video-set filmed in this run (its item's `clip.report.json`). */
+  const noteVideo = async (item, since) => { if (await fresh(path.join(item, 'clip.report.json'), since)) models.note(VIDEO_ENTRY); };
+  /** A stage's model observations go up as one event when it ends (a courtesy: one that fails never changes its outcome). */
+  const observed = (name, stage) => async (job, dir) => {
+    models = createModelLog();
+    try { return await stage(job, dir); } finally {
+      const event = models.event(name);
+      if (event) await Promise.resolve(api.progress?.(job, undefined, event)).catch(() => {});
+    }
+  };
+  /**
+   * One judge (JUDGE_CACHE_RULE). `parse` reads an answer (null: not a verdict). The verdict in `verdictFile` is reused whatever its key, with
+   * its standing (`verdictKeyStatus`); else codex answers into `answerFile` (any earlier answer removed first, so it never speaks for this
+   * run) and the verdict is written with its `judge` record. `cached: false` judges every time (the look judge keeps nothing). Resolves
+   * `{ verdict, record, status }`, or `{ code }` when codex gave no verdict (its exit; 0 with an answer that is not one).
+   */
+  async function judge({ verdictFile, answerFile, schemaFile, prompt, refs, parse, cached = true }) {
+    const schema = await readFile(schemaFile, 'utf8').catch(() => ''), key = judgeKey({ prompt, schema, isolated });
+    if (cached) {
+      const saved = await readFile(verdictFile, 'utf8').then(JSON.parse, () => null), verdict = parse(saved);
+      if (verdict) return { verdict, record: saved, status: verdictKeyStatus(saved, key) };
+    }
+    await rm(answerFile, { force: true });
+    const cwd = await codexDir(), since = Date.now();
+    const { code, output } = await og(judgeCommand({ schema: schemaFile, out: answerFile, refs, cwd }), { stdin: prompt, capture: true });
+    if (code !== 0) return { code };
+    const facts = await observeCodex(output, since);
+    models.note(codexEntry('judge', JUDGE.model, JUDGE.effort, facts));
+    const answer = await readFile(answerFile, 'utf8').then(JSON.parse, () => null), verdict = parse(answer);
+    if (!verdict) return { code: 0 };
+    const record = { ...answer, judge: judgeRecord({ prompt, schema, facts, isolated }) };
+    // Whole or not at all (writeWhole): a torn verdict would read as none and pay for the judge again.
+    await writeWhole(verdictFile, JSON.stringify(record));
+    return { verdict, record, status: 'keyed' };
+  }
+  /** A reused verdict that is not the current judge's, as a `tried` entry or an event marks it. */
+  const keyMark = judged => judged.status && judged.status !== 'keyed' ? { judgeKey: judged.status } : {};
+  /** Any JSON object is a side or look verdict here: their checks are read where they are used (`sidePassed`, `lookPick`). */
+  const anObject = value => value && typeof value === 'object' && !Array.isArray(value) ? value : null;
   // One loop alignment at a time on this worker: RIFE on the GPU takes about 4 GB, and a walk and a run aligning at once (or two jobs) ran
   // an 8 GB card out of memory (2026-10-28).
   let aligning = Promise.resolve();
@@ -757,7 +925,10 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
     }
     const schema = path.join(dir, 'brief-schema.json'), out = path.join(dir, 'brief.json');
     await writeFile(schema, JSON.stringify(BRIEF_SCHEMA));
-    const { code } = await og(briefCommand({ schema, out, refs }), { stdin: briefPrompt(job, refs.length) });
+    const cwd = await codexDir(), since = Date.now();
+    const { code, output } = await og(briefCommand({ schema, out, refs, cwd }), { stdin: briefPrompt(job, refs.length), capture: true });
+    // The brief names no effort (the host's codex config chooses): what its session recorded is noted beside the model asked for.
+    if (code === 0) models.note(codexEntry('brief', MODELS.text, 'config', await observeCodex(output, since)));
     if (code === ASK_EXIT) return asOutcome(ASKED);
     if (code !== 0 || !existsSync(out)) return { outcome: 'retry', result: { code: `brief-exit-${code}` } };
     let parsed;
@@ -794,6 +965,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       // A look this round already made (the stage runs again because the other one failed) is kept: making it again pays twice.
       if (existsSync(png) && await finishedLook(report)) return { name, png, report, code: 0 };
       const { code } = await og(appearanceCommand({ promptFile: promptOf(index === 0 ? 'a' : 'b'), out: png, report, refs, anchor: styleAnchor }));
+      if (code === 0) await noteImage(report, since);
       return { name, png, report, code };
     }));
     // Every failed look is read (2026-10-30): only the first was, so a look whose request may have been taken went out again when the
@@ -823,13 +995,14 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
 
   /** 맡기기: the look judge's pick of the two candidates, or null when it picked none or could not answer (the creator is asked). */
   async function pickLook(job, dir, made) {
-    const judge = path.join(dir, 'looks', `judge-${job.appearanceRound}`);
-    await mkdir(judge, { recursive: true });
-    const schema = path.join(judge, 'schema.json'), out = path.join(judge, 'verdict.json');
-    await writeFile(schema, JSON.stringify(LOOK_JUDGE_SCHEMA));
-    const { code } = await og(briefCommand({ schema, out, refs: [...made.map(look => look.png), styleAnchor] }), { stdin: lookJudgePrompt(job.brief) });
-    if (code !== 0) return null;
-    try { return lookPick(JSON.parse(await readFile(out, 'utf8'))); } catch { return null; }
+    const folder = path.join(dir, 'looks', `judge-${job.appearanceRound}`);
+    await mkdir(folder, { recursive: true });
+    const schemaFile = path.join(folder, 'schema.json');
+    await writeFile(schemaFile, JSON.stringify(LOOK_JUDGE_SCHEMA));
+    // Judged every time the stage runs (it keeps nothing), its verdict written with its judge's record.
+    const judged = await judge({ verdictFile: path.join(folder, 'verdict.json'), answerFile: path.join(folder, 'answer.json'), schemaFile,
+      prompt: lookJudgePrompt(job.brief), refs: [...made.map(look => look.png), styleAnchor], parse: anObject, cached: false });
+    return judged.verdict ? lookPick(judged.verdict) : null;
   }
 
   const sprite = (...args) => ['npm', 'run', 'sprite', '--', ...args];
@@ -845,6 +1018,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
         '--model', MODELS.image, '--concurrency', concurrency));
       if (code === 75) return ASKED;
       if (code !== 0) return failedRun('rows', code, path.join(run, 'reports', 'gen-set', 'set.report.json'), since);
+      await noteRows(run, since);
     }
   }
 
@@ -889,20 +1063,15 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
         if (code === 75) return ASKED;
         if (code !== 0) return failedRun('side', code, report, since);
         if (!existsSync(png)) return { review: 'side-no-output' };
+        await noteImage(report, since);
       }
-      let verdict = await readJson(verdictFile).catch(() => null);
-      if (!verdict) {
-        const out = path.join(folder, `take-${take}.judge.json`);
-        const { code } = await og(briefCommand({ schema, out, refs: [front, png, styleAnchor] }), { stdin: sideJudgePrompt(job.brief) });
-        if (code === 75) return ASKED;
-        if (code !== 0) return { retry: `side-judge-exit-${code}` };
-        verdict = await readJson(out).catch(() => null);
-        if (!verdict) return { retry: 'side-judge-invalid' };
-        await writeWhole(verdictFile, JSON.stringify(verdict));
-      }
-      const passed = sidePassed(verdict);
+      // A take's verdict is kept in the job folder (JUDGE_CACHE_RULE): a stage run again judges only a take it has none for.
+      const judged = await judge({ verdictFile, answerFile: path.join(folder, `take-${take}.judge.json`), schemaFile: schema,
+        prompt: sideJudgePrompt(job.brief), refs: [front, png, styleAnchor], parse: anObject });
+      if (!judged.verdict) return judged.code === ASK_EXIT ? ASKED : { retry: judged.code ? `side-judge-exit-${judged.code}` : 'side-judge-invalid' };
+      const verdict = judged.verdict, passed = sidePassed(verdict);
       await Promise.resolve(api.progress?.(job, undefined, { kind: 'side', take, outcome: passed ? 'pass' : 'fail',
-        failed: SIDE_CHECKS.filter(check => verdict?.checks?.[check] !== 'pass') })).catch(() => {});
+        failed: SIDE_CHECKS.filter(check => verdict?.checks?.[check] !== 'pass'), ...keyMark(judged) })).catch(() => {});
       if (!passed) { if (styleOnly === null && sideStyleOnly(verdict)) styleOnly = { png, take }; continue; }
       return chooseSide(job, folder, png, take, false);
     }
@@ -944,6 +1113,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
         await writeFile(promptFile, expressionsPrompt(job.brief));
         const since = Date.now();
         const { code } = await og(expressionsCommand({ promptFile, out: png, report, front, anchor: styleAnchor }));
+        if (code === 0) await noteImage(report, since);
         // Nothing was sent (its own report says so, og found no slot, or the account's allowance stopped it before it ran: 75 and no report
         // of this run): a later run may draw it (리뷰 2026-11-03). Anything else may have been paid for and is never drawn again.
         const said = code === 0 ? null : await readOutcome(report, { since });
@@ -993,17 +1163,14 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
     }
     const meta = await readJson(strip).catch(() => null);
     if (!meta || meta.frames !== GAIT_FRAMES.run || retakeReasons(meta).length || !alternate(meta)) return null;
-    const judge = path.join(folder, 'judge');
-    if ((await motionsPy(['judge-request', 'run', judge])).code !== 0 || (await motionsPy(['sheet', strip, path.join(judge, 'sheet.png')])).code !== 0)
+    const judgeDir = path.join(folder, 'judge');
+    if ((await motionsPy(['judge-request', 'run', judgeDir])).code !== 0 || (await motionsPy(['sheet', strip, path.join(judgeDir, 'sheet.png')])).code !== 0)
       return null;
-    const verdictFile = path.join(judge, 'verdict.json');
-    let verdict = checkedVerdict(await readJson(verdictFile).catch(() => null));
-    if (!verdict) {
-      const { code } = await og(briefCommand({ schema: path.join(judge, 'judge-schema.json'), out: verdictFile, refs: [look, path.join(judge, 'sheet.png')] }),
-        { stdin: await readFile(path.join(judge, 'judge-prompt.txt'), 'utf8') });
-      verdict = code === 0 ? checkedVerdict(await readJson(verdictFile).catch(() => null)) : null;
-    }
-    return verdict && loopTaken(verdict, meta) ? { strip, verdict: verdictFile, note: RUN_FROM_WALK } : null;
+    const verdictFile = path.join(judgeDir, 'verdict.json');
+    const judged = await judge({ verdictFile, answerFile: path.join(judgeDir, 'answer.json'), schemaFile: path.join(judgeDir, 'judge-schema.json'),
+      prompt: await readFile(path.join(judgeDir, 'judge-prompt.txt'), 'utf8'), refs: [look, path.join(judgeDir, 'sheet.png')], parse: checkedVerdict });
+    return judged.verdict && loopTaken(judged.verdict, meta)
+      ? { strip, verdict: verdictFile, note: RUN_FROM_WALK, judged: { status: judged.status, label: judgeLabel(judged.record, judged.status) } } : null;
   }
 
   /** `change`: the creator's latest change to this gait ({ round, note }) — its takes film the change, quoted, and nothing else is tried.
@@ -1027,6 +1194,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       const since = Date.now();
       const { code } = await og(sprite('video-set', '--base', `side@right=${input.still}`, '--facing', 'right', '--states', gait, '--key', input.key,
         '--anchor', 'none', '--out-dir', clip, '--character', character, '--concurrency', '1', ...motion));
+      await noteVideo(item, since);
       // 75: sprite-gen's codex question (its report says so — codex is down) or og refusing grok's account (no report — grok is down).
       if (code === ASK_EXIT) return failedRun('video', code, path.join(clip, 'set.report.json'), since, GROK_LIMITED);
       // No clip at all (a limit, an outage): try the stage later rather than film again with other words, unless the set report
@@ -1130,23 +1298,20 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
           }
           if (reasons.length) { tried.push({ take, cut: cutName, reasons, ...cutFacts(meta) }); continue; }
           // The judge: codex with every tool off sees the look and the loop's frames.
-          const judge = path.join(aligned, 'judge');
-          if ((await motionsPy(['judge-request', gait, judge])).code !== 0 || (await motionsPy(['sheet', strip, path.join(judge, 'sheet.png')])).code !== 0)
+          const judgeDir = path.join(aligned, 'judge');
+          if ((await motionsPy(['judge-request', gait, judgeDir])).code !== 0 || (await motionsPy(['sheet', strip, path.join(judgeDir, 'sheet.png')])).code !== 0)
             return { retry: 'judge-input' };
-          const verdictFile = path.join(judge, 'verdict.json');
-          // A verdict an earlier run of this stage got on this cut is kept (no second codex call for the same picture).
-          let verdict = checkedVerdict(await readJson(verdictFile).catch(() => null)), judged = 0;
-          if (!verdict) {
-            ({ code: judged } = await og(briefCommand({ schema: path.join(judge, 'judge-schema.json'), out: verdictFile, refs: [look, path.join(judge, 'sheet.png')] }),
-              { stdin: await readFile(path.join(judge, 'judge-prompt.txt'), 'utf8') }));
-            verdict = judged === 0 ? checkedVerdict(await readJson(verdictFile).catch(() => null)) : null;
-          }
-          if (!verdict) return judged === ASK_EXIT ? ASKED : { retry: `judge-exit-${judged}` };
+          const verdictFile = path.join(judgeDir, 'verdict.json');
+          // A verdict an earlier run of this stage got on this cut is kept (JUDGE_CACHE_RULE: no second codex call for the same picture).
+          const judged = await judge({ verdictFile, answerFile: path.join(judgeDir, 'answer.json'), schemaFile: path.join(judgeDir, 'judge-schema.json'),
+            prompt: await readFile(path.join(judgeDir, 'judge-prompt.txt'), 'utf8'), refs: [look, path.join(judgeDir, 'sheet.png')], parse: checkedVerdict });
+          const verdict = judged.verdict;
+          if (!verdict) return judged.code === ASK_EXIT ? ASKED : { retry: `judge-exit-${judged.code}` };
           if (loopTaken(verdict, meta)) {
-            tried.push({ take, cut: cutName, passed: true, ...(verdict.loop === 'pass' ? {} : { loopBy: 'engine-seam' }), ...cutFacts(meta) });
-            return { strip, verdict: verdictFile, take, tried };
+            tried.push({ take, cut: cutName, passed: true, ...(verdict.loop === 'pass' ? {} : { loopBy: 'engine-seam' }), ...keyMark(judged), ...cutFacts(meta) });
+            return { strip, verdict: verdictFile, take, tried, judged: { status: judged.status, label: judgeLabel(judged.record, judged.status) } };
           }
-          tried.push({ take, cut: cutName, judge: LOOP_VISUAL.filter(key => verdict[key] !== 'pass'), ...cutFacts(meta) });
+          tried.push({ take, cut: cutName, judge: LOOP_VISUAL.filter(key => verdict[key] !== 'pass'), ...keyMark(judged), ...cutFacts(meta) });
           break;   // the judge saw this take: another cut of it would show the same motion
         }
         if (!cuts.length || unaligned < cuts.length) break;
@@ -1190,6 +1355,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       const { code } = await og(sprite('gen-set', '--run-dir', run, '--provider', 'codex', '--model', MODELS.image, '--concurrency', '1'));
       if (code === 75) return ASKED;
       if (code !== 0) return failedRun('rows', code, path.join(run, 'reports', 'gen-set', 'set.report.json'), since);
+      await noteRows(run, since);
       const extracted = await extractRows(run, '1');
       if (extracted) return extracted;
       overrides.push({ run, row, cells });
@@ -1397,6 +1563,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
             if (said.review && charge !== 'not-charged') await writeWhole(showLeftOut, JSON.stringify(said) + '\n');
             return null;
           }
+          await noteRows(showRows, since);
           if ((await og(sprite('extract', '--run-dir', showRows))).code !== 0) return null;
         }
         return showRows;
@@ -1426,6 +1593,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       const { code } = genSet;
       if (code === 75) return ASKED;
       if (code !== 0) return failedRun('rows', code, path.join(rows, 'reports', 'gen-set', 'set.report.json'), since);
+      await noteRows(rows, since);
       const extracted = await extractRows(rows, '2');
       if (extracted) return extracted;
       // The creator's changes to action clips, in order: each remade row's named cells replace the first run's.
@@ -1470,6 +1638,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
         if (code !== 0) return failedRun('gait-still', code, report, since);
         // gen said it finished and its picture is not there: a paid image may be somewhere — an operator looks, nothing is sent again.
         if (!existsSync(relaxedLook)) return { review: 'gait-still-no-output' };
+        await noteImage(report, since);
       }
       if ((await motionsPy(['video-still', relaxedLook, relaxed])).code !== 0) return { retry: 'gait-still' };
       const { key } = await readJson(relaxed.replace(/\.png$/, '.json')).catch(() => ({ key: 'magenta' }));
@@ -1567,10 +1736,12 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
     for (const gait of ['walk', 'run']) {
       const folder = path.join(asm, 'loop', gait), config = path.join(folder, 'config.json');
       await mkdir(folder, { recursive: true });
+      // Who judged, as the verdict records it (never the model asked for now: a kept verdict may be an earlier judge's — JUDGE_CACHE_RULE).
+      const judged = loops[gait].judged ?? { status: 'unkeyed', label: judgeLabel(null, 'unkeyed') };
       await writeFile(config, JSON.stringify({ motion: gait, source: { file: path.join(asm, 'pack', 'game-pack.json'), animation: gait },
         strip: loops[gait].strip, verdict: loops[gait].verdict,
-        judge: `codex ${MODELS.text} (og harden, tools off)${loops[gait].note === RUN_FROM_WALK ? '; the run is the walk\'s cut aligned to its frames' : ''}`,
-        ...(gait === 'walk' ? { stridePixels } : {}) }));
+        judge: `${judged.label}${loops[gait].note === RUN_FROM_WALK ? '; the run is the walk\'s cut aligned to its frames' : ''}`,
+        judgeKey: judged.status, ...(gait === 'walk' ? { stridePixels } : {}) }));
       if ((await og(['npm', 'run', 'fighter:gait', '--', 'loop-review', config, path.join(folder, 'review.json')])).code !== 0)
         return { outcome: 'review', result: { code: `${gait}-loop-review` } };
       if (serverReviewEnabled(job, api)) {
@@ -1657,7 +1828,8 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
     return { outcome: 'ok', result: { submissionId: created.submissionId } };
   }
 
-  return { queued: brief, appearance: screened(appearance), motions: screened(motions), submitting };
+  return { queued: observed('queued', brief), appearance: observed('appearance', screened(appearance)), motions: observed('motions', screened(motions)),
+    submitting };
 }
 
 /** Files in a job folder, for a log line (never their contents). */

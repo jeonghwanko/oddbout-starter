@@ -18,6 +18,7 @@ const FOLDER = '20261103-front-0123abcd0000400080000123456789ab';
 /** A check against a fake API and fake runs: `og` is the judge's exit code and what it writes as its verdict. */
 async function harness({ claim = { ok: true, profileSet: SET }, bytes = BYTES, og = { code: 0, verdict: PASS }, kit } = {}) {
   kit ??= await mkdtemp(path.join(tmpdir(), 'front-check-'));
+  const codexCwd = path.join(kit, '..', `${path.basename(kit)}-codex-cwd`);
   const lines = [], finished = [], released = [], runs = [], down = [], worked = [];
   const api = { frontClaim: async () => claim, frontRelease: async set => { released.push(set.id); return { ok: true } },
     frontFinish: async (set, verdict) => { finished.push({ set, verdict }); return { ok: true, frontCheck: { status: 'pass' } }; } };
@@ -28,8 +29,8 @@ async function harness({ claim = { ok: true, profileSet: SET }, bytes = BYTES, o
     return og.code;
   };
   const check = createFrontCheck({ api, og: 'og', python: 'python', kit, say: async line => { lines.push(line); }, fetcher: async () => new Response(bytes), runner,
-    providerDown: async code => { down.push(code); return true; }, worked: () => worked.push(true), now: () => new Date('2026-11-03T12:00:00Z') });
-  return { kit, check, lines, finished, released, runs, down, worked, folder: path.join(kit, 'output', FOLDER) };
+    providerDown: async code => { down.push(code); return true; }, worked: () => worked.push(true), now: () => new Date('2026-11-03T12:00:00Z'), codexCwd });
+  return { kit, check, lines, finished, released, runs, down, worked, codexCwd, folder: path.join(kit, 'output', FOLDER) };
 }
 
 test('a claimed front is judged in its own og folder by codex with every tool off, and only its verdict is sent', async () => {
@@ -42,6 +43,10 @@ test('a claimed front is judged in its own og folder by codex with every tool of
     assert.equal(judge.args[3], 'codex');
     for (const feature of CODEX_TOOLS_OFF) assert.ok(judge.args.includes(feature), feature);
     assert.deepEqual(judge.args.slice(judge.args.indexOf('-i'), judge.args.indexOf('-i') + 2), ['-i', path.join(h.folder, 'front.png')]);
+    // The judges' model and effort, run outside the kit (2026-11-05): codex reads no project's AGENTS.md beside the prompt.
+    assert.ok(judge.args.includes('model_reasoning_effort="medium"'));
+    assert.deepEqual(judge.args.slice(judge.args.indexOf('-C'), judge.args.indexOf('-C') + 2), ['-C', h.codexCwd]);
+    assert.ok(existsSync(h.codexCwd), 'the folder is made before codex runs');
     assert.match(judge.stdin, /front painting a player uploaded/);
     assert.equal(JSON.parse(await readFile(path.join(h.folder, 'request.json'), 'utf8')).api.profileSetId, SET.id);
     assert.ok(existsSync(path.join(h.folder, '.closed')), 'the folder is closed after, so og setup is not held');

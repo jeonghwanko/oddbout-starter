@@ -684,17 +684,47 @@ cmd_self_update() {
 CODEX_OFF="shell_tool unified_exec browser_use browser_use_external computer_use apps multi_agent hooks plugins remote_plugin"
 CODEX_KEEP_ON="code_mode_host image_generation"
 HARDEN_MARK="# og harden:"
-codex_hardened() {
+codex_features_off() {
   local f=$G/.codex/config.toml k
   [ -f "$f" ] && grep -q '^\[features\]' "$f" || return 1
   for k in $CODEX_OFF; do grep -Eq "^[[:space:]]*$k[[:space:]]*=[[:space:]]*false" "$f" || return 1; done
   for k in $CODEX_KEEP_ON; do grep -Eq "^[[:space:]]*$k[[:space:]]*=[[:space:]]*false" "$f" && return 1; done
   return 0
 }
+# Project instructions off (2026-11-05): codex puts every AGENTS.md from the git checkout its working folder lies in down to that folder
+# into the model's instructions, and reads none at `project_doc_max_bytes = 0` (codex-rs core/src/agents_md.rs, rust-v0.165.0). og runs
+# every command in the kit, and sprite-gen starts its codex runs in a folder under the job's .tmp, inside the kit: the brief, the judges and
+# the image agents read the kit's AGENTS.md — a guide for creators' agents — beside their prompts (37 of 322 rollouts on the official host,
+# 2026-11-05). A top-level key, so it goes at the top of the file: in TOML a key after a table header belongs to that table.
+DOCS_MARK="# og harden (project docs):"
+# Whether a top-level line before the first table sets project_doc_max_bytes (`any`: to anything; else to 0).
+codex_docs_line() {
+  local f=$G/.codex/config.toml value='0[[:space:]]*(#.*)?$'
+  [ "${1:-}" = any ] && value=''
+  [ -f "$f" ] && awk -v value="$value" '/^[[:space:]]*\[/ { exit }
+    $0 ~ ("^[[:space:]]*project_doc_max_bytes[[:space:]]*=[[:space:]]*" value) { found = 1; exit }
+    END { exit (found ? 0 : 1) }' "$f"
+}
+codex_docs_off() { codex_docs_line; }
+codex_hardened() { codex_features_off && codex_docs_off; }
+# Writes the project-docs line at the top of the service codex's config. An operator's own value is theirs to change: og stops instead.
+harden_docs() {
+  local f=$G/.codex/config.toml tmp
+  codex_docs_off && return 0
+  codex_docs_line any && die "$f sets project_doc_max_bytes — set it to 0 there by hand (codex would read the kit's AGENTS.md)"
+  mkdir -p "$G/.codex"
+  tmp=$(mktemp)
+  { echo "$DOCS_MARK codex reads no project's AGENTS.md (og runs every command in the kit)."; echo "project_doc_max_bytes = 0"; echo
+    if [ -f "$f" ]; then cat "$f"; fi; } >"$tmp" && cat "$tmp" >"$f"
+  rm -f "$tmp"
+  echo "og: codex project instructions off (project_doc_max_bytes = 0)"
+}
 cmd_harden() {
   local f=$G/.codex/config.toml k tmp
-  if codex_hardened; then echo "og: codex features already off"; return; fi
+  if codex_hardened; then echo "og: codex features and project instructions already off"; return; fi
   mkdir -p "$G/.codex"
+  harden_docs
+  codex_features_off && return
   # The block an earlier og harden appended is written again; any other [features] table is the operator's to edit.
   if [ -f "$f" ] && grep -q "^$HARDEN_MARK" "$f"; then
     tmp=$(mktemp)
@@ -713,7 +743,10 @@ cmd_harden() {
 cmd_worker() {
   local unit_dir=$UNIT_DIR base key
   case ${1:-} in
-    run) shift; codex_hardened || die "og harden first — the worker runs player text through codex"
+    run) shift; codex_features_off || die "og harden first — the worker runs player text through codex"
+      # A host updated (og self-update) before og harden ran again takes the project-docs line here: a restriction og owns, so the worker
+      # never stops for want of it.
+      harden_docs >&2
       OG_ROOT=$G exec "$NODE" "$HERE/generation-worker.mjs" "$@" ;;
     key)
       # The API base on the command line, the worker key (afw_…, scope generation) on stdin — never in argv or the ledger.
@@ -762,7 +795,7 @@ og explain -- <command...>          what a command bills, its codex slots and le
 og run <job> -- <command...>        every generation step goes through this
 og deliver <job> [package-dir] | close <job> <fighter-uuid> | purge <job> [--cancelled] | prune [days]
 og cat <job> <path> > file          read one file of a job (results are 600, service-only)
-og harden                           turn off the service codex's shell, file, browser and plugin features (the worker needs it)
+og harden                           turn off the service codex's shell, file, browser and plugin features and its reading of AGENTS.md (the worker needs it)
 og rife torch|ncnn|status           the loop alignment's RIFE: PyTorch on an NVIDIA GPU (fast) or the ncnn binary (default)
 og worker key <api-base> < key | install | uninstall | start | stop | restart | status | log [n] | run [--once]
 og self-update                      (operator side) install this copy's files for the service user
