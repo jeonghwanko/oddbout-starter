@@ -975,7 +975,7 @@
     ]
   },
   "bet-host.html": {
-    "file": "assets/betHost-DBazXFln.js",
+    "file": "assets/betHost-CrcTdPTB.js",
     "name": "betHost",
     "src": "bet-host.html",
     "isEntry": true,
@@ -988,11 +988,11 @@
       "_boothApi-0nqfAUFE.js"
     ],
     "css": [
-      "assets/betHost-t_7TvCI8.css"
+      "assets/betHost-DWytqX_a.css"
     ]
   },
   "bet.html": {
-    "file": "assets/bet-D4mpcF3R.js",
+    "file": "assets/bet-Dvjx0Fdw.js",
     "name": "bet",
     "src": "bet.html",
     "isEntry": true,
@@ -1003,7 +1003,7 @@
       "_boothApi-0nqfAUFE.js"
     ],
     "css": [
-      "assets/bet-B88QANKC.css"
+      "assets/bet-BtnSbXVJ.css"
     ]
   },
   "broadcast.html": {
