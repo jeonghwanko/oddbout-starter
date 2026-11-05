@@ -728,8 +728,8 @@
     "file": "assets/storageKeys-DnS9HuPI.js",
     "name": "storageKeys"
   },
-  "_twitchAuth-CONoyFxu.js": {
-    "file": "assets/twitchAuth-CONoyFxu.js",
+  "_twitchAuth-C8aduet6.js": {
+    "file": "assets/twitchAuth-C8aduet6.js",
     "name": "twitchAuth"
   },
   "_twitchChat-DFesFAPX.js": {
@@ -975,7 +975,7 @@
     ]
   },
   "bet-host.html": {
-    "file": "assets/betHost-DgTaNXuo.js",
+    "file": "assets/betHost-DBazXFln.js",
     "name": "betHost",
     "src": "bet-host.html",
     "isEntry": true,
@@ -984,22 +984,22 @@
       "_fighterApiBase-CeB_1v89.js",
       "_TwitchArenaBout-B1EudwAr.js",
       "_twitchChat-DFesFAPX.js",
-      "_twitchAuth-CONoyFxu.js",
+      "_twitchAuth-C8aduet6.js",
       "_boothApi-0nqfAUFE.js"
     ],
     "css": [
-      "assets/betHost-Dx_a4owU.css"
+      "assets/betHost-t_7TvCI8.css"
     ]
   },
   "bet.html": {
-    "file": "assets/bet-DXFdHIHf.js",
+    "file": "assets/bet-D4mpcF3R.js",
     "name": "bet",
     "src": "bet.html",
     "isEntry": true,
     "imports": [
       "__oddbout-analytics-DfJ7iKZO.js",
       "_fighterApiBase-CeB_1v89.js",
-      "_twitchAuth-CONoyFxu.js",
+      "_twitchAuth-C8aduet6.js",
       "_boothApi-0nqfAUFE.js"
     ],
     "css": [
@@ -1021,7 +1021,7 @@
     ]
   },
   "contracts/ai-fighter/v1/example.fighter.json": {
-    "file": "assets/example.fighter-Bz-exq6f.json",
+    "file": "assets/example.fighter-OCFYqmYG.json",
     "src": "contracts/ai-fighter/v1/example.fighter.json"
   },
   "contracts/ai-fighter/validate.mjs": {
@@ -1090,7 +1090,7 @@
     ]
   },
   "docs.html": {
-    "file": "assets/docs-D-WYPWRn.js",
+    "file": "assets/docs-BQ6V4KHd.js",
     "name": "docs",
     "src": "docs.html",
     "isEntry": true,
@@ -1110,7 +1110,7 @@
       "assets/info-MB1OWjGx.css"
     ],
     "assets": [
-      "assets/example.fighter-Bz-exq6f.json"
+      "assets/example.fighter-OCFYqmYG.json"
     ]
   },
   "fighter.html": {
@@ -2398,17 +2398,17 @@
     "isDynamicEntry": true
   },
   "twitch-auth.html": {
-    "file": "assets/twitchAuth-Bkm7N0J-.js",
+    "file": "assets/twitchAuth-SwvRu-_m.js",
     "name": "twitchAuth",
     "src": "twitch-auth.html",
     "isEntry": true,
     "imports": [
       "__oddbout-analytics-DfJ7iKZO.js",
-      "_twitchAuth-CONoyFxu.js"
+      "_twitchAuth-C8aduet6.js"
     ]
   },
   "twitch.html": {
-    "file": "assets/twitch-CZVO9jks.js",
+    "file": "assets/twitch-Dlh_Ot9u.js",
     "name": "twitch",
     "src": "twitch.html",
     "isEntry": true,
@@ -2420,7 +2420,7 @@
       "_TwitchArenaBout-B1EudwAr.js",
       "_ArenaArtCatalog-lashfPc-.js",
       "_twitchChat-DFesFAPX.js",
-      "_twitchAuth-CONoyFxu.js"
+      "_twitchAuth-C8aduet6.js"
     ],
     "css": [
       "assets/twitch-DRH-Vl3h.css"
