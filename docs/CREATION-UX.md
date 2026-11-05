@@ -192,7 +192,8 @@ Grok 상태를 알리고 원화용 `workflow --kind image`를 별도로 확인�
 표정 시트는 무투장 얼굴 여섯 칸(기본·맞음·으스댐·위기·옆눈질·KO)이고, 마지막 칸이 KO 컷인에서 진 선수의 얼굴이다. 시트가 없으면 무투장은
 모든 상황에 얼굴 칸 한 장을 쓴다. `npm run fighter:profile-set`이 정면 틀·얼굴 칸·시트 검사·`profile-set.json`을 만든다. 원형 얼굴과
 시트(KO 얼굴)를 외형 그룹에서 함께 보인다. 등록 뒤에는 고른 정면과 시트를 프로필 세트로 올린다
-(`prepare_profile_set` → `upload_profile_set_asset` front·expressions → `submit_profile_set`). 홈은 승인된 프로필 세트가 있는 선수만 보인다.
+(`prepare_fighter_registration` kind `profile_set` → `upload_fighter_asset` kind `profile_set` front·expressions →
+`submit_fighter_registration` kind `profile_set`. 2026-11-06 전 이름 `prepare_profile_set`·`upload_profile_set_asset`·`submit_profile_set`도 그대로 답한다). 홈은 승인된 프로필 세트가 있는 선수만 보인다.
 시트 없이 등록한 선수는 사용자가 요청하면(그 요청이 새 생성의 허가다) 같은 정면과 새 시트로 세트를 다시 올린다. 패키지·출전·기록은 그대로다.
 서버 검사를 통과하지 못한 시트는 빠지고(`sheetErrors`) 세트는 얼굴 칸 한 장으로 계속 간다.
 

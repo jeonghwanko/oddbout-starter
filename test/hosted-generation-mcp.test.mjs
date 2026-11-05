@@ -6,8 +6,9 @@ import { CREATOR_PAGE, siteUrl } from '../mcp/cloud/common.mjs';
 import { generation, png, webp } from './helpers/generation-database.mjs';
 
 // list_generation_hosts is browse_oddbout's view hosts, get_picture_upload and report_picture_link get_hosted_fighter's (MCP 통합 1단계, 2026-11-05).
-const HOSTED = ['request_hosted_fighter', 'get_hosted_fighter', 'choose_hosted_look', 'revise_hosted_motion', 'register_hosted_fighter', 'cancel_hosted_fighter',
-  'start_picture_upload'];
+// 2단계 (2026-11-06): choose_hosted_look, revise_hosted_motion and start_picture_upload are request_hosted_fighter's steps, register_hosted_fighter
+// submit_fighter_registration's kind hosted.
+const HOSTED = ['request_hosted_fighter', 'get_hosted_fighter', 'cancel_hosted_fighter'];
 
 // The cloud MCP over the hosted generation API on a real (PGlite) database: the agent carries the user's words and answers, the worker the rest.
 async function connector(g, hosted, fetcher = async () => new Response(png(512, 512)), { budgetMs, clientId = crypto.randomUUID(), meta } = {}) {
@@ -45,13 +46,17 @@ test('hosted generation tools list only when configured', async () => {
     const on = await (await connector(g, {})).tools();
     for (const name of HOSTED) assert.ok(on.some(t => t.name === name), name);
     assert.deepEqual(on.find(t => t.name === 'request_hosted_fighter')._meta['openai/fileParams'], ['picture', 'secondPicture']);
-    assert.equal(on.find(t => t.name === 'register_hosted_fighter').annotations.destructiveHint, true);
+    const submit = on.find(t => t.name === 'submit_fighter_registration');
+    assert.equal(submit.annotations.destructiveHint, true); assert.ok(submit.inputSchema.properties.kind.enum.includes('hosted'));
+    assert.deepEqual(on.find(t => t.name === 'request_hosted_fighter').inputSchema.properties.step.enum, ['request', 'choose_look', 'revise_motion', 'picture_ticket']);
+    // The revisions spend tokens and replace work (destructive since 2026-11-06), so the merged request is destructive too.
+    assert.equal(on.find(t => t.name === 'request_hosted_fighter').annotations.destructiveHint, true);
     assert.equal(on.find(t => t.name === 'get_hosted_fighter').annotations.readOnlyHint, true);
     // The hosted reads are views: get_hosted_fighter's job (its default) and the pictures; the hosts are browse_oddbout's, listed only while hosted generation is on.
-    assert.deepEqual(on.find(t => t.name === 'get_hosted_fighter').inputSchema.properties.view, { default: 'job', type: 'string', enum: ['job', 'upload', 'link'] });
-    for (const name of ['list_generation_hosts', 'get_picture_upload', 'report_picture_link']) assert.ok(!on.some(t => t.name === name), name);
-    for (const name of ['request_hosted_fighter', 'choose_hosted_look', 'revise_hosted_motion'])
-      assert.equal(on.find(t => t.name === name).annotations.idempotentHint, false, name);
+    assert.deepEqual(on.find(t => t.name === 'get_hosted_fighter').inputSchema.properties.view, { type: 'string', enum: ['job', 'upload', 'link'] });
+    for (const name of ['list_generation_hosts', 'get_picture_upload', 'report_picture_link', 'choose_hosted_look', 'revise_hosted_motion',
+      'register_hosted_fighter', 'start_picture_upload']) assert.ok(!on.some(t => t.name === name), name);
+    assert.equal(on.find(t => t.name === 'request_hosted_fighter').annotations.idempotentHint, false);
   } finally { await g.sql.close(); }
 });
 

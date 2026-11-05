@@ -63,7 +63,7 @@ are not evidence that the token expired.
 When the connected ODDBOUT tools list `request_hosted_fighter`, ODDBOUT can make the fighter on its own worker:
 no workspace, kit or generation account of the user's is needed. Offer it first when the user wants ODDBOUT to make
 the fighter or has no generation setup; the workspace route below stays the user's choice. Pass the user's words (and
-their own pictures with their confirmation of rights: attached files where the host attaches them, else `start_picture_upload`
+their own pictures with their confirmation of rights: attached files where the host attaches them, else `request_hosted_fighter` step `picture_ticket`
 (with the host you will request), whose link the user opens, or with `terminal: true` whose command sends a picture file you have;
 `get_hosted_fighter` view `upload` before resending one that got no answer; show them before passing them), then follow each result's `next`: show both looks (front views; the pick
 is also the fighter's profile picture) and pass the user's pick or one change, show the motion previews (made from a side view
@@ -131,13 +131,14 @@ his face in the arena, and the home lists him only once his profile set is appro
    its KO face, in the appearance group's review.
 5. Draw the side view (facing right) from the approved front as the first reference, same colouring; check it is the same character.
    Continue the appearance group (concept/idle) from that side view; the motions follow it.
-6. After registration, upload the set with `prepare_profile_set` (fighter id, its `profile-set.json`), `upload_profile_set_asset` for
-   `front` and then `expressions`, and `submit_profile_set`, and follow `get_my_fighter_updates` view `profile_set`. The set is not part of the package.
+6. After registration, upload the set with `prepare_fighter_registration` kind `profile_set` (fighter id, its `profile-set.json`),
+   `upload_fighter_asset` kind `profile_set` for `front` and then `expressions`, and `submit_fighter_registration` kind `profile_set`, and
+   follow `get_my_fighters` view `profile_set`. The set is not part of the package.
 
 A registered fighter without a sheet (made before 2026-11-03) can get one when the user asks for it: that request is the new generation's
 authorization. Draw the sheet from his approved front, build a new set from the same front and the sheet, and upload it. His package,
 entry and record do not change; his current set stays until an operator approves the new one. A sheet that fails the server's check is
-left out (`get_my_fighter_updates` view `profile_set` → `sheetErrors`) and the set goes on with his face square only.
+left out (`get_my_fighters` view `profile_set` → `sheetErrors`) and the set goes on with his face square only.
 
 ## Work in review groups
 
