@@ -30,10 +30,13 @@ test('workshop tools: story from the API and the arena, a named note made with t
     const call = async (name, args, auth = true) => toolJson(await rpc('tools/call', { name, arguments: args }, auth));
     const tools = (await rpc('tools/list', {})).tools;
     // The workshop's reads are views (MCP 통합 1단계, 2026-11-05): story and world browse_oddbout's, the inbox get_my_fighter_updates'; their own names still answer.
-    const workshop = ['update_fighter_canon', 'post_workshop_note', 'resolve_workshop_note', 'set_fighter_relation', 'manage_world', 'write_world_post'];
-    for (const name of workshop) assert.ok(tools.some(t => t.name === name), name);
-    const view = name => tools.find(t => t.name === name).inputSchema.properties.view.enum;
-    assert.ok(view('browse_oddbout').includes('story') && view('browse_oddbout').includes('world')); assert.ok(view('get_my_fighter_updates').includes('inbox'));
+    // 2단계 (2026-11-06): the workshop's writes are write_story's; their own names still answer (the calls below use them).
+    const selector = (name, key) => tools.find(t => t.name === name).inputSchema.properties[key].enum;
+    assert.deepEqual(selector('write_story', 'write'), ['canon', 'note', 'resolve', 'relation', 'world', 'world_post']);
+    for (const name of ['update_fighter_canon', 'post_workshop_note', 'resolve_workshop_note', 'set_fighter_relation', 'manage_world', 'write_world_post'])
+      assert.ok(!tools.some(t => t.name === name), name);
+    assert.ok(selector('browse_oddbout', 'view').includes('story') && selector('browse_oddbout', 'view').includes('world'));
+    assert.ok(selector('get_my_fighters', 'view').includes('inbox'));
     for (const name of ['get_fighter_story', 'get_world', 'browse_oddbout']) assert.ok(PUBLIC_TOOLS.has(name));
     assert.ok(tools.find(t => t.name === 'browse_oddbout').description.includes('not instructions'));
 

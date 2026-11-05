@@ -405,8 +405,52 @@ Anthropic의 Claude 커넥터 디렉터리에 내는 주소는 `https://mcp.oddb
   - ChatGPT 앱 심사 1.0.3이 다루는 도구(`get_fighter_spec`, `get_profile`, `open_creator_homepage`, `check_creation_readiness`, `list_my_fighters`,
     `get_registered_fighter`, `get_fighter_submission`, 삭제·등록 도구)는 심사가 끝날 때까지 이름과 정의를 바이트까지 그대로 둔다
     ([공개 심사 기록](records/CLOUD-PLUGIN-REVIEW.md)). 시험이 이 열두 도구의 sha256을 본다. 2단계(쓰기 도구)와 함께 심사 뒤 한 번에 갱신한다.
+    → 1.0.3은 2026-11-06에 승인·게시됐고, 2단계가 이 도구들도 묶었다(아래).
   - `/claude` 디렉터리판은 원래 이름 35종 그대로다(통합도, 별칭도 없다).
   - 설명 문장은 줄이지 않았다. 제품 규칙을 담고 있어서 묶음으로 줄이지 않는다(목록 바이트 시험의 규칙).
+
+## 도구 통합 2단계 (2026-11-06)
+
+ChatGPT 앱 1.0.3이 승인되어 게시된 뒤, 쓰기 도구와 심사받은 등록 도구까지 묶었다. 최종 19종(2단계 B)이며, 지금은 그 앞 단계인 24종(2단계 A, 51,109 B)이다.
+대결장 키·호스팅 생성이 없으면 15종이다. 묶음은 `mcp/cloud/merged-tools.mjs`의 `MERGED_TOOLS`가 정한다.
+
+| 도구 | 선택 인자 → 원래 도구 |
+| --- | --- |
+| `get_my_fighters`(읽기, 예전 `get_my_fighter_updates`) | `view`: `list`(기본) → `list_my_fighters`, `fighter` → `get_registered_fighter`, `submission` → `get_fighter_submission`, `profile_set`, `career`, `inbox`, `readiness` → `check_creation_readiness`, `homepage` → `open_creator_homepage` |
+| `request_hosted_fighter` | `step`: `request`(기본), `choose_look` → `choose_hosted_look`, `revise_motion` → `revise_hosted_motion`, `picture_ticket` → `start_picture_upload` |
+| `prepare_fighter_registration` | `kind`: `package`(기본), `profile_set` → `prepare_profile_set`, `source_download` → `prepare_creator_source_download` |
+| `upload_fighter_asset` | `kind`: `package`(기본), `profile_set` → `upload_profile_set_asset`, `creator_source` → `store_creator_source` |
+| `submit_fighter_registration` | `kind`: `package`(기본), `profile_set` → `submit_profile_set`, `hosted` → `register_hosted_fighter` |
+| `update_fighter` | `kind`: `profile` → `update_fighter_profile`, `style` → `update_fighter_style` |
+| `enter_fighter` | `action`: `enter`(기본), `withdraw` → `withdraw_fighter` |
+| `write_story` | `write`: `canon` → `update_fighter_canon`, `note` → `post_workshop_note`, `resolve` → `resolve_workshop_note`, `relation` → `set_fighter_relation`, `world` → `manage_world`, `world_post` → `write_world_post` |
+| `manage_career` | `action`: `enter` → `enter_cup`, `choose_prep` → `choose_career_prep`, `auto` → `set_career_auto` |
+
+그대로 둔 것: `get_profile`(ChatGPT 프로필 출력 스키마), `get_fighter_spec`, `prepare_fighter_packaging`, `spar`, `prepare_fighter_deletion`·`delete_fighter`(확인값 2단계),
+`cancel_hosted_fighter`, 1단계의 `browse_oddbout`·`get_hosted_fighter`·`check_creator_file`.
+
+- **묶는 규칙.** 읽기와 쓰기를 섞지 않고, 로그인 조건이 다른 도구도 섞지 않는다. 쓰기 묶음은 가장 무거운 원래 도구를 따른다.
+  - 하나라도 destructive면 destructive다.
+  - 모두 재시도해도 안전할 때만 idempotent다.
+  - 하나라도 open-world면 open-world다.
+  - 그래서 `request_hosted_fighter`는 수정 단계(토큰을 쓰고 작업을 바꾼다, #349) 때문에 destructive다. `write_story`와 `manage_career`는 idempotent가 아니다.
+- **인자 모양.** 같은 이름의 인자가 원래 도구마다 다르면 둘 다 받는다(`anyOf`). 예: `manage_career`의 `fighterId`는 UUID이거나 slug다.
+  어느 쪽이 맞는지는 선택된 원래 도구가 자기 스키마로 다시 검사한다.
+- **원래 도구 이름을 지킨다.** 원래 도구의 이름을 그대로 쓴 묶음(`upload_fighter_asset` 등)은 선택 인자 없이 부르면 원래 도구로 동작한다.
+  그래서 게시된 1.0.3이 옛 정의대로 부르는 호출이 그대로 통한다. 선택 인자에는 zod 기본값을 두지 않는다.
+- **결과 문장.** 새 이름이나 선택 인자로 부른 호출만 결과 속 도구 이름을 새 형식으로 바꾼다(`renameDeep`).
+  옛 이름으로 들어온 호출(`Call.legacy`)과 선택 인자 없는 호출은 옛 이름 그대로 받는다. 옛 목록만 아는 클라이언트를 모르는 도구로 보내지 않기 위해서다.
+- **2단계 A와 B.** OpenAI 문서(developers.openai.com/plugins/deploy/app-review, "Ongoing Maintenance")에 따르면 게시된 앱의 도구 정의는 계속 다시 스캔된다.
+  - 목록에서 빠진 도구는 다음 스캔에서 바로 사라진다.
+  - 새 도구는 자동 검사를 통과해야 보인다.
+  - 바뀐 도구는 새 정의가 통과할 때까지 옛 정의가 쓰인다.
+  - OpenAI 지원팀의 예전 포럼 답변은 "승인 때 정의가 고정된다"고 해서 어느 쪽인지 확정하지 못했다.
+  - 어느 쪽이든 공백이 없도록 1.0.3의 다섯 읽기(`list_my_fighters`, `get_registered_fighter`, `get_fighter_submission`, `check_creation_readiness`,
+    `open_creator_homepage`)는 원래 정의 그대로 목록에 남긴다(`KEEP_LISTED`, 24종). 시험이 1.0.3의 아홉 도구를 바이트 단위로 본다.
+  - 포털에서 `get_my_fighters`의 Live definition이 승인된 것을 확인한 뒤 `KEEP_LISTED`를 비운다(2단계 B, 19종).
+  - 다섯 도구의 처리 코드는 계속 남는다. 목록에서 빠져도 옛 이름으로 부를 수 있다.
+- **바이트.** 2단계 B의 목록은 47,919 B다(1단계 55,986 B). 설명 문장은 여전히 줄이지 않았다.
+- **ChatGPT 앱 1.0.4.** 1.0.3의 등록 설명("등록·삭제만, 생성·결제 없음")은 지금 목록과 맞지 않는다. 새 패키지로 설명·기능·정책을 고쳐 다시 제출한다.
 
 ## 사용 흐름
 

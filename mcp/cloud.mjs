@@ -146,7 +146,8 @@ export async function authenticateCloud(db, request, now = Date.now, edition = '
 /**
  * One request's call, for its tools and its log line: `requestId` (the gateway's, else this function's), the client's `protocol` version,
  * the request's `signal` (aborted when the client goes away) and the `deadline` its answer is due by (CALL_BUDGET_MS from its arrival).
- * @typedef {{ requestId?: string, protocol?: string | null, signal?: AbortSignal, deadline?: number }} Call
+ * @typedef {{ requestId?: string, protocol?: string | null, signal?: AbortSignal, deadline?: number, legacy?: boolean }} Call  `legacy`: called by a
+ *   name no longer listed (cloud/merged-tools.mjs `aliasCall`), so its results keep the old names
  */
 /**
  * One MCP request as its log line names it (createCloudHandler): `route`, the address it came to (/mcp and /signin are both the full edition).
@@ -278,7 +279,8 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
       const started = Date.now(), signals = [ctx?.mcpReq?.signal, call.signal].filter(signal => signal !== undefined);
       // The SDK's signal ends with a cancellation; the request's, when the client goes away (2026-07-28 reads a closed stream as one).
       /** @type {import('./cloud/common.mjs').ToolContext} */
-      const context = { signal: signals.length ? AbortSignal.any(signals) : new AbortController().signal, deadline: call.deadline ?? started + CALL_BUDGET_MS };
+      const context = { signal: signals.length ? AbortSignal.any(signals) : new AbortController().signal, deadline: call.deadline ?? started + CALL_BUDGET_MS,
+        ...(call.legacy ? { legacy: true } : {}) };
       /** @type {Record<string, unknown>} */
       let value;
       /** @type {unknown} */
@@ -467,7 +469,8 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted =
     line.method = body.method.slice(0, 80);
     if (body.method === 'tools/call' && typeof body.params?.name === 'string') line.tool = body.params.name.slice(0, 80);
     // A merged-away tool's own name (a host's older list) is its merged tool's view; the request line keeps the name the host called.
-    if (edition === 'full') body = aliasCall(body);
+    const aliased = edition === 'full' ? aliasCall(body) : body, legacy = aliased !== body;
+    body = aliased;
     // Whether the host is ChatGPT is the body's to say, not the sign-in's: its refused calls are named so too (MCP 리뷰 2026-11-05).
     const host = await hostOf(body);
     line.compact = host.compact;
@@ -481,7 +484,7 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted =
     const given = request.headers.get('x-request-id') ?? '', version = request.headers.get('mcp-protocol-version') ?? '';
     /** @type {Call} */
     const call = { requestId: UUID.test(given) ? given.toLowerCase() : crypto.randomUUID(),
-      protocol: /^\d{4}-\d{2}-\d{2}$/.test(version) ? version : null, signal: request.signal, deadline: started + budgetMs };
+      protocol: /^\d{4}-\d{2}-\d{2}$/.test(version) ? version : null, signal: request.signal, deadline: started + budgetMs, ...(legacy ? { legacy } : {}) };
     /** @type {Parameters<typeof cloudServer>[0]} */
     const options = { db, identity, fetcher, arena, hosted, host, edition, call };
     try {
