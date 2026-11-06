@@ -73,7 +73,7 @@
             },
             {
               "description": "P3 — Inspect an existing owned registration and prepare deletion without executing it. Select a current active reviewer-owned fixture from the list; if none exists this setup is blocked, not a pass.",
-              "prompt": "Open my fighter named ODDBOUT Review Test and its latest registration submission. Show the actual submission stage. Prepare a deletion preview for that fighter and tell me its name, what would be removed or kept, and when the confirmation expires. Stop before deletion and keep confirmation values private.",
+              "prompt": "Open my fighter named ODDBOUT Review Test and its latest registration submission. Show the actual submission stage. Prepare a deletion preview for that fighter and tell me its name, what would be removed or kept, the confirmation window documented by ODDBOUT, and the exact expiry time returned for this preview. Stop before deletion and keep confirmation values private.",
               "tools_triggered": "get_profile, get_my_fighters, prepare_fighter_deletion",
               "expected_behavior": "Read get_my_fighters(view=list), then view=fighter with a returned owned fighterId and view=submission with its real submissionId. Report actual stages. Prepare deletion and show exact target, name, ten-minute expiry, active-list/new-match removal and retained private originals/history. Keep the confirmation secret out of public evidence. Do not invoke delete_fighter or recreate a deleted fixture."
             },

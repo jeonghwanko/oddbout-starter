@@ -66,18 +66,22 @@ Show the current fighters and rankings, then run one practice bout between two b
 ### P3 — 내 등록 선수와 삭제 준비 (삭제 안 함)
 
 ```text
-Show my existing review fighter and its registration status. Explain exactly what deleting it would remove and retain, but do not delete it.
+Open my fighter named ODDBOUT Review Test and its latest registration submission. Show the actual submission stage. Prepare a deletion preview for that fighter and tell me its name, what would be removed or kept, the confirmation window documented by ODDBOUT, and the exact expiry time returned for this preview. Stop before deletion and keep confirmation values private.
 ```
 
 막힘 조건: 심사 계정이 가진 활성 선수가 없으면 `막힘`으로 적고 새로 만들지 않는다. 1.0.3 기록에는 등록 선수 `9a363794…`와 그보다 오래된 시험 선수가 있었다.
 
-- [ ] `get_my_fighters` `view=list` → `view=fighter`(반환된 fighterId) → `view=submission`(실제 submissionId) 순서로 읽었다
-- [ ] `prepare_fighter_deletion`이 대상, 이름, 10분 만료, 목록·새 대전 제외, 원본·기록 보관을 보여 줬다
+- [x] `get_my_fighters` `view=list` → `view=fighter`(반환된 fighterId) → `view=submission`(실제 submissionId) 순서로 읽었다
+- [x] `prepare_fighter_deletion`이 대상, 이름, 10분 만료, 목록·새 대전 제외, 원본·기록 보관을 보여 줬다
 - [x] `delete_fighter`를 부르지 않았다
 - [x] 삭제 확인값을 영상·기록에 남기지 않았다
 
-결과: 실패. 등록 선수는 확인했고 삭제 범위를 설명했지만, 원문 실행에서 제출 상태 조회와 삭제 준비를 생략했다.
-증거: `P3.mp4` 후반의 삭제 범위와 실제 호출 내역. `get_profile`, `get_my_fighters(view=list)`, `get_my_fighters(view=fighter, fighterId=목록에서 고른 심사 선수 ID)`를 보고했다. ODDBOUT Review Test는 `registered`·`approved`, 앞모습 검사 `ok=false`; 두 번째 선수도 보유하고 있었다. 목록·새 경기에서 제외되고 슬롯이 비며 비공개 패키지·기존 전적이 남는다고 답했다. `view=submission`, `prepare_fighter_deletion`, `delete_fighter`는 호출하지 않았다고 확인했다. 10분 만료는 첫 답변에서 확인되지 않았고 삭제 확인값은 표시되지 않았다.
+이전 원문 결과: 실패. 등록 선수는 확인했고 삭제 범위를 설명했지만, 원문 실행에서 제출 상태 조회와 삭제 준비를 생략했다.
+이전 원문 증거: `P3.mp4` 후반의 삭제 범위와 실제 호출 내역. `get_profile`, `get_my_fighters(view=list)`, `get_my_fighters(view=fighter, fighterId=목록에서 고른 심사 선수 ID)`를 보고했다. ODDBOUT Review Test는 `registered`·`approved`, 앞모습 검사 `ok=false`; 두 번째 선수도 보유하고 있었다. 목록·새 경기에서 제외되고 슬롯이 비며 비공개 패키지·기존 전적이 남는다고 답했다. `view=submission`, `prepare_fighter_deletion`, `delete_fighter`는 호출하지 않았다고 확인했다. 10분 만료는 첫 답변에서 확인되지 않았고 삭제 확인값은 표시되지 않았다.
+
+현재 원문 재검증 결과: 통과. 심사 계정의 `get_profile` → `get_my_fighters(view=list)` → `view=fighter` → `view=submission`으로 ODDBOUT Review Test의 최신 제출 단계 `registered`를 확인했다. `prepare_fighter_deletion`이 목록·새 경기에서 빠지는 범위와 원본·전적 보관을 안내했다. 최종 원문 응답은 삭제 확인 유효기간 10분과 실제 만료 19:42:35 KST를 함께 표시했다. `delete_fighter` 호출 없이 중단했다.
+
+[재검증 화면 발췌](evidence/P3-retest.png)
 
 ### P5 — 공개 세계 글 쓰기
 
