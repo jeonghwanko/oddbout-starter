@@ -1,5 +1,60 @@
 # 호스팅 생성기 (`host/`)
 
+## `npx oddbout-host`
+
+내 PC(Windows·macOS·Linux)와 내 SuperGrok 구독으로 oddbout.com의 내 선수를 만든다. Node 22.12 이상만 있으면 된다.
+
+```sh
+npx -y oddbout-host@0.1.0
+```
+
+처음 한 번은 아래 순서로 간다. 단계마다 사이트의 내 PC 카드에 지금 어디인지 보인다(하트비트 `setup`).
+
+1. **연결** — 브라우저에 `oddbout.com/creator.html#pc=ABCD-EFGH`가 열린다. 로그인한 계정으로 코드와 PC 이름을 확인하고 "연결"을 누른다.
+   복사할 코드는 없다. 워커 열쇠는 설치 폴더의 `worker.env`에만 들어가고 화면에 나오지 않는다. 안 되면 `--join <ohj_…>`(사이트의 붙이기 코드).
+2. **키트** — creator-kit ZIP(`vendor/sprite-gen` 포함: Git·서브모듈 없음)과 그 Node 패키지
+3. **Python** — 이 PC에 3.11~3.13(venv·sqlite3)이 없을 때만 standalone Python 3.12
+4. **sprite-gen** — 키트의 `sprite:setup`(venv, img2webp, RIFE)
+5. **ffmpeg** — 정적 ffmpeg·ffprobe 9.0.2(Linux는 시스템에 있으면 그것)
+6. **Grok 로그인** — Grok CLI 1.0.52, 기기 인증(주소를 열고 코드 입력)
+7. **Codex 로그인(선택)** — 물어본다(`--codex`·`--no-codex`). ChatGPT 구독이 있으면 그림을 GPT로도 고를 수 있다. Codex CLI 0.165.0(약 500 MB)
+8. **워커** — 이 창에서 돈다. 창을 닫거나 PC가 잠들면 멈추고, 다시 켜면 맡은 단계를 이어서 한다. Ctrl-C는 실행 중인 단계를 먼저 끝낸다.
+
+다음부터는 같은 명령 한 줄로 다시 켠다. 설치된 것은 건너뛴다.
+
+| 명령 | 하는 일 |
+| --- | --- |
+| `npx oddbout-host [--name <PC 이름>] [--codex\|--no-codex] [--slots 2\|3]` | 연결·설치(처음)·로그인 확인·워커 |
+| `npx oddbout-host login grok\|codex [--replace]` | 구독 로그인(`--replace`: 다른 계정). codex는 CLI부터 설치한다 |
+| `npx oddbout-host status` | 설치·연결·로그인·작업 |
+
+- **설치 폴더**: Windows `%LOCALAPPDATA%\oddbout-host`, macOS `~/Library/Application Support/oddbout-host`, Linux `~/.local/share/oddbout-host`
+  (`--root`·`ODDBOUT_HOST_ROOT`). 그 안에 `bin/`(이 패키지의 생성기 파일과 `og.mjs`), `kit/`, `python/`, `ffmpeg-9.0.2/`, `tools/`(Grok CLI),
+  `codex/`(선택), `host.env`, `worker.env`, `runner.json`(설치된 핀), `setup.log`가 있다.
+- **정확한 버전만**: 받는 것은 모두 [`pins.json`](pins.json)이 크기와 SHA-256으로 고정한다(CLI는 [`cli/`](cli)의 npm 락파일, `npm ci --ignore-scripts`).
+  다르면 쓰지 않고 멈춘다. 새 버전은 **열린 작업이 없을 때만** 올린다. 열린 작업은 시작한 파일로 끝낸다.
+- 한 설치 폴더에는 한 러너만 돈다(`runner.lock`). Linux에서 `npm run host`의 서비스 워커가 돌고 있으면 시작하지 않는다.
+- 공개(npm publish)는 `prepublishOnly`가 `check-pins.mjs --publish`로 막는다: 키트의 엔진이 공식 호스트(`og.mjs` `KIT_REF`)와 같아야 하고,
+  키트 `release.json`이 고정한 ZIP을 가리켜야 한다(`--download`면 모든 파일을 다시 받아 대조한다).
+  **지금 고정한 키트 0.6.17은 sprite-gen `5fc42b6`이라 Grok 그림의 dominance 매트(sprite-gen-agent#55)가 없다.** `KIT_REF`(sprite-gen `2d781c9`)로
+  새 키트를 낸 뒤 `pins.json`의 `kit`을 옮겨야 공개할 수 있다.
+
+| 파일 | 하는 일 |
+| --- | --- |
+| `runner.mjs` | 패키지의 bin. 위 순서, 연결(`api/host-pairing.mjs`), 설치 중 하트비트, 앞에서 도는 워커 |
+| `install.mjs` | 설치 폴더·`host.env`·생성기 파일 복사·열린 작업·`checkSystem`·로그인 — `scripts/host.mjs`(`npm run host`)와 함께 쓴다 |
+| `pinned.mjs` | 고정 파일 받기(크기·SHA-256), ZIP 풀기(Node만, 폴더 밖 이름·심볼릭 링크 거부), `.tar.gz`는 OS의 tar |
+| `pins.json`, `cli/` | 키트·Python·ffmpeg·CLI의 고정값. `runner.test.mjs`가 `og.mjs`의 버전·키트 사이트와 맞춘다 |
+| `check-pins.mjs` | 고정값 검사(시험과 공개 전). 패키지에는 넣지 않는다 |
+
+2026-11-07 이 PC(Windows 11 x64)에서 연결 없이 실제 핀으로 설치 단계를 돌렸다: 키트·Python 3.12.15·ffmpeg 9.0.2·Grok CLI·키트 npm·sprite-gen venv·img2webp
+모두 됐다(합 약 3분). **RIFE만 안 깔린다**: rife-ncnn-vulkan 20221029의 Windows ZIP은 모델 `flownet.param`이 CRLF라 SHA-256이 다르고
+(`28df14d5…`), sprite-gen은 LF 판(`72456959…`)만 받는다. 고리는 RIFE 없이 찍힌 대로 가고 경고가 남는다(엔진에서 고칠 일).
+아직 실기로 확인하지 않은 것: 깨끗한 Windows 11·Apple silicon Mac에서 연결 → Grok 로그인 → 선수 1명(계획 1.3·1.6의 실기 검증),
+Windows RIFE(x64·Vulkan), 경로 260자, Defender, macOS 서명. ffmpeg는 GPL 빌드를 배포처(gyan.dev, martin-riedl.de)에서 직접 받는다.
+
+---
+
 ODDBOUT 제작자 페이지·에이전트의 **호스팅 생성 신청**(글과 그림 → 선수)을 실제로 만드는 생성 PC의 도구다.
 서버(`api/generations.mjs`)는 작업 표와 상태만 가진다. 그림·동작은 이 도구가 생성 PC의 GPT(codex)·Grok 구독으로 만든다.
 

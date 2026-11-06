@@ -57,6 +57,11 @@ export const imagesOf = ({ codex, grok }) => grok ? (codex ? ['grok', 'gpt'] : [
 /** A health with these logins: whether it may claim (canWork) and the pictures it draws (imagesOf), the rest kept. */
 const withLogins = (health, logins, configured, ok = true) =>
   ({ ...health, ...logins, ok: ok && canWork(logins, configured), images: imagesOf(logins) });
+/**
+ * A heartbeat's health with what the runner says of this PC (`about`, oddbout-host: `platform`, `runner`, `setup`; the site's My PC card
+ * reads them). The logins' own keys always win: `about` never says a PC may claim.
+ */
+export const aboutHealth = (health, about) => about ? { ...about, ...health } : health;
 /** `og health` lines → { ok, codex, grok, images, at }: `ok` says this host may claim (canWork), `codex` and `grok` each login. */
 export function parseHealth(output, at = new Date().toISOString(), configured = undefined) {
   const ok = p => new RegExp(`^og: ${p} ok\\b`, 'm').test(output);
@@ -481,10 +486,11 @@ export function createFrontCheck({ api, og, python, kit, say, providerDown, work
 
 /**
  * The worker's loop. `once`: one claim, for a manual run. `og`: bash og's path (`<root>/bin/og`, the default) or og.mjs's runner, and
- * `python`: the kit's sprite-gen Python (spritePython) — injected by og.mjs `worker run` on a host without bash.
- * @param {{ once?: boolean, root?: string, og?: Parameters<typeof ogClient>[0], python?: string }} [options]
+ * `python`: the kit's sprite-gen Python (spritePython) — injected by og.mjs `worker run` on a host without bash. `about`: what every
+ * heartbeat says of this PC beside its logins (oddbout-host, 2026-11-07: `platform`, `runner`, `setup`; aboutHealth).
+ * @param {{ once?: boolean, root?: string, og?: Parameters<typeof ogClient>[0], python?: string, about?: Record<string, string> | null }} [options]
  */
-export async function main({ once = false, root = ROOT, og: ogGiven, python: pythonGiven } = {}) {
+export async function main({ once = false, root = ROOT, og: ogGiven, python: pythonGiven, about = null } = {}) {
   const env = parseEnv(await readFile(path.join(root, 'worker.env'), 'utf8'));
   if (!/^https:\/\//.test(env.ODDBOUT_GENERATION_API ?? '') || !/^afw_[a-f0-9]{64}$/.test(env.ODDBOUT_GENERATION_WORKER_KEY ?? ''))
     throw new Error('worker.env needs ODDBOUT_GENERATION_API (https) and ODDBOUT_GENERATION_WORKER_KEY (afw_…)');
@@ -529,7 +535,7 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
       await say(`prune ${(await og.prune(keepDays(env.ODDBOUT_GENERATION_KEEP_DAYS))).trim().split('\n').at(-1) ?? ''}`);
     }
     if (Date.now() - beatAt >= TIMING.heartbeatMs) {
-      const reply = await api.heartbeat(health, await codexUsage(sessions).catch(() => null)).catch(error => ({ ok: false, code: error.message }));
+      const reply = await api.heartbeat(aboutHealth(health, about), await codexUsage(sessions).catch(() => null)).catch(error => ({ ok: false, code: error.message }));
       if (reply.ok) beatAt = Date.now(); else await say(`heartbeat failed ${reply.code ?? reply.status}`);
     }
   }
@@ -554,7 +560,7 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
   let frontDue = 0, frontWait = FRONT_RETRY_MS;
   async function frontTurn() {
     // A check holds the loop: the heartbeat goes on beside it, or the official host looks offline and refuses requests.
-    const beating = setInterval(() => { api.heartbeat(health).catch(() => {}); }, TIMING.heartbeatMs);
+    const beating = setInterval(() => { api.heartbeat(aboutHealth(health, about)).catch(() => {}); }, TIMING.heartbeatMs);
     const outcome = await checkFront().catch(error => { say(`front check error ${error.message}`); return 'failed'; })
       .finally(() => clearInterval(beating));
     if (outcome === 'judged') { frontDue = 0; frontWait = FRONT_RETRY_MS; }

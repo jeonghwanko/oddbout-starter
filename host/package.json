@@ -1,0 +1,41 @@
+{
+  "name": "oddbout-host",
+  "version": "0.1.0",
+  "description": "One command makes your PC an ODDBOUT generation host: your SuperGrok (and, if you like, ChatGPT) makes your fighters.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "oddbout-host": "runner.mjs"
+  },
+  "engines": {
+    "node": ">=22.12"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jeonghwanko/oddbout-starter.git",
+    "directory": "host"
+  },
+  "homepage": "https://oddbout.com",
+  "files": [
+    "runner.mjs",
+    "install.mjs",
+    "pinned.mjs",
+    "pins.json",
+    "cli/grok/package.json",
+    "cli/grok/lock.json",
+    "cli/codex/package.json",
+    "cli/codex/lock.json",
+    "og.mjs",
+    "og",
+    "generation-worker.mjs",
+    "generation-stages.mjs",
+    "codex-usage.mjs",
+    "sprite-outcome.mjs",
+    "ledger-report.mjs",
+    "motions.py",
+    "style-anchor-front.webp"
+  ],
+  "scripts": {
+    "prepublishOnly": "node check-pins.mjs --publish"
+  }
+}

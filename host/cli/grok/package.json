@@ -1,0 +1,8 @@
+{
+  "name": "oddbout-host-grok",
+  "private": true,
+  "description": "The Grok CLI an ODDBOUT host runs (oddbout-host pins.json).",
+  "dependencies": {
+    "@xai-official/grok": "1.0.52"
+  }
+}

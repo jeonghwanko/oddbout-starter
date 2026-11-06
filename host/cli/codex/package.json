@@ -1,0 +1,8 @@
+{
+  "name": "oddbout-host-codex",
+  "private": true,
+  "description": "The Codex CLI an ODDBOUT host runs for GPT pictures (oddbout-host pins.json).",
+  "dependencies": {
+    "@openai/codex": "0.165.0"
+  }
+}
