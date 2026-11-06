@@ -12,6 +12,7 @@ import { registerAgentTools } from './cloud/agent-tools.mjs';
 import { registerProfileSetTools } from './cloud/profile-set-tools.mjs';
 import { registerWorkshopTools } from './cloud/workshop-tools.mjs';
 import { HOSTED_INSTRUCTIONS, hostedCandidateImages, registerHostedTools } from './cloud/hosted-tools.mjs';
+import { LOOK_UI, registerLookUi } from './cloud/hosted-look-ui.mjs';
 import { DIRECTORY_DESCRIPTIONS, DIRECTORY_INSTRUCTIONS, DIRECTORY_TITLES } from './cloud/directory-edition.mjs';
 import { aliasCall, memberOf, mergingRegister, renameTools } from './cloud/merged-tools.mjs';
 import { mcpServing } from './cloud/serve.mjs';
@@ -262,6 +263,7 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
       // The directory edition repeats the title among the annotations, where Anthropic's tool checklist looks for it with the hints.
       annotations: { ...(directory ? { title } : {}), ...READ, readOnlyHint: !write, openWorldHint: openWorld, destructiveHint: publish, idempotentHint: idempotent },
       ...(openaiMeta ? { _meta: { securitySchemes: publicTool ? [{ type: 'noauth' }] : AUTH,
+        ...(name === 'get_hosted_fighter' && hosted ? { ui: { resourceUri: LOOK_UI }, 'openai/outputTemplate': LOOK_UI } : {}),
         ...(files.length ? { 'openai/fileParams': files } : {}), ...(profile ? { 'openai/profile': true } : {}) } } : {}) },
     async (/** @type {Record<string, unknown>} */ args, /** @type {import('@modelcontextprotocol/server').ServerContext | undefined} */ ctx) => {
       /**
@@ -292,7 +294,8 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
       if (name === 'get_hosted_fighter' && identity && value.ok === true) {
         const images = await hostedCandidateImages(/** @type {Parameters<typeof hostedCandidateImages>[0]} */ (value.job), fetcher, context);
         if (images.length) {
-          const answer = reply({ ...value, next: 'The attached front views are candidate A, then B. Show both images. ' + value.next }, host.compact === true);
+          const answer = reply({ ...value, previewPair: true, next: 'The read-only comparison shows the original fronts A and B in hosts with app UI. '
+            + 'Do not claim the user saw them solely because the tool returned images. ' + value.next }, host.compact === true);
           return { ...answer, content: [...answer.content, ...images] };
         }
       }
@@ -317,7 +320,10 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
     registerAgentTools({ register, arena, db, identity, invoke, recordAgent, caller: host.caller ?? null, directory, uploads: fileHost });
     registerWorkshopTools({ register, arena, invoke, separateWrites: directory });
   }
-  if (hosted && !directory) registerHostedTools({ register, db, identity, invoke, fetcher, hosted, uploads: fileHost });
+  if (hosted && !directory) {
+    registerLookUi(server);
+    registerHostedTools({ register, db, identity, invoke, fetcher, hosted, uploads: fileHost });
+  }
   registerFileInputProbe({ register, fileSchema: FILE, identity, downloadFile: downloadHostFile, fetcher });
   registerCreatorSources({ register, fileSchema: FILE, identity, db, downloadFile: downloadHostFile, fetcher });
   merging?.finish();

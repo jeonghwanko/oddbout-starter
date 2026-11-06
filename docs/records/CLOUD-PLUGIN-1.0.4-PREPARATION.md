@@ -1,18 +1,18 @@
 # ODDBOUT 1.0.4 preparation — 2026-11-06
 
-Status: **draft package; not uploaded, submitted or ready for submission**. The user requires separate approval for portal upload, submission, cancellation, publication and merging the PR. MCP server code is unchanged. Preserve the old 1.0.1 and 1.0.0 drafts.
+Status (2026-11-07): package PR [#350](https://github.com/jeonghwanko/oddbout-starter/pull/350) merged at `387a7a1e`. The 1.0.4 package has not been uploaded or submitted. Preserve the old 1.0.1 and 1.0.0 drafts.
 
 Package: `oddbout-dots`; public plugin: `plugin_asdk_app_6adc695de1bc8191a604b42bbaa178af`; existing endpoint: `https://mcp.oddbout.com/mcp`.
 
 ## Current ZIP, hosted recording and release gates
 
-The [existing recording URL](https://oddbout.com/cloud-plugin/review-1.0.4/walkthrough.mp4) serves the 106.83-second reviewer edit with the production v103 ChatGPT retest and excerpts from the revised P3/P4/P5/N2 runs. The [Pages deployment](https://github.com/jeonghwanko/oddbout-starter/actions/runs/42245163698) replaced the MP4 and deployment marker. Anonymous full and range responses matched the file (2,903,548 bytes, SHA-256 `204055e17f1596238331f1d099f337c68c2e04c1189c9493a9d7799d08e1fd82`). A fresh Edge session played from the beginning and after seeks to 68 s and 102 s. [Site source #360](https://github.com/jeonghwanko/oddbout-starter/pull/360) keeps the same video for subsequent builds if merged.
+The [stable recording URL](https://oddbout.com/cloud-plugin/review-1.0.4/walkthrough.mp4) is unchanged. The current footage and verification are documented in the [run sheet](cloud-plugin-1.0.4/REVIEW-RUN.md); [site source #360](https://github.com/jeonghwanko/oddbout-starter/pull/360) contains the updated MP4.
 
 **Current ZIP:** `output/review-20261106-fixed-cases/oddbout-dots-1.0.4.zip`, **34,499 bytes**, SHA-256 `50b53f3009c709394c6ab2ae8d0b47b7a3096efe087edc9e2021708c18bf0540`. It contains exactly the manifest, the 1.0.3 authentication configuration and two icon files. Every entry matched committed source. The English release notes, Korean subtitle and description, five positive and three negative prompts, tool names, four listing URLs in both languages, and recording URL were checked. Market selection remains in the portal; no country values were guessed.
 
-The [run sheet](cloud-plugin-1.0.4/REVIEW-RUN.md) holds the case results and the [production ChatGPT reply](cloud-plugin-1.0.4/evidence/P2-v103-read.jpg). [Runtime PR #361](https://github.com/jeonghwanko/oddbout-starter/pull/361) merged at `978e9aa0` and shipped in verified MCP Edge v103. A reviewer-scoped read returned two native WebP blocks identical to the existing job’s originals. Neither the initial ChatGPT reply nor the follow-up actually displayed or attached A and B. Candidate display in the user-facing chat remains the release gate.
+Case outcomes and screens, including the v103 and v104 P2 reads, are maintained only in the [run sheet](cloud-plugin-1.0.4/REVIEW-RUN.md).
 
-The [production tools/list](cloud-plugin-1.0.4/tools-list.20261106-evening.json) in v103 matches the previously rescanned list, including all 19 tools (48,125 bytes, SHA-256 `231ea4a82589e10771929a24c9bcd68841da98b5325a1dd53e201dc189a8dd39`). The portal rescan completed at 00:14:33 KST on November 7 with 19 Published, no findings, and the optional `imageProvider` field present in the cached request definition. Enter the reset reviewer password in the portal’s private reviewer access fields after upload is authorized.
+The [v104 production list](cloud-plugin-1.0.4/tools-list.v104.json) has 19 tools (48,242 bytes, SHA-256 `64d98a2dd4cfe08be142d873086fb46e42a3bb1a8b73c477a5182ad7d6df0386`). Compared with [v103](cloud-plugin-1.0.4/tools-list.20261106-evening.json), only the UI template metadata on `get_hosted_fighter` changed. The portal rescan included that template and reported no findings. Enter the reset reviewer password in the private reviewer access fields only after upload is authorized.
 
 ## 19-tool inventory and previous ZIP (2026-11-06 KST)
 

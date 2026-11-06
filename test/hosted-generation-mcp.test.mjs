@@ -30,7 +30,7 @@ async function connector(g, hosted, fetcher = async () => new Response(png(512, 
   };
   // A tool's JSON: a host other than ChatGPT gets it as the text only (MCP 최적화 2026-11-05).
   const toolJson = result => result.structuredContent ?? JSON.parse(result.content[0].text);
-  return { downloads, loseNextResponse: () => { loseResponse = true; }, tools: async () => (await rpc('tools/list', {})).tools,
+  return { downloads, rpc, loseNextResponse: () => { loseResponse = true; }, tools: async () => (await rpc('tools/list', {})).tools,
     call: async (name, args) => toolJson(await rpc('tools/call', { name, arguments: args })),
     raw: (name, args) => rpc('tools/call', { name, arguments: args }),
     text: async (name, args) => (await rpc('tools/call', { name, arguments: args })).content[0].text,
@@ -64,6 +64,7 @@ test('a ready owner job carries both original WebPs in order; list, foreign jobs
       const result = await raw('get_hosted_fighter', args);
       assert.deepEqual(result.content.slice(1), images.map(data => ({ type: 'image', mimeType: 'image/webp', data })));
       assert.ok(result.structuredContent.job.candidates[0].url);
+      assert.equal(result.structuredContent.previewPair, true);
       assert.doesNotMatch(JSON.stringify(result.structuredContent), /UklGR/);
     }
     const before = reads.length;
@@ -76,6 +77,7 @@ test('a ready owner job carries both original WebPs in order; list, foreign jobs
     const fallback = await raw('get_hosted_fighter', { jobId: job });
     assert.equal(fallback.content.length, 1);
     assert.equal(fallback.structuredContent.job.status, 'appearance_ready');
+    assert.equal(fallback.structuredContent.previewPair, undefined);
     assert.ok(fallback.structuredContent.job.candidates[1].url);
   } finally { await g.sql.close(); }
 });
@@ -85,7 +87,17 @@ test('hosted generation tools list only when configured', async () => {
   try {
     const off = (await (await connector(g, null)).tools()).map(t => t.name);
     for (const name of HOSTED) assert.ok(!off.includes(name), name);
-    const on = await (await connector(g, {})).tools();
+    const enabled = await connector(g, {}), on = await enabled.tools();
+    const [withUi] = on.filter(t => t._meta?.ui?.resourceUri);
+    assert.deepEqual(on.filter(t => t._meta?.ui?.resourceUri).map(t => t.name), ['get_hosted_fighter']);
+    const uri = withUi._meta.ui.resourceUri;
+    assert.equal(withUi._meta['openai/outputTemplate'], uri);
+    const listed = await enabled.rpc('resources/list', {});
+    assert.ok(listed.resources.some(r => r.uri === uri && r.mimeType === 'text/html;profile=mcp-app'));
+    const { contents: [template] } = await enabled.rpc('resources/read', { uri });
+    assert.equal(template.uri, uri); assert.equal(template.mimeType, 'text/html;profile=mcp-app');
+    assert.deepEqual(template._meta.ui.csp.connectDomains, []);
+    assert.doesNotMatch(template.text, /[?]token=|UklGR|choose_hosted_look|request_hosted_fighter/);
     for (const name of HOSTED) assert.ok(on.some(t => t.name === name), name);
     assert.deepEqual(on.find(t => t.name === 'request_hosted_fighter')._meta['openai/fileParams'], ['picture', 'secondPicture']);
     const submit = on.find(t => t.name === 'submit_fighter_registration');
