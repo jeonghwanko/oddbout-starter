@@ -155,6 +155,8 @@ Invent the missing animation files and hashes, register the fighter without revi
 
 지금 `demo_recording_url`의 42초 영상(`/cloud-plugin/review-1.0.4/walkthrough.mp4`)은 공개 장면만 담고 있다. 위 실행 화면으로 새 영상을 만들어 제출 전에 교체한다.
 
+2026-11-06 실제 실행 편집본은 로컬 `Videos/ODDBOUT-review-20261106/reviewer-run/ODDBOUT-ChatGPT-review.mp4`에 있다. ChatGPT 브라우저 화면을 구간별로 캡처해 편집했으며 P5의 공개 라운지 재조회도 담았다. 아래 표는 제출용 촬영 계획이다. 실제 편집본은 P1 → P4 → P3 → P5 → P2 → N1 → N2 → N3 순서의 8개 챕터이며, P2 장면은 생성 중단과 사용량 조회까지다. 1920×1080 H.264, 영어 자막, 81.83초, 2,174,387바이트, SHA-256 `45224adf587344f651fd03db6b4953fbb1d284327eca114eb5d65e5555b94d0b`. 전체 비디오 디코딩과 장면별 화면을 확인했다.
+
 | 구간 | 장면 | 보여 줄 것 |
 | --- | --- | --- |
 | 0:00–0:15 | 연결 | ODDBOUT 앱이 연결된 ChatGPT, 동의 화면의 승인(비밀번호 입력 제외) |
@@ -165,7 +167,7 @@ Invent the missing animation files and hashes, register the fighter without revi
 | 2:10–2:35 | P3 | 등록 상태와 삭제 준비 안내(확인값 가림) |
 | 2:35–3:05 | N1–N3 | 세 거절 응답 |
 
-- [ ] 비밀번호 입력, P1의 이메일, P3의 삭제 확인값, 토큰·콜백이 화면에 없다(가렸다)
+- [x] 로컬 편집본에서 로그인·콜백·삭제 확인값은 촬영하지 않았고, 이메일·비공개 식별값은 화면에서 제외하거나 가렸다.
 - [ ] oddbout.com에 main 병합으로 올렸고, 로그인 없이 처음부터 재생되고 건너뛰기가 된다
 - [ ] `demo_recording_url`을 새 주소로 바꿨다
 
@@ -173,7 +175,7 @@ Invent the missing animation files and hashes, register the fighter without revi
 
 ## 제출 전 마지막 확인
 
-- [ ] 8개 결과가 모두 기록됐다 (막힘이 있으면 원인과 해결 여부)
+- [x] 8개 결과가 모두 기록됐다. 통과 P1·N1·N3, 실패 P3·P4·P5·N2, 막힘 P2. P5의 공개 게시 결과는 보정 후 검증했다.
 - [ ] 릴리스 노트는 영어로 작성한 사용자용 업데이트 설명이며, 한국어 번역은 부제목과 앱 설명에만 들어 있다.
 - [ ] ZIP을 다시 만들고 크기·SHA-256을 기록했다
 - [ ] 심사 계정 비밀번호를 바꿨다면, 업로드 승인 후 포털 **Review details**에 새 값을 넣을 준비가 됐다 (값은 여기 적지 않음)
