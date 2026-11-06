@@ -148,6 +148,8 @@ GPT는 자세마다 몸을 따로 그려 외형보다 2~20% 커지거나 작아�
   키 없는 판정의 `judge` 문구는 "모델과 강도 기록 없음"이다. 새로 하는 판정은 언제나 지금 키를 쓴다. 운영자가 지금 판정기로 다시 보게 하려면 그 판정 파일을 지운다(명시적 요청). 다음 단계 실행이 그 컷만 다시 판정한다.
   정면 판정 폴더의 판정은 서버가 받는 모양 그대로 두고(키 없음) 강도만 적는다. 같은 판정의 끝냄을 다시 보낼 때만 쓰기 때문이다.
 - 옆모습·걷기·달리기 판정기는 `worker.env`의 `ODDBOUT_GENERATION_JUDGES`로 고른다(2026-11-06, `JUDGE_MODES`). `codex`(기본, 없거나 다른 값도)는 지금 그대로다.
+  `og worker judges codex|pixels|hybrid`(사용자 설치는 `npm run host -- worker judges …`)가 그 줄을 쓰고, 워커는 다시 시작할 때 읽는다.
+  `og worker key`는 키 두 줄만 바꾸고 이 줄과 `ODDBOUT_GENERATION_KEEP_DAYS`를 남긴다(전에는 파일을 통째로 다시 써서 지웠다).
   `pixels`는 픽셀 판정기(`motions.py pixel-judge`, NumPy, 한 번에 1초 미만, 제공자 호출 없음)만 판정하고, 픽셀이 정하지 못한 검사(`unknown`)는 통과로 치며 notes에 그렇게 적는다.
   `hybrid`는 픽셀 판정기가 먼저 보고, 픽셀 실패는 그대로 실패(codex를 부르지 않음), `unknown`이 있을 때만 codex에 물어 둘 중 하나라도 실패한 검사를 실패로 한다.
   픽셀 판정기의 답은 `take-<n>.pixels.json`·`judge/pixels.json`(측정값 포함), hybrid가 부른 codex 판정은 `take-<n>.codex-verdict.json`·`judge/codex-verdict.json`에 남는다.

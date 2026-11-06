@@ -754,8 +754,18 @@ cmd_worker() {
       [[ $base =~ ^https://[A-Za-z0-9.-]+(/[A-Za-z0-9._/-]*)?$ ]] || die "usage: og worker key <https://…/functions/v1/ai-fighter> < key-file"
       key=$(tr -d '[:space:]')
       [[ $key =~ ^afw_[a-f0-9]{64}$ ]] || die "the key on stdin must be afw_ and 64 hex"
-      (umask 077; printf 'ODDBOUT_GENERATION_API=%s\nODDBOUT_GENERATION_WORKER_KEY=%s\n' "${base%/}" "$key" >"$G/worker.env")
+      # The other settings (ODDBOUT_GENERATION_KEEP_DAYS, ODDBOUT_GENERATION_JUDGES) stay: a new key never resets them (2026-11-06).
+      (umask 077; { if [ -f "$G/worker.env" ]; then grep -vE '^ODDBOUT_GENERATION_(API|WORKER_KEY)=' "$G/worker.env" || true; fi
+        printf 'ODDBOUT_GENERATION_API=%s\nODDBOUT_GENERATION_WORKER_KEY=%s\n' "${base%/}" "$key"; } >"$G/worker.env.new" &&
+        mv -f "$G/worker.env.new" "$G/worker.env")
       echo "og: worker.env written" ;;
+    judges)
+      # Who judges the side takes and the walk and run loops (generation-stages JUDGE_MODES), read when the worker starts (2026-11-06).
+      case ${2:-} in codex | pixels | hybrid) ;; *) die "usage: og worker judges codex|pixels|hybrid" ;; esac
+      [ -f "$G/worker.env" ] || die "og worker key first"
+      (umask 077; { grep -v '^ODDBOUT_GENERATION_JUDGES=' "$G/worker.env" || true; printf 'ODDBOUT_GENERATION_JUDGES=%s\n' "$2"; } \
+        >"$G/worker.env.new" && mv -f "$G/worker.env.new" "$G/worker.env")
+      echo "og: judges $2 — og worker restart takes it" ;;
     install)
       [ -f "$G/worker.env" ] || die "og worker key first"
       mkdir -p "$unit_dir"
@@ -783,7 +793,7 @@ UNIT
       echo "og: worker stopped and its unit removed" ;;
     start | stop | restart | status) systemctl --user "$1" "$WORKER_UNIT" --no-pager ;;
     log) tail -n "${2:-40}" "$G/worker.log" ;;
-    *) die "usage: og worker run [--once] | key <api-base> < key | install | uninstall | start | stop | restart | status | log [n]" ;;
+    *) die "usage: og worker run [--once] | key <api-base> < key | judges codex|pixels|hybrid | install | uninstall | start | stop | restart | status | log [n]" ;;
   esac
 }
 
@@ -797,7 +807,7 @@ og deliver <job> [package-dir] | close <job> <fighter-uuid> | purge <job> [--can
 og cat <job> <path> > file          read one file of a job (results are 600, service-only)
 og harden                           turn off the service codex's shell, file, browser and plugin features and its reading of AGENTS.md (the worker needs it)
 og rife torch|ncnn|status           the loop alignment's RIFE: PyTorch on an NVIDIA GPU (fast) or the ncnn binary (default)
-og worker key <api-base> < key | install | uninstall | start | stop | restart | status | log [n] | run [--once]
+og worker key <api-base> < key | judges codex|pixels|hybrid | install | uninstall | start | stop | restart | status | log [n] | run [--once]
 og self-update                      (operator side) install this copy's files for the service user
 A community host's install runs the same commands through npm run host -- … (scripts/host.mjs); new, deliver, close
 and self-update are the official host's only.

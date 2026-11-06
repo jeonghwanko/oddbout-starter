@@ -265,6 +265,14 @@ test('a host install runs og.mjs as its own account: providers signed in inside 
     assert.equal(await readFile(path.join(root, 'worker.env'), 'utf8'),
       `ODDBOUT_GENERATION_API=https://example.supabase.co/functions/v1/ai-fighter\nODDBOUT_GENERATION_WORKER_KEY=afw_${'c'.repeat(64)}\n`);
     if (!windows) assert.equal(statSync(path.join(root, 'worker.env')).mode & 0o777, 0o600);
+    // The judges mode (2026-11-06): its own line, replaced when set again and kept when the key is written again.
+    assert.notEqual((await call(g, ['worker', 'judges', 'gpt'])).code, 0);
+    assert.equal((await call(g, ['worker', 'judges', 'pixels'])).code, 0);
+    assert.equal((await call(g, ['worker', 'judges', 'hybrid'])).code, 0);
+    assert.equal((await call(g, ['worker', 'key', 'https://example.supabase.co/functions/v1/ai-fighter'], `afw_${'c'.repeat(64)}\n`)).code, 0);
+    assert.equal(await readFile(path.join(root, 'worker.env'), 'utf8'), 'ODDBOUT_GENERATION_JUDGES=hybrid\n'
+      + `ODDBOUT_GENERATION_API=https://example.supabase.co/functions/v1/ai-fighter\nODDBOUT_GENERATION_WORKER_KEY=afw_${'c'.repeat(64)}\n`);
+    if (!windows) assert.equal(statSync(path.join(root, 'worker.env')).mode & 0o777, 0o600);
     assert.match((await call(g, ['worker', 'run', '--once'])).stderr, /og harden first/);
 
     // og harden: codex's tools off and its project instructions off, the same file bash og writes.
