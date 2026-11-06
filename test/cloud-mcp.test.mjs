@@ -752,7 +752,14 @@ test('the sign-in-first address lists exactly what /mcp lists and says the same;
     // 2단계 B (2026-11-06, once ChatGPT's portal published all 24): the five reviewed reads left the list for get_my_fighters, 24 to 19
     // (ab96aea0… before).
     // 그림 제공자 (2026-11-06): request_hosted_fighter takes imageProvider, grok or gpt (a35f57da… before). Not a tool ChatGPT's app pins.
-    if (count === 19) assert.equal(createHash('sha256').update(JSON.stringify(tools)).digest('hex'), 'd56abc4d22b2c629b385a8b49685dd88e5457821d899a42b6c49acad826e4d07');
+    if (count === 19) {
+      const hash = list => createHash('sha256').update(JSON.stringify(list)).digest('hex');
+      assert.equal(hash(tools), 'e4039c24301f5682c249de66f566b06af406169745524a1c749028cd64827ea6');
+      // Without the single comparison template, v103's full tool inventory must still match byte for byte.
+      const prior = structuredClone(tools), meta = prior.find(t => t.name === 'get_hosted_fighter')._meta;
+      delete meta.ui; delete meta['openai/outputTemplate'];
+      assert.equal(hash(prior), 'd56abc4d22b2c629b385a8b49685dd88e5457821d899a42b6c49acad826e4d07');
+    }
     // ChatGPT's published app 1.0.3 (docs/records/CLOUD-PLUGIN-REVIEW.md): four of its twelve tools are listed with their reviewed bytes (nine
     // until 2단계 B, 16a9ae15…). prepare_fighter_registration, upload_fighter_asset and submit_fighter_registration took a `kind`, and a call
     // without it is the reviewed tool's call; the other five are get_my_fighters views, and their own names still answer (cloud/merged-tools.mjs).
