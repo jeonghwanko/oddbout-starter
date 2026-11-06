@@ -1,6 +1,6 @@
 # ODDBOUT cloud plugin review
 
-Latest preparation: [1.0.4, 2026-11-06](CLOUD-PLUGIN-1.0.4-PREPARATION.md). The historical statuses below describe their dated observations; 1.0.3 is now published and 1.0.4 has not been uploaded.
+The [1.0.4 submission record](CLOUD-PLUGIN-1.0.4-PREPARATION.md) reports **In review** on November 7, 2026 (KST). The directory lists 1.0.3 as Published. The sections below record the earlier releases.
 
 Status verified on 2026-10-24 at 11:54 UTC: **1.0.3 · In review**.
 Publication is still **Not published**; submission is not approval.

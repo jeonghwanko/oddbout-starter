@@ -1,6 +1,6 @@
 # ODDBOUT 1.0.4 preparation — 2026-11-06
 
-Status (2026-11-07): package PR [#350](https://github.com/jeonghwanko/oddbout-starter/pull/350) merged at `387a7a1e`. The 1.0.4 package has not been uploaded or submitted. Preserve the old 1.0.1 and 1.0.0 drafts.
+**1.0.4 · In review**, verified on November 7, 2026 (KST) in the [version details](https://platform.openai.com/plugins/manage/plugin_asdk_app_6adc695de1bc8191a604b42bbaa178af?version=appsub_6aee149ab97c8191b8e1badd942b7ac3). The directory lists 1.0.3 as Published. Package PR #350, comparison UI #364 and video source #360 are merged.
 
 Package: `oddbout-dots`; public plugin: `plugin_asdk_app_6adc695de1bc8191a604b42bbaa178af`; existing endpoint: `https://mcp.oddbout.com/mcp`.
 
@@ -8,11 +8,11 @@ Package: `oddbout-dots`; public plugin: `plugin_asdk_app_6adc695de1bc8191a604b42
 
 The [stable recording URL](https://oddbout.com/cloud-plugin/review-1.0.4/walkthrough.mp4) is unchanged. The current footage and verification are documented in the [run sheet](cloud-plugin-1.0.4/REVIEW-RUN.md); [site source #360](https://github.com/jeonghwanko/oddbout-starter/pull/360) contains the updated MP4.
 
-**Current ZIP:** `output/review-20261106-fixed-cases/oddbout-dots-1.0.4.zip`, **34,499 bytes**, SHA-256 `50b53f3009c709394c6ab2ae8d0b47b7a3096efe087edc9e2021708c18bf0540`. It contains exactly the manifest, the 1.0.3 authentication configuration and two icon files. Every entry matched committed source. The English release notes, Korean subtitle and description, five positive and three negative prompts, tool names, four listing URLs in both languages, and recording URL were checked. Market selection remains in the portal; no country values were guessed.
+**Submitted ZIP:** `output/portal-1.0.4/oddbout-dots-1.0.4.zip`, **34,429 bytes**, SHA-256 `3ad3d068266067b901aa9471fa1718c39b7004d78cdc50ce55440fc313d3152f`. The saved portal ZIP contained the same manifest, MCP configuration and icons as the local upload. The portal accepted the light-mode contrast fix. One advisory about pricing language remained. The private review note explained how account token usage works.
 
 Case outcomes and screens, including the v103 and v104 P2 reads, are maintained only in the [run sheet](cloud-plugin-1.0.4/REVIEW-RUN.md).
 
-The [v104 production list](cloud-plugin-1.0.4/tools-list.v104.json) has 19 tools (48,242 bytes, SHA-256 `64d98a2dd4cfe08be142d873086fb46e42a3bb1a8b73c477a5182ad7d6df0386`). Compared with [v103](cloud-plugin-1.0.4/tools-list.20261106-evening.json), only the UI template metadata on `get_hosted_fighter` changed. The portal rescan included that template and reported no findings. Enter the reset reviewer password in the private reviewer access fields only after upload is authorized.
+The [v104 production list](cloud-plugin-1.0.4/tools-list.v104.json) has 19 tools (48,242 bytes, SHA-256 `64d98a2dd4cfe08be142d873086fb46e42a3bb1a8b73c477a5182ad7d6df0386`). Compared with [v103](cloud-plugin-1.0.4/tools-list.20261106-evening.json), only the UI template metadata on `get_hosted_fighter` changed. The portal rescan included that template and reported no findings.
 
 ## 19-tool inventory and previous ZIP (2026-11-06 KST)
 
