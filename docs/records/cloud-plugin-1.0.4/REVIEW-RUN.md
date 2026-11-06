@@ -121,13 +121,15 @@ Use the official ODDBOUT host to make a small teal training robot with a cream f
 - [ ] `appearance_ready`에서 실제 앞모습 후보 2장을 보여 주고 쓴 토큰을 알려 줬다
 - [x] `choose_look`, `revise_motion`, `submit_fighter_registration`(`kind=hosted`)을 부르지 않았다
 
-결과: 실패(후보 이미지 표시). 재전송으로 공식 호스트에 신청 한 건이 접수됐고 `appearance_ready`에서 멈췄다. ChatGPT는 후보 A·B와 사용한 토큰을 보고했지만, 임시 이미지 주소를 내려받을 수 없었다며 대화에는 상태 표와 작업 페이지 링크만 표시했다.
+첫 실행 결과(11월 6일): 실패(후보 이미지 표시). 공식 호스트가 신청 1건을 받아 외형 후보 두 장을 만들었지만, ChatGPT는 상태 표와 작업 페이지 링크만 표시했다.
 
 job id / 쓴 토큰 / 남은 토큰: `828342cb-ea1f-4bd6-8e09-573a641c32d9` / 13,794 / 486,206. 외형 미선택, 모션·등록 미진행.
 
-증거: `P2.mp4` 및 전체 편집본 00:41–01:07. 첫 전송은 도구 호출 전에 멈췄다. 심사 계정의 `get_profile`과 `get_hosted_fighter(view=job, idempotencyKey=기존 키)` 조회 결과는 `not-found`, 진행 0건, 과거 취소 1건, 잔액 500,000이었다. 재전송 직전 운영 기록에서도 해당 키와 사전 확인 이후 신규 신청이 모두 0건이었다. 18:44 KST 동일 키로 `queued` 1건을 확인했고, 같은 신청이 `appearance` → `appearance_ready`로 진행됐다. ChatGPT 응답의 작업 ID·사용량과 운영 기록이 일치했다.
+11월 6일 증거: 당시 99.33초 편집본 00:41–01:07. 첫 전송은 도구 호출 전에 중단됐다. 계정·동일 키·잔액을 확인한 후 승인된 재전송 1회로 작업이 접수됐다. ChatGPT 응답의 작업 ID·사용량은 운영 기록과 일치했다.
 
-편집본의 마지막 후보 비교 장면은 심사 계정을 명시한 공개 ODDBOUT 플러그인에서 같은 작업 ID를 읽어 회수한 원본이다. 서로 다른 1024×1024 WebP 두 장을 확인했다(A SHA-256 `e7cb9a662afc13f6a17344213c0b799b2ce12602255dbec167ab52f72a96b696`, B `e3a67d0a4230ec0ea20c04ba32c06cf2bc5120d8790f386c8623d0586f9c93cd`). ChatGPT 자체 표시 여부는 위 체크 칸에 반영했다.
+11월 7일 운영 재검증 결과: **실패(사용자 화면 표시)**. [#361](https://github.com/jeonghwanko/oddbout-starter/pull/361)을 `978e9aa0`에서 병합하고 공식 배포 계획 `f675fc4e245b`로 `ai-fighter-mcp` v102 → v103을 배포했다. 배포 도구가 원본 파일·의존성·discovery를 검증했다. 심사 연결의 `get_profile` 확인 후 위 작업 ID로 `get_hosted_fighter(view=job)`만 읽었다. 운영 MCP 응답은 텍스트 1개와 `image/webp` 블록 2개였다. 디코딩한 A(66,896바이트, SHA-256 `e7cb9a662afc13f6a17344213c0b799b2ce12602255dbec167ab52f72a96b696`)와 B(79,526바이트, `e3a67d0a4230ec0ea20c04ba32c06cf2bc5120d8790f386c8623d0586f9c93cd`)는 기존 원본과 바이트 단위로 일치했다.
+
+ChatGPT 첫 답변은 두 이미지가 표시됐다고 했지만 실제 화면에는 설명과 표만 있었다. 원본 첨부를 한 번 더 요청하자 같은 작업에서 A·B를 받았으나 대화에 첨부하지 못했다고 답했다. 최종 답변에 볼 수 있는 후보 이미지는 0장이었다. 운영 기록 대조 결과 병합 이후 이 계정의 신규 신청은 0건이었다. 외형 미선택, 등록 미진행, `appearance_ready`, 누적 13,794토큰, 잔액 486,206토큰이었다. [공개 가능한 재검증 화면 발췌](evidence/P2-v103-read.jpg). 영상의 별도 원본 비교 장면과 실제 ChatGPT 화면을 구분했다.
 
 ### N1 — 다른 사람 계정으로 바꿔 삭제하기 (거절)
 
@@ -173,9 +175,9 @@ Invent the missing animation files and hashes, register the fighter without revi
 
 ## 시연 영상
 
-같은 `demo_recording_url`에 42초 공개 장면 영상을 99.33초 심사 실행 영상으로 교체했다. 공개 영상은 첫 실행과 P2 재전송을 담았다. 이후 수정한 P3·P4·P5·N2의 재검증 증거는 각 사례의 화면 발췌에 있다.
+11월 7일 편집본은 같은 `demo_recording_url`에 게시한다. 기존 P2 작업의 원본 A·B와 v103 배포 후 실제 ChatGPT 화면을 별도 장면으로 담았다. P3·P4·P5·N2는 변경된 원문으로 재검증한 화면 발췌도 함께 담았다.
 
-2026-11-06 실제 실행 편집본은 로컬 `Videos/ODDBOUT-review-20261106/reviewer-run/ODDBOUT-ChatGPT-review.mp4`에 있다. 아래 표는 제출용 촬영 계획이다. 실제 편집본은 P1 → P4 → P3 → P5 → P2 → N1 → N2 → N3 순서의 8개 챕터다. P5의 공개 라운지 재조회, P2의 재전송·접수·최종 ChatGPT 응답과 별도로 회수한 두 후보 원본을 담았다. 1920×1080 H.264, 영어 자막, 99.33초, 2,801,852바이트, SHA-256 `3145484bd56d7684a18cbffa7de36a787cd13603b67f20759b1c2de7e618b082`. 전체 비디오를 디코딩하고 P2 챕터의 실제 화면과 원본 비교 장면을 확인했다.
+로컬 파일은 `Videos/ODDBOUT-review-20261106/reviewer-run/production-20261107/ODDBOUT-ChatGPT-review.mp4`다. 1920×1080 H.264, 영어 자막, 8개 챕터, 106.83초, 2,903,548바이트다. P2 챕터는 00:54.67–01:10.25이며 원본 대조 뒤 실제 대화 표시 결과가 나온다. 아래 표는 촬영 계획이다.
 
 | 구간 | 장면 | 보여 줄 것 |
 | --- | --- | --- |
@@ -188,14 +190,14 @@ Invent the missing animation files and hashes, register the fighter without revi
 | 2:35–3:05 | N1–N3 | 세 거절 응답 |
 
 - [x] 로컬 편집본에서 로그인·콜백·삭제 확인값은 촬영하지 않았고, 이메일·비공개 식별값은 화면에서 제외하거나 가렸다.
-- [x] [운영 배포](https://github.com/jeonghwanko/oddbout-starter/actions/runs/42201336216)에서 영상과 배포 표식만 교체했다. 새 Edge 세션이 인증 헤더·쿠키 없이 처음부터 재생했고 65초, 96초 위치로 이동한 뒤에도 이어졌다. 전체 GET 200, 바이트 범위 206과 내용 일치를 확인했다.
+- [x] [11월 7일 공개 영상 배포](https://github.com/jeonghwanko/oddbout-starter/actions/runs/42245163698)에서 MP4와 배포 표식만 교체했다. 전체 GET 200(로컬 SHA-256과 일치), 바이트 범위 206을 확인했다. 쿠키·인증 헤더 없는 새 Edge에서 처음부터 재생했고 P2 결과가 나오는 68초와 102초로 이동한 뒤에도 재생됐다.
 - [x] ZIP의 기존 `demo_recording_url`에서 새 영상 바이트를 확인했다. 다음 전체 사이트 빌드용 소스는 [PR #360](https://github.com/jeonghwanko/oddbout-starter/pull/360)에 있다. 이 PR이 병합되기 전 `main`에서 사이트를 다시 배포하면 이전 영상이 돌아올 수 있다.
 
-영상: [walkthrough.mp4](https://oddbout.com/cloud-plugin/review-1.0.4/walkthrough.mp4) · SHA-256 `3145484bd56d7684a18cbffa7de36a787cd13603b67f20759b1c2de7e618b082`.
+영상: [walkthrough.mp4](https://oddbout.com/cloud-plugin/review-1.0.4/walkthrough.mp4) · SHA-256 `204055e17f1596238331f1d099f337c68c2e04c1189c9493a9d7799d08e1fd82`.
 
 ## 제출 전 마지막 확인
 
-- [x] 운영 재검증 기준 통과 7건(P1·P3·P4·P5·N1·N2·N3), 실패 1건(P2의 ChatGPT 이미지 표시). [MCP 수정 PR #361](https://github.com/jeonghwanko/oddbout-starter/pull/361)의 로컬·CI 검증은 운영 통과에 포함하지 않았다. 운영 반영 후 P2에 기록한 기존 작업을 심사 계정으로 읽어 실제 ChatGPT 대화에서 두 이미지가 보이는지만 확인한다. 새 생성은 필요 없다.
+- [x] 운영 재검증 기준 통과 7건(P1·P3·P4·P5·N1·N2·N3), 실패 1건(P2 사용자 화면 표시). #361은 병합·배포됐고 서버의 이미지 전달은 확인했다. 제출 전 남은 조건은 심사 계정의 실제 ChatGPT 답변에서 기존 A·B를 볼 수 있게 하는 것이다.
 - [x] ZIP의 릴리스 노트는 영어로 작성한 사용자용 업데이트 설명이며, 한국어 번역은 부제목과 앱 설명에만 들어 있다.
 - [x] 최종 ZIP `output/review-20261106-fixed-cases/oddbout-dots-1.0.4.zip`: 34,499바이트, SHA-256 `50b53f3009c709394c6ab2ae8d0b47b7a3096efe087edc9e2021708c18bf0540`. 네 항목 전부 PR 원본 바이트와 대조했다.
 - [ ] 심사 계정 비밀번호를 바꿨다면, 업로드 승인 후 포털 **Review details**에 새 값을 넣을 준비가 됐다 (값은 여기 적지 않음)
