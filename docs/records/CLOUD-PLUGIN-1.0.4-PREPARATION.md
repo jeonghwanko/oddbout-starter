@@ -6,15 +6,15 @@ Package: `oddbout-dots`; public plugin: `plugin_asdk_app_6adc695de1bc8191a604b42
 
 ## Published public walkthrough and current ZIP (2026-11-06 KST)
 
-The [public ChatGPT walkthrough](https://oddbout.com/cloud-plugin/review-1.0.4/walkthrough.mp4) is the video referenced by `extensions.com.openai.review.demo_recording_url`. It shows the public roster and standings, a completed semifinal from a fighter's record, and ChatGPT's response to an external-host request without consent. It does not demonstrate private reviewer workflows, a new bout, generation or publication of a post; **0/8 dedicated-account runs are recorded**.
+**제출 전 교체 예정.** 현재 `demo_recording_url`은 [공개 장면 영상](https://oddbout.com/cloud-plugin/review-1.0.4/walkthrough.mp4)을 가리킨다. 운영자가 심사 계정으로 ChatGPT에서 긍정 5개·부정 3개 사례를 모두 실행한 뒤, 그 화면으로 새 영상을 만들어 제출 전에 교체한다. **0/8 dedicated-account runs are recorded.**
 
-The [site source PR #357](https://github.com/jeonghwanko/oddbout-starter/pull/357) is unmerged. The [Pages deployment](https://github.com/jeonghwanko/oddbout-starter/actions/runs/42178778966) at `6fff816d` added only the video and updated the deployment marker against the previous production tree. Merge the site source when authorized so later full site builds retain the URL.
+The [Pages deployment](https://github.com/jeonghwanko/oddbout-starter/actions/runs/42178778966) at `6fff816d` published the current recording. The [site source PR #357](https://github.com/jeonghwanko/oddbout-starter/pull/357) merged into `main` at `602890a1`, so future site builds include the video at this path.
 
 Anonymous playback checks on the exact manifest URL:
 - HTTP 200, `video/mp4`, no redirect; all 1,071,126 bytes matched the approved local video (SHA-256 `60a3b451bef5326b4f502d0f31db2176cea977777b603aa4f490a3dbe0959d21`). A byte-range request returned 206 and the requested bytes.
 - A new browser context with no cookies or Authorization header played the video from the beginning and continued after seeking to 35 seconds. The remote decoded frames at 1, 24 and 39 seconds matched the local video. Duration 41.54 seconds, H.264, 1920 × 1080, English and Korean subtitle tracks.
 
-**Current local candidate:** `output/review-20261106-hosted-video/oddbout-dots-1.0.4.zip`, **34,359 bytes**, SHA-256 `189c636ea872cc87297f96869d2dfa0c32daf8b3fdc6e0f8547f9e3316ca9380`. The verified URL is present in the archived manifest. Verified archive integrity and all four files against source; the demo video is hosted outside the ZIP. The endpoint, authentication, five positive and three negative cases are unchanged. Older ZIPs below predate the hosted video. No merge, portal upload or submission was performed.
+**Current local candidate:** `output/review-20261106-bilingual-notes/oddbout-dots-1.0.4.zip`, **34,401 bytes**, SHA-256 `439a7237e91b3d6b27d7c849be30ca0828fd5df4add08041066abe79cda67689`. The archive contains the bilingual user-facing release notes and the current public video URL. All four entries matched the package source. This supersedes the earlier hosted-video ZIP (`189c636e…`).
 
 ## 19-tool inventory and previous ZIP (2026-11-06 KST)
 
@@ -186,4 +186,4 @@ ZIP build: `python scripts/zip-plugin.py plugins/oddbout-cloud output/review-202
 
 Built candidate: **33,692 bytes**, SHA-256 `06e3ca98c92e0ecf45af3d1194a7484c938db529d574e28006bf85394711e40f`. Inventory: `plugin.json`, `mcp.json`, `assets/icon.svg`, `assets/icon.png`. Local structural checks passed for identity/version, listing limits (subtitle 29 / description 1,878 characters), exactly five positive/three negative cases, expected tool names against the actual live list, single unchanged endpoint, absence of app/credential fields, all 42 annotation sets and PNG format/dimensions/size. `git diff --check` passed. These are local package checks, not portal validation or reviewer-conversation passes.
 
-Before requesting upload/submission approval: incorporate the owner's eight ChatGPT results, recheck the hosted URL after any later site deployment, and rebuild/re-hash if the package changes. Recheck the published policy pages if a later website release intervenes. Merge, portal upload and submission remain unapproved.
+Before requesting upload or submission approval, record the owner's eight ChatGPT results, replace the public-only demo with the dedicated-account recording, and verify anonymous playback at the final manifest URL. Rebuild and re-hash the ZIP if the URL or other package contents change.

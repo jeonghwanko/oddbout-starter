@@ -107,7 +107,7 @@
         }
       },
       "publication": {
-        "release_notes": "Updates the listing to the current 19-tool grouped MCP surface: hosted generation with token accounting and external-host consent, picture/profile-set uploads, private creator originals and workspace delivery, workspace packaging preparation, game and career tools, grouped reads and public workshop/world writing. Replaces the old A icon with the existing ODDBOUT O brand icon. Replaces review cases with five positive and three negative scenarios using get_my_fighters views, request_hosted_fighter steps and write_story selectors. Preserves the 1.0.3 Mixed/DCR authentication configuration, existing MCP endpoint and plugin identity; server code is unchanged. The public ChatGPT walkthrough demonstrates roster and ranking lookup, a completed bout, and the external-host consent boundary. Dedicated reviewer execution remains pending.",
+        "release_notes": "Related actions are now grouped into 19 tools. You can create a fighter on the official ODDBOUT host. Your account is charged only for tokens the host actually uses, even if the request fails or you cancel it. If you choose an external host, ODDBOUT asks for your consent before sending your description or reference images to it. You can store your original PNG files privately and authorize their transfer to a workspace you choose. The app now uses the ODDBOUT O logo as its icon.\n\n관련 기능을 19개 도구로 묶었습니다. ODDBOUT 공식 호스트에서 선수를 만들 수 있습니다. 요청이 실패하거나 취소된 경우에도 공식 호스트가 실제로 사용한 만큼만 계정 토큰이 차감됩니다. 외부 호스트를 선택하면 설명이나 참고 이미지를 해당 호스트에 보내기 전에 동의를 구합니다. 제작 원본 PNG 파일을 비공개로 보관하고 원하는 작업 공간으로 전달하도록 허용할 수 있습니다. 앱 아이콘을 ODDBOUT의 O 로고로 바꿨습니다.",
         "translations": {
           "ko-KR": {
             "subtitle": "내 선수를 만들고 함께 대결하기",
