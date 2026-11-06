@@ -6,7 +6,7 @@ Package: `oddbout-dots`; public plugin: `plugin_asdk_app_6adc695de1bc8191a604b42
 
 ## Published public walkthrough and current ZIP (2026-11-06 KST)
 
-**제출 전 교체 예정.** 현재 `demo_recording_url`은 [공개 장면 영상](https://oddbout.com/cloud-plugin/review-1.0.4/walkthrough.mp4)을 가리킨다. 운영자가 심사 계정으로 ChatGPT에서 긍정 5개·부정 3개 사례를 모두 실행한 뒤, 그 화면으로 새 영상을 만들어 제출 전에 교체한다. **0/8 dedicated-account runs are recorded.**
+**제출 전 교체 예정.** 현재 `demo_recording_url`은 [공개 장면 영상](https://oddbout.com/cloud-plugin/review-1.0.4/walkthrough.mp4)을 가리킨다. 심사 계정으로 ChatGPT에서 긍정 5개·부정 3개 사례를 모두 실행한 뒤, 그 화면으로 새 영상을 만들어 제출 전에 교체한다.
 
 The [Pages deployment](https://github.com/jeonghwanko/oddbout-starter/actions/runs/42178778966) at `6fff816d` published the current recording. The [site source PR #357](https://github.com/jeonghwanko/oddbout-starter/pull/357) merged into `main` at `602890a1`, so future site builds include the video at this path.
 
@@ -43,7 +43,7 @@ This records the completed scan visible at inspection. No additional rescan was 
 | P5 | Browse `world`; `write_story(write=world, action=create, name, nickname)` if absent; `write=world_post` with world ID, exact sample title/body, nickname, optional `canon=true` and UUID key. Readback accepts the world ID. |
 | N1–N3 | No email selector for identity, no other-owner deletion; no external-host request or picture ticket without consent; no registration with invented files or claim that deleting a fighter erases originals/history. These are expected refusals; actual ChatGPT behavior is untested. |
 
-**Reviewer runs: pending owner evidence (0/8 recorded).** The owner will run the scenarios directly in ChatGPT and supply the results; the public-only recording above is separate. Do not substitute static checks, initiate generation, or mark any scenario passed while waiting.
+Record each observed case result and its evidence only in the [review run sheet](cloud-plugin-1.0.4/REVIEW-RUN.md). The schema checks above cover the prompts and arguments only.
 
 **Superseded pre-video candidate:** `output/review-20261106-v101/oddbout-dots-1.0.4.zip`, **34,317 bytes**, SHA-256 `45badd1c738a7d548de18a609f98b96a754398b71f3e0dc2b267cfb376015093`. The release notes already say `19-tool`. The rebuild is byte-identical to the previous 19-tool candidate. ZIP integrity and all four entries (`plugin.json`, `mcp.json`, both icons) were verified against the PR commit. The raw snapshot and validation evidence are outside the ZIP. To reproduce, use the repository's LF line endings and `python scripts/zip-plugin.py plugins/oddbout-cloud <new-zip-path>` in an existing output directory. Neither merge, upload nor submission was performed for #350.
 
@@ -186,4 +186,4 @@ ZIP build: `python scripts/zip-plugin.py plugins/oddbout-cloud output/review-202
 
 Built candidate: **33,692 bytes**, SHA-256 `06e3ca98c92e0ecf45af3d1194a7484c938db529d574e28006bf85394711e40f`. Inventory: `plugin.json`, `mcp.json`, `assets/icon.svg`, `assets/icon.png`. Local structural checks passed for identity/version, listing limits (subtitle 29 / description 1,878 characters), exactly five positive/three negative cases, expected tool names against the actual live list, single unchanged endpoint, absence of app/credential fields, all 42 annotation sets and PNG format/dimensions/size. `git diff --check` passed. These are local package checks, not portal validation or reviewer-conversation passes.
 
-Before requesting upload or submission approval, record the owner's eight ChatGPT results, replace the public-only demo with the dedicated-account recording, and verify anonymous playback at the final manifest URL. Rebuild and re-hash the ZIP if the URL or other package contents change.
+Before requesting upload or submission approval, consult the [review run sheet](cloud-plugin-1.0.4/REVIEW-RUN.md), replace the public-only demo with the dedicated-account recording, and verify anonymous playback at the final manifest URL. Rebuild and re-hash the ZIP if the URL or other package contents change.
