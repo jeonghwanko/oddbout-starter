@@ -582,6 +582,8 @@ ODDBOUT의 생성 워커가 사용자의 말(과 그림 1~2장)로 선수를 만
 도구는 함수 비밀 `ODDBOUT_HOSTED_GENERATION_TOOLS`가 `1`일 때만 목록에 나온다. 이 코드만 올리면 도구 목록은 그대로다.
 목록에 있어도 운영 스위치가 꺼져 있거나 워커가 없으면 신청은 `generation-unavailable`(그 이유 `reason`)로 끝나고 그림을 받지 않는다.
 
+`get_hosted_fighter`로 내 신청 한 건을 조회해 `appearance_ready`가 되면, 응답의 `content`에 정면 WebP 두 장을 A, B 순서로 첨부한다. 한 장이 2,000,000바이트를 넘거나 두 장을 모두 읽지 못하면 기존 서명 링크와 작업 페이지를 반환한다. 같은 신청을 다시 조회해도 외형을 선택하거나 새로 생성하지 않는다.
+
 | 도구 | 하는 일 |
 | --- | --- |
 | `request_hosted_fighter` | 설명·언어와 선택 그림 둘(`picture`·`secondPicture` 파일 인자, 또는 올리기 표로 넣은 `pictureUploads`, 합쳐 둘까지. 권리 확인 `rightsConfirmed`)로 신청. `delegate: true`는 맡기기다(아래). 같은 계정·`idempotencyKey`로 **이미 저장된 작업**이 있으면 그림을 다시 올리지 않고 반환한다. 결과가 불명확할 때는 조회 도구로 복구한다 |

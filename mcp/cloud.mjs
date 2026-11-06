@@ -11,7 +11,7 @@ import { registerPackagingPreparation } from './cloud/packaging-tools.mjs';
 import { registerAgentTools } from './cloud/agent-tools.mjs';
 import { registerProfileSetTools } from './cloud/profile-set-tools.mjs';
 import { registerWorkshopTools } from './cloud/workshop-tools.mjs';
-import { HOSTED_INSTRUCTIONS, registerHostedTools } from './cloud/hosted-tools.mjs';
+import { HOSTED_INSTRUCTIONS, hostedCandidateImages, registerHostedTools } from './cloud/hosted-tools.mjs';
 import { DIRECTORY_DESCRIPTIONS, DIRECTORY_INSTRUCTIONS, DIRECTORY_TITLES } from './cloud/directory-edition.mjs';
 import { aliasCall, memberOf, mergingRegister, renameTools } from './cloud/merged-tools.mjs';
 import { mcpServing } from './cloud/serve.mjs';
@@ -289,6 +289,13 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
       catch (error) { failure = error; value = { ok: false, code: error instanceof Problem ? error.message : 'cloud-operation-unavailable' }; }
       logCall({ tool: logAs ? logAs(args) : name, via: name, edition, client: identity?.claims.client_id ?? null, call, started, value, failure });
       if (failure !== undefined) return reply(value);
+      if (name === 'get_hosted_fighter' && identity && value.ok === true) {
+        const images = await hostedCandidateImages(/** @type {Parameters<typeof hostedCandidateImages>[0]} */ (value.job), fetcher, context);
+        if (images.length) {
+          const answer = reply({ ...value, next: 'The attached front views are candidate A, then B. Show both images. ' + value.next }, host.compact === true);
+          return { ...answer, content: [...answer.content, ...images] };
+        }
+      }
       const result = reply(value, host.compact === true);
       // A diagnostic failure is useful data; keep it readable by hosts that throw away tool errors.
       return (typeof diagnostic === 'function' ? diagnostic(args) : diagnostic) ? { ...result, isError: false } : result;

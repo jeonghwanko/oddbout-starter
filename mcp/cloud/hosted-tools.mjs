@@ -2,11 +2,13 @@
 // 호스팅 생성 도구 (2026-10-28): ODDBOUT's generation worker makes the fighter; the agent carries the user's answers.
 import { z } from 'zod';
 import { GENERATION_LIMITS, UPLOAD_TICKET_HEADER, artifactPath } from '../../api/generations.mjs';
-import { Problem } from '../../api/http.mjs';
+import { Problem, readBody, UUID } from '../../api/http.mjs';
+import { encodeBase64 } from '../../api/base64.mjs';
+import { probeImage } from '../../api/image-probe.mjs';
 import spec from '../../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { profileLimits } from '../../contracts/ai-fighter/profile-limits.mjs';
 import { CREATOR_PAGE, LIBRARY_FILE_HOSTS, SITE_URL_NEXT, UUID_ARG, allowedFileUrl, downloadHostFile, fileSchema, pause, siteUrl, timeLeft, unavailable, within } from './common.mjs';
-import { TICKET_UPLOAD_URL } from './resources.mjs';
+import { CLOUD_RESOURCE, TICKET_UPLOAD_URL } from './resources.mjs';
 import { toolRef } from './merged-tools.mjs';
 /**
  * @typedef {import('./common.mjs').Identity} Identity
@@ -89,6 +91,41 @@ const RUN_FROM_WALK_NEXT = 'The run preview is the walk played faster: no filmed
  * or its own image card, and showed the picture once the bot downloaded the file and attached it.
  */
 const IMAGES_NEXT = 'where this chat shows no picture from its url, download each file (the url lasts ten minutes) and attach it';
+
+// Keep the pair under 5.4 MB after base64 encoding. Oversize or unavailable previews retain the ordinary signed-link response.
+const INLINE_CANDIDATE_BYTES = 2_000_000;
+/**
+ * Attach only the two looks from a successful owner-scoped job read. Never fetch a caller-supplied URL or follow a redirect.
+ * @param {HostedJob | undefined} job @param {typeof fetch} fetcher @param {import('./common.mjs').ToolContext} context
+ * @returns {Promise<Array<{type:'image', mimeType:'image/webp', data:string}>>}
+ */
+export async function hostedCandidateImages(job, fetcher, { signal, deadline }) {
+  if (job?.status !== 'appearance_ready' || !UUID.test(job.id) || job.candidates?.length !== 2 || signal.aborted || Date.now() >= deadline) return [];
+  const cancel = new AbortController();
+  try {
+    const prefix = '/storage/v1/object/sign/af-generation/jobs/' + job.id + '/';
+    const urls = job.candidates.map((candidate, i) => {
+      const url = new URL(candidate.url ?? '');
+      if (candidate.key !== ['a', 'b'][i] || url.origin !== new URL(CLOUD_RESOURCE).origin || url.username || url.password
+        || url.hash || !url.searchParams.get('token') || !url.pathname.startsWith(prefix)
+        || !/^[a-z0-9][a-z0-9-]{0,47}\.webp$/.test(url.pathname.slice(prefix.length))) throw Error('invalid-candidate');
+      return url;
+    });
+    if (urls[0].pathname === urls[1].pathname) return [];
+    const bounded = AbortSignal.any([within(signal, timeLeft(deadline, HOSTED_READ_MS)), cancel.signal]);
+    return await Promise.all(urls.map(async url => {
+      const response = await fetcher(url.href, { signal: bounded, redirect: 'error', credentials: 'omit' });
+      if (!response.ok) throw Error('candidate-unavailable');
+      const bytes = await readBody(response, INLINE_CANDIDATE_BYTES);
+      if (probeImage(bytes)?.type !== 'image/webp') throw Error('invalid-candidate-image');
+      return { type: /** @type {const} */ ('image'), mimeType: /** @type {const} */ ('image/webp'), data: encodeBase64(bytes) };
+    }));
+  } catch {
+    return [];
+  } finally {
+    cancel.abort();
+  }
+}
 /**
  * How an agent follows a working job (Grok 점검 2026-11-03: the bot's own schedule checked every 5 to 10 minutes, and the user asked for
  * 25 seconds): a wait returns as soon as something the user sees changes, so a chat he watches hears of each motion as it is made.
