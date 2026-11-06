@@ -179,10 +179,50 @@ export const judgeRecord = ({ prompt, schema, facts = null, isolated = true }) =
 /** The loop review's `judge` line (it goes into the review the package carries): who judged, as the verdict records it. */
 export function judgeLabel(record, status) {
   const judge = record?.judge;
+  const stale = status === 'stale' ? '; an earlier judge made it, its key is not the current one' : '';
+  if (judge?.kind === 'pixels' || judge?.kind === 'hybrid') {
+    const pixels = `pixels ${judge.pixels?.model ?? UNKNOWN} (observed ${judge.pixels?.observed ?? UNKNOWN}; NumPy on the frames, no vision model`;
+    if (judge.kind === 'pixels') return `${pixels}; checks it left open counted as pass: ${judge.unknownAsPass?.join(', ') || 'none'}${stale})`;
+    return judge.codex ? `${pixels}) then ${judgeLabel({ judge: judge.codex }, 'keyed').replace(/\)$/, `${stale})`)}`
+      : `${pixels}; hybrid, codex not asked${stale})`;
+  }
   if (status === 'unkeyed' || !judge) return 'codex, model and effort not recorded (a verdict from before judge keys; og harden, tools off)';
   return `codex ${judge.model} effort ${judge.effort} (observed ${judge.observed?.model ?? UNKNOWN}, effort ${judge.observed?.effort ?? UNKNOWN}`
-    + `${status === 'stale' ? '; an earlier judge made it, its key is not the current one' : ''}; og harden, tools off)`;
+    + `${stale}; og harden, tools off)`;
 }
+
+/**
+ * The judges (2026-11-06): who decides a side take and a walk or run loop. `codex`, the default, as before. `pixels`: the pixel judge
+ * (motions.py `pixel-judge`, NumPy on the pictures, well under a second, no provider) decides alone; the checks it cannot settle
+ * ("unknown") count as passes and the verdict's notes say which. `hybrid`: the pixel judge first — a pixel fail is final, with no codex
+ * call — and codex only when a check came back unknown; then a check fails when either judge failed it. The look judge (맡기기) and the
+ * front check stay codex's. A worker sets it in worker.env (ODDBOUT_GENERATION_JUDGES). Every verdict records who made it (`judge.kind`
+ * 'pixels' or 'hybrid'; a codex verdict has none) and carries its mode's key, so under JUDGE_CACHE_RULE a verdict another mode made is
+ * reused and marked stale, never taken for the current judge's.
+ */
+export const JUDGE_MODES = Object.freeze(['codex', 'pixels', 'hybrid']);
+/** A judges mode as configured, or `codex` for none or anything else. */
+export const judgesMode = value => JUDGE_MODES.includes(value) ? value : 'codex';
+/** The pixel judge asked for (motions.py PIXEL_MODEL; its answer names the one that ran, `observed`). */
+export const PIXEL_JUDGE = Object.freeze({ model: 'pixels-v1' });
+/** The key of a pixel verdict (`kind`: side or loop), and of a hybrid one (the pixel judge's and codex's keys together). */
+export const pixelJudgeKey = kind => reviewHash(JSON.stringify({ version: JUDGE_KEY_VERSION, judge: 'pixels', model: PIXEL_JUDGE.model, kind }));
+export const hybridJudgeKey = (pixelKey, codexKey) => reviewHash(JSON.stringify({ version: JUDGE_KEY_VERSION, judge: 'hybrid', pixelKey, codexKey }));
+const PIXEL_STATES = Object.freeze(['pass', 'fail', 'unknown']);
+/**
+ * The pixel judge's answer, checked: every check of its kind (side: SIDE_CHECKS under `checks`; loop: LOOP_VISUAL at the top) pass, fail or
+ * unknown, and its notes; or null. Returns { model, checks, notes } (its `measures` stay in its own file).
+ */
+export function checkedPixels(kind, value) {
+  const keys = kind === 'side' ? SIDE_CHECKS : LOOP_VISUAL, checks = kind === 'side' ? value?.checks : value;
+  if (!value || typeof value !== 'object' || value.kind !== kind || typeof value.model !== 'string' || !value.model.trim() || !checks
+    || typeof checks !== 'object' || !keys.every(key => PIXEL_STATES.includes(checks[key])) || typeof value.notes !== 'string') return null;
+  const notes = value.notes.replace(/[\u0000-\u001f\u007f]/g, ' ').trim();
+  if (!notes || SECRET.test(notes)) return null;
+  return { model: value.model.trim().slice(0, 40), checks: Object.fromEntries(keys.map(key => [key, checks[key]])), notes };
+}
+/** At most `max` characters: a judge's notes (the loop verdict takes 600, `checkedVerdict`). */
+const clipNotes = (text, max = 600) => text.length <= max ? text : `${text.slice(0, max - 3).trimEnd()}...`;
 /**
  * The codex session a run's output names: the first `session id: <id>` of codex exec's header. The first, never the last: codex echoes its
  * prompt after the header, and a prompt carries the look brief, which the player's words shaped.
@@ -808,11 +848,14 @@ export const extOf = type => ({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/
  * `og(args, { capture: true })` also resolves the run's output (its start: codex exec's header names its session), and
  * `codexSession(id, sinceMs)` what codex recorded for that session ({ model, effort, cliVersion }), or null. `codexCwd`: the folder outside
  * the kit the brief and the judges run in (`briefCommand` `cwd`; the worker's `<root>/codex-cwd`), made before each run; null runs them in
- * og's folder, the kit, as before 2026-11-05 (and their verdicts' keys say so: `isolated` false).
+ * og's folder, the kit, as before 2026-11-05 (and their verdicts' keys say so: `isolated` false). `judges`: who judges the side takes and
+ * the walk and run loops (JUDGE_MODES), codex unless the worker says otherwise.
  */
 export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy = async () => ({ code: 127 }), gaitStaggerMs = GAIT_STAGGER_MS,
   alignPauseMs = ALIGN_PAUSE_MS, earlyPollMs = EARLY_POLL_MS, earlyGraceMs = EARLY_GRACE_MS, signal = null, lowMarginFeetTaken = true,
-  codexSession = async () => null, codexCwd = null, styleAnchor = path.join(path.dirname(fileURLToPath(import.meta.url)), STYLE_ANCHOR_FILE) }) {
+  codexSession = async () => null, codexCwd = null, styleAnchor = path.join(path.dirname(fileURLToPath(import.meta.url)), STYLE_ANCHOR_FILE),
+  judges = 'codex' }) {
+  judges = judgesMode(judges);
   // The models this stage run asked for and observed (`createModelLog`), sent as its `models` event when it ends (`observed`).
   let models = createModelLog();
   /** The folder a codex text run starts in, there when it starts (a host's cleanup may have removed it). */
@@ -876,6 +919,60 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
     await writeWhole(verdictFile, JSON.stringify(record));
     return { verdict, record, status: 'keyed' };
   }
+  /** Who decided a verdict the job folder holds: its record's `judge.kind`, codex when it names none. */
+  const decidedBy = record => record?.judge?.kind === 'pixels' ? 'pixels' : record?.judge?.kind === 'hybrid'
+    ? (record.judge.codex ? 'pixels+codex' : 'pixels') : 'codex';
+  /**
+   * One side or loop judgment as the judges mode makes it (JUDGE_MODES). codex: `judge` as before. pixels and hybrid: a verdict in
+   * `verdictFile` is reused whatever made it (JUDGE_CACHE_RULE, its standing against this mode's key); else the pixel judge answers into
+   * `pixelFile` (`pixelArgs`: its two pictures), and in hybrid mode with a check left open and none failed codex judges the same pictures as
+   * in codex mode (`codex`: judge()'s arguments), its verdict kept in `codexFile` so a stage run again never pays for it twice. The verdict
+   * written has the codex verdict's shape, every check pass or fail. Resolves like `judge`, with `by` (pixels, pixels+codex or codex) and
+   * `open` (the checks the pixels left open), or `{ pixelCode }` when the pixel judge gave no answer.
+   */
+  async function judged({ kind, verdictFile, pixelFile, pixelArgs, codexFile, codex }) {
+    if (judges === 'codex') { const made = await judge({ verdictFile, ...codex }); return { ...made, by: decidedBy(made.record) }; }
+    const keys = kind === 'side' ? SIDE_CHECKS : LOOP_VISUAL;
+    const schema = await readFile(codex.schemaFile, 'utf8').catch(() => '');
+    const pixelKey = pixelJudgeKey(kind), key = judges === 'pixels' ? pixelKey : hybridJudgeKey(pixelKey, judgeKey({ prompt: codex.prompt, schema, isolated }));
+    const saved = await readFile(verdictFile, 'utf8').then(JSON.parse, () => null), kept = codex.parse(saved);
+    if (kept) return { verdict: kept, record: saved, status: verdictKeyStatus(saved, key), by: decidedBy(saved) };
+    await rm(pixelFile, { force: true });
+    const ran = await motionsPy(['pixel-judge', kind, ...pixelArgs, pixelFile]);
+    const pixels = ran.code === 0 ? checkedPixels(kind, await readFile(pixelFile, 'utf8').then(JSON.parse, () => null)) : null;
+    if (!pixels) return { pixelCode: ran.code === 0 ? 'invalid' : ran.code };
+    models.note({ role: 'pixel-judge', requested: PIXEL_JUDGE.model, observed: pixels.model });
+    const open = keys.filter(check => pixels.checks[check] === 'unknown'), failed = keys.filter(check => pixels.checks[check] === 'fail');
+    const record = { judge: { kind: judges, key, keyVersion: JUDGE_KEY_VERSION, pixels: { model: PIXEL_JUDGE.model, observed: pixels.model,
+      checks: pixels.checks } } };
+    let checks, notes, status = 'keyed', by = 'pixels';
+    if (judges === 'pixels' || failed.length || !open.length) {
+      checks = Object.fromEntries(keys.map(check => [check, pixels.checks[check] === 'fail' ? 'fail' : 'pass']));
+      // An open check counts as a pass only in pixels mode (in hybrid a pixel fail ends the take whatever the open ones say): said first, never cut.
+      const counted = judges === 'pixels' && open.length ? `Not judged by pixels, counted as pass: ${open.join(', ')}. ` : '';
+      notes = clipNotes(`${counted}${pixels.notes}`);
+      if (judges === 'pixels') record.judge.unknownAsPass = open;
+    } else {
+      const asked = await judge({ verdictFile: codexFile, ...codex });
+      if (!asked.verdict) return asked;
+      const theirs = kind === 'side' ? asked.verdict.checks ?? {} : asked.verdict;
+      // No pixel check failed here: a check fails when codex failed it, the pixels' passes included.
+      checks = Object.fromEntries(keys.map(check => [check, theirs[check] === 'pass' ? 'pass' : 'fail']));
+      notes = clipNotes(`${String(asked.verdict.notes ?? '').trim()} Pixels (left ${open.join(', ')} open): ${pixels.notes}`);
+      record.judge.codex = asked.record?.judge ?? null;
+      status = asked.status;
+      by = 'pixels+codex';
+    }
+    record.judge.decidedBy = by;
+    Object.assign(record, kind === 'side' ? { checks, notes } : { ...checks, notes });
+    const verdict = codex.parse(record);
+    if (!verdict) return { pixelCode: 'invalid' };
+    await writeWhole(verdictFile, JSON.stringify(record));
+    return { verdict, record, status, by, open };
+  }
+  /** A verdict the pixels had a hand in, as a `tried` entry or an event marks it: who decided, and the checks they left open. */
+  const byMark = (judgedNow, withOpen = false) => !judgedNow.by || judgedNow.by === 'codex' ? {}
+    : { judgeBy: judgedNow.by, ...(withOpen && judgedNow.open?.length ? { open: judgedNow.open } : {}) };
   /** A reused verdict that is not the current judge's, as a `tried` entry or an event marks it. */
   const keyMark = judged => judged.status && judged.status !== 'keyed' ? { judgeKey: judged.status } : {};
   /** Any JSON object is a side or look verdict here: their checks are read where they are used (`sidePassed`, `lookPick`). */
@@ -1077,12 +1174,14 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
         await noteImage(report, since);
       }
       // A take's verdict is kept in the job folder (JUDGE_CACHE_RULE): a stage run again judges only a take it has none for.
-      const judged = await judge({ verdictFile, answerFile: path.join(folder, `take-${take}.judge.json`), schemaFile: schema,
-        prompt: sideJudgePrompt(job.brief), refs: [front, png, styleAnchor], parse: anObject });
-      if (!judged.verdict) return judged.code === ASK_EXIT ? ASKED : { retry: judged.code ? `side-judge-exit-${judged.code}` : 'side-judge-invalid' };
-      const verdict = judged.verdict, passed = sidePassed(verdict);
+      const judgedTake = await judged({ kind: 'side', verdictFile, pixelFile: path.join(folder, `take-${take}.pixels.json`), pixelArgs: [front, png],
+        codexFile: path.join(folder, `take-${take}.codex-verdict.json`), codex: { answerFile: path.join(folder, `take-${take}.judge.json`),
+          schemaFile: schema, prompt: sideJudgePrompt(job.brief), refs: [front, png, styleAnchor], parse: anObject } });
+      if (!judgedTake.verdict) return judgedTake.code === ASK_EXIT ? ASKED : { retry: judgedTake.pixelCode !== undefined
+        ? `side-pixel-judge-${judgedTake.pixelCode}` : judgedTake.code ? `side-judge-exit-${judgedTake.code}` : 'side-judge-invalid' };
+      const verdict = judgedTake.verdict, passed = sidePassed(verdict);
       await Promise.resolve(api.progress?.(job, undefined, { kind: 'side', take, outcome: passed ? 'pass' : 'fail',
-        failed: SIDE_CHECKS.filter(check => verdict?.checks?.[check] !== 'pass'), ...keyMark(judged) })).catch(() => {});
+        failed: SIDE_CHECKS.filter(check => verdict?.checks?.[check] !== 'pass'), ...keyMark(judgedTake), ...byMark(judgedTake, true) })).catch(() => {});
       if (!passed) { if (styleOnly === null && sideStyleOnly(verdict)) styleOnly = { png, take }; continue; }
       return chooseSide(job, folder, png, take, false);
     }
@@ -1178,10 +1277,12 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
     if ((await motionsPy(['judge-request', 'run', judgeDir])).code !== 0 || (await motionsPy(['sheet', strip, path.join(judgeDir, 'sheet.png')])).code !== 0)
       return null;
     const verdictFile = path.join(judgeDir, 'verdict.json');
-    const judged = await judge({ verdictFile, answerFile: path.join(judgeDir, 'answer.json'), schemaFile: path.join(judgeDir, 'judge-schema.json'),
-      prompt: await readFile(path.join(judgeDir, 'judge-prompt.txt'), 'utf8'), refs: [look, path.join(judgeDir, 'sheet.png')], parse: checkedVerdict });
-    return judged.verdict && loopTaken(judged.verdict, meta)
-      ? { strip, verdict: verdictFile, note: RUN_FROM_WALK, judged: { status: judged.status, label: judgeLabel(judged.record, judged.status) } } : null;
+    const judgedRun = await judged({ kind: 'loop', verdictFile, pixelFile: path.join(judgeDir, 'pixels.json'), pixelArgs: [look, strip],
+      codexFile: path.join(judgeDir, 'codex-verdict.json'), codex: { answerFile: path.join(judgeDir, 'answer.json'),
+        schemaFile: path.join(judgeDir, 'judge-schema.json'), prompt: await readFile(path.join(judgeDir, 'judge-prompt.txt'), 'utf8'),
+        refs: [look, path.join(judgeDir, 'sheet.png')], parse: checkedVerdict } });
+    return judgedRun.verdict && loopTaken(judgedRun.verdict, meta) ? { strip, verdict: verdictFile, note: RUN_FROM_WALK,
+      judged: { status: judgedRun.status, label: judgeLabel(judgedRun.record, judgedRun.status) } } : null;
   }
 
   /** `change`: the creator's latest change to this gait ({ round, note }) — its takes film the change, quoted, and nothing else is tried.
@@ -1314,15 +1415,20 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
             return { retry: 'judge-input' };
           const verdictFile = path.join(judgeDir, 'verdict.json');
           // A verdict an earlier run of this stage got on this cut is kept (JUDGE_CACHE_RULE: no second codex call for the same picture).
-          const judged = await judge({ verdictFile, answerFile: path.join(judgeDir, 'answer.json'), schemaFile: path.join(judgeDir, 'judge-schema.json'),
-            prompt: await readFile(path.join(judgeDir, 'judge-prompt.txt'), 'utf8'), refs: [look, path.join(judgeDir, 'sheet.png')], parse: checkedVerdict });
-          const verdict = judged.verdict;
-          if (!verdict) return judged.code === ASK_EXIT ? ASKED : { retry: `judge-exit-${judged.code}` };
+          const cutJudged = await judged({ kind: 'loop', verdictFile, pixelFile: path.join(judgeDir, 'pixels.json'), pixelArgs: [look, strip],
+            codexFile: path.join(judgeDir, 'codex-verdict.json'), codex: { answerFile: path.join(judgeDir, 'answer.json'),
+              schemaFile: path.join(judgeDir, 'judge-schema.json'), prompt: await readFile(path.join(judgeDir, 'judge-prompt.txt'), 'utf8'),
+              refs: [look, path.join(judgeDir, 'sheet.png')], parse: checkedVerdict } });
+          const verdict = cutJudged.verdict;
+          if (!verdict) return cutJudged.code === ASK_EXIT ? ASKED
+            : { retry: cutJudged.pixelCode !== undefined ? `pixel-judge-${cutJudged.pixelCode}` : `judge-exit-${cutJudged.code}` };
           if (loopTaken(verdict, meta)) {
-            tried.push({ take, cut: cutName, passed: true, ...(verdict.loop === 'pass' ? {} : { loopBy: 'engine-seam' }), ...keyMark(judged), ...cutFacts(meta) });
-            return { strip, verdict: verdictFile, take, tried, judged: { status: judged.status, label: judgeLabel(judged.record, judged.status) } };
+            tried.push({ take, cut: cutName, passed: true, ...(verdict.loop === 'pass' ? {} : { loopBy: 'engine-seam' }), ...keyMark(cutJudged),
+              ...byMark(cutJudged), ...cutFacts(meta) });
+            return { strip, verdict: verdictFile, take, tried, judged: { status: cutJudged.status, label: judgeLabel(cutJudged.record, cutJudged.status) } };
           }
-          tried.push({ take, cut: cutName, judge: LOOP_VISUAL.filter(key => verdict[key] !== 'pass'), ...keyMark(judged), ...cutFacts(meta) });
+          tried.push({ take, cut: cutName, judge: LOOP_VISUAL.filter(key => verdict[key] !== 'pass'), ...keyMark(cutJudged), ...byMark(cutJudged),
+            ...cutFacts(meta) });
           break;   // the judge saw this take: another cut of it would show the same motion
         }
         if (!cuts.length || unaligned < cuts.length) break;

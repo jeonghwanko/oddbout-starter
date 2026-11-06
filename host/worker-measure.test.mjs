@@ -43,6 +43,10 @@ test('the versions event names the kit, the engine and the models asked for, and
     requested: { text: MODELS.text, imageAgent: MODELS.image, judge: JUDGE.model, judgeEffort: JUDGE.effort, video: VIDEO_REQUESTED } });
   assert.deepEqual(seen, ['/kit', path.join('/kit', 'vendor', 'sprite-gen')]);
   assert.ok(JSON.stringify(event).length < 2000);
+  // A worker whose judges are not codex's says so, with the pixel judge it asks for (2026-11-06).
+  const pixels = await versionsEvent('/kit', async () => null, 'hybrid');
+  assert.deepEqual(pixels.requested, { ...event.requested, judges: 'hybrid', pixelJudge: 'pixels-v1' });
+  assert.deepEqual((await versionsEvent('/kit', async () => null, 'codex')).requested, event.requested);
 });
 
 test('og report --json is the summary as data', async () => {

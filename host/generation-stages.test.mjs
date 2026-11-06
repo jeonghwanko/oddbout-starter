@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { cp, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -11,7 +11,8 @@ import { ALIGN_AGAIN, BEAT_LIMIT, GROK_LIMITED, BRIEF_SCHEMA, ONE_STRIDE_OF, GAI
   submissionOutcome, withProfile, EXTRACT_REDRAWS, extractFailedRows, ENGINE_SEAM_MAX, loopTaken, HOUSE_COLOURING, LOOK_CHECKS, SIDE_CHECKS, SIDE_COLOURING, SIDE_TAKES,
   lookJudgePrompt, sideJudgePrompt, sidePrompt, EXPRESSION_CELLS, expressionsPrompt, expressionsName, MODELS,
   JUDGE, UNKNOWN, MODELS_EVENT_BYTES, SIDE_JUDGE_SCHEMA, codexSessionId, createModelLog, imageEntry, judgeCommand, judgeKey, judgeLabel, judgeRecord,
-  verdictKeyStatus, videoEntry, VIDEO_REQUESTED, REQUESTED_MODELS, writeWhole } from './generation-stages.mjs';
+  verdictKeyStatus, videoEntry, VIDEO_REQUESTED, REQUESTED_MODELS, writeWhole, JUDGE_MODES, PIXEL_JUDGE, checkedPixels, hybridJudgeKey, judgesMode,
+  pixelJudgeKey, sidePassed } from './generation-stages.mjs';
 import { codexSessionFacts } from './codex-usage.mjs';
 import { ENGINE_SEAM_MAX as REVIEW_SEAM_MAX, ENGINE_CUE_RHYTHM as REVIEW_CUE_RHYTHM, lowMarginFeet as reviewLowMarginFeet } from '../tools/ai-fighter/gait.mjs';
 import { parseEnv, parseHealth } from './generation-worker.mjs';
@@ -506,7 +507,7 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
 // `showGenSet()`: the show row's gen-set exit (no report), or null for no show row.
 async function scaleStage({ scaleCheck = () => 0, scaleFit, brokenRun = false, alignFails = {}, job: change = {}, spec = null, ownFrames = { walk: 24, run: 14 },
   uncut = {}, showGenSet = null, stop = null, alignPauseMs = 0, before = null, specDelayMs = 0, videoReport = null,
-  rowStates = null, earlyPollMs, hooks = {}, onArtifact = null, lowMarginFeetTaken = true, codexSession = null, codexCwd = null }) {
+  rowStates = null, earlyPollMs, hooks = {}, onArtifact = null, lowMarginFeetTaken = true, codexSession = null, codexCwd = null, judges = null }) {
   const dir = await mkdtemp(path.join(tmpdir(), 'gen-scale-')), calls = [], events = [];
   await before?.(dir);
   await mkdir(path.join(dir, 'looks'), { recursive: true });
@@ -586,7 +587,8 @@ async function scaleStage({ scaleCheck = () => 0, scaleFit, brokenRun = false, a
     progress: async (j, value, event) => { if (event) events.push(structuredClone(event)); return { ok: true }; },
     ...(spec || specDelayMs ? { spec: async () => { await new Promise(done => setTimeout(done, specDelayMs)); return spec; } } : {}) };
   const stages = createStages({ og, api, motionsPy, fetchBytes: async () => new Uint8Array(), toWebp: async () => {}, gaitStaggerMs: 0, alignPauseMs, lowMarginFeetTaken,
-    ...(earlyPollMs ? { earlyPollMs } : {}), ...(codexSession ? { codexSession } : {}), ...(codexCwd ? { codexCwd } : {}), signal: stop?.signal ?? null });
+    ...(earlyPollMs ? { earlyPollMs } : {}), ...(codexSession ? { codexSession } : {}), ...(codexCwd ? { codexCwd } : {}), ...(judges ? { judges } : {}),
+    signal: stop?.signal ?? null });
   const job = { id: '0123abcd-0000', language: 'ko', brief, choice: 'a', appearanceRound: 0, candidates: [], motionNote: null, motionRound: 0, ...change };
   const done = await stages.motions(job, dir);
   return { done, calls, events, dir, again: () => stages.motions(job, dir) };
@@ -1706,6 +1708,173 @@ test('the chosen front and its face square go to the job before the package; a f
   assert.equal((await unmeasured.submitting(job, other)).outcome, 'ok');
 });
 
+// 픽셀 판정기 (2026-11-06): the judges mode decides who judges the side takes and the walk and run loops.
+const pass5 = Object.fromEntries(SIDE_CHECKS.map(check => [check, 'pass']));
+/** A pixel judge answer as motions.py writes it. */
+const pixelSide = (checks, notes = 'whole: the figure keeps 5% from every edge.') =>
+  ({ kind: 'side', model: 'pixels-v1', checks: { ...pass5, side: 'unknown', ...checks }, notes, measures: { ms: 90 } });
+const pixelLoop = (checks, notes = 'identity: the look\'s colour regions stay in every frame.') =>
+  ({ kind: 'loop', model: 'pixels-v1', identity: 'pass', anatomy: 'pass', loop: 'pass', ...checks, notes, measures: { ms: 200 } });
+
+test('the judges mode: codex unless one of the three is named, and a pixel answer is checked like a judge\'s', () => {
+  assert.deepEqual(JUDGE_MODES, ['codex', 'pixels', 'hybrid']);
+  assert.deepEqual([undefined, '', 'Pixels', 'grok', 'pixels', 'hybrid', 'codex'].map(judgesMode), ['codex', 'codex', 'codex', 'codex', 'pixels', 'hybrid', 'codex']);
+  assert.deepEqual(checkedPixels('side', pixelSide({ style: 'unknown' })),
+    { model: 'pixels-v1', checks: { ...pass5, side: 'unknown', style: 'unknown' }, notes: 'whole: the figure keeps 5% from every edge.' });
+  assert.deepEqual(checkedPixels('loop', pixelLoop({ anatomy: 'fail' })).checks, { identity: 'pass', anatomy: 'fail', loop: 'pass' });
+  // Another kind, a check missing or answered otherwise, no notes, a credential in them: not an answer.
+  for (const bad of [pixelLoop({}), { ...pixelSide({}), checks: { whole: 'pass' } }, pixelSide({ match: 'maybe' }), pixelSide({}, ''),
+    pixelSide({}, 'key afw_' + 'a'.repeat(64)), null]) assert.equal(checkedPixels('side', bad), null);
+  // Each mode its own key: a verdict one mode made is never the current one of another.
+  const codexKey = judgeKey({ prompt: 'p', schema: 's' });
+  assert.equal(new Set([codexKey, pixelJudgeKey('side'), pixelJudgeKey('loop'), hybridJudgeKey(pixelJudgeKey('side'), codexKey)]).size, 4);
+  assert.equal(PIXEL_JUDGE.model, 'pixels-v1');
+});
+
+/** The side still under a judges mode: `pixels` and `codex` are queues of answers, one per call; motions.py's other commands fail (enough). */
+async function sideStage(judges, pixels, codex = []) {
+  const dir = await mkdtemp(path.join(tmpdir(), `gen-side-${judges}-`)), calls = [], events = [];
+  await mkdir(path.join(dir, 'looks'), { recursive: true });
+  await writeFile(path.join(dir, 'looks', 'front-a-0.png'), 'front');
+  const flag = (args, name) => args[args.indexOf(name) + 1];
+  const og = async (args, { stdin } = {}) => {
+    calls.push({ args, stdin });
+    if (args.includes('gen') && args.includes('--direction')) {
+      await writeFile(flag(args, '--out'), 'side'); await writeFile(flag(args, '--report'), JSON.stringify({ ok: true })); return { code: 0 };
+    }
+    if (args[0] === 'codex') { await writeFile(flag(args, '-o'), JSON.stringify(codex.shift())); return { code: 0 }; }
+    return { code: 1 };
+  };
+  const motionsPy = async args => {
+    calls.push({ args: ['motions.py', ...args] });
+    if (args[0] !== 'pixel-judge') return { code: 1 };
+    const answer = pixels.shift();
+    if (answer === undefined) return { code: 1 };
+    await writeFile(args.at(-1), JSON.stringify(answer));
+    return { code: 0 };
+  };
+  const api = { artifact: async () => ({ ok: true }), progress: async (job, progress, event) => { if (event) events.push(event); return { ok: true }; } };
+  const stages = createStages({ og, api, motionsPy, fetchBytes: async () => new Uint8Array(), toWebp: async (png, webp) => writeFile(webp, 'webp'),
+    styleAnchor: '/kit/style-anchor-front.webp', gaitStaggerMs: 0, alignPauseMs: 0, judges });
+  const job = { id: '0123abcd-0006', language: 'ko', brief, choice: 'a', appearanceRound: 0, candidates: [], motionNote: null, motionRound: 0 };
+  const done = await stages.motions(job, dir);
+  const folder = path.join(dir, 'looks', 'side-0-a'), read = async name => JSON.parse(await readFile(path.join(folder, name), 'utf8'));
+  return { done, calls, events, dir, folder, read, job, again: () => stages.motions(job, dir),
+    drawn: () => calls.filter(c => c.args.includes('gen') && c.args.includes('--direction')).length,
+    asked: () => calls.filter(c => c.args[0] === 'codex').length, pixelRuns: () => calls.filter(c => c.args[1] === 'pixel-judge') };
+}
+
+test('pixels: the pixel judge decides a side take alone, its open checks counted as passes and said so; no codex', async () => {
+  const run = await sideStage('pixels', [pixelSide({ clean: 'fail' }, 'clean: a second part holds 9.0% of the figure\'s area.'), pixelSide({ style: 'unknown' })]);
+  assert.equal(run.drawn(), 2);
+  assert.equal(run.asked(), 0);
+  // The pixel judge reads the front and the take, and answers beside the take.
+  assert.deepEqual(run.pixelRuns()[0].args.slice(1), ['pixel-judge', 'side', path.join(run.dir, 'looks', 'front-a-0.png'),
+    path.join(run.folder, 'take-0.png'), path.join(run.folder, 'take-0.pixels.json')]);
+  const first = await run.read('take-0.verdict.json'), second = await run.read('take-1.verdict.json');
+  assert.equal(sidePassed(first), false);
+  assert.deepEqual(first.checks, { ...pass5, clean: 'fail' });
+  assert.deepEqual(second.checks, pass5);
+  assert.match(second.notes, /^Not judged by pixels, counted as pass: side, style\. whole:/);
+  assert.deepEqual([second.judge.kind, second.judge.key, second.judge.unknownAsPass, second.judge.decidedBy, second.judge.pixels.observed],
+    ['pixels', pixelJudgeKey('side'), ['side', 'style'], 'pixels', 'pixels-v1']);
+  assert.deepEqual(run.events.filter(e => e.kind === 'side').map(e => [e.outcome, e.judgeBy, e.open]),
+    [['fail', 'pixels', ['side']], ['pass', 'pixels', ['side', 'style']], ['chosen', undefined, undefined]]);
+  assert.ok(run.calls.some(c => c.args.includes(path.join(run.folder, 'take-1.png'))), 'the motions take the take the pixels passed');
+  const models = run.events.find(e => e.kind === 'models');
+  assert.deepEqual(models.runs.filter(r => r.role === 'pixel-judge'), [{ role: 'pixel-judge', requested: 'pixels-v1', observed: 'pixels-v1', n: 2 }]);
+  // A stage run again judges nothing it has.
+  run.calls.length = 0;
+  await run.again();
+  assert.equal(run.pixelRuns().length + run.asked() + run.drawn(), 0);
+});
+
+test('hybrid: a pixel fail is final with no codex call; an open check asks codex, and a check fails when either judge failed it', async () => {
+  const notes = 'The same boxer, seen from the side.';
+  const run = await sideStage('hybrid', [pixelSide({ whole: 'fail' }), pixelSide({}), pixelSide({ style: 'unknown' })],
+    [{ checks: { ...pass5, match: 'fail' }, notes: 'Other gloves.' }, { checks: pass5, notes }]);
+  assert.equal(run.drawn(), 3);
+  assert.equal(run.asked(), 2, 'codex judged the two takes the pixels left open, not the one they failed');
+  const [first, second, third] = [await run.read('take-0.verdict.json'), await run.read('take-1.verdict.json'), await run.read('take-2.verdict.json')];
+  assert.deepEqual([first.checks.whole, first.judge.kind, first.judge.decidedBy, first.judge.codex], ['fail', 'hybrid', 'pixels', undefined]);
+  // The pixels passed match; codex failed it: the take fails on it.
+  assert.deepEqual(second.checks, { ...pass5, match: 'fail' });
+  assert.deepEqual([second.judge.decidedBy, second.judge.codex.model, second.judge.pixels.checks.side], ['pixels+codex', JUDGE.model, 'unknown']);
+  assert.match(second.notes, /^Other gloves\. Pixels \(left side open\): whole:/);
+  assert.deepEqual(third.checks, pass5);
+  assert.equal(third.judge.key, hybridJudgeKey(pixelJudgeKey('side'), third.judge.codex.key));
+  // codex's own verdicts stay beside them (a stage run again pays for none).
+  assert.equal((await run.read('take-2.codex-verdict.json')).notes, notes);
+  assert.deepEqual(run.events.filter(e => e.kind === 'side' && e.outcome !== 'chosen').map(e => [e.outcome, e.judgeBy, e.open]),
+    [['fail', 'pixels', ['side']], ['fail', 'pixels+codex', ['side']], ['pass', 'pixels+codex', ['side', 'style']]]);
+  // Every check settled by the pixels: no codex call.
+  const settled = await sideStage('hybrid', [pixelSide({ side: 'pass' })]);
+  assert.equal(settled.asked(), 0);
+  const kept = await settled.read('take-0.verdict.json');
+  assert.deepEqual([kept.checks, kept.judge.decidedBy], [pass5, 'pixels']);
+  // A pixel judge that gives no answer: tried again later (nothing paid is drawn again), never decided by codex in its place.
+  const broken = await sideStage('pixels', []);
+  assert.deepEqual([broken.done, broken.asked(), broken.drawn()], [{ outcome: 'retry', result: { code: 'side-pixel-judge-1' } }, 0, 1]);
+});
+
+test('a side verdict another judges mode made is reused and marked stale, never judged again (JUDGE_CACHE_RULE)', async () => {
+  const run = await sideStage('codex', [], [{ checks: pass5, notes: 'The same boxer.' }]);
+  assert.equal(run.asked(), 1);
+  const stages = createStages({ og: async () => ({ code: 1 }), motionsPy: async args => { run.calls.push({ args: ['motions.py', ...args] }); return { code: 1 }; },
+    api: { artifact: async () => ({ ok: true }), progress: async (job, progress, event) => { if (event) run.events.push(event); return { ok: true }; } },
+    fetchBytes: async () => new Uint8Array(), toWebp: async () => {}, judges: 'pixels' });
+  run.calls.length = 0; run.events.length = 0;
+  await stages.motions(run.job, run.dir);
+  assert.equal(run.pixelRuns().length, 0);
+  assert.deepEqual(run.events.filter(e => e.kind === 'side').map(e => [e.outcome, e.judgeKey]), [['pass', 'stale'], ['chosen', undefined]]);
+});
+
+test('pixels and hybrid judge the walk and the run: who decided goes to tried and to the loop review, a pixel fail films another take', async () => {
+  const schema = '{"type":"object"}\n';
+  /** `answers(gait, take)`: the pixel answer for a cut of that gait and take. */
+  const loopStage = (judges, answers) => scaleStage({ scaleFit: () => ({ grown: {}, frames: 40, corrected: 0, guessed: [] }), judges, hooks: {
+    motionsPy: async (command, rest) => {
+      if (command === 'judge-request') {
+        await mkdir(rest[1], { recursive: true });
+        await writeFile(path.join(rest[1], 'judge-prompt.txt'), `judge the ${rest[0]}\n`); await writeFile(path.join(rest[1], 'judge-schema.json'), schema);
+        return { code: 0 };
+      }
+      if (command !== 'pixel-judge') return null;
+      const gait = /video-run|run-from-walk/.test(rest[2]) ? 'run' : 'walk', take = Number(/-s(\d)-/.exec(rest[2])?.[1] ?? 0);
+      await writeFile(rest[3], JSON.stringify(answers(gait, take)));
+      return { code: 0 };
+    } } });
+  const config = async (dir, gait) => JSON.parse(await readFile(path.join(dir, 'motion', 'assembled', 'loop', gait, 'config.json'), 'utf8'));
+  const tried = (events, gait) => events.filter(e => e.kind === 'gait' && e.gait === gait).at(-1).tried;
+
+  const pixels = await loopStage('pixels', () => pixelLoop({ anatomy: 'unknown' }));
+  assert.equal(pixels.done.outcome, 'ok', JSON.stringify(pixels.done));
+  assert.equal(pixels.calls.filter(a => a[0] === 'codex').length, 0);
+  const walk = await config(pixels.dir, 'walk'), verdict = JSON.parse(await readFile(walk.verdict, 'utf8'));
+  assert.ok(checkedVerdict(verdict), 'a pixel verdict reads as a loop verdict');
+  assert.deepEqual([verdict.identity, verdict.anatomy, verdict.loop, verdict.judge.kind], ['pass', 'pass', 'pass', 'pixels']);
+  assert.match(verdict.notes, /^Not judged by pixels, counted as pass: anatomy\./);
+  assert.deepEqual([walk.judgeKey, walk.judge], ['keyed',
+    'pixels pixels-v1 (observed pixels-v1; NumPy on the frames, no vision model; checks it left open counted as pass: anatomy)']);
+  // The walk and the run judge at once: the walk's pixel judge reads the look and the walk's aligned strip.
+  assert.deepEqual(pixels.calls.find(a => a[0] === 'motions.py' && a[1] === 'pixel-judge' && a[4].includes('video-walk')).slice(2, 5)
+    .map(f => path.basename(f)), ['loop', 'look-a-0.png', 'side-walk.strip.json']);
+  assert.deepEqual(tried(pixels.events, 'walk').map(t => [t.passed, t.judgeBy]), [[true, 'pixels']]);
+
+  // hybrid: the walk's first take fails on identity in the pixels (no codex call), its retake leaves anatomy open and codex passes it;
+  // the run's pixels settle every check.
+  const hybrid = await loopStage('hybrid', (gait, take) => gait === 'walk' ? take === 0 ? pixelLoop({ identity: 'fail' }) : pixelLoop({ anatomy: 'unknown' })
+    : pixelLoop({}));
+  assert.equal(hybrid.done.outcome, 'ok', JSON.stringify(hybrid.done));
+  assert.equal(hybrid.calls.filter(a => a[0] === 'codex').length, 1);
+  assert.deepEqual(tried(hybrid.events, 'walk').map(t => [t.take, t.passed ?? false, t.judge ?? null, t.judgeBy]),
+    [[0, false, ['identity'], 'pixels'], [1, true, null, 'pixels+codex']]);
+  assert.deepEqual(tried(hybrid.events, 'run').map(t => [t.passed, t.judgeBy]), [[true, 'pixels']]);
+  assert.match((await config(hybrid.dir, 'walk')).judge,
+    /^pixels pixels-v1 \(observed pixels-v1; NumPy on the frames, no vision model\) then codex gpt-6\.1-sol effort medium/);
+  assert.match((await config(hybrid.dir, 'run')).judge, /hybrid, codex not asked\)$/);
+});
+
 test('motions.py face-box measures a front as the game measures its own: the head\'s square at the top of the figure', { skip: !hasPillow() }, async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'face-box-'));
   const script = `from PIL import Image, ImageDraw
@@ -1719,6 +1888,94 @@ im.save("${path.join(dir, 'front.png')}")`;
   const face = JSON.parse(await readFile(path.join(dir, 'face.json'), 'utf8'));
   // The figure is 801 px tall from y 100: a 136 px square (17 %) at its top, centred on the head (x 150-250).
   assert.deepEqual(face, { x: 132, y: 100, side: 136 });
+});
+
+test('motions.py pixel-judge: a cut head, a ground line, a lost item and a ghosted frame fail their own check, and a side view stays open', { skip: !hasPillow() }, async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'pixel-judge-'));
+  try {
+    // A flat-coloured fighter: head, body, two legs and a red item held at his front, drawn whole (`s` 1) or at half size into a strip's cells.
+    const script = `import json, math, sys
+from PIL import Image, ImageDraw
+out = sys.argv[1]
+SKIN, BLUE, DARK, RED = (230, 190, 160, 255), (40, 60, 180, 255), (40, 40, 50, 255), (240, 30, 30, 255)
+def fighter(d, ox=0, oy=0, s=1.0, body=(125, 185), phase=0.0, item=True):
+    P = lambda x0, y0, x1, y1: (ox + x0 * s, oy + y0 * s, ox + x1 * s, oy + y1 * s)
+    d.ellipse(P(130, 40, 170, 80), fill=SKIN)
+    d.rectangle(P(body[0], 80, body[1], 220), fill=BLUE)
+    swing = 25 * phase
+    d.rectangle(P(body[0] + 5 + swing, 220, body[0] + 35 + swing, 360), fill=DARK)
+    d.rectangle(P(body[1] - 35 - swing, 220, body[1] - 5 - swing, 360), fill=DARK)
+    if item:
+        d.rectangle(P(body[1], 130, body[1] + 22, 230), fill=RED)
+def still(name, **kw):
+    im = Image.new("RGBA", (300, 400), (0, 0, 0, 0)); d = ImageDraw.Draw(im)
+    fighter(d, **kw)
+    if name == "ground":
+        d.rectangle((20, 362, 280, 366), fill=DARK)
+    im.save(f"{out}/{name}.png")
+still("front", body=(110, 190))
+still("take")
+still("headcut", oy=-50)
+still("ground")
+still("noitem", item=False)
+def strip(name, item=True, ghost=None, seam=0.8):
+    cells = []
+    for i in range(12):
+        im = Image.new("RGBA", (100, 190), (0, 0, 0, 0)); d = ImageDraw.Draw(im)
+        fighter(d, ox=-27.5, oy=5, s=0.5, phase=math.sin(2 * math.pi * i / 12), item=item)
+        if ghost == i:
+            d.rectangle((2, 65, 34, 105), fill=(40, 60, 180, 120))
+        cells.append(im)
+    sheet = Image.new("RGBA", (1200, 190), (0, 0, 0, 0))
+    for i, c in enumerate(cells):
+        sheet.paste(c, (i * 100, 0))
+    sheet.save(f"{out}/{name}.strip.png")
+    meta = {"frames": 12, "w": 100, "h": 190, "body_h": 161, "delay_ms": 83, "cycle_align": {} if seam is None else {"seam_ratio": seam}}
+    open(f"{out}/{name}.strip.json", "w").write(json.dumps(meta))
+strip("walk"); strip("lost", item=False); strip("ghost", ghost=5); strip("jump", seam=3.5); strip("noseam", seam=None)`;
+    const made = spawnSync('python3', ['-c', script, dir]);
+    assert.equal(made.status, 0, String(made.stderr));
+    const judge = (kind, a, b) => {
+      const out = path.join(dir, `${kind}-${path.basename(b)}.json`);
+      const run = spawnSync('python3', [path.join(here, 'motions.py'), 'pixel-judge', kind, path.join(dir, a), path.join(dir, b), out]);
+      assert.equal(run.status, 0, String(run.stderr));
+      return JSON.parse(readFileSync(out, 'utf8'));
+    };
+    const side = take => {
+      const answer = judge('side', 'front.png', take);
+      assert.deepEqual([answer.kind, answer.model], ['side', 'pixels-v1']);
+      assert.ok(checkedPixels('side', answer), 'the stage reads it as a pixel answer');
+      // Profile or three-quarter is never decided by pixels; the style statistic never fails.
+      assert.equal(answer.checks.side, 'unknown');
+      assert.ok(['pass', 'unknown'].includes(answer.checks.style));
+      const { side: _, style: __, ...rest } = answer.checks;
+      return { rest, answer };
+    };
+    assert.deepEqual(side('take.png').rest, { whole: 'pass', match: 'pass', clean: 'pass' });
+    const cut = side('headcut.png');
+    assert.deepEqual(cut.rest, { whole: 'fail', match: 'pass', clean: 'pass' });
+    assert.match(cut.answer.notes, /whole: the figure touches the top edge/);
+    assert.deepEqual(side('ground.png').rest, { whole: 'pass', match: 'pass', clean: 'fail' });
+    const lost = side('noitem.png');
+    assert.deepEqual(lost.rest, { whole: 'pass', match: 'fail', clean: 'pass' });
+    assert.match(lost.answer.notes, /match: region #[0-9a-f]{6} \([a-z ]+\), \d+\.\d% of the front, keeps 0\.00 of its share here/);
+    const loop = strip => {
+      const answer = judge('loop', 'take.png', strip);
+      assert.ok(checkedPixels('loop', answer), 'the stage reads it as a pixel answer');
+      assert.ok(answer.measures.ms < 5000 && answer.measures.frames === 12);
+      return { identity: answer.identity, anatomy: answer.anatomy, loop: answer.loop, notes: answer.notes };
+    };
+    const walk = loop('walk.strip.json');
+    assert.deepEqual([walk.identity, walk.anatomy, walk.loop], ['pass', 'pass', 'pass'], walk.notes);
+    const gone = loop('lost.strip.json');
+    assert.deepEqual([gone.identity, gone.anatomy, gone.loop], ['fail', 'pass', 'pass'], gone.notes);
+    assert.match(gone.notes, /identity: region #[0-9a-f]{6} \([a-z ]+\), \d+\.\d% of the look, keeps a median 0\.00 of its share over the frames/);
+    const ghost = loop('ghost.strip.json');
+    assert.deepEqual([ghost.identity, ghost.anatomy, ghost.loop], ['pass', 'fail', 'pass'], ghost.notes);
+    assert.match(ghost.notes, /anatomy: frame 5 is half-transparent \d+\.\d% \(frames \[5\]\)/);
+    assert.equal(loop('jump.strip.json').loop, 'fail');
+    assert.equal(loop('noseam.strip.json').loop, 'unknown');
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
 test('a resume-state file is written whole or not at all, and a scanner hold on Windows is retried', async () => {

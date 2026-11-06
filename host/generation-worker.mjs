@@ -4,15 +4,16 @@
 // It reaches the API outward only: a heartbeat with the subscriptions' health every minute, a claim of one stage of one job at a time,
 // lease renewals while the stage runs, artifacts and the package through the worker routes, the stage's outcome. Stages:
 // generation-stages.mjs. Config: `<root>/worker.env` (ODDBOUT_GENERATION_API, ODDBOUT_GENERATION_WORKER_KEY, optional
-// ODDBOUT_GENERATION_KEEP_DAYS), written by `og worker key`. Once a day it runs `og prune`: a finished job's request text and pictures go.
+// ODDBOUT_GENERATION_KEEP_DAYS and ODDBOUT_GENERATION_JUDGES), written by `og worker key`. Once a day it runs `og prune`: a finished job's
+// request text and pictures go.
 import { execFile, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { appendFile, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { ASKS, CODEX_CWD, FRONT_JUDGE_SCHEMA, GROK_LIMITED, REQUESTED_MODELS, createStages, frontJobId, frontJudgePrompt, frontVerdict, judgeCommand,
-  ogJobId } from './generation-stages.mjs';
+import { ASKS, CODEX_CWD, FRONT_JUDGE_SCHEMA, GROK_LIMITED, PIXEL_JUDGE, REQUESTED_MODELS, createStages, frontJobId, frontJudgePrompt, frontVerdict,
+  judgeCommand, judgesMode, ogJobId } from './generation-stages.mjs';
 import { codexSessionFacts, codexTokensSince, codexUsage } from './codex-usage.mjs';
 
 // <root>/bin holds this file in both installs (/srv/oddbout-gen on ODDBOUT's PC, a host's own folder in user mode).
@@ -65,10 +66,12 @@ const gitHead = dir => new Promise(resolve => execFile('git', ['-C', dir, 'rev-p
  * What made a stage's work (measurement, 2026-10-29): the kit and engine commits and the models, sent as a `versions` event when the
  * stage starts, so each number in docs/MEASUREMENT.md can be read per release. A commit that cannot be read is null, never a failure.
  * The models are the ones the stage asks for (`requested`, 2026-11-05): what codex recorded comes when the stage ends, as its `models` event.
+ * `judges`: the worker's judges mode (generation-stages JUDGE_MODES); named with the pixel judge when it is not codex.
  */
-export async function versionsEvent(kit, head = gitHead) {
+export async function versionsEvent(kit, head = gitHead, judges = 'codex') {
   const [kitRef, engine] = await Promise.all([head(kit), head(path.join(kit, 'vendor', 'sprite-gen'))]);
-  return { kind: 'versions', kit: kitRef, engine, requested: { ...REQUESTED_MODELS } };
+  return { kind: 'versions', kit: kitRef, engine, requested: { ...REQUESTED_MODELS,
+    ...(judges === 'codex' ? {} : { judges, pixelJudge: PIXEL_JUDGE.model }) } };
 }
 /** How much of a run's output the stage may read back (`og(args, { capture: true })`): codex exec's header, which names its session, comes first. */
 export const CAPTURE_BYTES = 32 * 1024;
@@ -472,6 +475,11 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
   const codexCwd = path.join(root, CODEX_CWD);
   await mkdir(codexCwd, { recursive: true });
   for (const file of await projectDocsAt(codexCwd)) await say(`codex folder ${codexCwd} reads ${file}: the brief and the judges read it beside their prompts`);
+  // Who judges the side takes and the walk and run loops (generation-stages JUDGE_MODES): codex unless worker.env says otherwise.
+  const judges = judgesMode(env.ODDBOUT_GENERATION_JUDGES);
+  if (env.ODDBOUT_GENERATION_JUDGES && env.ODDBOUT_GENERATION_JUDGES !== judges)
+    await say(`ODDBOUT_GENERATION_JUDGES=${env.ODDBOUT_GENERATION_JUDGES} is not one of codex, pixels, hybrid: codex judges`);
+  else if (judges !== 'codex') await say(`judges ${judges}: the pixel judge ${PIXEL_JUDGE.model} judges the side takes and the loops first`);
 
   let health = { ok: false, codex: false, grok: false, at: null }, checkedAt = 0, beatAt = 0, prunedAt = 0;
   const cooldowns = createCooldowns();
@@ -530,7 +538,7 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
     await mkdir(dir, { recursive: true });
     // og's job marker: `og run` refuses a folder without it. Who and what only; the description stays in the API.
     await writeFile(path.join(dir, 'request.json'), JSON.stringify({ id: ogId, api: { jobId: job.id, owner: job.owner }, createdAt: new Date().toISOString() }, null, 2) + '\n');
-    await api.progress(job, undefined, await versionsEvent(kit)).catch(() => {});
+    await api.progress(job, undefined, await versionsEvent(kit, undefined, judges)).catch(() => {});
     const controller = new AbortController(), tally = createTally(), since = Date.now();
     // The codex tokens of the sessions written since the stage began (codex-usage.mjs), or null: none, or unreadable (logged).
     const spent = async () => {
@@ -559,7 +567,7 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
         return capture ? { code, output } : { code };
       }),
       // What codex recorded for a run's session (its rollout under this worker's sessions folder), for the verdicts and the `models` event.
-      codexSession: (id, sinceMs) => codexSessionFacts(sessions, id, sinceMs), codexCwd,
+      codexSession: (id, sinceMs) => codexSessionFacts(sessions, id, sinceMs), codexCwd, judges,
       api, signal: controller.signal, lowMarginFeetTaken,
       fetchBytes: async url => { const r = await fetch(url, { signal: AbortSignal.timeout(60_000) }); if (!r.ok) throw new Error(`download ${r.status}`); return new Uint8Array(await r.arrayBuffer()); },
       motionsPy: args => unlessStopped(controller.signal, () => run(python, ['-I', path.join(root, 'bin', 'motions.py'), ...args], { cwd: kit, log, signal: controller.signal })
