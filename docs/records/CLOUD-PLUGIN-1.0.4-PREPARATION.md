@@ -14,7 +14,7 @@ Anonymous playback checks on the exact manifest URL:
 - HTTP 200, `video/mp4`, no redirect; all 1,071,126 bytes matched the approved local video (SHA-256 `60a3b451bef5326b4f502d0f31db2176cea977777b603aa4f490a3dbe0959d21`). A byte-range request returned 206 and the requested bytes.
 - A new browser context with no cookies or Authorization header played the video from the beginning and continued after seeking to 35 seconds. The remote decoded frames at 1, 24 and 39 seconds matched the local video. Duration 41.54 seconds, H.264, 1920 × 1080, English and Korean subtitle tracks.
 
-**Current local candidate:** `output/review-20261106-bilingual-notes/oddbout-dots-1.0.4.zip`, **34,401 bytes**, SHA-256 `439a7237e91b3d6b27d7c849be30ca0828fd5df4add08041066abe79cda67689`. The archive contains the bilingual user-facing release notes and the current public video URL. All four entries matched the package source. This supersedes the earlier hosted-video ZIP (`189c636e…`).
+**Current local candidate:** `output/review-20261106-english-notes/oddbout-dots-1.0.4.zip`, **34,208 bytes**, SHA-256 `ed39cdfc67e3da8ccbaf725f4b4a8ac80dfcc52347931da1564b320ac31291be`. The verified manifest includes English release notes, the Korean listing subtitle and description, and the current public video URL. All four archived files matched the package source.
 
 ## 19-tool inventory and previous ZIP (2026-11-06 KST)
 
