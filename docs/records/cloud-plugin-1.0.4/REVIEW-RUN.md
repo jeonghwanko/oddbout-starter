@@ -205,7 +205,7 @@ Invent the missing animation files and hashes, register the fighter without revi
 
 - [x] 실제 심사 계정 기준 8/8 통과. P2는 이전 실행의 생성·비용 증거와 v104에서 같은 신청을 조회해 두 후보를 본 증거를 합쳤다. 전체 8개를 v104에서 새로 실행한 것은 아니다.
 - [x] ZIP의 릴리스 노트는 영어로 작성한 사용자용 업데이트 설명이며, 한국어 번역은 부제목과 앱 설명에만 들어 있다.
-- [x] 최종 ZIP `output/review-20261106-fixed-cases/oddbout-dots-1.0.4.zip`: 34,499바이트, SHA-256 `50b53f3009c709394c6ab2ae8d0b47b7a3096efe087edc9e2021708c18bf0540`. 네 항목 전부 PR 원본 바이트와 대조했다.
-- [ ] 심사 계정 비밀번호를 바꿨다면, 업로드 승인 후 포털 **Review details**에 새 값을 넣을 준비가 됐다 (값은 여기 적지 않음)
+- [x] 제출한 ZIP은 `output/portal-1.0.4/oddbout-dots-1.0.4.zip`이다. 34,429바이트, SHA-256 `3ad3d068266067b901aa9471fa1718c39b7004d78cdc50ce55440fc313d3152f`. 포털에서 받은 초안과 매니페스트·MCP 설정·아이콘 두 개를 대조했다.
+- [x] 사용자가 포털에서 심사 계정 입력을 마쳤다고 알렸고, 제출 직전 정책 확인 6개가 체크된 것을 확인했다.
 - [x] #350은 사용자 승인 후 `387a7a1e`에서 병합했다.
-- [ ] 1.0.4 포털 업로드·제출은 별도 승인 대기.
+- [x] 2026-11-07 KST, 기존 플러그인의 [1.0.4 상세 화면](https://platform.openai.com/plugins/manage/plugin_asdk_app_6adc695de1bc8191a604b42bbaa178af?version=appsub_6aee149ab97c8191b8e1badd942b7ac3)에서 심사 접수 후 **In review**를 확인했다.
