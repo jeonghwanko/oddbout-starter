@@ -38,6 +38,48 @@ async function connector(g, hosted, fetcher = async () => new Response(png(512, 
     bytes: () => bytes };
 }
 
+test('a ready owner job carries both original WebPs in order; list, foreign jobs and failed pairs do not attach images', async () => {
+  const g = await generation();
+  try {
+    const job = crypto.randomUUID(), key = crypto.randomUUID(), foreign = crypto.randomUUID();
+    for (const [id, owner, idem] of [[job, g.owner, key], [foreign, g.other, crypto.randomUUID()]]) {
+      await g.sql.query(`insert into public.af_generation_jobs(id, owner_id, idempotency_key, description, language, status, candidates)
+        values($1,$2,$3,'review robot','en','appearance_ready','["front-a-0","front-b-0"]'::jsonb)`, [id, owner, idem]);
+    }
+    const images = ['UklGRhwAAABXRUJQVlA4TBAAAAAvAUAAAAdQwChg/wMR0f8A', 'UklGRhwAAABXRUJQVlA4TBAAAAAvAUAAAAfQ0v5H/wMR0f8A'];
+    const storage = g.db.storage.from;
+    let origin = new URL(CLOUD_RESOURCE).origin, invalidSecond = false;
+    g.db.storage.from = bucket => ({ ...storage(bucket), createSignedUrls: async paths => ({ data: paths.map(path => ({
+      path, signedUrl: `${origin}/storage/v1/object/sign/${bucket}/${path}?token=fixture` })) }) });
+    const reads = [];
+    const { raw } = await connector(g, {}, async (input, options) => {
+      const url = new URL(input);
+      assert.equal(options.redirect, 'error'); assert.equal(options.credentials, 'omit');
+      assert.ok(url.pathname.startsWith('/storage/v1/object/sign/af-generation/jobs/' + job + '/'));
+      reads.push(url.pathname);
+      const second = url.pathname.endsWith('/front-b-0.webp');
+      return new Response(second && invalidSecond ? 'not an image' : Buffer.from(images[Number(second)], 'base64'));
+    }, { meta: { 'openai/subject': 'preview-test' } });
+    for (const args of [{ jobId: job, waitSeconds: 1 }, { view: 'job', idempotencyKey: key }]) {
+      const result = await raw('get_hosted_fighter', args);
+      assert.deepEqual(result.content.slice(1), images.map(data => ({ type: 'image', mimeType: 'image/webp', data })));
+      assert.ok(result.structuredContent.job.candidates[0].url);
+      assert.doesNotMatch(JSON.stringify(result.structuredContent), /UklGR/);
+    }
+    const before = reads.length;
+    for (const args of [{}, { jobId: foreign }]) assert.equal((await raw('get_hosted_fighter', args)).content.length, 1);
+    assert.equal(reads.length, before);
+    origin = 'https://untrusted.example';
+    assert.equal((await raw('get_hosted_fighter', { jobId: job })).content.length, 1);
+    assert.equal(reads.length, before);
+    origin = new URL(CLOUD_RESOURCE).origin; invalidSecond = true;
+    const fallback = await raw('get_hosted_fighter', { jobId: job });
+    assert.equal(fallback.content.length, 1);
+    assert.equal(fallback.structuredContent.job.status, 'appearance_ready');
+    assert.ok(fallback.structuredContent.job.candidates[1].url);
+  } finally { await g.sql.close(); }
+});
+
 test('hosted generation tools list only when configured', async () => {
   const g = await generation();
   try {
