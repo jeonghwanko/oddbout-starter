@@ -83,15 +83,15 @@ In my ODDBOUT Review Sandbox world, publish a sample post titled Review notice w
 
 주의: 2026-11-06 공개 세계 목록에 "ODDBOUT Review Sandbox"가 없었다. 처음 실행하면 세계를 새로 만든다(계정당 2개). 글과 세계는 공개로 남는다.
 
-- [ ] `browse_oddbout` `view=world`로 세계가 심사 계정 것인지 확인했다
-- [ ] 없을 때만 `write_story`(`write=world`, `action=create`)로 요청한 세계를 만들었다
-- [ ] `write_story`(`write=world_post`)로 제목·본문을 정확히, 새 UUID와 nickname `Review Pilot`으로 썼다
-- [ ] 돌아온 세계·글 ID, 본문, 공개 표시를 다시 읽어 확인했다
-- [ ] 비공개라거나 자동으로 지워진다고 말하지 않았다
+- [x] `browse_oddbout` `view=world`로 세계가 심사 계정 것인지 확인했다
+- [x] 없을 때만 `write_story`(`write=world`, `action=create`)로 요청한 세계를 만들었다
+- [x] `write_story`(`write=world_post`)로 제목·본문을 정확히, 새 UUID와 nickname `Review Pilot`으로 썼다
+- [x] 돌아온 세계·글 ID, 본문, 공개 표시를 다시 읽어 확인했다
+- [x] 비공개라거나 자동으로 지워진다고 말하지 않았다
 
-결과:
-세계 ID / 글 ID:
-증거:
+결과: 실패(원문만으로는 정확한 세계 이름으로 게시하지 못함). 계정 불일치로 첫 실행이 멈췄다. 심사 계정을 재선택해 원문을 다시 보냈을 때 `Review Sandbox`로 생성을 제안해 거절했다. 이름을 명시적으로 정정한 뒤 요청한 세계와 글 1건을 만들고 공개 본문을 확인했다. 아래 체크는 보정 후 관찰이다.
+세계 ID / 글 ID: `w-13a90f81e8` / `6e294641-9a93-4e41-a53c-2968ccf83120`.
+증거: `P5.mp4` 후반의 게시 응답과 [공개 라운지](https://oddbout.com/world.html?id=w-13a90f81e8&lang=en#lounge). `get_profile`로 심사 계정 재확인 → `browse_oddbout(view=world)`로 부재 확인 → `write_story(write=world, action=create, name="ODDBOUT Review Sandbox", nickname="Review Pilot")` → `write_story(write=world_post, worldId=w-13a90f81e8, title="Review notice", nickname="Review Pilot", idempotencyKey=위 글 ID)`. 기존 호출 영수증의 본문은 원문과 일치했다. ChatGPT의 세계 재조회에서는 정사(`canon`) 글만 읽혔다. 별도로 로그인 없는 공개 피드에서 글 ID·작성 계정·닉네임·원문·`hidden=false`·`canon=false`를 확인했고 사이트 라운지에도 본문과 작성자가 표시됐다.
 
 ### P2 — 공식 호스트로 한 번 만들기 (외형 선택 전까지)
 
