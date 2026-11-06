@@ -132,6 +132,8 @@ PC의 설치 폴더는 PC에서 `npm run host -- remove --yes`로 지운다.
   ([MEASUREMENT.md](MEASUREMENT.md)) 이 기준을 숫자로 바꾼다.
 - 하루 한 번 끝난 작업 폴더를 지운다. 닫힌 지 7일 지난 작업과, 닫히지 않은 채 14일 동안 바뀐 파일이 없는 작업이다
   (`worker.env`의 `ODDBOUT_GENERATION_KEEP_DAYS`, 1~90).
+- 옆모습·걷기·달리기 판정은 기본으로 codex가 한다. `worker.env`에 `ODDBOUT_GENERATION_JUDGES=pixels`(픽셀 판정기만) 또는 `hybrid`(픽셀 판정기 먼저,
+  정하지 못한 검사만 codex)를 적으면 바뀐다. 무엇을 보고 무엇을 못 보는지는 [host/README.md](../host/README.md)의 판정기 항목에 있다.
 
 ## 보안 모델
 
