@@ -38,11 +38,11 @@ test('wire descriptor exposes the complete official file-input schema and keeps 
   assert.equal(status, 200);
   // The probe is check_creator_file's view input (MCP 통합 1단계, 2026-11-05); verify_creator_file_input still answers (the calls below).
   const tools = body.result.tools, tool = tools.find(t => t.name === 'check_creator_file');
-  assert.equal(tools.length, 15);
+  assert.equal(tools.length, 10);
   assert.ok(!tools.some(t => t.name === 'verify_creator_file_input'));
   assert.deepEqual(tool.inputSchema.properties.view.enum, ['input', 'source']);
-  // The profile-set uploads are kinds of the registration tools since 2단계 (2026-11-06).
-  for (const name of ['get_profile', 'open_creator_homepage', 'prepare_fighter_registration', 'upload_fighter_asset', 'submit_fighter_registration'])
+  // The profile-set uploads are kinds of the registration tools since 2단계 (2026-11-06), the account reads views of get_my_fighters since 2단계 B.
+  for (const name of ['get_profile', 'get_my_fighters', 'prepare_fighter_registration', 'upload_fighter_asset', 'submit_fighter_registration'])
     assert.ok(tools.some(t => t.name === name));
   assert.deepEqual(tool._meta['openai/fileParams'], ['file']);
   assert.deepEqual(Object.keys(tool.inputSchema.properties.file.properties).sort(), ['download_url','file_id','file_name','mime_type']);

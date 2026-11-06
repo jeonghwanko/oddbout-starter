@@ -158,7 +158,7 @@ function hostedStep(job, uploads = true) {
         + 'every motion on his fighter page (give him siteUrl) and enter him there (출전); other people meet him only after that. enter_fighter does it here '
         + 'once he confirmed each of the eleven motions. '
         // Not a promise (2026-11-03, 레온: his set was refused by the file check while this said he could enter once it was checked).
-        + (job.profileSetId ? `His chosen front went in as his profile set (${job.profileSetId}). Before he enters, read get_registered_fighter: its `
+        + (job.profileSetId ? `His chosen front went in as his profile set (${job.profileSetId}). Before he enters, read ${toolRef('get_registered_fighter')}: its `
           + 'front says whether the set passed ODDBOUT\'s checks, and its next what to do if not. The home and the arena show it once an operator approves it. '
           + (job.expressions?.url ? `His six arena faces were sent with it; ${toolRef('get_profile_set')} says whether they passed the check (sheetErrors when not).` : '')
           : 'His profile set (front picture) did not go in with it: '

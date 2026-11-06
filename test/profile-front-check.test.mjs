@@ -62,7 +62,7 @@ test('the PC takes a validated front, its verdict decides the entry, and the own
     const refused = await enter();
     assert.deepEqual(refused.body.front, { required: true, ok: false, profileSetId: first, status: 'rejected', frontCheck: 'fail', reason: 'FRONT_VIEW',
       notes: 'A side view facing right.' });
-    assert.match(frontNext(refused.body.front), /front check sent its painting back \(front\.reason and front\.notes.*prepare_profile_set/);
+    assert.match(frontNext(refused.body.front), /front check sent its painting back \(front\.reason and front\.notes.*prepare_fighter_registration\(kind=profile_set\)/);
     assert.doesNotMatch(frontNext(refused.body.front), /side view/, 'the judge\'s words stay data, out of the instruction');
     assert.doesNotMatch(frontNext(refused.body.front, { directory: true }), /prepare_profile_set|get_fighter_spec|출전/);
     // The MCP tools say it too: get_registered_fighter before an entry, enter_fighter with its refusal.

@@ -3,6 +3,7 @@
 import { z } from 'zod';
 import { DATABASE_TIMEOUT_MS, Problem, readBody, timedFetch, unavailable, within } from '../../api/http.mjs';
 import { compactText } from '../tool-result.mjs';
+import { toolRef } from './merged-tools.mjs';
 
 /**
  * What cloud.mjs hands the tool families. `Identity` is the verified caller (authenticateCloud): null on a signed-out call, which
@@ -83,14 +84,17 @@ export const SITE_URL_NEXT = 'The user can follow this on the ODDBOUT website to
  */
 export function frontNext(front, { directory = false, uploads = !directory } = {}) {
   if (!front?.required || front.ok) return null;
+  // The full edition names merged tools by selector (enter_fighter's call without its action is not renamed); the directory keeps its own.
+  /** @param {string} member */
+  const tool = member => directory ? member : toolRef(member);
   const cannot = directory ? 'The fighter cannot enter public play yet' : 'He cannot enter (출전) yet';
   const after = directory ? 'It can enter once front.ok.' : 'He can enter once front.ok.';
   const painting = 'a full-body front painting of this fighter: one character, whole from head to soles, facing the viewer straight on'
     + (directory ? '' : ' (get_fighter_spec overview: profileSet)');
   // The upload tools take files a host attaches (ChatGPT's); the directory edition has none (리뷰 2026-11-03).
   const upload = !uploads ? 'This connector cannot upload it: the user uploads it from the ODDBOUT app in ChatGPT or with the creator kit.'
-    : 'It goes in through prepare_profile_set, upload_profile_set_asset and submit_profile_set, which take files this host attaches (as ChatGPT '
-      + 'does); otherwise the user uploads it from the ODDBOUT app in ChatGPT.';
+    : `It goes in through ${tool('prepare_profile_set')}, ${tool('upload_profile_set_asset')} and ${tool('submit_profile_set')}, which take files `
+      + 'this host attaches (as ChatGPT does); otherwise the user uploads it from the ODDBOUT app in ChatGPT.';
   const reason = String(front.reason ?? '');
   if (!front.profileSetId) return `${cannot}: it has no front painting (profile set). Make ${painting} with the user. ${upload} ${after}`;
   // Each refusal asks for what fixes it, never a paid new painting where the same one goes in again. The judge's and the operator's words
@@ -107,11 +111,11 @@ export function frontNext(front, { directory = false, uploads = !directory } = {
       + `only if he wants. ${upload} ${after}`;
   }
   if (front.status === 'uploading') return `${cannot}: its front painting was never submitted (${front.profileSetId}). `
-    + (!uploads ? 'Tell the user to finish it where it was started. ' : 'Finish its upload (upload_profile_set_asset) and submit_profile_set. ') + after;
+    + (!uploads ? 'Tell the user to finish it where it was started. ' : `Finish its upload (${tool('upload_profile_set_asset')}) and ${tool('submit_profile_set')}. `) + after;
   if (front.frontCheck === 'stalled') return `${cannot}: ODDBOUT could not check its front painting (${front.profileSetId}) automatically, and an `
-    + `operator will look at it. Nothing to upload now: tell the user and read get_registered_fighter again later. ${after}`;
+    + `operator will look at it. Nothing to upload now: tell the user and read ${tool('get_registered_fighter')} again later. ${after}`;
   return `${cannot}: ODDBOUT is checking its front painting (${front.profileSetId}) — the file first, then whether it shows one character, `
-    + `whole, facing the viewer straight on. Tell the user; read get_registered_fighter again later. ${after}`;
+    + `whole, facing the viewer straight on. Tell the user; read ${tool('get_registered_fighter')} again later. ${after}`;
 }
 export const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 export const AUTH = [{ type: 'oauth2', scopes: ['openid', 'email', 'profile'] }];

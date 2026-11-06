@@ -8,6 +8,10 @@
  * the reviewed registration tools too: 55 → 19. A merge never mixes reads with writes, or public tools with signed-in ones, so no read starts
  * asking for approval and no public tool for a sign-in. A merged write is as consequential as its most consequential member: destructive if
  * any member is, retry-safe (idempotent) only if every member is, open-world if any member is.
+ * Until ChatGPT's portal showed get_my_fighters published (2단계 A, 24 tools), five reviewed reads stayed listed beside it: OpenAI's continuous
+ * review drops a published app's tool as soon as a rescan misses it while a new tool still waits for its checks
+ * (developers.openai.com/plugins/deploy/app-review, "Ongoing Maintenance"). The portal's rescan of 2026-11-06 published all 24 with no
+ * findings, and 2단계 B unlisted those five (19 tools).
  *
  * Old names keep working, because ChatGPT's published app (1.0.3) and hosts holding an older list call them:
  * - a merged tool may keep its main member's name (upload_fighter_asset): a call without the selector is that member's call, as before;
@@ -73,14 +77,6 @@ export const MERGED_TOOLS = Object.freeze(/** @type {MergedTool[]} */ ([
     views: { enter: 'enter_cup', choose_prep: 'choose_career_prep', auto: 'set_career_auto' } },
 ]));
 
-/**
- * Members that stay listed under their own name and reviewed definition beside their merged tool, for now (2단계 A, 2026-11-06). ChatGPT's
- * published app (1.0.3) carries them, and OpenAI's continuous review drops a tool from a published app as soon as a rescan misses it while a
- * new tool waits for its checks (developers.openai.com/plugins/deploy/app-review, "Ongoing Maintenance"): unlisting them before the merged
- * tool is live there would leave the app with neither. Empty this set once the portal shows get_my_fighters live (2단계 B: 24 → 19 tools).
- */
-export const KEEP_LISTED = new Set(['list_my_fighters', 'get_registered_fighter', 'get_fighter_submission', 'check_creation_readiness', 'open_creator_homepage']);
-
 const BY_NAME = new Map(MERGED_TOOLS.map(merged => [merged.name, merged]));
 /** @param {MergedTool} merged */
 const keyOf = merged => merged.key ?? 'view';
@@ -92,7 +88,7 @@ const MEMBERS = new Map(MERGED_TOOLS.flatMap(merged => Object.entries(merged.vie
  * @type {Map<string, { tool: string, key: string, view: string | null }>}
  */
 export const ALIASES = new Map(/** @type {[string, { tool: string, key: string, view: string | null }][]} */ ([
-  ...[...MEMBERS].filter(([member, { tool }]) => member !== tool && !KEEP_LISTED.has(member)),
+  ...[...MEMBERS].filter(([member, { tool }]) => member !== tool),
   ...MERGED_TOOLS.flatMap(merged => (merged.formerly ?? []).map(name => [name, { tool: merged.name, key: keyOf(merged), view: null }])),
 ]));
 
@@ -156,9 +152,10 @@ export function mergingRegister(registerTool) {
   const hold = (name, title, description, inputSchema, run, options = {}) => {
     const renamed = renameTools(description);
     if (MEMBERS.has(name)) held.set(name, { title, description: renamed, inputSchema, run, options });
-    // A member that stays listed keeps its reviewed definition to the byte, beside its merged tool's view.
-    if (KEEP_LISTED.has(name)) registerTool(name, title, description, inputSchema, run, options);
-    else if (!MEMBERS.has(name)) registerTool(name, title, renamed, inputSchema, run, options);
+    // A tool that was not merged has no old name to be called by, so its results name merged tools as its description does
+    // (2단계 B, 2026-11-06: get_fighter_spec's creation steps still named the profile-set and submission tools by their old names).
+    else registerTool(name, title, renamed, inputSchema,
+      async (/** @type {any} */ args, /** @type {ToolContext} */ context) => renameDeep(await run(args, context)), options);
   };
   const finish = () => {
     for (const merged of MERGED_TOOLS) {
@@ -195,7 +192,7 @@ export function mergingRegister(registerTool) {
         shape[name] = (schemas.length === 1 ? schemas[0] : z.union(/** @type {[z.ZodType, z.ZodType, ...z.ZodType[]]} */ (schemas))).optional();
       }
       const lines = views.map(({ view, member, entry }) => `${key}=${view}${view === merged.defaultView ? ' (default)' : ''}`
-        + `${member === merged.name ? '' : KEEP_LISTED.has(member) ? ` (same as ${member})` : ` (was ${member})`}`
+        + `${member === merged.name ? '' : ` (was ${member})`}`
         + `${Object.keys(entry.inputSchema).length ? ` [${argumentsOf(entry.inputSchema)}]` : ''}: ${entry.description}`);
       const own = held.get(merged.name);
       const diagnostic = new Set(views.filter(({ entry }) => entry.options.diagnostic === true).map(({ view }) => view));

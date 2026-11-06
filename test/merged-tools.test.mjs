@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createCloudHandler as cloudHandler, CLOUD_ISSUER, CLOUD_RESOURCE, DIRECTORY_RESOURCE, PUBLIC_TOOLS } from '../mcp/cloud.mjs';
-import { ALIASES, KEEP_LISTED, MERGED_TOOLS, aliasCall, memberOf, renameDeep, renameTools, toolRef } from '../mcp/cloud/merged-tools.mjs';
+import { ALIASES, MERGED_TOOLS, aliasCall, memberOf, renameDeep, renameTools, toolRef } from '../mcp/cloud/merged-tools.mjs';
+import { frontNext } from '../mcp/cloud/common.mjs';
 
 // MCP 통합 (1단계 2026-11-05, 2단계 2026-11-06): tools of one kind are one tool with a selector in the full edition; their own names still answer.
 const owner = crypto.randomUUID();
@@ -32,8 +33,8 @@ test('each merged tool lists its selector, needs one sign-in, and is as conseque
     assert.equal(tool.securitySchemes[0].type === 'noauth', PUBLIC_TOOLS.has(merged.name), merged.name);
     for (const [view, member] of Object.entries(merged.views)) {
       assert.match(tool.description, new RegExp(`${key}=${view}\\b`), `${merged.name} ${view}`);
-      // Members leave the list unless they stay listed for ChatGPT's published app, beside their merged tool.
-      if (member !== merged.name) assert.equal(tools.some(t => t.name === member), KEEP_LISTED.has(member), member);
+      // Members leave the list: only a merged tool that keeps a member's name lists it (MCP 통합 2단계 B, 2026-11-06).
+      if (member !== merged.name) assert.equal(tools.some(t => t.name === member), false, member);
     }
   }
   const hints = name => { const a = tools.find(t => t.name === name).annotations; return [a.readOnlyHint, a.destructiveHint, a.idempotentHint, a.openWorldHint]; };
@@ -55,17 +56,32 @@ test('each merged tool lists its selector, needs one sign-in, and is as conseque
   assert.equal(tools.find(t => t.name === 'manage_career').inputSchema.properties.fighterId.anyOf.length, 2);
 });
 
-test('the full list names no merged-away tool, except a member that stays listed and what a selector line says it was', async () => {
+test('the full list names no merged-away tool, except what a selector line says it was', async () => {
   const tools = await listFull();
-  const text = JSON.stringify(tools).replace(/\((?:was|same as) [a-z_]+\)/g, '');
+  const text = JSON.stringify(tools).replace(/\(was [a-z_]+\)/g, '');
   const initialize = await (await post(cloudHandler({ db: dbFor(), arena: echoArena([]), hosted: {}, log: () => {} }), CLOUD_RESOURCE, 'initialize',
     { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't', version: '1' } })).json();
   for (const name of ALIASES.keys()) {
     assert.doesNotMatch(text, new RegExp(`\\b${name}\\b`), `${name} in the list`);
     assert.doesNotMatch(initialize.result.instructions, new RegExp(`\\b${name}\\b`), `${name} in the instructions`);
   }
-  for (const name of KEEP_LISTED) assert.equal(ALIASES.has(name), false, name);
   assert.match(text, /browse_oddbout\(view=bout\)/);
+});
+
+// 2단계 B (2026-11-06): the creation guide still named the profile-set and submission tools by their old names, which no list carries now.
+test('a tool that was not merged, and the front guidance, name no tool the list no longer carries', async () => {
+  const handle = cloudHandler({ db: dbFor(), arena: echoArena([]), hosted: {}, log: () => {} });
+  const unlisted = text => [...ALIASES.keys()].filter(name => text.split(/[^a-z_]+/).includes(name));
+  const creation = await (await post(handle, CLOUD_RESOURCE, 'tools/call', { name: 'get_fighter_spec', arguments: { section: 'creation' } }, false)).text();
+  assert.deepEqual(unlisted(creation), []);
+  assert.match(creation, /get_my_fighters\(view=submission\)/);
+  for (const front of [{ required: true, ok: false }, { required: true, ok: false, profileSetId: 'p', status: 'uploading' },
+    { required: true, ok: false, profileSetId: 'p', status: 'checking', frontCheck: 'stalled' }, { required: true, ok: false, profileSetId: 'p', status: 'checking' }]) {
+    const next = frontNext(front);
+    assert.deepEqual(unlisted(next), [], next);
+    // The directory edition lists the members under their own names.
+    assert.equal(frontNext(front, { directory: true }).includes('get_my_fighters'), false);
+  }
 });
 
 test('an old name answers as its selector with the same result, the member\'s sign-in and log name, and keeps the old names in its result', async () => {
@@ -131,11 +147,11 @@ test('aliasCall, memberOf, toolRef, renameTools and renameDeep', () => {
   // A merged tool's earlier name keeps the caller's selector.
   assert.deepEqual(aliasCall({ method: 'tools/call', params: { name: 'get_my_fighter_updates', arguments: { view: 'career', fighterId: 'kuma' } } }).params,
     { name: 'get_my_fighters', arguments: { view: 'career', fighterId: 'kuma' } });
-  // A member that stays listed, and a merged tool that keeps a member's name, are called as they are.
-  for (const name of ['get_registered_fighter', 'upload_fighter_asset']) {
-    const body = { method: 'tools/call', params: { name, arguments: {} } };
-    assert.equal(aliasCall(body), body);
-  }
+  // The reviewed account reads are views too since 2단계 B (2026-11-06); a merged tool that keeps a member's name is called as it is.
+  assert.deepEqual(aliasCall({ method: 'tools/call', params: { name: 'get_registered_fighter', arguments: { fighterId: 'kuma' } } }).params,
+    { name: 'get_my_fighters', arguments: { fighterId: 'kuma', view: 'fighter' } });
+  const body = { method: 'tools/call', params: { name: 'upload_fighter_asset', arguments: {} } };
+  assert.equal(aliasCall(body), body);
   const listed = { method: 'tools/list', params: { name: 'get_cup' } };
   assert.equal(aliasCall(listed), listed);
   assert.equal(memberOf('browse_oddbout', { view: 'bout' }), 'read_bout');
@@ -145,7 +161,7 @@ test('aliasCall, memberOf, toolRef, renameTools and renameDeep', () => {
   assert.equal(memberOf('browse_oddbout', { view: 'nope' }), 'browse_oddbout');
   assert.equal(memberOf('spar', { view: 'bout' }), 'spar');
   assert.equal(toolRef('get_hosted_fighter'), 'get_hosted_fighter');
-  assert.equal(toolRef('get_registered_fighter'), 'get_registered_fighter');
+  assert.equal(toolRef('get_registered_fighter'), 'get_my_fighters(view=fighter)');
   assert.equal(toolRef('register_hosted_fighter'), 'submit_fighter_registration(kind=hosted)');
   assert.equal(toolRef('get_my_fighter_updates'), 'get_my_fighters');
   assert.equal(renameTools('read get_cup, then get_cups or my_get_cup; spar'), 'read browse_oddbout(view=cup), then get_cups or my_get_cup; spar');

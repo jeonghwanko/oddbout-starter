@@ -1,11 +1,12 @@
 # ODDBOUT 연결과 제작 준비
 
 ODDBOUT 계정 연결과 등록은 대화에 연결한 **호스팅 ODDBOUT MCP**가 맡는다. 작업 공간 도구(`creation:tool`)는 제작과 검증만
-하며 등록용 로그인을 읽거나 제안하지 않는다. 두 도구에 같은 이름(`check_creation_readiness`)이 있어도 준비 응답의 구조가 다르다.
+하며 등록용 로그인을 읽거나 제안하지 않는다. 작업 공간의 `check_creation_readiness`와 클라우드의 `get_my_fighters`(`view: "readiness"`)는 준비 응답의 구조가 다르다.
+클라우드 쪽은 2026-11-06까지 같은 이름 `check_creation_readiness`였고, 그 이름도 그대로 답한다(Claude 디렉터리판은 지금도 그 이름으로 둔다).
 
 | 사용 경로 | 연결과 첫 확인 | 중단 후 재개 |
 | --- | --- | --- |
-| Dots/Grok의 호스팅 ODDBOUT MCP (`mcp/cloud.mjs`) | Dots는 기존 ODDBOUT 앱을 선택·재사용하고, 다른 호스트의 최초 연결은 [CLOUD-MCP.md](CLOUD-MCP.md)를 따른다. 대상 대화에서 `get_profile`과 cloud `check_creation_readiness(purpose: "connection")` 확인 | 같은 계정의 `get_hosted_fighter`로 저장된 작업 조회. 아래 클라우드 절과 [호스팅 복구](CLOUD-MCP.md#호스팅-작업의-중단과-미리보기-복구) 참고 |
+| Dots/Grok의 호스팅 ODDBOUT MCP (`mcp/cloud.mjs`) | Dots는 기존 ODDBOUT 앱을 선택·재사용하고, 다른 호스트의 최초 연결은 [CLOUD-MCP.md](CLOUD-MCP.md)를 따른다. 대상 대화에서 `get_profile`과 cloud `get_my_fighters(view: "readiness", purpose: "connection")` 확인 | 같은 계정의 `get_hosted_fighter`로 저장된 작업 조회. 아래 클라우드 절과 [호스팅 복구](CLOUD-MCP.md#호스팅-작업의-중단과-미리보기-복구) 참고 |
 | PC 또는 준비된 VM의 작업 공간 도구 (`npm run creation:tool`, `scripts/creation-tool.mjs`) | 작업 공간 `check_creation_readiness`로 키트·도구·생성 경로를 확인한다. 계정과 등록은 위 클라우드 연결로 확인 | 로컬 제작 세션·작업 조회. 아래 작업 공간 절 참고 |
 
 클라우드 연결에 로컬 로그인, PC 설치를 요구하지 않는다. 작업 공간에서도 등록 계정, 생성 접근과
@@ -34,9 +35,10 @@ ChatGPT/Dots에서 가져온 플러그인의 `mcp.json`은 클라우드 앱 연�
    새로운 생성 준비에만 기본 `purpose: "generation"`을 사용하고 `account`는 사용자가 실제 선택한 경우에만 넘긴다.
 2. 응답의 `items.login`은 `status: "connector-verification-required"`, `route: "oddbout-cloud"`,
    `nextTools: ["get_profile", "check_creation_readiness"]`다. 작업 공간은 저장된 등록 세션을 읽지 않고 로그인을 제안하지 않으며,
-   `readyForRegistration`은 항상 `false`다. 계정은 대화에 연결한 ODDBOUT의 `get_profile`과 `check_creation_readiness`로 확인한다.
+   `readyForRegistration`은 항상 `false`다. 계정은 대화에 연결한 ODDBOUT의 `get_profile`과 `get_my_fighters` `view: "readiness"`
+   (예전 이름 `check_creation_readiness`)로 확인한다.
 3. 사용자가 최종 패키지의 등록을 요청하면 클라우드 `prepare_fighter_registration` → `upload_fighter_asset` →
-   `submit_fighter_registration` → `get_fighter_submission` 순서로 진행한다. 클라우드 도구가 없거나 실패해도 작업 공간에서
+   `submit_fighter_registration` → `get_my_fighters` `view: "submission"` 순서로 진행한다. 클라우드 도구가 없거나 실패해도 작업 공간에서
    로그인하거나 다른 계정으로 바꾸지 않는다. 기존 제출과 작업을 먼저 조회한다.
 
 VM 안에서 작업 공간 도구 목록(`creation:tool list`)이 조회된 것만으로 Dots 대화에 ODDBOUT 도구가 연결됐다고 보고하지 않는다.
@@ -51,7 +53,7 @@ PC의 `config.toml`·CLI 로그인 세션은 Dots/Grok에 자동 설치되거나
 
 1. 현재 호스트에서 실제 ODDBOUT 커넥터를 선택하고 `get_profile`로 의도한 등록 계정인지 확인한다.
    도구 목록·공개 `/spec`만 조회된 상태는 사용자 인증 완료가 아니다.
-2. 이 커넥터의 `check_creation_readiness(purpose: "connection")`를 읽는다. 응답은
+2. 이 커넥터의 `get_my_fighters(view: "readiness", purpose: "connection")`를 읽는다. 응답은
    `scope: "cloud-registration-connection"`, `account`, `registration`이며 아래 작업 공간 `items.*` 표와 다르다.
    연결이 정상이더라도 `generation`, `delivery`, `package`는 실제 증거가 생기기 전까지 `unverified`다.
 3. 호스팅 생성을 이어갈 때는 저장된 `jobId`로 `get_hosted_fighter`를 호출한다. ID가 없으면 원래 `idempotencyKey`로 읽기만 하는 조회를 한다.
@@ -82,7 +84,7 @@ VM 셸의 CONNECT 403과 네이티브 커넥터 실패를 구분한다. VM에서
 `kitAndAccountReady`는 키트와 생성 경로 선택만 확인한다. 기존 `readyForGeneration`은 실제 생성·전달을 확인하는
 기능이 이 도구에 없으므로 `false`다. 이 값으로 사용자 요청을 거부하거나 확인용 생성을 하지 않는다.
 요청된 첫 생성은 [DELIVERY.md](DELIVERY.md)의 실제 도구·환경·계정·모델·비용·전달 사전 조건을 별도로 확인한 뒤 진행한다.
-작업 공간의 `readyForRegistration`은 항상 `false`다. 등록 접근은 클라우드 `check_creation_readiness`가 보고하며, 그것도 최종 패키지 검수·사용자 등록 요청을 대신하지 않는다.
+작업 공간의 `readyForRegistration`은 항상 `false`다. 등록 접근은 클라우드 `get_my_fighters` `view: "readiness"`가 보고하며, 그것도 최종 패키지 검수·사용자 등록 요청을 대신하지 않는다.
 
 생성 모델 문자열, 로그인, 도구 목록, `creation:delivery` 기록 검사로 라이브 생성이나 부모 화면 전달 성공을 만들지 않는다.
 기존 결과가 있으면 회수·표시하고, `pending`·`unknown`을 재생성 허가로 바꾸지 않는다.

@@ -30,8 +30,9 @@ test('MCP discovery, file schemas, profile identity and HTTP auth challenge inte
   assert.equal(init.result.serverInfo.name,'oddbout-cloud');
   const list=await (await handle(request('tools/list'))).json();
   // MCP 통합 1단계 (2026-11-05): 21 until the creator-file reads became check_creator_file's views; 2단계 (2026-11-06): 20 until the
-  // profile-set and creator-source writes became kinds of the registration tools, and the account reads views of get_my_fighters.
-  assert.equal(list.result.tools.length,15);
+  // profile-set and creator-source writes became kinds of the registration tools, and the account reads views of get_my_fighters; 2단계 B
+  // (2026-11-06): 15 until the five reviewed account reads left the list for those views.
+  assert.equal(list.result.tools.length,10);
   for(const name of ['prepare_fighter_registration','upload_fighter_asset','check_creator_file']) {
     const t=list.result.tools.find(t=>t.name===name), f=t.inputSchema.properties[t._meta['openai/fileParams'][0]];
     assert.deepEqual(new Set(f.required),new Set(['download_url','file_id']));
@@ -278,14 +279,17 @@ test('creator homepage is an authenticated fixed navigation URL without account 
   let unexpected = 0;
   const db = {...dbFor(),from:()=>{unexpected++;throw Error('unexpected database call')}};
   const handle = createCloudHandler({db,fetcher:async()=>{unexpected++;throw Error('unexpected fetch')}});
-  const tool = (await (await handle(request('tools/list'))).json()).result.tools.find(t=>t.name==='open_creator_homepage');
-  assert.deepEqual(Object.keys(tool.inputSchema.properties),[]);
+  // A view of get_my_fighters since MCP 통합 2단계 B (2026-11-06); its own name still answers.
+  const tools = (await (await handle(request('tools/list'))).json()).result.tools, tool = tools.find(t=>t.name==='get_my_fighters');
+  assert.equal(tools.some(t=>t.name==='open_creator_homepage'),false);
   assert.equal(tool.securitySchemes[0].type,'oauth2');
   assert.equal(tool.annotations.readOnlyHint,true); assert.equal(tool.annotations.idempotentHint,true);
   assert.equal((await handle(request('tools/call',{name:'open_creator_homepage',arguments:{}}))).status,401);
-  const result = toolJson(await call(handle,'open_creator_homepage'));
-  assert.equal(result.url,'https://oddbout.com/creator.html');
-  assert.match(result.signIn,/normally.*same account as get_profile/);
+  for (const [name,args] of [['open_creator_homepage',{}],['get_my_fighters',{view:'homepage'}]]) {
+    const result = toolJson(await call(handle,name,args));
+    assert.equal(result.url,'https://oddbout.com/creator.html',name);
+    assert.match(result.signIn,/normally.*same account as get_profile/,name);
+  }
   assert.equal(unexpected,0);
 });
 test('native OAuth hook isolates connector tokens and live-session checks enforce owner/client/scope/revocation',async()=>{
@@ -728,7 +732,7 @@ test('the sign-in-first address lists exactly what /mcp lists and says the same;
   const arena = { url: 'https://arena.test/oddbout-arena', key: 'k'.repeat(64), fetcher: async () => Response.json({ ok: true, fighters: [] }) };
   const db = { ...dbFor(), rpc: async name => ({ data: name === 'af_account' ? { invited: true, accessMode: 'open', canSubmit: true } : name === 'af_mcp_session_state' ? 'usable' : true }) };
   const hello = { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'codex', version: '1' } };
-  for (const [setup, options, count] of [['arena and hosted', { arena, hosted: {} }, 24], ['bare', {}, 15]]) {
+  for (const [setup, options, count] of [['arena and hosted', { arena, hosted: {} }, 19], ['bare', {}, 10]]) {
     const handle = createCloudHandler({ db, ...options });
     const text = (url, method, params = {}) => handle(new Request(url, { method: 'POST', headers: { 'content-type': 'application/json',
       accept: 'application/json, text/event-stream', authorization: `Bearer ${token}` }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) }))
@@ -745,14 +749,15 @@ test('the sign-in-first address lists exactly what /mcp lists and says the same;
     // 2026-11-05: 55 tools to 42, −3,004 B). Neither touched a tool ChatGPT's app review pins: those keep their bytes (below).
     // 2026-11-06: the hosted look/motion revisions declare destructiveHint and non-refundable token use (portal findings).
     // MCP 통합 2단계 A (2026-11-06): the writes and the reviewed registration tools merged too, 42 tools to 24 (ac6d43c8… before).
-    if (count === 24) assert.equal(createHash('sha256').update(JSON.stringify(tools)).digest('hex'), 'ab96aea0357cd88e19fd16b73380427aed90b617434036b473f7ec9b852ff049');
-    // ChatGPT's published app 1.0.3 (docs/records/CLOUD-PLUGIN-REVIEW.md): nine of its twelve tools keep their reviewed bytes, five of them
-    // listed beside get_my_fighters until it is live there (KEEP_LISTED). prepare_fighter_registration, upload_fighter_asset and
-    // submit_fighter_registration took a `kind`, and a call without it is the reviewed tool's call (cloud/merged-tools.mjs).
-    const reviewed = ['get_fighter_spec', 'get_profile', 'open_creator_homepage', 'check_creation_readiness', 'list_my_fighters', 'prepare_fighter_deletion',
-      'delete_fighter', 'get_fighter_submission', 'get_registered_fighter'];
-    if (count === 24) assert.equal(createHash('sha256').update(JSON.stringify(reviewed.map(name => tools.find(t => t.name === name)))).digest('hex'),
-      '16a9ae15ededafaf23d190d91b03970faf0ddc7d579e7fffc82b3099317fa4d7');
+    // 2단계 B (2026-11-06, once ChatGPT's portal published all 24): the five reviewed reads left the list for get_my_fighters, 24 to 19
+    // (ab96aea0… before).
+    if (count === 19) assert.equal(createHash('sha256').update(JSON.stringify(tools)).digest('hex'), 'a35f57da061af59879bcca4c6cc7bd4f889cbbf283489de13983055291d7da04');
+    // ChatGPT's published app 1.0.3 (docs/records/CLOUD-PLUGIN-REVIEW.md): four of its twelve tools are listed with their reviewed bytes (nine
+    // until 2단계 B, 16a9ae15…). prepare_fighter_registration, upload_fighter_asset and submit_fighter_registration took a `kind`, and a call
+    // without it is the reviewed tool's call; the other five are get_my_fighters views, and their own names still answer (cloud/merged-tools.mjs).
+    const reviewed = ['get_fighter_spec', 'get_profile', 'prepare_fighter_deletion', 'delete_fighter'];
+    if (count === 19) assert.equal(createHash('sha256').update(JSON.stringify(reviewed.map(name => tools.find(t => t.name === name)))).digest('hex'),
+      'ba4f9c2a8c946099ef0ad951cc7cd9a3772ad9031bde7bfbfd03d7c3aa206269');
     // The instructions, and what the creation guide and the readiness check answer, are the same at both.
     const [signInHello, fullHello] = [await text(SIGN_IN_RESOURCE, 'initialize', hello), await text(CLOUD_RESOURCE, 'initialize', hello)];
     assert.equal(signInHello, fullHello, setup); assert.match(JSON.parse(fullHello).result.instructions, /Use host file attachments/);
@@ -783,7 +788,7 @@ test('the directory edition lists only its tools, in English, with every hint; t
   // /mcp keeps all its tools: ChatGPT's submitted plugin is pinned to its list. Here set_fighter_relation and manage_world split by kind of write.
   const split = ['propose_fighter_relation', 'answer_fighter_relation', 'end_fighter_relation', 'create_world', 'update_world', 'remove_world_fighter',
     'set_fighter_world'];
-  assert.deepEqual([tools.length, full.length], [35, 24]);
+  assert.deepEqual([tools.length, full.length], [35, 19]);
   assert.deepEqual(tools.map(t => t.name).sort(), [...DIRECTORY_TITLES.keys()].sort());
   // What this edition does not have: the full edition's tools, and the reads it merged into views (MCP 통합 1단계, 2026-11-05), by their own names.
   const dropped = [...full.map(t => t.name), ...ALIASES.keys()].filter(name => !DIRECTORY_TITLES.has(name));
@@ -842,7 +847,7 @@ test('the directory edition lists only its tools, in English, with every hint; t
   assert.equal(await instructions(DIRECTORY_RESOURCE), DIRECTORY_INSTRUCTIONS);
   // How to make a fighter, answered without a sign-in: the website's address is in the instructions.
   assert.match(DIRECTORY_INSTRUCTIONS, /https:\/\/oddbout\.com\/creator\.html/); assert.doesNotMatch(DIRECTORY_INSTRUCTIONS, HANGUL);
-  assert.match(await instructions(CLOUD_RESOURCE), /check_creation_readiness/);
+  assert.match(await instructions(CLOUD_RESOURCE), /get_my_fighters\(view=readiness\)/);
   // Signed out like the public address: its public tools answer, an account tool asks for a sign-in at the edition's own metadata.
   assert.equal(toolJson((await (await post(DIRECTORY_RESOURCE, 'tools/call', { name: 'get_style_guide', arguments: {} })).json()).result).ok, true);
   const signIn = (resource = DIRECTORY_RESOURCE) => `Bearer resource_metadata="${resource}/.well-known/oauth-protected-resource", scope="openid email profile"`;
@@ -1021,7 +1026,7 @@ test('a 2026-07-28 client discovers, lists and calls the same tools; the list ke
       requestInit: { headers: { authorization: `Bearer ${token}` } } }));
     try {
       assert.equal(client.getNegotiatedProtocolVersion(), '2026-07-28');
-      assert.equal((await client.listTools()).tools.length, 15);
+      assert.equal((await client.listTools()).tools.length, 10);
       assert.deepEqual((await client.callTool({ name: 'get_profile', arguments: {} })).structuredContent, { id: owner, email: 'test@example.com', nickname: 'ODDBOUT' });
     } finally { await client.close(); }
   }
@@ -1033,7 +1038,7 @@ test('a 2026-07-28 client discovers, lists and calls the same tools; the list ke
   assert.deepEqual([lists[0].result.ttlMs, lists[0].result.cacheScope], [300_000, 'private']);
   const legacyList = await (await handle(new Request(CLOUD_RESOURCE, { method: 'POST', headers: { 'content-type': 'application/json',
     accept: 'application/json, text/event-stream' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }) }))).json();
-  assert.equal(legacyList.result.tools.length, 15); assert.equal('ttlMs' in legacyList.result, false);
+  assert.equal(legacyList.result.tools.length, 10); assert.equal('ttlMs' in legacyList.result, false);
   // The call's log line names the era it spoke.
   const lines = logged.mock.calls.map(entry => JSON.parse(entry.arguments[0])).filter(line => line.tool === 'get_profile');
   assert.deepEqual(lines.map(line => line.protocol), ['2026-07-28', '2026-07-28']);
@@ -1048,7 +1053,7 @@ test('a 2026-07-28 client discovers, lists and calls the same tools; the list ke
   await legacy.connect(new StreamableHTTPClientTransport(new URL(CLOUD_RESOURCE), { fetch: (url, init) => handle(new Request(url, init)) }));
   try {
     assert.equal(legacy.getNegotiatedProtocolVersion(), '2025-11-25');
-    assert.equal((await legacy.listTools()).tools.length, 15);
+    assert.equal((await legacy.listTools()).tools.length, 10);
   } finally { await legacy.close(); }
 });
 

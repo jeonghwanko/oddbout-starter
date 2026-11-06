@@ -133,7 +133,7 @@ generation and the live AI Fighter spec before creating a package, and use the b
   otherwise let the conversation host's form or numbered options ask.
 - Follow `docs/CONNECTION-READINESS.md`: the account and registration belong to the connected ODDBOUT cloud tools
   (`get_profile`, then `prepare_fighter_registration`, `upload_fighter_asset`, `submit_fighter_registration` and
-  `get_fighter_submission`). The workspace tools never read a CLI login; a missing or failing cloud tool is not a
+  `get_my_fighters` view `submission`). The workspace tools never read a CLI login; a missing or failing cloud tool is not a
   reason to sign in locally.
 - The kit's own login (`npm run login`, used to join a generation host or run admin commands) runs only with a supported
   secure handoff or the device connection ([hard rule 4](#hard-rules)): for a browser on another device, `--device`,
@@ -251,7 +251,7 @@ Both routes:
   previews and practises it. Other people meet it after the owner watches each required motion and enters it (출전,
   on the site's motions page or with `enter_fighter`); a new package returns it to production. Entry also needs its front
   painting (profile set) to pass ODDBOUT's front check — one character, whole from head to soles, facing the viewer —
-  or an operator's approval; `get_registered_fighter`'s `front` says what is missing. Losing its last front returns it to production.
+  or an operator's approval; the fighter's `front` (`get_my_fighters` view `fighter`) says what is missing. Losing its last front returns it to production.
 
 ## Changing this repository
 
