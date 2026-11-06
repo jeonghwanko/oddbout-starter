@@ -13,7 +13,8 @@ import { ALIGN_AGAIN, BEAT_LIMIT, GROK_LIMITED, BRIEF_SCHEMA, ONE_STRIDE_OF, GAI
   JUDGE, UNKNOWN, MODELS_EVENT_BYTES, SIDE_JUDGE_SCHEMA, codexSessionId, createModelLog, imageEntry, judgeCommand, judgeKey, judgeLabel, judgeRecord,
   verdictKeyStatus, videoEntry, VIDEO_REQUESTED, REQUESTED_MODELS, writeWhole, JUDGE_MODES, PIXEL_JUDGE, checkedPixels, hybridJudgeKey, judgesMode,
   pixelJudgeKey, sidePassed, IMAGE_PROFILES, GROK_IMAGE_MODEL, appearanceCommand, chromaKeyFor, expressionsCommand, gaitStillCommand, gaitStillPrompt,
-  imageFor, imageProviderOf, requestedModels, sideCommand } from './generation-stages.mjs';
+  imageFor, imageProviderOf, requestedModels, sideCommand, FRONT_TAKES, GROK_FRONT_COLOURING, GROK_FRONT_FRAMING, GROK_FRONT_TAKES,
+  GROK_ONE_FIGURE } from './generation-stages.mjs';
 import { codexSessionFacts } from './codex-usage.mjs';
 import { ENGINE_SEAM_MAX as REVIEW_SEAM_MAX, ENGINE_CUE_RHYTHM as REVIEW_CUE_RHYTHM, lowMarginFeet as reviewLowMarginFeet } from '../tools/ai-fighter/gait.mjs';
 import { parseEnv, parseHealth } from './generation-worker.mjs';
@@ -1890,6 +1891,52 @@ test('Grok pictures: each look, side, sheet and relaxed still asks Grok on a key
     imageProvider: 'grok', image: GROK_IMAGE_MODEL });
   assert.deepEqual(imageEntry({ provider: 'grok', model: GROK_IMAGE_MODEL }, GROK_IMAGE_MODEL),
     { role: 'image', requested: GROK_IMAGE_MODEL, observed: UNKNOWN, effort: UNKNOWN, cli: UNKNOWN, imageModel: UNKNOWN });
+});
+
+// The first production Grok request (2026-11-07): take B came back a sheet of three figures, take A a little turned and heavily shaded.
+test('Grok fronts: one figure in one square front view whatever the brief says about views, flat cel colouring; GPT\'s fronts byte for byte', () => {
+  const sha = text => createHash('sha256').update(text).digest('hex');
+  // GPT's front prompts are origin/main's of 2026-11-07 (978e9aa0), byte for byte.
+  assert.deepEqual([appearancePrompt(brief, null, 'a'), appearancePrompt(brief, null, 'b'), appearancePrompt(brief, 'smaller ears', 'b')].map(sha), [
+    'c32c7d6b509e7bd0f52ec075c0867bb2c3076fa39327cf9ced4a05af2c7d0007', '052f441fefab9d7337baedecedfaec3ff9f0b4a23fe58efacaebf75d1a5c1400',
+    'c3329a77ef09ceab8e5543c1af8cbb58c4bfe8e6317400d675bb395feeaeaa9c']);
+  const viewsBrief = { ...brief, look: { ...brief.look, subject: `${brief.look.subject} Show his entire body in front and side views.` } };
+  const grok = imageFor({ imageProvider: 'grok', brief: viewsBrief }), gpt = imageFor({ brief: viewsBrief });
+  const grokLines = [GROK_ONE_FIGURE, ...GROK_FRONT_FRAMING, ...GROK_FRONT_TAKES.b, ...GROK_FRONT_COLOURING];
+  for (const take of /** @type {const} */ (['a', 'b'])) {
+    const text = appearancePrompt(viewsBrief, take === 'b' ? 'a longer scarf' : null, take, grok), lines = text.split('\n');
+    // The one-figure line comes first, before the brief's own words about views; the rest of the house prompt is still there.
+    assert.equal(lines[0], GROK_ONE_FIGURE);
+    assert.match(lines[1], /in front and side views\.$/);
+    for (const line of [...GROK_FRONT_FRAMING, ...GROK_FRONT_TAKES[take], ...GROK_FRONT_COLOURING, ...HOUSE_COLOURING]) assert.ok(lines.includes(line), line);
+    assert.ok(lines.indexOf(GROK_FRONT_FRAMING[0]) > lines.findIndex(line => line.startsWith('FRAMING: one character only')));
+    assert.match(text, /no side or back view, no second pose/); assert.match(text, /draw only its front view here/);
+    assert.match(text, /both toes pointing at the viewer/);
+    assert.match(text, /pure bright green \(#00FF00\) colour filling the whole canvas edge to edge/);
+    // The key line stays last: its "Do not draw" names the brief's avoid list.
+    assert.match(lines.at(-1), /^Background: .* Do not draw: weapons, text\.$/);
+    // GPT's prompt for the same brief has none of it.
+    const gptText = appearancePrompt(viewsBrief, null, take, gpt);
+    for (const line of grokLines) assert.ok(!gptText.includes(line), line);
+  }
+  // Take B never asks to be shown beside another take, and keeps the kind of being; take A is GPT's own.
+  assert.equal(GROK_FRONT_TAKES.a, FRONT_TAKES.a);
+  assert.doesNotMatch(GROK_FRONT_TAKES.b.join(' '), /beside/);
+  assert.match(GROK_FRONT_TAKES.b.join(' '), /an animal stays that animal/);
+  assert.match(FRONT_TAKES.b.join(' '), /shown beside another take/);
+  // The side still, sheet and relaxed still are as before: only the fronts change.
+  assert.ok(![sidePrompt(viewsBrief, grok), expressionsPrompt(viewsBrief, grok), gaitStillPrompt(viewsBrief, grok)].some(text => text.includes(GROK_ONE_FIGURE)));
+});
+
+test('the look judge checks the fronts\' colouring family, not their shading depth; the side judge\'s style is unchanged', () => {
+  const lines = lookJudgePrompt(brief).split('\n'), style = lines.find(line => line.startsWith('- style:'));
+  assert.match(style, /^- style: the same colouring family as image 3 \(compare only the colouring and line, never the character\)/);
+  assert.match(style, /A second shadow tone, drawn fur, or a small highlight on a metal or leather part is still that family/);
+  assert.match(style, /Fail for another family \(3D render, photo, pixel art, flat vector or sticker-style art without cel shadows\)/);
+  assert.match(style, /or for clearly heavier rendering than image 3: semi-realistic modelling, glossy shine across clothes or skin/);
+  assert.doesNotMatch(style, /one soft shadow tone|fail for semi-realistic or heavy rendering, glossy highlights/);
+  assert.deepEqual(lines.filter(line => line.startsWith('- ')).map(line => line.slice(2, line.indexOf(':'))), LOOK_CHECKS);
+  assert.match(sideJudgePrompt(brief), /- style: coloured as plainly as image 1 \(the approved front\), in the game's flat cel colouring of image 3/);
 });
 
 test('a SuperGrok-only PC: the looks drawn by Grok, no look judge without codex, Grok\'s refusal is Grok\'s, not codex\'s question', async () => {

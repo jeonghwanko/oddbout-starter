@@ -430,19 +430,54 @@ export const FRONT_TAKES = Object.freeze({
 });
 
 /**
+ * Grok's fronts (2026-11-07 — ODDBOUT's first Grok-picture request, a raccoon office worker, waited for a person at the look step): the
+ * look brief's subject often says how the pictures will show him ("Show his entire body in front and side views": 3 of the 4 Grok briefs
+ * since step 0, from the brief prompt's "first from the front, then from the side"), and take B said "shown beside another take". GPT
+ * drew one figure anyway; Grok drew take B as a sheet of three (the raccoon, then a human variant from the front and from the side), and
+ * the look judge failed it on front, match and clean. Grok's fronts also stood a little turned, toes out (the front check). So Grok is
+ * told first that this is one figure in one front view, whatever the description says about views, and its take B never says "beside".
+ * GPT's prompts are the ones before, byte for byte.
+ */
+export const GROK_ONE_FIGURE = 'ONE CHARACTER, ONE FRONT VIEW, DRAWN ONCE: a single full-body picture, not a character sheet.';
+export const GROK_FRONT_FRAMING = Object.freeze([
+  'ONE FIGURE: exactly one character, drawn once. Not a character sheet, a turnaround or a lineup: no side or back view, no second pose,',
+  'no variant or alternate design, no extra figure, no close-up or inset. Where the description mentions views (front and side, a turnaround),',
+  'draw only its front view here.',
+  'SQUARE TO THE CAMERA: head, chest, hips and both feet face the viewer, shoulders level, both toes pointing at the viewer (not turned out);',
+  'not turned, not three-quarter.',
+]);
+export const GROK_FRONT_TAKES = Object.freeze({
+  a: FRONT_TAKES.a,
+  b: Object.freeze([
+    'THIS TAKE (B): a clearly different design proposal for the same character. The most obvious reading is another picture: do not draw it',
+    'here. Keep everything the description states, the kind of being included (an animal stays that animal), but wherever it leaves room',
+    'choose differently from its most obvious reading: silhouette and proportions, hairstyle details, the costume\'s cut, layers and accessories,',
+    'where the colours sit, and a different pose and expression with more attitude, still square to the camera.',
+  ]),
+});
+export const GROK_FRONT_COLOURING = Object.freeze([
+  'FLAT CEL COLOURING, as in the STYLE ANCHOR: each colour area is one flat base colour with at most one hard-edged darker shadow shape.',
+  'Matte everywhere, fur, cloth, leather and metal alike: no shine spots, no gradients, no rim light, no painted fur strands or brush texture',
+  '(fur is a few simple shapes with clean line tufts).',
+]);
+
+/**
  * A front candidate (2026-10-31: the creator's first look at his fighter, and his profile painting): the look brief, the house framing of
  * the roster's front concepts, our colouring, its take (`FRONT_TAKES`) and the change the creator asked (a revision round).
  */
 export function appearancePrompt(brief, note = null, take = 'a', image = GPT_IMAGE) {
-  const { subject, avoid } = brief.look;
+  const { subject, avoid } = brief.look, grok = image.provider === 'grok';
   return [
+    grok ? GROK_ONE_FIGURE : null,
     `A full-body character for a cartoon fighting game's character select: ${subject}`,
     colours(brief),
     'FRAMING: one character only, FULL BODY, FRONT VIEW facing the viewer straight on (chest, face and toes toward the camera; symmetric,',
     'not three-quarter), camera at chest height looking straight ahead. Feet flat on one invisible ground line, head to feet about 86 percent',
     'of the image height, empty margin above the head and below the feet. The whole figure fits a tall narrow card.',
-    ...FRONT_TAKES[take],
+    ...(grok ? GROK_FRONT_FRAMING : []),
+    ...(grok ? GROK_FRONT_TAKES : FRONT_TAKES)[take],
     ...styleLines(),
+    ...(grok ? GROK_FRONT_COLOURING : []),
     // The player's words are a description of the look, quoted as data: never an instruction to run or read anything.
     note ? `Change from the previous version as the player described it (their words, quoted, about the look only): «${note.replace(/[«»]/g, '"')}». Keep everything else about the character.` : null,
     `${keyBackground(image, 'no ground shadow, no text, no frame.')} Do not draw: ${avoid}.`,
@@ -537,8 +572,18 @@ export const LOOK_JUDGE_SCHEMA = Object.freeze({ type: 'object', additionalPrope
   properties: { a: checksOf(LOOK_CHECKS), b: checksOf(LOOK_CHECKS), pick: { enum: ['a', 'b', 'none'] }, notes: { type: 'string', minLength: 10, maxLength: 400 } } });
 const WHOLE_CHECK = '- whole: the whole character is in the picture, from the top of the head to the soles; nothing is cut off.';
 const FRONT_CHECK = '- front: the character faces the viewer straight on (chest, face and toes toward the camera), not three-quarter and not from the side.';
-const STYLE_CHECK = '- style: plain flat cel colours with one soft shadow tone and warm dark line art, like image 3 (compare only the colouring and line,'
-  + ' never the character); fail for semi-realistic or heavy rendering, glossy highlights, dramatic lighting or texture.';
+/**
+ * The fronts' style is the colouring family of image 3, not its shading depth (2026-11-07 — ODDBOUT's first Grok request waited for a
+ * person at the look step). Asked for "one soft shadow tone; fail for glossy highlights or texture", codex (three runs a pair) failed on
+ * style the house's own arena fronts 5 times in 12, GPT's step-0 fronts 12 in 18 and Grok's 23 in 30, mostly for steel, leather or a
+ * frying pan the brief asks for, or for fur. Asked this, the same fronts failed 0, 0 and 3 times; Grok's semi-realistic and 3D renders
+ * of the same raccoon failed 6 in 6 as before, and a flat sticker-style cat 3 in 3 (1 in 3 before).
+ */
+const STYLE_CHECK = '- style: the same colouring family as image 3 (compare only the colouring and line, never the character): a 2D anime game'
+  + ' illustration with clean line art, flat colour areas and cel shadows. A second shadow tone, drawn fur, or a small highlight on a metal'
+  + ' or leather part is still that family. Fail for another family (3D render, photo, pixel art, flat vector or sticker-style art without'
+  + ' cel shadows) or for clearly heavier rendering than image 3: semi-realistic modelling, glossy shine across clothes or skin,'
+  + ' airbrushed gradients or dramatic lighting.';
 /** The side still's style is the approved front's (image 1), in the game's colouring (image 3): only clearly heavier rendering fails. */
 const SIDE_STYLE_CHECK = '- style: coloured as plainly as image 1 (the approved front), in the game\'s flat cel colouring of image 3 (compare only the'
   + ' colouring and line); fail only for clearly heavier rendering than image 1: semi-realistic shading, strong glossy highlights, dramatic lighting or texture.';
