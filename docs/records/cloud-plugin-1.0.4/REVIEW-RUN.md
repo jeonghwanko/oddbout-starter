@@ -50,14 +50,14 @@ Which ODDBOUT account is connected? Can I register a fighter, and do I already h
 Show the current fighters and rankings, then run a practice bout between two built-in fighters with seed 104. Tell me the actual result and whether it changes rankings.
 ```
 
-- [ ] `browse_oddbout`를 `view=fighters`, `view=rankings`로 읽었다
-- [ ] 반환된 기본 선수 두 명의 ID로 `spar`를 `seed=104`로 불렀다
+- [x] `browse_oddbout`를 `view=fighters`, `view=rankings`로 읽었다
+- [x] 반환된 기본 선수 두 명의 ID로 `spar`를 `seed=104`로 불렀다
 - [ ] 실제 승자, 결말, 재생 링크(있으면)를 알려 줬다
-- [ ] 순위에 반영되지 않는 연습이라고 말했다
-- [ ] 컵 출전, 스타일 수정, 정식 대전을 하지 않았다
+- [x] 순위에 반영되지 않는 연습이라고 말했다
+- [x] 컵 출전, 스타일 수정, 정식 대전을 하지 않았다
 
-결과:
-증거:
+결과: 실패(재생 링크 누락). 원문에 대한 첫 답변은 대결 결과와 순위 영향을 맞게 보고했지만 반환된 재생 링크를 보여 주지 않았다. 후속 질문에서만 링크를 확인했다.
+증거: `P4.mp4` 후반 결과 화면. ChatGPT의 호출 내역에 `get_profile`, `browse_oddbout(view=fighters)` 2회, `browse_oddbout(view=rankings, scope=builtin)` 3회, `spar(fighterId=ttakbujang, opponentId=cinnamon, seed=104)` 1회가 표시됐다. Ttakbujang이 John Cinnamon을 32.4초에 KO, 남은 HP 34% 대 0%. 전후 순위 20개가 같았고 연습은 순위·컵 기록에 남지 않는다고 답했다. 대결을 재실행하지 않고 확인한 `page`는 `oddbout.com/fighter.html` 재생 링크였다.
 
 ### P3 — 내 등록 선수와 삭제 준비 (삭제 안 함)
 
