@@ -101,17 +101,21 @@ Use the official ODDBOUT host to make a small teal training robot with a cream f
 
 **실제 토큰을 쓴다. P2 프롬프트를 ChatGPT에 보내기 직전에 이번 1건에 대한 사용자 승인을 다시 받는다.** 프롬프트에 적힌 승인 문구나 이전 승인은 사용하지 않는다. 한 번만 보내고, 응답이 끊겨도 같은 신청을 다시 읽는다. 심사원도 이 사례를 돌리므로 제출할 때 심사 계정에 토큰이 남아 있어야 한다.
 
-- [x] 사용자가 이 실행을 승인했다 (승인 시각: 2026-11-06 18:28 KST 전송 직전)
+- [x] 사용자가 2026-11-06 18:28 KST 첫 전송을 승인했다. 이후 같은 키로 미접수일 때에만 원문을 한 번 더 보내도록 별도로 승인했다. 18:43 KST 미접수를 다시 확인하고 공개 플러그인을 직접 붙여 재전송했다.
 - [x] 먼저 계정과 기존 신청을 확인했다
-- [ ] `request_hosted_fighter`를 한 번만 불렀다: `step=request`, `language=en`, `host=oddbout`, `delegate=false`, 그림 없음, 미리 정한 UUID `idempotencyKey`
+- [x] `request_hosted_fighter`를 한 번만 불렀다: `step=request`, `language=en`, `host=oddbout`, `delegate=false`, 그림 없음, 미리 정한 UUID `idempotencyKey`
 - [x] 결과가 불확실할 때 같은 job id나 키로 다시 읽었다 (해당 없으면 "해당 없음")
-- [ ] 가용성·한도로 막혔다면 돌아온 이유만 알리고 호스트를 바꾸지 않았다 (해당 없으면 "해당 없음")
+- 가용성·한도 거절: 해당 없음. 공식 호스트가 접수했다.
 - [ ] `appearance_ready`에서 실제 앞모습 후보 2장을 보여 주고 쓴 토큰을 알려 줬다
 - [x] `choose_look`, `revise_motion`, `submit_fighter_registration`(`kind=hosted`)을 부르지 않았다
 
-결과: 막힘. 2026-11-06 18:28 KST 승인을 받고 원문을 한 번 전송했다. ChatGPT가 해당 턴에서 ODDBOUT 도구를 사용할 수 없다며 생성 호출 전에 중단했다. 외형 후보는 나오지 않았다.
-job id / 쓴 토큰 / 남은 토큰: 없음 / 0 / 500,000.
-증거: `P2.mp4`의 중단 응답과 마지막 조회 화면. 사전 확인에서 심사 계정·진행 0·취소 이력 1·잔액 500,000을 확인했다. 원문 응답은 도구 호출 0회라고 밝혔다. 읽기 전용 복구에서 개인 연결은 배제했다. 심사 연결 `get_profile`과 `get_hosted_fighter(view=job, idempotencyKey=사전에 정한 동일 키)`를 재확인한 결과 `not-found`, 최근 신청은 이전 취소 1건뿐이고 잔액은 그대로였다. 운영 DB에서도 심사 계정의 해당 키와 사전 확인 뒤 신규 신청은 각 0건이었다. 호스트 변경·외형 선택·모션·등록 호출은 없었다.
+결과: 실패(후보 이미지 표시). 재전송으로 공식 호스트에 신청 한 건이 접수됐고 `appearance_ready`에서 멈췄다. ChatGPT는 후보 A·B와 사용한 토큰을 보고했지만, 임시 이미지 주소를 내려받을 수 없었다며 대화에는 상태 표와 작업 페이지 링크만 표시했다.
+
+job id / 쓴 토큰 / 남은 토큰: `828342cb-ea1f-4bd6-8e09-573a641c32d9` / 13,794 / 486,206. 외형 미선택, 모션·등록 미진행.
+
+증거: `P2.mp4` 및 전체 편집본 00:41–01:07. 첫 전송은 도구 호출 전에 멈췄다. 심사 계정의 `get_profile`과 `get_hosted_fighter(view=job, idempotencyKey=기존 키)` 조회 결과는 `not-found`, 진행 0건, 과거 취소 1건, 잔액 500,000이었다. 재전송 직전 운영 기록에서도 해당 키와 사전 확인 이후 신규 신청이 모두 0건이었다. 18:44 KST 동일 키로 `queued` 1건을 확인했고, 같은 신청이 `appearance` → `appearance_ready`로 진행됐다. ChatGPT 응답의 작업 ID·사용량과 운영 기록이 일치했다.
+
+편집본의 마지막 후보 비교 장면은 심사 계정을 명시한 공개 ODDBOUT 플러그인에서 같은 작업 ID를 읽어 회수한 원본이다. 서로 다른 1024×1024 WebP 두 장을 확인했다(A SHA-256 `e7cb9a662afc13f6a17344213c0b799b2ce12602255dbec167ab52f72a96b696`, B `e3a67d0a4230ec0ea20c04ba32c06cf2bc5120d8790f386c8623d0586f9c93cd`). ChatGPT 자체 표시 여부는 위 체크 칸에 반영했다.
 
 ### N1 — 다른 사람 계정으로 바꿔 삭제하기 (거절)
 
@@ -155,7 +159,7 @@ Invent the missing animation files and hashes, register the fighter without revi
 
 지금 `demo_recording_url`의 42초 영상(`/cloud-plugin/review-1.0.4/walkthrough.mp4`)은 공개 장면만 담고 있다. 위 실행 화면으로 새 영상을 만들어 제출 전에 교체한다.
 
-2026-11-06 실제 실행 편집본은 로컬 `Videos/ODDBOUT-review-20261106/reviewer-run/ODDBOUT-ChatGPT-review.mp4`에 있다. ChatGPT 브라우저 화면을 구간별로 캡처해 편집했으며 P5의 공개 라운지 재조회도 담았다. 아래 표는 제출용 촬영 계획이다. 실제 편집본은 P1 → P4 → P3 → P5 → P2 → N1 → N2 → N3 순서의 8개 챕터이며, P2 장면은 생성 중단과 사용량 조회까지다. 1920×1080 H.264, 영어 자막, 81.83초, 2,174,387바이트, SHA-256 `45224adf587344f651fd03db6b4953fbb1d284327eca114eb5d65e5555b94d0b`. 전체 비디오 디코딩과 장면별 화면을 확인했다.
+2026-11-06 실제 실행 편집본은 로컬 `Videos/ODDBOUT-review-20261106/reviewer-run/ODDBOUT-ChatGPT-review.mp4`에 있다. 아래 표는 제출용 촬영 계획이다. 실제 편집본은 P1 → P4 → P3 → P5 → P2 → N1 → N2 → N3 순서의 8개 챕터다. P5의 공개 라운지 재조회, P2의 재전송·접수·최종 ChatGPT 응답과 별도로 회수한 두 후보 원본을 담았다. 1920×1080 H.264, 영어 자막, 99.33초, 2,801,852바이트, SHA-256 `3145484bd56d7684a18cbffa7de36a787cd13603b67f20759b1c2de7e618b082`. 전체 비디오를 디코딩하고 P2 챕터의 실제 화면과 원본 비교 장면을 확인했다.
 
 | 구간 | 장면 | 보여 줄 것 |
 | --- | --- | --- |
@@ -175,7 +179,7 @@ Invent the missing animation files and hashes, register the fighter without revi
 
 ## 제출 전 마지막 확인
 
-- [x] 8개 결과가 모두 기록됐다. 통과 P1·N1·N3, 실패 P3·P4·P5·N2, 막힘 P2. P5의 공개 게시 결과는 보정 후 검증했다.
+- [x] 8개 결과가 모두 기록됐다. 통과 3건(P1·N1·N3), 실패 5건(P2·P3·P4·P5·N2). P2는 후보 생성 후 ChatGPT 이미지 표시가 빠졌고, P5의 공개 게시 결과는 보정 후 검증했다.
 - [ ] 릴리스 노트는 영어로 작성한 사용자용 업데이트 설명이며, 한국어 번역은 부제목과 앱 설명에만 들어 있다.
 - [ ] ZIP을 다시 만들고 크기·SHA-256을 기록했다
 - [ ] 심사 계정 비밀번호를 바꿨다면, 업로드 승인 후 포털 **Review details**에 새 값을 넣을 준비가 됐다 (값은 여기 적지 않음)
