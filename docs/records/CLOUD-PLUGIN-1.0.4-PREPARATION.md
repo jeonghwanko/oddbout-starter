@@ -4,6 +4,18 @@ Status: **draft package; not uploaded, submitted or ready for submission**. The 
 
 Package: `oddbout-dots`; public plugin: `plugin_asdk_app_6adc695de1bc8191a604b42bbaa178af`; existing endpoint: `https://mcp.oddbout.com/mcp`.
 
+## Blocker follow-up (2026-11-06 KST)
+
+**Public pages — published and verified:** [Website source PR #352](https://github.com/jeonghwanko/oddbout-starter/pull/352) updates the English and Korean overview, privacy, terms and support pages. It covers hosted requests and token accounting, reference uploads, generation providers and host choice, public writing and entry, retention, private original PNGs and delivery to a chosen VM. Both languages distinguish a stored-source receipt or expiring grant from actual delivery or erasure. Support explains recovery of an existing job, quota and expiring previews, picture tickets and content reports. The Claude guide and historical reviewer evidence were preserved.
+
+The [Pages deployment](https://github.com/jeonghwanko/oddbout-starter/actions/runs/42160303558) succeeded at publishing commit `8ca55060` (source PR head `556cb19d`, game `2cadd63b`, build `9e7fc23f-4ffc-4bee-bc9b-9ffab519c717`). Compared with the previous Pages commit, only the eight documents and deployment marker changed. All eight canonical URLs returned 200 and matched their built bytes, both with and without a cache-busting query. The publication/hosting tests (12), type check and website PR CI passed. No main merge was performed. Merge #352 when authorized to retain the disclosures in future site builds.
+
+**MCP discovery:** In the published 1.0.3 MCP tab the Rescan control is disabled with “Scan unavailable” and “Account connected. No scan has finished since this connection.” The old Published inventory is still present and lacks `get_my_fighters`. At 03:47 UTC the production endpoint returned HTTP 200 for initialize and tools/list, with 24 tools including all four grouped replacements. Anonymous `get_profile` returned 401 with an OAuth challenge. Its advertised resource metadata and the path-specific discovery URL both returned 200 for the correct MCP resource. These probes do not establish the portal scanner's eligibility, connectivity or OAuth session. No scan was dispatched, and no finding or appeal was identified that could be resolved in the UI.
+
+OpenAI documents [daily scans and the possible reasons Rescan is unavailable](https://developers.openai.com/plugins/deploy/submission#scan-your-latest-changes); the specific reason for this plugin remains unknown. Retain the five compatibility reads until the replacement definitions are Live. An unsent support request with the plugin ID and redacted public probes is prepared locally under `output/review-20261106-blockers/`.
+
+**Reviewer access:** The user requested recovery instructions only. A local operator guide and a masked-input PowerShell helper are prepared in that same ignored directory. The helper is for normal password sign-in after the existing password is recovered or the operator separately authorizes rotation; it verifies the dedicated email/ID before writing a new Windows-user-only credential file outside the repository. It was syntax checked, not run. No password was changed, no recovery email was sent, and no grant was used to impersonate the reviewer. All eight reviewer conversations remain unrun; no generation tokens were spent. If the password changes, the old private review password is invalid and must be updated through the private portal fields when an upload is authorized.
+
 ## PR #350 review corrections (2026-11-06 KST)
 
 The MCP manifest is restored byte-for-byte from 1.0.3 (`0130b0fc`): `mixed`, DCR, scopes `openid email profile`, and `oidcEnabled: true`. No official OpenAI documentation supporting removal of this block was found; the official sources and the corrected rationale are recorded in section 1.
@@ -64,9 +76,9 @@ Verified source facts:
 - Canon, notes, relations, world posts and public nicknames are public; writing can carry the OAuth client's registered name. World creation is public immediately. Sources: `mcp/cloud/workshop-tools.mjs`, `api/workshop.mjs`, `docs/CLOUD-MCP.md` (workshop).
 - Deletion requires the live owner/session/client, exact name and ten-minute confirmation; removes active listings/new matches and releases the slot. Private originals and history remain. Signed-link expiry (at most 600 seconds) is not data erasure. Sources: `api/fighter-deletion.mjs`, deletion migrations, `docs/CLOUD-MCP.md`.
 
-## 3. Public page audit
+## 3. Public page audit before the website update
 
-All four English listing URLs returned HTTP 200 and relevant ODDBOUT content. Their displayed effective date was 2026-11-02. No policy page was changed or published by this preparation.
+At the initial audit all four English listing URLs returned HTTP 200 and relevant ODDBOUT content. Their displayed effective date was 2026-11-02. The gaps below describe that earlier version; the subsequent EN/KR publication is verified above.
 
 | Page | Already covered | Missing or stale before submission |
 | --- | --- | --- |
@@ -131,4 +143,4 @@ ZIP build: `python scripts/zip-plugin.py plugins/oddbout-cloud output/review-202
 
 Built candidate: **33,692 bytes**, SHA-256 `06e3ca98c92e0ecf45af3d1194a7484c938db529d574e28006bf85394711e40f`. Inventory: `plugin.json`, `mcp.json`, `assets/icon.svg`, `assets/icon.png`. Local structural checks passed for identity/version, listing limits (subtitle 29 / description 1,878 characters), exactly five positive/three negative cases, expected tool names against the actual live list, single unchanged endpoint, absence of app/credential fields, all 42 annotation sets and PNG format/dimensions/size. `git diff --check` passed. These are local package checks, not portal validation or reviewer-conversation passes.
 
-Before requesting upload/submission approval: resolve reviewer access and execute the eight conversations (record real Passed/Failed/Blocked outcomes), finish/verify the new demo, correct and publish policy pages within separately authorized scope, then rebuild/re-hash. Merge, portal upload and submission remain unapproved.
+Before requesting upload/submission approval: verify Live replacement definitions, resolve reviewer access and execute the eight conversations (record real Passed/Failed/Blocked outcomes), finish/verify the new demo, then rebuild/re-hash. Recheck the published policy pages if a later website release intervenes. Merge, portal upload and submission remain unapproved.
