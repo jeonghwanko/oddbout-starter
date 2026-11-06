@@ -122,17 +122,22 @@ PC의 설치 폴더는 PC에서 `npm run host -- remove --yes`로 지운다.
 - 워커는 1분마다 서버에 살아 있음을 알린다. 3분 동안 소식이 없으면 목록에서 오프라인이 된다.
 - 하루 넘게 소식이 없으면 내가 맡은 신청은 서버가 끝낸다(2026-11-05). 하던 단계는 유료 실행이 나갔는지 내 PC만 알므로 운영자 검토
   (`<단계>-host-lost`)로 가고, 아직 맡지 않은 단계(신청자의 답 뒤)는 실패(`host-lost`)한다. 다른 호스트로 넘어가지 않는다. 하룻밤 꺼 두는 것은 괜찮다.
-- 한 시간마다 두 구독에 아주 작은 실제 호출을 한다. 하나라도 안 되면 새 작업을 가져가지 않는다.
-  두 구독이 모두 필요한 이유: 신청은 처음 가져간 호스트가 외형·동작·제출까지 끝까지 맡고(다른 호스트로 넘기지 않는다), 걷기·달리기는 Grok 영상으로 만든다.
-  구독이 하나뿐인 호스트가 외형까지 만들어 두면 동작 단계에서 멈추므로, 하나가 안 되는 동안은 새 작업을 아예 받지 않는다.
-  구독이 하나뿐인 PC를 받을 수 있는지와 그 설계는 [SINGLE-SUBSCRIPTION-HOSTS.md](SINGLE-SUBSCRIPTION-HOSTS.md)에 있다.
-- 하루 한도는 기본값 5로 시작한다(2026-10-30, 측정 전의 운영 기준). 한 건이 두 구독을 함께 쓰고(그림은 ChatGPT, 걷기·달리기는 SuperGrok) 구독의 남은 사용량은
+- 한 시간마다 구독마다 아주 작은 실제 호출을 한다. **grok(SuperGrok)이 안 되면 새 작업을 가져가지 않는다**(2026-11-06, 1.1 제공자 프로필).
+  신청은 처음 가져간 호스트가 외형·동작·제출까지 끝까지 맡고(다른 호스트로 넘기지 않는다), 걷기·달리기는 언제나 Grok 영상이다.
+  그림(정면 두 장·옆모습·표정·키포즈 줄)은 신청의 `imageProvider`가 그린다: `grok`(기본) 또는 `gpt`(ChatGPT, 신청할 때 고른다).
+  **SuperGrok만 있는 PC도 호스트가 된다**: Grok 그림 신청만 받고, 옆모습·걷기·달리기 판정은 픽셀 판정기가 한다(아래 판정 항목).
+  codex(ChatGPT)도 되면 GPT 그림 신청도 받는다. 워커는 하트비트로 그릴 수 있는 그림(`images`: `grok`, codex도 되면 `gpt`)을 알리고,
+  서버는 그 PC가 그리는 그림의 신청만 준다. codex가 안 되는 PC에 GPT 그림을 신청하면 바로 거절한다(`image-provider-unavailable`).
+  맡기기 신청의 외형 고르기(codex)는 codex가 없는 PC에서는 하지 않고 신청자에게 묻는다.
+  `worker.env`에 판정기를 `codex`나 `hybrid`로 정해 두었다면 그 판정기에 codex가 필요하므로, codex가 안 되는 동안은 새 작업을 가져가지 않는다.
+  구독 하나로 하는 다른 설계(ChatGPT만 있는 PC)는 [SINGLE-SUBSCRIPTION-HOSTS.md](SINGLE-SUBSCRIPTION-HOSTS.md)에 있다.
+- 하루 한도는 기본값 5로 시작한다(2026-10-30, 측정 전의 운영 기준). 한 건이 SuperGrok을 그림·영상에 쓰고(GPT 그림이면 그림은 ChatGPT) 구독의 남은 사용량은
   CLI로 볼 수 없어서, 건수는 거친 대리 지표다. `npm run host -- log`에 `cannot run now` 줄이 며칠 동안 없으면 한 번에 몇 건씩 올리고,
   자주 나오면 낮춘다. 그 줄은 실제 단계가 한도에 걸렸다는 뜻이고, 그동안 이 PC는 새 작업을 받지 않는다. 등록 1건당 제공자 실행 수를 잰 뒤
   ([MEASUREMENT.md](MEASUREMENT.md)) 이 기준을 숫자로 바꾼다.
 - 하루 한 번 끝난 작업 폴더를 지운다. 닫힌 지 7일 지난 작업과, 닫히지 않은 채 14일 동안 바뀐 파일이 없는 작업이다
   (`worker.env`의 `ODDBOUT_GENERATION_KEEP_DAYS`, 1~90).
-- 옆모습·걷기·달리기 판정은 기본으로 codex가 한다. `npm run host -- worker judges pixels`(픽셀 판정기만) 또는 `hybrid`(픽셀 판정기 먼저,
+- 옆모습·걷기·달리기 판정은 기본으로 codex가 하고, codex가 안 되는 PC에서는 픽셀 판정기가 한다(2026-11-06). `npm run host -- worker judges pixels`(픽셀 판정기만) 또는 `hybrid`(픽셀 판정기 먼저,
   정하지 못한 검사만 codex)로 `worker.env`의 `ODDBOUT_GENERATION_JUDGES`를 바꾸고 워커를 다시 시작하면 바뀐다. 공식 PC는 `og worker judges …`다.
   키를 다시 받아도(`worker key`) 이 설정은 남는다. 무엇을 보고 무엇을 못 보는지는 [host/README.md](../host/README.md)의 판정기 항목에 있다.
 

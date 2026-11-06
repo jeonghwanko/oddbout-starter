@@ -82,8 +82,18 @@ export function openJobs(root) {
     .filter(d => existsSync(path.join(output, d.name, 'request.json')) && !existsSync(path.join(output, d.name, '.closed'))).map(d => d.name);
 }
 
-/** `og health` output → both providers ready? @type {(output: string) => boolean} */
-export const healthy = output => /^og: codex ok\b/m.test(output) && /^og: grok ok\b/m.test(output);
+/** One provider's line of `og health` says ok. @type {(output: string, provider: string) => boolean} */
+const answered = (output, provider) => new RegExp(`^og: ${provider} ok\\b`, 'm').test(output);
+/**
+ * `og health` output → may this PC work (1.1, 2026-11-06)? Grok is the one it needs: it draws a job's pictures (unless the job asks for
+ * GPT's) and films every walk and run. Codex is optional: GPT pictures, and the judges where they ask it (the worker judges with pixels
+ * without it, host/generation-worker.mjs canWork). Until 2026-11-06 both had to answer. @type {(output: string) => boolean}
+ */
+export const healthy = output => answered(output, 'grok');
+/** Whether codex answered too: this PC may then draw GPT pictures. @type {(output: string) => boolean} */
+export const codexHealthy = output => answered(output, 'codex');
+/** The line that says what codex adds, when it did not answer. */
+const CODEX_OPTIONAL = 'codex(ChatGPT)는 없어도 된다: 그림은 Grok으로 그리고 판정은 픽셀로 한다. GPT 그림도 고르려면: npm run host:login -- codex';
 
 /** @type {(name: string) => string} */
 const which = name => {
@@ -154,8 +164,8 @@ export const USAGE = `npm run host -- <명령>   (커뮤니티 생성 호스트,
   apply --name <이름> [--billing subscription|api-key] --accept-terms   호스트 신청(이름·과금 바꾸기도 같다)
   status                          신청·승인·켜짐·오늘 남은 수·열쇠와 이 PC의 설치·워커
   setup [--slots 2|3] [--memory <n>G] [--rife torch|ncnn]   이 PC에 생성기 설치·갱신 (npm run host:setup). torch: NVIDIA GPU로 고리 정렬 약 2배
-  login [codex|grok] [--replace]  설치 폴더 안의 구독 로그인                 (npm run host:login)
-  health                          두 구독에 아주 작은 실제 호출
+  login [grok|codex] [--replace]  설치 폴더 안의 구독 로그인: 기본은 grok(필수), codex는 GPT 그림용(선택) (npm run host:login)
+  health                          구독마다 아주 작은 실제 호출
   join <코드> [setup 옵션]        사이트(내 선수 → 내 PC로 만들기)의 코드 하나로: 설치·구독 로그인(없으면)·워커. ODDBOUT 로그인 없이
   start                           열쇠가 없으면 로그인한 계정으로 받아 넣고 워커를 켠다 (npm run host:start)
   stop | restart | log [n]        워커
@@ -178,11 +188,13 @@ export async function runHost(argv, deps) {
   /** @param {string} route @param {string} [method] @param {object} [body] */
   const api = async (route, method = 'GET', body) => deps.request(route, { method, ...(body ? { body: JSON.stringify(body), headers: { 'content-type': 'application/json' } } : {}) });
   const needInstall = () => { if (installed(root)) return true; out(`이 PC에 설치가 없다(${root}): npm run host:setup`); return false; };
-  // Both subscriptions answered, then the user unit. Approval is not needed: not approved, the worker makes its owner's own requests.
+  // Grok answered (codex too, or not: healthy), then the user unit. Approval is not needed: not approved, the worker makes its owner's
+  // own requests.
   async function startWorker() {
     const health = await og(['health'], { capture: true });
     out(health.output.trim());
-    if (!healthy(health.output)) { out('두 구독이 모두 ok여야 켠다: npm run host:login 뒤 npm run host:start'); return 1; }
+    if (!healthy(health.output)) { out('grok(SuperGrok)이 ok여야 켠다: npm run host:login 뒤 npm run host:start'); return 1; }
+    if (!codexHealthy(health.output)) out(CODEX_OPTIONAL);
     if (!deps.linger()) out(`참고: 로그아웃하면 워커도 멈춘다. 계속 돌리려면 한 번: sudo loginctl enable-linger ${userInfo().username}`);
     if ((await og(['worker', 'install'])).code !== 0) return 1;
     out('워커가 켜졌다. 1분 안에 사이트의 내 호스트가 온라인이 된다. 내 선수 신청에서 "내 PC"를 고를 수 있다.');
@@ -258,12 +270,13 @@ export async function runHost(argv, deps) {
         if (rife && (await og(['rife', rife])).code !== 0) return 1;
         if (!rife && system.gpu) out('참고: NVIDIA GPU가 있다. npm run host:setup -- --rife torch 로 고리 정렬이 약 2배 빨라진다(PyTorch 약 3 GB).');
         if (wasRunning) await og(['worker', 'start']);
-        out('다음: npm run host:login (codex·grok 로그인) → 사이트의 붙이기 코드로 npm run host -- join <코드>');
+        out('다음: npm run host:login (grok 로그인, GPT 그림도 쓰려면 codex도) → 사이트의 붙이기 코드로 npm run host -- join <코드>');
         return 0;
       }
       case 'login': {
         if (!needInstall()) return 1;
-        const providers = ['codex', 'grok'].includes(args[0]) ? [args[0]] : ['codex', 'grok'];
+        // Grok unless one is named: codex is GPT pictures' only (1.1, 2026-11-06), signed in on its own (`login codex`).
+        const providers = ['codex', 'grok'].includes(args[0]) ? [args[0]] : ['grok'];
         for (const p of providers) {
           out(`${p} 로그인 — 아래 주소를 브라우저에서 열고 코드를 넣는다. 이 호스트가 쓸 구독 계정으로 로그인한다.`);
           if ((await og(['login', p, ...args.filter(a => a === '--replace')])).code !== 0) return 1;
@@ -271,7 +284,12 @@ export async function runHost(argv, deps) {
         const health = await og(['health'], { capture: true });
         out(health.output.trim());
         // An account with no subscription signs in but cannot make anything: say what to do now, not at the first job.
-        if (!healthy(health.output)) { out('두 구독이 모두 ok여야 일한다. 유료 구독(ChatGPT Plus·Pro, SuperGrok) 계정으로 다시 로그인한다: npm run host:login -- --replace'); return 1; }
+        if (!healthy(health.output)) { out('grok이 ok여야 일한다. 유료 구독(SuperGrok) 계정으로 다시 로그인한다: npm run host:login -- --replace'); return 1; }
+        if (providers.includes('codex') && !codexHealthy(health.output)) {
+          out('codex가 ok가 아니다: GPT 그림은 고를 수 없다(Grok 그림은 된다). 유료 구독(ChatGPT Plus·Pro) 계정으로 다시 로그인한다: npm run host:login -- codex --replace');
+          return 1;
+        }
+        if (!codexHealthy(health.output)) out(CODEX_OPTIONAL);
         return 0;
       }
       case 'health': return needInstall() ? (await og(['health'])).code : 1;
@@ -291,10 +309,12 @@ export async function runHost(argv, deps) {
         // The key goes straight from the API reply into og's worker.env (stdin, mode 600): never on screen, in argv or a log.
         const wrote = await og(['worker', 'key', joined.apiBase], { stdin: `${joined.key}\n`, capture: true });
         if (wrote.code !== 0) { out(wrote.output.trim()); return 1; }
-        // The subscriptions this install has not signed in to (or that do not answer): signed in now, one device code each.
+        // Grok, when this install has not signed in to it (or it does not answer): signed in now, one device code. Codex is not asked for:
+        // it adds GPT pictures only (1.1, 2026-11-06), and startWorker says how to add it.
         const before = await og(['health'], { capture: true });
-        for (const provider of ['codex', 'grok'].filter(p => !new RegExp(`^og: ${p} ok\\b`, 'm').test(before.output)))
-          if (await runHost(['login', provider], deps) !== 0) { out('구독 로그인이 끝나지 않았다: npm run host:login 뒤 npm run host:start'); return 1; }
+        if (!healthy(before.output) && await runHost(['login', 'grok'], deps) !== 0) {
+          out('grok 로그인이 끝나지 않았다: npm run host:login 뒤 npm run host:start'); return 1;
+        }
         out(`이 PC를 호스트 ${joined.name}에 붙였다(워커 열쇠는 화면에 보이지 않는다, 90일). ${joined.approved
           ? '승인된 호스트라 다른 사람의 신청도 받는다.' : '승인 전에는 내 신청만 이 PC로 만든다.'}`);
         return startWorker();

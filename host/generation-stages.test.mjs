@@ -12,7 +12,8 @@ import { ALIGN_AGAIN, BEAT_LIMIT, GROK_LIMITED, BRIEF_SCHEMA, ONE_STRIDE_OF, GAI
   lookJudgePrompt, sideJudgePrompt, sidePrompt, EXPRESSION_CELLS, expressionsPrompt, expressionsName, MODELS,
   JUDGE, UNKNOWN, MODELS_EVENT_BYTES, SIDE_JUDGE_SCHEMA, codexSessionId, createModelLog, imageEntry, judgeCommand, judgeKey, judgeLabel, judgeRecord,
   verdictKeyStatus, videoEntry, VIDEO_REQUESTED, REQUESTED_MODELS, writeWhole, JUDGE_MODES, PIXEL_JUDGE, checkedPixels, hybridJudgeKey, judgesMode,
-  pixelJudgeKey, sidePassed } from './generation-stages.mjs';
+  pixelJudgeKey, sidePassed, IMAGE_PROFILES, GROK_IMAGE_MODEL, appearanceCommand, chromaKeyFor, expressionsCommand, gaitStillCommand, gaitStillPrompt,
+  imageFor, imageProviderOf, requestedModels, sideCommand } from './generation-stages.mjs';
 import { codexSessionFacts } from './codex-usage.mjs';
 import { ENGINE_SEAM_MAX as REVIEW_SEAM_MAX, ENGINE_CUE_RHYTHM as REVIEW_CUE_RHYTHM, lowMarginFeet as reviewLowMarginFeet } from '../tools/ai-fighter/gait.mjs';
 import { parseEnv, parseHealth } from './generation-worker.mjs';
@@ -240,8 +241,11 @@ test('a failed look is tried again only when its report says so; otherwise an op
 test('the worker reads its env file and og health', () => {
   assert.deepEqual(parseEnv('# c\nODDBOUT_GENERATION_API=https://x/y\nODDBOUT_GENERATION_WORKER_KEY=afw_1\nbad line\n'),
     { ODDBOUT_GENERATION_API: 'https://x/y', ODDBOUT_GENERATION_WORKER_KEY: 'afw_1' });
-  assert.deepEqual(parseHealth('og: codex ok (a@b)\nog: grok FAILED (exit 1)\n', 't'), { ok: false, codex: true, grok: false, at: 't' });
+  assert.deepEqual(parseHealth('og: codex ok (a@b)\nog: grok FAILED (exit 1)\n', 't'), { ok: false, codex: true, grok: false, images: [], at: 't' });
   assert.equal(parseHealth('og: codex ok (a)\nog: grok ok (b)\n').ok, true);
+  // 1.1 (2026-11-06): grok alone is a working host (its judges are pixels) unless worker.env names judges that ask codex.
+  assert.equal(parseHealth('og: codex FAILED (exit 1)\nog: grok ok (b)\n').ok, true);
+  assert.equal(parseHealth('og: codex FAILED (exit 1)\nog: grok ok (b)\n', 't', 'hybrid').ok, false);
 });
 
 test('the motions: GPT rows assembled, a clean walk and run cut the judge passed, the package and one preview per clip', async () => {
@@ -1732,7 +1736,7 @@ test('the judges mode: codex unless one of the three is named, and a pixel answe
 });
 
 /** The side still under a judges mode: `pixels` and `codex` are queues of answers, one per call; motions.py's other commands fail (enough). */
-async function sideStage(judges, pixels, codex = []) {
+async function sideStage(judges, pixels, codex = [], { job: extra = {}, codexOn = true, reports = { ok: true } } = {}) {
   const dir = await mkdtemp(path.join(tmpdir(), `gen-side-${judges}-`)), calls = [], events = [];
   await mkdir(path.join(dir, 'looks'), { recursive: true });
   await writeFile(path.join(dir, 'looks', 'front-a-0.png'), 'front');
@@ -1740,7 +1744,7 @@ async function sideStage(judges, pixels, codex = []) {
   const og = async (args, { stdin } = {}) => {
     calls.push({ args, stdin });
     if (args.includes('gen') && args.includes('--direction')) {
-      await writeFile(flag(args, '--out'), 'side'); await writeFile(flag(args, '--report'), JSON.stringify({ ok: true })); return { code: 0 };
+      await writeFile(flag(args, '--out'), 'side'); await writeFile(flag(args, '--report'), JSON.stringify(reports)); return { code: 0 };
     }
     if (args[0] === 'codex') { await writeFile(flag(args, '-o'), JSON.stringify(codex.shift())); return { code: 0 }; }
     return { code: 1 };
@@ -1755,8 +1759,8 @@ async function sideStage(judges, pixels, codex = []) {
   };
   const api = { artifact: async () => ({ ok: true }), progress: async (job, progress, event) => { if (event) events.push(event); return { ok: true }; } };
   const stages = createStages({ og, api, motionsPy, fetchBytes: async () => new Uint8Array(), toWebp: async (png, webp) => writeFile(webp, 'webp'),
-    styleAnchor: '/kit/style-anchor-front.webp', gaitStaggerMs: 0, alignPauseMs: 0, judges });
-  const job = { id: '0123abcd-0006', language: 'ko', brief, choice: 'a', appearanceRound: 0, candidates: [], motionNote: null, motionRound: 0 };
+    styleAnchor: '/kit/style-anchor-front.webp', gaitStaggerMs: 0, alignPauseMs: 0, judges, codex: codexOn });
+  const job = { id: '0123abcd-0006', language: 'ko', brief, choice: 'a', appearanceRound: 0, candidates: [], motionNote: null, motionRound: 0, ...extra };
   const done = await stages.motions(job, dir);
   const folder = path.join(dir, 'looks', 'side-0-a'), read = async name => JSON.parse(await readFile(path.join(folder, name), 'utf8'));
   return { done, calls, events, dir, folder, read, job, again: () => stages.motions(job, dir),
@@ -1827,6 +1831,110 @@ test('a side verdict another judges mode made is reused and marked stale, never 
   await stages.motions(run.job, run.dir);
   assert.equal(run.pixelRuns().length, 0);
   assert.deepEqual(run.events.filter(e => e.kind === 'side').map(e => [e.outcome, e.judgeKey]), [['pass', 'stale'], ['chosen', undefined]]);
+});
+
+// 1.1 제공자 프로필 (2026-11-06): Grok pictures for a SuperGrok-only PC, GPT's as before for a job that names none or asks for them.
+const flagOf = (args, name) => args[args.indexOf(name) + 1];
+test('Grok pictures: each look, side, sheet and relaxed still asks Grok on a key colour opposite the palette, keyed by dominance; GPT\'s unchanged', () => {
+  assert.deepEqual([{}, null, { imageProvider: 'gpt' }, { imageProvider: 'grok' }, { imageProvider: 'claude' }].map(imageProviderOf),
+    ['gpt', 'gpt', 'gpt', 'grok', 'gpt']);
+  // The key is the palette's opposite: green, unless a green the matte would take for the key is named and nothing of magenta's family.
+  assert.equal(chromaKeyFor(brief), 'green');
+  assert.equal(chromaKeyFor({ look: { palette: ['gray', 'charcoal', 'white', 'fluorescent lime', 'black'], prop: 'a briefcase' } }), 'magenta');
+  assert.equal(chromaKeyFor({ look: { palette: ['red'], prop: 'an emerald dagger' } }), 'magenta');
+  assert.equal(chromaKeyFor({ look: { palette: ['green', 'rose pink'], prop: 'none' } }), 'green');
+  assert.equal(chromaKeyFor({ look: { palette: ['Black', 'White', 'Red', 'Golden yellow'], prop: 'a frying pan' } }), 'green');
+  assert.equal(chromaKeyFor(undefined), 'green');
+  const gpt = imageFor({ brief }), grok = imageFor({ imageProvider: 'grok', brief });
+  assert.deepEqual([gpt.provider, gpt.model, gpt.key], ['codex', MODELS.image, null]);
+  assert.deepEqual([grok.provider, grok.model, grok.key, grok.chromaMethod], ['grok', GROK_IMAGE_MODEL, 'green', 'dominance']);
+  assert.equal(IMAGE_PROFILES.grok.limited, GROK_LIMITED);
+  // GPT's prompts and commands are the ones before the profiles, word for word.
+  assert.equal(appearancePrompt(brief, 'x', 'b', gpt), appearancePrompt(brief, 'x', 'b'));
+  assert.equal(sidePrompt(brief, gpt), sidePrompt(brief));
+  assert.match(sidePrompt(brief), /\nNo background, no ground shadow, no text, no frame\. Do not draw: weapons, text\.$/);
+  assert.match(expressionsPrompt(brief), /Fully transparent background, no cell borders/);
+  assert.match(gaitStillPrompt(brief), /\nNo background, no ground shadow, no text, no frame\.$/);
+  assert.deepEqual(appearanceCommand({ promptFile: 'p', out: 'o', report: 'r', refs: ['ref'], anchor: 'a' }), ['npm', 'run', 'sprite', '--', 'gen',
+    '--provider', 'codex', '--model', MODELS.image, '--prompt-file', 'p', '--out', 'o', '--transparent', '--direction', 'front', '--layout-guide',
+    '--report', 'r', '--ref', 'ref', '--ref', 'a']);
+  assert.deepEqual(expressionsCommand({ promptFile: 'p', out: 'o', report: 'r', front: 'f', anchor: 'a' }), ['npm', 'run', 'sprite', '--', 'gen',
+    '--provider', 'codex', '--model', MODELS.image, '--prompt-file', 'p', '--out', 'o', '--transparent', '--aspect-ratio', '3:2', '--report', 'r',
+    '--ref', 'f', '--ref', 'a']);
+  // Grok's: no "No background" (Grok painted it black), the key colour edge to edge instead.
+  const keyLine = 'Background: one flat solid pure bright green (#00FF00) colour filling the whole canvas edge to edge; no ground shadow, no text, no frame.';
+  for (const text of [appearancePrompt(brief, null, 'a', grok), sidePrompt(brief, grok), gaitStillPrompt(brief, grok)]) {
+    assert.doesNotMatch(text, /No background|transparent/i);
+    assert.ok(text.includes(keyLine), text);
+  }
+  const sheet = expressionsPrompt(brief, grok);
+  assert.doesNotMatch(sheet, /transparent/i);
+  assert.match(sheet, /Background: one flat solid pure bright green \(#00FF00\) colour filling the whole canvas behind every face; no cell borders/);
+  assert.match(sidePrompt(brief, imageFor({ imageProvider: 'grok', brief: { ...brief, look: { ...brief.look, palette: ['lime', 'black'] } } })),
+    /pure bright magenta \(#FF00FF\) colour filling the whole canvas edge to edge/);
+  // Its commands: Grok's image model, the key and the dominance matte, a square canvas under the square layout guide, 3:2 for the sheet.
+  const commands = [appearanceCommand({ promptFile: 'p', out: 'o', report: 'r', refs: [], anchor: 'a', image: grok }),
+    sideCommand({ promptFile: 'p', out: 'o', report: 'r', front: 'f', anchor: 'a', image: grok }),
+    gaitStillCommand({ promptFile: 'p', out: 'o', report: 'r', look: 'l', image: grok })];
+  for (const args of commands) {
+    assert.deepEqual(['--provider', '--model', '--chroma-key', '--chroma-method', '--aspect-ratio'].map(name => flagOf(args, name)),
+      ['grok', GROK_IMAGE_MODEL, 'green', 'dominance', '1:1']);
+    assert.ok(args.includes('--transparent') && args.includes('--layout-guide') && !args.includes('codex'));
+  }
+  const sheetArgs = expressionsCommand({ promptFile: 'p', out: 'o', report: 'r', front: 'f', anchor: 'a', image: grok });
+  assert.deepEqual(['--provider', '--chroma-key', '--chroma-method'].map(name => flagOf(sheetArgs, name)), ['grok', 'green', 'dominance']);
+  assert.deepEqual(sheetArgs.filter((a, i) => sheetArgs[i - 1] === '--aspect-ratio'), ['3:2']);
+  // The versions event names Grok's image model, not codex's image agent; a GPT job's is REQUESTED_MODELS as before.
+  assert.equal(requestedModels({}), REQUESTED_MODELS);
+  assert.deepEqual(requestedModels({ imageProvider: 'grok' }), { text: MODELS.text, judge: JUDGE.model, judgeEffort: JUDGE.effort, video: MODELS.video,
+    imageProvider: 'grok', image: GROK_IMAGE_MODEL });
+  assert.deepEqual(imageEntry({ provider: 'grok', model: GROK_IMAGE_MODEL }, GROK_IMAGE_MODEL),
+    { role: 'image', requested: GROK_IMAGE_MODEL, observed: UNKNOWN, effort: UNKNOWN, cli: UNKNOWN, imageModel: UNKNOWN });
+});
+
+test('a SuperGrok-only PC: the looks drawn by Grok, no look judge without codex, Grok\'s refusal is Grok\'s, not codex\'s question', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'gen-grok-look-')), calls = [];
+  let exit = 0;
+  const og = async args => {
+    calls.push(args);
+    if (exit) return { code: exit };
+    await writeFile(flagOf(args, '--out'), 'png'); await writeFile(flagOf(args, '--report'), JSON.stringify({ ok: true, provider: 'grok', model: GROK_IMAGE_MODEL }));
+    return { code: 0 };
+  };
+  const events = [];
+  const api = { artifact: async () => ({ ok: true }), progress: async (job, progress, event) => { if (event) events.push(event); return { ok: true }; } };
+  const stages = createStages({ og, api, fetchBytes: async () => new Uint8Array(), toWebp: async (png, webp) => writeFile(webp, 'webp'),
+    styleAnchor: '/kit/style-anchor-front.webp', judges: 'pixels', codex: false });
+  const job = { id: 'g', description: '펭귄 셰프', language: 'ko', refs: [], candidates: [], appearanceRound: 0, appearanceNote: null, brief,
+    imageProvider: 'grok', delegate: true };
+  try {
+    // 맡기기 without codex: both looks drawn by Grok, nothing judged, the creator chooses (as when the judge picks none).
+    assert.deepEqual(await stages.appearance(job, dir), { outcome: 'ok', result: { candidates: ['front-a-0', 'front-b-0'] } });
+    assert.equal(calls.length, 2);
+    assert.ok(calls.every(args => flagOf(args, '--provider') === 'grok' && flagOf(args, '--chroma-key') === 'green' && !args.includes('codex')));
+    for (const take of ['a', 'b']) assert.match(await readFile(path.join(dir, 'looks', `prompt-0-${take}.txt`), 'utf8'), /pure bright green \(#00FF00\)/);
+    const models = events.find(e => e.kind === 'models');
+    assert.deepEqual(models.runs, [{ role: 'image', requested: GROK_IMAGE_MODEL, observed: UNKNOWN, effort: UNKNOWN, cli: UNKNOWN, imageModel: UNKNOWN, n: 2 }]);
+    // og refusing grok's account (75, no report): Grok is down here, never codex's question.
+    await rm(path.join(dir, 'looks'), { recursive: true, force: true });
+    exit = 75;
+    assert.deepEqual(await stages.appearance({ ...job, delegate: false }, dir), { outcome: 'retry', result: { code: GROK_LIMITED } });
+    // A GPT job on the same stages object is drawn by codex again (the profile is the job's, read when each stage starts).
+    exit = 0; calls.length = 0;
+    await rm(path.join(dir, 'looks'), { recursive: true, force: true });
+    await stages.appearance({ ...job, imageProvider: undefined, delegate: false }, dir);
+    assert.ok(calls.length === 2 && calls.every(args => flagOf(args, '--provider') === 'codex' && !args.includes('--chroma-key')));
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('a SuperGrok-only PC: the side still and the sheet drawn by Grok and judged by pixels, with no codex call', async () => {
+  const run = await sideStage('pixels', [pixelSide({})], [], { job: { imageProvider: 'grok' }, codexOn: false });
+  assert.equal(run.asked(), 0);
+  const drawn = run.calls.filter(c => c.args.includes('gen'));
+  assert.ok(drawn.length >= 1);
+  assert.ok(drawn.every(c => flagOf(c.args, '--provider') === 'grok' && flagOf(c.args, '--chroma-method') === 'dominance'), 'every picture is Grok\'s');
+  assert.match(await readFile(path.join(run.folder, 'prompt.txt'), 'utf8'), /Background: one flat solid pure bright green/);
+  assert.ok(run.calls.some(c => c.args.includes(path.join(run.folder, 'take-0.png'))), 'the motions take the Grok side still');
 });
 
 test('pixels and hybrid judge the walk and the run: who decided goes to tried and to the loop review, a pixel fail films another take', async () => {

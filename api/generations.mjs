@@ -26,7 +26,7 @@ import { accountTokens } from './account.mjs';
  *   lease_expires_at: string | null, created_at: string, updated_at: string, delegate: boolean, host_choice: string,
  *   requested_host: string | null, assigned_host: string | null, started_at?: string | null, charged_at?: string | null,
  *   refunded_at?: string | null, profile_front?: any, profile_expressions?: any, profile_set_id?: string | null, agent_client?: string | null,
- *   agent_name?: string | null }} Job
+ *   agent_name?: string | null, image_provider?: string }} Job
  * @typedef {{ id: string, path: string, content_type: string, width: number, height: number }} Upload  A job's reference picture (af_generation_uploads).
  */
 
@@ -41,6 +41,8 @@ export const PREVIEW_NOTES = Object.freeze(['run-from-walk']);
 /** What the worker may say about one draft (2026-11-01): a walk or run take shown as it is cut, `checking` while the gate looks at it,
  * `retaking` when the gate refused it and the next take films. A draft with no state passed (or is an action clip). */
 export const DRAFT_STATES = Object.freeze(['checking', 'retaking']);
+/** Who draws a request's pictures (2026-11-06, af_generation_jobs.image_provider): `grok` (the default) or `gpt`. */
+export const IMAGE_PROVIDERS = Object.freeze(['grok', 'gpt']);
 const DRAFT_EVENTS_READ = 5;
 const CORS = { methods: 'GET, POST, PATCH, DELETE, OPTIONS', headers: 'Authorization, Content-Type, Idempotency-Key' };
 // A join code (내 PC 붙이기): made by the site for a signed-in host, copied into his PC's terminal once; 160 bits, so nobody guesses one.
@@ -66,6 +68,8 @@ const STATUS = { 'generation-unavailable': 409, 'generation-quota': 409, 'genera
   'upload-closed': 409,
   // 그림 올리기 표 (2026-11-01).
   'invalid-ticket': 403, 'ticket-expired': 410, 'ticket-full': 409,
+  // 그림 제공자 (2026-11-06): a provider the request may not name, or one the chosen host cannot draw now.
+  'invalid-image-provider': 422, 'image-provider-unavailable': 409,
   // The submission path's own refusals (`af_create_submission`, `af_submit`), with the statuses the creator's routes give them.
   ...SUBMISSION_STATUS };
 /** Stats the contract takes: 1-5 each, summing to 9 (`contracts/ai-fighter/validate.mjs`). */
@@ -324,6 +328,8 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       // What it took from his tokens so far (null: not readable now).
       tokens: tokens ? tokens.get(row.id) ?? 0 : null,
       host: { choice: row.host_choice ?? 'oddbout', requested: hosts.get(row.requested_host) ?? null, assigned: hosts.get(row.assigned_host) ?? null },
+      // Who draws its pictures (2026-11-06): grok or gpt; a job from before the column was drawn by GPT.
+      imageProvider: row.image_provider ?? 'gpt',
       // The agent that asked for it (2026-11-03: the cloud MCP's client name, as the client gave it), null for a request made on the site.
       agent: row.agent_name ?? null };
   }
@@ -383,6 +389,8 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     return { id: data.id, name: data.name, approved: data.approved, enabled: data.enabled, acceptsAny: data.accepts_any, billing: data.billing,
       dailyLimit: data.daily_limit, online: live, todayLeft: Math.max(data.daily_limit - (Number(today) || 0), 0), lastSeenAt: data.worker_seen_at ?? null,
       health: { codex: data.worker_health?.codex === true, grok: data.worker_health?.grok === true,
+        // The pictures it draws now (its worker's `images`, 2026-11-06): GPT's only with codex ok. Null from a worker that says none.
+        images: Array.isArray(data.worker_health?.images) ? data.worker_health.images.filter((/** @type {unknown} */ name) => IMAGE_PROVIDERS.includes(/** @type {string} */ (name))) : null,
         checkedAt: typeof data.worker_health?.at === 'string' ? data.worker_health.at : null },
       keys: /** @type {{ expires_at: string, enabled: boolean }[]} */ (keys ?? []).filter(k => k.enabled && Date.parse(k.expires_at) > Date.now()).map(k => ({ expiresAt: k.expires_at })) };
   }
@@ -471,12 +479,14 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
    * @param {Request} request @param {string} owner
    */
   async function requested(request, owner) {
-    const body = fields(await readJson(request, 8000), ['description', 'language', 'refs', 'rightsConfirmed', 'delegate', 'host', 'hostConsent']);
+    const body = fields(await readJson(request, 8000), ['description', 'language', 'refs', 'rightsConfirmed', 'delegate', 'host', 'hostConsent', 'imageProvider']);
     if (!['ko', 'en'].includes(body.language)) throw new Problem(422, 'invalid-language');
     if (body.delegate !== undefined && typeof body.delegate !== 'boolean') throw new Problem(422, 'invalid-body');
+    // Who draws the pictures (2026-11-06): grok, the default, or gpt (the host must draw them: af_generation_image_check).
+    if (body.imageProvider !== undefined && !IMAGE_PROVIDERS.includes(body.imageProvider)) throw new Problem(422, 'invalid-image-provider');
     const target = await targetOf(owner, body);
     if (body.refs !== undefined && (!Array.isArray(body.refs) || body.refs.length > GENERATION_LIMITS.refs)) throw new Problem(422, 'invalid-refs');
-    return { body, target, refs: (body.refs ?? []).map(id),
+    return { body, target, imageProvider: /** @type {string} */ (body.imageProvider ?? 'grok'), refs: (body.refs ?? []).map(id),
       description: text(body.description, GENERATION_LIMITS.description, '/description', { min: GENERATION_LIMITS.descriptionMin, lines: true, code: 'invalid-description' }) };
   }
   /**
@@ -580,16 +590,19 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     // The checks of a request without making it (MCP 점검 2026-10-29): the connector asks before it uploads the user's pictures, so a
     // refused request keeps none of them. Nothing is made or kept.
     if (method === 'POST' && route === 'generations/check') {
-      const { target, refs } = await requested(request, owner);
+      const { target, refs, imageProvider } = await requested(request, owner);
       if (refs.length) await usableRefs(owner, refs);
       await call('af_generation_check', { p_owner: owner, ...target });
+      /** @type {{ p_host_choice?: string, p_host?: string }} */
+      const where = target;
+      await call('af_generation_image_check', { p_host_choice: where.p_host_choice ?? 'oddbout', p_host: where.p_host ?? null, p_image_provider: imageProvider });
       return { ok: true };
     }
     if (method === 'POST' && route === 'generations') {
       const key = id(request.headers.get('idempotency-key'));
-      const { body, description, refs, target } = await requested(request, owner);
+      const { body, description, refs, target, imageProvider } = await requested(request, owner);
       const row = await call('af_generation_create', { p_owner: owner, p_key: key, p_description: description,
-        p_language: body.language, p_refs: refs, p_rights: body.rightsConfirmed === true,
+        p_language: body.language, p_refs: refs, p_rights: body.rightsConfirmed === true, p_image_provider: imageProvider,
         // 맡기기 (2026-10-28): the worker picks the look and goes on to the motions; the creator answers once, at the end.
         ...(body.delegate ? { p_delegate: true } : {}), ...target,
         // 신청한 에이전트 (2026-11-03): only the cloud MCP's verified client; the database keeps it if the client is live and named.
@@ -740,6 +753,8 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       return { ok: true, job: { id: row.id, status: row.status, leaseToken: row.lease_token, owner: row.owner_id, createdAt: row.created_at, description: row.description,
         language: row.language, brief: row.brief ?? null, delegate: row.delegate === true, choice: row.choice ?? null, appearanceNote: row.appearance_note ?? null,
         decisionsReview: { mode: productionReviewer?.enabled ? 'shadow' : 'off' },
+        // Who draws its pictures (host/generation-stages.mjs imageProviderOf): grok or gpt; a row from before the column was GPT's.
+        imageProvider: row.image_provider ?? 'gpt',
         appearanceRound: row.appearance_revisions, motionNote: row.motion_note ?? null, motionRound: row.motion_revisions, profile: row.profile ?? null,
         refs: (refs ?? []).map(/** @param {Upload} ref */ ref => ({ id: ref.id, contentType: ref.content_type, width: ref.width, height: ref.height, url: urls.get(ref.path) ?? null })),
         candidates: candidates.map((name, i) => ({ key: i === 0 ? 'a' : 'b', name, url: urls.get(artifactPath(row.id, name)) ?? null })),

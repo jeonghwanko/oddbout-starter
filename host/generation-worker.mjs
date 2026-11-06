@@ -12,8 +12,8 @@ import { appendFile, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/pro
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { ASKS, CODEX_CWD, FRONT_JUDGE_SCHEMA, GROK_LIMITED, PIXEL_JUDGE, REQUESTED_MODELS, createStages, frontJobId, frontJudgePrompt, frontVerdict,
-  judgeCommand, judgesMode, ogJobId } from './generation-stages.mjs';
+import { ASKS, CODEX_CWD, FRONT_JUDGE_SCHEMA, GROK_LIMITED, PIXEL_JUDGE, createStages, frontJobId, frontJudgePrompt, frontVerdict,
+  imageProviderOf, judgeCommand, judgesFor, judgesMode, judgesNeedCodex, ogJobId, requestedModels } from './generation-stages.mjs';
 import { codexSessionFacts, codexTokensSince, codexUsage } from './codex-usage.mjs';
 
 // <root>/bin holds this file in both installs (/srv/oddbout-gen on ODDBOUT's PC, a host's own folder in user mode).
@@ -40,10 +40,27 @@ export function parseEnv(text) {
     .map(line => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]).filter(([key]) => /^[A-Z_][A-Z0-9_]*$/.test(key)));
 }
 
-/** `og health` lines → { ok, codex, grok, at }. */
-export function parseHealth(output, at = new Date().toISOString()) {
+/**
+ * Whether this host may claim work with these logins (1.1, 2026-11-06 — the logins its work needs, no longer both): grok always (it films
+ * every walk and run, and draws a job's pictures unless the job asks for GPT's), codex only when the judges it runs ask codex (judgesFor:
+ * `configured` is worker.env's ODDBOUT_GENERATION_JUDGES). A SuperGrok-only PC works; a job that needs codex — GPT pictures, the brief —
+ * goes only to a host whose last health says codex ok (the server's claim, af_generation_claim_for).
+ * @param {{ codex: boolean, grok: boolean }} logins @param {string | undefined} [configured]
+ */
+export const canWork = ({ codex, grok }, configured) => Boolean(grok && (codex || !judgesNeedCodex(judgesFor(configured, { codex }))));
+/**
+ * The pictures a host draws with these logins, as its heartbeat says them (`images`; the server gives a host only jobs whose pictures it
+ * draws, af_generation_claim_for): Grok's with grok, GPT's with codex as well (their walk and run are Grok clips).
+ * @param {{ codex: boolean, grok: boolean }} logins @returns {string[]}
+ */
+export const imagesOf = ({ codex, grok }) => grok ? (codex ? ['grok', 'gpt'] : ['grok']) : [];
+/** A health with these logins: whether it may claim (canWork) and the pictures it draws (imagesOf), the rest kept. */
+const withLogins = (health, logins, configured, ok = true) =>
+  ({ ...health, ...logins, ok: ok && canWork(logins, configured), images: imagesOf(logins) });
+/** `og health` lines → { ok, codex, grok, images, at }: `ok` says this host may claim (canWork), `codex` and `grok` each login. */
+export function parseHealth(output, at = new Date().toISOString(), configured = undefined) {
   const ok = p => new RegExp(`^og: ${p} ok\\b`, 'm').test(output);
-  return { ok: ok('codex') && ok('grok'), codex: ok('codex'), grok: ok('grok'), at };
+  return withLogins({ at }, { codex: ok('codex'), grok: ok('grok') }, configured);
 }
 
 /**
@@ -66,11 +83,12 @@ const gitHead = dir => new Promise(resolve => execFile('git', ['-C', dir, 'rev-p
  * What made a stage's work (measurement, 2026-10-29): the kit and engine commits and the models, sent as a `versions` event when the
  * stage starts, so each number in docs/MEASUREMENT.md can be read per release. A commit that cannot be read is null, never a failure.
  * The models are the ones the stage asks for (`requested`, 2026-11-05): what codex recorded comes when the stage ends, as its `models` event.
- * `judges`: the worker's judges mode (generation-stages JUDGE_MODES); named with the pixel judge when it is not codex.
+ * `judges`: the worker's judges mode (generation-stages JUDGE_MODES); named with the pixel judge when it is not codex. `job`: its pictures'
+ * provider (requestedModels: a grok job names Grok's image model).
  */
-export async function versionsEvent(kit, head = gitHead, judges = 'codex') {
+export async function versionsEvent(kit, head = gitHead, judges = 'codex', job = null) {
   const [kitRef, engine] = await Promise.all([head(kit), head(path.join(kit, 'vendor', 'sprite-gen'))]);
-  return { kind: 'versions', kit: kitRef, engine, requested: { ...REQUESTED_MODELS,
+  return { kind: 'versions', kit: kitRef, engine, requested: { ...requestedModels(job),
     ...(judges === 'codex' ? {} : { judges, pixelJudge: PIXEL_JUDGE.model }) } };
 }
 /** How much of a run's output the stage may read back (`og(args, { capture: true })`): codex exec's header, which names its session, comes first. */
@@ -246,10 +264,12 @@ export const dispatchUnknownOutcome = (status, open) => ({ outcome: 'review',
   result: { code: `${status}-${DISPATCH_UNKNOWN}`, runs: open.slice(0, 8).map(record => record.tool ?? 'unreadable') } });
 /** The provider a stage's outcome code says cannot run here now (the codex question, Grok's 429), if it does. */
 export const limitedProvider = code => ({ [ASKS]: 'codex', [GROK_LIMITED]: 'grok' })[code];
-/** The health after a stage's outcome: a provider that cannot run here now is marked down until a check passes. */
-export function healthAfter(health, code) {
+/** The health after a stage's outcome: a provider that cannot run here now is marked down until a check passes; the host goes on claiming
+ * only when its work needs no more than the providers left (canWork: a codex question on a host that judges with pixels leaves it working). */
+export function healthAfter(health, code, configured = undefined) {
   const provider = limitedProvider(code);
-  return provider ? { ...health, ok: false, [provider]: false } : health;
+  if (!provider) return health;
+  return withLogins(health, { codex: health.codex, grok: health.grok, [provider]: false }, configured, health.ok);
 }
 /**
  * What the health check cannot see (2026-10-30): it sends each provider one word, and a text answer says nothing of the image or video
@@ -257,7 +277,7 @@ export function healthAfter(health, code) {
  * doubled each time it is found limited again (the stage ends first, or a requester picks this host and meets it), at most a health
  * period. A stage that made its work with the provider ends the streak. In memory only: a restarted worker asks the check again.
  */
-export function createCooldowns(now = Date.now) {
+export function createCooldowns(now = Date.now, configured = undefined) {
   const by = new Map();
   return {
     /** Marks `provider` limited; returns how long it stays down (ms). */
@@ -269,12 +289,15 @@ export function createCooldowns(now = Date.now) {
     worked(providers) { for (const provider of providers) { const held = by.get(provider); if (held) by.set(provider, { ...held, streak: 0 }); } },
     apply(health) {
       const down = p => health[p] && !(by.get(p)?.until > now()), codex = down('codex'), grok = down('grok');
-      return codex === health.codex && grok === health.grok ? health : { ...health, ok: health.ok && codex && grok, codex, grok };
+      return codex === health.codex && grok === health.grok ? health : withLogins(health, { codex, grok }, configured, health.ok);
     },
   };
 }
-/** The providers a stage's work uses, for ending a limited streak when it made its work. */
-const STAGE_PROVIDERS = Object.freeze({ appearance: ['codex'], motions: ['codex', 'grok'] });
+/** The providers a stage's work uses, for ending a limited streak when it made its work: the job's pictures' (codex for GPT's), and Grok's clips. */
+export function stageProviders(status, job) {
+  const pictures = imageProviderOf(job) === 'grok' ? 'grok' : 'codex';
+  return ({ appearance: [pictures], motions: [...new Set([pictures, 'grok'])] })[status] ?? [];
+}
 /** An error's code as the finish route takes it: a string of at most 60 characters (a child process's or a reply's code may be a number). */
 export const errorCode = (error, fallback = 'stage-error') => String(error?.code ?? fallback).slice(0, 60);
 
@@ -475,19 +498,23 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
   const codexCwd = path.join(root, CODEX_CWD);
   await mkdir(codexCwd, { recursive: true });
   for (const file of await projectDocsAt(codexCwd)) await say(`codex folder ${codexCwd} reads ${file}: the brief and the judges read it beside their prompts`);
-  // Who judges the side takes and the walk and run loops (generation-stages JUDGE_MODES): codex unless worker.env says otherwise.
-  const judges = judgesMode(env.ODDBOUT_GENERATION_JUDGES);
-  if (env.ODDBOUT_GENERATION_JUDGES && env.ODDBOUT_GENERATION_JUDGES !== judges)
-    await say(`ODDBOUT_GENERATION_JUDGES=${env.ODDBOUT_GENERATION_JUDGES} is not one of codex, pixels, hybrid: codex judges`);
-  else if (judges !== 'codex') await say(`judges ${judges}: the pixel judge ${PIXEL_JUDGE.model} judges the side takes and the loops first`);
+  // Who judges the side takes and the walk and run loops (generation-stages JUDGE_MODES): the mode worker.env names, else codex where codex
+  // runs and pixels where it does not (judgesFor, read again for each claim).
+  const configured = env.ODDBOUT_GENERATION_JUDGES || undefined;
+  const named = configured ? judgesMode(configured) : null;
+  if (configured && configured !== named)
+    await say(`ODDBOUT_GENERATION_JUDGES=${configured} is not one of codex, pixels, hybrid: codex judges`);
+  else if (named && named !== 'codex') await say(`judges ${named}: the pixel judge ${PIXEL_JUDGE.model} judges the side takes and the loops first`);
+  else if (!named) await say('judges: codex where codex runs, the pixel judge where it does not (ODDBOUT_GENERATION_JUDGES names none)');
 
-  let health = { ok: false, codex: false, grok: false, at: null }, checkedAt = 0, beatAt = 0, prunedAt = 0;
-  const cooldowns = createCooldowns();
+  let health = { ok: false, codex: false, grok: false, images: [], at: null }, checkedAt = 0, beatAt = 0, prunedAt = 0;
+  const cooldowns = createCooldowns(Date.now, configured);
   async function keepAlive() {
     if (Date.now() - checkedAt >= TIMING.healthMs) {
       // A health check waits for a codex slot like any run; past ten minutes it counts as not healthy.
-      health = cooldowns.apply(parseHealth(await og.health())); checkedAt = Date.now();
-      await say(`health codex=${health.codex} grok=${health.grok}`);
+      health = cooldowns.apply(parseHealth(await og.health(), undefined, configured)); checkedAt = Date.now();
+      await say(`health codex=${health.codex} grok=${health.grok} → ${health.ok ? `claims (judges ${judgesFor(configured, health)})`
+        : configured && judgesNeedCodex(judgesMode(configured)) && health.grok ? `no claims: judges ${judgesMode(configured)} need codex` : 'no claims'}`);
       for (const name of await closeFrontFolders(path.join(kit, 'output'))) await say(`front folder ${name} closed`);
       // Jobs that ended while they waited for their requester (cancelled, expired): closed here, so og setup can update again.
       const unclosed = await unclosedJobs(path.join(kit, 'output'));
@@ -509,12 +536,15 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
 
   /** codex cannot run here now (exit 75: signed out, usage used up): claim nothing until a health check passes again, soon. */
   async function providerDown(code) {
-    const down = healthAfter(health, code), provider = limitedProvider(code);
+    const down = healthAfter(health, code, configured), provider = limitedProvider(code);
     if (down === health) return false;
     health = down;
     const wait = cooldowns.limit(provider);
     checkedAt = Date.now() - TIMING.healthMs + wait;
-    await say(`${provider} cannot run now: no claims until health passes (checked again in ${Math.round(wait / 60_000)} minutes)`);
+    // The next turn's heartbeat says so before it claims again: the server gives a job that needs this provider only to a host it is ok on.
+    beatAt = 0;
+    await say(`${provider} cannot run now: ${health.ok ? `claims go on without it (judges ${judgesFor(configured, health)})` : 'no claims until health passes'}`
+      + ` (checked again in ${Math.round(wait / 60_000)} minutes)`);
     return true;
   }
 
@@ -538,7 +568,9 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
     await mkdir(dir, { recursive: true });
     // og's job marker: `og run` refuses a folder without it. Who and what only; the description stays in the API.
     await writeFile(path.join(dir, 'request.json'), JSON.stringify({ id: ogId, api: { jobId: job.id, owner: job.owner }, createdAt: new Date().toISOString() }, null, 2) + '\n');
-    await api.progress(job, undefined, await versionsEvent(kit, undefined, judges)).catch(() => {});
+    // The judges this stage runs with: worker.env's, or codex where it runs now and pixels where it does not (judgesFor).
+    const judges = judgesFor(configured, health);
+    await api.progress(job, undefined, await versionsEvent(kit, undefined, judges, job)).catch(() => {});
     const controller = new AbortController(), tally = createTally(), since = Date.now();
     // The codex tokens of the sessions written since the stage began (codex-usage.mjs), or null: none, or unreadable (logged).
     const spent = async () => {
@@ -567,7 +599,7 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
         return capture ? { code, output } : { code };
       }),
       // What codex recorded for a run's session (its rollout under this worker's sessions folder), for the verdicts and the `models` event.
-      codexSession: (id, sinceMs) => codexSessionFacts(sessions, id, sinceMs), codexCwd, judges,
+      codexSession: (id, sinceMs) => codexSessionFacts(sessions, id, sinceMs), codexCwd, judges, codex: health.codex,
       api, signal: controller.signal, lowMarginFeetTaken,
       fetchBytes: async url => { const r = await fetch(url, { signal: AbortSignal.timeout(60_000) }); if (!r.ok) throw new Error(`download ${r.status}`); return new Uint8Array(await r.arrayBuffer()); },
       motionsPy: args => unlessStopped(controller.signal, () => run(python, ['-I', path.join(root, 'bin', 'motions.py'), ...args], { cwd: kit, log, signal: controller.signal })
@@ -603,7 +635,7 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
       await reportStageTokens(api, job, await spent(), say);
       return;
     }
-    if (!await providerDown(outcome.result?.code) && outcome.outcome === 'ok') cooldowns.worked(STAGE_PROVIDERS[job.status] ?? []);
+    if (!await providerDown(outcome.result?.code) && outcome.outcome === 'ok') cooldowns.worked(stageProviders(job.status, job));
     // The stage's codex tokens beside its calls (2026-10-31): the server's daily budget and the creator's balance count them. A finish
     // refused (or lost) keeps none, so they go on their own route.
     const tokens = await spent();

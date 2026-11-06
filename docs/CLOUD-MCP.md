@@ -779,6 +779,9 @@ URL 재발급과 신규 접수가 열린 상태에서 다른 계정의 키 조�
 - 신청의 `host`: `oddbout`(기본, 공식 호스트), `any`(승인된 호스트 누구나), 호스트 id. `any`와 호스트 id는 사용자의 글과 그림이 그 호스트 PC로 가므로
   `hostConsent: true`가 있어야 한다. 브리프(안전 판정)는 늘 공식 호스트가 쓴다. 그 뒤 단계를 처음 가져간 호스트가 끝까지 맡는다.
   공식 호스트는 다른 호스트가 켜져 있으면 `any` 신청을 3분 기다려 준다.
+- 신청의 `imageProvider`(2026-11-06): 그림을 누가 그리는지, `grok`(기본) 또는 `gpt`. 걷기·달리기는 언제나 Grok 영상이다. 호스트는 하트비트로
+  그릴 수 있는 그림을 알리고(`images`, codex가 되면 `gpt`도), 그 그림을 그리지 못하는 호스트 id나 `any`에 `gpt`를 신청하면 확인에서 바로 거절한다
+  (`image-provider-unavailable`, 409). 작업은 `imageProvider`를 돌려준다(이관 `20261106120000_oddbout_generation_image_provider`).
 - `list_generation_hosts`(로그인 없음, `/mcp`에서 `browse_oddbout` view `hosts`): 승인되고 켜진 호스트의 id·이름·켜짐·`any` 받기·오늘 남은 수.
 - 호스트 되기와 생성기 설치·운영은 `npm run host -- …`([생성 호스트 되기](GENERATION-HOST.md), 생성기 `host/`)가 아래 API를 부른다(사이트 화면은 다음 단계):
   `POST /generations/host`(이름·`billing` `subscription`|`api-key`·약관 동의) →
