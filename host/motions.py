@@ -47,6 +47,10 @@ NumPy and Pillow only: it runs on the kit's sprite-gen venv (`<kit>/vendor/sprit
       (kaito_web/tools/art/import-arena-concepts.mjs): the figure's box from its cleaned alpha, a square FACE_SIDE of its height at its
       top, centred on the opaque columns of its top FACE_HEAD_SHARE (the head, off the middle where a pose leans), inside the figure.
       {x, y, side} in the painting's pixels.
+  pixel-judge side <front.png> <take.png> <out.json>
+  pixel-judge loop <look.png> <aligned strip.json> <out.json>
+      The pixel judge (2026-11-06): the side judge's checks (whole, side, match, style, clean) or the loop judge's (identity, anatomy,
+      loop), each pass, fail or "unknown" where pixels cannot settle it, with `notes` and the numbers behind them (`measures`).
 
 Beats follow kaito_web/tools/art/fighter-gpt/template.py (the GPT guests' combo, slam, dash, block, hit, groggy and fall), with their
 jolt offsets drawn as shifted copies of the cell (the v1 package has no runtime jolt).
@@ -56,6 +60,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -946,6 +951,446 @@ def face_box(path: Path) -> dict:
     return {"x": int(x), "y": top, "side": int(side)}
 
 
+# ------------------------------------------------------------------------------------------------ pixel judge
+# A judge of what pixels can decide (2026-11-06), beside the vision judge (codex, 10-15 s a call): the same verdict shapes, in well under a
+# second. Every figure is first brought to one standing height, so shares and sizes compare across pictures drawn at any scale. A check the
+# pixels cannot settle answers "unknown"; the worker's judges mode decides what that means (generation-stages.mjs JUDGE_MODES). The
+# thresholds were set on six probe fighters of 2026-11-05 (8 side takes and 12 walk/run loops codex had judged; codex failed 2 takes as
+# three-quarter views, 3 loops for a frying pan missing in every frame and 1 for gloves shrinking in some frames) and on defects painted
+# into their passes. What they did not show: a profile from a three-quarter view, a part changing size, a face.
+
+PIXEL_MODEL = "pixels-v1"
+PJ_HEIGHT = 256            # the standing figure's height every share and size is measured at
+PJ_CANVAS = 384            # a canvas's longest side when its parts and margins are measured
+PJ_OPAQUE = 128            # alpha from which a pixel is part of the figure
+PJ_SOLID = 224             # alpha from which a pixel's colour is read (an edge pixel is half background)
+PJ_CLEAR = 24              # alpha below which a pixel is background
+PJ_REGIONS = 8             # colour regions of the reference (Lab k-means from a fixed seed: the same picture, the same regions)
+PJ_SAMPLE = 24000          # reference pixels the regions are fitted on (evenly spaced)
+PJ_FAR = 22.0              # Lab distance past which a pixel matches no region of the reference: a new colour
+# whole: the main figure's box keeps this share of the canvas side from every edge (passing takes kept 2.6 % or more).
+PJ_EDGE = 0.005
+# clean: a part apart from the main figure (8-connected, on the PJ_CANVAS canvas) holding this share of its area is a second thing in the
+# picture; smaller ones are specks. A straight opaque run near the bottom this wide (of the canvas) is a ground line (passing feet: 0.34
+# at most), a canvas edge covered this far a frame.
+PJ_PART = (0.006, 0.03)    # (unknown from, fail from)
+PJ_GROUND = 0.6
+PJ_BORDER = 0.5
+# match (side): a region of the front holding PJ_KEPT_SHARE of it keeps this ratio of its share in the side view, a view change hides
+# up to two thirds of one (0.33 the least kept on a passing take); new colours past PJ_NEW (a share of the take) are not the front's.
+PJ_KEPT_SHARE = 0.04
+PJ_SIDE_KEPT = (0.25, 0.2)    # (unknown below, fail below)
+PJ_NEW = (0.03, 0.08)         # (unknown from, fail from); passing takes 0.7 % at most, passing frames 4 %
+# identity (loop): a region of the look keeps this median ratio of its share over the frames (0.49 the least on a passing loop; the
+# frying pan that went missing kept 0.24-0.29); a smaller region (PJ_SMALL_SHARE up to PJ_KEPT_SHARE) only has to stay.
+PJ_LOOP_KEPT = (0.45, 0.4)
+PJ_SMALL_SHARE = 0.02
+PJ_SMALL_KEPT = (0.3, 0.2)
+# A region gone from some frames while the others show it (below PJ_GONE in one, above PJ_SEEN in another): an item lost in those frames
+# or an arm passing in front of it. Pixels cannot tell which: unknown (passing loops: 0.29 the least in a frame).
+PJ_GONE, PJ_SEEN = 0.12, 0.5
+# style (side): the share of soft steps (Lab 1.5-8 between neighbours: gradients, gloss) against the front's. Never a fail: codex's own
+# style misses are let through (generation-stages.mjs sideStyleOnly).
+PJ_SOFT = 1.25
+# anatomy (loop), per frame: half-transparent pixels inside the body (passing frames: 0.29 % at most), height against the standing
+# height (0.925-1.006 on passing frames), the area against its neighbours' mean (a frame that lost or gained a part; passing loops: 0.20
+# of the median area at most, a run's legs crossing).
+PJ_GHOST = (0.005, 0.01)
+PJ_TALL = ((0.88, 1.08), (0.82, 1.15))   # (unknown outside, fail outside)
+PJ_SPIKE = (0.35, 0.5)
+# loop: the engine's seam (sprite-gen SEAM_RATIO_MAX, generation-stages ENGINE_SEAM_MAX); past the fail bound a jump. Without it unknown:
+# the frames' own mask change (in the measures) passed 6 of 8 cycles cut 30 % short.
+PJ_SEAM = (2.0, 3.0)
+
+
+def _pj_rgba(path: Path) -> np.ndarray:
+    return np.asarray(Image.open(path).convert("RGBA"))
+
+
+def _pj_scaled(rgba: np.ndarray, scale: float) -> np.ndarray:
+    """The picture resampled by `scale` with its alpha premultiplied, so a transparent pixel's stale colour (a key's green) never bleeds in."""
+    image = Image.fromarray(np.ascontiguousarray(rgba)).convert("RGBa")
+    size = (max(1, round(image.width * scale)), max(1, round(image.height * scale)))
+    return np.asarray(image.resize(size, Image.BOX if scale < 1 else Image.BILINEAR).convert("RGBA"))
+
+
+def _pj_lab(rgb: np.ndarray) -> np.ndarray:
+    """sRGB (uint8, any shape ending in 3) to CIE Lab (D65)."""
+    c = rgb.astype(np.float32) / 255.0
+    c = np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+    m = np.array([[0.4124564, 0.3575761, 0.1804375], [0.2126729, 0.7151522, 0.0721750], [0.0193339, 0.1191920, 0.9503041]], np.float32)
+    xyz = (c @ m.T) / np.array([0.95047, 1.0, 1.08883], np.float32)
+    f = np.where(xyz > 0.008856, np.cbrt(xyz), 7.787 * xyz + 16 / 116)
+    return np.stack([116 * f[..., 1] - 16, 500 * (f[..., 0] - f[..., 1]), 200 * (f[..., 1] - f[..., 2])], axis=-1)
+
+
+def _pj_kmeans(points: np.ndarray, k: int, iterations=40, seed=0) -> np.ndarray:
+    """k colour centres of `points` (k-means++ from a fixed seed), ordered dark to light."""
+    rng = np.random.default_rng(seed)
+    k = min(k, len(points))
+    centres = [points[rng.integers(len(points))]]
+    d2 = ((points - centres[0]) ** 2).sum(1)
+    for _ in range(1, k):
+        total = float(d2.sum())
+        centres.append(points[rng.choice(len(points), p=d2 / total) if total > 0 else rng.integers(len(points))])
+        d2 = np.minimum(d2, ((points - centres[-1]) ** 2).sum(1))
+    centres = np.array(centres, dtype=np.float32)
+    for _ in range(iterations):
+        labels = ((points[:, None, :] - centres[None]) ** 2).sum(2).argmin(1)
+        counts = np.bincount(labels, minlength=k)
+        sums = np.stack([np.bincount(labels, weights=points[:, d], minlength=k) for d in range(3)], 1)
+        new = np.where(counts[:, None] > 0, sums / np.maximum(counts, 1)[:, None], centres).astype(np.float32)
+        moved = float(np.abs(new - centres).max())
+        centres = new
+        if moved < 0.05:
+            break
+    return centres[np.argsort(centres[:, 0], kind="stable")]
+
+
+def _pj_assign(lab: np.ndarray, centres: np.ndarray):
+    """Each pixel's nearest region and its distance to it."""
+    d = np.sqrt(((lab[:, None, :] - centres[None]) ** 2).sum(2))
+    nearest = d.argmin(1)
+    return nearest, d[np.arange(len(lab)), nearest]
+
+
+def _pj_shares(rgba: np.ndarray, centres: np.ndarray):
+    """The share of the figure's solid pixels in each region, and the share that matches none (farther than PJ_FAR)."""
+    solid = rgba[..., 3] >= PJ_SOLID
+    if not solid.any():
+        return np.zeros(len(centres)), 0.0
+    nearest, dist = _pj_assign(_pj_lab(rgba[..., :3][solid]), centres)
+    near = dist <= PJ_FAR
+    return np.bincount(nearest[near], minlength=len(centres)) / len(dist), float((~near).mean())
+
+
+def _pj_regions(rgba: np.ndarray):
+    """The reference's colour regions: their Lab centres and each one's share of its solid pixels."""
+    pixels = rgba[..., :3][rgba[..., 3] >= PJ_SOLID]
+    if len(pixels) < PJ_REGIONS:
+        raise SystemExit("pixel-judge: the reference has no figure")
+    centres = _pj_kmeans(_pj_lab(pixels[::max(1, len(pixels) // PJ_SAMPLE)]), PJ_REGIONS)
+    return centres, _pj_shares(rgba, centres)[0]
+
+
+def _pj_parts(mask: np.ndarray):
+    """A mask's 8-connected parts (label propagation with pointer jumping, NumPy only): a label per pixel (-1 outside) and the labels with
+    their pixel counts, largest first."""
+    h, w = mask.shape
+    n = h * w
+    flat = mask.ravel()
+    if not flat.any():
+        return np.full(mask.shape, -1), np.zeros(0, dtype=int), np.zeros(0, dtype=int)
+    labels = np.append(np.where(flat, np.arange(n), n), n)
+    shifts = [(dy, dx) for dy in (-1, 0, 1) for dx in (-1, 0, 1) if dy or dx]
+    span = lambda d: (slice(d, None), slice(None, -d)) if d > 0 else (slice(None, d), slice(-d, None)) if d < 0 else (slice(None), slice(None))
+    while True:
+        grid = labels[:n].reshape(h, w)
+        low = grid.copy()
+        for dy, dx in shifts:
+            (ys, yd), (xs, xd) = span(dy), span(dx)
+            np.minimum(low[ys, xs], grid[yd, xd], out=low[ys, xs])
+        new = np.append(np.where(flat, low.ravel(), n), n)
+        new = new[new]
+        new = new[new]
+        if np.array_equal(new, labels):
+            break
+        labels = new
+    out = np.where(flat, labels[:n], -1).reshape(h, w)
+    ids, counts = np.unique(out[mask], return_counts=True)
+    order = np.argsort(-counts, kind="stable")
+    return out, ids[order], counts[order]
+
+
+def _pj_ghost(alpha: np.ndarray) -> float:
+    """Half-transparent pixels at least two pixels inside the figure, as a share of it: an edge's own blend is one or two pixels wide, a limb
+    drawn twice at half strength (two frames blended) a wide patch."""
+    clear = np.pad(alpha < PJ_CLEAR, 2, constant_values=True)
+    h, w = alpha.shape
+    near = np.zeros((h, w), dtype=bool)
+    for dy in range(5):
+        for dx in range(5):
+            near |= clear[dy:dy + h, dx:dx + w]
+    half = (alpha >= PJ_CLEAR) & (alpha < PJ_SOLID) & ~near
+    return float(half.sum() / max(1, (alpha >= PJ_CLEAR).sum()))
+
+
+def _pj_longest_run(rows: np.ndarray) -> int:
+    """The longest run of set pixels in any of `rows`."""
+    if not rows.size:
+        return 0
+    padded = np.pad(rows.astype(np.int8), ((0, 0), (1, 1)))
+    d = np.diff(padded, axis=1)
+    starts, ends = np.nonzero(d == 1), np.nonzero(d == -1)
+    # starts and ends come row by row in order, one end for every start
+    return int((ends[1] - starts[1]).max()) if len(starts[1]) else 0
+
+
+def _pj_soft(rgba: np.ndarray) -> float:
+    """The share of neighbouring solid pixels (across) whose colours differ by a soft step (Lab 1.5-8): a gradient or gloss is made of them,
+    a flat cel fill has none and an outline makes hard ones."""
+    solid = rgba[..., 3] >= PJ_SOLID
+    both = solid[:, 1:] & solid[:, :-1]
+    if not both.any():
+        return 0.0
+    lab = _pj_lab(rgba[..., :3])
+    d = np.sqrt(((lab[:, 1:] - lab[:, :-1]) ** 2).sum(-1))[both]
+    return float(((d > 1.5) & (d < 8)).mean())
+
+
+def _pj_figure(rgba: np.ndarray, standing: float | None = None) -> np.ndarray:
+    """The figure cut to its box and scaled so that `standing` source pixels (its own box height when None) become PJ_HEIGHT."""
+    box = _bbox(rgba[..., 3], PJ_OPAQUE)
+    if box is None:
+        raise SystemExit("pixel-judge: an empty picture")
+    return _pj_scaled(rgba[box[1]:box[3], box[0]:box[2]], PJ_HEIGHT / (standing or (box[3] - box[1])))
+
+
+def _pj_name(lab) -> str:
+    """A region for a note: its colour as hex and in words."""
+    fy = (lab[0] + 16) / 116
+    f = np.array([fy + lab[1] / 500, fy, fy - lab[2] / 200])
+    xyz = np.where(f ** 3 > 0.008856, f ** 3, (f - 16 / 116) / 7.787) * np.array([0.95047, 1.0, 1.08883])
+    linear = np.linalg.solve(np.array([[0.4124564, 0.3575761, 0.1804375], [0.2126729, 0.7151522, 0.0721750],
+                                       [0.0193339, 0.1191920, 0.9503041]]), xyz)
+    srgb = np.where(linear <= 0.0031308, 12.92 * linear, 1.055 * np.clip(linear, 0, None) ** (1 / 2.4) - 0.055)
+    hexed = "".join(f"{int(v):02x}" for v in np.clip(np.round(srgb * 255), 0, 255))
+    chroma, hue = float(np.hypot(lab[1], lab[2])), float(np.degrees(np.arctan2(lab[2], lab[1])) % 360)
+    tone = "dark " if lab[0] < 35 else "light " if lab[0] > 75 else ""
+    words = "grey" if chroma < 12 else next(name for limit, name in ((20, "pink"), (50, "red"), (75, "orange"), (100, "yellow"), (160, "green"),
+                                                                    (230, "cyan"), (290, "blue"), (340, "purple"), (361, "pink")) if hue < limit)
+    return f"#{hexed} ({tone}{words})"
+
+
+def _pj_worst(*states):
+    return "fail" if "fail" in states else "unknown" if "unknown" in states else "pass"
+
+
+def _pj_grade(value, bounds, below=False):
+    """pass, unknown or fail for a value against (unknown, fail) bounds: past them upward, or below them when `below`."""
+    soft, hard = bounds
+    if below:
+        return "fail" if value < hard else "unknown" if value < soft else "pass"
+    return "fail" if value >= hard else "unknown" if value >= soft else "pass"
+
+
+def _pj_notes(notes) -> str:
+    text = " ".join(notes)
+    return text if len(text) <= 600 else text[:597].rstrip() + "..."
+
+
+def _pj_canvas_parts(rgba: np.ndarray):
+    """The canvas at PJ_CANVAS: its opaque mask, the main part's box (left, top, right, bottom) and the other parts' areas against it."""
+    h, w = rgba.shape[:2]
+    small = _pj_scaled(rgba, min(1.0, PJ_CANVAS / max(h, w)))
+    mask = small[..., 3] >= PJ_OPAQUE
+    labels, ids, counts = _pj_parts(mask)
+    if not len(ids):
+        raise SystemExit("pixel-judge: an empty picture")
+    ys, xs = np.nonzero(labels == ids[0])
+    return mask, (int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1), counts[1:] / counts[0]
+
+
+def _pj_main(rgba: np.ndarray, mask: np.ndarray, box) -> np.ndarray:
+    """The picture cut to its main part's box (found on the PJ_CANVAS canvas, a pixel of it kept around): a frame, a ground line apart from
+    the feet or a second figure beside it stays out of the colours measured."""
+    scale = rgba.shape[0] / mask.shape[0]
+    left, top = max(0, int((box[0] - 1) * scale)), max(0, int((box[1] - 1) * scale))
+    return rgba[top:int(np.ceil((box[3] + 1) * scale)), left:int(np.ceil((box[2] + 1) * scale))]
+
+
+def pixel_judge_side(front_path: Path, take_path: Path) -> dict:
+    """The side take against the chosen front: whole, side, match, style, clean as the side judge answers them (generation-stages
+    SIDE_CHECKS), each pass, fail or unknown, with the numbers behind them."""
+    started = time.perf_counter()
+    front, take = _pj_rgba(front_path), _pj_rgba(take_path)
+    notes, m = [], {}
+    # whole: the main figure keeps a margin from every edge of its canvas
+    mask, (left, top, right, bottom), parts = _pj_canvas_parts(take)
+    ch, cw = mask.shape
+    margins = {"left": left / cw, "top": top / ch, "right": (cw - right) / cw, "bottom": (ch - bottom) / ch}
+    m["margins"] = {k: round(v, 4) for k, v in margins.items()}
+    cut = [k for k, v in margins.items() if v < PJ_EDGE]
+    whole = "fail" if cut else "pass"
+    notes.append(f"whole: the figure touches the {', '.join(cut)} edge (margin under {PJ_EDGE:.1%})." if cut else
+                 f"whole: the figure keeps {min(margins.values()):.1%} or more from every edge.")
+    # clean: one figure (specks aside), no ground line under it, no frame around the canvas
+    big = float(parts.max()) if len(parts) else 0.0
+    m["parts"] = [round(float(p), 4) for p in parts[:6]]
+    m["specks"] = int((parts < PJ_PART[0]).sum())
+    alpha = take[..., 3] >= PJ_OPAQUE
+    scale_y = take.shape[0] / ch
+    feet = round(bottom * scale_y)
+    band = alpha[max(0, feet - max(3, round((bottom - top) * scale_y * 0.1))):]
+    m["groundRun"] = round(_pj_longest_run(band) / take.shape[1], 3)
+    edge = max(1, round(min(take.shape[:2]) * 0.01))
+    m["borders"] = [round(float(x), 3) for x in (alpha[:edge].any(0).mean(), alpha[-edge:].any(0).mean(), alpha[:, :edge].any(1).mean(),
+                                                  alpha[:, -edge:].any(1).mean())]
+    parts_state = _pj_grade(big, PJ_PART)
+    ground_state = "fail" if m["groundRun"] >= PJ_GROUND else "pass"
+    border_state = "fail" if max(m["borders"]) >= PJ_BORDER else "pass"
+    clean = _pj_worst(parts_state, ground_state, border_state)
+    if parts_state != "pass":
+        notes.append(f"clean: a second part holds {big:.1%} of the figure's area.")
+    if ground_state == "fail":
+        notes.append(f"clean: a straight run across {m['groundRun']:.0%} of the width at the feet (a ground line).")
+    if border_state == "fail":
+        notes.append(f"clean: the canvas edge is covered {max(m['borders']):.0%} of its length (a frame).")
+    if clean == "pass":
+        notes.append(f"clean: one figure ({m['specks']} specks under {PJ_PART[0]:.1%}), no ground line, no frame; limbs are not judged.")
+    # match: the front's colour regions in the side view
+    ff, tf = _pj_figure(_pj_main(front, *_pj_canvas_parts(front)[:2])), _pj_figure(_pj_main(take, mask, (left, top, right, bottom)))
+    centres, ref = _pj_regions(ff)
+    shares, far = _pj_shares(tf, centres)
+    ratios = np.where(ref > 0, shares / np.maximum(ref, 1e-9), 1.0)
+    m["regions"] = [{"lab": [round(float(v), 1) for v in c], "front": round(float(r), 4), "take": round(float(s), 4)}
+                    for c, r, s in zip(centres, ref, shares)]
+    m["newColour"] = round(far, 4)
+    states = ["pass"]
+    for j in np.nonzero(ref >= PJ_KEPT_SHARE)[0]:
+        state = _pj_grade(float(ratios[j]), PJ_SIDE_KEPT, below=True)
+        if state != "pass":
+            notes.append(f"match: region {_pj_name(centres[j])}, {ref[j]:.1%} of the front, keeps {ratios[j]:.2f} of its share here.")
+        states.append(state)
+    new_state = _pj_grade(far, PJ_NEW)
+    if new_state != "pass":
+        notes.append(f"match: {far:.1%} of the take is in colours the front does not have.")
+    match = _pj_worst(*states, new_state)
+    if match == "pass":
+        kept = ratios[ref >= PJ_KEPT_SHARE]
+        notes.append(f"match: every colour region of the front is here ({float(kept.min()) if len(kept) else 1:.2f} of a share at the least), "
+                     f"{far:.1%} new colour; faces are not compared.")
+    # side: profile or three-quarter is not told by pixels (2026-11-06: width, mirror overlap and part positions did not separate the probe's
+    # three-quarter takes from its profile); the numbers go with the verdict.
+    fa, ta = ff[..., 3] >= PJ_OPAQUE, tf[..., 3] >= PJ_OPAQUE
+    m["widthToFront"] = round(ta.shape[1] / fa.shape[1], 3)
+    cx = np.nonzero(ta)[1].mean()
+    mirrored = np.zeros_like(ta)
+    source = np.round(2 * cx - np.arange(ta.shape[1])).astype(int)
+    inside = (source >= 0) & (source < ta.shape[1])
+    mirrored[:, inside] = ta[:, source[inside]]
+    m["mirrorOverlap"] = round(float((ta & mirrored).sum() / max(1, (ta | mirrored).sum())), 3)
+    notes.append(f"side: not judged by pixels (width {m['widthToFront']:.2f} of the front's, mirror overlap {m['mirrorOverlap']:.2f}).")
+    # style: soft colour steps against the front's; heavier rendering is left to the eye, never failed here
+    m["soft"] = {"front": round(_pj_soft(ff), 4), "take": round(_pj_soft(tf), 4)}
+    soft = m["soft"]["take"] / max(m["soft"]["front"], 1e-6)
+    # half a point of slack: a flat front has almost no soft steps, and a few more along the take's edges are not shading
+    style = "pass" if m["soft"]["take"] <= m["soft"]["front"] * PJ_SOFT + 0.005 else "unknown"
+    notes.append(f"style: soft colour steps {soft:.2f} times the front's" + ("." if style == "pass" else ", heavier shading than the front?"))
+    m["ms"] = round((time.perf_counter() - started) * 1000)
+    return {"kind": "side", "model": PIXEL_MODEL, "checks": {"whole": whole, "side": "unknown", "match": match, "style": style, "clean": clean},
+            "notes": _pj_notes(notes), "measures": m}
+
+
+def pixel_judge_loop(look_path: Path, strip_path: Path) -> dict:
+    """A walk or run loop (an aligned strip) against the look: identity, anatomy and loop as the loop judge answers them (motions.py
+    JUDGE_SCHEMA), each pass, fail or unknown, with the numbers behind them."""
+    started = time.perf_counter()
+    meta = json.loads(strip_path.read_text())
+    sheet = _pj_rgba(strip_path.with_suffix(".png"))
+    w, h, count = meta["w"], meta["h"], meta["frames"]
+    standing = meta.get("body_h") or h
+    cells = [sheet[:h, i * w:(i + 1) * w] for i in range(count)]
+    notes, m = [], {"frames": count}
+    lf = _pj_figure(_pj_rgba(look_path))
+    centres, ref = _pj_regions(lf)
+    tall, area, ghost, parts, rows, far = [], [], [], [], [], []
+    for cell in cells:
+        # cut to everything not background (a half-transparent limb beside the body stays in), measured tall by its opaque pixels
+        box, solid_box = _bbox(cell[..., 3], PJ_CLEAR), _bbox(cell[..., 3], PJ_OPAQUE)
+        if solid_box is None:
+            raise SystemExit("pixel-judge: an empty frame")
+        figure = _pj_scaled(cell[box[1]:box[3], box[0]:box[2]], PJ_HEIGHT / standing)
+        opaque = figure[..., 3] >= PJ_OPAQUE
+        shares, new = _pj_shares(figure, centres)
+        _, _, counts = _pj_parts(opaque)
+        tall.append((solid_box[3] - solid_box[1]) / standing)
+        area.append(float(opaque.sum()))
+        ghost.append(_pj_ghost(figure[..., 3]))
+        parts.append(float(counts[1] / counts[0]) if len(counts) > 1 else 0.0)
+        rows.append(shares)
+        far.append(new)
+    shares = np.array(rows)
+    ratios = shares / np.maximum(ref, 1e-9)
+    # identity: the look's colour regions in every frame
+    states = ["pass"]
+    m["regions"] = []
+    for j in range(len(centres)):
+        median, low, high = float(np.median(ratios[:, j])), float(ratios[:, j].min()), float(ratios[:, j].max())
+        m["regions"].append({"lab": [round(float(v), 1) for v in centres[j]], "look": round(float(ref[j]), 4), "median": round(median, 3),
+                             "min": round(low, 3), "max": round(high, 3)})
+        if ref[j] < PJ_SMALL_SHARE:
+            continue
+        name = _pj_name(centres[j])
+        state = _pj_grade(median, PJ_LOOP_KEPT if ref[j] >= PJ_KEPT_SHARE else PJ_SMALL_KEPT, below=True)
+        if state != "pass":
+            notes.append(f"identity: region {name}, {ref[j]:.1%} of the look, keeps a median {median:.2f} of its share over the frames: "
+                         "something the look shows is missing.")
+        elif low < PJ_GONE and high > PJ_SEEN:
+            gone = [int(i) for i in np.nonzero(ratios[:, j] < PJ_GONE)[0]]
+            state = "unknown"
+            notes.append(f"identity: region {name}, {ref[j]:.1%} of the look, is gone from frames {gone} and kept in others "
+                         "(lost, or hidden by a limb).")
+        states.append(state)
+    m["newColour"] = [round(float(f), 4) for f in far]
+    new_state = _pj_grade(float(np.median(far)), PJ_NEW)
+    if new_state != "pass":
+        notes.append(f"identity: a median {float(np.median(far)):.1%} of each frame is in colours the look does not have.")
+    identity = _pj_worst(*states, new_state)
+    if identity == "pass":
+        kept = [r["median"] for r in m["regions"] if r["look"] >= PJ_SMALL_SHARE]
+        notes.append(f"identity: the look's colour regions stay in every frame ({min(kept):.2f} of a share at the least, median), "
+                     f"{float(np.median(far)):.1%} new colour; faces are not compared.")
+    # anatomy: ghosting, a detached part, a frame cut short or grown, a frame that lost or gained area against its neighbours
+    m["tall"] = [round(t, 3) for t in tall]
+    m["ghost"] = [round(g, 4) for g in ghost]
+    m["parts"] = [round(p, 4) for p in parts]
+    middle = float(np.median(area))
+    spikes = [abs(area[i] - (area[i - 1] + area[(i + 1) % count]) / 2) / middle for i in range(count)]
+    m["areaSpike"] = [round(s, 3) for s in spikes]
+    checks = []
+    for label, values, bounds in (("half-transparent", ghost, PJ_GHOST), ("a detached part of", parts, PJ_PART),
+                                  ("an area jump of", spikes, PJ_SPIKE)):
+        graded = [_pj_grade(v, bounds) for v in values]
+        bad = [i for i, g in enumerate(graded) if g != "pass"]
+        if bad:
+            worst = max(bad, key=lambda i: values[i])
+            notes.append(f"anatomy: frame {worst} is {label} {values[worst]:.1%} (frames {bad}).")
+        checks.append(_pj_worst(*graded))
+    graded = [_pj_worst(_pj_grade(t, (PJ_TALL[0][0], PJ_TALL[1][0]), below=True), _pj_grade(t, (PJ_TALL[0][1], PJ_TALL[1][1]))) for t in tall]
+    bad = [i for i, g in enumerate(graded) if g != "pass"]
+    if bad:
+        notes.append(f"anatomy: frames {bad} stand {min(tall[i] for i in bad):.2f}-{max(tall[i] for i in bad):.2f} of the standing height.")
+    checks.append(_pj_worst(*graded))
+    anatomy = _pj_worst(*checks)
+    if anatomy == "pass":
+        notes.append(f"anatomy: no ghosting ({max(ghost):.2%} at most), no detached part, heights {min(tall):.2f}-{max(tall):.2f}; "
+                     "limb shapes are not judged.")
+    # loop: the engine's seam (the frames' own mask change, last into first against the mean step, goes with the measures only)
+    masks = [c[..., 3] >= PJ_OPAQUE for c in cells]
+    steps = [float((masks[i] ^ masks[(i + 1) % count]).sum()) for i in range(count)]
+    own = steps[-1] / max(1.0, float(np.mean(steps[:-1])))
+    engine = (meta.get("cycle_align") or {}).get("seam_ratio")
+    m["seam"] = {"engine": engine, "own": round(own, 3)}
+    if isinstance(engine, (int, float)):
+        loop = "pass" if engine <= PJ_SEAM[0] else "unknown" if engine <= PJ_SEAM[1] else "fail"
+        notes.append(f"loop: the engine measured the seam at {engine:.2f} of a step.")
+    else:
+        loop = "unknown"
+        notes.append(f"loop: no engine seam; not judged by pixels (own mask measure {own:.2f}).")
+    m["ms"] = round((time.perf_counter() - started) * 1000)
+    return {"kind": "loop", "model": PIXEL_MODEL, "identity": identity, "anatomy": anatomy, "loop": loop, "notes": _pj_notes(notes),
+            "measures": m}
+
+
+def pixel_judge(kind: str, args: list[str]) -> dict:
+    if kind == "side":
+        return pixel_judge_side(Path(args[0]), Path(args[1]))
+    if kind == "loop":
+        return pixel_judge_loop(Path(args[0]), Path(args[1]))
+    raise SystemExit(f"pixel-judge: unknown kind {kind}")
+
+
 def main(argv):
     if not argv:
         print(__doc__); return 2
@@ -996,6 +1441,9 @@ def main(argv):
         Path(rest[1]).write_text(json.dumps(face_box(Path(rest[0]))) + "\n")
     elif command == "strip-preview" and len(rest) == 2:
         strip_preview(Path(rest[0]), Path(rest[1]))
+    elif command == "pixel-judge" and len(rest) == 4 and rest[0] in ("side", "loop"):
+        verdict = pixel_judge(rest[0], rest[1:3])
+        Path(rest[3]).write_text(json.dumps(verdict) + "\n")
     else:
         print(__doc__); return 2
     return 0
