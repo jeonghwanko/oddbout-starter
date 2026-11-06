@@ -109,6 +109,14 @@ test('a host install runs og as its own account: providers signed in inside the 
     assert.notEqual(og(['worker', 'key', 'https://example.supabase.co/functions/v1/ai-fighter'], 'not-a-key').status, 0);
     assert.equal(og(['worker', 'key', 'https://example.supabase.co/functions/v1/ai-fighter'], `afw_${'c'.repeat(64)}\n`).status, 0);
     assert.equal(statSync(path.join(root, 'worker.env')).mode & 0o777, 0o600);
+    // The judges mode (2026-11-06): its own line, replaced when set again and kept when the key is written again.
+    assert.notEqual(og(['worker', 'judges', 'gpt']).status, 0);
+    assert.equal(og(['worker', 'judges', 'pixels']).status, 0);
+    assert.equal(og(['worker', 'judges', 'hybrid']).status, 0);
+    assert.equal(og(['worker', 'key', 'https://example.supabase.co/functions/v1/ai-fighter'], `afw_${'c'.repeat(64)}\n`).status, 0);
+    assert.equal(await readFile(path.join(root, 'worker.env'), 'utf8'), 'ODDBOUT_GENERATION_JUDGES=hybrid\n'
+      + `ODDBOUT_GENERATION_API=https://example.supabase.co/functions/v1/ai-fighter\nODDBOUT_GENERATION_WORKER_KEY=afw_${'c'.repeat(64)}\n`);
+    assert.equal(statSync(path.join(root, 'worker.env')).mode & 0o777, 0o600);
     assert.equal(og(['harden']).status, 0);
     const configFile = path.join(root, '.codex', 'config.toml'), config = await readFile(configFile, 'utf8');
     assert.match(config, /^shell_tool = false$/m);

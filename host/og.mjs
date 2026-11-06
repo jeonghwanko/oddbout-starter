@@ -12,7 +12,7 @@
 // The rest is bash og's user mode: the pinned accounts, the grok token refresh, harden, health, prune and the ledger (ledger-report.mjs).
 // og-node.test.mjs keeps the tool lists and defaults here equal to bash og's. Runbook: README.md beside this file.
 import { spawn, spawnSync } from 'node:child_process';
-import { accessSync, appendFileSync, constants, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync,
+import { accessSync, appendFileSync, constants, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync,
   writeFileSync } from 'node:fs';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import os from 'node:os';
@@ -862,6 +862,19 @@ export function createOg({ root, env = process.env, memory = os.totalmem() }) {
     return cmdStatus(io);
   }
 
+  /**
+   * worker.env written whole (mode 600, renamed into place): the lines it has that `keep` keeps, then `lines` (bash og's `worker key`
+   * and `worker judges` the same).
+   * @param {(line: string) => boolean} keep @param {string[]} lines
+   */
+  function writeWorkerEnv(keep, lines) {
+    const file = path.join(G, 'worker.env');
+    let kept = [];
+    try { kept = readFileSync(file, 'utf8').split(/\r?\n/).filter(line => line && keep(line)); } catch {}
+    writeFileSync(`${file}.new`, [...kept, ...lines].map(line => `${line}\n`).join(''), { mode: 0o600 });
+    renameSync(`${file}.new`, file);
+  }
+
   /** The hosted generation worker: in this process, with this og (bash og ran generation-worker.mjs as its own process). @param {Io} io @param {string[]} args */
   async function cmdWorker(io, [what, ...rest]) {
     switch (what) {
@@ -878,8 +891,19 @@ export function createOg({ root, env = process.env, memory = os.totalmem() }) {
         if (!/^https:\/\/[A-Za-z0-9.-]+(\/[A-Za-z0-9._/-]*)?$/.test(base)) die('usage: og worker key <https://…/functions/v1/ai-fighter> < key-file');
         const key = (await (io.stdin?.() ?? Promise.resolve(''))).replace(/\s/g, '');
         if (!/^afw_[a-f0-9]{64}$/.test(key)) die('the key on stdin must be afw_ and 64 hex');
-        writeFileSync(path.join(G, 'worker.env'), `ODDBOUT_GENERATION_API=${base.replace(/\/$/, '')}\nODDBOUT_GENERATION_WORKER_KEY=${key}\n`, { mode: 0o600 });
+        // The other settings (ODDBOUT_GENERATION_KEEP_DAYS, ODDBOUT_GENERATION_JUDGES) stay: a new key never resets them (2026-11-06).
+        writeWorkerEnv(line => !/^ODDBOUT_GENERATION_(API|WORKER_KEY)=/.test(line),
+          [`ODDBOUT_GENERATION_API=${base.replace(/\/$/, '')}`, `ODDBOUT_GENERATION_WORKER_KEY=${key}`]);
         io.out('og: worker.env written\n');
+        return 0;
+      }
+      case 'judges': {
+        // Who judges the side takes and the walk and run loops (generation-stages JUDGE_MODES), read when the worker starts (2026-11-06).
+        const mode = rest[0] ?? '';
+        if (!['codex', 'pixels', 'hybrid'].includes(mode)) die('usage: og worker judges codex|pixels|hybrid');
+        if (!existsSync(path.join(G, 'worker.env'))) die('og worker key first');
+        writeWorkerEnv(line => !line.startsWith('ODDBOUT_GENERATION_JUDGES='), [`ODDBOUT_GENERATION_JUDGES=${mode}`]);
+        io.out(`og: judges ${mode} — restart the worker to take it\n`);
         return 0;
       }
       case 'log': {
@@ -914,7 +938,7 @@ export function createOg({ root, env = process.env, memory = os.totalmem() }) {
         io.out(r.stdout ?? ''); io.err(r.stderr ?? '');
         return r.status ?? 1;
       }
-      default: die('usage: og worker run [--once] | key <api-base> < key | log [n] (Linux: install | uninstall | start | stop | restart | status)');
+      default: die('usage: og worker run [--once] | key <api-base> < key | judges codex|pixels|hybrid | log [n] (Linux: install | uninstall | start | stop | restart | status)');
     }
   }
 
@@ -925,7 +949,7 @@ og.mjs purge <job> [--cancelled] | prune [days]
 og.mjs cat <job> <path> > file          read one file of a job
 og.mjs harden                           turn off codex's shell, file, browser and plugin features and its reading of AGENTS.md (the worker needs it)
 og.mjs rife torch|ncnn|status           the loop alignment's RIFE: PyTorch on an NVIDIA GPU (fast) or the ncnn binary (default)
-og.mjs worker key <api-base> < key | run [--once] | log [n]; on Linux also install | uninstall | start | stop | restart | status
+og.mjs worker key <api-base> < key | judges codex|pixels|hybrid | run [--once] | log [n]; on Linux also install | uninstall | start | stop | restart | status
 A community host's og on Windows, macOS or Linux (bash og is the official host's). new, deliver, close and self-update are the official host's only.
 `;
 
