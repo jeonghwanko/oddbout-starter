@@ -54,7 +54,7 @@
         "logo": "./assets/icon.png"
       },
       "review": {
-        "demo_recording_url": "",
+        "demo_recording_url": "https://oddbout.com/cloud-plugin/review-1.0.4/walkthrough.mp4",
         "commerce": false,
         "commerce_description": "No products, tokens, credits or subscriptions are sold and no payments are processed by these MCP tools. Official hosted generation deducts actual usage from the account token allowance, including failed or cancelled work; spent tokens are not refunded.",
         "test_cases": {
@@ -107,7 +107,7 @@
         }
       },
       "publication": {
-        "release_notes": "Updates the listing to the current 19-tool grouped MCP surface: hosted generation with token accounting and external-host consent, picture/profile-set uploads, private creator originals and workspace delivery, workspace packaging preparation, game and career tools, grouped reads and public workshop/world writing. Replaces the old A icon with the existing ODDBOUT O brand icon. Replaces review cases with five positive and three negative scenarios using get_my_fighters views, request_hosted_fighter steps and write_story selectors. Preserves the 1.0.3 Mixed/DCR authentication configuration, existing MCP endpoint and plugin identity; server code is unchanged. New-scope reviewer execution and a new walkthrough must be completed before submission.",
+        "release_notes": "Updates the listing to the current 19-tool grouped MCP surface: hosted generation with token accounting and external-host consent, picture/profile-set uploads, private creator originals and workspace delivery, workspace packaging preparation, game and career tools, grouped reads and public workshop/world writing. Replaces the old A icon with the existing ODDBOUT O brand icon. Replaces review cases with five positive and three negative scenarios using get_my_fighters views, request_hosted_fighter steps and write_story selectors. Preserves the 1.0.3 Mixed/DCR authentication configuration, existing MCP endpoint and plugin identity; server code is unchanged. The public ChatGPT walkthrough demonstrates roster and ranking lookup, a completed bout, and the external-host consent boundary. Dedicated reviewer execution remains pending.",
         "translations": {
           "ko-KR": {
             "subtitle": "내 선수를 만들고 함께 대결하기",

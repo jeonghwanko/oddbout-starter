@@ -4,7 +4,19 @@ Status: **draft package; not uploaded, submitted or ready for submission**. The 
 
 Package: `oddbout-dots`; public plugin: `plugin_asdk_app_6adc695de1bc8191a604b42bbaa178af`; existing endpoint: `https://mcp.oddbout.com/mcp`.
 
-## Current 19-tool inventory and ZIP (2026-11-06 KST)
+## Published public walkthrough and current ZIP (2026-11-06 KST)
+
+The [public ChatGPT walkthrough](https://oddbout.com/cloud-plugin/review-1.0.4/walkthrough.mp4) is the video referenced by `extensions.com.openai.review.demo_recording_url`. It shows the public roster and standings, a completed semifinal from a fighter's record, and ChatGPT's response to an external-host request without consent. It does not demonstrate private reviewer workflows, a new bout, generation or publication of a post; **0/8 dedicated-account runs are recorded**.
+
+The [site source PR #357](https://github.com/jeonghwanko/oddbout-starter/pull/357) is unmerged. The [Pages deployment](https://github.com/jeonghwanko/oddbout-starter/actions/runs/42178778966) at `6fff816d` added only the video and updated the deployment marker against the previous production tree. Merge the site source when authorized so later full site builds retain the URL.
+
+Anonymous playback checks on the exact manifest URL:
+- HTTP 200, `video/mp4`, no redirect; all 1,071,126 bytes matched the approved local video (SHA-256 `60a3b451bef5326b4f502d0f31db2176cea977777b603aa4f490a3dbe0959d21`). A byte-range request returned 206 and the requested bytes.
+- A new browser context with no cookies or Authorization header played the video from the beginning and continued after seeking to 35 seconds. The remote decoded frames at 1, 24 and 39 seconds matched the local video. Duration 41.54 seconds, H.264, 1920 × 1080, English and Korean subtitle tracks.
+
+**Current local candidate:** `output/review-20261106-hosted-video/oddbout-dots-1.0.4.zip`, **34,359 bytes**, SHA-256 `189c636ea872cc87297f96869d2dfa0c32daf8b3fdc6e0f8547f9e3316ca9380`. The verified URL is present in the archived manifest. Verified archive integrity and all four files against source; the demo video is hosted outside the ZIP. The endpoint, authentication, five positive and three negative cases are unchanged. Older ZIPs below predate the hosted video. No merge, portal upload or submission was performed.
+
+## 19-tool inventory and previous ZIP (2026-11-06 KST)
 
 Production: [PR #355](https://github.com/jeonghwanko/oddbout-starter/pull/355) merged at `e24a9201`. The operator identifies this release as MCP Edge v101 (deployment 222). At **2026-11-06 15:13:06 KST**, an anonymous `POST https://mcp.oddbout.com/mcp` with JSON-RPC `id: 1`, method `tools/list` and empty params returned HTTP 200 and 19 tools in one page. The [snapshot](cloud-plugin-1.0.4/tools-list.v101.json) is the unmodified 47,907-byte HTTP response body, SHA-256 `5ba2872f19cc73567ab4fc218e7b81466ac14f98aea8a77d4720d587f27fd18e`. No authorization headers or private tool results are part of the snapshot.
 
@@ -31,9 +43,9 @@ This records the completed scan visible at inspection. No additional rescan was 
 | P5 | Browse `world`; `write_story(write=world, action=create, name, nickname)` if absent; `write=world_post` with world ID, exact sample title/body, nickname, optional `canon=true` and UUID key. Readback accepts the world ID. |
 | N1–N3 | No email selector for identity, no other-owner deletion; no external-host request or picture ticket without consent; no registration with invented files or claim that deleting a fighter erases originals/history. These are expected refusals; actual ChatGPT behavior is untested. |
 
-**Reviewer runs: pending owner evidence (0/8 recorded).** The owner will run the scenarios directly in ChatGPT and supply the results and walkthrough URL. Do not substitute static checks, initiate generation, or mark any scenario passed while waiting.
+**Reviewer runs: pending owner evidence (0/8 recorded).** The owner will run the scenarios directly in ChatGPT and supply the results; the public-only recording above is separate. Do not substitute static checks, initiate generation, or mark any scenario passed while waiting.
 
-**Rebuilt candidate:** `output/review-20261106-v101/oddbout-dots-1.0.4.zip`, **34,317 bytes**, SHA-256 `45badd1c738a7d548de18a609f98b96a754398b71f3e0dc2b267cfb376015093`. The release notes already say `19-tool`. The rebuild is byte-identical to the previous 19-tool candidate. ZIP integrity and all four entries (`plugin.json`, `mcp.json`, both icons) were verified against the PR commit. The raw snapshot and validation evidence are outside the ZIP. To reproduce, use the repository's LF line endings and `python scripts/zip-plugin.py plugins/oddbout-cloud <new-zip-path>` in an existing output directory. Neither merge, upload nor submission was performed for #350.
+**Superseded pre-video candidate:** `output/review-20261106-v101/oddbout-dots-1.0.4.zip`, **34,317 bytes**, SHA-256 `45badd1c738a7d548de18a609f98b96a754398b71f3e0dc2b267cfb376015093`. The release notes already say `19-tool`. The rebuild is byte-identical to the previous 19-tool candidate. ZIP integrity and all four entries (`plugin.json`, `mcp.json`, both icons) were verified against the PR commit. The raw snapshot and validation evidence are outside the ZIP. To reproduce, use the repository's LF line endings and `python scripts/zip-plugin.py plugins/oddbout-cloud <new-zip-path>` in an existing output directory. Neither merge, upload nor submission was performed for #350.
 
 ## Blocker follow-up (2026-11-06 KST)
 
@@ -161,7 +173,7 @@ Independent live public probes (not reviewer runs):
 
 Raw public probe evidence remains under ignored `output/review-20261106/`; SHA-256 `38379aa993a4f21b940da96ae21472f339fb081bd1ed2107dad5cb4caf52914e`. No private account fixture or generated result was invented.
 
-The old 2026-10-24 registration/deletion video does not demonstrate the new scope. The manifest explicitly clears `demo_recording_url` instead of carrying that video as a new walkthrough. A new actual ChatGPT walkthrough remains required: identity/existing jobs → approved generation candidates → owned inspection/deletion scope → roster/practice → public sample post → one negative prompt. Use a recording of real interactions, hide credentials, verify playback, host it at a reviewer-accessible URL, then rebuild the ZIP. Public API probes or a screenshot montage are not a ChatGPT conversation recording.
+The old 2026-10-24 registration/deletion video was not reused. The earlier pre-video candidate cleared `demo_recording_url`; the current candidate references the verified public ChatGPT walkthrough above. It does not provide evidence for the eight dedicated reviewer runs.
 
 ## 5. Icon and package provenance
 
@@ -174,4 +186,4 @@ ZIP build: `python scripts/zip-plugin.py plugins/oddbout-cloud output/review-202
 
 Built candidate: **33,692 bytes**, SHA-256 `06e3ca98c92e0ecf45af3d1194a7484c938db529d574e28006bf85394711e40f`. Inventory: `plugin.json`, `mcp.json`, `assets/icon.svg`, `assets/icon.png`. Local structural checks passed for identity/version, listing limits (subtitle 29 / description 1,878 characters), exactly five positive/three negative cases, expected tool names against the actual live list, single unchanged endpoint, absence of app/credential fields, all 42 annotation sets and PNG format/dimensions/size. `git diff --check` passed. These are local package checks, not portal validation or reviewer-conversation passes.
 
-Before requesting upload/submission approval: incorporate the owner's eight ChatGPT results and verify the supplied walkthrough URL, then rebuild and re-hash the ZIP with the updated review evidence. Recheck the published policy pages if a later website release intervenes. Merge, portal upload and submission remain unapproved.
+Before requesting upload/submission approval: incorporate the owner's eight ChatGPT results, recheck the hosted URL after any later site deployment, and rebuild/re-hash if the package changes. Recheck the published policy pages if a later website release intervenes. Merge, portal upload and submission remain unapproved.
