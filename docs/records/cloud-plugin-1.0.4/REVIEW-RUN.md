@@ -21,7 +21,7 @@ OpenAI 제출 문서: "Run each case using the test account before submitting."
 
 - [x] 포털 재검사 완료: 19개 모두 Published, "No findings" (2026-11-06 14:42 KST, PR #350 기록)
 - [ ] 전용 심사 계정이 MFA·이메일 코드 없이 이메일 로그인으로 바로 들어간다
-- [ ] ChatGPT의 ODDBOUT 연결이 심사 계정이다 (`get_profile`의 id로 확인)
+- [x] ChatGPT의 ODDBOUT 연결이 심사 계정이다. 2026-11-06 18:00 KST, 공개 플러그인의 연결 목록에서 심사 계정을 확인했다. 새 ChatGPT 대화에서 심사 계정을 지정해 `get_profile`을 요청했고, 응답에 표시된 계정 ID 끝 8자리가 사전에 확인한 심사 계정 ID와 일치했다. 같은 시점에 Codex에서 직접 조회한 연결은 기존 일반 계정이었다.
 - [ ] 녹화 중이다 (브라우저 창, 1080p, 비밀번호 입력 중에는 멈춤)
 
 ## 사례
