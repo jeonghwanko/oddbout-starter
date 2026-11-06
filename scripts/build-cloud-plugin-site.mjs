@@ -22,5 +22,6 @@ export async function buildCloudPluginSite(siteRoot) {
   // Review links must survive full game releases, which replace the public tree.
   await cp(new URL('../website/cloud-plugin/review-20261024/',import.meta.url),join(dir,'review-20261024'),{recursive:true});
   await cp(new URL('../website/cloud-plugin/review-20261025/',import.meta.url),join(dir,'review-20261025'),{recursive:true});
+  await cp(new URL('../website/cloud-plugin/review-1.0.4/',import.meta.url),join(dir,'review-1.0.4'),{recursive:true});
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){if(!process.argv[2])throw new Error('Supply the existing site root');await buildCloudPluginSite(resolve(process.argv[2]));}
