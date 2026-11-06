@@ -21,7 +21,8 @@ do not require a PC or leave the user's chosen VM scope. Packaging still uses th
 ## Connection-only checks and missing tools
 
 A connection/status request does not authorize starting or resuming creation. Inspect this conversation's actual
-ODDBOUT tools, call native `get_profile` when available, and use `check_creation_readiness` with `purpose: connection`.
+ODDBOUT tools, call native `get_profile` when available, and use `get_my_fighters` view `readiness` with `purpose: connection`
+(the cloud tool named `check_creation_readiness` until 2026-11-06; that name still answers).
 Keep server discovery, account plugin import/update, installation and selection in this conversation, tool exposure,
 and the returned account identity separate. A released ZIP, local Codex connection or successful public MCP tool listing
 does not establish any Dots-native account connection.
@@ -93,7 +94,7 @@ Another person's host (`browse_oddbout` view `hosts`) takes none of their tokens
    Set `purpose: connection` for sign-in checks and `purpose: registration` for an existing final package;
    only `purpose: generation` prepares the generation engine or asks about generation access.
    Its login item only points to the connected ODDBOUT tools: verify the account with native `get_profile` and the
-   connected `check_creation_readiness`. The workspace never reads or offers a registration login; missing cloud tools
+   connected `get_my_fighters` view `readiness`. The workspace never reads or offers a registration login; missing cloud tools
    follow the connection-only checks above.
    Keep authenticated registration API access, generation access and parent delivery separate. Environment-preparer
    actions (VM host allowlist/Republish) are initial workspace setup, not repeated creator steps; the kit cannot
@@ -216,11 +217,11 @@ The session requires current validated package bytes, not a quality verdict or g
 The final `get_creation_session` must have no blockers before submission.
 
 Use the connected ODDBOUT account for registration from either workspace. Verify `get_profile` matches
-the user's intended account and call the cloud `check_creation_readiness`; a workspace readiness result
+the user's intended account and call the cloud `get_my_fighters` view `readiness`; a workspace readiness result
 does not verify that login. Never copy a CLI session into the connector or request local login for this route.
 Read the cloud tools' current schemas, then call `prepare_fighter_registration` with the actual approved
 manifest, `upload_fighter_asset` for each pending file, `submit_fighter_registration`, and
-`get_fighter_submission`. Pass actual host attachments/files, not rendered previews, made-up URLs, or
+`get_my_fighters` view `submission`. Pass actual host attachments/files, not rendered previews, made-up URLs, or
 paths on another machine. Materialize supported Library files with their original bytes and verify hashes.
 Preserve the submission ID and idempotency key across identical retries; inspect status before retrying
 an unknown response. Changed package bytes need a new key. A metadata-only final edit followed by an

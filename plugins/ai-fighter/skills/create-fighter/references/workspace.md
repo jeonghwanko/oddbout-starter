@@ -67,7 +67,7 @@ Preserve actual previews, user review boundaries, provider choices and unknown-o
 
 Call workspace `check_creation_readiness` before generation, after restart and before registration,
 using only the account choice stated by the user. It checks kit and project state and reports registration
-as requiring connector verification. Also use the connected ODDBOUT `check_creation_readiness` for its
+as requiring connector verification. Also use the connected ODDBOUT `get_my_fighters` view `readiness` for its
 account checks. Neither response verifies generation, file delivery, visual acceptance or registration.
 Cloud registration never requires `npm run login` in the workspace.
 
