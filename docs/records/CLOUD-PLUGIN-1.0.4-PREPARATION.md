@@ -4,17 +4,15 @@ Status: **draft package; not uploaded, submitted or ready for submission**. The 
 
 Package: `oddbout-dots`; public plugin: `plugin_asdk_app_6adc695de1bc8191a604b42bbaa178af`; existing endpoint: `https://mcp.oddbout.com/mcp`.
 
-## Published public walkthrough and current ZIP (2026-11-06 KST)
+## Current ZIP, hosted recording and release gates
 
-**제출 전 교체 예정.** 현재 `demo_recording_url`은 [공개 장면 영상](https://oddbout.com/cloud-plugin/review-1.0.4/walkthrough.mp4)을 가리킨다. 심사 계정으로 ChatGPT에서 긍정 5개·부정 3개 사례를 모두 실행한 뒤, 그 화면으로 새 영상을 만들어 제출 전에 교체한다.
+[The unchanged recording URL](https://oddbout.com/cloud-plugin/review-1.0.4/walkthrough.mp4) now serves the 99.33-second 1080p reviewer run. The [Pages deployment](https://github.com/jeonghwanko/oddbout-starter/actions/runs/42201336216) replaced the MP4 on the existing production site. The full anonymous response was 2,801,852 bytes, SHA-256 `3145484bd56d7684a18cbffa7de36a787cd13603b67f20759b1c2de7e618b082`. A byte-range response returned the expected bytes with 206. A fresh Edge context sent no cookies or authorization and played from the beginning and after seeks to 65 s and 96 s. [Site source PR #360](https://github.com/jeonghwanko/oddbout-starter/pull/360) preserves these bytes for future builds once merged.
 
-The [Pages deployment](https://github.com/jeonghwanko/oddbout-starter/actions/runs/42178778966) at `6fff816d` published the current recording. The [site source PR #357](https://github.com/jeonghwanko/oddbout-starter/pull/357) merged into `main` at `602890a1`, so future site builds include the video at this path.
+**Current ZIP:** `output/review-20261106-fixed-cases/oddbout-dots-1.0.4.zip`, **34,499 bytes**, SHA-256 `50b53f3009c709394c6ab2ae8d0b47b7a3096efe087edc9e2021708c18bf0540`. It contains exactly the manifest, the 1.0.3 authentication configuration and two icon files. Every entry matched committed source. The English release notes, Korean subtitle and description, five positive and three negative prompts, tool names, four listing URLs in both languages, and recording URL were checked. Market selection remains in the portal; no country values were guessed.
 
-Anonymous playback checks on the exact manifest URL:
-- HTTP 200, `video/mp4`, no redirect; all 1,071,126 bytes matched the approved local video (SHA-256 `60a3b451bef5326b4f502d0f31db2176cea977777b603aa4f490a3dbe0959d21`). A byte-range request returned 206 and the requested bytes.
-- A new browser context with no cookies or Authorization header played the video from the beginning and continued after seeking to 35 seconds. The remote decoded frames at 1, 24 and 39 seconds matched the local video. Duration 41.54 seconds, H.264, 1920 × 1080, English and Korean subtitle tracks.
+The [run sheet](cloud-plugin-1.0.4/REVIEW-RUN.md) is the only case-outcome record. The public recording documents the earlier runs; the run sheet links excerpts from the revised prompts. [Runtime PR #361](https://github.com/jeonghwanko/oddbout-starter/pull/361) addresses the remaining front-view delivery issue. After an authorized deployment, check the already-generated job in ChatGPT. Its two original WebPs are available; no token spend or new job is needed to retest.
 
-**Current local candidate:** `output/review-20261106-english-notes/oddbout-dots-1.0.4.zip`, **34,208 bytes**, SHA-256 `ed39cdfc67e3da8ccbaf725f4b4a8ac80dfcc52347931da1564b320ac31291be`. The verified manifest includes English release notes, the Korean listing subtitle and description, and the current public video URL. All four archived files matched the package source.
+The [evening production tools/list](cloud-plugin-1.0.4/tools-list.20261106-evening.json) returned 19 names with all four boolean annotations, 48,125 bytes, SHA-256 `231ea4a82589e10771929a24c9bcd68841da98b5325a1dd53e201dc189a8dd39`. Only `request_hosted_fighter` changed from v101 (description and optional `imageProvider` input). At the read-only portal inspection, 19 tools were Published and the latest scan had zero findings, but the cached request definition still lacked that field. The P2 response change in #361 does not change the tool definition. Before submission, verify the cached definition against the live list and enter the reset reviewer password in the portal's private access fields after upload is authorized.
 
 ## 19-tool inventory and previous ZIP (2026-11-06 KST)
 
@@ -186,4 +184,4 @@ ZIP build: `python scripts/zip-plugin.py plugins/oddbout-cloud output/review-202
 
 Built candidate: **33,692 bytes**, SHA-256 `06e3ca98c92e0ecf45af3d1194a7484c938db529d574e28006bf85394711e40f`. Inventory: `plugin.json`, `mcp.json`, `assets/icon.svg`, `assets/icon.png`. Local structural checks passed for identity/version, listing limits (subtitle 29 / description 1,878 characters), exactly five positive/three negative cases, expected tool names against the actual live list, single unchanged endpoint, absence of app/credential fields, all 42 annotation sets and PNG format/dimensions/size. `git diff --check` passed. These are local package checks, not portal validation or reviewer-conversation passes.
 
-Before requesting upload or submission approval, consult the [review run sheet](cloud-plugin-1.0.4/REVIEW-RUN.md), replace the public-only demo with the dedicated-account recording, and verify anonymous playback at the final manifest URL. Rebuild and re-hash the ZIP if the URL or other package contents change.
+Before portal upload, use the current ZIP and release gates above. The earlier packages, video and measurements below their dated headings are historical.
