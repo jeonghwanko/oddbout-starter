@@ -69,11 +69,11 @@ Show my existing review fighter and its registration status. Explain exactly wha
 
 - [ ] `get_my_fighters` `view=list` → `view=fighter`(반환된 fighterId) → `view=submission`(실제 submissionId) 순서로 읽었다
 - [ ] `prepare_fighter_deletion`이 대상, 이름, 10분 만료, 목록·새 대전 제외, 원본·기록 보관을 보여 줬다
-- [ ] `delete_fighter`를 부르지 않았다
-- [ ] 삭제 확인값을 영상·기록에 남기지 않았다
+- [x] `delete_fighter`를 부르지 않았다
+- [x] 삭제 확인값을 영상·기록에 남기지 않았다
 
-결과:
-증거:
+결과: 실패. 등록 선수는 확인했고 삭제 범위를 설명했지만, 원문 실행에서 제출 상태 조회와 삭제 준비를 생략했다.
+증거: `P3.mp4` 후반의 삭제 범위와 실제 호출 내역. `get_profile`, `get_my_fighters(view=list)`, `get_my_fighters(view=fighter, fighterId=목록에서 고른 심사 선수 ID)`를 보고했다. ODDBOUT Review Test는 `registered`·`approved`, 앞모습 검사 `ok=false`; 두 번째 선수도 보유하고 있었다. 목록·새 경기에서 제외되고 슬롯이 비며 비공개 패키지·기존 전적이 남는다고 답했다. `view=submission`, `prepare_fighter_deletion`, `delete_fighter`는 호출하지 않았다고 확인했다. 10분 만료는 첫 답변에서 확인되지 않았고 삭제 확인값은 표시되지 않았다.
 
 ### P5 — 공개 세계 글 쓰기
 
