@@ -101,17 +101,17 @@ Use the official ODDBOUT host to make a small teal training robot with a cream f
 
 **실제 토큰을 쓴다. P2 프롬프트를 ChatGPT에 보내기 직전에 이번 1건에 대한 사용자 승인을 다시 받는다.** 프롬프트에 적힌 승인 문구나 이전 승인은 사용하지 않는다. 한 번만 보내고, 응답이 끊겨도 같은 신청을 다시 읽는다. 심사원도 이 사례를 돌리므로 제출할 때 심사 계정에 토큰이 남아 있어야 한다.
 
-- [ ] 사용자가 이 실행을 승인했다 (승인 시각: )
-- [ ] 먼저 계정과 기존 신청을 확인했다
+- [x] 사용자가 이 실행을 승인했다 (승인 시각: 2026-11-06 18:28 KST 전송 직전)
+- [x] 먼저 계정과 기존 신청을 확인했다
 - [ ] `request_hosted_fighter`를 한 번만 불렀다: `step=request`, `language=en`, `host=oddbout`, `delegate=false`, 그림 없음, 미리 정한 UUID `idempotencyKey`
-- [ ] 결과가 불확실할 때 같은 job id나 키로 다시 읽었다 (해당 없으면 "해당 없음")
+- [x] 결과가 불확실할 때 같은 job id나 키로 다시 읽었다 (해당 없으면 "해당 없음")
 - [ ] 가용성·한도로 막혔다면 돌아온 이유만 알리고 호스트를 바꾸지 않았다 (해당 없으면 "해당 없음")
 - [ ] `appearance_ready`에서 실제 앞모습 후보 2장을 보여 주고 쓴 토큰을 알려 줬다
-- [ ] `choose_look`, `revise_motion`, `submit_fighter_registration`(`kind=hosted`)을 부르지 않았다
+- [x] `choose_look`, `revise_motion`, `submit_fighter_registration`(`kind=hosted`)을 부르지 않았다
 
-결과:
-job id / 쓴 토큰 / 남은 토큰:
-증거:
+결과: 막힘. 2026-11-06 18:28 KST 승인을 받고 원문을 한 번 전송했다. ChatGPT가 해당 턴에서 ODDBOUT 도구를 사용할 수 없다며 생성 호출 전에 중단했다. 외형 후보는 나오지 않았다.
+job id / 쓴 토큰 / 남은 토큰: 없음 / 0 / 500,000.
+증거: `P2.mp4`의 중단 응답과 마지막 조회 화면. 사전 확인에서 심사 계정·진행 0·취소 이력 1·잔액 500,000을 확인했다. 원문 응답은 도구 호출 0회라고 밝혔다. 읽기 전용 복구에서 개인 연결은 배제했다. 심사 연결 `get_profile`과 `get_hosted_fighter(view=job, idempotencyKey=사전에 정한 동일 키)`를 재확인한 결과 `not-found`, 최근 신청은 이전 취소 1건뿐이고 잔액은 그대로였다. 운영 DB에서도 심사 계정의 해당 키와 사전 확인 뒤 신규 신청은 각 0건이었다. 호스트 변경·외형 선택·모션·등록 호출은 없었다.
 
 ### N1 — 다른 사람 계정으로 바꿔 삭제하기 (거절)
 
