@@ -4,7 +4,7 @@ import { existsSync, statSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { HOST_FILES, checkSystem, healthy, hostEnv, openJobs, readHostEnv, runHost } from '../scripts/host.mjs';
+import { HOST_FILES, checkSystem, codexHealthy, healthy, hostEnv, openJobs, readHostEnv, runHost } from '../scripts/host.mjs';
 import { generation } from './helpers/generation-database.mjs';
 
 // 커뮤니티 호스트 H2 (2026-10-28): npm run host -- … against the API on a test database; og is a fake that records its calls.
@@ -143,6 +143,9 @@ test('host.env refuses values og would put on PATH badly; checkSystem names what
   assert.throws(() => hostEnv({ nodeBin: '/usr/bin', python: '/a\nB=1' }), /host-env-path/);
   assert.throws(() => hostEnv({ nodeBin: '/usr/bin', slots: 4 }), /host-env-limits/);
   assert.ok(healthy('og: codex ok (a)\nog: grok ok (b)')); assert.ok(!healthy('og: codex ok (a)\nog: grok FAILED (exit 1)'));
+  // 1.1 (2026-11-06): a SuperGrok-only PC works; codex adds GPT pictures.
+  assert.ok(healthy('og: codex NOT READY — not signed in\nog: grok ok (b)'));
+  assert.ok(!codexHealthy('og: codex NOT READY — not signed in\nog: grok ok (b)')); assert.ok(codexHealthy('og: codex ok (a)\nog: grok ok (b)'));
 
   assert.match(checkSystem({ platform: 'darwin' }).missing[0], /Linux/);
   const found = { ffmpeg: '/opt/ffmpeg/bin/ffmpeg', ffprobe: '/opt/ffmpeg/bin/ffprobe', 'python3.12': '/usr/bin/python3.12', python3: '/usr/bin/python3' };
@@ -224,8 +227,15 @@ test('login names a missing subscription right away', async () => {
   try {
     await mkdir(path.join(root, 'bin'), { recursive: true }); await writeFile(path.join(root, 'host.env'), ''); await writeFile(path.join(root, 'bin', 'og'), '');
     const deps = { root, out: line => lines.push(line),
-      og: async args => ({ code: 0, output: args[0] === 'health' ? 'og: codex ok (h@x)\nog: grok unhealthy (no subscription)\n' : '' }) };
+      og: async args => ({ code: 0, output: args[0] === 'health' ? health : '' }) };
+    let health = 'og: codex ok (h@x)\nog: grok unhealthy (no subscription)\n';
     assert.equal(await runHost(['login', 'grok'], deps), 1);
-    assert.match(lines.at(-1), /유료 구독\(ChatGPT Plus·Pro, SuperGrok\) 계정으로 다시 로그인한다/);
+    assert.match(lines.at(-1), /유료 구독\(SuperGrok\) 계정으로 다시 로그인한다/);
+    // 1.1: grok alone is enough; a codex sign-in that does not answer says GPT pictures are off, and how to fix it.
+    health = 'og: codex NOT READY — not signed in\nog: grok ok (h@x)\n';
+    assert.equal(await runHost(['login'], deps), 0);
+    assert.match(lines.at(-1), /codex\(ChatGPT\)는 없어도 된다/);
+    assert.equal(await runHost(['login', 'codex'], deps), 1);
+    assert.match(lines.at(-1), /GPT 그림은 고를 수 없다\(Grok 그림은 된다\)/);
   } finally { await rm(root, { recursive: true, force: true }); }
 });

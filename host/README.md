@@ -147,7 +147,14 @@ GPT는 자세마다 몸을 따로 그려 외형보다 2~20% 커지거나 작아�
   다른 키인(`stale`, 그 뒤 모델·강도·프롬프트·스키마가 바뀜) 판정도 다시 묻지 않고 쓰되, `side`·`gait` 이벤트(`judgeKey`)와 걸음 검수 설정(`judgeKey`, `judge` 문구)에 표시한다.
   키 없는 판정의 `judge` 문구는 "모델과 강도 기록 없음"이다. 새로 하는 판정은 언제나 지금 키를 쓴다. 운영자가 지금 판정기로 다시 보게 하려면 그 판정 파일을 지운다(명시적 요청). 다음 단계 실행이 그 컷만 다시 판정한다.
   정면 판정 폴더의 판정은 서버가 받는 모양 그대로 두고(키 없음) 강도만 적는다. 같은 판정의 끝냄을 다시 보낼 때만 쓰기 때문이다.
-- 옆모습·걷기·달리기 판정기는 `worker.env`의 `ODDBOUT_GENERATION_JUDGES`로 고른다(2026-11-06, `JUDGE_MODES`). `codex`(기본, 없거나 다른 값도)는 지금 그대로다.
+- 옆모습·걷기·달리기 판정기는 `worker.env`의 `ODDBOUT_GENERATION_JUDGES`로 고른다(2026-11-06, `JUDGE_MODES`). 정하지 않으면 그 시점에 codex가 되는 PC는 `codex`,
+  안 되는 PC(SuperGrok만)는 `pixels`다(`judgesFor`, 1.1 제공자 프로필). 다른 값은 `codex`다. 정해 둔 판정기는 바꾸지 않는다: `codex`·`hybrid`인데 codex가 안 되면
+  워커는 새 작업을 가져가지 않는다(`canWork`). 판정기가 codex를 안 쓰면 codex가 안 되는 동안에도 Grok 그림 작업을 한다.
+- 그림 제공자(2026-11-06, `IMAGE_PROFILES`): 작업의 `imageProvider`가 `grok`이면 정면·옆모습·표정·이완 스틸·키포즈 줄을 Grok(`grok-imagine-image-2.0`)으로 그린다.
+  Grok은 알파를 주지 않으므로 키 색 바탕(초록, 팔레트에 초록 계열 이름이 있고 자홍 계열이 없으면 자홍)을 프롬프트에 적고 sprite-gen의 우세도 매트
+  (`--chroma-method dominance`)로 딴다. "No background"를 쓰면 Grok이 검은 바탕을 그렸고, 엔진의 YCbCr 매트는 Grok의 탁한 초록에서 흰색·검은색까지 지웠다(0단계).
+  레이아웃 가이드가 정사각이라 정면·옆모습·이완 스틸은 `--aspect-ratio 1:1`, 표정 시트는 3:2다. `imageProvider`가 없는 작업(이 변경 전 서버)은 `gpt`다.
+  Grok 그림 실행이 75(계정·토큰)나 429로 끝나면 codex 질문이 아니라 grok이 안 되는 것(`grok-rate-limited`)으로 다룬다.
   `og worker judges codex|pixels|hybrid`(사용자 설치는 `npm run host -- worker judges …`)가 그 줄을 쓰고, 워커는 다시 시작할 때 읽는다.
   `og worker key`는 키 두 줄만 바꾸고 이 줄과 `ODDBOUT_GENERATION_KEEP_DAYS`를 남긴다(전에는 파일을 통째로 다시 써서 지웠다).
   `pixels`는 픽셀 판정기(`motions.py pixel-judge`, NumPy, 한 번에 1초 미만, 제공자 호출 없음)만 판정하고, 픽셀이 정하지 못한 검사(`unknown`)는 통과로 치며 notes에 그렇게 적는다.

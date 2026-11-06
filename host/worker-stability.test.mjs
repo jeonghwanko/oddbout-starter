@@ -3,9 +3,9 @@ import test from 'node:test';
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { ASKS, GROK_LIMITED, createStages } from './generation-stages.mjs';
-import { STAGE_LIMIT_MS, createApi, createCooldowns, createDispatches, dispatchUnknownOutcome, generates, healthAfter, reportStageTokens, run,
-  STAGE_STOPPED, TIMING, errorCode, projectDocsAt, readOutput, stageLimitMs, timedOutOutcome, unlessStopped } from './generation-worker.mjs';
+import { ASKS, GROK_LIMITED, createStages, judgesFor } from './generation-stages.mjs';
+import { STAGE_LIMIT_MS, canWork, imagesOf, createApi, createCooldowns, createDispatches, dispatchUnknownOutcome, generates, healthAfter, parseHealth, reportStageTokens, run,
+  STAGE_STOPPED, TIMING, errorCode, projectDocsAt, readOutput, stageLimitMs, stageProviders, timedOutOutcome, unlessStopped } from './generation-worker.mjs';
 
 test('the codex folder\'s project instructions: every AGENTS.md from its checkout\'s root down to it, none beside the checkout', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'codex-cwd-'));
@@ -156,20 +156,59 @@ test('a look gen said it made but whose picture is not there goes to an operator
 
 test('a provider that cannot run here now is marked down, the other keeps its health, and any other outcome changes nothing', () => {
   const up = { ok: true, codex: true, grok: true, at: 't' };
-  assert.deepEqual(healthAfter(up, ASKS), { ok: false, codex: false, grok: true, at: 't' });
-  assert.deepEqual(healthAfter(up, GROK_LIMITED), { ok: false, codex: true, grok: false, at: 't' });
+  // Judges named codex or hybrid (the official host's worker.env) need codex: the host claims nothing without it, as before 1.1.
+  assert.deepEqual(healthAfter(up, ASKS, 'hybrid'), { ok: false, codex: false, grok: true, images: ['grok'], at: 't' });
+  assert.deepEqual(healthAfter(up, ASKS, 'codex'), { ok: false, codex: false, grok: true, images: ['grok'], at: 't' });
+  // 1.1 (2026-11-06): with no judges named, or pixels, codex down leaves a host that judges with pixels working its Grok jobs, and its
+  // heartbeat says it draws Grok's pictures only (the server then gives it no GPT job and no brief).
+  assert.deepEqual(healthAfter(up, ASKS), { ok: true, codex: false, grok: true, images: ['grok'], at: 't' });
+  assert.deepEqual(healthAfter(up, ASKS, 'pixels'), { ok: true, codex: false, grok: true, images: ['grok'], at: 't' });
+  // Grok down stops every host: it films every walk and run.
+  for (const judges of [undefined, 'pixels', 'hybrid'])
+    assert.deepEqual(healthAfter(up, GROK_LIMITED, judges), { ok: false, codex: true, grok: false, images: [], at: 't' });
+  // A host that could not claim stays so.
+  assert.equal(healthAfter({ ...up, ok: false }, ASKS).ok, false);
   assert.equal(healthAfter(up, 'video-exit-1'), up);
   assert.equal(healthAfter(up, undefined), up);
 });
 
+test('a host claims with the logins its work needs: grok always, codex only for judges that ask it (1.1)', () => {
+  // SuperGrok only: pixels judge (judgesFor), so it works; a named codex or hybrid mode does not quietly become pixels.
+  assert.equal(canWork({ codex: false, grok: true }), true);
+  assert.equal(canWork({ codex: false, grok: true }, 'pixels'), true);
+  assert.equal(canWork({ codex: false, grok: true }, 'hybrid'), false);
+  assert.equal(canWork({ codex: false, grok: true }, 'codex'), false);
+  // Both logins: every mode works. Codex alone films nothing.
+  for (const judges of [undefined, 'pixels', 'hybrid', 'codex']) {
+    assert.equal(canWork({ codex: true, grok: true }, judges), true);
+    assert.equal(canWork({ codex: true, grok: false }, judges), false);
+  }
+  const grokOnly = 'og: codex NOT READY — not signed in\nog: grok ok (g@x)\n';
+  assert.deepEqual(parseHealth(grokOnly, 't'), { ok: true, codex: false, grok: true, images: ['grok'], at: 't' });
+  assert.deepEqual(parseHealth(grokOnly, 't', 'hybrid'), { ok: false, codex: false, grok: true, images: ['grok'], at: 't' });
+  assert.deepEqual(parseHealth('og: codex ok (c@x)\nog: grok ok (g@x)\n', 't').images, ['grok', 'gpt']);
+  assert.deepEqual(imagesOf({ codex: true, grok: false }), []);
+  // The judges a claim runs with: worker.env's mode, else codex where it runs and pixels where it does not.
+  assert.equal(judgesFor(undefined, { codex: true }), 'codex');
+  assert.equal(judgesFor(undefined, { codex: false }), 'pixels');
+  assert.equal(judgesFor('hybrid', { codex: true }), 'hybrid');
+  assert.equal(judgesFor('pixels', { codex: true }), 'pixels');
+  // A stage ends the limited streak of the providers its job used: Grok pictures use grok only.
+  assert.deepEqual(stageProviders('appearance', { imageProvider: 'grok' }), ['grok']);
+  assert.deepEqual(stageProviders('motions', { imageProvider: 'grok' }), ['grok']);
+  assert.deepEqual(stageProviders('appearance', {}), ['codex']);
+  assert.deepEqual(stageProviders('motions', { imageProvider: 'gpt' }), ['codex', 'grok']);
+  assert.deepEqual(stageProviders('submitting', { imageProvider: 'grok' }), []);
+});
+
 test('a provider a real stage found limited stays down past a health check that only says hello, for longer each time it is found limited again', () => {
   let now = 1_000_000;
-  const cool = createCooldowns(() => now), up = { ok: true, codex: true, grok: true, at: 't' }, minute = 60_000;
+  const cool = createCooldowns(() => now, 'hybrid'), up = { ok: true, codex: true, grok: true, at: 't' }, minute = 60_000;
   assert.deepEqual(cool.apply(up), up);
   assert.equal(cool.limit('grok'), TIMING.askedRecheckMs);
   // The text probe passes again after the first wait is over only if the wait is: until then grok stays down and so does the host.
   now += TIMING.askedRecheckMs - minute;
-  assert.deepEqual(cool.apply(up), { ok: false, codex: true, grok: false, at: 't' });
+  assert.deepEqual(cool.apply(up), { ok: false, codex: true, grok: false, images: [], at: 't' });
   now += minute;
   assert.deepEqual(cool.apply(up), up);
   // Found limited again: twice as long, then no longer than a health period.
@@ -177,12 +216,19 @@ test('a provider a real stage found limited stays down past a health check that 
   assert.equal(cool.limit('grok'), TIMING.healthMs);
   assert.equal(cool.limit('grok'), TIMING.healthMs);
   // A failed probe stays failed whatever the cool-down says, and the other provider is untouched.
-  assert.deepEqual(cool.apply({ ...up, codex: false, ok: false }), { ok: false, codex: false, grok: false, at: 't' });
+  assert.deepEqual(cool.apply({ ...up, codex: false, ok: false }), { ok: false, codex: false, grok: false, images: [], at: 't' });
   // A stage that used grok and made its work ends the streak: the next limit starts from the first wait again.
   cool.worked(['grok']);
   assert.equal(cool.limit('grok'), TIMING.askedRecheckMs);
   cool.limit('codex');
-  assert.deepEqual(cool.apply(up), { ok: false, codex: false, grok: false, at: 't' });
+  assert.deepEqual(cool.apply(up), { ok: false, codex: false, grok: false, images: [], at: 't' });
+  // With no judges named, a host whose codex is held down works on with pixels (canWork) while grok is up.
+  let later = 2_000_000;
+  const plain = createCooldowns(() => later);
+  plain.limit('codex');
+  assert.deepEqual(plain.apply(up), { ok: true, codex: false, grok: true, images: ['grok'], at: 't' });
+  later += TIMING.healthMs;
+  assert.deepEqual(plain.apply(up), up);
 });
 
 // 리뷰 (2026-10-31): a stage whose job was cancelled under it (lease lost) or whose finish was refused spent its tokens all the same. They

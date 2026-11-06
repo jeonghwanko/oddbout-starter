@@ -337,6 +337,63 @@ test('the admin approves and withdraws hosts, and runs a stopped stage again or 
 // My agents (2026-10-28): the site shows his subscriptions as his worker last checked them, and he removes his host there. A request for him
 // that is not over keeps the host (its files are on his PC); removed, the host is off every list, key and claim, and applying again brings
 // the same host back, terms anew and not approved.
+// 그림 제공자 (1.1, 2026-11-06): a SuperGrok-only PC draws Grok's pictures; GPT's need its codex too, and the brief the official host's codex.
+test('a request names who draws its pictures: Grok by default, GPT only where the host draws them; a claim gives a host only what it draws', async () => {
+  const { sql, call, work, healthy } = await generation();
+  const theirs = 'other-token-0123456789';
+  try {
+    await healthy();
+    await call('POST', 'generations/host', { name: '그록 PC', billing: 'subscription', termsAccepted: true }, theirs);
+    const key = (await call('POST', 'generations/host/keys', {}, theirs)).body.key;
+    const host = (path, body) => call('POST', `generation-worker/${path}`, body, key);
+    const grokOnly = { ok: true, codex: false, grok: true, images: ['grok'], at: '2026-11-06T09:00:00.000Z' };
+    const both = { ok: true, codex: true, grok: true, images: ['grok', 'gpt'], at: '2026-11-06T10:00:00.000Z' };
+    // His SuperGrok-only PC (host/generation-worker.mjs parseHealth): on, and it says it draws Grok's pictures.
+    await host('heartbeat', { health: grokOnly });
+    const own = (await call('GET', 'generations/host', undefined, theirs)).body.host;
+    assert.equal(own.online, true);
+    assert.deepEqual(own.health, { codex: false, grok: true, images: ['grok'], checkedAt: grokOnly.at });
+    const words = { description: '프라이팬을 든 펭귄 셰프', language: 'ko', host: 'mine' };
+    const ask = body => call('POST', 'generations', { ...words, ...body }, theirs, { 'idempotency-key': crypto.randomUUID() });
+    // GPT pictures on a PC that does not draw them now: refused at the check and at the request, nothing made. A provider not offered: refused.
+    assert.equal((await call('POST', 'generations/check', { ...words, imageProvider: 'gpt' }, theirs)).body.code, 'image-provider-unavailable');
+    const refused = await ask({ imageProvider: 'gpt' });
+    assert.deepEqual([refused.status, refused.body.code], [409, 'image-provider-unavailable']);
+    assert.deepEqual([(await ask({ imageProvider: 'claude' })).status, (await ask({ imageProvider: 'claude' })).body.code], [422, 'invalid-image-provider']);
+    assert.equal((await sql.query('select count(*)::int as n from public.af_generation_jobs')).rows[0].n, 0);
+    // Named none: Grok's. The official brief first (its codex ok), then his PC takes it and is told whose pictures to draw.
+    const grokJob = (await ask({})).body.job;
+    assert.equal(grokJob.imageProvider, 'grok');
+    const [created] = (await sql.query("select data from public.af_generation_events where job_id = $1 and kind = 'created'", [grokJob.id])).rows;
+    assert.equal(created.data.images, 'grok');
+    const brief = (await work('POST', 'claim', {})).body.job;
+    assert.deepEqual([brief.id, brief.imageProvider], [grokJob.id, 'grok']);
+    await work('POST', 'finish', { jobId: brief.id, leaseToken: brief.leaseToken, outcome: 'ok', result: { brief: { profile: {} } } });
+    const looks = (await host('claim', {})).body.job;
+    assert.deepEqual([looks.id, looks.status, looks.imageProvider], [grokJob.id, 'appearance', 'grok']);
+    await sql.query("update public.af_generation_jobs set status = 'cancelled', lease_token = null where id = $1", [grokJob.id]);
+    // With codex too his PC draws GPT's: asked for, it is made, and its job says so.
+    await host('heartbeat', { health: both });
+    const gptJob = (await ask({ imageProvider: 'gpt' })).body.job;
+    assert.equal(gptJob.imageProvider, 'gpt');
+    // The brief is codex's: the official host whose last health says codex is not ok takes none, then takes it once it is.
+    await work('POST', 'heartbeat', { health: grokOnly });
+    assert.equal((await work('POST', 'claim', {})).body.stage, 'idle');
+    await work('POST', 'heartbeat', { health: both });
+    const gptBrief = (await work('POST', 'claim', {})).body.job;
+    assert.equal(gptBrief.id, gptJob.id);
+    await work('POST', 'finish', { jobId: gptBrief.id, leaseToken: gptBrief.leaseToken, outcome: 'ok', result: { brief: { profile: {} } } });
+    // His codex went down after the request: his PC is given no job whose pictures it no longer draws; it waits, and comes back with codex.
+    await host('heartbeat', { health: grokOnly });
+    assert.equal((await host('claim', {})).body.stage, 'idle');
+    await host('heartbeat', { health: both });
+    assert.deepEqual([(await host('claim', {})).body.job?.id, gptJob.imageProvider], [gptJob.id, 'gpt']);
+    // A job made before the column (its default for old rows) reads as GPT's, and a worker that says nothing of `images` is not held back.
+    const [{ fn }] = (await sql.query("select public.af_generation_host_images(h) as fn from public.af_generation_hosts h where h.official")).rows;
+    assert.deepEqual(fn, ['grok', 'gpt']);
+  } finally { await sql.close(); }
+});
+
 test('his host shows his subscriptions, and he removes it once no request for him is open; applying again brings it back', async () => {
   const { sql, call, healthy } = await generation();
   const theirs = 'other-token-0123456789';
@@ -348,7 +405,8 @@ test('his host shows his subscriptions, and he removes it once no request for hi
     const beat = health => call('POST', 'generation-worker/heartbeat', { health }, key);
     await beat({ ok: false, codex: true, grok: false, at: '2026-10-28T09:00:00.000Z' });
     const own = (await call('GET', 'generations/host', undefined, theirs)).body.host;
-    assert.deepEqual(own.health, { codex: true, grok: false, checkedAt: '2026-10-28T09:00:00.000Z' });
+    // `images` null: this worker says none (before 2026-11-06).
+    assert.deepEqual(own.health, { codex: true, grok: false, images: null, checkedAt: '2026-10-28T09:00:00.000Z' });
     assert.equal(own.online, false); // a subscription not answering keeps the PC off
     await beat({ ok: true, codex: true, grok: true, at: '2026-10-28T10:00:00.000Z' });
     assert.equal((await call('GET', 'generations/host', undefined, theirs)).body.host.online, true);
@@ -378,7 +436,7 @@ test('his host shows his subscriptions, and he removes it once no request for hi
     const back = (await call('POST', 'generations/host', { name: '고양이 공방 2', billing: 'subscription', termsAccepted: true }, theirs)).body.host;
     assert.deepEqual([back.id, back.enabled, back.approved, back.name], [applied.id, true, false, '고양이 공방 2']);
     const again = (await call('GET', 'generations/host', undefined, theirs)).body.host;
-    assert.deepEqual([again.online, again.lastSeenAt, again.health], [false, null, { codex: false, grok: false, checkedAt: null }]);
+    assert.deepEqual([again.online, again.lastSeenAt, again.health], [false, null, { codex: false, grok: false, images: null, checkedAt: null }]);
     const joined = (await call('POST', 'generations/host/join', { code: (await call('POST', 'generations/host/join-codes', {}, theirs)).body.code }, null)).body;
     assert.equal(joined.host, applied.id);
   } finally { await sql.close(); }

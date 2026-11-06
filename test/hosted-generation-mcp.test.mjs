@@ -372,6 +372,8 @@ test('커뮤니티 호스트: the hosts are listed to anyone, and a request name
     assert.equal((await ask({ host: 'any' })).code, 'host-consent-required');
     const made = await ask({ host: 'any', hostConsent: true });
     assert.equal(made.job.host.choice, 'any');
+    // Who draws the pictures (2026-11-06): Grok's unless he asks for GPT's.
+    assert.equal(made.job.imageProvider, 'grok');
     assert.match(hostedNext({ ...made.job, status: 'appearance' }), /^Waiting for a host to take it/);
     assert.match(hostedNext({ ...made.job, status: 'appearance', host: { choice: 'host', requested: { name: '고양이 공방' }, assigned: null } }), /the host 고양이 공방/);
   } finally { await g.sql.close(); }
@@ -389,6 +391,10 @@ test('a request the database would refuse is refused before any of the user\'s p
     const kept = async () => (await g.sql.query('select count(*)::int as n from public.af_generation_uploads')).rows[0].n;
     assert.equal((await ask({ host: 'any' })).code, 'host-consent-required');
     assert.equal((await ask({ description: '짧은\u0000설명이에요요요' })).code, 'invalid-description');
+    // GPT pictures where no host a request may go to draws them now (2026-11-06): refused at the check, before the pictures move.
+    await g.work('POST', 'heartbeat', { health: { ok: true, codex: false, grok: true, images: ['grok'] } });
+    assert.equal((await ask({ host: 'any', hostConsent: true, imageProvider: 'gpt' })).code, 'image-provider-unavailable');
+    await g.healthy();
     assert.equal(downloads.length, 0); assert.equal(await kept(), 0);
     const made = await ask({});
     assert.equal(made.job.status, 'queued'); assert.equal(downloads.length, 2); assert.equal(await kept(), 2);

@@ -930,14 +930,14 @@ test('the agent that asked: the MCP\'s live named client only, never a request b
   } finally { await mcp.sql.close(); await site.sql.close(); }
 });
 
-test('af_generation_create keeps its old call: an older caller names no agent', async () => {
+test('af_generation_create keeps its old call: an older caller names no agent and no image provider (Grok pictures, the default)', async () => {
   const { sql, owner, healthy } = await generation();
   try {
     await healthy();
     const signatures = (await sql.query("select pg_get_function_identity_arguments(oid) as args from pg_proc where proname = 'af_generation_create'")).rows;
-    assert.equal(signatures.length, 1); assert.match(signatures[0].args, /p_agent_client uuid$/);
+    assert.equal(signatures.length, 1); assert.match(signatures[0].args, /p_agent_client uuid, p_image_provider text$/);
     const job = (await sql.query("select to_jsonb(public.af_generation_create(p_owner => $1, p_key => $2, p_description => $3, p_language => 'ko', p_refs => '{}', p_rights => false)) as value",
       [owner, crypto.randomUUID(), '빨간 글러브를 낀 고양이 복서, 귀가 크다'])).rows[0].value;
-    assert.equal(job.agent_client, null); assert.equal(job.agent_name, null);
+    assert.equal(job.agent_client, null); assert.equal(job.agent_name, null); assert.equal(job.image_provider, 'grok');
   } finally { await sql.close(); }
 });

@@ -751,7 +751,8 @@ test('the sign-in-first address lists exactly what /mcp lists and says the same;
     // MCP 통합 2단계 A (2026-11-06): the writes and the reviewed registration tools merged too, 42 tools to 24 (ac6d43c8… before).
     // 2단계 B (2026-11-06, once ChatGPT's portal published all 24): the five reviewed reads left the list for get_my_fighters, 24 to 19
     // (ab96aea0… before).
-    if (count === 19) assert.equal(createHash('sha256').update(JSON.stringify(tools)).digest('hex'), 'a35f57da061af59879bcca4c6cc7bd4f889cbbf283489de13983055291d7da04');
+    // 그림 제공자 (2026-11-06): request_hosted_fighter takes imageProvider, grok or gpt (a35f57da… before). Not a tool ChatGPT's app pins.
+    if (count === 19) assert.equal(createHash('sha256').update(JSON.stringify(tools)).digest('hex'), 'd56abc4d22b2c629b385a8b49685dd88e5457821d899a42b6c49acad826e4d07');
     // ChatGPT's published app 1.0.3 (docs/records/CLOUD-PLUGIN-REVIEW.md): four of its twelve tools are listed with their reviewed bytes (nine
     // until 2단계 B, 16a9ae15…). prepare_fighter_registration, upload_fighter_asset and submit_fighter_registration took a `kind`, and a call
     // without it is the reviewed tool's call; the other five are get_my_fighters views, and their own names still answer (cloud/merged-tools.mjs).

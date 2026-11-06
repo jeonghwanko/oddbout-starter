@@ -374,7 +374,8 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
     + 'oddbout (default, ODDBOUT\'s own worker), mine (his own PC as a host: '
     + 'no consent to give, approval not needed), any (any approved community host) or a host id from list_generation_hosts; '
     + 'any or another person\'s host sends his words and pictures to that host\'s PC, so ask him first and pass hostConsent: '
-    + 'true. Pass his words (what the fighter is and looks like) and, if he gave them, '
+    + 'true. imageProvider: who draws the pictures, grok (default) or gpt (refused with image-provider-unavailable where that host '
+    + 'draws no GPT pictures now). Pass his words (what the fighter is and looks like) and, if he gave them, '
     + 'up to two of his own pictures with his confirmation that he has the rights to them: attached files (picture, secondPicture) where '
     + 'this host attaches files, else pictureUploads (usable ids from get_picture_upload, shown to him first). '
     + 'Each account holds tokens (500,000 at sign-up). What ODDBOUT\'s own worker makes for him (host oddbout, or any when ODDBOUT\'s worker '
@@ -389,8 +390,10 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
     { description: z.string().min(GENERATION_LIMITS.descriptionMin).max(GENERATION_LIMITS.description), language: z.enum(['ko', 'en']),
       picture: PICTURE.optional(), secondPicture: PICTURE.optional(), pictureUploads: z.array(UUID_ARG()).max(GENERATION_LIMITS.refs).optional(),
       rightsConfirmed: z.boolean().optional(), delegate: z.boolean().optional(),
-      host: z.union([z.enum(['oddbout', 'any', 'mine']), UUID_ARG()]).optional(), hostConsent: z.boolean().optional(), idempotencyKey: UUID_ARG() },
-    async ({ description, language, picture, secondPicture, pictureUploads = [], rightsConfirmed, delegate, host, hostConsent, idempotencyKey }, { signal, deadline }) => {
+      host: z.union([z.enum(['oddbout', 'any', 'mine']), UUID_ARG()]).optional(), hostConsent: z.boolean().optional(),
+      imageProvider: z.enum(['grok', 'gpt']).optional(), idempotencyKey: UUID_ARG() },
+    async ({ description, language, picture, secondPicture, pictureUploads = [], rightsConfirmed, delegate, host, hostConsent, imageProvider, idempotencyKey },
+      { signal, deadline }) => {
       // Once saved, the same key returns its job without re-uploading pictures. Before that, use read-only recovery.
       const existingId = await jobIdForKey(idempotencyKey);
       if (existingId) return withNext(await invoke(`generations/${existingId}`));
@@ -409,7 +412,8 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
       // Pictures already in (a ticket's) count with the attached ones: two in all, refused before an attached one moves.
       if (pictures.length + pictureUploads.length > GENERATION_LIMITS.refs) return { ok: false, code: 'invalid-refs' };
       if ((pictures.length || pictureUploads.length) && rightsConfirmed !== true) return { ok: false, code: 'rights-required' };
-      const ask = { description, language, ...(delegate ? { delegate: true } : {}), ...(host && host !== 'oddbout' ? { host, hostConsent: hostConsent === true } : {}) };
+      const ask = { description, language, ...(delegate ? { delegate: true } : {}), ...(host && host !== 'oddbout' ? { host, hostConsent: hostConsent === true } : {}),
+        ...(imageProvider ? { imageProvider } : {}) };
       // The request's own checks (consent, one at a time, the day's limits, the host) before a picture moves: each kept picture spends one
       // of the day's uploads and stays in storage (MCP 점검 2026-10-29). A request without pictures is checked where it is made.
       // The pictures already in are checked there too (his, unused, from the last day): a refusal keeps no attached picture.

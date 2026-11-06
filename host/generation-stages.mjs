@@ -146,6 +146,12 @@ export const VIDEO_REQUESTED = MODELS.video;
 /** The models a stage asks for, as the `versions` event names them: requested only. What codex recorded is the stage's `models` event. */
 export const REQUESTED_MODELS = Object.freeze({ text: MODELS.text, imageAgent: MODELS.image, judge: JUDGE.model, judgeEffort: JUDGE.effort,
   video: VIDEO_REQUESTED });
+/** The models a job's stage asks for: REQUESTED_MODELS for GPT pictures; Grok pictures name their provider and image model, and no image agent. */
+export function requestedModels(job) {
+  if (imageProviderOf(job) !== 'grok') return REQUESTED_MODELS;
+  const { imageAgent: _agent, ...rest } = REQUESTED_MODELS;
+  return { ...rest, imageProvider: 'grok', image: GROK_IMAGE_MODEL };
+}
 
 /**
  * A judge verdict's key (2026-11-05): what decides a judge's answer besides the pictures — the model and reasoning effort asked for, the
@@ -203,6 +209,14 @@ export function judgeLabel(record, status) {
 export const JUDGE_MODES = Object.freeze(['codex', 'pixels', 'hybrid']);
 /** A judges mode as configured, or `codex` for none or anything else. */
 export const judgesMode = value => JUDGE_MODES.includes(value) ? value : 'codex';
+/** Whether a judges mode asks codex (codex always, hybrid when the pixels leave a check open). */
+export const judgesNeedCodex = mode => mode !== 'pixels';
+/**
+ * The judges a host runs with now (1.1, 2026-11-06): the mode worker.env names (ODDBOUT_GENERATION_JUDGES), or with none codex where
+ * codex runs and pixels where it does not — a SuperGrok-only PC judges with pixels. A named mode is never changed here: one that asks
+ * codex on a host whose codex cannot run keeps the worker from claiming (workerHealth), it does not quietly become another judge.
+ */
+export const judgesFor = (configured, { codex = false } = {}) => configured ? judgesMode(configured) : codex ? 'codex' : 'pixels';
 /** The pixel judge asked for (motions.py PIXEL_MODEL; its answer names the one that ran, `observed`). */
 export const PIXEL_JUDGE = Object.freeze({ model: 'pixels-v1' });
 /** The key of a pixel verdict (`kind`: side or loop), and of a hybrid one (the pixel judge's and codex's keys together). */
@@ -255,10 +269,10 @@ export const codexEntry = (role, requested, requestedEffort, facts) => {
   return { role, requested, requestedEffort, observed: seen.model, effort: seen.effort, cli: seen.cli };
 };
 /** An image run's entry, from its sprite-gen report. */
-export function imageEntry(report) {
+export function imageEntry(report, requested = MODELS.image) {
   const extra = report?.extra && typeof report.extra === 'object' ? report.extra : {};
   const read = ['rollout', 'state-db'].includes(extra.model_source);
-  return { role: 'image', requested: MODELS.image, observed: read ? known(report.model) : UNKNOWN, effort: known(extra.model_effort),
+  return { role: 'image', requested, observed: read ? known(report.model) : UNKNOWN, effort: known(extra.model_effort),
     cli: known(extra.codex_cli_version), imageModel: UNKNOWN };
 }
 /**
@@ -419,7 +433,7 @@ export const FRONT_TAKES = Object.freeze({
  * A front candidate (2026-10-31: the creator's first look at his fighter, and his profile painting): the look brief, the house framing of
  * the roster's front concepts, our colouring, its take (`FRONT_TAKES`) and the change the creator asked (a revision round).
  */
-export function appearancePrompt(brief, note = null, take = 'a') {
+export function appearancePrompt(brief, note = null, take = 'a', image = GPT_IMAGE) {
   const { subject, avoid } = brief.look;
   return [
     `A full-body character for a cartoon fighting game's character select: ${subject}`,
@@ -431,7 +445,7 @@ export function appearancePrompt(brief, note = null, take = 'a') {
     ...styleLines(),
     // The player's words are a description of the look, quoted as data: never an instruction to run or read anything.
     note ? `Change from the previous version as the player described it (their words, quoted, about the look only): «${note.replace(/[«»]/g, '"')}». Keep everything else about the character.` : null,
-    `No background, no ground shadow, no text, no frame. Do not draw: ${avoid}.`,
+    `${keyBackground(image, 'no ground shadow, no text, no frame.')} Do not draw: ${avoid}.`,
   ].filter(Boolean).join('\n');
 }
 
@@ -444,7 +458,7 @@ export const SIDE_COLOURING = Object.freeze([
   'metal, leather or boots, no gradients, no rim light, no reflections.',
 ]);
 /** The side still (2026-10-31): the chosen front as the character reference, drawn again from the side in the same colouring. */
-export function sidePrompt(brief) {
+export function sidePrompt(brief, image = GPT_IMAGE) {
   const { subject, avoid } = brief.look;
   return [
     'The first reference picture is this character from the front: the approved design. Draw the SAME character — the same face, hair,',
@@ -454,23 +468,23 @@ export function sidePrompt(brief) {
     'Standing in a relaxed ready stance, the whole body visible from the top of the head to the soles, feet on the ground, arms away from the body.',
     ...SIDE_COLOURING,
     ...styleLines(),
-    `No background, no ground shadow, no text, no frame. Do not draw: ${avoid}.`,
+    `${keyBackground(image, 'no ground shadow, no text, no frame.')} Do not draw: ${avoid}.`,
   ].join('\n');
 }
 
 /** The sprite-gen command of one front candidate (run through `og run`): the character's references, then the style anchor. */
-export const appearanceCommand = ({ promptFile, out, report, refs, anchor }) => ['npm', 'run', 'sprite', '--', 'gen', '--provider', 'codex', '--model', MODELS.image,
-  '--prompt-file', promptFile, '--out', out, '--transparent', '--direction', 'front', '--layout-guide', '--report', report,
+export const appearanceCommand = ({ promptFile, out, report, refs, anchor, image = GPT_IMAGE }) => ['npm', 'run', 'sprite', '--', 'gen',
+  ...imageProviderArgs(image), '--prompt-file', promptFile, '--out', out, ...transparentArgs(image, '1:1'), '--direction', 'front', '--layout-guide', '--report', report,
   ...[...refs, anchor].flatMap(ref => ['--ref', ref])];
 /** The sprite-gen command of the side still: the chosen front first, then the style anchor. */
-export const sideCommand = ({ promptFile, out, report, front, anchor }) => ['npm', 'run', 'sprite', '--', 'gen', '--provider', 'codex', '--model', MODELS.image,
-  '--prompt-file', promptFile, '--out', out, '--transparent', '--direction', 'side', '--facing', 'right', '--layout-guide', '--report', report,
+export const sideCommand = ({ promptFile, out, report, front, anchor, image = GPT_IMAGE }) => ['npm', 'run', 'sprite', '--', 'gen', ...imageProviderArgs(image),
+  '--prompt-file', promptFile, '--out', out, ...transparentArgs(image, '1:1'), '--direction', 'side', '--facing', 'right', '--layout-guide', '--report', report,
   '--ref', front, '--ref', anchor];
 /** The sprite-gen command of the gaits' relaxed still (`gaitStillPrompt`): the side look its one reference, drawn again from the side facing right.
  * Not `appearanceCommand`: since the fronts came first (2026-10-31) that one draws a front and adds the style anchor, and called without an
  * anchor it handed gen `--ref undefined`, which refused every walk or run retake (a hosted job failed three times, 2026-10-31). */
-export const gaitStillCommand = ({ promptFile, out, report, look }) => ['npm', 'run', 'sprite', '--', 'gen', '--provider', 'codex', '--model', MODELS.image,
-  '--prompt-file', promptFile, '--out', out, '--transparent', '--direction', 'side', '--facing', 'right', '--layout-guide', '--report', report,
+export const gaitStillCommand = ({ promptFile, out, report, look, image = GPT_IMAGE }) => ['npm', 'run', 'sprite', '--', 'gen', ...imageProviderArgs(image),
+  '--prompt-file', promptFile, '--out', out, ...transparentArgs(image, '1:1'), '--direction', 'side', '--facing', 'right', '--layout-guide', '--report', report,
   '--ref', look];
 
 /**
@@ -489,7 +503,7 @@ export const EXPRESSION_CELLS = Object.freeze([
 /** The sheet's size: the profile set takes exactly this (api/profile-sets.mjs PROFILE_SET_LIMITS.expressions). */
 export const EXPRESSIONS_SIZE = Object.freeze({ width: 1536, height: 1024 });
 /** The expression sheet: the chosen front as the character reference, six busts facing right in the same colouring. */
-export function expressionsPrompt(brief) {
+export function expressionsPrompt(brief, image = GPT_IMAGE) {
   return [
     'Expression sheet for a fighting-game HUD portrait. The first reference picture is this character from the front: the approved design.',
     'Draw the SAME character — the same face, hair, outfit, accessories, colours and proportions. Do not redesign him.',
@@ -497,7 +511,9 @@ export function expressionsPrompt(brief) {
     colours(brief),
     `Layout: one ${EXPRESSIONS_SIZE.width} x ${EXPRESSIONS_SIZE.height} landscape image, 3 columns x 2 rows, six equal square cells. Each cell holds the same`,
     'head-and-shoulders bust, same size and same framing (the head fills about 70% of the cell height), turned to the right in a three-quarter',
-    'view (he faces the right edge). Fully transparent background, no cell borders, no text, no numbers, no speech bubbles, no extra effects.',
+    `view (he faces the right edge). ${image.provider === 'grok'
+      ? `Background: one flat solid pure bright ${image.key} (${KEY_HEX[image.key]}) colour filling the whole canvas behind every face;`
+      : 'Fully transparent background,'} no cell borders, no text, no numbers, no speech bubbles, no extra effects.`,
     'Cells, left to right, top to bottom:',
     ...EXPRESSION_CELLS,
     ...SIDE_COLOURING,
@@ -505,8 +521,9 @@ export function expressionsPrompt(brief) {
   ].join('\n');
 }
 /** The sprite-gen command of the expression sheet: the chosen front first, then the style anchor; landscape 3:2 where the provider takes a ratio. */
-export const expressionsCommand = ({ promptFile, out, report, front, anchor }) => ['npm', 'run', 'sprite', '--', 'gen', '--provider', 'codex', '--model', MODELS.image,
-  '--prompt-file', promptFile, '--out', out, '--transparent', '--aspect-ratio', '3:2', '--report', report, '--ref', front, '--ref', anchor];
+export const expressionsCommand = ({ promptFile, out, report, front, anchor, image = GPT_IMAGE }) => ['npm', 'run', 'sprite', '--', 'gen',
+  ...imageProviderArgs(image), '--prompt-file', promptFile, '--out', out, ...transparentArgs(image), '--aspect-ratio', '3:2', '--report', report,
+  '--ref', front, '--ref', anchor];
 
 /**
  * 맡기기 (2026-10-28): a creator who left the look to us answers once, at the motions. codex with every tool off checks both candidates
@@ -626,6 +643,57 @@ const ASKED = Object.freeze({ retry: ASKS });
  * the stage went straight back to the queue and met the same answer three times, and the server failed the job (`stage-attempts`).
  */
 export const GROK_LIMITED = 'grok-rate-limited';
+const GROK_DOWN = Object.freeze({ retry: GROK_LIMITED });
+
+/**
+ * Who draws a job's pictures (1.1 제공자 프로필, 2026-11-06 — 사용자: SuperGrok만 있는 사람이 첫 대상이고 그림도 Grok으로 뽑는다; ChatGPT가 있으면
+ * GPT 그림을 옵션으로 고른다): the job's `imageProvider`, `grok` or `gpt`. It draws the two fronts, the side still, the expression sheet, the
+ * gaits' relaxed still and the keypose rows; the walk and run are Grok clips either way. A job that names none (claimed from a server
+ * before the field) is `gpt`: every job was drawn so until then, and a job GPT started never goes on in Grok.
+ * Step 0 (2026-11-06, office-stable): Grok pictures took 2 of 3 fighters through unattended (GPT 1 of 3), with 4 retakes to GPT's 10.
+ */
+export const IMAGE_PROVIDERS = Object.freeze(['grok', 'gpt']);
+export const imageProviderOf = job => job?.imageProvider === 'grok' ? 'grok' : 'gpt';
+/** The Grok image model the grok profile asks for: sprite-gen's own default for `--provider grok` (grok_provider DEFAULT_MODEL), named. */
+export const GROK_IMAGE_MODEL = 'grok-imagine-image-2.0';
+/**
+ * Each provider's image profile. gpt: codex's image tool, which returns real alpha. grok: xAI's image model returns none, so each picture
+ * is drawn on one flat key colour (`keyBackground`) and keyed by sprite-gen's dominance matte (`--chroma-method dominance`): Grok paints
+ * "pure green" as a desaturated green, and the engine's YCbCr matte flooded from it into white and black (step 0). Its canvas is square
+ * where the layout guide is (Grok drew 9:16 unasked). `limited`: what an image run that meets the provider's limit returns (failedRun).
+ */
+export const IMAGE_PROFILES = Object.freeze({
+  gpt: Object.freeze({ provider: 'codex', model: MODELS.image, limited: null }),
+  grok: Object.freeze({ provider: 'grok', model: GROK_IMAGE_MODEL, limited: GROK_LIMITED, chromaMethod: 'dominance' }),
+});
+/**
+ * The key colour of a Grok picture: green, or magenta when the palette names a green the matte would take for the key and nothing of
+ * magenta's family. The key must be the palette's opposite: in step 0 a magenta key erased a red scarf, and a dominance matte takes any
+ * strongly green part (a lime glove, an emerald coat) for the background.
+ */
+const GREEN_FAMILY = /\b(?:green|lime|emerald|mint|jade|chartreuse)\b/i;
+const MAGENTA_FAMILY = /\b(?:magenta|fuchsia|pink|purple|violet|lavender|lilac|mauve|plum|orchid|rose)\b/i;
+export function chromaKeyFor(brief) {
+  const named = [...(brief?.look?.palette ?? []), brief?.look?.prop ?? ''].join(', ');
+  return GREEN_FAMILY.test(named) && !MAGENTA_FAMILY.test(named) ? 'magenta' : 'green';
+}
+const KEY_HEX = Object.freeze({ green: '#00FF00', magenta: '#FF00FF' });
+/** The background a picture asks for: none (gpt draws real alpha), or the key's flat colour edge to edge (grok). */
+const keyBackground = (image, rest) => image.provider === 'grok'
+  ? `Background: one flat solid pure bright ${image.key} (${KEY_HEX[image.key]}) colour filling the whole canvas edge to edge; ${rest}`
+  : `No background, ${rest}`;
+/** A job's pictures as the commands and prompts take them: its profile and, for grok, the key colour its brief calls for. */
+export function imageFor(job) {
+  const name = imageProviderOf(job);
+  return Object.freeze({ name, ...IMAGE_PROFILES[name], key: name === 'grok' ? chromaKeyFor(job?.brief) : null });
+}
+/** gpt's pictures: every caller that names no job's profile (the prompts' and commands' defaults). */
+const GPT_IMAGE = imageFor(null);
+/** The provider and model of an image command, then its transparency (grok: the key, the dominance matte and `aspect`, when given). */
+const imageProviderArgs = image => ['--provider', image.provider, '--model', image.model];
+const transparentArgs = (image, aspect = null) => image.provider === 'grok'
+  ? ['--transparent', '--chroma-key', image.key, '--chroma-method', image.chromaMethod, ...(aspect ? ['--aspect-ratio', aspect] : [])]
+  : ['--transparent'];
 /** Front candidates since 2026-10-31 (`front-…`); a job whose looks were drawn before is a side look (`look-…`) and makes no side still. */
 export const lookNames = round => [`front-a-${round}`, `front-b-${round}`];
 const sideLookNames = round => [`look-a-${round}`, `look-b-${round}`];
@@ -777,7 +845,7 @@ export const SCALE_ROUNDS = 3;
  * runs punched, broke their beat or left both feet unnamed. The retakes film the same character drawn again by the look's image model in a
  * relaxed travel pose, arms low, with side-view depth shading (the far arm and leg darker than the near ones).
  */
-export function gaitStillPrompt(brief) {
+export function gaitStillPrompt(brief, image = GPT_IMAGE) {
   return [
     `Image 1 is a 2D fighting-game character seen from the side, facing right. Draw this exact character again: ${characterPhrase(brief)}.`,
     'Keep the face, colours, markings, outfit, props and body proportions exactly as in image 1, at the same size, seen from the side facing right.',
@@ -785,7 +853,7 @@ export function gaitStillPrompt(brief) {
     'by the hips (hands, gloves or anything held kept low; nothing raised, aimed or ready to strike).',
     'Depth: shade the far arm and the far leg clearly darker than the near arm and the near leg, as side-view game sprites do, so the two',
     'legs never look alike.',
-    'No background, no ground shadow, no text, no frame.',
+    keyBackground(image, 'no ground shadow, no text, no frame.'),
   ].join('\n');
 }
 
@@ -849,15 +917,21 @@ export const extOf = type => ({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/
  * `codexSession(id, sinceMs)` what codex recorded for that session ({ model, effort, cliVersion }), or null. `codexCwd`: the folder outside
  * the kit the brief and the judges run in (`briefCommand` `cwd`; the worker's `<root>/codex-cwd`), made before each run; null runs them in
  * og's folder, the kit, as before 2026-11-05 (and their verdicts' keys say so: `isolated` false). `judges`: who judges the side takes and
- * the walk and run loops (JUDGE_MODES), codex unless the worker says otherwise.
+ * the walk and run loops (JUDGE_MODES), codex unless the worker says otherwise (judgesFor). `codex`: whether codex runs on this host (1.1,
+ * 2026-11-06): on a SuperGrok-only PC it does not, and the look judge (맡기기) is not asked — the creator chooses his look, as when the judge
+ * picks none. The worker then judges with pixels (judgesFor).
  */
 export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy = async () => ({ code: 127 }), gaitStaggerMs = GAIT_STAGGER_MS,
   alignPauseMs = ALIGN_PAUSE_MS, earlyPollMs = EARLY_POLL_MS, earlyGraceMs = EARLY_GRACE_MS, signal = null, lowMarginFeetTaken = true,
   codexSession = async () => null, codexCwd = null, styleAnchor = path.join(path.dirname(fileURLToPath(import.meta.url)), STYLE_ANCHOR_FILE),
-  judges = 'codex' }) {
+  judges = 'codex', codex = true }) {
   judges = judgesMode(judges);
   // The models this stage run asked for and observed (`createModelLog`), sent as its `models` event when it ends (`observed`).
   let models = createModelLog();
+  // The job's pictures (imageFor): set when each stage starts (`observed`), so one stages object serves any job.
+  let image = GPT_IMAGE;
+  /** An image run the provider refused here now (exit 75): codex's question (gpt), or Grok's account or allowance (grok). */
+  const imageDown = () => image.provider === 'grok' ? GROK_DOWN : ASKED;
   /** The folder a codex text run starts in, there when it starts (a host's cleanup may have removed it). */
   const codexDir = async () => { if (codexCwd) await mkdir(codexCwd, { recursive: true }); return codexCwd; };
   const isolated = Boolean(codexCwd);
@@ -873,7 +947,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
   const noteImage = async (report, since) => {
     if (!await fresh(report, since)) return;
     const read = await readFile(report, 'utf8').then(JSON.parse, () => null);
-    if (read?.provider) models.note(imageEntry(read));
+    if (read?.provider) models.note(imageEntry(read, image.model));
   };
   /** Every row gen-set drew in this run (its per-row reports are `gen` reports). */
   const noteRows = async (run, since) => {
@@ -889,6 +963,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
   /** A stage's model observations go up as one event when it ends (a courtesy: one that fails never changes its outcome). */
   const observed = (name, stage) => async (job, dir) => {
     models = createModelLog();
+    image = imageFor(job);
     try { return await stage(job, dir); } finally {
       const event = models.event(name);
       if (event) await Promise.resolve(api.progress?.(job, undefined, event)).catch(() => {});
@@ -1064,7 +1139,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
     // One prompt per take (`FRONT_TAKES`): the two candidates are two proposals.
     const promptOf = /** @param {'a' | 'b'} take */ take => path.join(dir, 'looks', `prompt-${round}-${take}.txt`);
     await mkdir(path.join(dir, 'looks'), { recursive: true });
-    for (const take of /** @type {const} */ (['a', 'b'])) await writeFile(promptOf(take), appearancePrompt(job.brief, note, take));
+    for (const take of /** @type {const} */ (['a', 'b'])) await writeFile(promptOf(take), appearancePrompt(job.brief, note, take, image));
     screen({ job, dir, stage: 'input', scope: 'design', images: refs.slice(0, 3).map(file => ({ file, role: 'reference' })) });
     // Both looks at once (one codex slot each; og waits for a free one, and the engine finds each run's picture by its own session).
     const since = Date.now();
@@ -1072,7 +1147,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       const png = path.join(dir, 'looks', `${name}.png`), report = path.join(dir, 'looks', `${name}.report.json`);
       // A look this round already made (the stage runs again because the other one failed) is kept: making it again pays twice.
       if (existsSync(png) && await finishedLook(report)) return { name, png, report, code: 0 };
-      const { code } = await og(appearanceCommand({ promptFile: promptOf(index === 0 ? 'a' : 'b'), out: png, report, refs, anchor: styleAnchor }));
+      const { code } = await og(appearanceCommand({ promptFile: promptOf(index === 0 ? 'a' : 'b'), out: png, report, refs, anchor: styleAnchor, image }));
       if (code === 0) await noteImage(report, since);
       return { name, png, report, code };
     }));
@@ -1080,9 +1155,9 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
     // other one asked the codex question or may be retried. An operator's look wins, then the question, then a retry.
     const failed = made.filter(look => look.code !== 0 || !existsSync(look.png));
     if (failed.length) {
-      const said = await Promise.all(failed.map(look => look.code === 0 ? { review: 'look-no-output' } : look.code === 75 ? ASKED
-        : failedRun('look', look.code, look.report, since)));
-      return asOutcome(said.find(r => r.review) ?? said.find(r => r.retry === ASKS) ?? said[0]);
+      const said = await Promise.all(failed.map(look => look.code === 0 ? { review: 'look-no-output' } : look.code === 75 ? imageDown()
+        : failedRun('look', look.code, look.report, since, image.limited)));
+      return asOutcome(said.find(r => r.review) ?? said.find(r => r.retry === ASKS || r.retry === GROK_LIMITED) ?? said[0]);
     }
     for (const [index, { name, png }] of made.entries()) {
       const webp = png.replace(/\.png$/, '.webp');
@@ -1103,6 +1178,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
 
   /** 맡기기: the look judge's pick of the two candidates, or null when it picked none or could not answer (the creator is asked). */
   async function pickLook(job, dir, made) {
+    if (!codex) return null;
     const folder = path.join(dir, 'looks', `judge-${job.appearanceRound}`);
     await mkdir(folder, { recursive: true });
     const schemaFile = path.join(folder, 'schema.json');
@@ -1122,10 +1198,10 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       const rows = redraws < EXTRACT_REDRAWS ? await extractFailedRows(run) : [];
       if (!rows.length) return { review: 'rows-extract' };
       const since = Date.now();
-      const { code } = await og(sprite('gen-set', '--run-dir', run, '--states', rows.join(','), '--force', '--provider', 'codex',
-        '--model', MODELS.image, '--concurrency', concurrency));
-      if (code === 75) return ASKED;
-      if (code !== 0) return failedRun('rows', code, path.join(run, 'reports', 'gen-set', 'set.report.json'), since);
+      const { code } = await og(sprite('gen-set', '--run-dir', run, '--states', rows.join(','), '--force', ...imageProviderArgs(image),
+        '--concurrency', concurrency));
+      if (code === 75) return imageDown();
+      if (code !== 0) return failedRun('rows', code, path.join(run, 'reports', 'gen-set', 'set.report.json'), since, image.limited);
       await noteRows(run, since);
     }
   }
@@ -1159,7 +1235,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
     const folder = path.join(dir, 'looks', sideName(job.appearanceRound, job.choice));
     await mkdir(folder, { recursive: true });
     const promptFile = path.join(folder, 'prompt.txt'), schema = path.join(folder, 'judge-schema.json');
-    await writeFile(promptFile, sidePrompt(job.brief));
+    await writeFile(promptFile, sidePrompt(job.brief, image));
     await writeFile(schema, JSON.stringify(SIDE_JUDGE_SCHEMA));
     /** The first take that missed the colouring only (`sideStyleOnly`): the fighter goes on from it when no take passes all five. */
     let styleOnly = null;
@@ -1167,9 +1243,9 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       const png = path.join(folder, `take-${take}.png`), report = path.join(folder, `take-${take}.report.json`), verdictFile = path.join(folder, `take-${take}.verdict.json`);
       if (!existsSync(png) || !await finishedLook(report)) {
         const since = Date.now();
-        const { code } = await og(sideCommand({ promptFile, out: png, report, front, anchor: styleAnchor }));
-        if (code === 75) return ASKED;
-        if (code !== 0) return failedRun('side', code, report, since);
+        const { code } = await og(sideCommand({ promptFile, out: png, report, front, anchor: styleAnchor, image }));
+        if (code === 75) return imageDown();
+        if (code !== 0) return failedRun('side', code, report, since, image.limited);
         if (!existsSync(png)) return { review: 'side-no-output' };
         await noteImage(report, since);
       }
@@ -1220,9 +1296,9 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
         if (existsSync(started)) return event({ outcome: 'failed', code: 'expressions-unfinished' });
         await writeFile(started, new Date().toISOString());
         const promptFile = path.join(folder, 'prompt.txt');
-        await writeFile(promptFile, expressionsPrompt(job.brief));
+        await writeFile(promptFile, expressionsPrompt(job.brief, image));
         const since = Date.now();
-        const { code } = await og(expressionsCommand({ promptFile, out: png, report, front, anchor: styleAnchor }));
+        const { code } = await og(expressionsCommand({ promptFile, out: png, report, front, anchor: styleAnchor, image }));
         if (code === 0) await noteImage(report, since);
         // Nothing was sent (its own report says so, og found no slot, or the account's allowance stopped it before it ran: 75 and no report
         // of this run): a later run may draw it (리뷰 2026-11-03). Anything else may have been paid for and is never drawn again.
@@ -1469,9 +1545,9 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
         if (code !== 0) return { retry: `prepare-exit-${code}` };
       }
       const since = Date.now();
-      const { code } = await og(sprite('gen-set', '--run-dir', run, '--provider', 'codex', '--model', MODELS.image, '--concurrency', '1'));
-      if (code === 75) return ASKED;
-      if (code !== 0) return failedRun('rows', code, path.join(run, 'reports', 'gen-set', 'set.report.json'), since);
+      const { code } = await og(sprite('gen-set', '--run-dir', run, ...imageProviderArgs(image), '--concurrency', '1'));
+      if (code === 75) return imageDown();
+      if (code !== 0) return failedRun('rows', code, path.join(run, 'reports', 'gen-set', 'set.report.json'), since, image.limited);
       await noteRows(run, since);
       const extracted = await extractRows(run, '1');
       if (extracted) return extracted;
@@ -1671,10 +1747,10 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
         }
         if (!existsSync(path.join(showRows, 'frames', 'frames-manifest.json'))) {
           const since = Date.now();
-          const { code } = await og(sprite('gen-set', '--run-dir', showRows, '--provider', 'codex', '--model', MODELS.image, '--concurrency', '1'));
+          const { code } = await og(sprite('gen-set', '--run-dir', showRows, ...imageProviderArgs(image), '--concurrency', '1'));
           if (code !== 0) {
             const setReport = path.join(showRows, 'reports', 'gen-set', 'set.report.json');
-            const said = code === 75 ? ASKED : await failedRun('show', code, setReport, since);
+            const said = code === 75 ? imageDown() : await failedRun('show', code, setReport, since, image.limited);
             // Left out only when a request may have left: a run refused before any (a preflight) is tried again on the next stage run.
             const { charge } = judgeOutcome({ code, report: await readOutcome(setReport, { since }) });
             if (said.review && charge !== 'not-charged') await writeWhole(showLeftOut, JSON.stringify(said) + '\n');
@@ -1705,11 +1781,11 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       const since = Date.now();
       const watching = earlyDrafts();
       let genSet, early = null;
-      try { genSet = await og(sprite('gen-set', '--run-dir', rows, '--provider', 'codex', '--model', MODELS.image, '--concurrency', '2')); }
+      try { genSet = await og(sprite('gen-set', '--run-dir', rows, ...imageProviderArgs(image), '--concurrency', '2')); }
       finally { early = await watching.stop(); }
       const { code } = genSet;
-      if (code === 75) return ASKED;
-      if (code !== 0) return failedRun('rows', code, path.join(rows, 'reports', 'gen-set', 'set.report.json'), since);
+      if (code === 75) return imageDown();
+      if (code !== 0) return failedRun('rows', code, path.join(rows, 'reports', 'gen-set', 'set.report.json'), since, image.limited);
       await noteRows(rows, since);
       const extracted = await extractRows(rows, '2');
       if (extracted) return extracted;
@@ -1748,11 +1824,11 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
     const relaxedStill = () => relaxedReady ??= (async () => {
       if (!existsSync(relaxedLook)) {
         const promptFile = path.join(m, 'gait-still-prompt.txt');
-        await writeFile(promptFile, gaitStillPrompt(job.brief));
+        await writeFile(promptFile, gaitStillPrompt(job.brief, image));
         const since = Date.now(), report = path.join(m, 'gait-still-look.report.json');
-        const { code } = await og(gaitStillCommand({ promptFile, out: relaxedLook, report, look }));
-        if (code === 75) return ASKED;
-        if (code !== 0) return failedRun('gait-still', code, report, since);
+        const { code } = await og(gaitStillCommand({ promptFile, out: relaxedLook, report, look, image }));
+        if (code === 75) return imageDown();
+        if (code !== 0) return failedRun('gait-still', code, report, since, image.limited);
         // gen said it finished and its picture is not there: a paid image may be somewhere — an operator looks, nothing is sent again.
         if (!existsSync(relaxedLook)) return { review: 'gait-still-no-output' };
         await noteImage(report, since);
