@@ -22,7 +22,7 @@ OpenAI 제출 문서: "Run each case using the test account before submitting."
 - [x] 포털 재검사 완료: 19개 모두 Published, "No findings" (2026-11-06 14:42 KST, PR #350 기록)
 - [ ] 전용 심사 계정이 MFA·이메일 코드 없이 이메일 로그인으로 바로 들어간다
 - [x] ChatGPT의 ODDBOUT 연결이 심사 계정이다. 2026-11-06 18:00 KST, 공개 플러그인의 연결 목록에서 심사 계정을 확인했다. 새 ChatGPT 대화에서 심사 계정을 지정해 `get_profile`을 요청했고, 응답에 표시된 계정 ID 끝 8자리가 사전에 확인한 심사 계정 ID와 일치했다. 같은 시점에 Codex에서 직접 조회한 연결은 기존 일반 계정이었다.
-- [ ] 녹화 중이다 (브라우저 창, 1080p, 비밀번호 입력 중에는 멈춤)
+- [x] 인증을 마친 ChatGPT 탭에서 사례별로 브라우저 화면을 캡처해 1920×1080 영상으로 저장한다. 아래 MP4 경로의 기준은 로컬 `Videos/ODDBOUT-review-20261106/reviewer-run/`이다.
 
 ## 사례
 
@@ -34,15 +34,15 @@ OpenAI 제출 문서: "Run each case using the test account before submitting."
 Which ODDBOUT account is connected? Can I register a fighter, and do I already have a creation request? Do not start anything.
 ```
 
-- [ ] `get_profile`로 연결된 심사 계정을 확인했다
-- [ ] `get_my_fighters`를 `view=readiness`, `purpose=registration`으로 불렀다
-- [ ] `get_hosted_fighter`를 `view=job`, `jobId`·`idempotencyKey` 없이 불러 최근 신청을 봤다
-- [ ] 등록 준비 상태, 기존 신청, 토큰 잔액을 알려 줬다
-- [ ] 작업을 만들지 않았고, 준비 상태를 생성·등록 완료로 말하지 않았다
+- [x] `get_profile`로 연결된 심사 계정을 확인했다
+- [x] `get_my_fighters`를 `view=readiness`, `purpose=registration`으로 불렀다
+- [x] `get_hosted_fighter`를 `view=job`, `jobId`·`idempotencyKey` 없이 불러 최근 신청을 봤다
+- [x] 등록 준비 상태, 기존 신청, 토큰 잔액을 알려 줬다
+- [x] 작업을 만들지 않았고, 준비 상태를 생성·등록 완료로 말하지 않았다
 
-결과:
-토큰 잔액 / 기존 신청 수:
-증거:
+결과: 통과. 심사 계정에서 등록 가능(`ready`), 사용 슬롯 2/3, 남은 슬롯 1. 생성·파일 전달·최종 검증은 미확인이라고 답했다.
+토큰 잔액 / 기존 신청 수: 500,000 / 1건(2026-10-28 대롱, `cancelled`; 진행 중 0건).
+증거: `P1.mp4` 후반의 결과 화면. ChatGPT가 읽기 전용으로 보고한 호출은 `get_profile`, `get_my_fighters(view=readiness, purpose=registration)`, `get_my_fighters(view=list)`, `get_hosted_fighter(view=job)`. 같은 대화에서 기존 호출 인자를 재확인했으며 `jobId`와 `idempotencyKey`는 없었다. 응답의 계정 ID 끝 8자리가 심사 계정과 일치했다.
 
 ### P4 — 공개 목록과 연습 대결
 
