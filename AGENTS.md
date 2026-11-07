@@ -77,6 +77,10 @@ generation and the live AI Fighter spec before creating a package, and use the b
 
 ### Review groups
 
+- Hosted creation is an exception to the workspace review groups below: after the appearance choice (or delegated
+  choice), finish motions and register into production without asking for motion approval. Entry remains the owner's
+  action on the website. Honor an explicit hold/edit request; do not claim registration until the server confirms it.
+
 - Creation is conversational in review groups: appearance (concept/idle), locomotion (fightIdle/walk/run), attacks
   (combo/slam/dash), defense and reactions (block/hit/groggy/fall), then final review.
 - Appearance starts with the front (the profile set, `get_fighter_spec` → `profileSet`): the user chooses a full-body front view;

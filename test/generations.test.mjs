@@ -139,13 +139,16 @@ test('the worker carries a job through brief, two looks, a change, a pick, motio
     assert.equal((await finish(held, 'ok', { preview: preview.map(p => ({ ...p, note: 'made-up' })) })).body.code, 'invalid-result');
     await finish(held, 'ok', { preview });
     read = (await call('GET', `generations/${job.id}`)).body.job;
-    assert.equal(read.status, 'motion_ready'); assert.deepEqual(read.preview.map(p => p.clip), ['idle', 'walk', 'run']);
+    assert.equal(read.status, 'submitting');
+    // Existing motion_ready jobs remain supported. Restore that legacy fixture to exercise revision/profile edits.
+    await sql.query("update public.af_generation_jobs set status='motion_ready' where id=$1", [job.id]); assert.deepEqual(read.preview.map(p => p.clip), ['idle', 'walk', 'run']);
     assert.deepEqual(read.preview.map(p => p.note ?? null), [null, null, 'run-from-walk']);
     assert.deepEqual(read.drafts, []); // the package's previews replace them
     assert.equal((await call('POST', `generations/${job.id}/motions`, { revise: { clip: 'walk', note: '덜 통통 튀게'.repeat(25) } })).body.job.revisionsLeft.motions, 2);
     held = await step('motions'); assert.deepEqual(held.motionNote, { clip: 'walk', note: '덜 통통 튀게'.repeat(25) });
     assert.deepEqual((await call('GET', `generations/${job.id}`)).body.job.drafts, []); // round 0's drafts are not this round's
     await finish(held, 'ok', { preview });
+    await sql.query("update public.af_generation_jobs set status='motion_ready' where id=$1", [job.id]);
     // Registered: his confirmed profile, the package submitted under his account by the worker.
     assert.equal((await call('POST', `generations/${job.id}/register`, { profile: { name: '', description: 'x' } })).body.code, 'invalid-profile');
     assert.equal((await call('POST', `generations/${job.id}/register`, { profile: { name: 'Blue', description: 'x', stats: { power: 5, toughness: 5, speed: 5 } } })).body.code, 'invalid-profile');
@@ -485,6 +488,8 @@ test('review: idle cannot be redone, a daily limit of 0 refuses, a cancel while 
     await finish(await step('queued'), 'ok', { brief: { profile: {} } });
     await finish(await step('appearance'), 'ok', { candidates: ['look-a-0', 'look-b-0'], choice: 'a' });
     await finish(await step('motions'), 'ok', { preview: [{ clip: 'idle', name: 'motion-idle-0' }, { clip: 'walk', name: 'motion-walk-0' }] });
+    // Legacy waiting job: this test exercises revision and cancellation, not automatic registration.
+    await sql.query("update public.af_generation_jobs set status='motion_ready' where id=$1", [job.id]);
     assert.equal((await call('POST', `generations/${job.id}/motions`, { revise: { clip: 'idle', note: '조금 더 웃게' } })).body.code, 'invalid-answer');
     assert.equal((await call('POST', `generations/${job.id}/motions`, { revise: { clip: 'walk', note: '조금 더 빠르게' } })).body.job.status, 'motions');
     // The worker goes quiet in the middle: he gives up and the free fighter comes back.
@@ -541,7 +546,7 @@ test('a hosted fighter\'s chosen front becomes his profile set when his package 
     await work('POST', 'progress', { jobId: held.id, leaseToken: held.leaseToken, event: { kind: 'expressions', artifact: 'expressions-0-b', outcome: 'chosen' } });
     assert.match((await call('GET', `generations/${job.id}`)).body.job.expressions.url, /jobs\/.*expressions-0-b\.webp/);
     await finish(held, 'ok', { preview: [{ clip: 'idle', name: 'motion-idle-0' }] });
-    assert.equal((await call('POST', `generations/${job.id}/register`, { profile: { name: 'Blue Cat', description: 'A blue boxer.' } })).body.job.status, 'submitting');
+    assert.equal((await call('GET', `generations/${job.id}`)).body.job.status, 'submitting');
     held = await step('submitting');
     const json = { 'x-generation-lease': held.leaseToken, 'content-type': 'application/json' };
     const front = (artifact, face, expressions) => work('POST', `jobs/${held.id}/profile-front`, { artifact, face, ...(expressions ? { expressions } : {}) }, json);

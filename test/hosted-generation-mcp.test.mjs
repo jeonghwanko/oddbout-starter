@@ -192,6 +192,12 @@ test('an agent asks ODDBOUT for a fighter, passes the picks and registers it in 
     held = await claim('motions');
     const preview = ['idle', 'walk', 'run'].map(clip => ({ clip, name: `motion-${clip}-0` }));
     await finish(held, { preview });
+    const automatic = await call('get_hosted_fighter', { jobId });
+    assert.equal(automatic.job.status, 'submitting');
+    assert.equal(automatic.statusSummary.completed, false);
+    assert.equal((await call('register_hosted_fighter', { jobId })).job.status, 'submitting');
+    // Retain the old waiting-job repair path without requiring motion approval.
+    await g.sql.query("update public.af_generation_jobs set status='motion_ready' where id=$1", [jobId]);
     const ready = await call('get_hosted_fighter', { jobId });
     assert.equal(ready.job.status, 'motion_ready'); assert.match(ready.next, /register_hosted_fighter/);
     assert.equal((await call('revise_hosted_motion', { jobId, clip: 'walk', note: '덜 통통 튀게' })).job.revisionsLeft.motions, 2);
@@ -201,6 +207,7 @@ test('an agent asks ODDBOUT for a fighter, passes the picks and registers it in 
     held = await claim('motions'); assert.deepEqual(held.motionNote, { clip: 'walk', note: '덜 통통 튀게' });
     await finish(held, { preview });
 
+    await g.sql.query("update public.af_generation_jobs set status='motion_ready' where id=$1", [jobId]);
     // Registered with the worker's draft; the user's one change merges into its bout lines. The concept stays the brief's.
     const registered = await call('register_hosted_fighter', { jobId, profile: { lines: { win: '또 와!' } } });
     assert.equal(registered.job.status, 'submitting');
@@ -779,7 +786,7 @@ test('a watch on a job that only asks to be watched answers in short; without a 
     // A wait the tenth draft ends: the job's state, what changed, that draft's URL only, and the pictures there are by name.
     await age();
     const watched = await watch(() => drafts(10)), watchedBytes = bytes();
-    assert.deepEqual(Object.keys(watched).sort(), ['changed', 'job', 'made', 'next', 'ok', 'pictures', 'siteUrl', 'watch']);
+    assert.deepEqual(Object.keys(watched).sort(), ['changed', 'job', 'made', 'next', 'ok', 'pictures', 'siteUrl', 'statusSummary', 'watch']);
     assert.deepEqual(watched.job, { id: jobId, status: 'motions', progress: 50 });
     assert.deepEqual(watched.changed, ['progress', 'pictures']);
     assert.deepEqual(watched.pictures.map(p => [p.kind, p.clip, p.name, p.new]), [['draft', 'fall', 'draft-fall-0', true]]);
@@ -798,11 +805,11 @@ test('a watch on a job that only asks to be watched answers in short; without a 
     const marked = await watch(() => drafts(10, { walk: 'retaking' }));
     assert.deepEqual([marked.changed, named(marked), marked.pictures[0].state], [['pictures'], [['walk', true], ['fall', false]], 'retaking']);
     assert.ok(bytes() < 2500, `${bytes()} bytes`);
-    // A decision point (the motions ready for his answer) is the whole job and its next, waited for or not.
+    // This fixture has no complete profile: operator attention returns the whole job, not an endless working summary.
     await finish({ preview: ['idle', 'walk', 'run'].map(clip => ({ clip, name: `motion-${clip}-0` })) });
     const ready = await watch(null, 1);
-    assert.equal(ready.watch, undefined); assert.equal(ready.job.status, 'motion_ready'); assert.equal(ready.job.preview.length, 3);
-    assert.match(ready.next, /register_hosted_fighter/);
+    assert.equal(ready.watch, undefined); assert.equal(ready.job.status, 'needs_review'); assert.equal(ready.job.preview.length, 3);
+    assert.equal(ready.statusSummary.actionRequired, 'operator');
     // So is the end.
     await g.sql.query("update public.af_generation_jobs set status = 'failed', error_code = 'stage-attempts' where id = $1", [jobId]);
     const failed = await watch(null, 1);
@@ -916,10 +923,10 @@ test('the recent list holds each request in short and says to read one by its id
     const listed = await call('get_hosted_fighter', {}), whole = await call('get_hosted_fighter', { jobId });
     assert.equal(listed.jobs.length, 5); assert.equal(listed.jobs[0].id, jobId);
     for (const job of listed.jobs) assert.deepEqual(Object.keys(job), ['id', 'status', 'progress', 'error', 'description', 'name', 'createdAt', 'updatedAt',
-      'tokens', 'submission', 'agent', 'siteUrl']);
+      'tokens', 'submission', 'agent', 'statusSummary', 'siteUrl']);
     assert.deepEqual(listed.jobs[0], { id: jobId, status: 'motions', progress: whole.job.progress, error: null, description: whole.job.description,
       name: '빨간 주먹', createdAt: whole.job.createdAt, updatedAt: whole.job.updatedAt, tokens: whole.job.tokens, submission: null, agent: null,
-      siteUrl: whole.siteUrl });
+      statusSummary: { ...whole.statusSummary, checkedAt: listed.jobs[0].statusSummary.checkedAt }, siteUrl: whole.siteUrl });
     assert.ok(!JSON.stringify(listed).includes('token='), 'no signed URL in the list');
     assert.deepEqual([listed.used, listed.tokens.balance, listed.capabilities.hosted], [false, 500000, true]);
     assert.match(listed.next, /read one by its jobId/);

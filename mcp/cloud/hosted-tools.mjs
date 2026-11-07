@@ -53,6 +53,9 @@ export const HOSTED_INSTRUCTIONS = 'When the user wants ODDBOUT to make the figh
   + 'Never create a new key or repeat a look/motion revision merely to recover an unknown outcome. '
   + 'Read the same job again for fresh preview URLs; a URL is not proof that the user saw the image. '
   + 'While the user watches a working job in this chat, read it again with waitSeconds 25 each time a read returns and tell him each change. '
+  + 'Use statusSummary for the current stage, completion and required action; progress is stage-local, never overall completion. '
+  + 'Do not ask for motion approval before registration. Hosted creation includes registration into production; only the owner enters on the site. '
+  + 'Never promise background chat notifications or scheduling unless the host actually supports them. '
   + 'A result\'s siteUrl is the user\'s page for that request (or, once registered, for his fighter) on the ODDBOUT website. ';
 /**
  * picture and secondPicture: a file the host attaches, whose refusal says where any other picture goes (Grok 점검 2026-11-03: an address
@@ -132,7 +135,7 @@ export async function hostedCandidateImages(job, fetcher, { signal, deadline }) 
  */
 const WATCH_NEXT = 'While the user watches this chat, call get_hosted_fighter again with waitSeconds 25 each time it returns (it returns '
   + 'early when the state, the progress or a picture changes) and tell him each change at once: new pictures, the progress (percent) or the '
-  + 'place in line. When he has left, check on a schedule and tell him only what changed.';
+  + 'place in line. If the chat stops, give him siteUrl to follow the server job; do not promise a background notification.';
 /**
  * The tokens a job took off the user's balance (보유 토큰, 2026-10-31: every token ODDBOUT's making spends, whatever the outcome).
  * @param {HostedJob} job
@@ -185,15 +188,16 @@ function hostedStep(job, uploads = true) {
       return `${job.preview?.some(p => p.note === 'run-from-walk') ? RUN_FROM_WALK_NEXT : ''}`
         + `Show the user ${job.delegate ? `the look ODDBOUT picked (candidate ${job.choice}), ` : ''}the motion previews as images (${IMAGES_NEXT}), `
         + `${job.expressions?.url ? 'his six arena faces (job.expressions: the last one is his face when he is knocked out), ' : ''}and the profile draft. `
-        + 'If he likes them, register_hosted_fighter (change only what he asks in the profile). '
-        + `To fix one motion, revise_hosted_motion (${left.motions ?? 0} changes left).`;
+        + 'The motions are finished, but registration has not started. This is a legacy waiting job: '
+        + 'continue the requested creation with register_hosted_fighter now, without asking for motion approval. '
+        + 'If the user has explicitly asked to hold or revise instead, honor that request.';
     case 'submitting':
       return `ODDBOUT is packaging the fighter and submitting it under the user's account. ${WATCH_NEXT}`;
     case 'submitted':
       // 출전 (2026-10-30): a registered fighter is in production until the user watches his motions and enters him.
       if (job.submission?.stage === 'registered') return `Registered: fighter ${job.submission.fighterId}, in production. Tell the user: he can watch `
-        + 'every motion on his fighter page (give him siteUrl) and enter him there (출전); other people meet him only after that. enter_fighter does it here '
-        + 'once he confirmed each of the eleven motions. '
+        + 'every motion on his fighter page (give him siteUrl) and enter him there (출전); other people meet him only after that. '
+        + 'Leave entry to the owner on the website; do not enter him from this creation flow. '
         // Not a promise (2026-11-03, 레온: his set was refused by the file check while this said he could enter once it was checked).
         + (job.profileSetId ? `His chosen front went in as his profile set (${job.profileSetId}). Before he enters, read ${toolRef('get_registered_fighter')}: its `
           + 'front says whether the set passed ODDBOUT\'s checks, and its next what to do if not. The home and the arena show it once an operator approves it. '
@@ -224,7 +228,25 @@ const ANSWER_LATER = 'This job is not waiting for that answer now: a change is m
 /** @param {any} result  The API's JSON. @param {boolean} uploads */
 const answeredOf = (result, uploads) => result?.code === 'generation-state' ? { ...result, next: ANSWER_LATER } : withNextOf(result, uploads);
 /** @param {any} result  The API's JSON. @param {boolean} uploads */
-const withNextOf = (result, uploads) => result?.ok && result.job ? { ...result, next: hostedNext(result.job, { uploads }), siteUrl: jobSite(result.job) } : result;
+const withNextOf = (result, uploads) => result?.ok && result.job ? { ...result, statusSummary: hostedStatus(result.job), next: hostedNext(result.job, { uploads }), siteUrl: jobSite(result.job) } : result;
+
+/** A stable status contract shared by full reads, compact waits and the chat card.
+ * Progress belongs to one stage. Only a registered submission means creation completed.
+ * @param {HostedJob} job
+ */
+export function hostedStatus(job) {
+  const registered = job.status === 'submitted' && job.submission?.stage === 'registered';
+  const failed = ['failed', 'rejected', 'cancelled', 'expired'].includes(job.status) || job.submission?.stage === 'rejected';
+  const state = registered ? 'registered' : failed ? 'stopped' : job.status === 'appearance_ready' ? 'choose_look'
+    : job.status === 'needs_review' ? 'operator_review' : job.status === 'motion_ready' ? 'registration_pending'
+    : job.status === 'submitted' ? 'validating' : job.status;
+  return { state, completed: registered, terminal: registered || failed,
+    actionRequired: registered ? 'enter_on_site' : job.status === 'appearance_ready' ? 'choose_look'
+      : job.status === 'motion_ready' ? 'agent_register' : job.status === 'needs_review' ? 'operator' : failed ? 'inspect_error' : 'none',
+    stageProgress: Number.isFinite(job.progress) ? Math.max(0, Math.min(100, /** @type {number} */ (job.progress))) : null,
+    updatedAt: job.updatedAt ?? null, checkedAt: new Date().toISOString(), error: job.error ?? null,
+    queue: job.queue ? { position: job.queue.position, reason: job.queue.reason ?? 'turn', resetsAt: job.queue.resetsAt ?? null } : null };
+}
 
 /**
  * 감시 응답 줄이기 (MCP 최적화 2026-11-05): a chat that watches a job read the whole of it — every picture's signed URL and the long next — at
@@ -300,7 +322,7 @@ function watchedView(job, first, changes, baseline) {
   const changed = first === null ? [] : [...(first.status !== job.status ? ['status'] : []), ...(first.progress !== job.progress ? ['progress'] : []),
     ...(first.submission !== submission ? ['submission'] : []), ...(pictures.some(picture => picture.new) ? ['pictures'] : [])];
   const show = [...(pictures.length ? ['each picture in pictures'] : []), ...(look ? ['look (the front ODDBOUT picked, also his profile picture)'] : [])];
-  return { ok: true, watch: true,
+  return { ok: true, watch: true, statusSummary: hostedStatus(job),
     job: { id: job.id, status: job.status, progress: job.progress ?? null,
       ...(job.queue ? { queue: { position: job.queue.position, ...(job.queue.reason ? { reason: job.queue.reason } : {}) } } : {}),
       ...(job.submission ? { submission: { stage: job.submission.stage } } : {}) },
@@ -318,7 +340,7 @@ function watchedView(job, first, changes, baseline) {
  */
 const jobSummary = job => ({ id: job.id, status: job.status, progress: job.progress ?? null, error: job.error ?? null, description: job.description,
   name: job.profile?.name ?? null, createdAt: job.createdAt, updatedAt: job.updatedAt, tokens: job.tokens ?? null, submission: job.submission ?? null,
-  agent: job.agent ?? null, siteUrl: jobSite(job) });
+  agent: job.agent ?? null, statusSummary: hostedStatus(job), siteUrl: jobSite(job) });
 const LIST_NEXT = 'Each request in short: read one by its jobId for its pictures, what it asks of the user and what to do next.';
 
 /**
@@ -603,16 +625,18 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
     // Not idle: it is the look itself (choose_hosted_look changes the look, before the motions).
     { jobId: JOB, clip: z.enum(/** @type {[string, ...string[]]} */ (Object.keys(spec.motions).filter(clip => clip !== 'idle'))), note: z.string().min(2).max(GENERATION_LIMITS.note) },
     ({ jobId, clip, note }) => post(`generations/${jobId}/motions`, { revise: { clip, note } }).then(answered), { write: true, publish: true, idempotent: false });
-  register('register_hosted_fighter', '맡긴 선수 등록', 'Register the connected user\'s hosted fighter once he approved its motions: '
+  register('register_hosted_fighter', '맡긴 선수 등록', 'Register a legacy hosted fighter still waiting at motion_ready; no motion approval is required: '
     + 'ODDBOUT packages it and submits it under his account, through the same server check as any fighter. '
     + 'profile holds only what he changed in the draft (name, description, names, bout lines, stats summing to 9). '
-    + 'Requires the user\'s registration request.',
+    + 'The user\'s hosted creation request includes registration into production. Never enter it for him; entry is on the site.',
     { jobId: JOB, profile: z.object({ name: z.string().min(1).max(profileLimits.name), description: z.string().min(1).max(profileLimits.description),
       names: z.record(z.string(), z.string()), lines: z.record(z.string(), z.string()),
       stats: z.object({ power: z.number().int(), toughness: z.number().int(), speed: z.number().int() }).strict() }).partial().strict().optional() },
     async ({ jobId, profile = {} }) => {
       const read = await invoke(`generations/${jobId}`);
       if (!read.ok) return read;
+      // An interrupted registration response is recovered by reading, never by submitting the package again.
+      if (['submitting', 'submitted'].includes(read.job.status)) return withNext(read);
       // The draft the worker wrote, with his changes over it; the API checks the result against the contract.
       const draft = read.job.profile ?? {}, merged = { ...draft, ...profile };
       for (const key of /** @type {const} */ (['names', 'lines'])) if (profile[key] && draft[key]) merged[key] = { ...draft[key], ...profile[key] };

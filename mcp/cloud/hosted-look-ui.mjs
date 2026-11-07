@@ -38,9 +38,14 @@ function render(result){
   const urls=output.previewPair===true && job?.status==='appearance_ready' && job.candidates?.length===2 ? ['a','b'].map((k,i)=>safeUrl(job.candidates[i].url,job,k,i)) : [];
   if(!inline && !(urls.length===2 && urls.every(Boolean))){
     if(!result.structuredContent)return;
-    root.replaceChildren(node('p',job?.status==='appearance_ready' ? say('The two previews are unavailable.','후보 그림을 불러오지 못했습니다.') :
-      Array.isArray(output.jobs) ? say('Recent requests: ','최근 신청: ')+output.jobs.length :
-      job?.status ? 'ODDBOUT · '+job.status : say('ODDBOUT request details','ODDBOUT 신청 정보')));
+    if(output.statusSummary){renderStatus(output);return;}
+    if(Array.isArray(output.jobs)){
+      root.replaceChildren(node('h2',say('Recent requests','최근 제작 신청')));
+      for(const request of output.jobs){const card=node('section');
+        card.append(node('h2',request.name || say('Fighter','캐릭터')));statusNodes(request).forEach(n=>card.append(n));root.append(card);}
+      return;
+    }
+    root.replaceChildren(node('p',say('Status unavailable. Check the request on ODDBOUT.','상태를 확인하지 못했습니다. ODDBOUT에서 신청 내역을 확인하세요.')));
     return;
   }
   const grid=node('div');grid.className='looks';
@@ -53,7 +58,43 @@ function render(result){
     img.src=inline?'data:image/webp;base64,'+blocks[i].data:urls[i];
   });
   root.replaceChildren(node('h2',say('Compare the two looks','두 외형 비교')),grid);
+  statusNodes(output).forEach(n=>root.append(n));
 }
+function statusNodes(output){
+  const s=output.statusSummary;
+  if(!s)return [node('p',say('Status unavailable','상태 확인 필요'))];
+  const names={queued:['Queued','제작 대기'],appearance:['Creating looks','외형 제작 중'],choose_look:['Choose a look','외형 선택 필요'],
+    motions:['Creating motions','모션 제작 중'],registration_pending:['Motions finished · registration pending','모션 완료 · 등록 연결 대기'],
+    submitting:['Packaging and registering','패키지 구성·등록 중'],validating:['Checking the package','등록 파일 검사 중'],
+    registered:['Registered · not entered','등록 완료 · 출전 전'],operator_review:['Operator attention needed','운영자 확인 필요'],stopped:['Stopped','작업 종료·중단']};
+  const label=names[s.state] || ['Status unknown','상태 확인 필요'];
+  const items=[node('h2',say(...label))];
+  if(s.queue){
+    items.push(node('p',say('Queue position: ','대기 순서: ')+s.queue.position));
+    if(s.queue.reason==='usage')items.push(node('p',say('Waiting for generation capacity to recover.','생성 한도 회복을 기다리고 있습니다.')));
+    if(s.queue.reason==='paused')items.push(node('p',say('Generation service is paused.','현재 제작 서비스가 일시 중지되어 있습니다.')));
+    if(s.queue.resetsAt)items.push(node('p',say('Capacity reset: ','한도 회복 예정: ')+s.queue.resetsAt));
+  }
+  if(s.stageProgress!==null && !s.terminal && ['appearance','motions','submitting'].includes(s.state))
+    items.push(node('p',say('Current stage: ','현재 단계 진행: ')+s.stageProgress+'%'+say(' (not overall completion)',' (전체 완료율 아님)')));
+  const actions={enter_on_site:['Review and enter on the website.','사이트에서 동작을 확인하고 출전하세요.'],
+    choose_look:['Choose A or B in this chat.','채팅에서 A 또는 B를 선택하세요.'],
+    agent_register:['No motion approval needed. The agent continues registration.','모션 승인은 필요 없습니다. 에이전트가 등록을 이어갑니다.'],
+    operator:['No answer needed from you. An operator must check this step.','사용자 응답 대기가 아닙니다. 운영자의 확인이 필요합니다.'],
+    inspect_error:['Check the error before requesting any new generation.','오류를 확인하세요. 새 생성은 자동으로 시작하지 않습니다.'],
+    none:['No action needed. Follow the server job on the website.','지금 할 일은 없습니다. 사이트에서 진행 상황을 확인할 수 있습니다.']};
+  items.push(node('p',say(...(actions[s.actionRequired] || ['Check status','상태를 확인하세요']))));
+  if(s.error)items.push(node('p',say('Reason: ','사유: ')+s.error));
+  if(s.updatedAt)items.push(node('p',say('Last job update: ','작업 갱신: ')+s.updatedAt));
+  if(s.checkedAt)items.push(node('p',say('Snapshot checked: ','이 카드의 확인 시각: ')+s.checkedAt));
+  items.push(node('p',say('This card is a snapshot, not a live notification.','이 카드는 확인 시점의 상태입니다. 자동 알림이 아닙니다.')));
+  try{const u=new URL(output.siteUrl);if(u.protocol==='https:' && u.hostname==='oddbout.com' && !u.username && !u.password){
+    const a=node('a',s.completed?say('Review and enter','동작 확인·출전하기'):say('View latest status','최신 진행 상황 보기'));
+    a.href=u.href;a.target='_blank';a.rel='noopener noreferrer';items.push(a);}}
+  catch{}
+  return items;
+}
+function renderStatus(output){root.replaceChildren(...statusNodes(output));}
 function fromGlobals(){
   const api=window.openai, m=api?.toolResponseMetadata, r=m?.mcp_tool_result || m?.call_tool_result;
   if(r || api?.toolOutput)render({...r,structuredContent:r?.structuredContent || api?.toolOutput});
