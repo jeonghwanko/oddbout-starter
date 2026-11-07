@@ -54,9 +54,17 @@ function latest(result,partial=false){
   }
   return result;
 }
+function decoded(result){
+  if(result.structuredContent && typeof result.structuredContent==='object' && !Array.isArray(result.structuredContent))return result;
+  // Non-ChatGPT clients get the same JSON in content[0], without structuredContent.
+  try{const text=(result.content || []).find(b=>b.type==='text')?.text, output=JSON.parse(text);
+    if(output && typeof output==='object' && !Array.isArray(output))return {...result,structuredContent:output};
+  }catch{}
+  return {...result,structuredContent:{}};
+}
 function render(result){
   if(!result)return;
-  result=latest(result);
+  result=latest(decoded(result));
   const output=result.structuredContent || {}, job=output.job, blocks=(result.content || []).filter(b=>b.type==='image' && b.mimeType==='image/webp');
   const inline=output.previewPair===true && job?.status==='appearance_ready' && blocks.length===2 &&
     blocks.every(b=>typeof b.data==='string' && b.data.length<=2666668 && /^[A-Za-z0-9+/]+=*$/.test(b.data));

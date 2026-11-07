@@ -6,6 +6,7 @@ import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { VALIDATOR_VERSION } from '../api/submissions.mjs';
 import { withProfile } from '../host/generation-stages.mjs';
 import { hostedStatus } from '../mcp/cloud/hosted-tools.mjs';
+import { sha256 } from '../api/http.mjs';
 
 test('completed motions atomically queue registration, keep owner/profile and never enter a fighter', async () => {
   const { sql, owner } = await generation();
@@ -86,5 +87,37 @@ test('automatic registration carries the draft through package checks and a vali
     const fighter = (await sql.query('select owner_id, entered_at, profile from public.af_fighters where id=$1', [job.submission.fighterId])).rows[0];
     assert.equal(fighter.owner_id, owner); assert.equal(fighter.entered_at, null); assert.equal(fighter.profile.name, draft.name);
     assert.equal((await sql.query('select count(*)::int as n from public.af_submissions')).rows[0].n, 1);
+  } finally { await sql.close(); }
+});
+
+test('submission completion rejects unrelated or unfinished uploads and preserves the lease for the correct result', async t => {
+  const { sql, owner, other, work } = await generation();
+  const manifest = JSON.stringify(example), hash = await sha256(new TextEncoder().encode(manifest));
+  const bytes = example.assets.reduce((sum, asset) => sum + asset.bytes, 0);
+  try {
+    for (const reason of ['another job', 'another owner', 'still uploading']) await t.test(reason, async () => {
+      await sql.exec('begin');
+      try {
+        const job = crypto.randomUUID(), lease = crypto.randomUUID(), submission = crypto.randomUUID();
+        await sql.query(`insert into public.af_generation_jobs(id,owner_id,idempotency_key,description,language,status,lease_token)
+          values($1,$2,$1,'Test boxer','en','submitting',$3)`, [job, owner, lease]);
+        await sql.query(`insert into public.af_submissions(id,owner_id,idempotency_key,manifest_text,manifest,manifest_sha,asset_bytes,status)
+          values($1,$2,$3,$4::text,$4::text::jsonb,$5,$6,$7)`, [submission, reason === 'another owner' ? other : owner,
+          reason === 'another job' ? crypto.randomUUID() : job, manifest, hash, bytes, reason === 'still uploading' ? 'uploading' : 'queued']);
+        const finish = submissionId => work('POST', 'finish', { jobId: job, leaseToken: lease, outcome: 'ok', result: { submissionId } });
+        await sql.exec('savepoint finishing');
+        const refused = await finish(submission);
+        // PostgREST rolls back a refused RPC; emulate that boundary inside this fixture transaction.
+        await sql.exec('rollback to savepoint finishing');
+        assert.equal(refused.body.code, 'invalid-result');
+        const kept = (await sql.query('select status,lease_token,submission_id from public.af_generation_jobs where id=$1', [job])).rows[0];
+        assert.deepEqual(kept, { status: 'submitting', lease_token: lease, submission_id: null });
+        const correct = crypto.randomUUID();
+        await sql.query('delete from public.af_submissions where id=$1', [submission]);
+        await sql.query(`insert into public.af_submissions(id,owner_id,idempotency_key,manifest_text,manifest,manifest_sha,asset_bytes,status)
+          values($1,$2,$3,$4::text,$4::text::jsonb,$5,$6,'queued')`, [correct, owner, job, manifest, hash, bytes]);
+        assert.equal((await finish(correct)).body.status, 'submitted');
+      } finally { await sql.exec('rollback'); }
+    });
   } finally { await sql.close(); }
 });

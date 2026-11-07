@@ -21,9 +21,14 @@ grant execute on function public.af_generation_registration_draft(public.af_gene
 
 create or replace function public.af_generation_finish(p_id uuid, p_token uuid, p_outcome text, p_result jsonb)
 returns public.af_generation_jobs language plpgsql security invoker set search_path = '' as $$
-declare row public.af_generation_jobs := public.af_generation_held(p_id, p_token); result jsonb := coalesce(p_result, '{}'::jsonb);
+declare row public.af_generation_jobs; result jsonb := coalesce(p_result, '{}'::jsonb);
   registration_blocked boolean := false;
 begin
+  -- Admission calls af_authorize (creator lock), as owner cancellation does. Take that lock
+  -- before the job lock, without charging another authorization or losing art on a disabled account.
+  perform 1 from public.af_creators c join public.af_generation_jobs pending_job on pending_job.owner_id = c.owner_id
+    where pending_job.id = p_id for update of c;
+  row := public.af_generation_held(p_id, p_token);
   if p_outcome = 'retry' then
     update public.af_generation_jobs set lease_token = null, lease_expires_at = now() + interval '2 minutes', updated_at = now() where id = p_id returning * into row;
   elsif p_outcome = 'ok' and row.status = 'queued' then
@@ -48,7 +53,11 @@ begin
     update public.af_generation_jobs set preview = result->'preview', motion_note = null, status = 'motion_ready', waiting_since = now(), progress = 100,
       stage_leases = 0, lease_token = null, lease_expires_at = null, updated_at = now() where id = p_id returning * into row;
   elsif p_outcome = 'ok' and row.status = 'submitting' then
-    if not exists(select 1 from public.af_submissions where id = (result->>'submissionId')::uuid and owner_id = row.owner_id) then raise exception 'invalid-result'; end if;
+    -- Only this job's immutable submission, after upload/submit, may complete the host stage.
+    -- An old registered package from the same owner is not this job's result. An uploading one
+    -- would strand the job after its host closes it, since no validator can claim it yet.
+    if not exists(select 1 from public.af_submissions where id = (result->>'submissionId')::uuid
+      and owner_id = row.owner_id and idempotency_key = row.id and status <> 'uploading') then raise exception 'invalid-result'; end if;
     update public.af_generation_jobs set submission_id = (result->>'submissionId')::uuid, status = 'submitted', progress = 100, stage_leases = 0,
       lease_token = null, lease_expires_at = null, updated_at = now() where id = p_id returning * into row;
   elsif p_outcome = 'rejected' and row.status = 'queued' then
@@ -86,6 +95,9 @@ language plpgsql security invoker set search_path = '' as $$
 declare j public.af_generation_jobs; next text; blocked boolean;
 begin
   if not public.af_admin_account(p_actor) then raise exception 'admin-required'; end if;
+  -- Same creator-before-job order as af_generation_own and automatic completion.
+  perform 1 from public.af_creators c join public.af_generation_jobs pending_job on pending_job.owner_id = c.owner_id
+    where pending_job.id = p_id for update of c;
   select * into j from public.af_generation_jobs where id = p_id for update;
   if not found then raise exception 'not-found'; end if;
   if j.status <> 'needs_review' then raise exception 'review-conflict'; end if;

@@ -106,3 +106,12 @@ test('a current list preserves same-version previews and a resumed operator revi
   ui.render(result('recoverable', 'motions', '2026-11-07T12:01:00Z'));
   assert.match(ui.root.text, /모션 제작 중/); assert.doesNotMatch(ui.root.text, /운영자 확인 필요/);
 });
+
+test('the standard MCP text-only result renders and malformed results cannot leave a prior success visible', () => {
+  const ui = widget(), current = result('a', 'submitted', '2026-11-07T12:00:00Z');
+  // cloud.mjs deliberately omits structuredContent outside ChatGPT; its content[0] is JSON.
+  ui.render({ content: [{ type: 'text', text: JSON.stringify(current.structuredContent) }] });
+  assert.match(ui.root.text, /등록 완료/);
+  ui.render({ isError: true, content: [{ type: 'text', text: '{broken-json' }] });
+  assert.doesNotMatch(ui.root.text, /등록 완료/); assert.match(ui.root.text, /상태를 확인하지 못했습니다/);
+});

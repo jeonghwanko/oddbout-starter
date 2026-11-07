@@ -6,8 +6,7 @@ export const migrationNames = async () => (await readdir(migrationDir)).filter(n
 export const applyMigration = async (db, name) => db.exec(await readFile(new URL(name, migrationDir), 'utf8'));
 // A stand-in for the hosted Supabase platform, shared so a migration that starts relying on another
 // platform role or function is added here once instead of drifting in each test's own copy.
-export async function supabasePlatform() {
-  const db = new PGlite();
+export async function supabasePlatform(db = new PGlite()) {
   await db.exec(`create role anon; create role authenticated; create role service_role bypassrls; create role supabase_auth_admin;
     create schema auth; create table auth.users(id uuid primary key,email text,encrypted_password text,banned_until timestamptz,deleted_at timestamptz);
     create table auth.oauth_clients(id uuid primary key, deleted_at timestamptz, client_name text, redirect_uris text);

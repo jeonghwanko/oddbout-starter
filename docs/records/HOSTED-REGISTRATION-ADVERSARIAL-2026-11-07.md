@@ -64,3 +64,30 @@
 검증 결과: 관련 테스트 49개 통과(자동 등록 3개, 등록·실패 복구 8개, 상태·UI 8개, 실제 MCP 호출 30개).
 기존 UI 단위 테스트가 하나의 ID를 등록 완료 뒤 다시 제작·검수 단계에 재사용하던 fixture는 독립 작업으로
 분리했다. `npm run typecheck`와 MCP Edge의 `deno check --frozen`도 통과했다.
+
+## 네 번째 리뷰
+
+대상: 세 번째 보완 커밋 `4666b7c9`. 단일 연결인 PGlite 테스트로는 확인할 수 없었던 DB 잠금 경합을
+설치된 PostgreSQL 18의 임시 클러스터에서 검사했다. 운영 DB 연결은 사용하지 않았다.
+
+| 심각도 | 확인한 결함 | 수정과 재현 검사 |
+|---|---|---|
+| P1 | 완료 처리와 운영자 재시도는 작업 행 → 계정 행, 사용자 취소는 계정 행 → 작업 행 순서로 잠갔다. 서로 겹치면 PostgreSQL이 `deadlock detected`로 한 호출을 중단했다 | 두 경로 모두 계정 행 → 작업 행 순서로 통일. 실제 함수와 별도 DB 연결을 이용한 완료/취소, 운영자 복구/취소 시나리오가 수정 전 모두 실패하고 수정 후 통과. 계정 활성·한도·호출 제한 검사는 유지 |
+| P2 | 제출 완료에서 소유자만 검사해 같은 소유자의 다른 작업 제출이나 업로드 중인 제출도 연결할 수 있었다 | 소유자와 작업의 고정 제출 키가 일치하고 업로드 단계가 끝난 경우만 연결. 거절 뒤 기존 임대·상태를 보존하고 올바른 결과로 완료 가능. 다른 소유자의 제출 거절도 유지 |
+| P2 | 서버는 일부 클라이언트에 `structuredContent` 없이 JSON 텍스트를 보내는데 카드가 이를 읽지 못했다 | 구조화 출력 우선, 없으면 JSON 텍스트 해석. 해석할 수 없는 오류 응답은 이전 성공 표시를 남기지 않고 상태 확인 실패로 표시 |
+
+잠금 순서 변경은 [PostgreSQL의 교착상태 방지 지침](https://www.postgresql.org/docs/current/explicit-locking.html#LOCKING-DEADLOCKS)과
+실제 함수의 계정·작업 잠금 경로를 근거로 했다. 계정 잠금 자체는 권한 검사가 아니며, 기존 등록 함수가 검사를 수행한다.
+배포되지 않은 동일 마이그레이션을 보완했으며 운영 이력을 다시 쓰지 않았다.
+
+PostgreSQL 회귀 검사는 `test/postgres/hosted-lock-order.test.mjs`에 있다. `ODDBOUT_TEST_PG_BIN`을 로컬
+PostgreSQL bin 디렉터리로 지정한 뒤 `node --test test/postgres/hosted-lock-order.test.mjs`로 실행한다.
+테스트가 loopback의 임시 포트·새 클러스터를 만들고 종료·삭제한다. 일반 `npm test`와 별도로 실행하는 선택 검사다.
+
+Edge 브라우저에는 합성 상태 객체 대신 로컬 MCP의 실제 `get_hosted_fighter` 응답과 `resources/read` HTML을
+전달했다. JSON 텍스트의 운영자 확인 상태와 잘못된 JSON 뒤 이전 표시 제거를 확인했고 브라우저 오류는 없었다.
+계정·DB는 테스트 fixture이며 실제 GPT 웹 호스트, 운영 배포, 새 캐릭터 생성 검증은 아니다.
+
+검증 결과: 관련 테스트 87개 통과(등록·UI·마이그레이션 28개, 생성 API·MCP 55개, 기존 운영자 복구 1개,
+PostgreSQL 동시성 부모 검사와 두 시나리오 3개). `npm run typecheck`, MCP Edge의 `deno check --frozen`,
+실제 MCP 응답을 사용한 Edge 렌더링도 통과했다. 임시 PostgreSQL은 종료하고 해당 테스트 디렉터리를 정리했다.
