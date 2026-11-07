@@ -118,16 +118,19 @@ async function encode(png, limit, where) {
 
 /**
  * Build a profile set's folder. `front` is the painting the user chose; `expressions` his sheet (optional: without it the arena shows his face
- * square for every mood). Returns the files and the face square, or the errors; writes `out` only on a pass.
- * @param {{ front: string, expressions?: string | null, out: string }} options
+ * square for every mood). `face`: a square the user approved in place of the measured one, in the framed front's pixels (the `face` a build
+ * without it printed is in the same pixels) — for a figure face-box misreads, as a big round head whose face sits low (2026-11-07, 깔깔이: the
+ * measured square held his forehead and back bumps). It goes through the same set and pixel checks as a measured one. Returns the files and the
+ * face square, or the errors; writes `out` only on a pass.
+ * @param {{ front: string, expressions?: string | null, out: string, face?: { x: number, y: number, side: number } | null }} options
  */
-export async function buildProfileSet({ front, expressions = null, out }) {
+export async function buildProfileSet({ front, expressions = null, out, face: approved = null }) {
   try {
     if (await lstat(out).then(() => true, () => false)) throw new SetFailure('OUTPUT_EXISTS', '', out);
     const framed = await frameFront(await readPicture(front, '/front'));
     const frontBytes = await encode(framed, PROFILE_SET_LIMITS.frontBytes, '/front');
     const decoded = await sharp(frontBytes).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-    const face = faceBox({ data: decoded.data, width: decoded.info.width, height: decoded.info.height, channels: decoded.info.channels });
+    const face = approved ?? faceBox({ data: decoded.data, width: decoded.info.width, height: decoded.info.height, channels: decoded.info.channels });
     const sheetBytes = expressions ? await encode(await fitSheet(await readPicture(expressions, '/expressions')), PROFILE_SET_LIMITS.expressionsBytes, '/expressions') : null;
     /** @type {(bytes: Buffer, name: string, width: number, height: number) => { path: string, bytes: number, sha256: string, width: number, height: number }} */
     const file = (bytes, name, width, height) => ({ path: name, bytes: bytes.length, sha256: sha256(bytes), width, height });
@@ -169,19 +172,32 @@ export async function buildProfileSet({ front, expressions = null, out }) {
   }
 }
 
+/**
+ * `--face x,y,side` as a square, null when it is not given, false when it is not three whole numbers (the side at least the contract's least).
+ * @param {string | undefined} value @returns {{ x: number, y: number, side: number } | null | false}
+ */
+export function parseFace(value) {
+  if (value === undefined) return null;
+  const parts = /^(\d{1,5}),(\d{1,5}),(\d{1,5})$/.exec(value.trim());
+  if (!parts) return false;
+  const [x, y, side] = parts.slice(1).map(Number);
+  return side >= PROFILE_SET_LIMITS.faceMin ? { x, y, side } : false;
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  const usage = 'Usage: npm run fighter:profile-set -- --front <chosen front> [--expressions <sheet>] --out <new folder>';
+  const usage = 'Usage: npm run fighter:profile-set -- --front <chosen front> [--expressions <sheet>] [--face <x>,<y>,<side>] --out <new folder>';
   let values;
-  try { ({ values } = parseArgs({ options: { front: { type: 'string' }, expressions: { type: 'string' }, out: { type: 'string' } }, strict: true })); }
+  try { ({ values } = parseArgs({ options: { front: { type: 'string' }, expressions: { type: 'string' }, face: { type: 'string' }, out: { type: 'string' } }, strict: true })); }
   catch { values = null; }
-  if (!values?.front || !values.out) {
+  const face = parseFace(values?.face);
+  if (!values?.front || !values.out || face === false) {
     console.error(usage);
     process.exitCode = 2;
   } else {
     // npm runs scripts in the kit's folder; the paths are the caller's.
     const here = process.env.INIT_CWD || process.cwd();
     const result = await buildProfileSet({ front: path.resolve(here, values.front), expressions: values.expressions ? path.resolve(here, values.expressions) : null,
-      out: path.resolve(here, values.out) });
+      out: path.resolve(here, values.out), face });
     console.log(JSON.stringify(result, null, 2));
     process.exitCode = result.ok ? 0 : 1;
   }
