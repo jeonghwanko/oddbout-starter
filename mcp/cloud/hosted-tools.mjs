@@ -104,7 +104,9 @@ const INLINE_CANDIDATE_BYTES = 2_000_000;
  * @returns {Promise<Array<{type:'image', mimeType:'image/webp', data:string}>>}
  */
 export async function hostedCandidateImages(job, fetcher, { signal, deadline }) {
-  if (job?.status !== 'appearance_ready' || !UUID.test(job.id) || job.candidates?.length !== 2 || signal.aborted || Date.now() >= deadline) return [];
+  // Keep finished looks available after selection, including a provider stop. Working polls use the card's signed URLs
+  // instead of downloading and sending the same pair of images every 25 seconds.
+  if (!job || HOSTED_WORKING.has(job.status) || !UUID.test(job.id) || job.candidates?.length !== 2 || signal.aborted || Date.now() >= deadline) return [];
   const cancel = new AbortController();
   try {
     const prefix = '/storage/v1/object/sign/af-generation/jobs/' + job.id + '/';

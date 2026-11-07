@@ -68,9 +68,10 @@ function render(result){
   if(!result)return;
   result=latest(decoded(result));
   const output=result.structuredContent || {}, job=output.job, blocks=(result.content || []).filter(b=>b.type==='image' && b.mimeType==='image/webp');
-  const inline=output.previewPair===true && job?.status==='appearance_ready' && blocks.length===2 &&
+  const pair=job?.candidates?.length===2 && job.candidates[0].key==='a' && job.candidates[1].key==='b';
+  const inline=output.previewPair===true && pair && blocks.length===2 &&
     blocks.every(b=>typeof b.data==='string' && b.data.length<=2666668 && /^[A-Za-z0-9+/]+=*$/.test(b.data));
-  const urls=job?.status==='appearance_ready' && job.candidates?.length===2 ? ['a','b'].map((k,i)=>safeUrl(job.candidates[i].url,job,k,i)) : [];
+  const urls=pair ? ['a','b'].map((k,i)=>safeUrl(job.candidates[i].url,job,k,i)) : [];
   if(!inline && !(urls.length===2 && urls.every(Boolean))){
     if(!result.structuredContent)return;
     if(output.statusSummary){renderStatus(output);
@@ -102,14 +103,14 @@ function render(result){
   }
   const grid=node('div');grid.className='looks';
   ['A','B'].forEach((key,i)=>{
-    const fig=node('figure'), label=say('Candidate ','후보 ')+key, img=node('img');
+    const fig=node('figure'), label=say('Candidate ','후보 ')+key+(job.choice===key.toLowerCase()?say(' · Selected',' · 선택됨'):''), img=node('img');
     img.alt=label;img.referrerPolicy='no-referrer';
     const failure=()=>img.replaceWith(node('p',say('Image unavailable','그림을 표시할 수 없습니다')));
     img.onerror=()=>{if(inline && urls[i]){img.onerror=failure;img.src=urls[i]}else failure()};
     fig.append(node('figcaption',label),img);grid.append(fig);
     img.src=inline?'data:image/webp;base64,'+blocks[i].data:urls[i];
   });
-  root.replaceChildren(node('h2',say('Compare the two looks','두 외형 비교')),grid);
+  root.replaceChildren(node('h2',job.status==='appearance_ready'?say('Compare the two looks','두 외형 비교'):say('Existing looks','기존 외형 시안')),grid);
   statusNodes(output).forEach(n=>root.append(n));
 }
 function ticketNodes(ticket){
