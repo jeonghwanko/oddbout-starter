@@ -1,9 +1,12 @@
-# Pull requests to main and pushes to main; main requires this check before a merge.
-# Each tree is tested once (2026-11-07: one release ran this suite five times, about 12 minutes each):
-# - A draft pull request runs nothing. Marking it ready (`gh pr ready`) runs it, and so does every push after that.
-# - A push to main that only merges a pull request whose head already contained main has that head's tree. When that head
-#   passed `test`, the push runs `merged` alone (seconds), not the suite again. A merge of a head behind main, a squash or
-#   rebase merge, and a direct push run the suite.
+# Pull requests to main, and main itself every three hours; main requires this check before a merge.
+# Runs are batched (2026-11-07: one release ran this suite, about 11 minutes, five times; three hours of merges ran it
+# eight times on main):
+# - A draft pull request runs nothing. Marking it ready (`gh pr ready`) runs it at once.
+# - A push to a ready pull request waits four minutes first. Another push in that time cancels the waiting run, so a burst
+#   of pushes runs the suite once, on the last one.
+# - Merges to main run nothing. Every three hours `gate` looks at main's head: when that commit already passed `test`, or
+#   it merges a pull request head that passed `test` with the same tree, nothing runs; otherwise the suite runs once for
+#   everything merged since. Run it at once with `gh workflow run test --ref main` (before a deploy, for example).
 # A job skipped by its `if` reports success. A draft cannot merge, and marking it ready starts the real run.
 # GitHub skips the run when a PR's last commit message carries a skip-ci marker anywhere, body included (this PR's
 # first commit quoted it in an explanation and was skipped), and the required check then never reports.
@@ -13,8 +16,8 @@ on:
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened, ready_for_review]
-  push:
-    branches: [main]
+  schedule:
+    - cron: '23 */3 * * *' # main's head, at most once per three hours (GitHub may start it late)
   workflow_dispatch:
 permissions:
   contents: read
@@ -22,9 +25,9 @@ concurrency:
   group: test-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
-  # On a push to main: is this the tree a pull request's head already passed `test` with?
-  merged:
-    if: github.event_name == 'push'
+  # Every three hours on main: has this tree already passed `test`?
+  gate:
+    if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -35,28 +38,38 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2 # the pushed commit and its parents
+          fetch-depth: 2 # main's head and its parents
       - id: head
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          passed() {
+            n=$(gh api "repos/$GITHUB_REPOSITORY/commits/$1/check-runs?check_name=test&filter=latest" \
+              --jq '[.check_runs[] | select(.conclusion == "success")] | length') || n=0
+            [ "${n:-0}" -gt 0 ]
+          }
           tested=false
-          if head=$(git rev-parse -q --verify HEAD^2) && [ "$(git rev-parse 'HEAD^{tree}')" = "$(git rev-parse "$head^{tree}")" ]; then
-            passed=$(gh api "repos/$GITHUB_REPOSITORY/commits/$head/check-runs?check_name=test&filter=latest" \
-              --jq '[.check_runs[] | select(.conclusion == "success")] | length') || passed=0
-            if [ "${passed:-0}" -gt 0 ]; then tested=true; echo "Merges $head, which passed test with this tree: not run again."; fi
+          if passed "$GITHUB_SHA"; then
+            tested=true; echo "$GITHUB_SHA already passed test: not run again."
+          elif head=$(git rev-parse -q --verify HEAD^2) && [ "$(git rev-parse 'HEAD^{tree}')" = "$(git rev-parse "$head^{tree}")" ] \
+            && passed "$head"; then
+            tested=true; echo "Merges $head, which passed test with this tree: not run again."
           fi
           echo "tested=$tested" >> "$GITHUB_OUTPUT"
   test:
-    needs: merged
-    # needs + !cancelled(): runs where `merged` was skipped (pull requests, dispatch) or failed (then nothing is known).
+    needs: gate
+    # needs + !cancelled(): runs where `gate` was skipped (pull requests, dispatch) or failed (then nothing is known).
     if: >-
       !cancelled()
       && !(github.event_name == 'pull_request' && github.event.pull_request.draft)
-      && !(github.event_name == 'push' && needs.merged.outputs.tested == 'true')
+      && !(github.event_name == 'schedule' && needs.gate.outputs.tested == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      # A newer push to the same pull request cancels this run here, before anything is installed (concurrency above).
+      - name: wait for more pushes
+        if: github.event_name == 'pull_request' && github.event.action == 'synchronize'
+        run: sleep 240
       - uses: actions/checkout@v4
         with:
           submodules: true
