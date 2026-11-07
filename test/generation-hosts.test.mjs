@@ -146,15 +146,33 @@ test('a claim carrying the heartbeat records it first and says so; a bare claim 
     assert.deepEqual([bare.ok, bare.stage, bare.beat], [true, 'idle', undefined]);
     assert.equal((await seen()).worker_seen_at, null);
     assert.equal((await call('GET', 'generations/host', undefined, theirs)).body.host.online, false);
-    const carried = (await claim({ health: { ok: true, codex: false, grok: true } })).body;
+    const carried = (await claim({ health: { ok: true, codex: false, grok: true }, usage: { usedPercent: 42.5, windowMinutes: 300 } })).body;
     assert.deepEqual([carried.ok, carried.stage, carried.beat], [true, 'idle', true]);
+    // The subscription's reading rides along as on the heartbeat route; one that does not parse is left out, never the claim.
+    assert.deepEqual((await sql.query('select usage from public.af_generation_hosts where not official')).rows[0].usage, { usedPercent: 42.5, windowMinutes: 300 });
+    assert.equal((await claim({ health: { ok: true, codex: false, grok: true }, usage: { usedPercent: 'lots' } })).body.beat, true);
     const row = await seen();
     assert.ok(row.worker_seen_at);
     assert.deepEqual([row.worker_health.ok, row.worker_health.grok], [true, true]);
     assert.equal((await call('GET', 'generations/host', undefined, theirs)).body.host.online, true);
-    // Checked as the heartbeat route checks it; nothing else rides along.
+    // Checked as the heartbeat route checks it; nothing else rides along. The heartbeat route says claims take one.
     assert.equal((await claim({ health: 'ok' })).body.code, 'invalid-health');
     assert.equal((await claim({ health: { ok: true }, lease: 1 })).body.code, 'invalid-body');
+    assert.equal((await call('POST', 'generation-worker/heartbeat', { health: { ok: true } }, key)).body.claimBeats, true);
+  } finally { await sql.close(); }
+});
+
+// The carried health is recorded before the claim reads it: the official host's brief needs codex.
+test('a claim carrying the health it reports is judged on that health, not the one recorded before', async () => {
+  const { sql, call, work, healthy } = await generation();
+  try {
+    await healthy(); // recorded: codex ok
+    const job = (await call('POST', 'generations', { description: '빨간 글러브를 낀 고양이 복서', language: 'ko' }, undefined,
+      { 'idempotency-key': crypto.randomUUID() })).body.job;
+    const down = (await work('POST', 'claim', { health: { ok: true, codex: false, grok: true } })).body;
+    assert.deepEqual([down.stage, down.beat, down.job], ['idle', true, undefined]);
+    const up = (await work('POST', 'claim', { health: { ok: true, codex: true, grok: true } })).body;
+    assert.deepEqual([up.beat, up.job?.id, up.job?.status], [true, job.id, 'queued']);
   } finally { await sql.close(); }
 });
 

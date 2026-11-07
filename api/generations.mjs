@@ -731,7 +731,9 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       if (usageReading(beat.usage)) await call('af_generation_host_usage', { p_host: host, p_usage: beat.usage }).catch(skipped('generation', 'host-usage'));
       return call('af_generation_host_heartbeat', { p_host: host, p_health: beat.health });
     };
-    if (route === 'generation-worker/heartbeat') return { ok: true, capabilities: await recordBeat(fields(body, ['health', 'usage'])) };
+    // `claimBeats`: this server also takes the heartbeat on a claim (2026-11-07). A worker carries it there only after hearing this, so on an
+    // older server it never relies on a claim reading health the server did not record.
+    if (route === 'generation-worker/heartbeat') return { ok: true, capabilities: await recordBeat(fields(body, ['health', 'usage'])), claimBeats: true };
     // Which of this host's jobs are over for him (the worker closes their folders). A community host: his own jobs that ended. The official
     // host writes every job's brief, so it also hears of jobs that ended anywhere, and of jobs another host took after its brief (2026-10-28 —
     // the brief folder of the first test host's job stayed open on the office PC and blocked og setup).
@@ -750,7 +752,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     if (route === 'generation-worker/claim') {
       // A claim may carry the heartbeat (2026-11-07): idle claims and the minute's heartbeats were 83 % of the project's Edge requests
       // (17,966 on 2026-11-06, the free plan's month being 500,000). It is recorded first, as the claim reads the host's health, and
-      // `beat: true` tells the worker so: it stops beating apart. A worker sending none gets no `beat` and beats on its own route.
+      // `beat: true` confirms it. A claim without one is unchanged.
       const beat = fields(body, ['health', 'usage']);
       const beaten = beat.health === undefined ? {} : (await recordBeat(beat), { beat: true });
       const row = await call('af_generation_claim_for', { p_host: host });
