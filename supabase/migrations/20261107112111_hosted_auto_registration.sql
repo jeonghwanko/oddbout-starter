@@ -120,3 +120,66 @@ begin
   insert into public.af_generation_events(job_id, kind, data) values (p_id, 'operator', jsonb_build_object('action', 'retry', 'to', next, 'actor', p_actor));
   return jsonb_build_object('id', j.id, 'status', j.status);
 end $$;
+
+-- Completed art survives submission infrastructure failures. Exhausted leases stop automatic retries
+-- for operator recovery; a missing community host never releases the same package to another PC.
+-- Restated from 20261105100000 / 20261106120000; generation-stage limits and host selection stay intact.
+create or replace function public.af_generation_host_lost() returns integer language plpgsql security invoker set search_path = '' as $$
+declare n integer;
+begin
+  with lost as (
+    select j.id, j.status, j.assigned_host, h.worker_seen_at, (j.status = 'submitting' or j.lease_token is not null or j.stage_leases > 0) as needs_attention
+    from public.af_generation_jobs j join public.af_generation_hosts h on h.id = j.assigned_host
+    where j.status in ('appearance', 'motions', 'submitting') and coalesce(j.lease_expires_at, '-infinity') < now()
+      and not h.official and not public.af_generation_host_online(h) and coalesce(h.worker_seen_at, '-infinity') < now() - interval '1 day'
+    for update of j skip locked),
+  ended as (
+    update public.af_generation_jobs j set status = case when l.needs_attention then 'needs_review' else 'failed' end,
+      error_code = case when l.needs_attention then l.status || '-host-lost' else 'host-lost' end, lease_token = null, lease_expires_at = null,
+      updated_at = now()
+    from lost l where j.id = l.id
+    returning j.id, l.status as stage, j.status as moved, l.assigned_host, l.worker_seen_at)
+  insert into public.af_generation_events(job_id, kind, data)
+    select e.id, 'host-lost', jsonb_build_object('status', e.stage, 'to', e.moved, 'host', e.assigned_host, 'lastSeenAt', e.worker_seen_at)
+    from ended e;
+  get diagnostics n = row_count;
+  return n;
+end $$;
+
+create or replace function public.af_generation_claim_for(p_host uuid) returns public.af_generation_jobs
+language plpgsql security invoker set search_path = '' as $$
+declare row public.af_generation_jobs; h public.af_generation_hosts; others boolean; room boolean; images text[];
+begin
+  -- The host row is held (key share) until this claim commits: a removal waits for it and then sees the job it took.
+  select * into h from public.af_generation_hosts where id = coalesce(p_host, public.af_generation_official()) for key share;
+  if not found or h.removed_at is not null or not h.enabled or not (h.approved or h.terms_accepted_at is not null) then return null; end if;
+  perform public.af_generation_expire();
+  update public.af_generation_jobs set status = case when status = 'submitting' then 'needs_review' else 'failed' end, error_code = 'stage-attempts', lease_token = null, lease_expires_at = null, updated_at = now()
+    where public.af_generation_working(status) and stage_leases >= 3 and coalesce(lease_expires_at, '-infinity') < now();
+  perform public.af_generation_host_lost();
+  others := exists(select 1 from public.af_generation_hosts o where not o.official and o.accepts_any and public.af_generation_host_online(o)
+    and public.af_generation_host_today(o.id) < o.daily_limit);
+  images := public.af_generation_host_images(h);
+  -- The official host's claims go one at a time: two workers must not both take the day's last start.
+  if h.official then perform pg_advisory_xact_lock(74280504); end if;
+  room := not h.official or public.af_generation_official_wait() is null;
+  select j.* into row from public.af_generation_jobs j
+    where public.af_generation_working(j.status) and (j.lease_expires_at is null or j.lease_expires_at < now())
+      and ((j.status = 'queued' and h.official and coalesce((h.worker_health->>'codex')::boolean, true))
+        or (j.status <> 'queued' and j.image_provider = any(images)
+          and (h.approved or (j.owner_id = h.owner_id and j.host_choice = 'host' and j.requested_host = h.id))
+          and (j.assigned_host = h.id
+            or (j.assigned_host is null and ((j.host_choice = 'oddbout' and h.official and (room or public.af_generation_is_admin(j.owner_id)))
+              or (j.host_choice = 'host' and j.requested_host = h.id)
+              or (j.host_choice = 'any' and h.accepts_any and (case when h.official then room else public.af_generation_host_today(h.id) < h.daily_limit end)
+                and (not h.official or not others or j.updated_at < now() - interval '3 minutes')))))))
+    order by public.af_generation_is_admin(j.owner_id) desc, j.updated_at, j.id limit 1 for update skip locked;
+  if not found then return null; end if;
+  update public.af_generation_jobs set lease_token = gen_random_uuid(), lease_expires_at = now() + interval '5 minutes', stage_leases = stage_leases + 1,
+    assigned_host = case when status = 'queued' then assigned_host else coalesce(assigned_host, h.id) end,
+    started_at = case when status = 'queued' then started_at else coalesce(started_at, now()) end
+    where id = row.id returning * into row;
+  insert into public.af_generation_events(job_id, kind, data) values (row.id, 'claimed',
+    jsonb_build_object('status', row.status, 'lease', row.stage_leases, 'host', h.id));
+  return row;
+end $$;

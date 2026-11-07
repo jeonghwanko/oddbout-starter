@@ -245,7 +245,7 @@ test('the worker learns which of its own jobs ended, and finds the folders it ha
 // good, holding its creator's request and free fighter (a registration under way cannot even be cancelled). A day after its last report,
 // every claim ends it: the stage it took and never finished goes to an operator (whether a paid run went out is only on that PC), a stage it
 // never took fails. Neither moves to another host, and the official host's jobs wait for it.
-test('a job whose community host is gone a day goes to an operator if its stage ran there, fails if not, and never moves', async () => {
+test('a job whose community host is gone preserves uncertain work and completed art, and never moves', async () => {
   const { sql, owner, call, work, healthy } = await generation();
   const theirs = 'other-token-0123456789';
   try {
@@ -303,8 +303,8 @@ test('a job whose community host is gone a day goes to an operator if its stage 
     await beat();
     assert.deepEqual((await host('ended', { jobs: [open.id] })).body.ended, [open.id]);
 
-    // Registrations under way (no creator's cancel reaches them): one the host held goes to an operator, one it never took fails. A job
-    // that used its three leases still fails as before. The official host's job waits for it, however long it has been away. Any host's
+    // Registrations preserve their completed art even if the host has not claimed submission yet. Generation stages
+    // that used three leases still fail as before. The official host's job waits for it, however long it has been away. Any host's
     // claim runs the rule: here a second PC's, the creator's own (an official claim would take the official host's job back).
     const officialHost = (await sql.query('select id from public.af_generation_hosts where official')).rows[0].id;
     const insert = async (status, hostId, leases, leased) => (await sql.query(`insert into public.af_generation_jobs(owner_id, idempotency_key,
@@ -325,7 +325,7 @@ test('a job whose community host is gone a day goes to an operator if its stage 
     const rows = Object.fromEntries((await sql.query("select id, status, error_code from public.af_generation_jobs where status not in ('cancelled', 'failed') or id = any($1)",
       [[untaken, spent]])).rows.map(row => [row.id, [row.status, row.error_code]]));
     assert.deepEqual(rows[heldRegistration], ['needs_review', 'submitting-host-lost']);
-    assert.deepEqual(rows[untaken], ['failed', 'host-lost']);
+    assert.deepEqual(rows[untaken], ['needs_review', 'submitting-host-lost']);
     assert.deepEqual(rows[spent], ['failed', 'stage-attempts']);
     assert.deepEqual(Object.values(rows).filter(([status]) => status === 'motions'), [['motions', null]]);
     // Waiting for an operator, the registration can be cancelled now.

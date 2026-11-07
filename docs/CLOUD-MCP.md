@@ -592,7 +592,7 @@ ODDBOUT의 생성 워커가 사용자의 말(과 그림 1~2장)로 선수를 만
 | `get_hosted_fighter` | 작업 상태, 외형 후보 둘·동작 미리보기의 서명 URL(10분), 프로필 초안, `next`. `jobId` 또는 원래 `idempotencyKey` 하나로 조회하며 둘 다 없으면 최근 다섯 신청, 열림 여부, 보유 토큰(`tokens`: granted·spent·balance). 최근 목록의 각 작업은 요약(상태·진행률·설명·이름·시각·그 작업이 쓴 토큰 `tokens`·`siteUrl`)이고, 자세한 내용은 `jobId`로 읽는다(2026-11-05). 키 조회는 새 신청·업로드를 하지 않는다. `waitSeconds`(25초까지)는 찾은 작업의 상태를 기다린다. `next`가 지켜보라고만 하는 단계에서는 짧은 답(`watch: true`)을 준다: 차례를 기다리는 줄(`queue.reason` `turn`)과 외형을 그리는 중, 동작, 포장(`submitting`), 서버 검사 중인 제출. 같은 대기라도 생성 용량(`usage`)·운영 중지(`paused`)·커뮤니티 호스트를 기다리는 작업, 고를 때(`appearance_ready`·`motion_ready`), 사람 확인, 끝났을 때와 `waitSeconds` 없는 조회는 전체를 준다. 짧은 답은 상태·진행률·대기 순서·제출 단계, 이번 대기에 바뀐 것 `changed`(`status`·`progress`·`submission`·`pictures`), 동작 중이면 대기 시작 90초 전부터 더하거나 바뀐 그림 모두 `pictures`(최신 먼저 12장까지, 넘치면 `more`. 각각 `kind`·`clip`·`name`·`state`·`url`·`new` — 이번 대기에 왔으면 `new: true`. 한 이벤트에 여러 장이 와도, 두 조회 사이에 여러 번 와도 다 든다), 있는 그림의 이름 목록 `made`, 맡기기면 ODDBOUT이 고른 외형 `look`(`choice`·`url`)이다(MCP 리뷰 2026-11-05) |
 | `choose_hosted_look` | 후보 `a`·`b` 고르기, 또는 한 문장 수정(두 장을 다시 그린다) |
 | `revise_hosted_motion` | 동작 하나를 한 문장으로 다시. 나머지 동작은 그대로 |
-| `register_hosted_fighter` | 사용자가 동작을 승인한 뒤 등록. 프로필은 워커 초안 위에 사용자가 바꾼 칸만 얹는다(언어별 이름·대사는 칸별로). 다른 선수와 같은 서버 검사를 거친다 |
+| `register_hosted_fighter` | 예전 `motion_ready` 작업의 등록을 이어간다. 모션 승인은 필요 없으며 새 작업은 자동 등록된다. 프로필은 워커 초안 위에 사용자가 바꾼 칸만 얹는다(언어별 이름·대사는 칸별로). 다른 선수와 같은 서버 검사를 거친다 |
 | `cancel_hosted_fighter` | 신청 취소. 이미 쓴 토큰은 돌아오지 않는다(보유 토큰, 2026-10-31) |
 | `start_picture_upload` | 그림 올리기 표(30분, 그림 둘). 사이트 링크(`page`)를 주고, `terminal: true`면 터미널 명령(`command`)도 준다. 아래 |
 | `get_picture_upload`(`/mcp`에서 `get_hosted_fighter` view `upload`) | 표가 받은 그림(`uploads`: id·크기·`url` 10분·`used`·`usable`)과 닫힌 까닭(`closed`) |
@@ -656,7 +656,7 @@ ChatGPT 밖의 에이전트(Grok·Claude·Gemini CLI·Codex CLI·Cursor의 Grok 
 배포 순서: 마이그레이션 → `ai-fighter` → Render → 사이트(게임 저장소의 그림 보내기 화면) → `ai-fighter-mcp`. 도구가 주는 링크는 사이트가 먼저 있어야 열린다.
 
 성공한 작업 응답에는 `next`(`hostedNext`)가 있다(목록은 각 `jobs[].next`): 사용자에게 무엇을 보이고 물을지, 또는 얼마나 기다릴지.
-한 선수는 대략 신청 → 외형 두 장(몇 분) → 고르기 → 동작 11개(15~30분) → 확인 → 등록이다.
+한 선수는 대략 신청 → 외형 두 장(몇 분) → 고르기 → 동작 11개(15~30분) → 자동 등록이다. 출전은 주인이 사이트에서 동작을 확인한 뒤 한다.
 
 ### 작업 공간 없는 에이전트의 길 (Grok 점검, 2026-11-03)
 
@@ -773,7 +773,7 @@ URL 재발급과 신규 접수가 열린 상태에서 다른 계정의 키 조�
 **맡기기**(`delegate`, 2026-10-28): 사용자가 "알아서 해 줘"라고 하면 외형 고르기를 ODDBOUT이 한다. 워커가 두 장을 그린 뒤 codex 판정(도구 끔)이
 설명과 맞고 온몸·옆모습·깨끗한 한 장을 고른다. 고르면 기다리지 않고 동작으로 넘어간다(작업 열 `delegate`, 이관
 `20261028120000_oddbout_hosted_generation_delegate`). 둘 다 마땅치 않으면 원래대로 사용자에게 묻는다. 사용자가 외형에 수정 문장을 주면 그 뒤로는
-그가 고른다. 동작 확인과 등록은 맡기기여도 사용자가 한다. 그래서 사용자가 답하는 곳은 끝의 한 번이다.
+그가 고른다. 이후 동작 제작과 등록은 자동으로 이어지며, 출전은 주인이 사이트에서 한다.
 
 ### 커뮤니티 호스트(2026-10-28)
 
