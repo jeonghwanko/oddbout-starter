@@ -298,6 +298,29 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     const name = `${kind}-${row.appearance_revisions}-${row.choice}`;
     return (data ?? []).some(/** @param {{ data: any }} event */ event => event.data?.outcome === 'chosen' && event.data?.artifact === name) ? name : null;
   }
+  /** A verified server timeout selection, never inferred from A or the clock. A later answer/revision invalidates older evidence.
+   * @param {Job} row
+   * @returns {Promise<{ choice: 'a', selectedAt: string, deadline: string } | null>}
+   */
+  async function autoSelectionOf(row) {
+    if (row.choice !== 'a' || !['motions', 'motion_ready', 'submitting', 'submitted', 'needs_review'].includes(row.status)) return null;
+    try {
+      const { data, error } = await db.from('af_generation_events').select('at,kind,data').eq('job_id', row.id)
+        .in('kind', ['appearance-auto-selected', 'appearance-answer']).order('id', { ascending: false }).limit(1);
+      if (error) throw error;
+      const event = data?.[0], said = event?.data;
+      // Worker progress data carries its own `kind`; only the server's event has this exact payload.
+      if (event?.kind !== 'appearance-auto-selected' || !isObject(said)
+        || Object.keys(said).some(key => !['choice', 'reason', 'deadline'].includes(key)) || said.choice !== 'a' || said.reason !== 'no-answer'
+        || typeof event.at !== 'string' || typeof said.deadline !== 'string') return null;
+      const selectedAt = Date.parse(event.at), deadline = Date.parse(said.deadline);
+      if (!Number.isFinite(selectedAt) || !Number.isFinite(deadline) || selectedAt < deadline) return null;
+      return { choice: 'a', selectedAt: new Date(selectedAt).toISOString(), deadline: new Date(deadline).toISOString() };
+    } catch (error) {
+      // A failed optional history read must not hide a finished fighter or invent a manual/automatic choice.
+      logSkipped('generation', 'appearance-auto-selection', error); return null;
+    }
+  }
   /**
    * Why a job that went in holds no profile set (2026-11-07, 깔깔이: his square front was refused and nothing but an event said so): the
    * worker's latest `profile-front` event, its outcome (PROFILE_FRONT_OUTCOMES) and codes. Null before its package went in, once it has a set,
@@ -345,7 +368,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       row.host_choice === 'oddbout' && !row.started_at && ['queued', 'appearance'].includes(row.status) ? call('af_generation_queue', { p_id: row.id }) : null,
       taken === undefined ? jobTokens([row.id]) : taken,
       // One job's read only: a list (tokens read for it at once) shows no next per job.
-      taken === undefined ? profileFrontOf(row) : null]);
+      taken === undefined ? profileFrontOf(row) : null, autoSelectionOf(row)]);
     const drafts = value(reads[0]), side = value(reads[1]), expressions = value(reads[2]), hosts = value(reads[3]);
     const urls = await signed([...candidates.map(name => artifactPath(row.id, name)), ...preview.map(p => artifactPath(row.id, p.name)),
       ...drafts.map(d => artifactPath(row.id, d.name)), ...[side, expressions].flatMap(name => name ? [artifactPath(row.id, name)] : [])]);
@@ -354,6 +377,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       delegate: row.delegate === true, createdAt: row.created_at, updatedAt: row.updated_at, profile: row.profile ?? (isObject(row.brief?.profile) ? row.brief.profile : null),
       candidates: candidates.map((name, i) => ({ key: i === 0 ? 'a' : 'b', url: urls.get(artifactPath(row.id, name)) ?? null })), choice: row.choice ?? null,
       appearanceAutoSelectAt: row.status === 'appearance_ready' ? row.appearance_auto_select_at ?? null : null,
+      appearanceAutoSelection: value(reads[8]),
       revisionsLeft: { appearance: 2 - row.appearance_revisions, motions: 3 - row.motion_revisions },
       // The free fighter's mark (첫 선수 무료 2026-10-30), kept for a page from before: tokens decide a request now (보유 토큰 2026-10-31).
       charged: Boolean(row.charged_at) && !row.refunded_at && !['needs_review', 'failed', 'rejected'].includes(row.status)
@@ -823,6 +847,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     const at = { p_id: id(lease.jobId), p_token: id(lease.leaseToken) };
     if (route === 'generation-worker/progress') {
       if (lease.event !== undefined && (!isObject(lease.event) || JSON.stringify(lease.event).length > 2000)) throw new Problem(422, 'invalid-event');
+      if (['appearance-auto-selected', 'appearance-answer'].includes(lease.event?.kind)) throw new Problem(422, 'invalid-event');
       const row = await call('af_generation_progress', { ...at, p_progress: Number.isInteger(lease.progress) ? lease.progress : null, p_event: lease.event ?? null });
       return { ok: true, status: row.status, leaseExpiresAt: row.lease_expires_at };
     }

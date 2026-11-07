@@ -26,6 +26,7 @@ test('new looks get ten minutes; only the server tick selects A once and the sam
     const read = (await g.call('GET', `generations/${id}`)).body.job;
     assert.equal(Date.parse(read.appearanceAutoSelectAt), new Date(initial.appearance_auto_select_at).getTime());
     assert.equal(read.choice, null);
+    assert.equal(read.appearanceAutoSelection, null);
     // Boundary is inclusive, using one transaction's clock; no wall-clock sleep/generation.
     await g.sql.exec('begin');
     await g.sql.query('update public.af_generation_jobs set appearance_auto_select_at=now() where id=$1', [id]);
@@ -40,11 +41,43 @@ test('new looks get ten minutes; only the server tick selects A once and the sam
     const events = (await g.sql.query("select kind,data from public.af_generation_events where job_id=$1 and kind like 'appearance-%'", [id])).rows;
     assert.equal(events.length, 1); assert.equal(events[0].kind, 'appearance-auto-selected');
     assert.deepEqual([events[0].data.choice, events[0].data.reason], ['a', 'no-answer']);
-    assert.equal((await g.call('GET', `generations/${id}`)).body.job.appearanceAutoSelectAt, null);
+    const selectedView = (await g.call('GET', `generations/${id}`)).body.job;
+    assert.equal(selectedView.appearanceAutoSelectAt, null);
+    assert.equal(selectedView.appearanceAutoSelection.choice, 'a');
+    assert.ok(Date.parse(selectedView.appearanceAutoSelection.selectedAt) >= Date.parse(selectedView.appearanceAutoSelection.deadline));
     const claimed = (await g.work('POST', 'claim', {})).body.job;
     assert.equal(claimed.id, id); assert.equal(claimed.status, 'motions');
     assert.equal((await g.call('POST', `generations/${id}/appearance`, { choose: 'b' })).status, 409);
     assert.equal((await row(g, id)).choice, 'a', 'a late answer cannot replace art already queued');
+  } finally { await g.sql.close(); }
+});
+
+test('selection evidence rejects worker claims, invalid event times and superseded choices without inventing history', async () => {
+  const g = await generation();
+  try {
+    await g.healthy();
+    const id = await ready(g); await overdue(g, id); await tick(g);
+    const read = async () => (await g.call('GET', `generations/${id}`)).body.job.appearanceAutoSelection;
+    const original = await read(); assert.equal(original.choice, 'a');
+    const claimed = (await g.work('POST', 'claim', {})).body.job;
+    for (const kind of ['appearance-auto-selected', 'appearance-answer']) {
+      assert.equal((await g.work('POST', 'progress', { jobId: id, leaseToken: claimed.leaseToken,
+        event: { kind, choice: 'a', reason: 'no-answer', deadline: original.deadline } })).status, 422);
+    }
+    assert.deepEqual(await read(), original);
+    for (const data of [
+      { kind: 'appearance-auto-selected', choice: 'a', reason: 'no-answer', deadline: original.deadline },
+      { choice: 'a', reason: 'no-answer', deadline: 'invalid' },
+      { choice: 'a', reason: 'no-answer', deadline: '2999-01-01T00:00:00Z' },
+    ]) {
+      await g.sql.query("insert into public.af_generation_events(job_id,kind,data) values($1,'appearance-auto-selected',$2)", [id, data]);
+      assert.equal(await read(), null);
+    }
+    await g.sql.query("insert into public.af_generation_events(job_id,kind,data) values($1,'appearance-auto-selected',$2)",
+      [id, { choice: 'a', reason: 'no-answer', deadline: original.deadline }]);
+    assert.ok(await read());
+    await g.sql.query("insert into public.af_generation_events(job_id,kind,data) values($1,'appearance-answer','{\"choice\":\"a\",\"revise\":false}')", [id]);
+    assert.equal(await read(), null, 'a later explicit answer overrides an older timeout event');
   } finally { await g.sql.close(); }
 });
 
@@ -130,4 +163,19 @@ test('the chat card explains the server deadline without inventing a selection o
   ui.render({ structuredContent: { job: old, statusSummary: hostedStatus(old) } });
   assert.doesNotMatch(ui.root.text, /자동 진행|자동 선택 예정/);
   assert.doesNotMatch(hostedNext(old), /automatically selects/);
+});
+
+test('the status contract and chat card retain actual automatic selection evidence through registration', () => {
+  const selection = { choice: 'a', selectedAt: '2026-11-08T01:11:00Z', deadline: '2026-11-08T01:10:00Z' };
+  for (const status of ['motions', 'submitting', 'submitted']) {
+    const job = { id: crypto.randomUUID(), status, choice: 'a', appearanceAutoSelection: selection,
+      ...(status === 'submitted' ? { submission: { stage: 'registered' } } : {}) };
+    assert.deepEqual(hostedStatus(job).appearanceAutoSelection, selection);
+    assert.match(hostedNext(job), /automatically selected A after no answer at 2026-11-08T01:11:00Z/);
+    const ui = widget(); ui.render({ structuredContent: { job, statusSummary: hostedStatus(job) } });
+    assert.match(ui.root.text, /응답이 없어 A가 자동 선택됐습니다/);
+    const unverified = { id: crypto.randomUUID(), status, choice: 'a' };
+    ui.render({ structuredContent: { job: unverified, statusSummary: hostedStatus(unverified) } });
+    assert.doesNotMatch(ui.root.text, /자동 선택됐습니다/);
+  }
 });

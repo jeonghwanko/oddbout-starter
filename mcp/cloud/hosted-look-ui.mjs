@@ -162,6 +162,13 @@ function statusNodes(output){
       say(' · Ten minutes after the pair was ready; automatic selection may take about one extra minute. Continues even with this chat closed.',
         ' · 시안 준비 후 10분이며, 자동 선택까지 약 1분 더 걸릴 수 있습니다. 채팅을 닫아도 이어집니다.')));
   }
+  const automatic=s.appearanceAutoSelection;
+  if(automatic?.choice==='a'){
+    const selected=new Date(automatic.selectedAt);
+    if(Number.isFinite(selected.getTime()))items.push(node('p',
+      say('A was selected automatically after no answer. Selected at: ','응답이 없어 A가 자동 선택됐습니다. 선택 시각: ')
+      +selected.toLocaleString(ko()?'ko-KR':'en-US',{timeZone:'UTC'})+' UTC'));
+  }
   if(s.error)items.push(node('p',say('Reason: ','사유: ')+s.error));
   if(s.updatedAt)items.push(node('p',say('Last job update: ','작업 갱신: ')+s.updatedAt));
   if(s.checkedAt)items.push(node('p',say('Snapshot checked: ','이 카드의 확인 시각: ')+s.checkedAt));
