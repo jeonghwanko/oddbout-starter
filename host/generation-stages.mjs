@@ -19,7 +19,8 @@
 //   A seventh, optional row (2026-10-28) draws the entrance and the victory beside the six; when it fails the fighter goes without them.
 //   The action clips' previews go up as the rows finish (2026-10-30): gen-set's finished rows are extracted in a scratch run while it still draws the rest.
 // submitting: the package the motions stage left in the job folder, with the profile the creator confirmed, submitted under his account;
-//   before it, the chosen front and its face square (measured here on the uploaded WebP, `motions.py face-box`) and his expression sheet go to the job: the server
+//   before it, the chosen front (framed into a portrait card first when it is not one: Grok's are square) and its face square (measured here on
+//   the uploaded WebP, `motions.py face-box`) and his expression sheet go to the job: the server
 //   makes them his profile set when the package is registered.
 import { createHash, randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -60,6 +61,19 @@ export const EVIDENCE_LIMIT = Object.freeze({ bytes: 2 * 1024 * 1024, side: 2048
 export function pngSize(bytes) {
   if (bytes.length < 24 || bytes.readUInt32BE(0) !== 0x89504e47 || bytes.toString('latin1', 12, 16) !== 'IHDR') return null;
   return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
+}
+/** A WebP's width and height from its header (VP8X, VP8 or VP8L, as api/image-probe.mjs reads them), or null for anything else. */
+export function webpSize(bytes) {
+  if (bytes.length < 30 || bytes.toString('latin1', 0, 4) !== 'RIFF' || bytes.toString('latin1', 8, 12) !== 'WEBP') return null;
+  const chunk = bytes.toString('latin1', 12, 16);
+  if (chunk === 'VP8X') return { width: bytes.readUIntLE(24, 3) + 1, height: bytes.readUIntLE(27, 3) + 1 };
+  if (chunk === 'VP8 ' && bytes[23] === 0x9d && bytes[24] === 0x01 && bytes[25] === 0x2a)
+    return { width: bytes.readUInt16LE(26) & 0x3fff, height: bytes.readUInt16LE(28) & 0x3fff };
+  if (chunk === 'VP8L' && bytes[20] === 0x2f) {
+    const bits = bytes.readUInt32LE(21);
+    return { width: (bits & 0x3fff) + 1, height: (bits >>> 14 & 0x3fff) + 1 };
+  }
+  return null;
 }
 /** Whether an image is sent as it is: a PNG within both limits. Anything else (a reference JPEG or WebP, a large look) is fitted first. */
 export const fitsAsIs = bytes => {
@@ -482,8 +496,11 @@ export function briefPrompt(job, refCount) {
     `- profile in ${language}: name (the fighter's name), names (ko and en), description (one or two sentences), concept (personality,`,
     '  how he fights, what he wants), lines (challenge before a bout, win, lose — short, in character), stats (power, toughness, speed, 1-5 each,',
     '  summing to 9). When rejecting, still fill every field briefly and neutrally.',
-    '- look in English, for an image model that draws him full-body (first from the front, then from the side): subject (60-150 words: what he is,',
-    '  body type and proportions, face, outfit, materials, held prop and in which hand, signature details), palette (2-6 colour names),',
+    // Only his look (2026-11-07, 깔깔이): "first from the front, then from the side" came back in the subject as "Show his entire body in
+    // front view, then side view", and Grok's front stood turned. Each picture's prompt says its own view.
+    '- look in English, for an image model that draws him full-body in each picture: subject (60-150 words: what he is,',
+    '  body type and proportions, face, outfit, materials, held prop and in which hand, signature details; only how he looks, never how a',
+    '  picture shows him: no views, angles, poses, turnarounds or sheets), palette (2-6 colour names),',
     '  prop (his signature item or "none"), avoid (what must not appear). Bold cartoon style, clean outlines; never a real person\'s likeness.',
     '- motion: temper (heavy, balanced or light — how his body moves) and attack (one line: how his strikes look).',
     '',
@@ -591,15 +608,51 @@ export const GROK_FRONT_FRAMING = Object.freeze([
   'SQUARE TO THE CAMERA: head, chest, hips and both feet face the viewer, shoulders level, both toes pointing at the viewer (not turned out);',
   'not turned, not three-quarter.',
 ]);
+/**
+ * Grok's fronts still stood a little turned (2026-11-07, 깔깔이 — a plump dinosaur in a track jacket): ODDBOUT's front check failed two
+ * re-drawn fronts as "slight three-quarter" views after he was registered, when it was too late to pick another look. The front that passed
+ * was asked for as a mirror image about a centre line, with the arms hanging at the sides and the back's details hidden behind the body.
+ * These are that prompt's words for any character.
+ */
+export const GROK_FRONT_MIRROR = Object.freeze([
+  'MIRROR-SYMMETRIC FRONT VIEW, like a mugshot or an official character-select pose: imagine a vertical line down the exact middle of the',
+  'body. The nose, the mouth, the middle of the chest and belly and any fastening down the front (a zip, buttons, a tie) sit ON that line. The',
+  'left and right halves of the body are mirror images: both arms with the same shape and the same length showing, both hands the same size,',
+  'both legs the same width, both feet pointing straight at the viewer at the same height. No body turn at all: the viewer sees exactly as',
+  'much of his left side as of his right side. What is on his back (a tail, back spikes or bumps, wings, a backpack) is behind him: hidden by',
+  'the body seen from the front, at most a small tip showing.',
+]);
+/**
+ * Grok's takes (2026-11-07): both stand still and upright with the arms hanging at the sides (the front that passed); take B's "different
+ * pose with more attitude" turned the body, so its difference is the design and the expression, never the stance.
+ */
 export const GROK_FRONT_TAKES = Object.freeze({
-  a: FRONT_TAKES.a,
+  a: Object.freeze([
+    'THIS TAKE (A): the most direct reading of the description, standing still and upright, both arms relaxed and hanging straight down at',
+    'the sides.',
+  ]),
   b: Object.freeze([
     'THIS TAKE (B): a clearly different design proposal for the same character. The most obvious reading is another picture: do not draw it',
     'here. Keep everything the description states, the kind of being included (an animal stays that animal), but wherever it leaves room',
     'choose differently from its most obvious reading: silhouette and proportions, hairstyle details, the costume\'s cut, layers and accessories,',
-    'where the colours sit, and a different pose and expression with more attitude, still square to the camera.',
+    'where the colours sit, and a different expression with more attitude. The stance is the same mirror-symmetric front view: standing upright,',
+    'both arms hanging at the sides.',
   ]),
 });
+/** How often a Grok front the front check failed is drawn again (`frontChecked`): once, then the creator chooses from what there is. */
+export const GROK_FRONT_RETAKES = 1;
+/** The line a Grok front drawn again after the front check failed it adds (`frontChecked`): the earlier drawing stood turned. */
+export const GROK_FRONT_RETAKE = 'DRAW IT AGAIN, STRAIGHT ON: an earlier drawing of this take stood turned a little to one side. This time the body is not turned at all.';
+/**
+ * The brief's subject without its sentences about how a picture shows him (2026-11-07, 깔깔이: "Show his entire body in front view, then side
+ * view, keeping the tail and back bumps readable."): views, angles, turnarounds and sheets. Grok's front prompt reads the rest; a subject that
+ * is nothing but such sentences stays as it is.
+ */
+const VIEW_WORDS = /\b(?:front|side|back|rear|three-quarter|3\/4|profile|top)[- ](?:and[- ](?:front|side|back|rear)[- ])?views?\b|\bturn-?arounds?\b|\b(?:character|model|reference) sheets?\b|\b(?:seen|shown|drawn|viewed) from (?:the )?(?:front|side|back|behind|above)\b/i;
+export function frontSubject(subject) {
+  const kept = subject.split(/(?<=[.!?])\s+/).filter(sentence => !VIEW_WORDS.test(sentence));
+  return kept.length ? kept.join(' ') : subject;
+}
 export const GROK_FRONT_COLOURING = Object.freeze([
   'FLAT CEL COLOURING, as in the STYLE ANCHOR: each colour area is one flat base colour with at most one hard-edged darker shadow shape.',
   'Matte everywhere, fur, cloth, leather and metal alike: no shine spots, no gradients, no rim light, no painted fur strands or brush texture',
@@ -610,16 +663,18 @@ export const GROK_FRONT_COLOURING = Object.freeze([
  * A front candidate (2026-10-31: the creator's first look at his fighter, and his profile painting): the look brief, the house framing of
  * the roster's front concepts, our colouring, its take (`FRONT_TAKES`) and the change the creator asked (a revision round).
  */
-export function appearancePrompt(brief, note = null, take = 'a', image = GPT_IMAGE) {
+export function appearancePrompt(brief, note = null, take = 'a', image = GPT_IMAGE, retake = false) {
   const { subject, avoid } = brief.look, grok = image.provider === 'grok';
   return [
     grok ? GROK_ONE_FIGURE : null,
-    `A full-body character for a cartoon fighting game's character select: ${subject}`,
+    `A full-body character for a cartoon fighting game's character select: ${grok ? frontSubject(subject) : subject}`,
     colours(brief),
     'FRAMING: one character only, FULL BODY, FRONT VIEW facing the viewer straight on (chest, face and toes toward the camera; symmetric,',
     'not three-quarter), camera at chest height looking straight ahead. Feet flat on one invisible ground line, head to feet about 86 percent',
     'of the image height, empty margin above the head and below the feet. The whole figure fits a tall narrow card.',
     ...(grok ? GROK_FRONT_FRAMING : []),
+    ...(grok ? GROK_FRONT_MIRROR : []),
+    grok && retake ? GROK_FRONT_RETAKE : null,
     ...(grok ? GROK_FRONT_TAKES : FRONT_TAKES)[take],
     ...styleLines(),
     ...(grok ? GROK_FRONT_COLOURING : []),
@@ -886,6 +941,8 @@ const transparentArgs = (image, aspect = null) => image.provider === 'grok'
   : ['--transparent'];
 /** Front candidates since 2026-10-31 (`front-…`); a job whose looks were drawn before is a side look (`look-…`) and makes no side still. */
 export const lookNames = round => [`front-a-${round}`, `front-b-${round}`];
+/** The chosen front framed for the profile card (`frame-front`), an artifact of its own: the server takes it for that front (api/generations.mjs). */
+export const frontCardName = name => `${name}-card`;
 const sideLookNames = round => [`look-a-${round}`, `look-b-${round}`];
 /** The side still's artifact (the creator sees it with his motions): one per chosen front. */
 export const sideName = (round, choice) => `side-${round}-${choice}`;
@@ -1420,6 +1477,9 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
         : failedRun('look', look.code, look.report, since, image.limited)));
       return asOutcome(said.find(r => r.review) ?? said.find(r => r.retry === ASKS || r.retry === GROK_LIMITED) ?? said[0]);
     }
+    // Grok's fronts go through ODDBOUT's own front check before anyone sees them (2026-11-07): the one entry asks of his profile painting.
+    if (image.provider === 'grok' && codex)
+      await Promise.all(made.map((look, index) => frontChecked(job, dir, look, index === 0 ? 'a' : 'b', refs)));
     for (const [index, { name, png }] of made.entries()) {
       const webp = png.replace(/\.png$/, '.webp');
       await toWebp(png, webp);
@@ -1430,6 +1490,57 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
     // 맡기기: the first round is ours to pick. Once the creator wrote a change, the look is his to choose.
     const choice = job.delegate && !note ? await pickLook(job, dir, made) : null;
     return { outcome: 'ok', result: { candidates: names, ...(choice ? { choice } : {}) } };
+  }
+
+  /**
+   * ODDBOUT's front check on a Grok front candidate (2026-11-07, 깔깔이: two re-drawn fronts failed it as "slight three-quarter" views after he
+   * was registered, when it was too late to pick another look): the check his profile painting must pass to enter (frontJudgePrompt, codex
+   * with every tool off). A candidate it fails is drawn once more (GROK_FRONT_RETAKES) with GROK_FRONT_RETAKE, and that drawing becomes the
+   * candidate when it passes. When neither passes, or the check or the drawing cannot be made, the first drawing stays: the creator still
+   * chooses, and nothing stops the stage. Everything stays in `looks/<name>-front/`: a stage run again judges or draws only what is missing,
+   * never a paid drawing twice. Each candidate's end goes up as a `front-check` event.
+   */
+  async function frontChecked(job, dir, look, take, refs) {
+    const folder = path.join(dir, 'looks', `${look.name}-front`), done = path.join(folder, 'done.json');
+    /** @param {Record<string, unknown>} event */
+    const end = async event => {
+      await writeWhole(done, JSON.stringify(event)).catch(() => {});
+      await Promise.resolve(api.progress?.(job, undefined, { kind: 'front-check', look: look.name, ...event })).catch(() => {});
+    };
+    try {
+      if (existsSync(done)) return;
+      await mkdir(folder, { recursive: true });
+      const schemaFile = path.join(folder, 'schema.json');
+      await writeFile(schemaFile, JSON.stringify(FRONT_JUDGE_SCHEMA));
+      const check = (n, png) => judge({ verdictFile: path.join(folder, `verdict-${n}.json`), answerFile: path.join(folder, `answer-${n}.json`),
+        schemaFile, prompt: frontJudgePrompt(), refs: [png], parse: frontVerdict });
+      const failing = verdict => FRONT_CHECKS.filter(name => verdict.checks[name] !== 'pass');
+      const first = await check(0, look.png);
+      if (!first.verdict) return await end({ outcome: 'unverified', code: `judge-exit-${first.code}` });
+      const failed = failing(first.verdict);
+      if (!failed.length) return await end({ outcome: 'pass' });
+      const retake = path.join(folder, `retake-${GROK_FRONT_RETAKES}.png`), report = path.join(folder, `retake-${GROK_FRONT_RETAKES}.report.json`);
+      if (!(existsSync(retake) && await finishedLook(report))) {
+        // A retake that ran before and did not finish is never run again unseen (it may have been paid for): the first drawing stays.
+        if (existsSync(report)) return await end({ outcome: 'fail', failed, retake: 'unfinished' });
+        const promptFile = path.join(folder, `retake-${GROK_FRONT_RETAKES}.txt`);
+        await writeFile(promptFile, appearancePrompt(job.brief, job.appearanceNote ?? null, take, image, true));
+        const since = Date.now();
+        const { code } = await og(appearanceCommand({ promptFile, out: retake, report, refs, anchor: styleAnchor, image }));
+        if (code === 0) await noteImage(report, since);
+        if (code !== 0 || !existsSync(retake)) return await end({ outcome: 'fail', failed, retake: `exit-${code}` });
+      }
+      const second = await check(GROK_FRONT_RETAKES, retake);
+      if (!second.verdict || failing(second.verdict).length)
+        return await end({ outcome: 'fail', failed, retake: second.verdict ? 'fail' : 'unverified' });
+      // The first drawing is kept beside it (once: a stage run again after the copy never takes the retake for it).
+      const first0 = path.join(folder, 'take-0.png');
+      if (!existsSync(first0)) await copyFile(look.png, first0);
+      await copyFile(retake, look.png);
+      return await end({ outcome: 'retake-pass', failed });
+    } catch (/** @type {any} */ error) {
+      await end({ outcome: 'unverified', code: typeof error?.code === 'string' ? error.code : 'error' });
+    }
   }
 
   /** Whether `gen` said it finished this look: its report's `ok`. A report that is missing or unreadable is not finished. */
@@ -2240,6 +2351,11 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
    * owner can upload one); it never stops his registration.
    */
   async function profileFront(job, dir) {
+    // Every way he goes without a set is said in a `profile-front` event (2026-11-07, 깔깔이: a square front was refused and only the bare
+    // code `invalid-profile-set` said so): what happened (`outcome`), its code and the server's own error codes. The job's read shows the
+    // last one (api/generations.mjs `profileFront`), its next says it, and the operator's detail lists it.
+    const said = (outcome, code = null, extra = {}) => Promise.resolve(api.progress?.(job, undefined, { kind: 'profile-front', outcome,
+      ...(code === null ? {} : { code: String(code).slice(0, 60) }), ...extra })).catch(() => {});
     try {
       const chosen = await chosenLook(job, dir);
       if (!chosen?.front || typeof api.profileFront !== 'function') return;
@@ -2248,17 +2364,42 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       // too far right and too large, and the validator refused his set — FACE_OUTSIDE_FIGURE). A new name: a square measured before is not reused.
       const webp = chosen.file.endsWith('.webp') ? chosen.file : chosen.file.replace(/\.png$/, '.webp');
       if (!existsSync(webp)) await toWebp(chosen.file, webp);
-      const out = path.join(dir, 'looks', `${chosen.name}.artifact.face.json`);
-      if (!existsSync(out) && (await motionsPy(['face-box', webp, out])).code !== 0) return;
+      let artifact = chosen.name, posted = webp, framed = false;
+      // A front that is not a portrait (Grok's are square since 2026-11-07, #362) is framed into the card the set takes (`frame-front`, the
+      // kit's own framing: uniform scale and transparent room, never redrawn) and goes up as an artifact of its own, `<front>-card`; the
+      // face square is measured on that card. The server refused the square as it was (FRONT_ORIENTATION) and he went without a set.
+      const size = webpSize(await readFile(webp));
+      if (size && size.height <= size.width) {
+        artifact = frontCardName(chosen.name);
+        posted = path.join(dir, 'looks', `${artifact}.webp`);
+        if (!existsSync(posted)) {
+          const card = path.join(dir, 'looks', `${artifact}.png`);
+          const made = await motionsPy(['frame-front', chosen.file, card]);
+          if (made.code !== 0 || !existsSync(card)) { await said('unframed', `frame-front-exit-${made.code}`, { width: size.width, height: size.height }); return; }
+          await toWebp(card, posted);
+        }
+        // Sent each time (the server keeps the last): a stage run again finds it there.
+        await api.artifact(job, artifact, await readFile(posted));
+        framed = true;
+      }
+      const out = path.join(dir, 'looks', `${artifact}.artifact.face.json`);
+      if (!existsSync(out)) {
+        const measured = await motionsPy(['face-box', posted, out]);
+        if (measured.code !== 0) { await said('unmeasured', `face-box-exit-${measured.code}`); return; }
+      }
       const sheet = await readJson(path.join(dir, 'looks', expressionsName(job.appearanceRound, job.choice), 'uploaded.json')).catch(() => null);
-      const front = { artifact: chosen.name, face: await readJson(out) };
+      const front = { artifact, face: await readJson(out) };
       let reply = await api.profileFront(job, { ...front, ...(typeof sheet?.artifact === 'string' ? { expressions: sheet.artifact } : {}) });
       // An API from before the sheet refuses the field (`invalid-body`): the front goes alone (리뷰 2026-11-03, a host updated first).
       if (!reply?.ok && reply?.code === 'invalid-body' && typeof sheet?.artifact === 'string') reply = await api.profileFront(job, front);
-      await Promise.resolve(api.progress?.(job, undefined, { kind: 'profile-front', outcome: reply?.ok ? 'ok' : 'refused',
-        ...(reply?.ok ? {} : { code: String(reply?.code ?? 'refused').slice(0, 60) }),
-        ...(reply?.ok && reply.expressionsRefused ? { expressionsRefused: String(reply.expressionsRefused).slice(0, 60) } : {}) })).catch(() => {});
-    } catch { /* a set is a courtesy here */ }
+      if (reply?.ok) await said('ok', null, { ...(framed ? { framed: true } : {}),
+        ...(reply.expressionsRefused ? { expressionsRefused: String(reply.expressionsRefused).slice(0, 60) } : {}) });
+      else await said('refused', reply?.code ?? 'refused', { ...(framed ? { framed: true } : {}),
+        ...(Array.isArray(reply?.errors) && reply.errors.length ? { errors: reply.errors.slice(0, 5).map(e => String(e?.code ?? e).slice(0, 40)) } : {}) });
+    } catch (/** @type {any} */ error) {
+      // A set is a courtesy here: his registration goes on. What stopped it is said all the same.
+      await said('error', typeof error?.code === 'string' ? error.code : 'error');
+    }
   }
 
   async function submitting(job, dir) {

@@ -14,7 +14,8 @@ import { ALIGN_AGAIN, BEAT_LIMIT, GROK_LIMITED, BRIEF_SCHEMA, ONE_STRIDE_OF, GAI
   verdictKeyStatus, videoEntry, VIDEO_REQUESTED, REQUESTED_MODELS, writeWhole, JUDGE_MODES, PIXEL_JUDGE, checkedPixels, hybridJudgeKey, judgesMode,
   pixelJudgeKey, sidePassed, IMAGE_PROFILES, GROK_IMAGE_MODEL, appearanceCommand, chromaKeyFor, expressionsCommand, gaitStillCommand, gaitStillPrompt,
   imageFor, imageProviderOf, requestedModels, sideCommand, FRONT_TAKES, GROK_FRONT_COLOURING, GROK_FRONT_FRAMING, GROK_FRONT_TAKES,
-  GROK_ONE_FIGURE, archiveJobKey, createJudgeArchive, judgeArchiveDays, judgeImageDays, judgmentLine, numbersOnly } from './generation-stages.mjs';
+  GROK_ONE_FIGURE, archiveJobKey, createJudgeArchive, judgeArchiveDays, judgeImageDays, judgmentLine, numbersOnly, GROK_FRONT_MIRROR, GROK_FRONT_RETAKE,
+  GROK_FRONT_RETAKES, FRONT_CHECKS, frontCardName, frontSubject, webpSize } from './generation-stages.mjs';
 import { codexSessionFacts } from './codex-usage.mjs';
 import { ENGINE_SEAM_MAX as REVIEW_SEAM_MAX, ENGINE_CUE_RHYTHM as REVIEW_CUE_RHYTHM, lowMarginFeet as reviewLowMarginFeet } from '../tools/ai-fighter/gait.mjs';
 import { parseEnv, parseHealth } from './generation-worker.mjs';
@@ -1713,6 +1714,175 @@ test('the chosen front and its face square go to the job before the package; a f
   assert.equal((await unmeasured.submitting(job, other)).outcome, 'ok');
 });
 
+/** A WebP header (VP8X) of that size: enough for webpSize. */
+const webpOf = (width, height) => {
+  const bytes = Buffer.alloc(30);
+  bytes.write('RIFF', 0, 'latin1'); bytes.writeUInt32LE(22, 4); bytes.write('WEBPVP8X', 8, 'latin1'); bytes.writeUInt32LE(10, 16);
+  bytes.writeUIntLE(width - 1, 24, 3); bytes.writeUIntLE(height - 1, 27, 3);
+  return bytes;
+};
+
+test('webpSize reads a WebP\'s VP8X, VP8 and VP8L headers, and nothing else', () => {
+  assert.deepEqual(webpSize(webpOf(1024, 1024)), { width: 1024, height: 1024 });
+  const lossy = Buffer.alloc(30); lossy.write('RIFF', 0, 'latin1'); lossy.write('WEBPVP8 ', 8, 'latin1');
+  lossy[23] = 0x9d; lossy[24] = 0x01; lossy[25] = 0x2a; lossy.writeUInt16LE(683, 26); lossy.writeUInt16LE(1024, 28);
+  assert.deepEqual(webpSize(lossy), { width: 683, height: 1024 });
+  const lossless = Buffer.alloc(30); lossless.write('RIFF', 0, 'latin1'); lossless.write('WEBPVP8L', 8, 'latin1');
+  lossless[20] = 0x2f; lossless.writeUInt32LE((683 - 1) | ((1024 - 1) << 14), 21);
+  assert.deepEqual(webpSize(lossless), { width: 683, height: 1024 });
+  assert.equal(webpSize(Buffer.from('webp')), null);
+  assert.equal(webpSize(pngHeader(10, 10)), null);
+});
+
+// 깔깔이 (2026-11-07): Grok's fronts are square (#362); the profile set takes a portrait, and the server refused his (FRONT_ORIENTATION).
+test('a square front goes to the job framed into a portrait card, its face square measured on the card; every miss is an event', async () => {
+  const setUp = async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'gen-card-'));
+    await mkdir(path.join(dir, 'looks'), { recursive: true });
+    await writeFile(path.join(dir, 'looks', 'front-a-0.png'), 'square front');
+    await mkdir(path.join(dir, 'package', 'assets'), { recursive: true });
+    await writeFile(path.join(dir, 'package', 'assets', 'idle.webp'), 'idle-bytes');
+    await writeFile(path.join(dir, 'package', 'fighter.json'), JSON.stringify({ profile: { name: 'old', description: 'old' },
+      assets: [{ id: 'idle', path: 'assets/idle.webp', sha256: createHash('sha256').update('idle-bytes').digest('hex') }] }));
+    return dir;
+  };
+  const fronts = [], uploads = [], events = [], py = [];
+  let reply = { ok: true }, frameCode = 0, faceCode = 0;
+  const api = { profileFront: async (job, front) => { fronts.push(front); return reply; },
+    artifact: async (job, name, bytes) => { uploads.push([name, bytes.length]); return { ok: true }; },
+    progress: async (job, progress, event) => { if (event) events.push(event); return { ok: true }; },
+    submission: async () => ({ ok: true, stage: 'uploading', submissionId: 'sub-1' }), asset: async () => ({ ok: true }), submit: async () => ({ ok: true }) };
+  const motionsPy = async ([command, image, out]) => {
+    py.push([command, path.basename(image), path.basename(out)]);
+    if (command === 'frame-front') { if (frameCode) return { code: frameCode }; await writeFile(out, 'card png'); return { code: 0 }; }
+    if (command === 'face-box') { if (faceCode) return { code: faceCode }; await writeFile(out, JSON.stringify({ x: 266, y: 71, side: 150 })); return { code: 0 }; }
+    return { code: 1 };
+  };
+  // The appearance stage's WebP keeps the PNG's square; the card's is 683 × 1024.
+  const toWebp = async (png, webp) => writeFile(webp, png.endsWith('-card.png') ? webpOf(683, 1024) : webpOf(1024, 1024));
+  const stages = createStages({ og: async () => ({ code: 0 }), api, motionsPy, fetchBytes: async () => new Uint8Array(), toWebp });
+  const job = { id: 'j', brief, choice: 'a', appearanceRound: 0, candidates: [], profile: { name: 'Blue', description: 'Boxer.' } };
+  const frontEvents = () => events.filter(e => e.kind === 'profile-front');
+
+  const dir = await setUp();
+  assert.equal(frontCardName('front-a-0'), 'front-a-0-card');
+  assert.equal((await stages.submitting(job, dir)).outcome, 'ok');
+  // Framed from the PNG (the kit's framing, never redrawn), put up as its own artifact, measured on the card's WebP and sent as that artifact.
+  assert.deepEqual(py, [['frame-front', 'front-a-0.png', 'front-a-0-card.png'], ['face-box', 'front-a-0-card.webp', 'front-a-0-card.artifact.face.json']]);
+  assert.deepEqual(uploads, [['front-a-0-card', 30]]);
+  assert.deepEqual(fronts, [{ artifact: 'front-a-0-card', face: { x: 266, y: 71, side: 150 } }]);
+  assert.deepEqual(frontEvents(), [{ kind: 'profile-front', outcome: 'ok', framed: true }]);
+  // A stage run again frames and measures nothing again; the card goes up again (the server keeps the last) with the same square.
+  py.length = 0; fronts.length = 0;
+  await stages.submitting(job, dir);
+  assert.deepEqual([py, uploads.length, fronts[0].artifact], [[], 2, 'front-a-0-card']);
+  // Refused by the server: the event names its code and the set's own error codes. The package still goes in.
+  reply = { ok: false, code: 'invalid-profile-set', errors: [{ code: 'FRONT_ORIENTATION', path: '/front' }, { code: 'FACE_OUTSIDE', path: '/face' }] };
+  events.length = 0;
+  assert.equal((await stages.submitting(job, dir)).outcome, 'ok');
+  assert.deepEqual(frontEvents(), [{ kind: 'profile-front', outcome: 'refused', code: 'invalid-profile-set', framed: true,
+    errors: ['FRONT_ORIENTATION', 'FACE_OUTSIDE'] }]);
+  reply = { ok: true };
+
+  // A front that cannot be framed (too wide, no clear background) or measured: no set, said so, and the package goes in.
+  frameCode = 1; events.length = 0; fronts.length = 0;
+  const unframed = await setUp();
+  assert.equal((await stages.submitting(job, unframed)).outcome, 'ok');
+  assert.deepEqual([fronts, frontEvents()], [[], [{ kind: 'profile-front', outcome: 'unframed', code: 'frame-front-exit-1', width: 1024, height: 1024 }]]);
+  frameCode = 0; faceCode = 2; events.length = 0;
+  const unmeasured = await setUp();
+  assert.equal((await stages.submitting(job, unmeasured)).outcome, 'ok');
+  assert.deepEqual([fronts, frontEvents()], [[], [{ kind: 'profile-front', outcome: 'unmeasured', code: 'face-box-exit-2' }]]);
+  faceCode = 0;
+  // The card refused as an artifact (an API from before the card): said, and the package goes in.
+  const refusing = createStages({ og: async () => ({ code: 0 }), motionsPy, fetchBytes: async () => new Uint8Array(), toWebp,
+    api: { ...api, artifact: async () => { throw Object.assign(new Error('storage-unavailable'), { code: 'storage-unavailable' }); } } });
+  events.length = 0;
+  assert.equal((await refusing.submitting(job, await setUp())).outcome, 'ok');
+  assert.deepEqual(frontEvents(), [{ kind: 'profile-front', outcome: 'error', code: 'storage-unavailable' }]);
+
+  // A portrait front (GPT's, 683 × 1024 as a WebP) goes as it is: no card.
+  const portrait = await setUp();
+  py.length = 0; uploads.length = 0; fronts.length = 0;
+  const gpt = createStages({ og: async () => ({ code: 0 }), api, motionsPy, fetchBytes: async () => new Uint8Array(), toWebp: async (png, webp) => writeFile(webp, webpOf(683, 1024)) });
+  await gpt.submitting(job, portrait);
+  assert.deepEqual([py.map(([command]) => command), uploads, fronts[0].artifact], [['face-box'], [], 'front-a-0']);
+});
+
+// 깔깔이 (2026-11-07): his Grok fronts stood a little turned and failed the front check after registration. The candidates take it now.
+test('Grok front candidates take ODDBOUT\'s front check: a failed one is drawn once more and the passing drawing becomes the candidate', async () => {
+  const pass3 = { checks: Object.fromEntries(FRONT_CHECKS.map(check => [check, 'pass'])), notes: 'One character, whole, facing the viewer.' };
+  const turned = { checks: { ...pass3.checks, front: 'fail' }, notes: 'A slight three-quarter view, turned to his left.' };
+  const run = async ({ answers, retakeCode = 0, job: extra = {}, codexOn = true }) => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'gen-front-check-')), calls = [], events = [], uploads = [];
+    const og = async (args, { stdin } = {}) => {
+      calls.push({ args, stdin });
+      if (args[0] === 'codex') {
+        const picture = path.relative(path.join(dir, 'looks'), flagOf(args, '-i'));
+        await writeFile(flagOf(args, '-o'), JSON.stringify(answers[picture.replaceAll('\\', '/')] ?? pass3));
+        return { code: 0, output: '' };
+      }
+      const out = flagOf(args, '--out');
+      if (out.includes('retake') && retakeCode) { await writeFile(flagOf(args, '--report'), JSON.stringify({ ok: false })); return { code: retakeCode }; }
+      await writeFile(out, `drawn ${path.basename(out)}`);
+      await writeFile(flagOf(args, '--report'), JSON.stringify({ ok: true, provider: 'grok', model: GROK_IMAGE_MODEL }));
+      return { code: 0 };
+    };
+    const api = { artifact: async (job, name, bytes) => { uploads.push([name, String(bytes)]); return { ok: true }; },
+      progress: async (job, progress, event) => { if (event) events.push(event); return { ok: true }; } };
+    const stages = createStages({ og, api, fetchBytes: async () => new Uint8Array(), toWebp: async (png, webp) => writeFile(webp, await readFile(png)),
+      styleAnchor: '/kit/style-anchor-front.webp', codex: codexOn });
+    const job = { id: 'g', language: 'ko', refs: [], candidates: [], appearanceRound: 0, appearanceNote: null, brief, imageProvider: 'grok', ...extra };
+    const done = await stages.appearance(job, dir);
+    return { dir, calls, events, uploads, done, again: () => stages.appearance(job, dir), checks: () => events.filter(e => e.kind === 'front-check') };
+  };
+  const drawn = calls => calls.filter(c => c.args.includes('gen'));
+  const judged = calls => calls.filter(c => c.args[0] === 'codex');
+
+  // a stood turned, its retake stands straight: the retake is candidate a (the first drawing kept beside it); b passed at once.
+  const fixed = await run({ answers: { 'front-a-0.png': turned } });
+  assert.deepEqual(fixed.done, { outcome: 'ok', result: { candidates: ['front-a-0', 'front-b-0'] } });
+  assert.equal(drawn(fixed.calls).length, 2 + GROK_FRONT_RETAKES);
+  assert.equal(judged(fixed.calls).length, 3);
+  assert.ok(judged(fixed.calls).every(c => c.stdin.includes('Image 1 is the front painting a player uploaded') && c.args.includes('--disable')));
+  const retake = drawn(fixed.calls).find(c => flagOf(c.args, '--out').endsWith(path.join('front-a-0-front', 'retake-1.png')));
+  const retakePrompt = await readFile(flagOf(retake.args, '--prompt-file'), 'utf8');
+  assert.ok(retakePrompt.split('\n').includes(GROK_FRONT_RETAKE)); assert.match(retakePrompt, /THIS TAKE \(A\)/);
+  assert.equal(flagOf(retake.args, '--provider'), 'grok');
+  assert.equal(await readFile(path.join(fixed.dir, 'looks', 'front-a-0.png'), 'utf8'), 'drawn retake-1.png');
+  assert.equal(await readFile(path.join(fixed.dir, 'looks', 'front-a-0-front', 'take-0.png'), 'utf8'), 'drawn front-a-0.png');
+  assert.deepEqual(fixed.uploads.map(([name, bytes]) => [name, bytes]), [['front-a-0', 'drawn retake-1.png'], ['front-b-0', 'drawn front-b-0.png']]);
+  assert.deepEqual(fixed.checks().slice().sort((x, y) => x.look.localeCompare(y.look)), [
+    { kind: 'front-check', look: 'front-a-0', outcome: 'retake-pass', failed: ['front'] }, { kind: 'front-check', look: 'front-b-0', outcome: 'pass' }]);
+  // A stage run again draws and judges nothing again, and keeps the retake as candidate a.
+  fixed.calls.length = 0;
+  assert.equal((await fixed.again()).outcome, 'ok');
+  assert.deepEqual([drawn(fixed.calls).length, judged(fixed.calls).length], [0, 0]);
+  assert.equal(await readFile(path.join(fixed.dir, 'looks', 'front-a-0.png'), 'utf8'), 'drawn retake-1.png');
+
+  // Both drawings of a turned: the first stays (the creator still chooses), once.
+  const stillTurned = await run({ answers: { 'front-a-0.png': turned, 'front-a-0-front/retake-1.png': turned } });
+  assert.equal(stillTurned.done.outcome, 'ok');
+  assert.equal(drawn(stillTurned.calls).length, 3);
+  assert.equal(await readFile(path.join(stillTurned.dir, 'looks', 'front-a-0.png'), 'utf8'), 'drawn front-a-0.png');
+  assert.deepEqual(stillTurned.checks().find(e => e.look === 'front-a-0'), { kind: 'front-check', look: 'front-a-0', outcome: 'fail', failed: ['front'], retake: 'fail' });
+  // The retake's drawing failed: the first stays, and a stage run again never draws it unseen.
+  const lost = await run({ answers: { 'front-b-0.png': turned }, retakeCode: 1 });
+  assert.equal(lost.done.outcome, 'ok');
+  assert.deepEqual(lost.checks().find(e => e.look === 'front-b-0'), { kind: 'front-check', look: 'front-b-0', outcome: 'fail', failed: ['front'], retake: 'exit-1' });
+  lost.calls.length = 0;
+  await rm(path.join(lost.dir, 'looks', 'front-b-0-front', 'done.json'));
+  await lost.again();
+  assert.equal(drawn(lost.calls).length, 0);
+  assert.deepEqual(lost.checks().at(-1), { kind: 'front-check', look: 'front-b-0', outcome: 'fail', failed: ['front'], retake: 'unfinished' });
+
+  // No codex on the host (a SuperGrok-only PC), or a GPT job: no front check, nothing drawn again.
+  for (const options of [{ codexOn: false, answers: { 'front-a-0.png': turned } }, { job: { imageProvider: undefined }, answers: { 'front-a-0.png': turned } }]) {
+    const skipped = await run(options);
+    assert.deepEqual([drawn(skipped.calls).length, judged(skipped.calls).length, skipped.checks()], [2, 0, []]);
+  }
+});
+
 // 픽셀 판정기 (2026-11-06): the judges mode decides who judges the side takes and the walk and run loops.
 const pass5 = Object.fromEntries(SIDE_CHECKS.map(check => [check, 'pass']));
 /** A pixel judge answer as motions.py writes it. */
@@ -2076,32 +2246,64 @@ test('Grok fronts: one figure in one square front view whatever the brief says a
   assert.deepEqual([appearancePrompt(brief, null, 'a'), appearancePrompt(brief, null, 'b'), appearancePrompt(brief, 'smaller ears', 'b')].map(sha), [
     'c32c7d6b509e7bd0f52ec075c0867bb2c3076fa39327cf9ced4a05af2c7d0007', '052f441fefab9d7337baedecedfaec3ff9f0b4a23fe58efacaebf75d1a5c1400',
     'c3329a77ef09ceab8e5543c1af8cbb58c4bfe8e6317400d675bb395feeaeaa9c']);
-  const viewsBrief = { ...brief, look: { ...brief.look, subject: `${brief.look.subject} Show his entire body in front and side views.` } };
+  const views = 'Show his entire body in front view, then side view, keeping the tail and back bumps readable.';
+  const viewsBrief = { ...brief, look: { ...brief.look, subject: `${brief.look.subject} ${views} Bold cartoon styling.` } };
   const grok = imageFor({ imageProvider: 'grok', brief: viewsBrief }), gpt = imageFor({ brief: viewsBrief });
-  const grokLines = [GROK_ONE_FIGURE, ...GROK_FRONT_FRAMING, ...GROK_FRONT_TAKES.b, ...GROK_FRONT_COLOURING];
+  const grokLines = [GROK_ONE_FIGURE, ...GROK_FRONT_FRAMING, ...GROK_FRONT_MIRROR, ...GROK_FRONT_TAKES.a, ...GROK_FRONT_TAKES.b, ...GROK_FRONT_COLOURING];
   for (const take of /** @type {const} */ (['a', 'b'])) {
     const text = appearancePrompt(viewsBrief, take === 'b' ? 'a longer scarf' : null, take, grok), lines = text.split('\n');
-    // The one-figure line comes first, before the brief's own words about views; the rest of the house prompt is still there.
+    // The one-figure line comes first; the brief's own sentence about views is left out of the front (2026-11-07, 깔깔이), the rest kept.
     assert.equal(lines[0], GROK_ONE_FIGURE);
-    assert.match(lines[1], /in front and side views\.$/);
-    for (const line of [...GROK_FRONT_FRAMING, ...GROK_FRONT_TAKES[take], ...GROK_FRONT_COLOURING, ...HOUSE_COLOURING]) assert.ok(lines.includes(line), line);
+    assert.equal(lines[1], `A full-body character for a cartoon fighting game's character select: ${brief.look.subject} Bold cartoon styling.`);
+    assert.doesNotMatch(text, /side view, keeping/);
+    for (const line of [...GROK_FRONT_FRAMING, ...GROK_FRONT_MIRROR, ...GROK_FRONT_TAKES[take], ...GROK_FRONT_COLOURING, ...HOUSE_COLOURING])
+      assert.ok(lines.includes(line), line);
     assert.ok(lines.indexOf(GROK_FRONT_FRAMING[0]) > lines.findIndex(line => line.startsWith('FRAMING: one character only')));
+    assert.equal(lines.indexOf(GROK_FRONT_MIRROR[0]), lines.indexOf(GROK_FRONT_FRAMING.at(-1)) + 1);
     assert.match(text, /no side or back view, no second pose/); assert.match(text, /draw only its front view here/);
     assert.match(text, /both toes pointing at the viewer/);
+    // The mirror image about a centre line, the arms hanging at the sides, the back's details behind him: the words of the front that passed.
+    assert.match(text, /imagine a vertical line down the exact middle of the/);
+    assert.match(text, /exactly as\nmuch of his left side as of his right side/);
+    assert.match(text, /hanging (straight down )?at\s+the sides/);
+    assert.match(text, /a tail, back spikes or bumps, wings, a backpack\) is behind him/);
+    assert.doesNotMatch(text, /different pose/);
+    assert.ok(!text.includes(GROK_FRONT_RETAKE));
+    assert.ok(appearancePrompt(viewsBrief, null, take, grok, true).split('\n').includes(GROK_FRONT_RETAKE));
     assert.match(text, /pure bright green \(#00FF00\) colour filling the whole canvas edge to edge/);
     // The key line stays last: its "Do not draw" names the brief's avoid list.
     assert.match(lines.at(-1), /^Background: .* Do not draw: weapons, text\.$/);
-    // GPT's prompt for the same brief has none of it.
+    // GPT's prompt for the same brief has none of it, and keeps the brief's words whole (a retake asked of it changes nothing).
     const gptText = appearancePrompt(viewsBrief, null, take, gpt);
     for (const line of grokLines) assert.ok(!gptText.includes(line), line);
+    assert.ok(gptText.includes(views));
+    assert.equal(appearancePrompt(viewsBrief, null, take, gpt, true), gptText);
   }
-  // Take B never asks to be shown beside another take, and keeps the kind of being; take A is GPT's own.
-  assert.equal(GROK_FRONT_TAKES.a, FRONT_TAKES.a);
+  // Take B never asks to be shown beside another take, keeps the kind of being and differs in design and expression, not in stance.
+  assert.notEqual(GROK_FRONT_TAKES.a, FRONT_TAKES.a);
   assert.doesNotMatch(GROK_FRONT_TAKES.b.join(' '), /beside/);
   assert.match(GROK_FRONT_TAKES.b.join(' '), /an animal stays that animal/);
+  assert.match(GROK_FRONT_TAKES.b.join(' '), /The stance is the same mirror-symmetric front view/);
   assert.match(FRONT_TAKES.b.join(' '), /shown beside another take/);
+  // The brief asks for his look only, never for views (it used to say "first from the front, then from the side").
+  const briefText = briefPrompt({ description: 'x', language: 'ko' }, 0);
+  assert.doesNotMatch(briefText, /then from the side/);
+  assert.match(briefText, /never how a\n {2}picture shows him: no views, angles, poses, turnarounds or sheets/);
   // The side still, sheet and relaxed still are as before: only the fronts change.
   assert.ok(![sidePrompt(viewsBrief, grok), expressionsPrompt(viewsBrief, grok), gaitStillPrompt(viewsBrief, grok)].some(text => text.includes(GROK_ONE_FIGURE)));
+});
+
+test('a front\'s subject loses its sentences about views, angles and sheets, and nothing else', () => {
+  assert.equal(frontSubject('A plump dinosaur. Show his entire body in front view, then side view, keeping the tail readable. Bold outlines.'),
+    'A plump dinosaur. Bold outlines.');
+  for (const sentence of ['Show his entire body in front and side views.', 'A turnaround of him.', 'Drawn as a character sheet.',
+    'He is seen from the side.', 'Three-quarter view, smiling.', 'Front, side and back views.'])
+    assert.equal(frontSubject(`A cat boxer. ${sentence}`), 'A cat boxer.', sentence);
+  // A cape hanging from his back, a side pocket, a front zip: his look, kept.
+  const look = 'A raccoon in a cape that hangs from the back. A side pocket on his shorts. A front zip.';
+  assert.equal(frontSubject(look), look);
+  // A subject that is only such a sentence stays whole: an empty description would draw nothing of him.
+  assert.equal(frontSubject('Show him in front and side views.'), 'Show him in front and side views.');
 });
 
 test('the look judge checks the fronts\' colouring family, not their shading depth; the side judge\'s style is unchanged', () => {
@@ -2219,6 +2421,39 @@ im.save("${path.join(dir, 'front.png')}")`;
   const face = JSON.parse(await readFile(path.join(dir, 'face.json'), 'utf8'));
   // The figure is 801 px tall from y 100: a 136 px square (17 %) at its top, centred on the head (x 150-250).
   assert.deepEqual(face, { x: 132, y: 100, side: 136 });
+});
+
+test('motions.py frame-front frames a square front into the portrait card the kit makes, scaled uniformly, never redrawn', { skip: !hasPillow() }, async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'frame-front-'));
+  try {
+    // Grok's square: a figure 300 × 800 on a 1024 × 1024 transparent canvas; a wide one; one with its background left in.
+    const script = `import sys
+from PIL import Image, ImageDraw
+out = sys.argv[1]
+im = Image.new("RGBA", (1024, 1024), (0, 0, 0, 0)); d = ImageDraw.Draw(im)
+d.ellipse((462, 100, 562, 200), fill=(200, 150, 120, 255)); d.rectangle((362, 200, 661, 899), fill=(30, 30, 90, 255))
+im.save(out + "/square.png")
+wide = Image.new("RGBA", (1024, 1024), (0, 0, 0, 0)); ImageDraw.Draw(wide).rectangle((100, 400, 900, 700), fill=(30, 30, 90, 255))
+wide.save(out + "/wide.png")
+Image.new("RGBA", (1024, 1024), (0, 255, 0, 255)).save(out + "/keyed.png")`;
+    assert.equal(spawnSync('python3', ['-c', script, dir]).status, 0);
+    const frame = name => spawnSync('python3', [path.join(here, 'motions.py'), 'frame-front', path.join(dir, `${name}.png`), path.join(dir, `${name}-card.png`)]);
+    const made = frame('square');
+    assert.equal(made.status, 0, String(made.stderr));
+    // The kit's numbers (scripts/profile-set.mjs frameFront): 800 px of figure → a 1024-tall card (86 %: 881 px), 683 wide (2:3).
+    assert.deepEqual(JSON.parse(String(made.stdout)), { width: 683, height: 1024, scale: 1.1008 });
+    const measure = spawnSync('python3', ['-c', `import sys, numpy as np
+from PIL import Image
+a = np.asarray(Image.open(sys.argv[1]))[:, :, 3]; r, c = np.nonzero(a > 16)
+print(a.shape[1], a.shape[0], c.min(), r.min(), c.max() - c.min() + 1, r.max() - r.min() + 1)`, path.join(dir, 'square-card.png')]);
+    // Width, height, then the figure's box: centred, 330 × 881 (its own 300 × 800 at one scale), as the kit pastes it (floor of half the room).
+    assert.deepEqual(String(measure.stdout).trim().split(' ').map(Number), [683, 1024, 176, 71, 330, 881]);
+    for (const [name, reason] of [['wide', /wider than tall/], ['keyed', /no clear background/]]) {
+      const refused = frame(name);
+      assert.equal(refused.status, 1); assert.match(String(refused.stderr), reason);
+      assert.equal(existsSync(path.join(dir, `${name}-card.png`)), false);
+    }
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
 test('motions.py pixel-judge: a cut head, a ground line, a lost item and a ghosted frame fail their own check, and a side view stays open', { skip: !hasPillow() }, async () => {

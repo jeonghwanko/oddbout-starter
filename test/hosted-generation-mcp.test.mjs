@@ -476,6 +476,13 @@ test('next names what the user is asked or how long ODDBOUT works', () => {
   assert.match(hostedNext({ status: 'motions' }), /15 to 30 minutes/);
   assert.match(hostedNext({ status: 'motions' }), /job\.drafts as soon as it is made/);
   assert.match(hostedNext({ status: 'submitted', submission: { stage: 'registered', fighterId: 'f-1' } }), /Registered: fighter f-1/);
+  // Registered without a profile set: why, from the worker's last word on it (2026-11-07, 깔깔이: his square front was refused).
+  const registered = { status: 'submitted', submission: { stage: 'registered', fighterId: 'f-1' }, profileSetId: null };
+  assert.match(hostedNext({ ...registered, profileFront: { outcome: 'refused', code: 'invalid-profile-set', errors: ['FRONT_ORIENTATION'] } }),
+    /did not go in with it \(ODDBOUT could not make it from his chosen front: refused, invalid-profile-set, FRONT_ORIENTATION\)\. Tell the user: he enters \(출전\) only once his fighter has a front painting that passes ODDBOUT's front check: prepare_profile_set can upload one\./);
+  assert.match(hostedNext({ ...registered, profileFront: { outcome: 'unmeasured' } }), /from his chosen front: unmeasured\)/);
+  for (const job of [registered, { ...registered, profileFront: { outcome: 'ok' } }])
+    assert.match(hostedNext(job), /His profile set \(front picture\) did not go in with it: prepare_profile_set can upload one\./);
   assert.match(hostedNext({ status: 'submitted', submission: { stage: 'validating' } }), /waitSeconds/);
   assert.match(hostedNext({ status: 'rejected', error: 'real-person' }), /declined this request \(real-person\)/);
   // 사용량으로 시작 (2026-10-31): the reason a request waits — the subscription (until its reset), a pause, or other requests ahead
