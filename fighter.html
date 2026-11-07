@@ -185,8 +185,27 @@
         .boot-loading-ring { animation: none; }
       }
       html[data-boot-motion="reduce"] .boot-loading-ring { animation: none; }
+      /* 부팅 실패(2026-11-07, src/render/boot/GameBoot.ts 의 showBootFailure): 준비 표시가 한 줄과 다시 단추(페이지를 다시 연다)로 바뀐다.
+         단추를 누를 수 있게 이때만 판이 누름을 받는다. */
+      #boot-loading.is-failed {
+        pointer-events: auto;
+        padding: 0 16px;
+        text-align: center;
+      }
+      .boot-failed-line { margin: 0; }
+      .boot-failed-retry {
+        min-width: 120px;
+        min-height: 44px;
+        padding: 0 22px;
+        border: 0;
+        border-radius: 12px;
+        background: #eaff50;
+        color: #141020;
+        font: 800 16px "Pretendard", system-ui, sans-serif;
+        cursor: pointer;
+      }
     </style>
-  <script type="module" crossorigin src="/assets/fighter-DTYsAIt-.js"></script>
+  <script type="module" crossorigin src="/assets/fighter-jAY-l6Fq.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-B0Z9INg1.js">
   <link rel="modulepreload" crossorigin href="/assets/_oddbout-analytics-DfJ7iKZO.js">
   <link rel="modulepreload" crossorigin href="/assets/pseudo-B3ZLOM_E.js">
@@ -200,27 +219,29 @@
   <link rel="modulepreload" crossorigin href="/assets/oddboutSession-Bf9m-kLP.js">
   <link rel="modulepreload" crossorigin href="/assets/catalog-CEcV9Fij.js">
   <link rel="modulepreload" crossorigin href="/assets/localeLoader-Ds4pezaf.js">
-  <link rel="modulepreload" crossorigin href="/assets/accountControl-tCKTzCWp.js">
+  <link rel="modulepreload" crossorigin href="/assets/chrome-Dc50d3Nx.js">
+  <link rel="modulepreload" crossorigin href="/assets/GameMenuState-BovYqjSP.js">
+  <link rel="modulepreload" crossorigin href="/assets/accountControl-Cwlg6slr.js">
   <link rel="modulepreload" crossorigin href="/assets/FighterIdentity-BKkMfkt-.js">
   <link rel="modulepreload" crossorigin href="/assets/arenaRankings-Dg4jOQ5W.js">
   <link rel="modulepreload" crossorigin href="/assets/CityTournamentRules-BPYwbSMx.js">
   <link rel="modulepreload" crossorigin href="/assets/UtcTime-BFPbMiHs.js">
-  <link rel="modulepreload" crossorigin href="/assets/rankedDuels-2zhes8Xj.js">
+  <link rel="modulepreload" crossorigin href="/assets/rankedDuels-DPwYufUd.js">
   <link rel="modulepreload" crossorigin href="/assets/RuntimeOptions-BM7dqT3w.js">
   <link rel="modulepreload" crossorigin href="/assets/PhaserTextureFamilies-C8vBSGBz.js">
-  <link rel="modulepreload" crossorigin href="/assets/UiFeedback-EfOAZy89.js">
-  <link rel="modulepreload" crossorigin href="/assets/arena-bout-rules-O9P_x5dv.js">
+  <link rel="modulepreload" crossorigin href="/assets/UiFeedback-BMhbI0_I.js">
+  <link rel="modulepreload" crossorigin href="/assets/arena-bout-rules-CBWPKwHh.js">
   <link rel="modulepreload" crossorigin href="/assets/CityFighterIds-D4IjlMNC.js">
   <link rel="modulepreload" crossorigin href="/assets/ArenaRoster-6t8Onowz.js">
   <link rel="modulepreload" crossorigin href="/assets/FighterCombat-BHJXm-86.js">
   <link rel="modulepreload" crossorigin href="/assets/arena-concept-runtime-CbVbG3va.js">
   <link rel="modulepreload" crossorigin href="/assets/ArenaArtCatalog-CujLPfbD.js">
-  <link rel="modulepreload" crossorigin href="/assets/ArenaGoldDropView-Cn3CT8w_.js">
+  <link rel="modulepreload" crossorigin href="/assets/ArenaGoldDropView-ClZ2P0oN.js">
   <link rel="modulepreload" crossorigin href="/assets/TwitchArenaBout-nD4PmNuG.js">
-  <link rel="modulepreload" crossorigin href="/assets/GameBoot-BzE7kaoH.js">
-  <link rel="modulepreload" crossorigin href="/assets/ArenaBracketPlate-DE51ViVK.js">
+  <link rel="modulepreload" crossorigin href="/assets/GameBoot-onOL1lCc.js">
+  <link rel="modulepreload" crossorigin href="/assets/ArenaBracketPlate-BWjfzRHY.js">
   <link rel="stylesheet" crossorigin href="/assets/accountControl-CWZ8z-IX.css">
-  <link rel="stylesheet" crossorigin href="/assets/fighter-_G7nYL65.css">
+  <link rel="stylesheet" crossorigin href="/assets/fighter-TpW0sHy-.css">
 </head>
   <body>
     <nav class="game-navigation">
@@ -256,7 +277,7 @@
       // A focused page link uses native keyboard activation, not the game's confirm key.
       for (const type of ["keydown", "keyup"]) homeLink.addEventListener(type, event => event.stopPropagation());
       if (bootParams.get("motion") === "reduce") document.documentElement.dataset.bootMotion = "reduce";
-    </script>
-    <script>(()=>{const p={"en":["assets/en-Bp-VkU79.js","assets/en-CUwuO7KT.js","assets/en-Dlkc4kRO.js"],"ko":["assets/ko-BR8_1A1H.js","assets/ko-D30tNOWv.js"],"ja":["assets/en-Dlkc4kRO.js","assets/ja-B6FCHEuZ.js","assets/ja-flnvtPMB.js"]}[document.documentElement.lang];if(!p)return;for(const f of p){const l=document.createElement("link");l.rel="modulepreload";l.crossOrigin="";l.href="./"+f;document.head.append(l)}})()</script>
+    </script>
+    <script>(()=>{const p={"en":["assets/en-CXlt6QAv.js","assets/en-CmgAg31f.js","assets/en-Dlkc4kRO.js"],"ko":["assets/ko-CX4bjMMy.js","assets/ko-Dus5E--h.js"],"ja":["assets/en-Dlkc4kRO.js","assets/ja-B4delRRC.js","assets/ja-d1vwGmCz.js"]}[document.documentElement.lang];if(!p)return;for(const f of p){const l=document.createElement("link");l.rel="modulepreload";l.crossOrigin="";l.href="./"+f;document.head.append(l)}})()</script>
   </body>
 </html>

@@ -1,0 +1,1 @@
+var e=0,t=-1/0,n=!1,r=-1/0,i=`data-leaves-page`;function a(){e+=1;let t=!1;return()=>{t||(t=!0,e=Math.max(0,e-1))}}function o(){return e>0}function s(e,r){n=e,t=r}function c(e){return n&&e-t<1e3}function l(e){r=e}function u(e){return c(e)&&!(e-r>=0&&e-r<1e4)}export{a,o as i,l as n,u as o,c as r,s,i as t};
