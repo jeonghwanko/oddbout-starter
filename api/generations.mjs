@@ -41,6 +41,10 @@ export const PREVIEW_NOTES = Object.freeze(['run-from-walk']);
 /** What the worker may say about one draft (2026-11-01): a walk or run take shown as it is cut, `checking` while the gate looks at it,
  * `retaking` when the gate refused it and the next take films. A draft with no state passed (or is an action clip). */
 export const DRAFT_STATES = Object.freeze(['checking', 'retaking']);
+/** What the worker's `profile-front` event says of his profile set (host/generation-stages.mjs profileFront, 2026-11-07): it went to the job
+ * (`ok`), the server refused it (`refused`), a front that is not a portrait could not be framed (`unframed`), its face square could not be
+ * measured (`unmeasured`), or something else stopped it (`error`). */
+export const PROFILE_FRONT_OUTCOMES = Object.freeze(['ok', 'refused', 'unframed', 'unmeasured', 'error']);
 /** Who draws a request's pictures (2026-11-06, af_generation_jobs.image_provider): `grok` (the default) or `gpt`. */
 export const IMAGE_PROVIDERS = Object.freeze(['grok', 'gpt']);
 /**
@@ -295,6 +299,22 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     return (data ?? []).some(/** @param {{ data: any }} event */ event => event.data?.outcome === 'chosen' && event.data?.artifact === name) ? name : null;
   }
   /**
+   * Why a job that went in holds no profile set (2026-11-07, 깔깔이: his square front was refused and nothing but an event said so): the
+   * worker's latest `profile-front` event, its outcome (PROFILE_FRONT_OUTCOMES) and codes. Null before its package went in, once it has a set,
+   * or when the worker said nothing. A host writes the event, so only known outcomes and plain codes pass: an agent reads them in the job's next.
+   * @param {Job} row @returns {Promise<{ outcome: string, code?: string, errors?: string[] } | null>}
+   */
+  async function profileFrontOf(row) {
+    if (row.status !== 'submitted' || row.profile_set_id) return null;
+    const { data, error } = await db.from('af_generation_events').select('data').eq('job_id', row.id).eq('kind', 'profile-front')
+      .order('at', { ascending: false }).limit(1);
+    if (error) throw unavailable('database-unavailable', error);
+    const said = data?.[0]?.data, plain = /** @param {unknown} v */ v => typeof v === 'string' && /^[A-Za-z0-9_.:-]{1,60}$/.test(v);
+    if (!isObject(said) || !PROFILE_FRONT_OUTCOMES.includes(said.outcome)) return null;
+    const errors = Array.isArray(said.errors) ? said.errors.filter(plain).slice(0, 5) : [];
+    return { outcome: said.outcome, ...(plain(said.code) ? { code: said.code } : {}), ...(errors.length ? { errors } : {}) };
+  }
+  /**
    * What these jobs took from their creator's tokens so far (보유 토큰, 2026-10-31: af_generation_charged), by id, in one query; null when
    * it cannot be read (a database before the tokens, an error): the jobs still read, their tokens null.
    * @param {string[]} ids @returns {Promise<Map<string, number> | null>}
@@ -323,11 +343,13 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       })(),
       // 첫 선수 무료 (2026-10-30): a request to ODDBOUT on a full day waits for its looks; where it stands, for the page's line.
       row.host_choice === 'oddbout' && !row.started_at && ['queued', 'appearance'].includes(row.status) ? call('af_generation_queue', { p_id: row.id }) : null,
-      taken === undefined ? jobTokens([row.id]) : taken]);
+      taken === undefined ? jobTokens([row.id]) : taken,
+      // One job's read only: a list (tokens read for it at once) shows no next per job.
+      taken === undefined ? profileFrontOf(row) : null]);
     const drafts = value(reads[0]), side = value(reads[1]), expressions = value(reads[2]), hosts = value(reads[3]);
     const urls = await signed([...candidates.map(name => artifactPath(row.id, name)), ...preview.map(p => artifactPath(row.id, p.name)),
       ...drafts.map(d => artifactPath(row.id, d.name)), ...[side, expressions].flatMap(name => name ? [artifactPath(row.id, name)] : [])]);
-    const submission = value(reads[4]), queue = value(reads[5]), tokens = value(reads[6]);
+    const submission = value(reads[4]), queue = value(reads[5]), tokens = value(reads[6]), profileFront = value(reads[7]);
     return { id: row.id, status: row.status, progress: row.progress, error: row.error_code ?? null, description: row.description, language: row.language,
       delegate: row.delegate === true, createdAt: row.created_at, updatedAt: row.updated_at, profile: row.profile ?? (isObject(row.brief?.profile) ? row.brief.profile : null),
       candidates: candidates.map((name, i) => ({ key: i === 0 ? 'a' : 'b', url: urls.get(artifactPath(row.id, name)) ?? null })), choice: row.choice ?? null,
@@ -344,6 +366,8 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       // His six arena faces (2026-11-03), 3 × 2 in the arena's order; the last is the face he makes when he is knocked out.
       expressions: expressions ? { url: urls.get(artifactPath(row.id, expressions)) ?? null } : null,
       profileSetId: row.profile_set_id ?? null,
+      // Why he went in without one (profileFrontOf), null otherwise.
+      profileFront,
       // What it took from his tokens so far (null: not readable now).
       tokens: tokens ? tokens.get(row.id) ?? 0 : null,
       host: { choice: row.host_choice ?? 'oddbout', requested: hosts.get(row.requested_host) ?? null, assigned: hosts.get(row.assigned_host) ?? null },
@@ -691,8 +715,11 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       const row = await heldForSubmission(request, parts[2]);
       const body = fields(await readJson(request, 1000), ['artifact', 'face', 'expressions']);
       const chosen = candidatesOf(row)[row.choice === 'b' ? 1 : 0];
-      if (typeof body.artifact !== 'string' || !chosen || body.artifact !== chosen || !chosen.startsWith('front-')) throw new Problem(422, 'invalid-artifact');
-      const { data, error } = await bucket().download(artifactPath(row.id, chosen));
+      // The front itself, or its portrait card (`<front>-card`, 2026-11-07): the worker frames a front that is not a portrait (Grok's are
+      // square) the way the kit does, uniform scale and transparent room, and puts it up as an artifact of its own.
+      if (typeof body.artifact !== 'string' || !chosen || !chosen.startsWith('front-') || ![chosen, `${chosen}-card`].includes(body.artifact))
+        throw new Problem(422, 'invalid-artifact');
+      const { data, error } = await bucket().download(artifactPath(row.id, body.artifact));
       if (error || !data) throw unavailable('storage-unavailable', error);
       const bytes = new Uint8Array(await data.arrayBuffer()), probed = probeImage(bytes);
       if (probed?.type !== 'image/webp' || bytes.length > PROFILE_SET_LIMITS.frontBytes) throw new Problem(422, 'invalid-profile-set');
@@ -700,7 +727,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       const parsed = parseProfileSet(JSON.stringify({ version: PROFILE_SET_VERSION, front, face: body.face }));
       if (!parsed.ok) throw new Problem(422, 'invalid-profile-set', parsed.errors);
       const sheet = body.expressions === undefined ? null : await jobSheet(row, front, parsed.data.face, body.expressions);
-      const profileFront = { artifact: chosen, ...front, face: parsed.data.face };
+      const profileFront = { artifact: body.artifact, ...front, face: parsed.data.face };
       // The sheet in its own column: an API from before it reads `profile_front` alone (a rollback keeps the front's set).
       const { error: saveError } = await db.from('af_generation_jobs').update({ profile_front: profileFront, profile_expressions: sheet?.expressions ?? null })
         .eq('id', row.id);

@@ -24,7 +24,8 @@ import { toolRef } from './merged-tools.mjs';
  *   submission?: { stage: string, fighterId?: string | null } | null,
  *   host?: { choice: string, requested?: { name?: string } | null, assigned?: unknown },
  *   queue?: { position: number, reason?: 'turn' | 'usage' | 'paused', usedPercent?: number, resetsAt?: string, dailyLimit: number, startedToday: number } | null,
- *   profileSetId?: string | null, tokens?: number | null, expressions?: { url: string | null } | null,
+ *   profileSetId?: string | null, profileFront?: { outcome: string, code?: string, errors?: string[] } | null,
+ *   tokens?: number | null, expressions?: { url: string | null } | null,
  *   progress?: number, description?: string, profile?: { name?: string } | null, createdAt?: string, updatedAt?: string, agent?: string | null,
  *   side?: { url: string | null } | null, drafts?: { clip: string, url: string | null, state?: string }[],
  *   candidates?: { key: string, url: string | null }[] }} HostedJob
@@ -141,6 +142,18 @@ const WATCH_NEXT = 'While the user watches this chat, call get_hosted_fighter ag
  * @param {HostedJob} job
  */
 const spent = job => Number.isSafeInteger(job.tokens) && /** @type {number} */ (job.tokens) > 0 ? ` It used ${job.tokens} of the user's tokens.` : '';
+/**
+ * Why a registered job holds no profile set, from the worker's last word on it (job.profileFront, 2026-11-07: 깔깔이's square front was
+ * refused and the next said only that no set went in). Without one he cannot enter, so the user hears it.
+ * @param {HostedJob} job
+ */
+const setMissed = job => {
+  const said = job.profileFront;
+  if (!said || said.outcome === 'ok') return '';
+  const codes = [said.code, ...(said.errors ?? [])].filter(Boolean).join(', ');
+  return ` (ODDBOUT could not make it from his chosen front: ${said.outcome}${codes ? `, ${codes}` : ''}). Tell the user: he enters (출전) only once`
+    + ' his fighter has a front painting that passes ODDBOUT\'s front check';
+};
 /** The states the user can follow on the site and answer there; a job over, a refused package and a registered fighter (whose text names his page) say nothing of it. */
 const HOSTED_FOLLOWED = new Set(['queued', 'appearance', 'appearance_ready', 'motions', 'motion_ready', 'submitting', 'needs_review']);
 /**
@@ -202,7 +215,7 @@ function hostedStep(job, uploads = true) {
         + (job.profileSetId ? `His chosen front went in as his profile set (${job.profileSetId}). Before he enters, read ${toolRef('get_registered_fighter')}: its `
           + 'front says whether the set passed ODDBOUT\'s checks, and its next what to do if not. The home and the arena show it once an operator approves it. '
           + (job.expressions?.url ? `His six arena faces were sent with it; ${toolRef('get_profile_set')} says whether they passed the check (sheetErrors when not).` : '')
-          : 'His profile set (front picture) did not go in with it: '
+          : `His profile set (front picture) did not go in with it${setMissed(job)}: `
             + (uploads ? 'prepare_profile_set can upload one.' : 'this connector cannot upload one; the user uploads it from the ODDBOUT app in ChatGPT or with the creator kit.'));
       if (job.submission?.stage === 'rejected') return `The server check refused the package. A person at ODDBOUT will look at it.${spent(job)}`;
       return `The server is checking the package. ${WATCH_NEXT}`;
