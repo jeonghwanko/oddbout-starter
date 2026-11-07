@@ -1,28 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import vm from 'node:vm';
-import { registerLookUi } from '../mcp/cloud/hosted-look-ui.mjs';
+import { widget } from './helpers/hosted-widget.mjs';
 import { hostedStatus } from '../mcp/cloud/hosted-tools.mjs';
 import { CLOUD_RESOURCE } from '../mcp/cloud/resources.mjs';
 
-function widget() {
-  let html;
-  registerLookUi({ registerResource: (_n, _u, _m, read) => { html = read().contents[0].text; } });
-  class El {
-    constructor(tag) { this.tag = tag; this.children = []; this.textContent = ''; }
-    append(...items) { this.children.push(...items); }
-    replaceChildren(...items) { this.children = items; }
-    get text() { return this.textContent + this.children.map(x => x.text).join(' '); }
-    get all() { return [this, ...this.children.flatMap(x => x.all)]; }
-  }
-  const root = new El('main'), window = { addEventListener() {} };
-  const context = vm.createContext({ URL, window, document: { querySelector: () => root, createElement: tag => new El(tag),
-    documentElement: { lang: 'ko' }, body: {} }, navigator: { language: 'ko' },
-    parent: { postMessage() {} }, ResizeObserver: class { observe() {} } });
-  vm.runInContext(html.match(/<script>([\s\S]*?)<\/script>/)[1], context);
-  return { root, window, globals: () => vm.runInContext('fromGlobals()', context),
-    render: result => { context.result = result; vm.runInContext('render(result)', context); } };
-}
 function result(id, status, at) {
   const job = { id, status, submission: status === 'submitted' ? { stage: 'registered' } : null };
   return { structuredContent: { job, statusSummary: { ...hostedStatus(job), updatedAt: at, checkedAt: at }, siteUrl: 'https://oddbout.com/' } };

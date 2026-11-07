@@ -4,6 +4,7 @@ import { createCloudHandler, hostedNext, CLOUD_ISSUER, CLOUD_RESOURCE } from '..
 import { PICTURE_PAGE, TICKET_UPLOAD_URL, pictureLinkShape } from '../mcp/cloud/hosted-tools.mjs';
 import { CREATOR_PAGE, siteUrl } from '../mcp/cloud/common.mjs';
 import { generation, png, webp } from './helpers/generation-database.mjs';
+import { widget } from './helpers/hosted-widget.mjs';
 
 // list_generation_hosts is browse_oddbout's view hosts, get_picture_upload and report_picture_link get_hosted_fighter's (MCP 통합 1단계, 2026-11-05).
 // 2단계 (2026-11-06): choose_hosted_look, revise_hosted_motion and start_picture_upload are request_hosted_fighter's steps, register_hosted_fighter
@@ -37,6 +38,45 @@ async function connector(g, hosted, fetcher = async () => new Response(png(512, 
     // The last answer's HTTP body, in bytes.
     bytes: () => bytes };
 }
+
+test('the shared hosted card distinguishes upload and diagnostic results from fighter status', async () => {
+  const g = await generation();
+  try {
+    await g.healthy();
+    const c = await connector(g, {}, undefined, { meta: { 'openai/subject': 'upload-card-test' } });
+    const tool = (await c.tools()).find(t => t.name === 'get_hosted_fighter');
+    const resource = await c.rpc('resources/read', { uri: tool._meta.ui.resourceUri });
+    const ui = widget(resource.contents[0].text);
+    ui.render(await c.raw('get_hosted_fighter', { view: 'upload' }));
+    assert.match(ui.root.text, /업로드 내역이 없습니다/);
+    const made = await c.call('request_hosted_fighter', { step: 'picture_ticket' }), id = made.ticket.id;
+    ui.render(await c.raw('get_hosted_fighter', { view: 'upload', ticketId: id }));
+    assert.match(ui.root.text, /아직 업로드된 이미지가 없습니다/);
+    assert.ok(ui.root.all.some(n => n.tag === 'a' && n.href === PICTURE_PAGE + id));
+    assert.equal((await g.call('POST', `generations/uploads?ticket=${id}`, png(512, 512))).status, 200);
+    await g.sql.query("update public.af_generation_upload_tickets set expires_at=now()-interval '1 minute' where id=$1", [id]);
+    ui.render(await c.raw('get_hosted_fighter', { view: 'upload', ticketId: id }));
+    assert.match(ui.root.text, /링크가 만료되었습니다/); assert.match(ui.root.text, /사용 가능: 1/);
+    await g.sql.query("update public.af_generation_upload_tickets set expires_at=now()+interval '10 minutes' where id=$1", [id]);
+    assert.equal((await g.call('POST', `generations/uploads?ticket=${id}`, png(512, 512))).status, 200);
+    ui.render(await c.raw('get_hosted_fighter', { view: 'upload', ticketId: id }));
+    assert.match(ui.root.text, /업로드된 이미지: 2/); assert.match(ui.root.text, /사용 가능: 2/);
+    assert.match(ui.root.text, /가득 찼습니다/); assert.doesNotMatch(ui.root.text, /상태를 확인하지 못했습니다/);
+    ui.render(await c.raw('get_hosted_fighter', { view: 'upload' }));
+    assert.match(ui.root.text, /업로드된 이미지: 2/);
+    await g.sql.query("update public.af_generation_upload_tickets set expires_at=now()-interval '1 minute' where id=$1", [id]);
+    ui.render(await c.raw('get_hosted_fighter', { view: 'upload', ticketId: id }));
+    assert.match(ui.root.text, /가득 찼습니다/); assert.match(ui.root.text, /사용 가능: 2/);
+    ui.render(await c.raw('get_hosted_fighter', { view: 'link', url: 'https://example.test/picture.png?secret=fixture', madeBy: 'grok' }));
+    assert.match(ui.root.text, /주소 형식만 확인했습니다/);
+    assert.match(ui.root.text, /이미지를 가져오거나 업로드하지 않았습니다/);
+    assert.doesNotMatch(ui.root.text, /상태를 확인하지 못했습니다|secret=fixture/);
+    ui.render(await c.raw('get_hosted_fighter', { view: 'upload', ticketId: crypto.randomUUID() }));
+    assert.match(ui.root.text, /상태를 확인하지 못했습니다/);
+    assert.doesNotMatch(ui.root.text, /업로드된 이미지: 2|주소 형식만 확인했습니다/);
+    assert.equal((await g.sql.query('select count(*)::int as n from public.af_generation_jobs')).rows[0].n, 0);
+  } finally { await g.sql.close(); }
+});
 
 test('a ready owner job carries both original WebPs in order; list, foreign jobs and failed pairs do not attach images', async () => {
   const g = await generation();

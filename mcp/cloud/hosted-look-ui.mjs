@@ -1,5 +1,6 @@
 // @ts-check
 import { CLOUD_RESOURCE } from './resources.mjs';
+import { CREATOR_PAGE } from './common.mjs';
 
 export const LOOK_UI = 'ui://oddbout/hosted-looks-v1.html';
 const mimeType = 'text/html;profile=mcp-app';
@@ -20,6 +21,7 @@ figure{margin:0;min-width:0}figcaption{font-weight:700;margin:0 0 4px}img{displa
 </style><main aria-live="polite"><p>ODDBOUT</p></main>
 <script>
 const root=document.querySelector('main'), origin=${JSON.stringify(storageOrigin)};
+const uploadPage=${JSON.stringify(CREATOR_PAGE + '#view=upload&ticket=')};
 const ko=()=> (window.openai?.locale || document.documentElement.lang || navigator.language).startsWith('ko');
 const say=(en,kr)=>ko()?kr:en;
 const node=(tag,words)=>{const el=document.createElement(tag);if(words)el.textContent=words;return el};
@@ -82,6 +84,19 @@ function render(result){
         statusNodes(current).forEach(n=>card.append(n));root.append(card);}
       return;
     }
+    if(output.ok===true && (output.ticket || Array.isArray(output.tickets))){
+      const tickets=output.ticket?[output.ticket]:output.tickets;
+      root.replaceChildren(node('h2',say('Reference image uploads','참고 이미지 업로드')));
+      if(!tickets.length)root.append(node('p',say('No image uploads yet.','업로드 내역이 없습니다.')));
+      for(const ticket of tickets){const card=node('section');card.append(...ticketNodes(ticket));root.append(card)}
+      root.append(node('p',say('Uploading images does not mean a fighter has been created or registered.','이미지 업로드는 캐릭터 생성·등록 완료를 뜻하지 않습니다.')));
+      return;
+    }
+    if(output.ok===true && output.observed && output.fetched===false && output.kept===false){
+      root.replaceChildren(node('h2',say('Image link check','이미지 주소 형식 확인')),
+        node('p',say('Only the address format was checked. No image was fetched or uploaded.','주소 형식만 확인했습니다. 이미지를 가져오거나 업로드하지 않았습니다.')));
+      return;
+    }
     root.replaceChildren(node('p',say('Status unavailable. Check the request on ODDBOUT.','상태를 확인하지 못했습니다. ODDBOUT에서 신청 내역을 확인하세요.')));
     return;
   }
@@ -96,6 +111,22 @@ function render(result){
   });
   root.replaceChildren(node('h2',say('Compare the two looks','두 외형 비교')),grid);
   statusNodes(output).forEach(n=>root.append(n));
+}
+function ticketNodes(ticket){
+  const uploads=Array.isArray(ticket.uploads)?ticket.uploads:[], usable=uploads.filter(u=>u.usable===true).length;
+  const items=[node('p',say('Uploaded images: ','업로드된 이미지: ')+uploads.length+say(' · Usable: ',' · 사용 가능: ')+usable)];
+  const closed={full:['The upload slots are full.','업로드 칸이 가득 찼습니다.'],expired:['The upload link has expired.','업로드 링크가 만료되었습니다.'],
+    'day-limit':['The daily upload limit has been reached.','오늘의 업로드 한도를 사용했습니다.']};
+  if(closed[ticket.closed])items.push(node('p',say(...closed[ticket.closed])));
+  if(usable)items.push(node('p',say('Review the images and confirm permission to use them before requesting creation.','이미지와 사용 권한을 확인한 뒤 제작을 요청하세요.')));
+  else items.push(node('p',!uploads.length && ticket.open?say('No images uploaded yet.','아직 업로드된 이미지가 없습니다.'):
+    say('No images are currently usable for a new request.','새 제작 요청에 사용할 수 있는 이미지가 없습니다.')));
+  if(ticket.expiresAt)items.push(node('p',say('Upload link expiry: ','업로드 링크 만료 시각: ')+ticket.expiresAt));
+  if(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ticket.id)){
+    const a=node('a',say('Review images and upload status','이미지·업로드 상태 확인'));a.href=uploadPage+ticket.id;
+    a.target='_blank';a.rel='noopener noreferrer';items.push(a);
+  }
+  return items;
 }
 function statusNodes(output){
   const s=output.statusSummary;
