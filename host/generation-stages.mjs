@@ -23,7 +23,7 @@
 //   makes them his profile set when the package is registered.
 import { createHash, randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { appendFile, copyFile, cp, mkdir, open, readFile, readdir, rename, rm, stat, utimes, writeFile } from 'node:fs/promises';
+import { appendFile, chmod, copyFile, cp, mkdir, open, readFile, readdir, rename, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ASK_EXIT, NOT_STARTED_EXIT, judgeOutcome, readOutcome } from './sprite-outcome.mjs';
@@ -320,6 +320,11 @@ export function createJudgeArchive({ dir, saltFile = null, lineDays = JUDGE_ARCH
     const kept = (await readFile(saltFile, 'utf8').catch(() => '')).trim();
     return (salt = /^[0-9a-f]{64}$/.test(kept) ? kept : null);
   }
+  /**
+   * One picture copied, readable by the archive's group (0640, as its month files are): copyFile keeps the source's mode, and a matted take
+   * is owner-only (0600), so an operator in the service group could read the lines but not the pictures they were copied for (2026-11-07).
+   */
+  const copyReadable = async (from, to) => { await copyFile(from, to); await chmod(to, 0o640); };
   /** The pictures copied into `into`, or null (none left behind) when any could not be. */
   async function copied(into, files, at, jobFolder) {
     try {
@@ -327,10 +332,10 @@ export function createJudgeArchive({ dir, saltFile = null, lineDays = JUDGE_ARCH
       const images = [];
       for (const [index, file] of files.entries()) {
         const name = `${index}-${path.basename(file)}`;
-        await copyFile(file, path.join(into, name));
+        await copyReadable(file, path.join(into, name));
         images.push(name);
         const png = file.replace(/\.json$/, '.png');
-        if (png !== file && existsSync(png)) await copyFile(png, path.join(into, `${index}-${path.basename(png)}`));
+        if (png !== file && existsSync(png)) await copyReadable(png, path.join(into, `${index}-${path.basename(png)}`));
       }
       if (folderName(jobFolder)) await writeFile(path.join(into, '.job'), `${jobFolder}\n`);
       await utimes(into, at, at);

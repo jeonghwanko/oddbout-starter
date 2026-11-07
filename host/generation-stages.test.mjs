@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
-import { cp, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { chmod, cp, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
@@ -1876,6 +1876,8 @@ test('the archive\'s pictures: only when asked, re-readable, gone after their da
   await writeFile(path.join(pics, 'look.png'), 'look');
   await writeFile(path.join(pics, 'side-walk.strip.json'), '{}');
   await writeFile(path.join(pics, 'side-walk.strip.png'), 'strip');
+  // A matted take is owner-only on a host (0600): the archive's copy is still group-readable.
+  await chmod(path.join(pics, 'look.png'), 0o600);
   let now = new Date('2026-11-01T10:00:00Z');
   const entry = { jobId: 'j', jobFolder: '20261101-gen-aaaa', item: 'walk/take-0/cut', kind: 'loop', mode: 'pixels', decidedBy: 'pixels',
     final: { identity: 'pass', anatomy: 'pass', loop: 'pass' } };
@@ -1891,6 +1893,9 @@ test('the archive\'s pictures: only when asked, re-readable, gone after their da
   const id = await kept.note(entry, files);
   assert.deepEqual((await readdir(path.join(dir, 'images', '2026-11-01', id))).sort(), ['.job', '0-look.png', '1-side-walk.strip.json', '1-side-walk.strip.png']);
   assert.equal((await readFile(path.join(dir, 'images', '2026-11-01', id, '.job'), 'utf8')).trim(), '20261101-gen-aaaa');
+  if (process.platform !== 'win32')
+    for (const name of ['0-look.png', '1-side-walk.strip.json', '1-side-walk.strip.png'])
+      assert.equal((await stat(path.join(dir, 'images', '2026-11-01', id, name))).mode & 0o777, 0o640, name);
   const [first] = await archived(dir);
   assert.deepEqual([first.id, first.images, first.at], [id, ['0-look.png', '1-side-walk.strip.json'], '2026-11-01T10:00:00.000Z']);
   // A picture folder goes when its own time is the days old — not a calendar day later.
