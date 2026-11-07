@@ -82,19 +82,6 @@ that is not an audio file without conversion (audio/music/*.bin).
 Edits: a whole number of bars cut at the measured tempo, one-beat circular crossfade
 loop, constant gain normalization toward -20 LUFS, stereo 44.1 kHz OGG Vorbis.
 
-Free Natural UI SFX Pack — menu buttons
----------------------------------------
-
-Created by Cici Fyre and released under Creative Commons Zero 1.0 (CC0 1.0).
-Source: https://cicifyre.itch.io/free-natural-sfx-pack
-License: https://creativecommons.org/publicdomain/zero/1.0/
-Runtime copies: audio/sfx/ui-hover.ogg, audio/sfx/ui-press.ogg,
-  audio/sfx/ui-reject.ogg, audio/sfx/ui-confirm.ogg
-Edits: short mono wood/metal clicks, filtering, attack/tail fades, gain
-normalization; lowered double tap for rejection, wood/metal layer for confirm.
-Original recordings and reproduction recipe: assets/audio/ui-natural-20261018/
-  and tools/audio/build-ui-natural.mjs. File hashes: src/assets/runtime-media.json.
-
 Fight shouts — recorded battle cries and grunts (some audio/voice/*.ogg)
 -----------------------------------------------------------------------
 
