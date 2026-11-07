@@ -1,7 +1,7 @@
 // @ts-check
 // 호스팅 생성 도구 (2026-10-28): ODDBOUT's generation worker makes the fighter; the agent carries the user's answers.
 import { z } from 'zod';
-import { GENERATION_LIMITS, UPLOAD_TICKET_HEADER, artifactPath } from '../../api/generations.mjs';
+import { GENERATION_LIMITS, UPLOAD_TICKET_HEADER, artifactPath, confirmedProfile } from '../../api/generations.mjs';
 import { Problem, readBody, UUID } from '../../api/http.mjs';
 import { encodeBase64 } from '../../api/base64.mjs';
 import { probeImage } from '../../api/image-probe.mjs';
@@ -54,6 +54,9 @@ export const HOSTED_INSTRUCTIONS = 'When the user wants ODDBOUT to make the figh
   + 'Never create a new key or repeat a look/motion revision merely to recover an unknown outcome. '
   + 'Read the same job again for fresh preview URLs; a URL is not proof that the user saw the image. '
   + 'While the user watches a working job in this chat, read it again with waitSeconds 25 each time a read returns and tell him each change. '
+  + 'Use statusSummary for the current stage, completion and required action; progress is stage-local, never overall completion. '
+  + 'Do not ask for motion approval before registration. Hosted creation includes registration into production; only the owner enters on the site. '
+  + 'Never promise background chat notifications or scheduling unless the host actually supports them. '
   + 'A result\'s siteUrl is the user\'s page for that request (or, once registered, for his fighter) on the ODDBOUT website. ';
 /**
  * picture and secondPicture: a file the host attaches, whose refusal says where any other picture goes (Grok 점검 2026-11-03: an address
@@ -133,7 +136,7 @@ export async function hostedCandidateImages(job, fetcher, { signal, deadline }) 
  */
 const WATCH_NEXT = 'While the user watches this chat, call get_hosted_fighter again with waitSeconds 25 each time it returns (it returns '
   + 'early when the state, the progress or a picture changes) and tell him each change at once: new pictures, the progress (percent) or the '
-  + 'place in line. When he has left, check on a schedule and tell him only what changed.';
+  + 'place in line. If the chat stops, give him siteUrl to follow the server job; do not promise a background notification.';
 /**
  * The tokens a job took off the user's balance (보유 토큰, 2026-10-31: every token ODDBOUT's making spends, whatever the outcome).
  * @param {HostedJob} job
@@ -198,15 +201,16 @@ function hostedStep(job, uploads = true) {
       return `${job.preview?.some(p => p.note === 'run-from-walk') ? RUN_FROM_WALK_NEXT : ''}`
         + `Show the user ${job.delegate ? `the look ODDBOUT picked (candidate ${job.choice}), ` : ''}the motion previews as images (${IMAGES_NEXT}), `
         + `${job.expressions?.url ? 'his six arena faces (job.expressions: the last one is his face when he is knocked out), ' : ''}and the profile draft. `
-        + 'If he likes them, register_hosted_fighter (change only what he asks in the profile). '
-        + `To fix one motion, revise_hosted_motion (${left.motions ?? 0} changes left).`;
+        + 'The motions are finished, but registration has not started. This is a legacy waiting job: '
+        + 'continue the requested creation with register_hosted_fighter now, without asking for motion approval. '
+        + 'If the user has explicitly asked to hold or revise instead, honor that request.';
     case 'submitting':
       return `ODDBOUT is packaging the fighter and submitting it under the user's account. ${WATCH_NEXT}`;
     case 'submitted':
       // 출전 (2026-10-30): a registered fighter is in production until the user watches his motions and enters him.
-      if (job.submission?.stage === 'registered') return `Registered: fighter ${job.submission.fighterId}, in production. Tell the user: he can watch `
-        + 'every motion on his fighter page (give him siteUrl) and enter him there (출전); other people meet him only after that. enter_fighter does it here '
-        + 'once he confirmed each of the eleven motions. '
+      if (job.submission?.stage === 'registered') return `Registered: fighter ${job.submission.fighterId}. Tell the user: he can check current entry status and watch `
+        + 'every motion on his fighter page (give him siteUrl) and enter him there if needed (출전). Registration alone does not report current entry status. '
+        + 'Leave entry to the owner on the website; do not enter him from this creation flow. '
         // Not a promise (2026-11-03, 레온: his set was refused by the file check while this said he could enter once it was checked).
         + (job.profileSetId ? `His chosen front went in as his profile set (${job.profileSetId}). Before he enters, read ${toolRef('get_registered_fighter')}: its `
           + 'front says whether the set passed ODDBOUT\'s checks, and its next what to do if not. The home and the arena show it once an operator approves it. '
@@ -215,7 +219,7 @@ function hostedStep(job, uploads = true) {
             + (uploads ? 'prepare_profile_set can upload one.' : 'this connector cannot upload one; the user uploads it from the ODDBOUT app in ChatGPT or with the creator kit.'));
       if (job.submission?.stage === 'rejected') return `The server check refused the package. A person at ODDBOUT will look at it.${spent(job)}`;
       return `The server is checking the package. ${WATCH_NEXT}`;
-    case 'needs_review': return `A person at ODDBOUT is checking this step; nothing to answer now. Tell the user and show him what is made so far `
+    case 'needs_review': return `This step needs an ODDBOUT operator's attention; it is not waiting for user motion approval${error}. Tell the user and show him what is made so far `
       + `(${IMAGES_NEXT}); check later.${spent(job)}`;
     case 'rejected': return `ODDBOUT declined this request${error}.${spent(job)} A different request may be made while his balance is above zero.`;
     case 'failed': return `This request failed${error}.${spent(job)} He may ask again while his balance is above zero.`;
@@ -232,12 +236,29 @@ const jobSite = job => siteUrl({ fighterId: job.submission?.stage === 'registere
  * An answer the job does not wait for now (Grok 점검 2026-11-03: the bot sent a second motion change while the first was being made, got a
  * bare generation-state and had to guess): what to do instead.
  */
-const ANSWER_LATER = 'This job is not waiting for that answer now: a change is made one at a time, and the motions take changes again once '
-  + 'they are ready (motion_ready). Read get_hosted_fighter (waitSeconds 25) for the state and its next, and send the change then.';
+const ANSWER_LATER = 'The requested change was not applied. Read get_hosted_fighter for the current state before doing anything else. '
+  + 'Newly completed motions register automatically; do not wait for motion_ready or repeat the change automatically.';
 /** @param {any} result  The API's JSON. @param {boolean} uploads */
-const answeredOf = (result, uploads) => result?.code === 'generation-state' ? { ...result, next: ANSWER_LATER } : withNextOf(result, uploads);
-/** @param {any} result  The API's JSON. @param {boolean} uploads */
-const withNextOf = (result, uploads) => result?.ok && result.job ? { ...result, next: hostedNext(result.job, { uploads }), siteUrl: jobSite(result.job) } : result;
+const withNextOf = (result, uploads) => result?.ok && result.job ? { ...result, statusSummary: hostedStatus(result.job), next: hostedNext(result.job, { uploads }), siteUrl: jobSite(result.job) } : result;
+
+/** A stable status contract shared by full reads, compact waits and the chat card.
+ * Progress belongs to one stage. Only a registered submission means creation completed.
+ * @param {HostedJob} job
+ */
+export function hostedStatus(job) {
+  const registered = job.status === 'submitted' && job.submission?.stage === 'registered';
+  const failed = ['failed', 'rejected', 'cancelled', 'expired'].includes(job.status) || job.submission?.stage === 'rejected';
+  const state = registered ? 'registered' : failed ? 'stopped' : job.status === 'appearance_ready' ? 'choose_look'
+    : job.status === 'needs_review' ? 'operator_review' : job.status === 'motion_ready' ? 'registration_pending'
+    : job.status === 'submitted' ? 'validating' : HOSTED_WORKING.has(job.status) ? job.status : 'unknown';
+  return { state, completed: registered, terminal: registered || failed,
+    actionRequired: registered ? 'enter_on_site' : job.status === 'appearance_ready' ? 'choose_look'
+      : job.status === 'motion_ready' ? 'agent_register' : job.status === 'needs_review' ? 'operator' : failed ? 'inspect_error'
+        : state === 'unknown' ? 'inspect_status' : 'none',
+    stageProgress: Number.isFinite(job.progress) ? Math.max(0, Math.min(100, /** @type {number} */ (job.progress))) : null,
+    updatedAt: job.updatedAt ?? null, checkedAt: new Date().toISOString(), error: job.error ?? null,
+    queue: job.queue ? { position: job.queue.position, reason: job.queue.reason ?? 'turn', resetsAt: job.queue.resetsAt ?? null } : null };
+}
 
 /**
  * 감시 응답 줄이기 (MCP 최적화 2026-11-05): a chat that watches a job read the whole of it — every picture's signed URL and the long next — at
@@ -313,7 +334,7 @@ function watchedView(job, first, changes, baseline) {
   const changed = first === null ? [] : [...(first.status !== job.status ? ['status'] : []), ...(first.progress !== job.progress ? ['progress'] : []),
     ...(first.submission !== submission ? ['submission'] : []), ...(pictures.some(picture => picture.new) ? ['pictures'] : [])];
   const show = [...(pictures.length ? ['each picture in pictures'] : []), ...(look ? ['look (the front ODDBOUT picked, also his profile picture)'] : [])];
-  return { ok: true, watch: true,
+  return { ok: true, watch: true, statusSummary: hostedStatus(job),
     job: { id: job.id, status: job.status, progress: job.progress ?? null,
       ...(job.queue ? { queue: { position: job.queue.position, ...(job.queue.reason ? { reason: job.queue.reason } : {}) } } : {}),
       ...(job.submission ? { submission: { stage: job.submission.stage } } : {}) },
@@ -331,7 +352,7 @@ function watchedView(job, first, changes, baseline) {
  */
 const jobSummary = job => ({ id: job.id, status: job.status, progress: job.progress ?? null, error: job.error ?? null, description: job.description,
   name: job.profile?.name ?? null, createdAt: job.createdAt, updatedAt: job.updatedAt, tokens: job.tokens ?? null, submission: job.submission ?? null,
-  agent: job.agent ?? null, siteUrl: jobSite(job) });
+  agent: job.agent ?? null, statusSummary: hostedStatus(job), siteUrl: jobSite(job) });
 const LIST_NEXT = 'Each request in short: read one by its jobId for its pictures, what it asks of the user and what to do next.';
 
 /**
@@ -382,8 +403,14 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
   const JOB = UUID_ARG();
   /** @param {any} result  The API's JSON. */
   const withNext = result => withNextOf(result, uploads);
-  /** @param {any} result  The API's JSON. */
-  const answered = result => answeredOf(result, uploads);
+  /** @param {string} jobId @param {any} result  The API's JSON. */
+  const answered = async (jobId, result) => {
+    if (result?.code !== 'generation-state') return withNext(result);
+    const current = await invoke(`generations/${jobId}`).catch(() => null);
+    if (!current?.ok || !current.job) return { ...result, next: ANSWER_LATER };
+    return { ...withNext(current), ...result,
+      next: 'The requested change was not applied. Do not claim it was saved or repeat it automatically. ' + hostedNext(current.job, { uploads }) };
+  };
   /** @type {(path: string, body: object, headers?: Record<string, string>) => Promise<any>} */
   const post = (path, body, headers = {}) => invoke(path, 'POST', JSON.stringify(body), { 'content-type': 'application/json', ...headers });
   /**
@@ -609,28 +636,52 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
     + 'after an unknown outcome, read get_hosted_fighter instead of repeating this call.',
     { jobId: JOB, choose: z.enum(['a', 'b']).optional(), revise: z.string().min(2).max(GENERATION_LIMITS.note).optional() },
     ({ jobId, choose, revise }) => (choose === undefined) === (revise === undefined) ? { ok: false, code: 'invalid-answer' }
-      : post(`generations/${jobId}/appearance`, choose !== undefined ? { choose } : { revise }).then(answered), { write: true, publish: true, idempotent: false });
+      : post(`generations/${jobId}/appearance`, choose !== undefined ? { choose } : { revise }).then(result => answered(jobId, result)), { write: true, publish: true, idempotent: false });
   register('revise_hosted_motion', '동작 하나 고치기', 'Ask ODDBOUT to make one motion of the connected user\'s hosted fighter again with his sentence; the other motions stay. '
+    + 'Available only for a legacy job currently at motion_ready. Newly completed motions register automatically; this tool cannot edit a submitted package. '
     + 'Not idle: the standing pose is the look itself. Requires the user\'s request. Replaces the working motion; ODDBOUT-worker generation spends tokens that are not refunded. Not idempotent: '
     + 'after an unknown outcome, read get_hosted_fighter instead of repeating this call.',
     // Not idle: it is the look itself (choose_hosted_look changes the look, before the motions).
     { jobId: JOB, clip: z.enum(/** @type {[string, ...string[]]} */ (Object.keys(spec.motions).filter(clip => clip !== 'idle'))), note: z.string().min(2).max(GENERATION_LIMITS.note) },
-    ({ jobId, clip, note }) => post(`generations/${jobId}/motions`, { revise: { clip, note } }).then(answered), { write: true, publish: true, idempotent: false });
-  register('register_hosted_fighter', '맡긴 선수 등록', 'Register the connected user\'s hosted fighter once he approved its motions: '
+    ({ jobId, clip, note }) => post(`generations/${jobId}/motions`, { revise: { clip, note } }).then(result => answered(jobId, result)), { write: true, publish: true, idempotent: false });
+  register('register_hosted_fighter', '맡긴 선수 등록', 'Register a legacy hosted fighter still waiting at motion_ready; no motion approval is required: '
     + 'ODDBOUT packages it and submits it under his account, through the same server check as any fighter. '
     + 'profile holds only what he changed in the draft (name, description, names, bout lines, stats summing to 9). '
-    + 'Requires the user\'s registration request.',
+    + 'The user\'s hosted creation request includes registration into production. Never enter it for him; entry is on the site.',
     { jobId: JOB, profile: z.object({ name: z.string().min(1).max(profileLimits.name), description: z.string().min(1).max(profileLimits.description),
       names: z.record(z.string(), z.string()), lines: z.record(z.string(), z.string()),
       stats: z.object({ power: z.number().int(), toughness: z.number().int(), speed: z.number().int() }).strict() }).partial().strict().optional() },
     async ({ jobId, profile = {} }) => {
+      /** A racing/repeated request must not silently discard a different requested profile.
+       * @param {any} current */
+      const recovered = current => {
+        if (Object.keys(profile).length) {
+          const draft = Object.fromEntries(PROFILE_KEYS.filter(key => current.job.profile?.[key] != null).map(key => [key, current.job.profile[key]]));
+          const desired = { ...draft, ...profile };
+          for (const key of /** @type {const} */ (['names', 'lines'])) if (profile[key] && draft[key]) desired[key] = { ...draft[key], ...profile[key] };
+          let same = false;
+          try { same = JSON.stringify(confirmedProfile(draft)) === JSON.stringify(confirmedProfile(desired)); } catch { /* unverified edit */ }
+          if (!same) return { ...withNext(current), ok: false, code: 'registration-profile-locked',
+            next: 'Registration already started. These profile changes were not applied. Do not claim they were saved; keep the existing package and use its siteUrl.' };
+        }
+        return withNext(current);
+      };
       const read = await invoke(`generations/${jobId}`);
       if (!read.ok) return read;
+      // An interrupted registration response is recovered by reading, never by submitting the package again.
+      if (['submitting', 'submitted'].includes(read.job.status)) return recovered(read);
       // The draft the worker wrote, with his changes over it; the API checks the result against the contract.
       const draft = read.job.profile ?? {}, merged = { ...draft, ...profile };
       for (const key of /** @type {const} */ (['names', 'lines'])) if (profile[key] && draft[key]) merged[key] = { ...draft[key], ...profile[key] };
       const confirmed = Object.fromEntries(PROFILE_KEYS.filter(key => merged[key] != null).map(key => [key, merged[key]]));
-      return withNext(await post(`generations/${jobId}/register`, { profile: confirmed }));
+      const result = await post(`generations/${jobId}/register`, { profile: confirmed });
+      if (!result.ok) {
+        // Another caller may have won after our read, or the successful response may have been lost.
+        // Read once; no second POST and no fallback to a different job/account.
+        const current = await invoke(`generations/${jobId}`);
+        if (current.ok && ['submitting', 'submitted'].includes(current.job.status)) return recovered(current);
+      }
+      return withNext(result);
     }, { write: true, publish: true, openWorld: true, idempotent: true });
   register('cancel_hosted_fighter', '맡긴 선수 취소', 'Cancel the connected user\'s hosted fighter request; '
     + 'work in progress stops at its next step. Tokens it already spent stay spent. Only on his explicit request.',

@@ -56,9 +56,14 @@ their own pictures with their confirmation of rights: attached files where the h
 (with the host you will request), whose link the user opens, or with `terminal: true` whose command sends a picture file you have;
 `get_hosted_fighter` view `upload` before resending one that got no answer; show them before passing them), then follow each result's `next`: show both looks (front views; the pick
 is also the fighter's profile picture) and pass the user's pick or one change, show the motion previews (made from a side view
-ODDBOUT draws from the pick) and pass their approval or one motion change, register on their request.
-If the user leaves the choices to ODDBOUT ("just make it"), pass `delegate: true`: ODDBOUT picks the look and the user answers once, at the motions.
-Wait with `get_hosted_fighter` `waitSeconds` rather than repeated reads. Do not generate locally for a hosted job.
+ODDBOUT draws from the pick). Hosted creation includes registration into production: do not wait for motion approval.
+The server continues to packaging and registration; for an older job at `motion_ready`, call `submit_fighter_registration`
+with `kind: hosted` to continue the requested creation. Honor an explicit hold or revision request.
+Only the owner reviews and enters the registered fighter on the website; never enter it automatically.
+If the user leaves the choices to ODDBOUT ("just make it"), pass `delegate: true`: ODDBOUT picks the look and continues through registration without a motion-approval boundary.
+Use `statusSummary` to report the stage, required action and last check. Stage progress 100% is not registration completion.
+Wait with `get_hosted_fighter` `waitSeconds` rather than repeated reads. If the chat stops, provide `siteUrl`;
+do not promise background chat notifications. Do not generate locally for a hosted job.
 If the user runs a generation host on their own PC (`npm run host -- join` from the site), pass `host: mine`: their own subscription makes it, with no
 consent to give and without using their tokens (each account starts with 500,000; ODDBOUT's own worker takes off what it spends).
 Another person's host (`browse_oddbout` view `hosts`) takes none of their tokens and needs the user's consent first.

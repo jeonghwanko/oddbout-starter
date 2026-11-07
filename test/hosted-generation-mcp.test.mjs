@@ -4,6 +4,7 @@ import { createCloudHandler, hostedNext, CLOUD_ISSUER, CLOUD_RESOURCE } from '..
 import { PICTURE_PAGE, TICKET_UPLOAD_URL, pictureLinkShape } from '../mcp/cloud/hosted-tools.mjs';
 import { CREATOR_PAGE, siteUrl } from '../mcp/cloud/common.mjs';
 import { generation, png, webp } from './helpers/generation-database.mjs';
+import { widget } from './helpers/hosted-widget.mjs';
 
 // list_generation_hosts is browse_oddbout's view hosts, get_picture_upload and report_picture_link get_hosted_fighter's (MCP 통합 1단계, 2026-11-05).
 // 2단계 (2026-11-06): choose_hosted_look, revise_hosted_motion and start_picture_upload are request_hosted_fighter's steps, register_hosted_fighter
@@ -37,6 +38,45 @@ async function connector(g, hosted, fetcher = async () => new Response(png(512, 
     // The last answer's HTTP body, in bytes.
     bytes: () => bytes };
 }
+
+test('the shared hosted card distinguishes upload and diagnostic results from fighter status', async () => {
+  const g = await generation();
+  try {
+    await g.healthy();
+    const c = await connector(g, {}, undefined, { meta: { 'openai/subject': 'upload-card-test' } });
+    const tool = (await c.tools()).find(t => t.name === 'get_hosted_fighter');
+    const resource = await c.rpc('resources/read', { uri: tool._meta.ui.resourceUri });
+    const ui = widget(resource.contents[0].text);
+    ui.render(await c.raw('get_hosted_fighter', { view: 'upload' }));
+    assert.match(ui.root.text, /업로드 내역이 없습니다/);
+    const made = await c.call('request_hosted_fighter', { step: 'picture_ticket' }), id = made.ticket.id;
+    ui.render(await c.raw('get_hosted_fighter', { view: 'upload', ticketId: id }));
+    assert.match(ui.root.text, /아직 업로드된 이미지가 없습니다/);
+    assert.ok(ui.root.all.some(n => n.tag === 'a' && n.href === PICTURE_PAGE + id));
+    assert.equal((await g.call('POST', `generations/uploads?ticket=${id}`, png(512, 512))).status, 200);
+    await g.sql.query("update public.af_generation_upload_tickets set expires_at=now()-interval '1 minute' where id=$1", [id]);
+    ui.render(await c.raw('get_hosted_fighter', { view: 'upload', ticketId: id }));
+    assert.match(ui.root.text, /링크가 만료되었습니다/); assert.match(ui.root.text, /사용 가능: 1/);
+    await g.sql.query("update public.af_generation_upload_tickets set expires_at=now()+interval '10 minutes' where id=$1", [id]);
+    assert.equal((await g.call('POST', `generations/uploads?ticket=${id}`, png(512, 512))).status, 200);
+    ui.render(await c.raw('get_hosted_fighter', { view: 'upload', ticketId: id }));
+    assert.match(ui.root.text, /업로드된 이미지: 2/); assert.match(ui.root.text, /사용 가능: 2/);
+    assert.match(ui.root.text, /가득 찼습니다/); assert.doesNotMatch(ui.root.text, /상태를 확인하지 못했습니다/);
+    ui.render(await c.raw('get_hosted_fighter', { view: 'upload' }));
+    assert.match(ui.root.text, /업로드된 이미지: 2/);
+    await g.sql.query("update public.af_generation_upload_tickets set expires_at=now()-interval '1 minute' where id=$1", [id]);
+    ui.render(await c.raw('get_hosted_fighter', { view: 'upload', ticketId: id }));
+    assert.match(ui.root.text, /가득 찼습니다/); assert.match(ui.root.text, /사용 가능: 2/);
+    ui.render(await c.raw('get_hosted_fighter', { view: 'link', url: 'https://example.test/picture.png?secret=fixture', madeBy: 'grok' }));
+    assert.match(ui.root.text, /주소 형식만 확인했습니다/);
+    assert.match(ui.root.text, /이미지를 가져오거나 업로드하지 않았습니다/);
+    assert.doesNotMatch(ui.root.text, /상태를 확인하지 못했습니다|secret=fixture/);
+    ui.render(await c.raw('get_hosted_fighter', { view: 'upload', ticketId: crypto.randomUUID() }));
+    assert.match(ui.root.text, /상태를 확인하지 못했습니다/);
+    assert.doesNotMatch(ui.root.text, /업로드된 이미지: 2|주소 형식만 확인했습니다/);
+    assert.equal((await g.sql.query('select count(*)::int as n from public.af_generation_jobs')).rows[0].n, 0);
+  } finally { await g.sql.close(); }
+});
 
 test('a ready owner job carries both original WebPs in order; list, foreign jobs and failed pairs do not attach images', async () => {
   const g = await generation();
@@ -192,15 +232,23 @@ test('an agent asks ODDBOUT for a fighter, passes the picks and registers it in 
     held = await claim('motions');
     const preview = ['idle', 'walk', 'run'].map(clip => ({ clip, name: `motion-${clip}-0` }));
     await finish(held, { preview });
+    const automatic = await call('get_hosted_fighter', { jobId });
+    assert.equal(automatic.job.status, 'submitting');
+    assert.equal(automatic.statusSummary.completed, false);
+    assert.equal((await call('register_hosted_fighter', { jobId })).job.status, 'submitting');
+    // Retain the old waiting-job repair path without requiring motion approval.
+    await g.sql.query("update public.af_generation_jobs set status='motion_ready' where id=$1", [jobId]);
     const ready = await call('get_hosted_fighter', { jobId });
     assert.equal(ready.job.status, 'motion_ready'); assert.match(ready.next, /register_hosted_fighter/);
     assert.equal((await call('revise_hosted_motion', { jobId, clip: 'walk', note: '덜 통통 튀게' })).job.revisionsLeft.motions, 2);
     // A second change while the first is made is refused with what to do (Grok 점검 2026-11-03: the bot got a bare code).
     const early = await call('revise_hosted_motion', { jobId, clip: 'run', note: '팔을 더 크게' });
-    assert.equal(early.code, 'generation-state'); assert.match(early.next, /one at a time[\s\S]*motion_ready/);
+    assert.equal(early.code, 'generation-state'); assert.match(early.next, /not applied/);
+    assert.equal(early.statusSummary.state, 'motions'); assert.doesNotMatch(early.next, /send the change then|take changes again/);
     held = await claim('motions'); assert.deepEqual(held.motionNote, { clip: 'walk', note: '덜 통통 튀게' });
     await finish(held, { preview });
 
+    await g.sql.query("update public.af_generation_jobs set status='motion_ready' where id=$1", [jobId]);
     // Registered with the worker's draft; the user's one change merges into its bout lines. The concept stays the brief's.
     const registered = await call('register_hosted_fighter', { jobId, profile: { lines: { win: '또 와!' } } });
     assert.equal(registered.job.status, 'submitting');
@@ -786,7 +834,7 @@ test('a watch on a job that only asks to be watched answers in short; without a 
     // A wait the tenth draft ends: the job's state, what changed, that draft's URL only, and the pictures there are by name.
     await age();
     const watched = await watch(() => drafts(10)), watchedBytes = bytes();
-    assert.deepEqual(Object.keys(watched).sort(), ['changed', 'job', 'made', 'next', 'ok', 'pictures', 'siteUrl', 'watch']);
+    assert.deepEqual(Object.keys(watched).sort(), ['changed', 'job', 'made', 'next', 'ok', 'pictures', 'siteUrl', 'statusSummary', 'watch']);
     assert.deepEqual(watched.job, { id: jobId, status: 'motions', progress: 50 });
     assert.deepEqual(watched.changed, ['progress', 'pictures']);
     assert.deepEqual(watched.pictures.map(p => [p.kind, p.clip, p.name, p.new]), [['draft', 'fall', 'draft-fall-0', true]]);
@@ -805,11 +853,11 @@ test('a watch on a job that only asks to be watched answers in short; without a 
     const marked = await watch(() => drafts(10, { walk: 'retaking' }));
     assert.deepEqual([marked.changed, named(marked), marked.pictures[0].state], [['pictures'], [['walk', true], ['fall', false]], 'retaking']);
     assert.ok(bytes() < 2500, `${bytes()} bytes`);
-    // A decision point (the motions ready for his answer) is the whole job and its next, waited for or not.
+    // This fixture has no complete profile: operator attention returns the whole job, not an endless working summary.
     await finish({ preview: ['idle', 'walk', 'run'].map(clip => ({ clip, name: `motion-${clip}-0` })) });
     const ready = await watch(null, 1);
-    assert.equal(ready.watch, undefined); assert.equal(ready.job.status, 'motion_ready'); assert.equal(ready.job.preview.length, 3);
-    assert.match(ready.next, /register_hosted_fighter/);
+    assert.equal(ready.watch, undefined); assert.equal(ready.job.status, 'needs_review'); assert.equal(ready.job.preview.length, 3);
+    assert.equal(ready.statusSummary.actionRequired, 'operator');
     // So is the end.
     await g.sql.query("update public.af_generation_jobs set status = 'failed', error_code = 'stage-attempts' where id = $1", [jobId]);
     const failed = await watch(null, 1);
@@ -923,10 +971,10 @@ test('the recent list holds each request in short and says to read one by its id
     const listed = await call('get_hosted_fighter', {}), whole = await call('get_hosted_fighter', { jobId });
     assert.equal(listed.jobs.length, 5); assert.equal(listed.jobs[0].id, jobId);
     for (const job of listed.jobs) assert.deepEqual(Object.keys(job), ['id', 'status', 'progress', 'error', 'description', 'name', 'createdAt', 'updatedAt',
-      'tokens', 'submission', 'agent', 'siteUrl']);
+      'tokens', 'submission', 'agent', 'statusSummary', 'siteUrl']);
     assert.deepEqual(listed.jobs[0], { id: jobId, status: 'motions', progress: whole.job.progress, error: null, description: whole.job.description,
       name: '빨간 주먹', createdAt: whole.job.createdAt, updatedAt: whole.job.updatedAt, tokens: whole.job.tokens, submission: null, agent: null,
-      siteUrl: whole.siteUrl });
+      statusSummary: { ...whole.statusSummary, checkedAt: listed.jobs[0].statusSummary.checkedAt }, siteUrl: whole.siteUrl });
     assert.ok(!JSON.stringify(listed).includes('token='), 'no signed URL in the list');
     assert.deepEqual([listed.used, listed.tokens.balance, listed.capabilities.hosted], [false, 500000, true]);
     assert.match(listed.next, /read one by its jobId/);

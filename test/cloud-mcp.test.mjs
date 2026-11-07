@@ -754,11 +754,12 @@ test('the sign-in-first address lists exactly what /mcp lists and says the same;
     // 그림 제공자 (2026-11-06): request_hosted_fighter takes imageProvider, grok or gpt (a35f57da… before). Not a tool ChatGPT's app pins.
     if (count === 19) {
       const hash = list => createHash('sha256').update(JSON.stringify(list)).digest('hex');
-      assert.equal(hash(tools), 'e4039c24301f5682c249de66f566b06af406169745524a1c749028cd64827ea6');
-      // Without the single comparison template, v103's full tool inventory must still match byte for byte.
+      // Hosted registration (2026-11-07): descriptions now include automatic registration and truthful status/recovery.
+      assert.equal(hash(tools), '025a552cd2281f40486cc88b3ddaae6879dc46466f11f4c29af38f93fe025c9e');
+      // Both addresses retain the same inventory when the comparison template metadata is omitted.
       const prior = structuredClone(tools), meta = prior.find(t => t.name === 'get_hosted_fighter')._meta;
       delete meta.ui; delete meta['openai/outputTemplate'];
-      assert.equal(hash(prior), 'd56abc4d22b2c629b385a8b49685dd88e5457821d899a42b6c49acad826e4d07');
+      assert.equal(hash(prior), '1dff92ae864ea4835b47b29c92d1702bacb3e9599f93ade0e09bf8e17ae25643');
     }
     // ChatGPT's published app 1.0.3 (docs/records/CLOUD-PLUGIN-REVIEW.md): four of its twelve tools are listed with their reviewed bytes (nine
     // until 2단계 B, 16a9ae15…). prepare_fighter_registration, upload_fighter_asset and submit_fighter_registration took a `kind`, and a call
