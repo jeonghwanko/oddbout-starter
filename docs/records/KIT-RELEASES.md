@@ -4,6 +4,48 @@ Earlier source-kit releases, moved here from [PLUGIN-DISTRIBUTION.md](../PLUGIN-
 release and the distribution procedures. Each entry records that release as published and verified at the time; it is not
 current procedure. Published release paths stay immutable.
 
+**Previous source-kit release: 0.6.18** (2026-11-07 KST: sprite-gen e44065a — Grok pictures' dominance matte and the Windows RIFE install).
+
+The sprite-gen pin moves from `5fc42b6` to `e44065a`: a generated picture's background key is the colour that dominates its border, so
+Grok pictures get a clean matte (sprite-gen-agent#55); a video's report names the model asked for apart from the one xAI named (#54);
+`rife install` takes the Windows release's CRLF `flownet.param`, so RIFE installs on Windows (#57); and the engine uses a resident RIFE
+binary when one sits beside `rife-ncnn-vulkan` (`native/rife-serve`, #56 #58). `rife install` does not install that binary yet, so a kit
+PC still calls RIFE once per run. The kit is the one the official host already runs (og `KIT_REF` `1f71d11`, #368) and the one
+`npx oddbout-host` pins. The docs agents read follow the
+merged MCP tools (#344 #351 #355), the code-free PC connection (#343), the image-provider profiles where a SuperGrok-only PC is a host
+(#356), and the hosted candidate images (#361 #364); `mcp/paid-operations.mjs` is new. The contract, schema, validation rules and limits
+are unchanged.
+
+Cloud `prepare_fighter_packaging` and the Dots source pin stay on 0.6.17 until `ai-fighter-mcp` is deployed with a new pin and Dots
+accepts it; this release changes neither.
+
+- [Download the 0.6.18 ZIP](https://oddbout.com/creator-kit/0.6.18/3615a6d7b1397d39ede47a5a833dac99a0e75dc56a244aff68229ba18e151f9d/oddbout-0.6.18.zip)
+- [Release manifest](https://oddbout.com/creator-kit/0.6.18/3615a6d7b1397d39ede47a5a833dac99a0e75dc56a244aff68229ba18e151f9d/release.json)
+- [Download helper](https://oddbout.com/creator-kit/0.6.18/3615a6d7b1397d39ede47a5a833dac99a0e75dc56a244aff68229ba18e151f9d/fetch-creator-kit.py)
+
+| Verified item | Value |
+| --- | --- |
+| ZIP size | 4,265,981 bytes |
+| ZIP SHA-256 | `f0e0b2c74826dd936938263ce5bb9eb789caf53183fdb923d81ccc983047d424` |
+| Release manifest SHA-256 | `d61a2f02ec30939859e8877713281a0c2b3195bb0f3409f835c581159e20b307` |
+| Runtime manifest SHA-256 | `84c6f3c8ba5a5c87325e9f1c63d8a819f9bd249e4c5a20797389c0dd9452daa4` |
+| Helper SHA-256 | `b66c31ff833816dfa74c90d9155359d3fdd484dff8c12759e48addde01707592` (unchanged) |
+| Archive build source | `c14a1ad922ab40505f901b8be2a5b8c692ae5fed` (main after [PR #369](https://github.com/jeonghwanko/oddbout-starter/pull/369)) |
+| Tested PR heads | `ebff5564893223ddc0f3faea2a229fb9e900fac4` ([PR #369](https://github.com/jeonghwanko/oddbout-starter/pull/369)) |
+| sprite-gen pin | `e44065aeef461b176a5517c925011348026a575e` |
+| Kit Pages publication | `cce5889ac0cc3cd8854aff4dd1d8c4ed5d2e2e34` |
+
+Full PR CI passed for #369. The archive was built from a clean worktree at the main merge with the sprite-gen submodule checked out at
+its pin with LF line ends: a Windows checkout with `core.autocrlf=true` writes the submodule's files with CRLF, and a first trial build
+caught it (602 engine files differing from 0.6.17). A trial build of the PR head gave byte-identical release files. That trial ZIP, pinned
+the way `npx oddbout-host` pins it, installed on Windows 11 x64 without the API: the kit, Python 3.12.15, ffmpeg 9.0.2, the Grok CLI, the
+kit's locked Node dependencies, the sprite-gen venv and img2webp, and RIFE — `rife install` turned `flownet.param`'s line ends and its
+check frame passed — with `sprite:status` reporting every tool ready (about two and a half minutes). The trusted helper downloaded the
+published release, verified it and extracted all 748 archive files. No generation login, generation or registration ran.
+
+Publication added only three release files, preserved 7,796 existing files without changes or deletions, and verified HTTP 200 and exact
+release bytes plus 12 unchanged site files at 2026-11-07T02:17:22.290Z. The release itself needs no game, API or site build.
+
 **Previous source-kit release: 0.6.17** (2026-11-04 KST: the entry needs a front that passed ODDBOUT's front check).
 
 `AGENTS.md` now says a fighter enters (출전) only with a front painting (profile set) that passed ODDBOUT's front check (one character,

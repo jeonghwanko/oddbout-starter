@@ -1,48 +1,48 @@
 # ODDBOUT distribution
 
-**Current source-kit release: 0.6.18** (2026-11-07 KST: sprite-gen e44065a — Grok pictures' dominance matte and the Windows RIFE install).
+**Current source-kit release: 0.6.19** (2026-11-07 KST: sprite-gen 767f3ec — the resident RIFE binary).
 
-The sprite-gen pin moves from `5fc42b6` to `e44065a`: a generated picture's background key is the colour that dominates its border, so
-Grok pictures get a clean matte (sprite-gen-agent#55); a video's report names the model asked for apart from the one xAI named (#54);
-`rife install` takes the Windows release's CRLF `flownet.param`, so RIFE installs on Windows (#57); and the engine uses a resident RIFE
-binary when one sits beside `rife-ncnn-vulkan` (`native/rife-serve`, #56 #58). `rife install` does not install that binary yet, so a kit
-PC still calls RIFE once per run. The kit is the one the official host already runs (og `KIT_REF` `1f71d11`, #368) and the one
-`npx oddbout-host` pins. The docs agents read follow the
-merged MCP tools (#344 #351 #355), the code-free PC connection (#343), the image-provider profiles where a SuperGrok-only PC is a host
-(#356), and the hosted candidate images (#361 #364); `mcp/paid-operations.mjs` is new. The contract, schema, validation rules and limits
-are unchanged.
+The sprite-gen pin moves from `e44065a` to `767f3ec`: `rife install` puts RIFE's resident binary (`rife-ncnn-vulkan-serve`, release
+`rife-serve-20221029-1`, zip SHA-256 pinned for Windows and Linux x86-64) beside `rife-ncnn-vulkan`. It keeps the binary only when its
+check frame is byte for byte RIFE's own (sprite-gen-agent#59 #63). The loop alignment then starts RIFE once and keeps it open instead of starting it for every frame:
+about 1.9× faster on Windows and 2.4× on Linux, with the same frames. `sprite:setup` now also runs `rife install` for a RIFE that works but
+has no resident binary beside it. RIFE is only checked again, not downloaded, and the binary is added. `sprite:status` reports it as
+`tools.rife.serve` (#372). macOS, a host that runs RIFE on PyTorch, and a RIFE found through `SPRITE_GEN_RIFE` or PATH get none. The
+kit is the one the official host runs (og `KIT_REF` `097c7c6`, #372, with the claim heartbeats of #371) and the one
+`npx oddbout-host` 0.1.1 pins. The contract, schema, validation rules and limits, and the workspace tools are unchanged.
 
 Cloud `prepare_fighter_packaging` and the Dots source pin stay on 0.6.17 until `ai-fighter-mcp` is deployed with a new pin and Dots
 accepts it; this release changes neither.
 
-- [Download the 0.6.18 ZIP](https://oddbout.com/creator-kit/0.6.18/3615a6d7b1397d39ede47a5a833dac99a0e75dc56a244aff68229ba18e151f9d/oddbout-0.6.18.zip)
-- [Release manifest](https://oddbout.com/creator-kit/0.6.18/3615a6d7b1397d39ede47a5a833dac99a0e75dc56a244aff68229ba18e151f9d/release.json)
-- [Download helper](https://oddbout.com/creator-kit/0.6.18/3615a6d7b1397d39ede47a5a833dac99a0e75dc56a244aff68229ba18e151f9d/fetch-creator-kit.py)
+- [Download the 0.6.19 ZIP](https://oddbout.com/creator-kit/0.6.19/34cc24fe426b7ba0a64bf6a970b43f238b39a330c79460576d594965bc3542f7/oddbout-0.6.19.zip)
+- [Release manifest](https://oddbout.com/creator-kit/0.6.19/34cc24fe426b7ba0a64bf6a970b43f238b39a330c79460576d594965bc3542f7/release.json)
+- [Download helper](https://oddbout.com/creator-kit/0.6.19/34cc24fe426b7ba0a64bf6a970b43f238b39a330c79460576d594965bc3542f7/fetch-creator-kit.py)
 
 | Verified item | Value |
 | --- | --- |
-| ZIP size | 4,265,981 bytes |
-| ZIP SHA-256 | `f0e0b2c74826dd936938263ce5bb9eb789caf53183fdb923d81ccc983047d424` |
-| Release manifest SHA-256 | `d61a2f02ec30939859e8877713281a0c2b3195bb0f3409f835c581159e20b307` |
-| Runtime manifest SHA-256 | `84c6f3c8ba5a5c87325e9f1c63d8a819f9bd249e4c5a20797389c0dd9452daa4` |
+| ZIP size | 4,281,385 bytes |
+| ZIP SHA-256 | `e576e638c6ae5e456021f5e79eeeeb911c77f295cdc20924b2dabce84ab092c9` |
+| Release manifest SHA-256 | `51cf82529e0d12b6a2359fbaf2818ecf17ed4a6964d197ec919b85c40a6c5077` |
+| Runtime manifest SHA-256 | `7f47f748c6a5e03d2035acdaad1a6be96de7251d248bc5ab142922fefc96b4fe` |
 | Helper SHA-256 | `b66c31ff833816dfa74c90d9155359d3fdd484dff8c12759e48addde01707592` (unchanged) |
-| Archive build source | `c14a1ad922ab40505f901b8be2a5b8c692ae5fed` (main after [PR #369](https://github.com/jeonghwanko/oddbout-starter/pull/369)) |
-| Tested PR heads | `ebff5564893223ddc0f3faea2a229fb9e900fac4` ([PR #369](https://github.com/jeonghwanko/oddbout-starter/pull/369)) |
-| sprite-gen pin | `e44065aeef461b176a5517c925011348026a575e` |
-| Kit Pages publication | `cce5889ac0cc3cd8854aff4dd1d8c4ed5d2e2e34` |
+| Archive build source | `9b65face9c7e7dec3f325742fbf993daaed87f75` (main after [PR #372](https://github.com/jeonghwanko/oddbout-starter/pull/372)) |
+| Tested PR heads | `eb48eaae4c8a2f3de577d6ce02af4f1f33142f63` ([PR #372](https://github.com/jeonghwanko/oddbout-starter/pull/372)) |
+| sprite-gen pin | `767f3ec7c62f6502eaede4c4bb86e6a1b289d78c` |
+| Kit Pages publication | `05ae15fec705ab33a5c70c0237f3b6fe37123ec1` |
 
-Full PR CI passed for #369. The archive was built from a clean worktree at the main merge with the sprite-gen submodule checked out at
-its pin with LF line ends: a Windows checkout with `core.autocrlf=true` writes the submodule's files with CRLF, and a first trial build
-caught it (602 engine files differing from 0.6.17). A trial build of the PR head gave byte-identical release files. That trial ZIP, pinned
-the way `npx oddbout-host` pins it, installed on Windows 11 x64 without the API: the kit, Python 3.12.15, ffmpeg 9.0.2, the Grok CLI, the
-kit's locked Node dependencies, the sprite-gen venv and img2webp, and RIFE — `rife install` turned `flownet.param`'s line ends and its
-check frame passed — with `sprite:status` reporting every tool ready (about two and a half minutes). The trusted helper downloaded the
-published release, verified it and extracted all 748 archive files. No generation login, generation or registration ran.
+Full PR CI passed for #372. The archive was built from a clean worktree at the main merge, with the sprite-gen submodule checked out at
+its pin with LF line ends. A trial build of the PR head gave byte-identical release files. That trial ZIP was installed on Windows 11 x64
+(RTX 3050 Laptop) without the API, pinned the way `npx oddbout-host` pins it: the kit, Python 3.12.15, the kit's Node packages, then og's
+`kit` and `engine` setup steps. A RIFE install made before the resident binary was placed in the install's own data folder first.
+`sprite:setup` found it working without the binary and ran `rife install`. That kept RIFE (`installed: already`, check frame passed),
+downloaded the 2 MB resident binary and passed its check frame on the GPU. `sprite:status` then reported `rife-serve ok` and every tool
+ready, in about two minutes. The trusted helper downloaded the published release, verified it and extracted all 750 archive files. No
+generation login, generation or registration ran.
 
-Publication added only three release files, preserved 7,796 existing files without changes or deletions, and verified HTTP 200 and exact
-release bytes plus 12 unchanged site files at 2026-11-07T02:17:22.290Z. The release itself needs no game, API or site build.
+Publication added only three release files, preserved 7,799 existing files without changes or deletions, and verified HTTP 200 and exact
+release bytes plus 12 unchanged site files at 2026-11-07T03:50:55.048Z. The release itself needs no game, API or site build.
 
-Earlier releases (0.6.17 back to 0.4.0) and their verification records are in [records/KIT-RELEASES.md](records/KIT-RELEASES.md).
+Earlier releases (0.6.18 back to 0.4.0) and their verification records are in [records/KIT-RELEASES.md](records/KIT-RELEASES.md).
 When a new release becomes current, move the entry above there.
 
 For installation and migration use [ODDBOUT-PLUGIN.md](ODDBOUT-PLUGIN.md). `plugin:bundle` now produces a

@@ -5,7 +5,7 @@
 내 PC(Windows·macOS·Linux)와 내 SuperGrok 구독으로 oddbout.com의 내 선수를 만든다. Node 22.12 이상만 있으면 된다.
 
 ```sh
-npx -y oddbout-host@0.1.0
+npx -y oddbout-host@0.1.1
 ```
 
 처음 한 번은 아래 순서로 간다. 단계마다 사이트의 내 PC 카드에 지금 어디인지 보인다(하트비트 `setup`).
@@ -36,7 +36,7 @@ npx -y oddbout-host@0.1.0
 - 한 설치 폴더에는 한 러너만 돈다(`runner.lock`). Linux에서 `npm run host`의 서비스 워커가 돌고 있으면 시작하지 않는다.
 - 공개(npm publish)는 `prepublishOnly`가 `check-pins.mjs --publish`로 막는다: 키트의 엔진이 공식 호스트(`og.mjs` `KIT_REF`)와 같아야 하고,
   키트 `release.json`이 고정한 ZIP을 가리켜야 한다(`--download`면 모든 파일을 다시 받아 대조한다).
-  고정한 키트는 0.6.18(sprite-gen `e44065a`, `KIT_REF`와 같은 엔진)이다. 엔진을 옮기면 키트를 새로 내고 `pins.json`의 `kit`도 옮긴다.
+  고정한 키트는 0.6.19(sprite-gen `767f3ec`, `KIT_REF`와 같은 엔진)이다. 엔진을 옮기면 키트를 새로 내고 `pins.json`의 `kit`도 옮긴다.
 
 | 파일 | 하는 일 |
 | --- | --- |
@@ -49,6 +49,10 @@ npx -y oddbout-host@0.1.0
 2026-11-07 이 PC(Windows 11 x64)에서 연결 없이 실제 핀으로 설치 단계를 돌렸다: 키트 0.6.18·Python 3.12.15·ffmpeg 9.0.2·Grok CLI·키트 npm·
 sprite-gen venv·img2webp·RIFE 모두 됐다(합 약 2분 반). RIFE는 Windows ZIP의 CRLF `flownet.param`을 LF로 바꿔 검사하고(sprite-gen-agent#57)
 확인 프레임을 통과했다. 0.6.17 키트에는 이 수정이 없어 Windows에서 RIFE가 깔리지 않았다.
+키트 0.6.19(oddbout-host 0.1.1)는 RIFE 상주 바이너리(`rife-ncnn-vulkan-serve`, sprite-gen-agent#63)를 RIFE 옆에 둔다: 고리 정렬이 Windows에서 약 1.9배,
+Linux에서 약 2.4배 빨라지고 프레임은 같다. 이미 깔린 설치는 키트가 바뀌어 `sprite` 단계가 다시 돌 때 RIFE는 그대로 두고 상주 바이너리만 받는다.
+같은 날 같은 ZIP을 이 순서(키트 → Python → og `setupStep kit·engine`, 연결 없이)로 깔고, 상주 바이너리 전의 RIFE를 미리 넣어 두었더니
+`sprite:setup`이 상주 바이너리를 받아 확인 프레임을 통과했고 `rife-serve ok`, 도구 `ready`였다(약 2분). macOS는 RIFE만 쓴다.
 아직 실기로 확인하지 않은 것: 깨끗한 Windows 11·Apple silicon Mac에서 연결 → Grok 로그인 → 선수 1명(계획 1.3·1.6의 실기 검증),
 Vulkan이 없는 GPU의 RIFE, 경로 260자, Defender, macOS 서명. ffmpeg는 GPL 빌드를 배포처(gyan.dev, martin-riedl.de)에서 직접 받는다.
 
