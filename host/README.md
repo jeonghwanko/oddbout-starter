@@ -5,7 +5,7 @@
 내 PC(Windows·macOS·Linux)와 내 SuperGrok 구독으로 oddbout.com의 내 선수를 만든다. Node 22.12 이상만 있으면 된다.
 
 ```sh
-npx -y oddbout-host@0.1.1
+npx -y oddbout-host@0.1.2
 ```
 
 처음 한 번은 아래 순서로 간다. 단계마다 사이트의 내 PC 카드에 지금 어디인지 보인다(하트비트 `setup`).
@@ -53,6 +53,8 @@ sprite-gen venv·img2webp·RIFE 모두 됐다(합 약 2분 반). RIFE는 Windows
 Linux에서 약 2.4배 빨라지고 프레임은 같다. 이미 깔린 설치는 키트가 바뀌어 `sprite` 단계가 다시 돌 때 RIFE는 그대로 두고 상주 바이너리만 받는다.
 같은 날 같은 ZIP을 이 순서(키트 → Python → og `setupStep kit·engine`, 연결 없이)로 깔고, 상주 바이너리 전의 RIFE를 미리 넣어 두었더니
 `sprite:setup`이 상주 바이너리를 받아 확인 프레임을 통과했고 `rife-serve ok`, 도구 `ready`였다(약 2분). macOS는 RIFE만 쓴다.
+oddbout-host 0.1.2(키트 0.6.19 그대로)는 단계가 도는 동안 PC가 저절로 잠들지 않게 막고, 잠들었다 깨면 그 단계의 임대를 바로 갱신한다
+(계획 1.6, `docs/GENERATION-HOST.md` 운영 절). 이미 깔린 PC는 열린 작업이 없을 때 `npx -y oddbout-host@0.1.2`로 다시 켜면 워커 파일만 바뀐다(키트는 같아 다시 받지 않는다).
 아직 실기로 확인하지 않은 것: 깨끗한 Windows 11·Apple silicon Mac에서 연결 → Grok 로그인 → 선수 1명(계획 1.3·1.6의 실기 검증),
 Vulkan이 없는 GPU의 RIFE, 경로 260자, Defender, macOS 서명. ffmpeg는 GPL 빌드를 배포처(gyan.dev, martin-riedl.de)에서 직접 받는다.
 

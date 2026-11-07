@@ -1,6 +1,6 @@
 {
   "name": "oddbout-host",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "One command makes your PC an ODDBOUT generation host: your SuperGrok (and, if you like, ChatGPT) makes your fighters.",
   "license": "MIT",
   "type": "module",
