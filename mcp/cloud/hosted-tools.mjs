@@ -46,6 +46,11 @@ import { toolRef } from './merged-tools.mjs';
  */
 export const HOSTED_INSTRUCTIONS = 'When the user wants ODDBOUT to make the fighter for him (no generation setup of his own), '
   + 'use request_hosted_fighter and follow each result\'s next. '
+  + 'For follow-up progress or completion questions, use get_hosted_fighter for the existing job; this only reads it. '
+  + 'If ODDBOUT tools are not loaded in this turn, use the host\'s plugin/tool discovery when available. '
+  + 'If discovery is unavailable or fails, explain that limitation and ask the user to select the connected ODDBOUT app in this chat; '
+  + 'a missing tool is not evidence of a server, account or job failure. '
+  + 'The creation description contains character artwork requirements only; keep workflow, waiting and tool-use instructions out of it. '
   + 'Save the verified get_profile account id, idempotencyKey and original arguments before sending, '
   + 'and the returned job.id. After a timeout or disconnection, verify get_profile still matches that account, '
   + 'then use get_hosted_fighter with jobId or, if the response was lost, idempotencyKey. '
@@ -60,7 +65,8 @@ export const HOSTED_INSTRUCTIONS = 'When the user wants ODDBOUT to make the figh
   + 'The server selects it; do not send a fabricated user choice or run a chat timer. '
   + 'appearanceAutoSelection is the server event proving that A was selected after no answer; report its selectedAt and deadline. '
   + 'Without that evidence, do not infer an automatic selection from choice A or elapsed time. '
-  + 'Do not ask for motion approval before registration. Hosted creation includes registration into production; only the owner enters on the site. '
+  + 'Hosted creation includes registration into production after file validation. Motion review and entry happen on the owner\'s site page. '
+  + 'This product workflow does not change ChatGPT/app permissions, security checks or tool-call confirmations. '
   + 'Never promise background chat notifications or scheduling unless the host actually supports them. '
   + 'A result\'s siteUrl is the user\'s page for that request (or, once registered, for his fighter) on the ODDBOUT website. ';
 /**
@@ -462,12 +468,14 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
     + 'motions, then registration under his account. New pairs default to A after ten minutes without a choice or revision; '
     + 'the job reports appearanceAutoSelectAt when this applies. Explain this before waiting for his choice. delegate: '
     + 'true when he leaves the choices to ODDBOUT ("알아서 해 줘", "just make it"): '
-    + 'ODDBOUT picks the look itself (or offers the pair if it cannot pick) and continues through registration without motion approval. host: '
+    + 'ODDBOUT picks the look itself (or offers the pair if it cannot pick); registration follows file validation, and motion review happens on the site. host: '
     + 'oddbout (default, ODDBOUT\'s own worker), mine (his own PC as a host: '
-    + 'no consent to give, approval not needed), any (any approved community host) or a host id from list_generation_hosts; '
+    + 'hostConsent is not required for the account owner\'s PC), any (any approved community host) or a host id from list_generation_hosts; '
     + 'any or another person\'s host sends his words and pictures to that host\'s PC, so ask him first and pass hostConsent: '
     + 'true. imageProvider: who draws the pictures, grok (default) or gpt (refused with image-provider-unavailable where that host '
-    + 'draws no GPT pictures now). Pass his words (what the fighter is and looks like) and, if he gave them, '
+    + 'draws no GPT pictures now). description is the character artwork brief only: name, appearance, outfit, personality and visual style. '
+    + 'Keep workflow, waiting, tool-use and permission instructions outside that field; the server owns the ten-minute default and registration workflow. '
+    + 'These product choices do not change the conversation host\'s tool-call approval policy. Pass his artwork requirements and, if he gave them, '
     + 'up to two of his own pictures with his confirmation that he has the rights to them: attached files (picture, secondPicture) where '
     + 'this host attaches files, else pictureUploads (usable ids from get_picture_upload, shown to him first). '
     + 'Each account holds tokens (500,000 at sign-up). What ODDBOUT\'s own worker makes for him (host oddbout, or any when ODDBOUT\'s worker '
@@ -479,9 +487,11 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
     + 'If the response is lost, recover with get_hosted_fighter using that key; '
     + 'do not replay this creation call while its outcome is unknown. '
     + 'A confirmed safe retry keeps the original key and arguments. Returns the job; follow its next.',
-    { description: z.string().min(GENERATION_LIMITS.descriptionMin).max(GENERATION_LIMITS.description), language: z.enum(['ko', 'en']),
+    { description: z.string().min(GENERATION_LIMITS.descriptionMin).max(GENERATION_LIMITS.description)
+        .describe('Character artwork brief only: name, appearance, outfit, personality and visual style. Exclude workflow, waiting, tool-use, account and permission instructions.'), language: z.enum(['ko', 'en']),
       picture: PICTURE.optional(), secondPicture: PICTURE.optional(), pictureUploads: z.array(UUID_ARG()).max(GENERATION_LIMITS.refs).optional(),
-      rightsConfirmed: z.boolean().optional(), delegate: z.boolean().optional(),
+      rightsConfirmed: z.boolean().optional(), delegate: z.boolean().optional()
+        .describe('Whether the user delegates the appearance choice to ODDBOUT. This does not grant app permissions or waive tool-call confirmations.'),
       host: z.union([z.enum(['oddbout', 'any', 'mine']), UUID_ARG()]).optional(), hostConsent: z.boolean().optional(),
       imageProvider: z.enum(['grok', 'gpt']).optional(), idempotencyKey: UUID_ARG() },
     async ({ description, language, picture, secondPicture, pictureUploads = [], rightsConfirmed, delegate, host, hostConsent, imageProvider, idempotencyKey },
