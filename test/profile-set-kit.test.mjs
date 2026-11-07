@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
 import { parseProfileSet } from '../api/profile-set-contract.mjs';
-import { buildProfileSet, faceBox } from '../scripts/profile-set.mjs';
+import { buildProfileSet, faceBox, parseFace } from '../scripts/profile-set.mjs';
 
 /** RGBA pixels `width` × `height` with filled rectangles [x0, y0, x1, y1] (inclusive). */
 function pixels(width, height, rects, background = null) {
@@ -73,5 +73,26 @@ test('fighter:profile-set refuses what the server would: no transparency (with t
     assert.deepEqual(await codes({ front: wide }), ['FIGURE_WIDTH']);
     assert.deepEqual(await codes({ front: good, expressions: square }), ['EXPRESSIONS_DIMENSIONS']);
     assert.deepEqual(await codes({ front: good, expressions: opaque }), ['PICTURE_NO_ALPHA']);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('fighter:profile-set --face: a square the user approved in place of the measured one, checked as a measured one is', async () => {
+  assert.deepEqual([undefined, '170,140,260', ' 1,2,16 ', '1,2,15', '1,2', 'a,b,c', '1.5,2,30', '-1,2,30'].map(parseFace),
+    [null, { x: 170, y: 140, side: 260 }, { x: 1, y: 2, side: 16 }, false, false, false, false, false]);
+  const dir = await mkdtemp(path.join(tmpdir(), 'profile-set-face-'));
+  try {
+    // A big round head whose face sits low, as 깔깔이's (2026-11-07): face-box takes the top of the head.
+    const front = path.join(dir, 'front.png');
+    await sharp(await png(pixels(1600, 1200, [[200, 100, 520, 420], [220, 420, 500, 1000]]))).toFile(front);
+    const measured = await buildProfileSet({ front, out: path.join(dir, 'measured') });
+    assert.equal(measured.ok, true, JSON.stringify(measured));
+    const face = { x: measured.set.face.x, y: measured.set.face.y + 80, side: 220 };
+    const approved = await buildProfileSet({ front, out: path.join(dir, 'approved'), face });
+    assert.equal(approved.ok, true, JSON.stringify(approved));
+    assert.deepEqual(approved.set.face, face);
+    assert.equal(approved.set.front.sha256, measured.set.front.sha256, 'the front is framed the same; only the square changes');
+    // A square outside the painting is refused, as the server would.
+    const outside = await buildProfileSet({ front, out: path.join(dir, 'outside'), face: { x: 5000, y: 0, side: 200 } });
+    assert.equal(outside.ok, false);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });

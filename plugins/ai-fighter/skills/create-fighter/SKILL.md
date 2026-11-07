@@ -117,7 +117,9 @@ his face in the arena, and the home lists him only once his profile set is appro
 4. Build the set with `npm run fighter:profile-set -- --front <pick> --expressions <sheet> --out <new folder>`. It frames the front,
    measures the face square, checks both pictures as the server will and writes `profile-set.json`, `front.webp`, `expressions.webp`,
    `face-preview.png` and `ko-preview.png`. Never type sizes, hashes or the face square. Show the face as a round crop and the sheet with
-   its KO face, in the appearance group's review.
+   its KO face, in the appearance group's review. Only when the user sees the measured crop miss the face (a big round head whose face
+   sits low): build again into a new folder with `--face <x>,<y>,<side>`, a square in the framed front's pixels that holds the face (its side
+   10–30 % of the figure's height), show that crop, and use it only once the user approves it; the same checks run on it.
 5. Draw the side view (facing right) from the approved front as the first reference, same colouring; check it is the same character.
    Continue the appearance group (concept/idle) from that side view; the motions follow it.
 6. After registration, upload the set with `prepare_fighter_registration` kind `profile_set` (fighter id, its `profile-set.json`),
