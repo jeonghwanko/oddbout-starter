@@ -158,5 +158,9 @@ test('rerun: the two pixel judges on the same items, a bad answer counted; the C
   assert.match(refused([dir, '--sample', '-1'])[1], /whole number/);
   assert.equal(refused([path.join(dir, 'missing')])[0], 2);
   assert.equal(refused([labelsFile])[0], 2, 'a file is not an archive folder');
+  // --judge: another pixel-judge script (host/side_models.py), only with --rerun and only one that exists; its value is never the archive.
+  assert.match(refused([dir, '--judge', labelsFile])[1], /--judge needs --rerun/);
+  assert.match(refused([dir, '--rerun', '--python', 'py', '--judge', path.join(pics, 'none.py')])[1], /--judge needs --rerun and an existing script/);
+  assert.match(refused(['--judge', dir])[1], /^usage:/, 'the folder after --judge is its value, not the archive');
   assert.equal(quantile([], 0.5), null);
 });

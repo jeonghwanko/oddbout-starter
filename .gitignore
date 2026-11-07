@@ -17,3 +17,6 @@ output/
 .DS_Store
 supabase/.temp/
 supabase/.branches/
+
+# side-models tier (host/side_models.py setup): its venv and weights
+/side-models/

@@ -15,7 +15,10 @@
 // about the queue than about the judges. Where the pixels and codex agreed, the label says whether both were right (the queue mixes in a
 // random sample of these); where they disagreed, which one was; where codex said nothing, whether the pixels were right.
 //
-//   node scripts/judge-eval.mjs <archive-dir> [--labels labels.jsonl] [--json] [--queue N] [--sample N] [--rerun --python <python>]
+//   node scripts/judge-eval.mjs <archive-dir> [--labels labels.jsonl] [--json] [--queue N] [--sample N] [--rerun --python <python> [--judge <script>]]
+//
+// `--judge` names another script with motions.py's `pixel-judge` command (host/side_models.py: the pixel judge with the side take's `side`
+// from local models, run with that tier's own venv python); without it, host/motions.py.
 //
 // A label line: {"id":"<archive line id>","checks":{"side":"fail"}} — only the checks it names are labelled (pass or fail).
 import { createHash } from 'node:crypto';
@@ -225,7 +228,7 @@ export function labelQueue(records, labels = Object.create(null), { sample = 5 }
 }
 
 /**
- * The archived pictures judged again by this checkout's pixel judge (`python -I host/motions.py pixel-judge`): the lines that kept their
+ * The archived pictures judged again by this checkout's pixel judge (`python -I host/motions.py pixel-judge`, or the `--judge` script): the lines that kept their
  * pictures, each with its `pixels` replaced by the new answer, and the same lines as archived (`before`), so the two pixel judges are
  * compared on the same items. A run that gives no usable answer is counted in `failed` and left out of both.
  * @param {Line[]} records @param {string} dir
@@ -296,8 +299,8 @@ export function render(byMode, title) {
   return out.join('\n');
 }
 
-const USAGE = 'usage: node scripts/judge-eval.mjs <archive-dir> [--labels labels.jsonl] [--json] [--queue N] [--sample N] [--rerun --python <python>]';
-const VALUED = new Set(['--labels', '--queue', '--sample', '--python']);
+const USAGE = 'usage: node scripts/judge-eval.mjs <archive-dir> [--labels labels.jsonl] [--json] [--queue N] [--sample N] [--rerun --python <python> [--judge <script>]]';
+const VALUED = new Set(['--labels', '--queue', '--sample', '--python', '--judge']);
 /** @param {string} file */
 const isDir = file => { try { return statSync(file).isDirectory(); } catch { return false; } };
 
@@ -309,6 +312,8 @@ export function main(argv, { out = line => { process.stdout.write(`${line}\n`); 
   if (!dir || !isDir(dir)) { out(USAGE); return 2; }
   const python = flag('--python'), labelsFile = flag('--labels'), queueSize = Number(flag('--queue') ?? 20), sample = Number(flag('--sample') ?? 5);
   if (argv.includes('--rerun') && !python) { out('--rerun needs --python <the sprite-gen venv python>'); return 2; }
+  const judge = flag('--judge');
+  if (judge !== undefined && (!argv.includes('--rerun') || !existsSync(judge))) { out(`--judge needs --rerun and an existing script (${judge})`); return 2; }
   if (labelsFile !== undefined && !existsSync(labelsFile)) { out(`no labels file at ${labelsFile}`); return 2; }
   if (![queueSize, sample].every(n => Number.isInteger(n) && n >= 0)) { out('--queue and --sample take a whole number'); return 2; }
   const { records, skipped } = readArchive(dir);
@@ -317,7 +322,7 @@ export function main(argv, { out = line => { process.stdout.write(`${line}\n`); 
   const byMode = evaluateByMode(records, labels), queue = labelQueue(records, labels, { sample }).slice(0, queueSize);
   /** @type {any} */ const result = { lines: records.length, skipped, labelled, unmatchedLabels: Object.keys(labels).length - labelled, byMode, queue };
   if (argv.includes('--rerun') && python) {
-    const again = rerun(records, dir, { python });
+    const again = rerun(records, dir, { python, ...(judge ? { motions: judge } : {}) });
     result.rerun = { lines: again.records.length, failed: again.failed, before: evaluateByMode(again.before, labels), after: evaluateByMode(again.records, labels) };
   }
   if (argv.includes('--json')) { out(JSON.stringify(result, null, 1)); return 0; }
