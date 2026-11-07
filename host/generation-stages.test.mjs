@@ -68,7 +68,7 @@ test('a look: the brief with the house rules and the change asked; a profile ove
   assert.equal(manifest.profile.name, 'x');
   // Dated by the job, not by the day a stage runs: every stage finds the same folder.
   assert.match(ogJobId({ id: '0123abcd-0000-4000-8000-0123456789ab', createdAt: '2026-10-27T23:59:00Z' }), /^20261027-gen-0123abcd000040008000[0-9a-f]{12}$/);
-  assert.equal(submissionOutcome({ status: 409, code: 'submission-quota' }), 'failed');
+  assert.equal(submissionOutcome({ status: 409, code: 'submission-quota' }), 'review');
   assert.equal(submissionOutcome({ status: 503, code: 'database-unavailable' }), 'retry');
   assert.equal(submissionOutcome({ ok: false, code: 'bad-reply' }), 'retry');
   assert.equal(submissionOutcome({ status: 422, code: 'invalid-manifest' }), 'review');

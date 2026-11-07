@@ -904,11 +904,11 @@ export function withProfile(manifest, profile, brief) {
 }
 
 /**
- * What a refused submission step means for the job: the account cannot take the fighter (it frees the creator's hosted fighter —
- * `failed`), the service is busy or unreachable (try again — `retry`, bounded by the stage's leases), anything else an operator reads.
+ * A submission refusal never makes completed art disposable. Account/slot limits need an operator (`review`),
+ * so recovery can resume this package after the blocker clears. Service outages still use bounded `retry`.
  */
 export function submissionOutcome(reply) {
-  if (['fighter-quota', 'submission-quota', 'open-submission-exists'].includes(reply.code)) return 'failed';
+  if (['fighter-quota', 'submission-quota', 'open-submission-exists'].includes(reply.code)) return 'review';
   if (!reply.status || reply.status >= 500 || ['submissions-paused', 'storage-budget-full', 'beta-capacity', 'rate-limit'].includes(reply.code)) return 'retry';
   return 'review';
 }
