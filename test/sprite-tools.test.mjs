@@ -96,6 +96,59 @@ test('RIFE is optional: missing before sprite-gen exists, and a failed check fra
   assert.equal(item.status, 'ready'); assert.deepEqual(item.warnings.map(w => [w.tool, w.command]), [['rife', 'npm run sprite:setup']]);
 });
 
+test('a working RIFE reports its resident binary; one sprite:setup can install is missing, with the setup command, and never a warning', async t => {
+  const dir = await directory(t), python = path.join(dir, 'python');
+  await writeFile(python, '');
+  const answer = serve => async () => ({ code: 0, output: `${JSON.stringify({ status: 'ok', path: '/r/rife-ncnn-vulkan', version: '20221029', serve })}\n` });
+  const missing = await inspectRife({ python, env: {}, probe: answer({ status: 'missing' }) });
+  assert.deepEqual([missing.status, missing.serve.status, missing.serve.install.actor, missing.serve.install.command], ['ok', 'missing', 'agent', 'npm run sprite:setup']);
+  assert.match(missing.serve.effectWhenMissing, /once per frame/);
+  for (const serve of [{ status: 'ok', path: '/r/rife-ncnn-vulkan-serve' }, { status: 'off', reason: 'SPRITE_GEN_RIFE_SERVE is set empty' },
+    { status: 'not-offered', reason: 'no resident binary is released for macos arm64' }, { status: 'broken', reason: 'not an executable file' }]) {
+    const found = await inspectRife({ python, env: {}, probe: answer(serve) });
+    assert.deepEqual(found.serve, serve, serve.status); // only a missing one gets an install
+  }
+  const item = toolsItem({ ffmpeg: { status: 'ok' }, ffprobe: { status: 'ok' }, img2webp: { status: 'ok' }, rife: missing });
+  assert.deepEqual([item.status, item.warnings], ['ready', []]);
+});
+
+test('setup runs rife install for a missing RIFE and for a working one without its resident binary, and shows the binary', async () => {
+  const ok = { ffmpeg: { status: 'ok' }, ffprobe: { status: 'ok' }, img2webp: { status: 'ok' } };
+  const rifeOk = serve => ({ status: 'ok', required: false, path: '/r/rife-ncnn-vulkan', version: '20221029', serve });
+  const setup = async (before, after) => {
+    const installs = [], lines = [];
+    let probes = 0;
+    assert.equal(await setupTools({ inspect: async () => ok, log: line => lines.push(line),
+      inspectOptional: async () => (probes++ ? after : before),
+      execute: async (command, args) => { installs.push(args.join(' ')); return 0; } }), 0);
+    return { installs, lines, probes };
+  };
+  const install = ['-m sprite_gen.cli rife install'];
+  // RIFE installed before the resident binary existed: rife install keeps it (only its check) and adds the binary beside it.
+  const added = await setup(rifeOk({ status: 'missing' }), rifeOk({ status: 'ok', path: '/r/rife-ncnn-vulkan-serve' }));
+  assert.deepEqual([added.installs, added.probes], [install, 2]);
+  assert.ok(added.lines.some(line => /^ {2}rife-serve +ok +\/r\/rife-ncnn-vulkan-serve$/.test(line)), added.lines.join('\n'));
+  assert.deepEqual((await setup({ status: 'missing', required: false }, rifeOk({ status: 'ok', path: '/r/s' }))).installs, install);
+  // Nothing rife install could add: no second run, every setup.
+  for (const serve of [{ status: 'ok', path: '/r/s' }, { status: 'off', reason: 'set empty' }, { status: 'not-offered', reason: 'macos' }, { status: 'broken', reason: 'x' }]) {
+    const kept = await setup(rifeOk(serve), rifeOk(serve));
+    assert.deepEqual([kept.installs, kept.probes], [[], 1], serve.status);
+    assert.ok(kept.lines.some(line => line.startsWith(`  rife-serve ${serve.status}`)), kept.lines.join('\n'));
+  }
+  // A refused or failed download leaves RIFE working as before: still missing, shown with what it costs, and setup does not fail.
+  const refused = await setup(rifeOk({ status: 'missing' }), (await inspectRifeFixture({ status: 'missing' })));
+  assert.ok(refused.lines.some(line => line.startsWith('  rife-serve missing') && line.includes('once per frame')), refused.lines.join('\n'));
+});
+
+/** inspectRife's answer for a working RIFE whose resident binary is `serve`. */
+async function inspectRifeFixture(serve) {
+  const dir = await mkdtemp(path.join(tmpdir(), 'sprite-tools-')), python = path.join(dir, 'python');
+  try {
+    await writeFile(python, '');
+    return await inspectRife({ python, env: {}, probe: async () => ({ code: 0, output: JSON.stringify({ status: 'ok', path: '/r/rife-ncnn-vulkan', version: '20221029', serve }) }) });
+  } finally { await rm(dir, { recursive: true, force: true }); }
+}
+
 test('sprite-gen runs with the kit venv first on PATH, keeping a single PATH key', () => {
   const env = toolEnv('/kit/vendor/sprite-gen', { Path: 'C:\\Windows', OTHER: '1' });
   assert.deepEqual(Object.keys(env).sort(), ['OTHER', 'Path']);

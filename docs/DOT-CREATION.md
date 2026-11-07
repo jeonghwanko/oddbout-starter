@@ -139,6 +139,7 @@ Python 탐지가 필요한 호스트는 `AI_FIGHTER_BOOTSTRAP_PYTHON`에 Python 
 | --- | --- | --- |
 | `img2webp`(`-exact`, libwebp 1.5+) | 걷기·달리기 WebP, 필수 | 없거나 오래되면 키트가 libwebp 1.6.0을 SHA-256 고정으로 venv에 받는다 |
 | RIFE | 루프 이음새 보정, 선택 | 키트가 `sprite-gen rife install`을 부른다. 확인 프레임 실패는 경고 |
+| RIFE 상주 바이너리 | 루프 정렬 약 2배 빠르게, 같은 프레임, 선택 | 같은 `rife install`이 RIFE 옆에 받는다(Windows·Linux x86-64, SHA-256 고정, 확인 프레임 일치 시만). 이미 깐 RIFE도 `sprite:setup`을 다시 돌리면 받는다 |
 | `ffmpeg`·`ffprobe` | 영상 → 프레임, 필수 | 사용자·준비자가 설치: `sudo apt install ffmpeg` / `brew install ffmpeg` / `winget install --id Gyan.FFmpeg -e` |
 
 `sprite:status`의 `tools`가 `ready`가 아니면 생성을 시작하지 않는다. `install.actor`가 `agent`면 `npm run sprite:setup`을 실행하고,

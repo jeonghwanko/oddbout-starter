@@ -139,10 +139,12 @@ export async function setupTools({ includeRife = true, inspect = inspectTools, i
     catch (/** @type {any} */ error) { log(error.message); failed = 1; }
   }
   // RIFE: sprite-gen's own installer. A finished install is only checked again; a failed check frame (no Vulkan) is a warning.
+  // It also puts the resident binary beside the binary, so a RIFE installed before it existed is run through it once more.
+  /** @type {import('./sprite-tools.mjs').Tool} */
   let rife = { status: 'not-checked', required: false };
   if (includeRife) {
     rife = await inspectOptional({ ...options, env: toolEnv(spriteRoot) });
-    if (rife.status === 'missing') {
+    if (rife.status === 'missing' || rife.serve?.status === 'missing') {
       if (await execute(spritePython, ['-m', 'sprite_gen.cli', 'rife', 'install'])) log('rife: sprite-gen rife install did not finish; see the message above.');
       rife = await inspectOptional({ ...options, env: toolEnv(spriteRoot) });
     }
@@ -152,8 +154,11 @@ export async function setupTools({ includeRife = true, inspect = inspectTools, i
   log('\nsprite-gen tools:');
   for (const name of ['ffmpeg', 'ffprobe', 'img2webp', 'rife']) {
     const tool = item[name];
-    log(`  ${name.padEnd(9)} ${tool.status.padEnd(8)} ${tool.path ?? ''}${tool.version ? ` (${tool.version})` : ''}${tool.reason ? ` — ${tool.reason}` : ''}`);
+    log(`  ${name.padEnd(10)} ${tool.status.padEnd(8)} ${tool.path ?? ''}${tool.version ? ` (${tool.version})` : ''}${tool.reason ? ` — ${tool.reason}` : ''}`);
   }
+  const serve = item.rife.serve; // the resident binary, for a RIFE that works
+  if (serve) log(`  ${'rife-serve'.padEnd(10)} ${serve.status.padEnd(8)} ${serve.path ?? ''}${serve.reason ? ` — ${serve.reason}` : ''}`
+    + (serve.status === 'missing' ? `— ${serve.effectWhenMissing}` : ''));
   for (const warning of item.warnings) log(`  warning: rife ${warning.status} — ${warning.message}. Next: ${warning.command}`);
   if (item.nextAction) log(`  action required (${item.nextAction.actor}): ${item.nextAction.commands.join('  |  ')}`);
   return failed;
