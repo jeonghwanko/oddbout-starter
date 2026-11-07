@@ -14,7 +14,7 @@ import { ALIGN_AGAIN, BEAT_LIMIT, GROK_LIMITED, BRIEF_SCHEMA, ONE_STRIDE_OF, GAI
   verdictKeyStatus, videoEntry, VIDEO_REQUESTED, REQUESTED_MODELS, writeWhole, JUDGE_MODES, PIXEL_JUDGE, checkedPixels, hybridJudgeKey, judgesMode,
   pixelJudgeKey, sidePassed, IMAGE_PROFILES, GROK_IMAGE_MODEL, appearanceCommand, chromaKeyFor, expressionsCommand, gaitStillCommand, gaitStillPrompt,
   imageFor, imageProviderOf, requestedModels, sideCommand, FRONT_TAKES, GROK_FRONT_COLOURING, GROK_FRONT_FRAMING, GROK_FRONT_TAKES,
-  GROK_ONE_FIGURE, createJudgeArchive, judgeImageDays, judgmentLine, numbersOnly } from './generation-stages.mjs';
+  GROK_ONE_FIGURE, archiveJobKey, createJudgeArchive, judgeArchiveDays, judgeImageDays, judgmentLine, numbersOnly } from './generation-stages.mjs';
 import { codexSessionFacts } from './codex-usage.mjs';
 import { ENGINE_SEAM_MAX as REVIEW_SEAM_MAX, ENGINE_CUE_RHYTHM as REVIEW_CUE_RHYTHM, lowMarginFeet as reviewLowMarginFeet } from '../tools/ai-fighter/gait.mjs';
 import { parseEnv, parseHealth } from './generation-worker.mjs';
@@ -1825,93 +1825,170 @@ test('hybrid: a pixel fail is final with no codex call; an open check asks codex
 /** The archive's lines in `dir`, oldest first. */
 const archived = async dir => (await Promise.all((await readdir(dir).catch(() => [])).filter(n => n.endsWith('.jsonl')).sort()
   .map(n => readFile(path.join(dir, n), 'utf8')))).join('').split('\n').filter(Boolean).map(line => JSON.parse(line));
+/** An archive in a fresh folder, its salt beside it (as the worker keeps it: outside the archive folder). */
+const freshArchive = async (options = {}) => {
+  const root = await mkdtemp(path.join(tmpdir(), 'judge-archive-'));
+  const dir = path.join(root, 'judge-archive');
+  return { root, dir, archive: createJudgeArchive({ dir, saltFile: path.join(root, 'judge-archive.salt'), ...options }) };
+};
 
-test('the judgment archive: one line per judgment with checks, numbers and models only; pictures only when asked, pruned by day', async () => {
+test('the judgment archive: checks, numbers and models, a salted job key and no job id; retention and the off switch', async () => {
   assert.deepEqual([undefined, '', '0', '7', '365', '366', '2.5', 'x'].map(judgeImageDays), [0, 0, 0, 7, 365, 0, 0, 0]);
+  assert.deepEqual([undefined, '', 'off', 'OFF', '0', '30', '730', '731', 'x'].map(judgeArchiveDays), [180, 180, 0, 0, 0, 30, 730, 180, 180]);
   assert.deepEqual(numbersOnly({ ms: 90, note: 'a frying pan', regions: [{ lab: [50, 1, 2], name: 'red' }], seam: { engine: null, own: 1.2 } }),
     { ms: 90, regions: [{ lab: [50, 1, 2] }], seam: { engine: null, own: 1.2 } });
-  const line = judgmentLine({ id: 'x', at: new Date('2026-11-07T01:02:03Z'), job: 'j', item: 'side-0-a/take-0', kind: 'side', mode: 'hybrid',
+  const line = judgmentLine({ id: 'x', at: new Date('2026-11-07T01:02:03Z'), jobKey: '0123456789abcdef', item: 'side-0-a/take-0', kind: 'side', mode: 'hybrid',
     decidedBy: 'pixels', final: { ...pass5, notes: 'no' }, pixels: { model: 'pixels-v1', observed: 'pixels-v1', checks: { ...pass5, side: 'unknown', extra: 'x' },
       measures: { ms: 80, words: 'gone' }, ms: 80 } });
-  assert.deepEqual(line, { v: 1, id: 'x', at: '2026-11-07T01:02:03.000Z', job: 'j', item: 'side-0-a/take-0', kind: 'side', mode: 'hybrid', decidedBy: 'pixels',
-    final: pass5, pixels: { model: 'pixels-v1', observed: 'pixels-v1', checks: { ...pass5, side: 'unknown' }, measures: { ms: 80 }, ms: 80, wallMs: null }, codex: null });
+  assert.deepEqual(line, { v: 2, id: 'x', at: '2026-11-07T01:02:03.000Z', jobKey: '0123456789abcdef', item: 'side-0-a/take-0', kind: 'side', mode: 'hybrid',
+    decidedBy: 'pixels', final: pass5, pixels: { model: 'pixels-v1', observed: 'pixels-v1', checks: { ...pass5, side: 'unknown' }, measures: { ms: 80 }, ms: 80,
+      wallMs: null }, codex: null });
+  assert.equal(judgmentLine({ id: 'x', at: new Date(), jobKey: 'not a key', kind: 'loop', mode: 'pixels', decidedBy: 'none', final: null,
+    pixels: { model: 'pixels-v1', error: 1, wallMs: 700 } }).pixels.error, '1');
 
-  const root = await mkdtemp(path.join(tmpdir(), 'judge-archive-'));
-  await writeFile(path.join(root, 'look.png'), 'look');
-  await writeFile(path.join(root, 'side-walk.strip.json'), '{}');
-  await writeFile(path.join(root, 'side-walk.strip.png'), 'strip');
+  const { root, dir, archive } = await freshArchive({ now: () => new Date('2026-11-07T10:00:00Z') });
+  const id = await archive.note({ jobId: '0123abcd-0006', jobFolder: '20261107-gen-0123abcd', item: 'walk/take-0/cut', kind: 'loop', mode: 'pixels',
+    decidedBy: 'pixels', final: { identity: 'pass', anatomy: 'pass', loop: 'pass' } });
+  const [first] = await archived(dir);
+  assert.equal(first.id, id);
+  assert.equal('job' in first, false, 'no job id in a line');
+  assert.match(first.jobKey, /^[0-9a-f]{16}$/);
+  assert.ok(!JSON.stringify(first).includes('0123abcd'), 'neither the job id nor its folder');
+  const salt = (await readFile(path.join(root, 'judge-archive.salt'), 'utf8')).trim();
+  assert.equal(first.jobKey, archiveJobKey(salt, '0123abcd-0006'), 'the key is the host salt and the job id');
+  assert.equal((await readdir(dir)).includes('judge-archive.salt'), false, 'the salt is not in the folder a copy takes');
+  // The same job, the same key on this host; another host's salt gives another key.
+  await archive.note({ jobId: '0123abcd-0006', item: 'run', kind: 'loop', mode: 'pixels', decidedBy: 'pixels', final: null });
+  assert.equal((await archived(dir))[1].jobKey, first.jobKey);
+  assert.notEqual(archiveJobKey('f'.repeat(64), '0123abcd-0006'), first.jobKey);
+
+  // Month files go once their month ended lineDays ago.
+  await writeFile(path.join(dir, 'judgments-2026-05.jsonl'), '{}\n');
+  await writeFile(path.join(dir, 'judgments-2026-06.jsonl'), '{}\n');
+  const later = createJudgeArchive({ dir, lineDays: 130, now: () => new Date('2026-11-07T10:00:00Z') });
+  // May ended 2026-06-01: 130 days later is 2026-10-09 (gone); June ended 2026-07-01: 2026-11-08 (kept, one more day).
+  assert.deepEqual(await later.prune(), { pictures: 0, lines: 1 });
+  assert.deepEqual((await readdir(dir)).filter(n => n.endsWith('.jsonl')).sort(), ['judgments-2026-06.jsonl', 'judgments-2026-11.jsonl']);
+});
+
+test('the archive\'s pictures: only when asked, re-readable, gone after their days, with their job, or when turned off', async () => {
+  const pics = await mkdtemp(path.join(tmpdir(), 'judge-archive-pics-'));
+  await writeFile(path.join(pics, 'look.png'), 'look');
+  await writeFile(path.join(pics, 'side-walk.strip.json'), '{}');
+  await writeFile(path.join(pics, 'side-walk.strip.png'), 'strip');
   let now = new Date('2026-11-01T10:00:00Z');
-  const entry = { job: 'j', item: 'walk/take-0/cut', kind: 'loop', mode: 'pixels', decidedBy: 'pixels', final: { identity: 'pass', anatomy: 'pass', loop: 'pass' } };
-  const files = [path.join(root, 'look.png'), path.join(root, 'side-walk.strip.json')];
+  const entry = { jobId: 'j', jobFolder: '20261101-gen-aaaa', item: 'walk/take-0/cut', kind: 'loop', mode: 'pixels', decidedBy: 'pixels',
+    final: { identity: 'pass', anatomy: 'pass', loop: 'pass' } };
+  const files = [path.join(pics, 'look.png'), path.join(pics, 'side-walk.strip.json')];
   // None copied by default: the line alone.
-  const plain = createJudgeArchive({ dir: path.join(root, 'a'), now: () => now });
-  assert.ok(await plain.note(entry, files));
-  assert.equal(existsSync(path.join(root, 'a', 'images')), false);
-  assert.equal((await archived(path.join(root, 'a')))[0].images, undefined);
-  // With days: the pixel judge's pictures (a strip's .png beside its .json) under the day, named so the pixel judge reads them again.
-  const kept = createJudgeArchive({ dir: path.join(root, 'b'), imageDays: 3, now: () => now });
+  const plain = await freshArchive({ now: () => now });
+  assert.ok(await plain.archive.note(entry, files));
+  assert.equal(existsSync(path.join(plain.dir, 'images')), false);
+  assert.equal((await archived(plain.dir))[0].images, undefined);
+  // With days: the pixel judge's pictures (a strip's .png beside its .json) under the day, named so the pixel judge reads them again, and
+  // a note of the job's folder.
+  const { dir, archive: kept } = await freshArchive({ imageDays: 3, now: () => now });
   const id = await kept.note(entry, files);
-  assert.deepEqual((await readdir(path.join(root, 'b', 'images', '2026-11-01', id))).sort(), ['0-look.png', '1-side-walk.strip.json', '1-side-walk.strip.png']);
-  const [first] = await archived(path.join(root, 'b'));
+  assert.deepEqual((await readdir(path.join(dir, 'images', '2026-11-01', id))).sort(), ['.job', '0-look.png', '1-side-walk.strip.json', '1-side-walk.strip.png']);
+  assert.equal((await readFile(path.join(dir, 'images', '2026-11-01', id, '.job'), 'utf8')).trim(), '20261101-gen-aaaa');
+  const [first] = await archived(dir);
   assert.deepEqual([first.id, first.images, first.at], [id, ['0-look.png', '1-side-walk.strip.json'], '2026-11-01T10:00:00.000Z']);
   // A picture folder goes when its own time is the days old — not a calendar day later.
   now = new Date('2026-11-04T09:59:00Z');
-  assert.equal(await kept.prune(), 0, 'three days are kept');
+  assert.deepEqual(await kept.prune(), { pictures: 0, lines: 0 }, 'three days are kept');
   now = new Date('2026-11-04T10:00:00Z');
-  assert.equal(await kept.prune(), 1);
-  assert.equal(existsSync(path.join(root, 'b', 'images', '2026-11-01')), false, 'the emptied day goes too');
-  assert.equal((await archived(path.join(root, 'b'))).length, 1, 'the lines stay');
+  assert.deepEqual(await kept.prune(), { pictures: 1, lines: 0 });
+  assert.equal(existsSync(path.join(dir, 'images', '2026-11-01')), false, 'the emptied day goes too');
+  assert.equal((await archived(dir)).length, 1, 'the lines stay');
+  // Its job's folder gone (og purge, og prune): its pictures go at the next prune, whatever their days; another job's stay.
+  const purged = await kept.note(entry, files), other = await kept.note({ ...entry, jobFolder: '20261104-gen-bbbb' }, files);
+  assert.deepEqual(await kept.prune({ jobGone: name => name === '20261101-gen-aaaa' }), { pictures: 1, lines: 0 });
+  assert.deepEqual([existsSync(path.join(dir, 'images', '2026-11-04', purged)), existsSync(path.join(dir, 'images', '2026-11-04', other))], [false, true]);
   // A picture that cannot be read: the line goes in without pictures, none left half copied (a judgment never waits on the archive).
-  const lost = await kept.note(entry, [path.join(root, 'look.png'), path.join(root, 'missing.png')]);
-  const lostLine = (await archived(path.join(root, 'b'))).find(l => l.id === lost);
-  assert.deepEqual([Boolean(lost), lostLine?.images, existsSync(path.join(root, 'b', 'images', '2026-11-04', String(lost)))], [true, undefined, false]);
-  // At 0 days (pictures turned off) the next prune removes every picture kept before.
-  await kept.note(entry, files);
-  assert.equal(await createJudgeArchive({ dir: path.join(root, 'b'), now: () => now }).prune(), 1);
-  assert.deepEqual(await readdir(path.join(root, 'b', 'images')), []);
+  const lost = await kept.note(entry, [path.join(pics, 'look.png'), path.join(pics, 'missing.png')]);
+  const lostLine = (await archived(dir)).find(l => l.id === lost);
+  assert.deepEqual([Boolean(lost), lostLine?.images, existsSync(path.join(dir, 'images', '2026-11-04', String(lost)))], [true, undefined, false]);
+  // At 0 days (pictures or the archive turned off) the next prune removes every picture kept before.
+  assert.deepEqual(await createJudgeArchive({ dir, now: () => now }).prune(), { pictures: 1, lines: 0 });
+  assert.deepEqual(await readdir(path.join(dir, 'images')), []);
 });
 
-test('hybrid with an archive: each new judgment goes in once, codex with its time only when it judged now', async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), 'judge-archive-side-')), archive = createJudgeArchive({ dir });
+test('hybrid with an archive: each new judgment goes in once with a marker, codex with its time only when it judged now', async () => {
+  const { dir, archive } = await freshArchive();
   const run = await sideStage('hybrid', [pixelSide({ whole: 'fail' }), pixelSide({ style: 'unknown' })], [{ checks: pass5, notes: 'The same boxer.' }], { archive });
   const lines = await archived(dir);
   assert.deepEqual(lines.map(l => [l.item, l.mode, l.decidedBy, l.final.whole, l.pixels.checks.side, l.pixels.ms, l.codex?.model ?? null]),
     [['side-0-a/take-0', 'hybrid', 'pixels', 'fail', 'unknown', 90, null], ['side-0-a/take-1', 'hybrid', 'pixels+codex', 'pass', 'unknown', 90, JUDGE.model]]);
-  assert.equal(lines[0].job, run.job.id);
+  assert.match(lines[0].jobKey, /^[0-9a-f]{16}$/);
   assert.deepEqual([typeof lines[1].codex.wallMs, lines[1].codex.reused, typeof lines[1].pixels.wallMs], ['number', undefined, 'number']);
   assert.deepEqual(lines[1].codex.checks, pass5);
   assert.ok(!JSON.stringify(lines).includes('boxer'), 'no notes in the archive');
+  assert.equal((await readFile(path.join(run.folder, 'take-1.verdict.json.archived'), 'utf8')).trim(), lines[1].id);
   await run.again();
   assert.equal((await archived(dir)).length, 2, 'a stage run again judges nothing and archives nothing');
 });
 
-test('hybrid with an archive: a codex verdict saved before a stop is reused, and its checks still go in (no time: not judged now)', async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), 'judge-archive-reused-')), archive = createJudgeArchive({ dir });
-  // The take's pixels left side open; codex judged it, and the stage stopped before the take's own verdict was written.
+test('hybrid with an archive: a pixel judge with no answer is a line of its own; the take judged later is another', async () => {
+  const { dir, archive } = await freshArchive();
+  const run = await sideStage('pixels', [], [], { archive });
+  assert.deepEqual(run.done, { outcome: 'retry', result: { code: 'side-pixel-judge-1' } });
+  const [line] = await archived(dir);
+  assert.deepEqual([line.decidedBy, line.final, line.pixels.error, line.pixels.checks, typeof line.pixels.wallMs], ['none', null, '1', null, 'number']);
+  assert.equal(existsSync(path.join(run.folder, 'take-0.verdict.json.archived')), false);
+});
+
+test('a verdict whose line was never written (a stop between them) goes in when the stage reuses it, once, marked recovered', async () => {
+  // hybrid: codex judged, the take's verdict was written, the stage stopped before its line.
+  const { dir, archive } = await freshArchive();
   const run = await sideStage('hybrid', [pixelSide({}), pixelSide({ side: 'pass' }), pixelSide({})],
     [{ checks: { ...pass5, side: 'fail' }, notes: 'A three-quarter view.' }], { archive });
   assert.equal(run.asked(), 1);
-  await rm(path.join(run.folder, 'take-0.verdict.json'));
+  await rm(path.join(run.folder, 'take-0.verdict.json.archived'));
+  for (const name of await readdir(dir)) if (name.endsWith('.jsonl')) await writeFile(path.join(dir, name), '');
   run.calls.length = 0;
   await run.again();
-  assert.equal(run.asked(), 0, 'codex is not asked again');
-  const again = (await archived(dir)).filter(l => l.item === 'side-0-a/take-0').at(-1);
-  assert.deepEqual([again.decidedBy, again.codex.checks.side, again.codex.wallMs, again.codex.reused], ['pixels+codex', 'fail', null, true]);
+  assert.equal(run.asked() + run.pixelRuns().length, 0, 'nothing judged again');
+  const recovered = (await archived(dir)).filter(l => l.item === 'side-0-a/take-0');
+  assert.equal(recovered.length, 1);
+  assert.deepEqual([recovered[0].recovered, recovered[0].mode, recovered[0].decidedBy, recovered[0].codex.checks.side, recovered[0].codex.reused,
+    recovered[0].codex.wallMs, recovered[0].pixels.checks.side, recovered[0].pixels.wallMs], [true, 'hybrid', 'pixels+codex', 'fail', true, null, 'unknown', null]);
+  await run.again();
+  assert.equal((await archived(dir)).filter(l => l.item === 'side-0-a/take-0').length, 1, 'once');
+  // hybrid again: codex's verdict saved, the stage stopped before the take's own verdict — the re-run's line keeps codex's checks.
+  const two = await freshArchive();
+  const stopped = await sideStage('hybrid', [pixelSide({}), pixelSide({ side: 'pass' }), pixelSide({})],
+    [{ checks: { ...pass5, side: 'fail' }, notes: 'A three-quarter view.' }], { archive: two.archive });
+  await rm(path.join(stopped.folder, 'take-0.verdict.json'));
+  await rm(path.join(stopped.folder, 'take-0.verdict.json.archived'));
+  stopped.calls.length = 0;
+  await stopped.again();
+  assert.equal(stopped.asked(), 0, 'codex is not asked again');
+  const again = (await archived(two.dir)).filter(l => l.item === 'side-0-a/take-0').at(-1);
+  assert.deepEqual([again.decidedBy, again.codex.checks.side, again.codex.wallMs, again.codex.reused, again.recovered], ['pixels+codex', 'fail', null, true, undefined]);
+  // codex mode: the verdict written, the stage stopped before the shadow and the line.
+  const three = await freshArchive();
+  const codexRun = await sideStage('codex', [pixelSide({})], [{ checks: pass5, notes: 'ok' }], { archive: three.archive });
+  await rm(path.join(codexRun.folder, 'take-0.verdict.json.archived'));
+  for (const name of await readdir(three.dir)) if (name.endsWith('.jsonl')) await writeFile(path.join(three.dir, name), '');
+  await codexRun.again();
+  const [back] = await archived(three.dir);
+  assert.deepEqual([back.recovered, back.mode, back.decidedBy, back.codex.checks.whole, back.codex.reused, back.shadow, back.pixels.checks.side],
+    [true, 'codex', 'codex', 'pass', true, true, 'unknown']);
 });
 
 test('codex with an archive: the pixel judge runs beside it and never decides; without an archive it does not run', async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), 'judge-archive-codex-')), archive = createJudgeArchive({ dir });
+  const { dir, archive } = await freshArchive();
   const run = await sideStage('codex', [pixelSide({ clean: 'fail' })], [{ checks: pass5, notes: 'The same boxer.' }], { archive });
   assert.equal(run.asked(), 1);
   assert.equal(sidePassed(await run.read('take-0.verdict.json')), true, 'the shadow fail changes nothing');
   const [line] = await archived(dir);
   assert.deepEqual([line.mode, line.decidedBy, line.shadow, line.final, line.pixels.checks.clean, line.codex.checks.clean],
     ['codex', 'codex', true, pass5, 'fail', 'pass']);
-  // A shadow that gives no answer: the line without pixels.
-  const dir2 = await mkdtemp(path.join(tmpdir(), 'judge-archive-codex-'));
-  const quiet = await sideStage('codex', [], [{ checks: pass5, notes: 'ok' }], { archive: createJudgeArchive({ dir: dir2 }) });
-  const [bare] = await archived(dir2);
-  assert.deepEqual([quiet.asked(), bare.pixels, bare.shadow], [1, null, undefined]);
+  // A shadow that gives no answer: the line says so.
+  const two = await freshArchive();
+  const quiet = await sideStage('codex', [], [{ checks: pass5, notes: 'ok' }], { archive: two.archive });
+  const [bare] = await archived(two.dir);
+  assert.deepEqual([quiet.asked(), bare.pixels.error, bare.pixels.checks, bare.shadow], [1, '1', null, true]);
   const none = await sideStage('codex', [pixelSide({})], [{ checks: pass5, notes: 'ok' }]);
   assert.equal(none.pixelRuns().length, 0);
 });
