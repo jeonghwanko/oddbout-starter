@@ -1,50 +1,48 @@
 # ODDBOUT distribution
 
-**Current source-kit release: 0.6.17** (2026-11-04 KST: the entry needs a front that passed ODDBOUT's front check).
+**Current source-kit release: 0.6.18** (2026-11-07 KST: sprite-gen e44065a — Grok pictures' dominance matte and the Windows RIFE install).
 
-`AGENTS.md` now says a fighter enters (출전) only with a front painting (profile set) that passed ODDBOUT's front check (one character,
-whole from head to soles, facing the viewer) or an operator's approval, that `get_registered_fighter`'s `front` says what is missing,
-and that losing that front returns him to production (#319). The READMEs (#314) and the docs agents read (`docs/CLOUD-MCP.md`,
-`docs/OPEN-REGISTRATION.md`) changed with them. The contract, schema, validation rules and limits, the workspace tools and the sprite-gen
-pin are unchanged. The front check itself, the hosted face-square fix (#321) and the operator quota fix (#323) are server-side and not in
-the kit.
+The sprite-gen pin moves from `5fc42b6` to `e44065a`: a generated picture's background key is the colour that dominates its border, so
+Grok pictures get a clean matte (sprite-gen-agent#55); a video's report names the model asked for apart from the one xAI named (#54);
+`rife install` takes the Windows release's CRLF `flownet.param`, so RIFE installs on Windows (#57); and the engine uses a resident RIFE
+binary when one sits beside `rife-ncnn-vulkan` (`native/rife-serve`, #56 #58). `rife install` does not install that binary yet, so a kit
+PC still calls RIFE once per run. The kit is the one the official host already runs (og `KIT_REF` `1f71d11`, #368) and the one
+`npx oddbout-host` pins. The docs agents read follow the
+merged MCP tools (#344 #351 #355), the code-free PC connection (#343), the image-provider profiles where a SuperGrok-only PC is a host
+(#356), and the hosted candidate images (#361 #364); `mcp/paid-operations.mjs` is new. The contract, schema, validation rules and limits
+are unchanged.
 
-Cloud `prepare_fighter_packaging` points to the reviewed 0.6.17 runtime once `ai-fighter-mcp` is deployed with
-this pin. It also supplies the workspace execution instructions; the cloud cannot read Dots files. Install the locked Node
-dependencies in the extracted `plugin/runtime/`, then run its `inspect_fighter_packaging` and `pack_fighter_package`
-tools on the existing plan. There is no new generation or generation login.
+Cloud `prepare_fighter_packaging` and the Dots source pin stay on 0.6.17 until `ai-fighter-mcp` is deployed with a new pin and Dots
+accepts it; this release changes neither.
 
-- [Download the 0.6.17 ZIP](https://oddbout.com/creator-kit/0.6.17/f5a6720163b9aee64f2f491ffac23be49b77ac61325c9adff097d5ea7ec7a71f/oddbout-0.6.17.zip)
-- [Release manifest](https://oddbout.com/creator-kit/0.6.17/f5a6720163b9aee64f2f491ffac23be49b77ac61325c9adff097d5ea7ec7a71f/release.json)
-- [Download helper](https://oddbout.com/creator-kit/0.6.17/f5a6720163b9aee64f2f491ffac23be49b77ac61325c9adff097d5ea7ec7a71f/fetch-creator-kit.py)
+- [Download the 0.6.18 ZIP](https://oddbout.com/creator-kit/0.6.18/3615a6d7b1397d39ede47a5a833dac99a0e75dc56a244aff68229ba18e151f9d/oddbout-0.6.18.zip)
+- [Release manifest](https://oddbout.com/creator-kit/0.6.18/3615a6d7b1397d39ede47a5a833dac99a0e75dc56a244aff68229ba18e151f9d/release.json)
+- [Download helper](https://oddbout.com/creator-kit/0.6.18/3615a6d7b1397d39ede47a5a833dac99a0e75dc56a244aff68229ba18e151f9d/fetch-creator-kit.py)
 
 | Verified item | Value |
 | --- | --- |
-| ZIP size | 4,201,434 bytes |
-| ZIP SHA-256 | `b77e8c74c0dc5387f9dc13013df244004c4dba5f7d98b0e11aa8148f6651a103` |
-| Release manifest SHA-256 | `94203edad4b43e0c6919c405f5c027e91e39c465528ef0a7a637cf11f1116360` |
-| Runtime manifest SHA-256 | `66e45c52b05a1a2630fb5a114a82a5da5f5c089fecb25f2bc4b2675034aa005a` |
+| ZIP size | 4,265,981 bytes |
+| ZIP SHA-256 | `f0e0b2c74826dd936938263ce5bb9eb789caf53183fdb923d81ccc983047d424` |
+| Release manifest SHA-256 | `d61a2f02ec30939859e8877713281a0c2b3195bb0f3409f835c581159e20b307` |
+| Runtime manifest SHA-256 | `84c6f3c8ba5a5c87325e9f1c63d8a819f9bd249e4c5a20797389c0dd9452daa4` |
 | Helper SHA-256 | `b66c31ff833816dfa74c90d9155359d3fdd484dff8c12759e48addde01707592` (unchanged) |
-| Archive build source | `5dcddb458db79e88a0ecc5ef73b01c5d4c92add6` (main after [PR #322](https://github.com/jeonghwanko/oddbout-starter/pull/322) and [PR #323](https://github.com/jeonghwanko/oddbout-starter/pull/323)) |
-| Tested PR heads | `93534ba9346ca0a55ae8d0ad5e6a6c3761d86a63` ([PR #322](https://github.com/jeonghwanko/oddbout-starter/pull/322)) |
-| sprite-gen pin | `5fc42b6d2a57354f38e5c348d0bb35590a3ddcf0` |
-| Kit Pages publication | `567d823802cc6670115c9564619d19d51fdd819e` |
+| Archive build source | `c14a1ad922ab40505f901b8be2a5b8c692ae5fed` (main after [PR #369](https://github.com/jeonghwanko/oddbout-starter/pull/369)) |
+| Tested PR heads | `ebff5564893223ddc0f3faea2a229fb9e900fac4` ([PR #369](https://github.com/jeonghwanko/oddbout-starter/pull/369)) |
+| sprite-gen pin | `e44065aeef461b176a5517c925011348026a575e` |
+| Kit Pages publication | `cce5889ac0cc3cd8854aff4dd1d8c4ed5d2e2e34` |
 
-Full PR CI passed for #319, #321, #322 and #323. The archive was built from a clean worktree at the main merge with the sprite-gen
-submodule checked out at its pin. The trusted helper downloaded the published release, verified it and extracted all 742 archive files.
-Locked production Node dependencies installed with no vulnerabilities reported. The extracted runtime reports version 0.6.17, its
-`AGENTS.md` carries the front-check entry sentence, its `creation:tool` lists all 18 workspace tools, `get_fighter_spec` answers with a
-one-line text, a mistyped tool name is reported as `unknown-tool`, and its `mcp:check --probe` found `mcp.oddbout.com` as both a 2025 and a
-2026-07-28 client. No Python engine ran.
+Full PR CI passed for #369. The archive was built from a clean worktree at the main merge with the sprite-gen submodule checked out at
+its pin with LF line ends: a Windows checkout with `core.autocrlf=true` writes the submodule's files with CRLF, and a first trial build
+caught it (602 engine files differing from 0.6.17). A trial build of the PR head gave byte-identical release files. That trial ZIP, pinned
+the way `npx oddbout-host` pins it, installed on Windows 11 x64 without the API: the kit, Python 3.12.15, ffmpeg 9.0.2, the Grok CLI, the
+kit's locked Node dependencies, the sprite-gen venv and img2webp, and RIFE — `rife install` turned `flownet.param`'s line ends and its
+check frame passed — with `sprite:status` reporting every tool ready (about two and a half minutes). The trusted helper downloaded the
+published release, verified it and extracted all 748 archive files. No generation login, generation or registration ran.
 
-Publication added only three release files, preserved 6,416 existing files without changes or deletions, and verified HTTP 200 and exact
-release bytes plus 12 unchanged site files at 2026-11-03T15:30:32.509Z. The release itself needs no game, API or site build.
+Publication added only three release files, preserved 7,796 existing files without changes or deletions, and verified HTTP 200 and exact
+release bytes plus 12 unchanged site files at 2026-11-07T02:17:22.290Z. The release itself needs no game, API or site build.
 
-The Dots source pin is `5dcddb458db79e88a0ecc5ef73b01c5d4c92add6` (0.6.17). It is still a candidate, with saved-VM acceptance pending.
-No Dots install was run at this pin, the saved Dots environment was not republished, and Grok sign-in, generation and delivery were not
-verified. No animation was generated and no registration was submitted during this release verification.
-
-Earlier releases (0.6.16 back to 0.4.0) and their verification records are in [records/KIT-RELEASES.md](records/KIT-RELEASES.md).
+Earlier releases (0.6.17 back to 0.4.0) and their verification records are in [records/KIT-RELEASES.md](records/KIT-RELEASES.md).
 When a new release becomes current, move the entry above there.
 
 For installation and migration use [ODDBOUT-PLUGIN.md](ODDBOUT-PLUGIN.md). `plugin:bundle` now produces a

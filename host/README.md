@@ -36,8 +36,7 @@ npx -y oddbout-host@0.1.0
 - 한 설치 폴더에는 한 러너만 돈다(`runner.lock`). Linux에서 `npm run host`의 서비스 워커가 돌고 있으면 시작하지 않는다.
 - 공개(npm publish)는 `prepublishOnly`가 `check-pins.mjs --publish`로 막는다: 키트의 엔진이 공식 호스트(`og.mjs` `KIT_REF`)와 같아야 하고,
   키트 `release.json`이 고정한 ZIP을 가리켜야 한다(`--download`면 모든 파일을 다시 받아 대조한다).
-  **지금 고정한 키트 0.6.17은 sprite-gen `5fc42b6`이라 Grok 그림의 dominance 매트(sprite-gen-agent#55)가 없다.** `KIT_REF`(sprite-gen `2d781c9`)로
-  새 키트를 낸 뒤 `pins.json`의 `kit`을 옮겨야 공개할 수 있다.
+  고정한 키트는 0.6.18(sprite-gen `e44065a`, `KIT_REF`와 같은 엔진)이다. 엔진을 옮기면 키트를 새로 내고 `pins.json`의 `kit`도 옮긴다.
 
 | 파일 | 하는 일 |
 | --- | --- |
@@ -47,11 +46,11 @@ npx -y oddbout-host@0.1.0
 | `pins.json`, `cli/` | 키트·Python·ffmpeg·CLI의 고정값. `runner.test.mjs`가 `og.mjs`의 버전·키트 사이트와 맞춘다 |
 | `check-pins.mjs` | 고정값 검사(시험과 공개 전). 패키지에는 넣지 않는다 |
 
-2026-11-07 이 PC(Windows 11 x64)에서 연결 없이 실제 핀으로 설치 단계를 돌렸다: 키트·Python 3.12.15·ffmpeg 9.0.2·Grok CLI·키트 npm·sprite-gen venv·img2webp
-모두 됐다(합 약 3분). **RIFE만 안 깔린다**: rife-ncnn-vulkan 20221029의 Windows ZIP은 모델 `flownet.param`이 CRLF라 SHA-256이 다르고
-(`28df14d5…`), sprite-gen은 LF 판(`72456959…`)만 받는다. 고리는 RIFE 없이 찍힌 대로 가고 경고가 남는다(엔진에서 고칠 일).
+2026-11-07 이 PC(Windows 11 x64)에서 연결 없이 실제 핀으로 설치 단계를 돌렸다: 키트 0.6.18·Python 3.12.15·ffmpeg 9.0.2·Grok CLI·키트 npm·
+sprite-gen venv·img2webp·RIFE 모두 됐다(합 약 2분 반). RIFE는 Windows ZIP의 CRLF `flownet.param`을 LF로 바꿔 검사하고(sprite-gen-agent#57)
+확인 프레임을 통과했다. 0.6.17 키트에는 이 수정이 없어 Windows에서 RIFE가 깔리지 않았다.
 아직 실기로 확인하지 않은 것: 깨끗한 Windows 11·Apple silicon Mac에서 연결 → Grok 로그인 → 선수 1명(계획 1.3·1.6의 실기 검증),
-Windows RIFE(x64·Vulkan), 경로 260자, Defender, macOS 서명. ffmpeg는 GPL 빌드를 배포처(gyan.dev, martin-riedl.de)에서 직접 받는다.
+Vulkan이 없는 GPU의 RIFE, 경로 260자, Defender, macOS 서명. ffmpeg는 GPL 빌드를 배포처(gyan.dev, martin-riedl.de)에서 직접 받는다.
 
 ---
 

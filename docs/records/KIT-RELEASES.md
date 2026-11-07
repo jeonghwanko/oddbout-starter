@@ -4,6 +4,50 @@ Earlier source-kit releases, moved here from [PLUGIN-DISTRIBUTION.md](../PLUGIN-
 release and the distribution procedures. Each entry records that release as published and verified at the time; it is not
 current procedure. Published release paths stay immutable.
 
+**Previous source-kit release: 0.6.17** (2026-11-04 KST: the entry needs a front that passed ODDBOUT's front check).
+
+`AGENTS.md` now says a fighter enters (출전) only with a front painting (profile set) that passed ODDBOUT's front check (one character,
+whole from head to soles, facing the viewer) or an operator's approval, that `get_registered_fighter`'s `front` says what is missing,
+and that losing that front returns him to production (#319). The READMEs (#314) and the docs agents read (`docs/CLOUD-MCP.md`,
+`docs/OPEN-REGISTRATION.md`) changed with them. The contract, schema, validation rules and limits, the workspace tools and the sprite-gen
+pin are unchanged. The front check itself, the hosted face-square fix (#321) and the operator quota fix (#323) are server-side and not in
+the kit.
+
+Cloud `prepare_fighter_packaging` points to the reviewed 0.6.17 runtime once `ai-fighter-mcp` is deployed with
+this pin. It also supplies the workspace execution instructions; the cloud cannot read Dots files. Install the locked Node
+dependencies in the extracted `plugin/runtime/`, then run its `inspect_fighter_packaging` and `pack_fighter_package`
+tools on the existing plan. There is no new generation or generation login.
+
+- [Download the 0.6.17 ZIP](https://oddbout.com/creator-kit/0.6.17/f5a6720163b9aee64f2f491ffac23be49b77ac61325c9adff097d5ea7ec7a71f/oddbout-0.6.17.zip)
+- [Release manifest](https://oddbout.com/creator-kit/0.6.17/f5a6720163b9aee64f2f491ffac23be49b77ac61325c9adff097d5ea7ec7a71f/release.json)
+- [Download helper](https://oddbout.com/creator-kit/0.6.17/f5a6720163b9aee64f2f491ffac23be49b77ac61325c9adff097d5ea7ec7a71f/fetch-creator-kit.py)
+
+| Verified item | Value |
+| --- | --- |
+| ZIP size | 4,201,434 bytes |
+| ZIP SHA-256 | `b77e8c74c0dc5387f9dc13013df244004c4dba5f7d98b0e11aa8148f6651a103` |
+| Release manifest SHA-256 | `94203edad4b43e0c6919c405f5c027e91e39c465528ef0a7a637cf11f1116360` |
+| Runtime manifest SHA-256 | `66e45c52b05a1a2630fb5a114a82a5da5f5c089fecb25f2bc4b2675034aa005a` |
+| Helper SHA-256 | `b66c31ff833816dfa74c90d9155359d3fdd484dff8c12759e48addde01707592` (unchanged) |
+| Archive build source | `5dcddb458db79e88a0ecc5ef73b01c5d4c92add6` (main after [PR #322](https://github.com/jeonghwanko/oddbout-starter/pull/322) and [PR #323](https://github.com/jeonghwanko/oddbout-starter/pull/323)) |
+| Tested PR heads | `93534ba9346ca0a55ae8d0ad5e6a6c3761d86a63` ([PR #322](https://github.com/jeonghwanko/oddbout-starter/pull/322)) |
+| sprite-gen pin | `5fc42b6d2a57354f38e5c348d0bb35590a3ddcf0` |
+| Kit Pages publication | `567d823802cc6670115c9564619d19d51fdd819e` |
+
+Full PR CI passed for #319, #321, #322 and #323. The archive was built from a clean worktree at the main merge with the sprite-gen
+submodule checked out at its pin. The trusted helper downloaded the published release, verified it and extracted all 742 archive files.
+Locked production Node dependencies installed with no vulnerabilities reported. The extracted runtime reports version 0.6.17, its
+`AGENTS.md` carries the front-check entry sentence, its `creation:tool` lists all 18 workspace tools, `get_fighter_spec` answers with a
+one-line text, a mistyped tool name is reported as `unknown-tool`, and its `mcp:check --probe` found `mcp.oddbout.com` as both a 2025 and a
+2026-07-28 client. No Python engine ran.
+
+Publication added only three release files, preserved 6,416 existing files without changes or deletions, and verified HTTP 200 and exact
+release bytes plus 12 unchanged site files at 2026-11-03T15:30:32.509Z. The release itself needs no game, API or site build.
+
+The Dots source pin is `5dcddb458db79e88a0ecc5ef73b01c5d4c92add6` (0.6.17). It is still a candidate, with saved-VM acceptance pending.
+No Dots install was run at this pin, the saved Dots environment was not republished, and Grok sign-in, generation and delivery were not
+verified. No animation was generated and no registration was submitted during this release verification.
+
 **Previous source-kit release: 0.6.16** (2026-11-03 KST: 전투 스타일 in the contract, 사연 for the canon in the docs).
 
 The contract names `combat.style` 전투 스타일 instead of 싸우는 성격: `spec.json`'s `combatStyle.note` and the `standard-duel` kit
