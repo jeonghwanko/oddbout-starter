@@ -21,8 +21,58 @@ const ROOT = process.env.OG_ROOT || path.dirname(path.dirname(fileURLToPath(impo
 /** The kit's sprite-gen venv Python (scripts/sprite-gen.mjs `spritePython`): Windows keeps a venv's programs in Scripts\ as .exe. */
 export const spritePython = (kit, platform = process.platform) =>
   path.join(kit, 'vendor', 'sprite-gen', '.venv', ...(platform === 'win32' ? ['Scripts', 'python.exe'] : ['bin', 'python']));
-export const TIMING = Object.freeze({ heartbeatMs: 60_000, healthMs: 3_600_000, idleMs: 15_000, renewMs: 60_000, errorMs: 60_000, pruneMs: 86_400_000,
-  askedRecheckMs: 900_000 });
+export const TIMING = Object.freeze({ heartbeatMs: 60_000, healthMs: 3_600_000, idleMs: 15_000, idleMaxMs: 60_000, renewMs: 60_000, errorMs: 60_000,
+  pruneMs: 86_400_000, askedRecheckMs: 900_000, beatFloorMs: 10_000 });
+/**
+ * The wait after a claim that took nothing (2026-11-07): idleMs, doubling to idleMaxMs while nothing comes, idleMs again after a job. Two
+ * workers claiming every 15 s and beating every minute were 83 % of the project's Edge requests (the free plan's month is 500,000); a request
+ * now waits at most a minute for an idle worker.
+ */
+export const nextIdleWait = wait => Math.min(wait * 2, TIMING.idleMaxMs);
+/**
+ * When the heartbeat goes (2026-11-07): about once a heartbeatMs, riding on the turn's claim (`{ health, usage }`) once the server has said
+ * on the heartbeat route that its claims take one (`claimBeats`). Until then — an older server ignores a claim's body and would claim on the
+ * health it last recorded — every heartbeat goes on its own route, before the claim. A claim answered without `beat` (the API rolled back)
+ * stops the carrying until a heartbeat's reply says `claimBeats` again, and that turn's heartbeat goes apart at once. A turn that claims
+ * nothing (not healthy) beats on its own route, and so does the turn after the health changed (`reset`: a provider went down, the hourly
+ * check), so the server records the new health before any claim on every server.
+ * Each heartbeat keeps the host "on" for three minutes on the server. `aheadMs` is the wait until the next chance to beat (the idle wait
+ * after this claim): a heartbeat goes now when that next chance would come past the minute, so the backoff never stretches the gap.
+ * @param {() => number} [now]
+ */
+export function createBeats(now = Date.now) {
+  let inClaim = false, urgent = false, at = 0;
+  const due = (aheadMs = 0) => urgent || now() - at + aheadMs >= TIMING.heartbeatMs;
+  return {
+    /** @param {boolean} claiming this turn claims (healthy) @param {number} [aheadMs] @returns {boolean} beat on its own route now */
+    apart: (claiming, aheadMs = 0) => due(aheadMs) && (urgent || !(claiming && inClaim)),
+    /** @param {boolean} claiming @param {number} [aheadMs] @returns {boolean} this turn's claim carries the heartbeat */
+    carry: (claiming, aheadMs = 0) => claiming && inClaim && !urgent && due(aheadMs),
+    /**
+     * When a step that may hold the loop for minutes (the hourly health check, a front check) beats first: when the minute since the last
+     * heartbeat is up, but not before floorMs, so a quick step sends none.
+     * @param {number} [floorMs] @returns {number}
+     */
+    nextInMs: (floorMs = TIMING.beatFloorMs) => Math.max(floorMs, urgent ? 0 : TIMING.heartbeatMs - (now() - at)),
+    /**
+     * A heartbeat went through on its own route; its reply says whether claims take one.
+     * @param {{ claimBeats?: boolean } | null | undefined} [reply]
+     */
+    beaten: reply => { at = now(); urgent = false; if (reply?.claimBeats === true) inClaim = true; },
+    /** The next turn beats on its own route before it claims: the health changed. */
+    reset: () => { urgent = true; },
+    /**
+     * What a carrying claim's reply says: 'taken' (`beat: true`), else 'apart' — beat on the heartbeat route now (a failed claim teaches nothing;
+     * one answered without `beat` stops the carrying).
+     * @param {{ ok?: boolean, beat?: boolean } | null | undefined} reply @returns {'taken' | 'apart'}
+     */
+    claimed: reply => {
+      if (reply?.ok && reply.beat === true) { at = now(); return 'taken'; }
+      if (reply?.ok) inClaim = false;
+      return 'apart';
+    },
+  };
+}
 /**
  * How long one stage may run (2026-10-29): past it the stage's runs are stopped (SIGTERM, which og passes on to its command, so sprite-gen
  * writes its reports) and the job goes to an operator as `<stage>-stage-timeout`, never back to the queue, since a stopped run may already
@@ -62,6 +112,8 @@ const withLogins = (health, logins, configured, ok = true) =>
  * reads them). The logins' own keys always win: `about` never says a PC may claim.
  */
 export const aboutHealth = (health, about) => about ? { ...about, ...health } : health;
+/** What of the health the server claims on (not when it was checked): a change sends the heartbeat before the next claim. */
+export const healthKey = health => JSON.stringify([health.ok, health.codex, health.grok, health.images]);
 /** `og health` lines → { ok, codex, grok, images, at }: `ok` says this host may claim (canWork), `codex` and `grok` each login. */
 export function parseHealth(output, at = new Date().toISOString(), configured = undefined) {
   const ok = p => new RegExp(`^og: ${p} ok\\b`, 'm').test(output);
@@ -203,7 +255,8 @@ export function createApi({ base, key, fetcher = fetch }) {
     heartbeat: (health, usage = null) => post('heartbeat', { health, ...(usage ? { usage } : {}) }),
     // The server's public contract: its features say what a package may carry (a gait at its own frame count: gait-frames-1).
     spec: () => fetcher(`${base}/spec`, { signal: AbortSignal.timeout(30_000) }).then(json),
-    claim: () => post('claim', {}),
+    // The heartbeat may ride along (createBeats): `{ health, usage }`, as the heartbeat route takes it.
+    claim: (beat = null) => post('claim', beat ?? {}),
     ended: jobs => post('ended', { jobs }),
     progress: (job, progress, event) => post('progress', { jobId: job.id, leaseToken: job.leaseToken, progress, ...(event ? { event } : {}) }),
     finish: (job, outcome, result) => post('finish', { jobId: job.id, leaseToken: job.leaseToken, outcome, result }),
@@ -513,12 +566,36 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
   else if (named && named !== 'codex') await say(`judges ${named}: the pixel judge ${PIXEL_JUDGE.model} judges the side takes and the loops first`);
   else if (!named) await say('judges: codex where codex runs, the pixel judge where it does not (ODDBOUT_GENERATION_JUDGES names none)');
 
-  let health = { ok: false, codex: false, grok: false, images: [], at: null }, checkedAt = 0, beatAt = 0, prunedAt = 0;
+  let health = { ok: false, codex: false, grok: false, images: [], at: null }, checkedAt = 0, prunedAt = 0;
+  const beats = createBeats();
+  /** The heartbeat's body: the health this worker reports and its subscription's reading. */
+  const beatBody = async () => { const usage = await codexUsage(sessions).catch(() => null); return { health: aboutHealth(health, about), ...(usage ? { usage } : {}) }; };
+  async function beatApart() {
+    const { health: reported, usage } = await beatBody();
+    const reply = await api.heartbeat(reported, usage ?? null).catch(error => ({ ok: false, code: error.message }));
+    if (reply.ok) beats.beaten(reply); else await say(`heartbeat failed ${reply.code ?? reply.status}`);
+  }
+  /**
+   * A step that may hold the loop for minutes (the hourly health check waits for a codex slot, a front check runs codex) with the heartbeat
+   * going on beside it — or the official host looks offline and the site refuses requests: first when the minute since the last heartbeat
+   * is up (beats.nextInMs), then each heartbeatMs. A quick step sends none.
+   * @template T @param {() => Promise<T>} step @returns {Promise<T>}
+   */
+  async function beatingDuring(step) {
+    /** @type {ReturnType<typeof setTimeout> | undefined} */
+    let timer;
+    const tick = () => { timer = setTimeout(tick, TIMING.heartbeatMs); beatApart().catch(() => {}); };
+    timer = setTimeout(tick, beats.nextInMs());
+    try { return await step(); } finally { clearTimeout(timer); }
+  }
   const cooldowns = createCooldowns(Date.now, configured);
   async function keepAlive() {
     if (Date.now() - checkedAt >= TIMING.healthMs) {
       // A health check waits for a codex slot like any run; past ten minutes it counts as not healthy.
-      health = cooldowns.apply(parseHealth(await og.health(), undefined, configured)); checkedAt = Date.now();
+      const before = healthKey(health);
+      health = cooldowns.apply(parseHealth(await beatingDuring(() => og.health()), undefined, configured)); checkedAt = Date.now();
+      // Changed (a login went or came back): the server hears it before the next claim.
+      if (healthKey(health) !== before) beats.reset();
       await say(`health codex=${health.codex} grok=${health.grok} → ${health.ok ? `claims (judges ${judgesFor(configured, health)})`
         : configured && judgesNeedCodex(judgesMode(configured)) && health.grok ? `no claims: judges ${judgesMode(configured)} need codex` : 'no claims'}`);
       for (const name of await closeFrontFolders(path.join(kit, 'output'))) await say(`front folder ${name} closed`);
@@ -534,10 +611,6 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
       prunedAt = Date.now();
       await say(`prune ${(await og.prune(keepDays(env.ODDBOUT_GENERATION_KEEP_DAYS))).trim().split('\n').at(-1) ?? ''}`);
     }
-    if (Date.now() - beatAt >= TIMING.heartbeatMs) {
-      const reply = await api.heartbeat(aboutHealth(health, about), await codexUsage(sessions).catch(() => null)).catch(error => ({ ok: false, code: error.message }));
-      if (reply.ok) beatAt = Date.now(); else await say(`heartbeat failed ${reply.code ?? reply.status}`);
-    }
   }
 
   /** codex cannot run here now (exit 75: signed out, usage used up): claim nothing until a health check passes again, soon. */
@@ -548,7 +621,7 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
     const wait = cooldowns.limit(provider);
     checkedAt = Date.now() - TIMING.healthMs + wait;
     // The next turn's heartbeat says so before it claims again: the server gives a job that needs this provider only to a host it is ok on.
-    beatAt = 0;
+    beats.reset();
     await say(`${provider} cannot run now: ${health.ok ? `claims go on without it (judges ${judgesFor(configured, health)})` : 'no claims until health passes'}`
       + ` (checked again in ${Math.round(wait / 60_000)} minutes)`);
     return true;
@@ -559,14 +632,13 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
   // verdict, after a failure only once FRONT_RETRY_MS (doubling) has passed, and never on a host that checks none.
   let frontDue = 0, frontWait = FRONT_RETRY_MS;
   async function frontTurn() {
-    // A check holds the loop: the heartbeat goes on beside it, or the official host looks offline and refuses requests.
-    const beating = setInterval(() => { api.heartbeat(aboutHealth(health, about)).catch(() => {}); }, TIMING.heartbeatMs);
-    const outcome = await checkFront().catch(error => { say(`front check error ${error.message}`); return 'failed'; })
-      .finally(() => clearInterval(beating));
+    // A check holds the loop: the heartbeat goes on beside it (beatingDuring).
+    const outcome = await beatingDuring(() => checkFront().catch(error => { say(`front check error ${error.message}`); return 'failed'; }));
     if (outcome === 'judged') { frontDue = 0; frontWait = FRONT_RETRY_MS; }
     else if (outcome === 'idle') frontDue = Date.now() + TIMING.heartbeatMs;
     else if (outcome === 'off') frontDue = Infinity;
     else { frontDue = Date.now() + frontWait; frontWait = Math.min(frontWait * 2, TIMING.healthMs); }
+    return outcome;
   }
 
   async function work(job) {
@@ -655,16 +727,25 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
   }
 
   await say('worker started');
+  let idleWait = TIMING.idleMs;
   for (;;) {
     try {
       await keepAlive();
-      if (health.codex && Date.now() >= frontDue) await frontTurn();
-      const claimed = health.ok ? await api.claim() : { ok: true, stage: 'idle' };
-      if (claimed.ok && claimed.job) await work(claimed.job);
+      // A front judged: the queue may hold more, so the next turn comes soon again.
+      if (health.codex && Date.now() >= frontDue && await frontTurn() === 'judged') idleWait = TIMING.idleMs;
+      // The heartbeat on its own route when this turn's claim does not carry it (createBeats) — after the front turn, which may have changed
+      // the health. Either way, counting the wait that follows this turn.
+      if (beats.apart(health.ok, idleWait)) await beatApart();
+      const carried = beats.carry(health.ok, idleWait);
+      const claimed = health.ok ? await api.claim(carried ? await beatBody() : null).catch(error => ({ ok: false, code: error.message }))
+        : { ok: true, stage: 'idle' };
+      if (carried && beats.claimed(claimed) === 'apart') await beatApart();
+      if (claimed.ok && claimed.job) { idleWait = TIMING.idleMs; await work(claimed.job); }
       else {
         if (!claimed.ok) await say(`claim failed ${claimed.code ?? claimed.status}`);
         if (once) return;
-        await new Promise(resolve => setTimeout(resolve, TIMING.idleMs));
+        await new Promise(resolve => setTimeout(resolve, idleWait));
+        idleWait = nextIdleWait(idleWait);
       }
       if (once) return;
     } catch (error) {
