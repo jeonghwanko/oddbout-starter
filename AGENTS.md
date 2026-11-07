@@ -301,6 +301,11 @@ npm run spec:check && npm run validate -- examples/sparring-bot/fighter.json && 
   `git worktree`, never switch a shared checkout's branch, and leave pulling it to the session working there.
 - Run only the relevant tests locally ([Commands](#commands)). Pull requests to `main` and pushes to it run the `test`
   workflow, and a pull request merges only when it passes. Do not dispatch extra runs unless asked.
+- One change, one run (about 12 minutes). Put a change and what it brings along in one pull request: an engine pin with
+  its kit version, `host/pins.json` and records. Finish local checks before pushing. Open the pull request as a draft
+  while it still changes (a draft runs no tests), then `gh pr ready` runs `test` once. Every push after that runs it again.
+  Fetch `main` first: a head that already contains `main` merges into the tree it was tested with, so the push to `main`
+  runs no tests again. A head behind `main` gets the whole suite once more after the merge.
 - Never put `[skip ci]` or another GitHub skip marker (`[ci skip]`, `[no ci]`, `[skip actions]`, `[actions skip]`, a
   `skip-checks: true` trailer) anywhere in a pull request's last commit message, body included, even quoted: the
   required check then never reports.

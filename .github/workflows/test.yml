@@ -1,4 +1,10 @@
-# Every pull request to main and every push to main; main requires this check before a merge.
+# Pull requests to main and pushes to main; main requires this check before a merge.
+# Each tree is tested once (2026-11-07: one release ran this suite five times, about 12 minutes each):
+# - A draft pull request runs nothing. Marking it ready (`gh pr ready`) runs it, and so does every push after that.
+# - A push to main that only merges a pull request whose head already contained main has that head's tree. When that head
+#   passed `test`, the push runs `merged` alone (seconds), not the suite again. A merge of a head behind main, a squash or
+#   rebase merge, and a direct push run the suite.
+# A job skipped by its `if` reports success. A draft cannot merge, and marking it ready starts the real run.
 # GitHub skips the run when a PR's last commit message carries a skip-ci marker anywhere, body included (this PR's
 # first commit quoted it in an explanation and was skipped), and the required check then never reports.
 # GitHub-hosted runners only: this repository is public, and a fork's pull request must not reach a self-hosted machine.
@@ -6,6 +12,7 @@ name: test
 on:
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
   workflow_dispatch:
@@ -15,7 +22,38 @@ concurrency:
   group: test-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
+  # On a push to main: is this the tree a pull request's head already passed `test` with?
+  merged:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      checks: read
+    outputs:
+      tested: ${{ steps.head.outputs.tested }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # the pushed commit and its parents
+      - id: head
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tested=false
+          if head=$(git rev-parse -q --verify HEAD^2) && [ "$(git rev-parse 'HEAD^{tree}')" = "$(git rev-parse "$head^{tree}")" ]; then
+            passed=$(gh api "repos/$GITHUB_REPOSITORY/commits/$head/check-runs?check_name=test&filter=latest" \
+              --jq '[.check_runs[] | select(.conclusion == "success")] | length') || passed=0
+            if [ "${passed:-0}" -gt 0 ]; then tested=true; echo "Merges $head, which passed test with this tree: not run again."; fi
+          fi
+          echo "tested=$tested" >> "$GITHUB_OUTPUT"
   test:
+    needs: merged
+    # needs + !cancelled(): runs where `merged` was skipped (pull requests, dispatch) or failed (then nothing is known).
+    if: >-
+      !cancelled()
+      && !(github.event_name == 'pull_request' && github.event.pull_request.draft)
+      && !(github.event_name == 'push' && needs.merged.outputs.tested == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
