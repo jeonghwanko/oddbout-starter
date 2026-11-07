@@ -119,6 +119,16 @@ test('a ready owner job carries both original WebPs in order; list, foreign jobs
     assert.equal(fallback.structuredContent.job.status, 'appearance_ready');
     assert.equal(fallback.structuredContent.previewPair, undefined);
     assert.ok(fallback.structuredContent.job.candidates[1].url);
+    invalidSecond = false;
+    await g.sql.query("update public.af_generation_jobs set status='needs_review', choice='a', error_code='side-provider-refused' where id=$1", [job]);
+    const stopped = await raw('get_hosted_fighter', { jobId: job });
+    assert.deepEqual(stopped.content.slice(1), images.map(data => ({ type: 'image', mimeType: 'image/webp', data })));
+    assert.equal(stopped.structuredContent.statusSummary.actionRequired, 'operator');
+    assert.equal(stopped.structuredContent.job.choice, 'a');
+    await g.sql.query("update public.af_generation_jobs set status='motions' where id=$1", [job]);
+    const beforePoll = reads.length, polling = await raw('get_hosted_fighter', { jobId: job });
+    assert.equal(polling.content.length, 1);
+    assert.equal(reads.length, beforePoll); // Working polls do not repeatedly download the old looks.
   } finally { await g.sql.close(); }
 });
 

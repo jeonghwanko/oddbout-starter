@@ -28,6 +28,27 @@ test('current toolOutput wins over stale response metadata in the ChatGPT global
   ui.globals(); assert.match(ui.root.text, /등록 완료/); assert.doesNotMatch(ui.root.text, /모션 제작 중/);
 });
 
+test('selected looks remain visible after a provider stop and registration without asking for another choice', () => {
+  for (const status of ['needs_review', 'motions', 'submitted']) for (const inline of [false, true]) {
+    const ui = widget(), id = crypto.randomUUID(), output = result(id, status, '2026-11-08T00:00:00Z');
+    output.structuredContent.job.choice = 'a';
+    output.structuredContent.job.candidates = ['a', 'b'].map(key => ({ key,
+      url: `${new URL(CLOUD_RESOURCE).origin}/storage/v1/object/sign/af-generation/jobs/${id}/front-${key}-0.webp?token=fixture` }));
+    if (inline) {
+      output.structuredContent.previewPair = true;
+      output.content = ['YWJj', 'ZGVm'].map(data => ({ type: 'image', mimeType: 'image/webp', data }));
+    }
+    ui.render(output);
+    const images = ui.root.all.filter(n => n.tag === 'img');
+    assert.equal(images.length, 2);
+    assert.match(ui.root.text, /기존 외형 시안.*후보 A · 선택됨.*후보 B/);
+    assert.doesNotMatch(ui.root.text, /두 외형 비교|외형을 선택/);
+    assert.equal(images[0].src, inline ? 'data:image/webp;base64,YWJj' : output.structuredContent.job.candidates[0].url);
+    if (status === 'needs_review') assert.match(ui.root.text, /운영자.*확인/);
+    if (status === 'submitted') assert.match(ui.root.text, /등록 완료/);
+  }
+});
+
 test('stale metadata images cannot be paired with the current appearance candidates', () => {
   const ui = widget(), id = crypto.randomUUID(), current = result(id, 'appearance_ready', '2026-11-07T12:00:00Z');
   current.structuredContent.previewPair = true;
