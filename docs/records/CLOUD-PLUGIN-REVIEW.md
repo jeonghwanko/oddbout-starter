@@ -1,6 +1,6 @@
 # ODDBOUT cloud plugin review
 
-The [1.0.4 submission record](CLOUD-PLUGIN-1.0.4-PREPARATION.md) reports **In review** on November 7, 2026 (KST). The directory lists 1.0.3 as Published. The sections below record the earlier releases.
+The [ODDBOUT directory](https://chatgpt.com/plugins/plugin_asdk_app_6adc695de1bc8191a604b42bbaa178af) showed **1.0.4** after publication on November 7, 2026 (KST). The package header displayed the new O icon and hosted-creation description. The lower **앱 1** card still displayed the earlier icon and Korean registration/deletion copy. The [distribution guide](../PLUGIN-DISTRIBUTION.md#chatgpt-directory--linked-oddbout-app-card) tracks that separate update. The sections below record earlier releases.
 
 Status verified on 2026-10-24 at 11:54 UTC: **1.0.3 · In review**.
 Publication is still **Not published**; submission is not approval.
