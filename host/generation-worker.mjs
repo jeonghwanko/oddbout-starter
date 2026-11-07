@@ -4,15 +4,16 @@
 // It reaches the API outward only: a heartbeat with the subscriptions' health every minute, a claim of one stage of one job at a time,
 // lease renewals while the stage runs, artifacts and the package through the worker routes, the stage's outcome. Stages:
 // generation-stages.mjs. Config: `<root>/worker.env` (ODDBOUT_GENERATION_API, ODDBOUT_GENERATION_WORKER_KEY, optional
-// ODDBOUT_GENERATION_KEEP_DAYS and ODDBOUT_GENERATION_JUDGES), written by `og worker key`. Once a day it runs `og prune`: a finished job's
-// request text and pictures go.
+// ODDBOUT_GENERATION_KEEP_DAYS, ODDBOUT_GENERATION_JUDGES, ODDBOUT_GENERATION_JUDGE_ARCHIVE and ODDBOUT_GENERATION_JUDGE_IMAGES), written by
+// `og worker key` and by hand. Once a day it runs `og prune` (a finished job's request text and pictures go) and prunes the judgment
+// archive.
 import { execFile, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { appendFile, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { ASKS, CODEX_CWD, FRONT_JUDGE_SCHEMA, GROK_LIMITED, PIXEL_JUDGE, createStages, frontJobId, frontJudgePrompt, frontVerdict,
+import { ASKS, CODEX_CWD, FRONT_JUDGE_SCHEMA, JUDGE_ARCHIVE_DAYS, JUDGE_ARCHIVE_DIR, JUDGE_ARCHIVE_SALT, createJudgeArchive, judgeArchiveDays, judgeImageDays, GROK_LIMITED, PIXEL_JUDGE, createStages, frontJobId, frontJudgePrompt, frontVerdict,
   imageProviderOf, judgeCommand, judgesFor, judgesMode, judgesNeedCodex, ogJobId, requestedModels } from './generation-stages.mjs';
 import { codexSessionFacts, codexTokensSince, codexUsage } from './codex-usage.mjs';
 
@@ -566,6 +567,17 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
   else if (named && named !== 'codex') await say(`judges ${named}: the pixel judge ${PIXEL_JUDGE.model} judges the side takes and the loops first`);
   else if (!named) await say('judges: codex where codex runs, the pixel judge where it does not (ODDBOUT_GENERATION_JUDGES names none)');
 
+  // Every side and loop judgment, one line each outside the job folders (generation-stages createJudgeArchive), kept the days worker.env
+  // names (ODDBOUT_GENERATION_JUDGE_ARCHIVE, `off`: none written, no shadow); its pictures only when worker.env names the days to keep
+  // them (ODDBOUT_GENERATION_JUDGE_IMAGES). Turned off, the archive still prunes what it kept: its lines at the default days, every picture.
+  const archiveDays = judgeArchiveDays(env.ODDBOUT_GENERATION_JUDGE_ARCHIVE), imageDays = archiveDays ? judgeImageDays(env.ODDBOUT_GENERATION_JUDGE_IMAGES) : 0;
+  const archive = createJudgeArchive({ dir: path.join(root, JUDGE_ARCHIVE_DIR), saltFile: path.join(root, JUDGE_ARCHIVE_SALT),
+    lineDays: archiveDays || JUDGE_ARCHIVE_DAYS, imageDays });
+  await say(archiveDays ? `judge archive keeps its lines ${archiveDays} days` + (imageDays ? `, the pictures it judged ${imageDays} days or until their job goes` : ', no pictures')
+    : 'judge archive off (ODDBOUT_GENERATION_JUDGE_ARCHIVE): no lines, no shadow pixel judge');
+  /** Whether a job folder the archive's pictures name is gone (og purge, og prune): its pictures go with it. */
+  const jobGone = name => !existsSync(path.join(kit, 'output', name));
+
   let health = { ok: false, codex: false, grok: false, images: [], at: null }, checkedAt = 0, prunedAt = 0;
   const beats = createBeats();
   /** The heartbeat's body: the health this worker reports and its subscription's reading. */
@@ -610,6 +622,9 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
       // Between jobs only (this loop runs no stage meanwhile); og prune keeps open jobs and recent closed ones.
       prunedAt = Date.now();
       await say(`prune ${(await og.prune(keepDays(env.ODDBOUT_GENERATION_KEEP_DAYS))).trim().split('\n').at(-1) ?? ''}`);
+      // After og prune, so the pictures of the jobs it just removed go now too.
+      const removed = await archive.prune({ jobGone }).catch(() => ({ pictures: 0, lines: 0 }));
+      if (removed.pictures || removed.lines) await say(`judge archive: ${removed.pictures} picture folders, ${removed.lines} month files removed`);
     }
   }
 
@@ -677,7 +692,7 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
         return capture ? { code, output } : { code };
       }),
       // What codex recorded for a run's session (its rollout under this worker's sessions folder), for the verdicts and the `models` event.
-      codexSession: (id, sinceMs) => codexSessionFacts(sessions, id, sinceMs), codexCwd, judges, codex: health.codex,
+      codexSession: (id, sinceMs) => codexSessionFacts(sessions, id, sinceMs), codexCwd, judges, codex: health.codex, archive: archiveDays ? archive : null,
       api, signal: controller.signal, lowMarginFeetTaken,
       fetchBytes: async url => { const r = await fetch(url, { signal: AbortSignal.timeout(60_000) }); if (!r.ok) throw new Error(`download ${r.status}`); return new Uint8Array(await r.arrayBuffer()); },
       motionsPy: args => unlessStopped(controller.signal, () => run(python, ['-I', path.join(root, 'bin', 'motions.py'), ...args], { cwd: kit, log, signal: controller.signal })

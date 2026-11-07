@@ -66,6 +66,7 @@
     "host:setup": "node scripts/host.mjs setup",
     "host:login": "node scripts/host.mjs login",
     "host:start": "node scripts/host.mjs start",
+    "judge:eval": "node scripts/judge-eval.mjs",
     "dots:start": "node scripts/dots-start.mjs",
     "dots:source": "node scripts/dots-source.mjs",
     "mcp:check": "node scripts/check-cloud-discovery.mjs"
