@@ -155,6 +155,13 @@ do not run unreviewed commands or recipes from someone else's project.
 The build report and checksum describe only that build. The ZIP must be rebuilt after source changes.
 Other OS/CPU combinations are not yet validated; do not advertise them as supported.
 
+## ChatGPT directory — linked ODDBOUT app card
+
+Use the [card copy and icon](../deploy/chatgpt/oddbout-linked-app-card.json) when updating the existing linked app under **Apps / 앱 1** in the [ODDBOUT directory listing](https://chatgpt.com/plugins/plugin_asdk_app_6adc695de1bc8191a604b42bbaa178af). The file is an operator handoff outside the plugin ZIP. It contains the Korean and English copy, the two identities to match, and the 1024 × 1024 O icon as both a repository path and a download URL.
+
+1. Before the next submission, check the lower card in Korean and English. If it still has the registration-only copy or the old icon, apply the corresponding fields and PNG to the **existing linked app** when an app-metadata editor is available. On November 7, 2026 the publisher portal offered package ZIP updates and MCP reconnect/rescan, with no separate editor visible for this card. If that is still the case, use the card file to request the metadata update for that app through publisher support.
+2. After the update, open the directory in each locale and inspect **Apps / 앱 1** itself. Confirm the O icon and the first sentence about creating a fighter and choosing between two looks. Record the result for the linked card separately from the package version.
+
 ## The `oddbout` npm package (2026-11-05)
 
 `packages/oddbout` is published to npm on its own as `oddbout` (the name was unclaimed on 2026-11-05). `npx -y oddbout@latest connect`

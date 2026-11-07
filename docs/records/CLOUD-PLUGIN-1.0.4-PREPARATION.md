@@ -1,6 +1,6 @@
 # ODDBOUT 1.0.4 preparation — 2026-11-06
 
-**1.0.4 · In review**, verified on November 7, 2026 (KST) in the [version details](https://platform.openai.com/plugins/manage/plugin_asdk_app_6adc695de1bc8191a604b42bbaa178af?version=appsub_6aee149ab97c8191b8e1badd942b7ac3). The directory lists 1.0.3 as Published. Package PR #350, comparison UI #364 and video source #360 are merged.
+**1.0.4 · Published.** On November 7, 2026 (KST), the [portal](https://platform.openai.com/plugins/manage/plugin_asdk_app_6adc695de1bc8191a604b42bbaa178af) confirmed publication and the [directory](https://chatgpt.com/plugins/plugin_asdk_app_6adc695de1bc8191a604b42bbaa178af) displayed version 1.0.4. The [review record](CLOUD-PLUGIN-REVIEW.md) distinguishes the updated package header from the linked app card. Package PR #350, comparison UI #364, video source #360 and portal corrections #365 are merged.
 
 Package: `oddbout-dots`; public plugin: `plugin_asdk_app_6adc695de1bc8191a604b42bbaa178af`; existing endpoint: `https://mcp.oddbout.com/mcp`.
 

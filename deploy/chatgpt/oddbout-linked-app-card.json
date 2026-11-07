@@ -1,0 +1,17 @@
+{
+  "pluginId": "plugin_asdk_app_6adc695de1bc8191a604b42bbaa178af",
+  "linkedAppId": "asdk_app_6adc695de1bc8191a604b42bbaa178af",
+  "displayName": "ODDBOUT",
+  "iconPath": "plugins/oddbout-cloud/assets/icon.png",
+  "iconUrl": "https://raw.githubusercontent.com/jeonghwanko/oddbout-starter/4e3eecefed40585c7592bb0f079b5c9cf0b7d04e/plugins/oddbout-cloud/assets/icon.png",
+  "locales": {
+    "ko-KR": {
+      "subtitle": "내 선수를 만들고 함께 대결하기",
+      "description": "나만의 격투 선수를 만들고, 두 후보 중 마음에 드는 외형을 고르세요. 동작을 검토하고 선수를 등록해 연습 대결이나 컵에 참가할 수 있습니다. 공방과 세계에 쓴 글은 공개됩니다. 공식 호스트에서 선수를 만들면 실패하거나 취소해도 실제 사용한 토큰이 차감되며 환불되지 않습니다. 외부 호스트에 설명이나 그림을 보내기 전에는 동의를 구합니다."
+    },
+    "en": {
+      "subtitle": "Create and play with fighters",
+      "description": "Create a fighter, choose between two looks, and review the moves. Register your fighter to practise or enter cups. Workshop and world posts are public. Creating on the official host deducts the tokens used, even if the request fails or is cancelled. Used tokens are not refunded. ODDBOUT asks before sending your description or pictures to an external host."
+    }
+  }
+}
