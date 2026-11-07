@@ -132,6 +132,32 @@ test('a join code becomes a worker key once, on a PC with no account session; a 
   } finally { await sql.close(); }
 });
 
+// 2026-11-07: a claim may carry the heartbeat (one request a turn instead of two). It is recorded before the claim reads the host's health.
+test('a claim carrying the heartbeat records it first and says so; a bare claim records none', async () => {
+  const { sql, call, healthy } = await generation();
+  const theirs = 'other-token-0123456789';
+  try {
+    await healthy();
+    await call('POST', 'generations/host', { name: '고양이 공방', billing: 'subscription', termsAccepted: true }, theirs);
+    const key = (await call('POST', 'generations/host/keys', {}, theirs)).body.key;
+    const claim = body => call('POST', 'generation-worker/claim', body, key);
+    const seen = async () => (await sql.query('select worker_seen_at, worker_health from public.af_generation_hosts where not official')).rows[0];
+    const bare = (await claim({})).body;
+    assert.deepEqual([bare.ok, bare.stage, bare.beat], [true, 'idle', undefined]);
+    assert.equal((await seen()).worker_seen_at, null);
+    assert.equal((await call('GET', 'generations/host', undefined, theirs)).body.host.online, false);
+    const carried = (await claim({ health: { ok: true, codex: false, grok: true } })).body;
+    assert.deepEqual([carried.ok, carried.stage, carried.beat], [true, 'idle', true]);
+    const row = await seen();
+    assert.ok(row.worker_seen_at);
+    assert.deepEqual([row.worker_health.ok, row.worker_health.grok], [true, true]);
+    assert.equal((await call('GET', 'generations/host', undefined, theirs)).body.host.online, true);
+    // Checked as the heartbeat route checks it; nothing else rides along.
+    assert.equal((await claim({ health: 'ok' })).body.code, 'invalid-health');
+    assert.equal((await claim({ health: { ok: true }, lease: 1 })).body.code, 'invalid-body');
+  } finally { await sql.close(); }
+});
+
 // His own PC pays for his own fighters, so they need no tokens (보유 토큰, 2026-10-31); one request at a time still.
 test('fighters made on his own PC need no tokens: at zero ODDBOUT refuses, his PC does not; one open request at a time', async () => {
   const { sql, call, healthy } = await generation();

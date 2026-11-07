@@ -720,14 +720,18 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     }
     if (route === 'generation-worker/profile-fronts/finish') return finishFrontCheck(db, host, body);
     if (route === 'generation-worker/profile-fronts/release') return releaseFrontCheck(db, host, body);
-    if (route === 'generation-worker/heartbeat') {
-      const { health, usage } = fields(body, ['health', 'usage']);
-      if (!isObject(health) || JSON.stringify(health).length > 2000) throw new Problem(422, 'invalid-health');
-      // The subscription's rate-limit reading (2026-10-31, host/codex-usage.mjs), kept for the operator: the budget is the day's tokens.
-      // A reading that does not parse is left out, never the heartbeat.
-      if (usageReading(usage)) await call('af_generation_host_usage', { p_host: host, p_usage: usage }).catch(skipped('generation', 'host-usage'));
-      return { ok: true, capabilities: await call('af_generation_host_heartbeat', { p_host: host, p_health: health }) };
-    }
+    /**
+     * The worker's heartbeat: its health (`af_generation_host_heartbeat`, "on" for three minutes) and its subscription's rate-limit reading
+     * (2026-10-31, host/codex-usage.mjs), kept for the operator — the budget is the day's tokens; a reading that does not parse is left out,
+     * never the heartbeat. On its own route, or riding on a claim (below).
+     * @param {Record<string, any>} beat
+     */
+    const recordBeat = async beat => {
+      if (!isObject(beat.health) || JSON.stringify(beat.health).length > 2000) throw new Problem(422, 'invalid-health');
+      if (usageReading(beat.usage)) await call('af_generation_host_usage', { p_host: host, p_usage: beat.usage }).catch(skipped('generation', 'host-usage'));
+      return call('af_generation_host_heartbeat', { p_host: host, p_health: beat.health });
+    };
+    if (route === 'generation-worker/heartbeat') return { ok: true, capabilities: await recordBeat(fields(body, ['health', 'usage'])) };
     // Which of this host's jobs are over for him (the worker closes their folders). A community host: his own jobs that ended. The official
     // host writes every job's brief, so it also hears of jobs that ended anywhere, and of jobs another host took after its brief (2026-10-28 —
     // the brief folder of the first test host's job stayed open on the office PC and blocked og setup).
@@ -744,13 +748,18 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
         : over(row) || (row.assigned_host !== null && row.assigned_host !== official)).map(row => row.id) };
     }
     if (route === 'generation-worker/claim') {
+      // A claim may carry the heartbeat (2026-11-07): idle claims and the minute's heartbeats were 83 % of the project's Edge requests
+      // (17,966 on 2026-11-06, the free plan's month being 500,000). It is recorded first, as the claim reads the host's health, and
+      // `beat: true` tells the worker so: it stops beating apart. A worker sending none gets no `beat` and beats on its own route.
+      const beat = fields(body, ['health', 'usage']);
+      const beaten = beat.health === undefined ? {} : (await recordBeat(beat), { beat: true });
       const row = await call('af_generation_claim_for', { p_host: host });
-      if (!row?.id) return { ok: true, stage: 'idle' };
+      if (!row?.id) return { ok: true, stage: 'idle', ...beaten };
       const { data: refs, error } = await db.from('af_generation_uploads').select('id,path,content_type,width,height').eq('job_id', row.id);
       if (error) throw unavailable('database-unavailable', error);
       const candidates = candidatesOf(row);
       const urls = await signed([...(refs ?? []).map(/** @param {Upload} ref */ ref => ref.path), ...candidates.map(name => artifactPath(row.id, name))]);
-      return { ok: true, job: { id: row.id, status: row.status, leaseToken: row.lease_token, owner: row.owner_id, createdAt: row.created_at, description: row.description,
+      return { ok: true, ...beaten, job: { id: row.id, status: row.status, leaseToken: row.lease_token, owner: row.owner_id, createdAt: row.created_at, description: row.description,
         language: row.language, brief: row.brief ?? null, delegate: row.delegate === true, choice: row.choice ?? null, appearanceNote: row.appearance_note ?? null,
         decisionsReview: { mode: productionReviewer?.enabled ? 'shadow' : 'off' },
         // Who draws its pictures (host/generation-stages.mjs imageProviderOf): grok or gpt; a row from before the column was GPT's.

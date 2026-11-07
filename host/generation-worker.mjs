@@ -21,8 +21,45 @@ const ROOT = process.env.OG_ROOT || path.dirname(path.dirname(fileURLToPath(impo
 /** The kit's sprite-gen venv Python (scripts/sprite-gen.mjs `spritePython`): Windows keeps a venv's programs in Scripts\ as .exe. */
 export const spritePython = (kit, platform = process.platform) =>
   path.join(kit, 'vendor', 'sprite-gen', '.venv', ...(platform === 'win32' ? ['Scripts', 'python.exe'] : ['bin', 'python']));
-export const TIMING = Object.freeze({ heartbeatMs: 60_000, healthMs: 3_600_000, idleMs: 15_000, renewMs: 60_000, errorMs: 60_000, pruneMs: 86_400_000,
-  askedRecheckMs: 900_000 });
+export const TIMING = Object.freeze({ heartbeatMs: 60_000, healthMs: 3_600_000, idleMs: 15_000, idleMaxMs: 60_000, renewMs: 60_000, errorMs: 60_000,
+  pruneMs: 86_400_000, askedRecheckMs: 900_000 });
+/**
+ * The wait after a claim that took nothing (2026-11-07): idleMs, doubling to idleMaxMs while nothing comes, idleMs again after a job. Two
+ * workers claiming every 15 s and beating every minute were 83 % of the project's Edge requests (the free plan's month is 500,000); a request
+ * now waits at most a minute for an idle worker.
+ */
+export const nextIdleWait = wait => Math.min(wait * 2, TIMING.idleMaxMs);
+/**
+ * When the heartbeat goes (2026-11-07): at most once a heartbeatMs, riding on the turn's claim (`{ health, usage }`) once a server has taken
+ * one there (`beat: true`). A turn that claims nothing (not healthy) beats on its own route, and so does every turn after a server that
+ * answered a carrying claim without `beat` (an older one ignores the body: that turn's beat goes apart at once). Each heartbeat keeps the
+ * host "on" for three minutes on the server; a minute's idle wait is well inside it.
+ * @param {() => number} [now]
+ */
+export function createBeats(now = Date.now) {
+  /** @type {boolean | null} Whether this server takes a claim's heartbeat: not known before the first carrying claim. */
+  let inClaim = null, at = 0;
+  const due = () => now() - at >= TIMING.heartbeatMs;
+  return {
+    /** @param {boolean} claiming this turn claims (healthy) @returns {boolean} keepAlive sends the heartbeat on its own route */
+    apart: claiming => due() && !(claiming && inClaim !== false),
+    /** @param {boolean} claiming @returns {boolean} this turn's claim carries the heartbeat */
+    carry: claiming => claiming && inClaim !== false && due(),
+    /** A heartbeat went through. */
+    beaten: () => { at = now(); },
+    /** The next turn beats whatever the time: a provider went down, and the server hears it before the next claim. */
+    reset: () => { at = 0; },
+    /**
+     * What a carrying claim's reply says: 'taken' (`beat: true`), else 'apart' — beat on the heartbeat route now (a failed claim teaches nothing).
+     * @param {{ ok?: boolean, beat?: boolean } | null | undefined} reply @returns {'taken' | 'apart'}
+     */
+    claimed: reply => {
+      if (reply?.ok && reply.beat === true) { inClaim = true; at = now(); return 'taken'; }
+      if (reply?.ok) inClaim = false;
+      return 'apart';
+    },
+  };
+}
 /**
  * How long one stage may run (2026-10-29): past it the stage's runs are stopped (SIGTERM, which og passes on to its command, so sprite-gen
  * writes its reports) and the job goes to an operator as `<stage>-stage-timeout`, never back to the queue, since a stopped run may already
@@ -203,7 +240,8 @@ export function createApi({ base, key, fetcher = fetch }) {
     heartbeat: (health, usage = null) => post('heartbeat', { health, ...(usage ? { usage } : {}) }),
     // The server's public contract: its features say what a package may carry (a gait at its own frame count: gait-frames-1).
     spec: () => fetcher(`${base}/spec`, { signal: AbortSignal.timeout(30_000) }).then(json),
-    claim: () => post('claim', {}),
+    // The heartbeat may ride along (createBeats): `{ health, usage }`, as the heartbeat route takes it.
+    claim: (beat = null) => post('claim', beat ?? {}),
     ended: jobs => post('ended', { jobs }),
     progress: (job, progress, event) => post('progress', { jobId: job.id, leaseToken: job.leaseToken, progress, ...(event ? { event } : {}) }),
     finish: (job, outcome, result) => post('finish', { jobId: job.id, leaseToken: job.leaseToken, outcome, result }),
@@ -513,7 +551,15 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
   else if (named && named !== 'codex') await say(`judges ${named}: the pixel judge ${PIXEL_JUDGE.model} judges the side takes and the loops first`);
   else if (!named) await say('judges: codex where codex runs, the pixel judge where it does not (ODDBOUT_GENERATION_JUDGES names none)');
 
-  let health = { ok: false, codex: false, grok: false, images: [], at: null }, checkedAt = 0, beatAt = 0, prunedAt = 0;
+  let health = { ok: false, codex: false, grok: false, images: [], at: null }, checkedAt = 0, prunedAt = 0;
+  const beats = createBeats();
+  /** The heartbeat's body: the health this worker reports and its subscription's reading. */
+  const beatBody = async () => { const usage = await codexUsage(sessions).catch(() => null); return { health: aboutHealth(health, about), ...(usage ? { usage } : {}) }; };
+  async function beatApart() {
+    const { health: reported, usage } = await beatBody();
+    const reply = await api.heartbeat(reported, usage ?? null).catch(error => ({ ok: false, code: error.message }));
+    if (reply.ok) beats.beaten(); else await say(`heartbeat failed ${reply.code ?? reply.status}`);
+  }
   const cooldowns = createCooldowns(Date.now, configured);
   async function keepAlive() {
     if (Date.now() - checkedAt >= TIMING.healthMs) {
@@ -534,10 +580,8 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
       prunedAt = Date.now();
       await say(`prune ${(await og.prune(keepDays(env.ODDBOUT_GENERATION_KEEP_DAYS))).trim().split('\n').at(-1) ?? ''}`);
     }
-    if (Date.now() - beatAt >= TIMING.heartbeatMs) {
-      const reply = await api.heartbeat(aboutHealth(health, about), await codexUsage(sessions).catch(() => null)).catch(error => ({ ok: false, code: error.message }));
-      if (reply.ok) beatAt = Date.now(); else await say(`heartbeat failed ${reply.code ?? reply.status}`);
-    }
+    // On its own route only when this turn's claim does not carry it (createBeats).
+    if (beats.apart(health.ok)) await beatApart();
   }
 
   /** codex cannot run here now (exit 75: signed out, usage used up): claim nothing until a health check passes again, soon. */
@@ -548,7 +592,7 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
     const wait = cooldowns.limit(provider);
     checkedAt = Date.now() - TIMING.healthMs + wait;
     // The next turn's heartbeat says so before it claims again: the server gives a job that needs this provider only to a host it is ok on.
-    beatAt = 0;
+    beats.reset();
     await say(`${provider} cannot run now: ${health.ok ? `claims go on without it (judges ${judgesFor(configured, health)})` : 'no claims until health passes'}`
       + ` (checked again in ${Math.round(wait / 60_000)} minutes)`);
     return true;
@@ -655,16 +699,20 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
   }
 
   await say('worker started');
+  let idleWait = TIMING.idleMs;
   for (;;) {
     try {
       await keepAlive();
       if (health.codex && Date.now() >= frontDue) await frontTurn();
-      const claimed = health.ok ? await api.claim() : { ok: true, stage: 'idle' };
-      if (claimed.ok && claimed.job) await work(claimed.job);
+      const carried = beats.carry(health.ok);
+      const claimed = health.ok ? await api.claim(carried ? await beatBody() : null) : { ok: true, stage: 'idle' };
+      if (carried && beats.claimed(claimed) === 'apart') await beatApart();
+      if (claimed.ok && claimed.job) { idleWait = TIMING.idleMs; await work(claimed.job); }
       else {
         if (!claimed.ok) await say(`claim failed ${claimed.code ?? claimed.status}`);
         if (once) return;
-        await new Promise(resolve => setTimeout(resolve, TIMING.idleMs));
+        await new Promise(resolve => setTimeout(resolve, idleWait));
+        idleWait = nextIdleWait(idleWait);
       }
       if (once) return;
     } catch (error) {
