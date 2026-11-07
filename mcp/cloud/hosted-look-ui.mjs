@@ -24,6 +24,7 @@ const ko=()=> (window.openai?.locale || document.documentElement.lang || navigat
 const say=(en,kr)=>ko()?kr:en;
 const node=(tag,words)=>{const el=document.createElement(tag);if(words)el.textContent=words;return el};
 const post=(message)=>parent.postMessage({jsonrpc:'2.0',...message},'*');
+const snapshots=new Map();
 function safeUrl(value,job,key,index){
   try{const u=new URL(value), prefix='/storage/v1/object/sign/af-generation/jobs/'+job.id+'/';
     return job.candidates?.[index]?.key===key && /^[0-9a-f-]{36}$/i.test(job.id) && u.origin===origin &&
@@ -34,11 +35,19 @@ function safeUrl(value,job,key,index){
 function render(result){
   if(!result)return;
   const output=result.structuredContent || {}, job=output.job, blocks=(result.content || []).filter(b=>b.type==='image' && b.mimeType==='image/webp');
-  const inline=blocks.length===2 && blocks.every(b=>typeof b.data==='string' && b.data.length<=2666668 && /^[A-Za-z0-9+/]+=*$/.test(b.data));
+  if(job?.id && output.statusSummary){
+    const s=output.statusSummary, stamp=[Date.parse(s.updatedAt)||0,Date.parse(s.checkedAt)||0], previous=snapshots.get(job.id);
+    if(previous && (stamp[0]<previous[0] || (stamp[0]===previous[0] && stamp[1]<previous[1])))return;
+    snapshots.set(job.id,stamp);
+  }
+  const inline=output.previewPair===true && job?.status==='appearance_ready' && blocks.length===2 &&
+    blocks.every(b=>typeof b.data==='string' && b.data.length<=2666668 && /^[A-Za-z0-9+/]+=*$/.test(b.data));
   const urls=output.previewPair===true && job?.status==='appearance_ready' && job.candidates?.length===2 ? ['a','b'].map((k,i)=>safeUrl(job.candidates[i].url,job,k,i)) : [];
   if(!inline && !(urls.length===2 && urls.every(Boolean))){
     if(!result.structuredContent)return;
-    if(output.statusSummary){renderStatus(output);return;}
+    if(output.statusSummary){renderStatus(output);
+      if(job?.status==='appearance_ready')root.append(node('p',say('The two previews are unavailable. Check them on the website before choosing.','후보 그림을 불러오지 못했습니다. 사이트에서 확인한 뒤 선택하세요.')));
+      return;}
     if(Array.isArray(output.jobs)){
       root.replaceChildren(node('h2',say('Recent requests','최근 제작 신청')));
       for(const request of output.jobs){const card=node('section');
@@ -66,7 +75,7 @@ function statusNodes(output){
   const names={queued:['Queued','제작 대기'],appearance:['Creating looks','외형 제작 중'],choose_look:['Choose a look','외형 선택 필요'],
     motions:['Creating motions','모션 제작 중'],registration_pending:['Motions finished · registration pending','모션 완료 · 등록 연결 대기'],
     submitting:['Packaging and registering','패키지 구성·등록 중'],validating:['Checking the package','등록 파일 검사 중'],
-    registered:['Registered · not entered','등록 완료 · 출전 전'],operator_review:['Operator attention needed','운영자 확인 필요'],stopped:['Stopped','작업 종료·중단']};
+    registered:['Registered','등록 완료'],operator_review:['Operator attention needed','운영자 확인 필요'],stopped:['Stopped','작업 종료·중단']};
   const label=names[s.state] || ['Status unknown','상태 확인 필요'];
   const items=[node('h2',say(...label))];
   if(s.queue){
@@ -77,11 +86,12 @@ function statusNodes(output){
   }
   if(s.stageProgress!==null && !s.terminal && ['appearance','motions','submitting'].includes(s.state))
     items.push(node('p',say('Current stage: ','현재 단계 진행: ')+s.stageProgress+'%'+say(' (not overall completion)',' (전체 완료율 아님)')));
-  const actions={enter_on_site:['Review and enter on the website.','사이트에서 동작을 확인하고 출전하세요.'],
+  const actions={enter_on_site:['Check entry status and motions on the website; enter there if needed.','사이트에서 출전 상태와 동작을 확인하고, 필요하면 출전하세요.'],
     choose_look:['Choose A or B in this chat.','채팅에서 A 또는 B를 선택하세요.'],
     agent_register:['No motion approval needed. The agent continues registration.','모션 승인은 필요 없습니다. 에이전트가 등록을 이어갑니다.'],
     operator:['No answer needed from you. An operator must check this step.','사용자 응답 대기가 아닙니다. 운영자의 확인이 필요합니다.'],
     inspect_error:['Check the error before requesting any new generation.','오류를 확인하세요. 새 생성은 자동으로 시작하지 않습니다.'],
+    inspect_status:['The current state is unknown. Check the request on the website.','현재 상태를 해석할 수 없습니다. 사이트에서 신청 상태를 확인하세요.'],
     none:['No action needed. Follow the server job on the website.','지금 할 일은 없습니다. 사이트에서 진행 상황을 확인할 수 있습니다.']};
   items.push(node('p',say(...(actions[s.actionRequired] || ['Check status','상태를 확인하세요']))));
   if(s.error)items.push(node('p',say('Reason: ','사유: ')+s.error));

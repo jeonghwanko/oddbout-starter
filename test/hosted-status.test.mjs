@@ -17,6 +17,7 @@ test('100% is stage progress; only a registered submission completes creation', 
   assert.equal(hostedStatus({ id: 'job', status: 'appearance_ready' }).actionRequired, 'choose_look');
   assert.equal(hostedStatus({ id: 'job', status: 'needs_review' }).actionRequired, 'operator');
   assert.equal(hostedStatus({ id: 'job', status: 'motion_ready' }).actionRequired, 'agent_register');
+  assert.equal(hostedStatus({ id: 'job', status: 'unexpected_status' }).actionRequired, 'inspect_status');
   assert.match(hostedNext({ id: 'job', status: 'motion_ready' }), /without asking for motion approval/);
 });
 
@@ -41,8 +42,27 @@ test('chat card shows completion, required action and snapshot time without raw 
   };
   draw('motions'); assert.match(root.text, /모션 제작 중/); assert.match(root.text, /전체 완료율 아님/);
   assert.match(root.text, /자동 알림이 아닙니다/); assert.match(root.text, /확인 시각/);
-  draw('submitted', { stage: 'registered' }); assert.match(root.text, /등록 완료 · 출전 전/);
+  draw('submitted', { stage: 'registered' }); assert.match(root.text, /등록 완료/); assert.doesNotMatch(root.text, /출전 전/);
   draw('needs_review'); assert.match(root.text, /사용자 응답 대기가 아닙니다/);
   draw('motion_ready', null, 'https://oddbout.com.evil.example/');
   assert.match(root.text, /모션 승인은 필요 없습니다/); assert.ok(root.children.every(n => !n.href));
+  draw('unexpected_status'); assert.match(root.text, /현재 상태를 해석할 수 없습니다/); assert.doesNotMatch(root.text, /지금 할 일은 없습니다/);
+
+  // A delayed result from an earlier read must not turn a completed card back into "working".
+  const dated = (status, updatedAt, checkedAt) => ({ structuredContent: {
+    job: { id: 'ordered-job', status }, statusSummary: { ...hostedStatus({ id: 'ordered-job', status,
+      submission: status === 'submitted' ? { stage: 'registered' } : null }), updatedAt, checkedAt }, siteUrl: 'https://oddbout.com/',
+  } });
+  context.result = dated('submitted', '2026-11-07T10:00:00Z', '2026-11-07T10:01:00Z');
+  vm.runInContext('render(result)', context);
+  const latest = root.text;
+  context.result = dated('motions', '2026-11-07T09:00:00Z', '2026-11-07T10:02:00Z');
+  vm.runInContext('render(result)', context); assert.equal(root.text, latest);
+  context.result = dated('motions', '2026-11-07T10:00:00Z', '2026-11-07T10:00:30Z');
+  vm.runInContext('render(result)', context); assert.equal(root.text, latest);
+
+  // Image blocks from an unrelated output do not become candidates without the structured look context.
+  context.result = { structuredContent: { job: { id: 'another', status: 'motions' }, statusSummary: hostedStatus({ id: 'another', status: 'motions' }) },
+    content: [0, 1].map(() => ({ type: 'image', mimeType: 'image/webp', data: 'AAAA' })) };
+  vm.runInContext('render(result)', context); assert.match(root.text, /모션 제작 중/); assert.doesNotMatch(root.text, /두 외형 비교/);
 });

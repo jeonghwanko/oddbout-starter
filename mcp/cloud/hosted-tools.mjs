@@ -1,7 +1,7 @@
 // @ts-check
 // 호스팅 생성 도구 (2026-10-28): ODDBOUT's generation worker makes the fighter; the agent carries the user's answers.
 import { z } from 'zod';
-import { GENERATION_LIMITS, UPLOAD_TICKET_HEADER, artifactPath } from '../../api/generations.mjs';
+import { GENERATION_LIMITS, UPLOAD_TICKET_HEADER, artifactPath, confirmedProfile } from '../../api/generations.mjs';
 import { Problem, readBody, UUID } from '../../api/http.mjs';
 import { encodeBase64 } from '../../api/base64.mjs';
 import { probeImage } from '../../api/image-probe.mjs';
@@ -206,7 +206,7 @@ function hostedStep(job, uploads = true) {
             + (uploads ? 'prepare_profile_set can upload one.' : 'this connector cannot upload one; the user uploads it from the ODDBOUT app in ChatGPT or with the creator kit.'));
       if (job.submission?.stage === 'rejected') return `The server check refused the package. A person at ODDBOUT will look at it.${spent(job)}`;
       return `The server is checking the package. ${WATCH_NEXT}`;
-    case 'needs_review': return `A person at ODDBOUT is checking this step; nothing to answer now. Tell the user and show him what is made so far `
+    case 'needs_review': return `This step needs an ODDBOUT operator's attention; it is not waiting for user motion approval${error}. Tell the user and show him what is made so far `
       + `(${IMAGES_NEXT}); check later.${spent(job)}`;
     case 'rejected': return `ODDBOUT declined this request${error}.${spent(job)} A different request may be made while his balance is above zero.`;
     case 'failed': return `This request failed${error}.${spent(job)} He may ask again while his balance is above zero.`;
@@ -239,10 +239,11 @@ export function hostedStatus(job) {
   const failed = ['failed', 'rejected', 'cancelled', 'expired'].includes(job.status) || job.submission?.stage === 'rejected';
   const state = registered ? 'registered' : failed ? 'stopped' : job.status === 'appearance_ready' ? 'choose_look'
     : job.status === 'needs_review' ? 'operator_review' : job.status === 'motion_ready' ? 'registration_pending'
-    : job.status === 'submitted' ? 'validating' : job.status;
+    : job.status === 'submitted' ? 'validating' : HOSTED_WORKING.has(job.status) ? job.status : 'unknown';
   return { state, completed: registered, terminal: registered || failed,
     actionRequired: registered ? 'enter_on_site' : job.status === 'appearance_ready' ? 'choose_look'
-      : job.status === 'motion_ready' ? 'agent_register' : job.status === 'needs_review' ? 'operator' : failed ? 'inspect_error' : 'none',
+      : job.status === 'motion_ready' ? 'agent_register' : job.status === 'needs_review' ? 'operator' : failed ? 'inspect_error'
+        : state === 'unknown' ? 'inspect_status' : 'none',
     stageProgress: Number.isFinite(job.progress) ? Math.max(0, Math.min(100, /** @type {number} */ (job.progress))) : null,
     updatedAt: job.updatedAt ?? null, checkedAt: new Date().toISOString(), error: job.error ?? null,
     queue: job.queue ? { position: job.queue.position, reason: job.queue.reason ?? 'turn', resetsAt: job.queue.resetsAt ?? null } : null };
@@ -633,15 +634,36 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
       names: z.record(z.string(), z.string()), lines: z.record(z.string(), z.string()),
       stats: z.object({ power: z.number().int(), toughness: z.number().int(), speed: z.number().int() }).strict() }).partial().strict().optional() },
     async ({ jobId, profile = {} }) => {
+      /** A racing/repeated request must not silently discard a different requested profile.
+       * @param {any} current */
+      const recovered = current => {
+        if (Object.keys(profile).length) {
+          const draft = Object.fromEntries(PROFILE_KEYS.filter(key => current.job.profile?.[key] != null).map(key => [key, current.job.profile[key]]));
+          const desired = { ...draft, ...profile };
+          for (const key of /** @type {const} */ (['names', 'lines'])) if (profile[key] && draft[key]) desired[key] = { ...draft[key], ...profile[key] };
+          let same = false;
+          try { same = JSON.stringify(confirmedProfile(draft)) === JSON.stringify(confirmedProfile(desired)); } catch { /* unverified edit */ }
+          if (!same) return { ...withNext(current), ok: false, code: 'registration-profile-locked',
+            next: 'Registration already started. These profile changes were not applied. Do not claim they were saved; keep the existing package and use its siteUrl.' };
+        }
+        return withNext(current);
+      };
       const read = await invoke(`generations/${jobId}`);
       if (!read.ok) return read;
       // An interrupted registration response is recovered by reading, never by submitting the package again.
-      if (['submitting', 'submitted'].includes(read.job.status)) return withNext(read);
+      if (['submitting', 'submitted'].includes(read.job.status)) return recovered(read);
       // The draft the worker wrote, with his changes over it; the API checks the result against the contract.
       const draft = read.job.profile ?? {}, merged = { ...draft, ...profile };
       for (const key of /** @type {const} */ (['names', 'lines'])) if (profile[key] && draft[key]) merged[key] = { ...draft[key], ...profile[key] };
       const confirmed = Object.fromEntries(PROFILE_KEYS.filter(key => merged[key] != null).map(key => [key, merged[key]]));
-      return withNext(await post(`generations/${jobId}/register`, { profile: confirmed }));
+      const result = await post(`generations/${jobId}/register`, { profile: confirmed });
+      if (!result.ok) {
+        // Another caller may have won after our read, or the successful response may have been lost.
+        // Read once; no second POST and no fallback to a different job/account.
+        const current = await invoke(`generations/${jobId}`);
+        if (current.ok && ['submitting', 'submitted'].includes(current.job.status)) return recovered(current);
+      }
+      return withNext(result);
     }, { write: true, publish: true, openWorld: true, idempotent: true });
   register('cancel_hosted_fighter', '맡긴 선수 취소', 'Cancel the connected user\'s hosted fighter request; '
     + 'work in progress stops at its next step. Tokens it already spent stay spent. Only on his explicit request.',

@@ -24,3 +24,5 @@ GPT 웹에서 진행 중인지·완료인지·누가 무엇을 해야 하는지 
 DB 마이그레이션 `20261107112111_hosted_auto_registration.sql`과 hosted MCP 변경을 함께 반영해야 한다.
 MCP 모듈을 포함하는 Render/Edge 배포 및 이후 제작 키트·스킬 배포 범위를 확인한다.
 이 문서 작성만으로 배포·캐릭터 등록·출전이 수행된 것은 아니다.
+
+추가 실패 재현과 보완 결과는 [적대적 리뷰 기록](HOSTED-REGISTRATION-ADVERSARIAL-2026-11-07.md)에 있다.
