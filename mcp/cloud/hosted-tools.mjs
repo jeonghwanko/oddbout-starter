@@ -28,7 +28,7 @@ import { toolRef } from './merged-tools.mjs';
  *   tokens?: number | null, expressions?: { url: string | null } | null,
  *   progress?: number, description?: string, profile?: { name?: string } | null, createdAt?: string, updatedAt?: string, agent?: string | null,
  *   side?: { url: string | null } | null, drafts?: { clip: string, url: string | null, state?: string }[],
- *   candidates?: { key: string, url: string | null }[] }} HostedJob
+ *   appearanceAutoSelectAt?: string | null, candidates?: { key: string, url: string | null }[] }} HostedJob
  * @typedef {{ id: number, at: string, kind: string, data: any }} JobEvent  A row of af_generation_events.
  * @typedef {{ status: string, progress: number, submission: string | null, picture: number | null }} WatchTick  What a wait sees of a job;
  *   `picture`: while the motions are made, the id of its newest event that carries a picture.
@@ -55,6 +55,8 @@ export const HOSTED_INSTRUCTIONS = 'When the user wants ODDBOUT to make the figh
   + 'Read the same job again for fresh preview URLs; a URL is not proof that the user saw the image. '
   + 'While the user watches a working job in this chat, read it again with waitSeconds 25 each time a read returns and tell him each change. '
   + 'Use statusSummary for the current stage, completion and required action; progress is stage-local, never overall completion. '
+  + 'When appearanceAutoSelectAt is present, explain that unanswered looks default to A ten minutes after the pair is ready. '
+  + 'The server selects it; do not send a fabricated user choice or run a chat timer. '
   + 'Do not ask for motion approval before registration. Hosted creation includes registration into production; only the owner enters on the site. '
   + 'Never promise background chat notifications or scheduling unless the host actually supports them. '
   + 'A result\'s siteUrl is the user\'s page for that request (or, once registered, for his fighter) on the ODDBOUT website. ';
@@ -193,7 +195,10 @@ function hostedStep(job, uploads = true) {
     case 'appearance_ready':
       return `${job.delegate ? 'ODDBOUT could not pick a look by itself. ' : ''}Show the user both looks (candidates a and b, his fighter from the front) as images `
         + `(${IMAGES_NEXT}) and ask which one: the one he picks is also his profile picture on the site and in the arena. `
-        + `Then choose_hosted_look with his pick, or with one sentence to change both (${left.appearance ?? 0} changes left).`;
+        + `Then choose_hosted_look with his pick, or with one sentence to change both (${left.appearance ?? 0} changes left).`
+        + (job.appearanceAutoSelectAt ? ` Tell him: if no choice or revision is received, the server automatically selects A after ${job.appearanceAutoSelectAt}`
+          + ' (ten minutes after this pair was ready, checked once a minute), even if he closes the chat. The host continues when available.'
+          + ' Do not send choose_hosted_look on his behalf just because time elapsed; read the job to confirm the actual selection.' : '');
     case 'motions':
       return `ODDBOUT is drawing ${job.delegate ? 'the look it picked' : 'the chosen look'} from the side (job.side once it is drawn) and making the eleven motions `
         + 'from that side view (about 15 to 30 minutes), and his six arena faces from the front (job.expressions once drawn; the last is his '
@@ -254,11 +259,12 @@ export function hostedStatus(job) {
     : job.status === 'needs_review' ? 'operator_review' : job.status === 'motion_ready' ? 'registration_pending'
     : job.status === 'submitted' ? 'validating' : HOSTED_WORKING.has(job.status) ? job.status : 'unknown';
   return { state, completed: registered, terminal: registered || failed,
-    actionRequired: registered ? 'enter_on_site' : job.status === 'appearance_ready' ? 'choose_look'
+    actionRequired: registered ? 'enter_on_site' : job.status === 'appearance_ready' ? (job.appearanceAutoSelectAt ? 'choose_look_or_wait' : 'choose_look')
       : job.status === 'motion_ready' ? 'agent_register' : job.status === 'needs_review' ? 'operator' : failed ? 'inspect_error'
         : state === 'unknown' ? 'inspect_status' : 'none',
     stageProgress: Number.isFinite(job.progress) ? Math.max(0, Math.min(100, /** @type {number} */ (job.progress))) : null,
     updatedAt: job.updatedAt ?? null, checkedAt: new Date().toISOString(), error: job.error ?? null,
+    appearanceAutoSelectAt: job.status === 'appearance_ready' ? job.appearanceAutoSelectAt ?? null : null,
     queue: job.queue ? { position: job.queue.position, reason: job.queue.reason ?? 'turn', resetsAt: job.queue.resetsAt ?? null } : null };
 }
 
@@ -447,9 +453,10 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
   };
   register('request_hosted_fighter', 'ODDBOUT에 선수 만들기 맡기기', 'ODDBOUT makes a fighter for the connected user on its own generation worker: '
     + 'two front-view looks to choose from (the chosen one is also his profile picture), then a side view drawn from it and the eleven '
-    + 'motions, then registration under his account. delegate: '
+    + 'motions, then registration under his account. New pairs default to A after ten minutes without a choice or revision; '
+    + 'the job reports appearanceAutoSelectAt when this applies. Explain this before waiting for his choice. delegate: '
     + 'true when he leaves the choices to ODDBOUT ("알아서 해 줘", "just make it"): '
-    + 'ODDBOUT picks the look itself (or asks him if neither suits) and he answers once, at the finished motions. host: '
+    + 'ODDBOUT picks the look itself (or offers the pair if it cannot pick) and continues through registration without motion approval. host: '
     + 'oddbout (default, ODDBOUT\'s own worker), mine (his own PC as a host: '
     + 'no consent to give, approval not needed), any (any approved community host) or a host id from list_generation_hosts; '
     + 'any or another person\'s host sends his words and pictures to that host\'s PC, so ask him first and pass hostConsent: '

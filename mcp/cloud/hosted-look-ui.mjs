@@ -148,12 +148,20 @@ function statusNodes(output){
     items.push(node('p',say('Current stage: ','현재 단계 진행: ')+s.stageProgress+'%'+say(' (not overall completion)',' (전체 완료율 아님)')));
   const actions={enter_on_site:['Check entry status and motions on the website; enter there if needed.','사이트에서 출전 상태와 동작을 확인하고, 필요하면 출전하세요.'],
     choose_look:['Choose A or B in this chat.','채팅에서 A 또는 B를 선택하세요.'],
+    choose_look_or_wait:['Choose A or B, or request a change. With no answer, A is selected automatically.','A·B를 고르거나 수정을 요청하세요. 응답이 없으면 A로 자동 진행합니다.'],
     agent_register:['No motion approval needed. The agent continues registration.','모션 승인은 필요 없습니다. 에이전트가 등록을 이어갑니다.'],
     operator:['No answer needed from you. An operator must check this step.','사용자 응답 대기가 아닙니다. 운영자의 확인이 필요합니다.'],
     inspect_error:['Check the error before requesting any new generation.','오류를 확인하세요. 새 생성은 자동으로 시작하지 않습니다.'],
     inspect_status:['The current state is unknown. Check the request on the website.','현재 상태를 해석할 수 없습니다. 사이트에서 신청 상태를 확인하세요.'],
     none:['No action needed. Follow the server job on the website.','지금 할 일은 없습니다. 사이트에서 진행 상황을 확인할 수 있습니다.']};
   items.push(node('p',say(...(actions[s.actionRequired] || ['Check status','상태를 확인하세요']))));
+  if(s.state==='choose_look' && s.appearanceAutoSelectAt){
+    const due=new Date(s.appearanceAutoSelectAt);
+    if(Number.isFinite(due.getTime()))items.push(node('p',
+      say('A auto-selection deadline: ','A 자동 선택 예정: ')+due.toLocaleString(ko()?'ko-KR':'en-US',{timeZone:'UTC'})+' UTC'+
+      say(' · Ten minutes after the pair was ready; automatic selection may take about one extra minute. Continues even with this chat closed.',
+        ' · 시안 준비 후 10분이며, 자동 선택까지 약 1분 더 걸릴 수 있습니다. 채팅을 닫아도 이어집니다.')));
+  }
   if(s.error)items.push(node('p',say('Reason: ','사유: ')+s.error));
   if(s.updatedAt)items.push(node('p',say('Last job update: ','작업 갱신: ')+s.updatedAt));
   if(s.checkedAt)items.push(node('p',say('Snapshot checked: ','이 카드의 확인 시각: ')+s.checkedAt));

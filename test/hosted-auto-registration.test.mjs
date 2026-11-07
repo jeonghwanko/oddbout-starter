@@ -41,7 +41,7 @@ test('a missing profile preserves completed art for operator attention rather th
   } finally { await sql.close(); }
 });
 
-test('automatic registration carries the draft through package checks and a validator receipt into production without entry', async () => {
+test('default A after the deadline carries the draft through automatic registration into production without entry', async () => {
   const { sql, owner, call, work, healthy, validatorToken } = await generation();
   try {
     await healthy();
@@ -58,7 +58,10 @@ test('automatic registration carries the draft through package checks and a vali
     const finish = (job, result) => work('POST', 'finish', { jobId: job.id, leaseToken: job.leaseToken, outcome: 'ok', result });
     await finish(await claim('queued'), { brief: { profile: draft } });
     await finish(await claim('appearance'), { candidates: ['front-a-0', 'front-b-0'] });
-    assert.equal((await call('POST', `generations/${id}/appearance`, { choose: 'a' })).body.job.status, 'motions');
+    await sql.query("update public.af_generation_jobs set appearance_auto_select_at=now()-interval '1 second' where id=$1", [id]);
+    assert.equal((await sql.query('select public.af_generation_auto_choose_look() as n')).rows[0].n, 1);
+    const chosen = (await call('GET', `generations/${id}`)).body.job;
+    assert.equal(chosen.status, 'motions'); assert.equal(chosen.choice, 'a');
     const motions = await finish(await claim('motions'), { preview: Object.keys(spec.motions).map(clip => ({ clip, name: `motion-${clip.toLowerCase()}-0` })) });
     assert.equal(motions.body.status, 'submitting'); // No user register/approval call, and no manually forced legacy state.
     const held = await claim('submitting'), { concept, ...expected } = draft;
