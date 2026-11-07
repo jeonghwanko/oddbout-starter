@@ -6,13 +6,13 @@
     "publishableKey": "sb_publishable_6UkV7tRAQ1P4qss5cTYSwQ_kVxSIv_V"
   },
   "kit": {
-    "version": "0.6.17",
-    "url": "https://oddbout.com/creator-kit/0.6.17/f5a6720163b9aee64f2f491ffac23be49b77ac61325c9adff097d5ea7ec7a71f/oddbout-0.6.17.zip",
-    "bytes": 4201434,
-    "sha256": "b77e8c74c0dc5387f9dc13013df244004c4dba5f7d98b0e11aa8148f6651a103",
+    "version": "0.6.18",
+    "url": "https://oddbout.com/creator-kit/0.6.18/3615a6d7b1397d39ede47a5a833dac99a0e75dc56a244aff68229ba18e151f9d/oddbout-0.6.18.zip",
+    "bytes": 4265981,
+    "sha256": "f0e0b2c74826dd936938263ce5bb9eb789caf53183fdb923d81ccc983047d424",
     "runtime": "runtime/",
-    "runtimeManifestSha256": "66e45c52b05a1a2630fb5a114a82a5da5f5c089fecb25f2bc4b2675034aa005a",
-    "spriteGenCommit": "5fc42b6d2a57354f38e5c348d0bb35590a3ddcf0"
+    "runtimeManifestSha256": "84c6f3c8ba5a5c87325e9f1c63d8a819f9bd249e4c5a20797389c0dd9452daa4",
+    "spriteGenCommit": "e44065aeef461b176a5517c925011348026a575e"
   },
   "cli": {
     "grok": { "package": "@xai-official/grok", "version": "1.0.52", "integrity": "sha512-mWNiJL++3cUoD9QVDWHZmhLdpmRNAu1nHQs1sMT10UNQMczBZflqdtr09XRyuKEKEle61L/1/YWDtxip840b8g==", "lock": "cli/grok" },
