@@ -9,7 +9,7 @@ about 1.9× faster on Windows and 2.4× on Linux, with the same frames. `sprite:
 has no resident binary beside it. RIFE is only checked again, not downloaded, and the binary is added. `sprite:status` reports it as
 `tools.rife.serve` (#372). macOS, a host that runs RIFE on PyTorch, and a RIFE found through `SPRITE_GEN_RIFE` or PATH get none. The
 kit is the one the official host runs (og `KIT_REF` `097c7c6`, #372, with the claim heartbeats of #371) and the one
-`npx oddbout-host` 0.1.1 pins. The contract, schema, validation rules and limits, and the workspace tools are unchanged.
+`npx oddbout-host` 0.1.1 and 0.1.2 pin. The contract, schema, validation rules and limits, and the workspace tools are unchanged.
 
 Cloud `prepare_fighter_packaging` and the Dots source pin stay on 0.6.17 until `ai-fighter-mcp` is deployed with a new pin and Dots
 accepts it; this release changes neither.
