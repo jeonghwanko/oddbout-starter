@@ -456,6 +456,105 @@ export function ogClient(og, runner = run) {
   };
 }
 
+/**
+ * 1.6 잠자기 (2026-11-07). A host on its owner's own PC (`npx oddbout-host`) makes one fighter in 50–68 minutes, a stage at a time, and a
+ * PC that idle-slept in the middle of a stage stopped the stage and let its lease (five minutes) run out. While a stage runs, a child
+ * process holds the platform's block against idle sleep, and the child ends with the worker whatever happens to it:
+ * - macOS: `caffeinate -i -w <pid>` (it exits when that process does).
+ * - Linux: `systemd-inhibit --what=sleep:idle … tail --pid=<pid> -f /dev/null` (GNU tail ends when the worker does; systemd-inhibit kills
+ *   its command when it is itself killed, measured on office-stable). polkit grants `org.freedesktop.login1.inhibit-block-sleep` only to
+ *   a session (allow_any=no, allow_inactive=yes, allow_active=yes; Ubuntu 24.04, office-stable, 2026-11-07): over ssh and in a
+ *   `systemd-run --user` unit with no session it printed "Failed to inhibit: Access denied" and exited 1. So the block holds from a local
+ *   desktop session (`npx oddbout-host` in a terminal on the PC itself); a worker run as a service or over ssh logs the refusal once and
+ *   runs on without it. `--what=idle` alone passes everywhere (`inhibit-block-idle` is allow_any=yes) but does not stop GNOME's automatic
+ *   suspend, so it is no fallback.
+ * - Windows: a hidden PowerShell that calls kernel32 SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED) for its own thread
+ *   (exit 3 if refused), then looks for the worker every 20 s and ends when it is gone; the state goes with its process.
+ * None of them stops a laptop whose lid is closed (the lid's own power action): createWakeWatch renews the lease on waking instead.
+ * @param {string} platform  process.platform @param {number} pid  the worker's
+ * @returns {{ command: string, args: string[], how: string } | null}
+ */
+export function stayAwakeCommand(platform, pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return null;
+  if (platform === 'darwin') return { command: 'caffeinate', args: ['-i', '-w', String(pid)], how: 'caffeinate' };
+  if (platform === 'linux')
+    return { command: 'systemd-inhibit', args: ['--what=sleep:idle', '--who=oddbout-host', '--why=generating a fighter', '--mode=block',
+      'tail', `--pid=${pid}`, '-f', '/dev/null'], how: 'systemd-inhibit' };
+  if (platform === 'win32') {
+    const script = ["$ErrorActionPreference = 'Stop'",
+      'Add-Type -Namespace OddboutHost -Name Power -MemberDefinition \'[DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint esFlags);\'',
+      'if ([OddboutHost.Power]::SetThreadExecutionState([uint32]2147483649) -eq 0) { exit 3 }',
+      `while (Get-Process -Id ${pid} -ErrorAction SilentlyContinue) { Start-Sleep -Seconds 20 }`].join('\n');
+    return { command: 'powershell.exe', args: ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
+      how: 'SetThreadExecutionState' };
+  }
+  return null;
+}
+/** What stayAwake said in this worker process: a refusal is said once, not at every stage. */
+const AWAKE_SAID = new Set();
+/** How long the child must live to count as holding (PowerShell compiles its P/Invoke first, a second or two). */
+export const AWAKE_SETTLE_MS = 10_000;
+/**
+ * Holds the PC awake for one stage (stayAwakeCommand): `release()` when the stage ends. Never throws: a block that cannot start (no such
+ * program) or that ends before its release (polkit's refusal, exit 3) is said once per worker process, and the stage runs without it.
+ * The first block that holds is said once as well. `release()` kills the child; again, or after the child ended, it does nothing.
+ * @param {{ platform?: string, pid?: number, spawn?: typeof spawn, say?: (line: string) => unknown, said?: Set<string>, settleMs?: number }} [options]
+ * @returns {{ release: () => void }}
+ */
+export function stayAwake({ platform = process.platform, pid = process.pid, spawn: start = spawn, say = () => {}, said = AWAKE_SAID,
+  settleMs = AWAKE_SETTLE_MS } = {}) {
+  const once = line => {
+    if (said.has(line)) return;
+    said.add(line);
+    try { Promise.resolve(say(line)).catch(() => {}); } catch { /* the log never stops a stage */ }
+  };
+  const how = stayAwakeCommand(platform, pid), none = { release() {} };
+  if (!how) { once(`stay awake during stages: nothing on ${platform}`); return none; }
+  let ended = false, released = false, child;
+  /** @type {ReturnType<typeof setTimeout> | undefined} */ let settle;
+  const end = why => {
+    if (ended) return;
+    ended = true; clearTimeout(settle);
+    if (!released) once(`stay awake during stages: ${how.how} ${why} — stages run without it`);
+  };
+  const held = () => { if (!ended) once(`stay awake during stages: ${how.how}`); };
+  try { child = start(how.command, how.args, { stdio: 'ignore', windowsHide: true }); }
+  catch (error) { end(`did not start (${error?.code ?? error?.message ?? error})`); return none; }
+  child.on('error', error => end(`did not start (${error?.code ?? error?.message ?? error})`));
+  child.on('exit', (code, signal) => end(`ended (${signal ?? `exit ${code}`})`));
+  // It ends with the worker on its own: it never keeps the worker's process alive.
+  child.unref?.();
+  settle = setTimeout(held, settleMs); settle.unref?.();
+  return {
+    release() {
+      if (released) return;
+      released = true; clearTimeout(settle);
+      if (ended) return;
+      held();
+      try { child.kill(); } catch { /* gone already */ }
+    },
+  };
+}
+/**
+ * Calls `onWake(gapMs)` when the PC comes back from a sleep (1.6, 2026-11-07): the wall clock moved more than `tickMs + slackMs` between two
+ * ticks. Wall clock, because on Linux and macOS the monotonic clock behind timers stops during a suspend while Date.now() jumps: the
+ * minute's renewal came up to a minute after waking, and a lease the sleep had nearly used up ran out meanwhile. A loop held that long
+ * (none in this worker) would read as a wake too; it costs one renewal more.
+ * @param {{ now?: () => number, tickMs?: number, slackMs?: number, onWake: (gapMs: number) => void }} options
+ * @returns {{ stop: () => void }}
+ */
+export function createWakeWatch({ now = Date.now, tickMs = 5_000, slackMs = 15_000, onWake }) {
+  let last = now();
+  const timer = setInterval(() => {
+    const at = now(), gap = at - last;
+    last = at;
+    if (gap <= tickMs + slackMs) return;
+    try { onWake(gap); } catch { /* a renewal's failure is its own */ }
+  }, tickMs);
+  timer.unref?.();
+  return { stop: () => clearInterval(timer) };
+}
+
 /** A front check's limit: one picture, one codex answer (its lease is fifteen minutes). */
 export const FRONT_CHECK_MS = 5 * 60_000;
 /** After a check that could not judge, the queue waits this long, doubled each time again, at most an hour (리뷰 2026-11-03). */
@@ -542,9 +641,14 @@ export function createFrontCheck({ api, og, python, kit, say, providerDown, work
  * The worker's loop. `once`: one claim, for a manual run. `og`: bash og's path (`<root>/bin/og`, the default) or og.mjs's runner, and
  * `python`: the kit's sprite-gen Python (spritePython) — injected by og.mjs `worker run` on a host without bash. `about`: what every
  * heartbeat says of this PC beside its logins (oddbout-host, 2026-11-07: `platform`, `runner`, `setup`; aboutHealth).
- * @param {{ once?: boolean, root?: string, og?: Parameters<typeof ogClient>[0], python?: string, about?: Record<string, string> | null }} [options]
+ * `keepAwake` and `wakeWatch` (1.6 잠자기, 2026-11-07): what holds the PC awake through a stage and what notices it woke, stayAwake on
+ * this process and createWakeWatch unless a test hands its own.
+ * @param {{ once?: boolean, root?: string, og?: Parameters<typeof ogClient>[0], python?: string, about?: Record<string, string> | null,
+ *   keepAwake?: (options: { say: (line: string) => unknown }) => { release: () => void },
+ *   wakeWatch?: (options: { onWake: (gapMs: number) => void }) => { stop: () => void } }} [options]
  */
-export async function main({ once = false, root = ROOT, og: ogGiven, python: pythonGiven, about = null } = {}) {
+export async function main({ once = false, root = ROOT, og: ogGiven, python: pythonGiven, about = null,
+  keepAwake = ({ say }) => stayAwake({ say }), wakeWatch = ({ onWake }) => createWakeWatch({ onWake }) } = {}) {
   const env = parseEnv(await readFile(path.join(root, 'worker.env'), 'utf8'));
   if (!/^https:\/\//.test(env.ODDBOUT_GENERATION_API ?? '') || !/^afw_[a-f0-9]{64}$/.test(env.ODDBOUT_GENERATION_WORKER_KEY ?? ''))
     throw new Error('worker.env needs ODDBOUT_GENERATION_API (https) and ODDBOUT_GENERATION_WORKER_KEY (afw_…)');
@@ -672,10 +776,12 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
     };
     let timedOut = false;
     const limit = setTimeout(() => { timedOut = true; controller.abort(); }, stageLimitMs(job.status));
-    // The lease runs five minutes: renew it every minute; a job cancelled meanwhile (lease lost) stops the stage's child.
-    const renew = setInterval(() => {
+    // The lease runs five minutes: renew it every minute, and at once when the PC woke (below); a job cancelled meanwhile (lease lost)
+    // stops the stage's child.
+    const renewNow = () => {
       api.progress(job, undefined).then(reply => { if (!reply.ok && reply.code === 'lease-lost') controller.abort(); }).catch(() => {});
-    }, TIMING.renewMs);
+    };
+    const renew = setInterval(renewNow, TIMING.renewMs);
     // The kit tree's loop review takes a low-margin cut (tools/ai-fighter/gait.mjs `lowMarginFeet`, 2026-11-01): read per job, as `og setup` moves it.
     const lowMarginFeetTaken = await readFile(path.join(kit, 'tools', 'ai-fighter', 'gait.mjs'), 'utf8')
       .then(text => text.includes('export const lowMarginFeet'), () => false);
@@ -709,6 +815,15 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
         if (code !== 0) throw Object.assign(new Error('evidence-fit-failed'), { code: 'evidence-fit-failed' });
       },
     });
+    // 1.6 잠자기 (2026-11-07): the PC stays awake while the stage runs (stayAwake). A sleep it cannot stop (a closed lid) renews the lease
+    // as soon as the PC wakes. A lease that ran out meanwhile is still this stage's until a claim takes the job (af_generation_held checks
+    // the token, not the time): the host's other PC claiming it, or any claim's sweep of an expired third lease (`stage-attempts`). Then the
+    // renewal's `lease-lost` stops the stage.
+    const awake = keepAwake({ say });
+    const wake = wakeWatch({ onWake: gapMs => {
+      renewNow();
+      say(`job ${job.id} ${job.status} woke after ${Math.round(gapMs / 1000)} s — lease renewed`);
+    } });
     let outcome, unknown = [];
     try {
       unknown = await dispatches.unended();
@@ -719,7 +834,7 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
       // A numeric code (a child process's) used to throw here, outside this catch: the finish never went and the job lost a lease.
       outcome = { outcome: 'retry', result: { code: errorCode(error) } };
       await appendFile(log, `stage error: ${error?.stack ?? error}\n`).catch(() => {});
-    } finally { clearInterval(renew); clearTimeout(limit); }
+    } finally { clearInterval(renew); clearTimeout(limit); wake.stop(); awake.release(); }
     if (timedOut) {
       await say(`job ${job.id} ${job.status} stopped after ${Math.round(stageLimitMs(job.status) / 60_000)} minutes`);
       outcome = timedOutOutcome(job.status, outcome);
