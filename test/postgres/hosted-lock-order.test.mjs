@@ -92,6 +92,34 @@ test('automatic registration and operator recovery use the same lock order as ow
         assert.match(b.err, /generation-state/); // Registration won the race; cancellation reports that state.
       } finally { if (!gate.child.stdin.writableEnded) gate.child.stdin.end('rollback;\n'); await gate.done; }
     });
+    await success(sql(`update public.af_generation_settings set enabled=true where singleton;
+      update public.af_generation_hosts set worker_seen_at=now(),worker_health='{"ok":true,"codex":true,"grok":true}' where official;`));
+    for (const order of ['create-first', 'retry-first', 'two-retries']) await t.test(order, async () => {
+      const owner = crypto.randomUUID(), old = crypto.randomUUID(), other = crypto.randomUUID(), key = crypto.randomUUID();
+      await success(sql(`insert into auth.users(id) values('${owner}'); insert into public.af_creators(owner_id) values('${owner}');
+        insert into public.af_admins(owner_id) values('${owner}');
+        insert into public.af_generation_jobs(id,owner_id,idempotency_key,description,language,status,brief,choice,error_code)
+          values('${old}','${owner}','${old}','Old boxer','en','needs_review','{}','a','side-provider-refused'),
+            ('${other}','${owner}','${other}','Other boxer','en','needs_review','{}','b','side-provider-refused');`));
+      const create = `select (public.af_generation_create('${owner}','${key}','New adult boxer','en','{}',false)).id;`;
+      const retry = id => `select public.af_admin_generation_retry('${owner}','${id}');`;
+      const firstAction = order === 'create-first' ? create : retry(old);
+      const secondAction = order === 'create-first' ? retry(old) : order === 'retry-first' ? create : retry(other);
+      const first = sql(`set application_name='test-capacity-first'; begin; ${firstAction}\n`, true);
+      try {
+        await waitFor("select exists(select 1 from pg_stat_activity where application_name='test-capacity-first' and state='idle in transaction');", first);
+        const second = sql(`set application_name='test-capacity-second'; ${secondAction}`);
+        await waitFor("select exists(select 1 from pg_stat_activity where application_name='test-capacity-second' and wait_event_type='Lock');", second);
+        first.child.stdin.end('commit;\n'); await success(first);
+        const result = await second.done;
+        assert.notEqual(result.code, 0);
+        assert.match(result.err, order === 'retry-first' ? /generation-quota/ : /review-conflict/);
+        assert.doesNotMatch(result.err, /deadlock detected/);
+        assert.equal(await success(sql(`select count(*) from public.af_generation_jobs where owner_id='${owner}'
+          and status not in ('submitted','rejected','failed','cancelled','expired','needs_review');`)), '1');
+        assert.equal(await success(sql(`select choice from public.af_generation_jobs where id='${other}';`)), 'b');
+      } finally { if (!first.child.stdin.writableEnded) first.child.stdin.end('rollback;\n'); await first.done; }
+    });
   } finally {
     if (server) { await success(command('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop'])); await server.done; }
     // Check the resolved deletion target before removing this test's own cluster.

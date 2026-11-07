@@ -33,12 +33,19 @@ test('quota-blocked automatic registration retries only registration and recheck
   } finally { await sql.close(); }
 });
 
-test('missing previews cannot auto-register; invalid profiles cannot cause regeneration on operator retry', async () => {
+test('missing previews cannot auto-register', async () => {
+  const { sql, owner } = await generation();
+  try {
+    const noPreview = await held(sql, owner);
+    await assert.rejects(noPreview.finish({}), /invalid-result/);
+    assert.equal((await sql.query('select status from public.af_generation_jobs where id=$1', [noPreview.id])).rows[0].status, 'motions');
+  } finally { await sql.close(); }
+});
+
+test('invalid profiles cannot cause regeneration on operator retry', async () => {
   const { sql, owner, other } = await generation();
   try {
     await sql.query('insert into public.af_admins(owner_id) values($1)', [other]);
-    const noPreview = await held(sql, owner);
-    await assert.rejects(noPreview.finish({}), /invalid-result/);
     for (const name of [42, {}, [], '', '   ']) {
       const job = await held(sql, owner, { ...profile, name }), done = await job.finish();
       assert.equal(done.status, 'needs_review', JSON.stringify(name));
