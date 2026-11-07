@@ -26,7 +26,7 @@ import { accountTokens } from './account.mjs';
  *   lease_expires_at: string | null, created_at: string, updated_at: string, delegate: boolean, host_choice: string,
  *   requested_host: string | null, assigned_host: string | null, started_at?: string | null, charged_at?: string | null,
  *   refunded_at?: string | null, profile_front?: any, profile_expressions?: any, profile_set_id?: string | null, agent_client?: string | null,
- *   agent_name?: string | null, image_provider?: string }} Job
+ *   agent_name?: string | null, image_provider?: string, appearance_auto_select_at?: string | null }} Job
  * @typedef {{ id: string, path: string, content_type: string, width: number, height: number }} Upload  A job's reference picture (af_generation_uploads).
  */
 
@@ -353,6 +353,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     return { id: row.id, status: row.status, progress: row.progress, error: row.error_code ?? null, description: row.description, language: row.language,
       delegate: row.delegate === true, createdAt: row.created_at, updatedAt: row.updated_at, profile: row.profile ?? (isObject(row.brief?.profile) ? row.brief.profile : null),
       candidates: candidates.map((name, i) => ({ key: i === 0 ? 'a' : 'b', url: urls.get(artifactPath(row.id, name)) ?? null })), choice: row.choice ?? null,
+      appearanceAutoSelectAt: row.status === 'appearance_ready' ? row.appearance_auto_select_at ?? null : null,
       revisionsLeft: { appearance: 2 - row.appearance_revisions, motions: 3 - row.motion_revisions },
       // The free fighter's mark (첫 선수 무료 2026-10-30), kept for a page from before: tokens decide a request now (보유 토큰 2026-10-31).
       charged: Boolean(row.charged_at) && !row.refunded_at && !['needs_review', 'failed', 'rejected'].includes(row.status)
