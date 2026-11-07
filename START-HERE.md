@@ -654,7 +654,7 @@ Dot의 제품 기억을 초기화하는 기능은 아닙니다. 이전 기록의
   },
   "revision": "efb6fd58729eb84f35180adb560d7db6403a304df9e241947af32b0266f32027",
   "provenance": {
-    "sourceCommit": "23326fb48f68cee5b85e5104661ead0450ed1aa9",
+    "sourceCommit": "cb99dab949a8985f96cf4bf1e10083e22d8af8be",
     "sourceDirty": false,
     "sourceFiles": {
       "tools/ai-fighter/creation-context.mjs": "b0425b8c55843cb17031bb63d8bbd44c66de5a4b88b843f6984e30b2be649b8e",
