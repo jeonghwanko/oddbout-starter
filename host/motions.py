@@ -47,6 +47,12 @@ NumPy and Pillow only: it runs on the kit's sprite-gen venv (`<kit>/vendor/sprit
       (kaito_web/tools/art/import-arena-concepts.mjs): the figure's box from its cleaned alpha, a square FACE_SIDE of its height at its
       top, centred on the opaque columns of its top FACE_HEAD_SHARE (the head, off the middle where a pose leans), inside the figure.
       {x, y, side} in the painting's pixels.
+  frame-front <front.png|webp> <out.png>
+      The front painting framed for the profile card (2026-11-07), as the kit's `npm run fighter:profile-set` frames it
+      (scripts/profile-set.mjs frameFront): its figure scaled uniformly to FRAME_FIGURE_SHARE of a portrait canvas whose long side is
+      1024-2048 (unscaled when it already fits), centred, with transparent room round it. Nothing is redrawn. Grok's fronts are square
+      (1024 x 1024) and the profile set takes a portrait only. Exits 1 with the reason when the picture has no figure, no clear
+      background or a figure wider than tall.
   pixel-judge side <front.png> <take.png> <out.json>
   pixel-judge loop <look.png> <aligned strip.json> <out.json>
       The pixel judge (2026-11-06): the side judge's checks (whole, side, match, style, clean) or the loop judge's (identity, anatomy,
@@ -951,6 +957,47 @@ def face_box(path: Path) -> dict:
     return {"x": int(x), "y": top, "side": int(side)}
 
 
+FRAME_INK = 16             # scripts/profile-set.mjs INK: alpha above it is the figure
+FRAME_FIGURE_SHARE = 0.86  # head to feet, a share of the card's height (the spec's framing)
+FRAME_CARD_RATIO = 2 / 3   # the card's least width, a share of its height
+FRAME_SIDE_ROOM = 0.9      # the figure's widest share of the card's width
+FRAME_LONG_SIDE = (1024, 2048)
+
+
+def _half_up(value: float) -> int:
+    """JavaScript's Math.round, as the kit's frameFront rounds."""
+    return int(np.floor(value + 0.5))
+
+
+def frame_front(path: Path, out: Path) -> dict:
+    image = Image.open(path).convert("RGBA")
+    alpha = np.asarray(image)[:, :, 3]
+    rows, cols = np.nonzero(alpha > FRAME_INK)
+    if not rows.size:
+        raise SystemExit("frame-front: no figure")
+    top, bottom, left, right = int(rows.min()), int(rows.max()), int(cols.min()), int(cols.max())
+    if left == 0 and top == 0 and right == image.width - 1 and bottom == image.height - 1:
+        raise SystemExit("frame-front: no clear background")
+    figure_width, figure_height = right - left + 1, bottom - top + 1
+    if figure_width > figure_height:
+        raise SystemExit("frame-front: the figure is wider than tall")
+    low, high = FRAME_LONG_SIDE
+    natural = _half_up(figure_height / FRAME_FIGURE_SHARE)
+    height = min(high, max(low, natural))
+    scale = 1.0 if height == natural else height * FRAME_FIGURE_SHARE / figure_height
+    drawn_width, drawn_height = max(1, _half_up(figure_width * scale)), max(1, _half_up(figure_height * scale))
+    width = max(int(np.ceil(height * FRAME_CARD_RATIO)), int(np.ceil(drawn_width / FRAME_SIDE_ROOM)))
+    if width >= height:
+        raise SystemExit("frame-front: the figure is too wide for a tall card")
+    figure = image.crop((left, top, right + 1, bottom + 1))
+    if (drawn_width, drawn_height) != figure.size:
+        figure = figure.resize((drawn_width, drawn_height), Image.LANCZOS)
+    card = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    card.paste(figure, ((width - drawn_width) // 2, (height - drawn_height) // 2))
+    card.save(out)
+    return {"width": width, "height": height, "scale": round(scale, 6)}
+
+
 # ------------------------------------------------------------------------------------------------ pixel judge
 # A judge of what pixels can decide (2026-11-06), beside the vision judge (codex, 10-15 s a call): the same verdict shapes, in well under a
 # second. Every figure is first brought to one standing height, so shares and sizes compare across pictures drawn at any scale. A check the
@@ -1439,6 +1486,8 @@ def main(argv):
         print(json.dumps(early_drafts(Path(rest[0]), Path(rest[1]), Path(rest[2]))))
     elif command == "face-box" and len(rest) == 2:
         Path(rest[1]).write_text(json.dumps(face_box(Path(rest[0]))) + "\n")
+    elif command == "frame-front" and len(rest) == 2:
+        print(json.dumps(frame_front(Path(rest[0]), Path(rest[1]))))
     elif command == "strip-preview" and len(rest) == 2:
         strip_preview(Path(rest[0]), Path(rest[1]))
     elif command == "pixel-judge" and len(rest) == 4 and rest[0] in ("side", "loop"):
