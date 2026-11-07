@@ -69,13 +69,41 @@ test('resumed registration consumes the old admission blocker before a later sub
   } finally { await sql.close(); }
 });
 
-function registration(invoke) {
+function hostedTool(tool, invoke) {
   let handler;
   registerHostedTools({ register: (name, _title, _description, _schema, call) => {
-    if (name === 'register_hosted_fighter') handler = call;
+    if (name === tool) handler = call;
   }, invoke, db: {}, identity: null, hosted: {}, fetcher: fetch });
   return handler;
 }
+const registration = invoke => hostedTool('register_hosted_fighter', invoke);
+
+test('a motion edit refused after automatic registration reports the current state without promising motion_ready', async () => {
+  let posts = 0;
+  const call = hostedTool('revise_hosted_motion', async (_path, method) => {
+    if (method === 'POST') { posts++; return { ok: false, code: 'generation-state' }; }
+    return { ok: true, job: { id: 'job', status: 'submitting', profile } };
+  });
+  const result = await call({ jobId: 'job', clip: 'run', note: 'Make the stride longer' });
+  assert.equal(result.ok, false); assert.equal(result.code, 'generation-state');
+  assert.equal(result.statusSummary?.state, 'submitting');
+  assert.match(result.next, /not applied/); assert.doesNotMatch(result.next, /send the change then|take changes again/);
+  assert.equal(posts, 1);
+});
+
+test('a failed state-conflict reread keeps the refusal and never repeats a revision', async () => {
+  for (const fail of [() => ({ ok: false, code: 'not-found' }), () => { throw Error('offline'); }]) {
+    let posts = 0;
+    const call = hostedTool('revise_hosted_motion', async (_path, method) => {
+      if (method === 'POST') { posts++; return { ok: false, code: 'generation-state' }; }
+      return fail();
+    });
+    const result = await call({ jobId: 'job', clip: 'run', note: 'Longer stride' });
+    assert.equal(result.ok, false); assert.equal(result.code, 'generation-state');
+    assert.match(result.next, /not applied/); assert.doesNotMatch(result.next, /send the change then|take changes again/);
+    assert.equal(posts, 1); assert.equal(result.job, undefined);
+  }
+});
 test('racing and lost registration responses recover the winning submission without another POST', async () => {
   for (const code of ['generation-state', 'database-unavailable']) {
     let posts = 0, reads = 0;

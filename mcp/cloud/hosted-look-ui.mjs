@@ -32,16 +32,32 @@ function safeUrl(value,job,key,index){
       /^[a-z0-9-]+[.]webp$/.test(u.pathname.slice(prefix.length)) ? u.href : null;
   }catch{return null}
 }
-function render(result){
-  if(!result)return;
-  const output=result.structuredContent || {}, job=output.job, blocks=(result.content || []).filter(b=>b.type==='image' && b.mimeType==='image/webp');
+function latest(result,partial=false){
+  const output=result.structuredContent || {}, job=output.job;
   if(job?.id && output.statusSummary){
     const s=output.statusSummary, stamp=[Date.parse(s.updatedAt)||0,Date.parse(s.checkedAt)||0], previous=snapshots.get(job.id);
-    if(previous && (stamp[0]<previous.stamp[0] || (stamp[0]===previous.stamp[0] && stamp[1]<previous.stamp[1])))return render(previous.result);
+    if(previous){
+      const before=previous.result.structuredContent, sameReceipt=!job.submission?.id || !before.job.submission?.id || job.submission.id===before.job.submission.id;
+      // The job timestamp does not change when validation finishes, and checkedAt is a response-completion clock.
+      // A submission's final receipt is immutable, so a slower pending read cannot undo it, in either arrival order.
+      const final=j=>j.status==='submitted' && ['registered','rejected'].includes(j.submission?.stage);
+      const settles=sameReceipt && final(job) && !final(before.job);
+      if((sameReceipt && final(before.job) && !final(job)) || (!settles &&
+        (stamp[0]<previous.stamp[0] || (stamp[0]===previous.stamp[0] && stamp[1]<previous.stamp[1]))))return previous.result;
+      // A list updates status without discarding the pictures from a full read of the same job version.
+      if(partial && sameReceipt && stamp[0]===previous.stamp[0] && job.status===before.job.status)
+        result={...previous.result,structuredContent:{...before,...output,job:{...before.job,...job}}};
+    }
     snapshots.delete(job.id);
     snapshots.set(job.id,{stamp,result});
     if(snapshots.size>5)snapshots.delete(snapshots.keys().next().value);
   }
+  return result;
+}
+function render(result){
+  if(!result)return;
+  result=latest(result);
+  const output=result.structuredContent || {}, job=output.job, blocks=(result.content || []).filter(b=>b.type==='image' && b.mimeType==='image/webp');
   const inline=output.previewPair===true && job?.status==='appearance_ready' && blocks.length===2 &&
     blocks.every(b=>typeof b.data==='string' && b.data.length<=2666668 && /^[A-Za-z0-9+/]+=*$/.test(b.data));
   const urls=job?.status==='appearance_ready' && job.candidates?.length===2 ? ['a','b'].map((k,i)=>safeUrl(job.candidates[i].url,job,k,i)) : [];
@@ -53,7 +69,9 @@ function render(result){
     if(Array.isArray(output.jobs)){
       root.replaceChildren(node('h2',say('Recent requests','최근 제작 신청')));
       for(const request of output.jobs){const card=node('section');
-        card.append(node('h2',request.name || say('Fighter','캐릭터')));statusNodes(request).forEach(n=>card.append(n));root.append(card);}
+        const current=latest({structuredContent:{job:request,statusSummary:request.statusSummary,siteUrl:request.siteUrl}},true).structuredContent;
+        card.append(node('h2',current.job.name || current.job.profile?.name || request.name || say('Fighter','캐릭터')));
+        statusNodes(current).forEach(n=>card.append(n));root.append(card);}
       return;
     }
     root.replaceChildren(node('p',say('Status unavailable. Check the request on ODDBOUT.','상태를 확인하지 못했습니다. ODDBOUT에서 신청 내역을 확인하세요.')));

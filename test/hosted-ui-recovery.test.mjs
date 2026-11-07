@@ -71,3 +71,38 @@ test('returning to a previous job with a delayed read shows that job, not the la
   ui.render(result('a', 'motions', '2026-11-07T11:00:00Z'));
   assert.match(ui.root.text, /등록 완료/); assert.doesNotMatch(ui.root.text, /운영자 확인 필요|모션 제작 중/);
 });
+
+test('final submission receipts beat response completion clocks in either arrival order and in lists', () => {
+  for (const stage of ['registered', 'rejected']) for (const reversed of [false, true]) {
+    const ui = widget(), job = { id: 'a', status: 'submitted', updatedAt: '2026-11-07T10:00:00Z' };
+    const receipt = (stage, checkedAt) => {
+      const snapshot = { ...job, submission: { id: 'immutable-submission', stage } };
+      return { structuredContent: { job: snapshot, statusSummary: { ...hostedStatus(snapshot), checkedAt }, siteUrl: 'https://oddbout.com/' } };
+    };
+    // The earlier read of validation takes longer to finish. The job timestamp never changes when its submission finishes.
+    const final = receipt(stage, '2026-11-07T12:00:00Z'), pending = receipt('validating', '2026-11-07T12:00:01Z');
+    for (const response of reversed ? [pending, final] : [final, pending]) ui.render(response);
+    const label = stage === 'registered' ? /등록 완료/ : /작업 종료·중단/;
+    assert.match(ui.root.text, label); assert.doesNotMatch(ui.root.text, /등록 파일 검사 중/);
+    ui.render({ structuredContent: { jobs: [{ ...pending.structuredContent.job,
+      statusSummary: pending.structuredContent.statusSummary, siteUrl: pending.structuredContent.siteUrl }] } });
+    assert.match(ui.root.text, label); assert.doesNotMatch(ui.root.text, /등록 파일 검사 중/);
+    const listFirst = widget();
+    listFirst.render({ structuredContent: { jobs: [{ ...final.structuredContent.job,
+      statusSummary: final.structuredContent.statusSummary, siteUrl: final.structuredContent.siteUrl }] } });
+    listFirst.render(pending); assert.match(listFirst.root.text, label);
+  }
+});
+
+test('a current list preserves same-version previews and a resumed operator review may still advance', () => {
+  const ui = widget(), id = crypto.randomUUID(), appearance = result(id, 'appearance_ready', '2026-11-07T12:00:00Z');
+  appearance.structuredContent.job.candidates = ['a', 'b'].map(key => ({ key,
+    url: `${new URL(CLOUD_RESOURCE).origin}/storage/v1/object/sign/af-generation/jobs/${id}/front-${key}-0.webp?token=fixture` }));
+  ui.render(appearance);
+  ui.render({ structuredContent: { jobs: [{ id, status: 'appearance_ready',
+    statusSummary: { ...appearance.structuredContent.statusSummary, checkedAt: '2026-11-07T12:01:00Z' } }] } });
+  ui.render(appearance); assert.equal(ui.root.all.filter(n => n.tag === 'img').length, 2);
+  ui.render(result('recoverable', 'needs_review', '2026-11-07T12:00:00Z'));
+  ui.render(result('recoverable', 'motions', '2026-11-07T12:01:00Z'));
+  assert.match(ui.root.text, /모션 제작 중/); assert.doesNotMatch(ui.root.text, /운영자 확인 필요/);
+});

@@ -1,6 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { generation } from './helpers/generation-database.mjs';
+import example from '../contracts/ai-fighter/v1/example.fighter.json' with { type: 'json' };
+import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
+import { VALIDATOR_VERSION } from '../api/submissions.mjs';
+import { withProfile } from '../host/generation-stages.mjs';
+import { hostedStatus } from '../mcp/cloud/hosted-tools.mjs';
 
 test('completed motions atomically queue registration, keep owner/profile and never enter a fighter', async () => {
   const { sql, owner } = await generation();
@@ -32,5 +37,54 @@ test('a missing profile preserves completed art for operator attention rather th
     const { rows } = await sql.query("select to_jsonb(public.af_generation_finish($1,$2,'ok',$3)) as job", [id, token, { preview }]);
     assert.equal(rows[0].job.status, 'needs_review'); assert.equal(rows[0].job.error_code, 'invalid-profile');
     assert.deepEqual(rows[0].job.preview, preview); assert.equal(rows[0].job.lease_token, null);
+  } finally { await sql.close(); }
+});
+
+test('automatic registration carries the draft through package checks and a validator receipt into production without entry', async () => {
+  const { sql, owner, call, work, healthy, validatorToken } = await generation();
+  try {
+    await healthy();
+    const draft = { name: 'Auto Cat', description: 'A fixture boxer.', concept: 'A test fixture.',
+      names: { en: 'Auto Cat', ko: '자동 고양이' }, lines: { win: 'Again!' }, stats: { power: 4, toughness: 3, speed: 2 } };
+    const made = await call('POST', 'generations', { description: 'An automatic cat boxer', language: 'en' },
+      undefined, { 'idempotency-key': crypto.randomUUID() });
+    assert.equal(made.status, 200);
+    const id = made.body.job.id;
+    const claim = async status => {
+      const response = await work('POST', 'claim', {});
+      assert.equal(response.body.job?.status, status); return response.body.job;
+    };
+    const finish = (job, result) => work('POST', 'finish', { jobId: job.id, leaseToken: job.leaseToken, outcome: 'ok', result });
+    await finish(await claim('queued'), { brief: { profile: draft } });
+    await finish(await claim('appearance'), { candidates: ['front-a-0', 'front-b-0'] });
+    assert.equal((await call('POST', `generations/${id}/appearance`, { choose: 'a' })).body.job.status, 'motions');
+    const motions = await finish(await claim('motions'), { preview: Object.keys(spec.motions).map(clip => ({ clip, name: `motion-${clip.toLowerCase()}-0` })) });
+    assert.equal(motions.body.status, 'submitting'); // No user register/approval call, and no manually forced legacy state.
+    const held = await claim('submitting'), { concept, ...expected } = draft;
+    assert.deepEqual(held.profile, expected);
+    const manifest = withProfile(example, held.profile, held.brief), headers = { 'x-generation-lease': held.leaseToken, 'content-type': 'application/json' };
+    assert.equal(manifest.profile.concept, concept); assert.equal(manifest.profile.name, draft.name);
+    assert.equal((await work('POST', `jobs/${id}/submission`, JSON.stringify({ ...manifest, assets: [] }), headers)).status, 422);
+    assert.equal((await sql.query('select count(*)::int as n from public.af_submissions')).rows[0].n, 0);
+    const text = JSON.stringify(manifest), created = await work('POST', `jobs/${id}/submission`, text, headers);
+    assert.equal(created.body.stage, 'uploading');
+    const submissionId = created.body.submissionId;
+    assert.equal((await work('POST', `jobs/${id}/submission`, text, headers)).body.submissionId, submissionId);
+    // Storage metadata and the validator receipt are fixtures: this tests orchestration, not a real pixel decode.
+    for (const asset of manifest.assets) await sql.query('insert into storage.objects values($1,$2,$3)',
+      ['ai-fighter-beta', `${owner}/${submissionId}/${asset.id}.webp`, { size: asset.bytes }]);
+    assert.equal((await work('POST', `jobs/${id}/submission/submit`, {}, headers)).body.stage, 'queued');
+    await finish(held, { submissionId });
+    assert.equal(hostedStatus((await call('GET', `generations/${id}`)).body.job).completed, false);
+    const validator = (await call('POST', 'worker/claim', { submissionId }, validatorToken)).body;
+    const registered = await call('POST', 'worker/finish', { submissionId, leaseToken: validator.leaseToken,
+      manifestSha256: validator.manifestSha256, passed: true,
+      result: { validatorVersion: VALIDATOR_VERSION, stage: 'bytes-hashes-and-full-decode', errors: [] } }, validatorToken);
+    assert.equal(registered.body.stage, 'registered');
+    const job = (await call('GET', `generations/${id}`)).body.job;
+    assert.equal(hostedStatus(job).completed, true);
+    const fighter = (await sql.query('select owner_id, entered_at, profile from public.af_fighters where id=$1', [job.submission.fighterId])).rows[0];
+    assert.equal(fighter.owner_id, owner); assert.equal(fighter.entered_at, null); assert.equal(fighter.profile.name, draft.name);
+    assert.equal((await sql.query('select count(*)::int as n from public.af_submissions')).rows[0].n, 1);
   } finally { await sql.close(); }
 });

@@ -195,8 +195,8 @@ function hostedStep(job, uploads = true) {
       return `ODDBOUT is packaging the fighter and submitting it under the user's account. ${WATCH_NEXT}`;
     case 'submitted':
       // 출전 (2026-10-30): a registered fighter is in production until the user watches his motions and enters him.
-      if (job.submission?.stage === 'registered') return `Registered: fighter ${job.submission.fighterId}, in production. Tell the user: he can watch `
-        + 'every motion on his fighter page (give him siteUrl) and enter him there (출전); other people meet him only after that. '
+      if (job.submission?.stage === 'registered') return `Registered: fighter ${job.submission.fighterId}. Tell the user: he can check current entry status and watch `
+        + 'every motion on his fighter page (give him siteUrl) and enter him there if needed (출전). Registration alone does not report current entry status. '
         + 'Leave entry to the owner on the website; do not enter him from this creation flow. '
         // Not a promise (2026-11-03, 레온: his set was refused by the file check while this said he could enter once it was checked).
         + (job.profileSetId ? `His chosen front went in as his profile set (${job.profileSetId}). Before he enters, read ${toolRef('get_registered_fighter')}: its `
@@ -223,10 +223,8 @@ const jobSite = job => siteUrl({ fighterId: job.submission?.stage === 'registere
  * An answer the job does not wait for now (Grok 점검 2026-11-03: the bot sent a second motion change while the first was being made, got a
  * bare generation-state and had to guess): what to do instead.
  */
-const ANSWER_LATER = 'This job is not waiting for that answer now: a change is made one at a time, and the motions take changes again once '
-  + 'they are ready (motion_ready). Read get_hosted_fighter (waitSeconds 25) for the state and its next, and send the change then.';
-/** @param {any} result  The API's JSON. @param {boolean} uploads */
-const answeredOf = (result, uploads) => result?.code === 'generation-state' ? { ...result, next: ANSWER_LATER } : withNextOf(result, uploads);
+const ANSWER_LATER = 'The requested change was not applied. Read get_hosted_fighter for the current state before doing anything else. '
+  + 'Newly completed motions register automatically; do not wait for motion_ready or repeat the change automatically.';
 /** @param {any} result  The API's JSON. @param {boolean} uploads */
 const withNextOf = (result, uploads) => result?.ok && result.job ? { ...result, statusSummary: hostedStatus(result.job), next: hostedNext(result.job, { uploads }), siteUrl: jobSite(result.job) } : result;
 
@@ -392,8 +390,14 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
   const JOB = UUID_ARG();
   /** @param {any} result  The API's JSON. */
   const withNext = result => withNextOf(result, uploads);
-  /** @param {any} result  The API's JSON. */
-  const answered = result => answeredOf(result, uploads);
+  /** @param {string} jobId @param {any} result  The API's JSON. */
+  const answered = async (jobId, result) => {
+    if (result?.code !== 'generation-state') return withNext(result);
+    const current = await invoke(`generations/${jobId}`).catch(() => null);
+    if (!current?.ok || !current.job) return { ...result, next: ANSWER_LATER };
+    return { ...withNext(current), ...result,
+      next: 'The requested change was not applied. Do not claim it was saved or repeat it automatically. ' + hostedNext(current.job, { uploads }) };
+  };
   /** @type {(path: string, body: object, headers?: Record<string, string>) => Promise<any>} */
   const post = (path, body, headers = {}) => invoke(path, 'POST', JSON.stringify(body), { 'content-type': 'application/json', ...headers });
   /**
@@ -619,13 +623,14 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
     + 'after an unknown outcome, read get_hosted_fighter instead of repeating this call.',
     { jobId: JOB, choose: z.enum(['a', 'b']).optional(), revise: z.string().min(2).max(GENERATION_LIMITS.note).optional() },
     ({ jobId, choose, revise }) => (choose === undefined) === (revise === undefined) ? { ok: false, code: 'invalid-answer' }
-      : post(`generations/${jobId}/appearance`, choose !== undefined ? { choose } : { revise }).then(answered), { write: true, publish: true, idempotent: false });
+      : post(`generations/${jobId}/appearance`, choose !== undefined ? { choose } : { revise }).then(result => answered(jobId, result)), { write: true, publish: true, idempotent: false });
   register('revise_hosted_motion', '동작 하나 고치기', 'Ask ODDBOUT to make one motion of the connected user\'s hosted fighter again with his sentence; the other motions stay. '
+    + 'Available only for a legacy job currently at motion_ready. Newly completed motions register automatically; this tool cannot edit a submitted package. '
     + 'Not idle: the standing pose is the look itself. Requires the user\'s request. Replaces the working motion; ODDBOUT-worker generation spends tokens that are not refunded. Not idempotent: '
     + 'after an unknown outcome, read get_hosted_fighter instead of repeating this call.',
     // Not idle: it is the look itself (choose_hosted_look changes the look, before the motions).
     { jobId: JOB, clip: z.enum(/** @type {[string, ...string[]]} */ (Object.keys(spec.motions).filter(clip => clip !== 'idle'))), note: z.string().min(2).max(GENERATION_LIMITS.note) },
-    ({ jobId, clip, note }) => post(`generations/${jobId}/motions`, { revise: { clip, note } }).then(answered), { write: true, publish: true, idempotent: false });
+    ({ jobId, clip, note }) => post(`generations/${jobId}/motions`, { revise: { clip, note } }).then(result => answered(jobId, result)), { write: true, publish: true, idempotent: false });
   register('register_hosted_fighter', '맡긴 선수 등록', 'Register a legacy hosted fighter still waiting at motion_ready; no motion approval is required: '
     + 'ODDBOUT packages it and submits it under his account, through the same server check as any fighter. '
     + 'profile holds only what he changed in the draft (name, description, names, bout lines, stats summing to 9). '

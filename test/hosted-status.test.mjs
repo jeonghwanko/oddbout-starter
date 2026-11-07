@@ -19,6 +19,7 @@ test('100% is stage progress; only a registered submission completes creation', 
   assert.equal(hostedStatus({ id: 'job', status: 'motion_ready' }).actionRequired, 'agent_register');
   assert.equal(hostedStatus({ id: 'job', status: 'unexpected_status' }).actionRequired, 'inspect_status');
   assert.match(hostedNext({ id: 'job', status: 'motion_ready' }), /without asking for motion approval/);
+  assert.doesNotMatch(hostedNext({ id: 'job', status: 'submitted', submission: { stage: 'registered' } }), /in production/);
 });
 
 test('chat card shows completion, required action and snapshot time without raw states or unsafe links', () => {
@@ -36,7 +37,8 @@ test('chat card shows completion, required action and snapshot time without raw 
     window: { addEventListener() {} }, parent: { postMessage() {} }, ResizeObserver: class { observe() {} } });
   vm.runInContext(html.match(/<script>([\s\S]*?)<\/script>/)[1], context);
   const draw = (status, submission, siteUrl = 'https://oddbout.com/') => {
-    const job = { id: 'job', status, progress: 100, submission };
+    // Independent cards: a submitted job does not go back into generation/review after a final receipt.
+    const job = { id: `job-${status}`, status, progress: 100, submission };
     context.result = { structuredContent: { job, statusSummary: hostedStatus(job), siteUrl } };
     vm.runInContext('render(result)', context);
   };

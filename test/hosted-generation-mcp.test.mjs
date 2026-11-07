@@ -203,7 +203,8 @@ test('an agent asks ODDBOUT for a fighter, passes the picks and registers it in 
     assert.equal((await call('revise_hosted_motion', { jobId, clip: 'walk', note: '덜 통통 튀게' })).job.revisionsLeft.motions, 2);
     // A second change while the first is made is refused with what to do (Grok 점검 2026-11-03: the bot got a bare code).
     const early = await call('revise_hosted_motion', { jobId, clip: 'run', note: '팔을 더 크게' });
-    assert.equal(early.code, 'generation-state'); assert.match(early.next, /one at a time[\s\S]*motion_ready/);
+    assert.equal(early.code, 'generation-state'); assert.match(early.next, /not applied/);
+    assert.equal(early.statusSummary.state, 'motions'); assert.doesNotMatch(early.next, /send the change then|take changes again/);
     held = await claim('motions'); assert.deepEqual(held.motionNote, { clip: 'walk', note: '덜 통통 튀게' });
     await finish(held, { preview });
 
