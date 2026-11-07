@@ -49,6 +49,26 @@ test('missing previews cannot auto-register; invalid profiles cannot cause regen
   } finally { await sql.close(); }
 });
 
+test('resumed registration consumes the old admission blocker before a later submitting-host failure', async () => {
+  const { sql, owner, other } = await generation();
+  try {
+    await sql.query('insert into public.af_admins(owner_id) values($1)', [other]);
+    await sql.query('update public.af_creators set fighter_limit=1 where owner_id=$1', [owner]);
+    const addFighter = () => sql.query('select public.af_register_character_profile($1,$2,$3,$4)', [owner, crypto.randomUUID(),
+      { name: 'Existing', description: 'Existing fighter', portrait: '/art/character-profiles/test-v1.webp', color: '#ffeebb' }, 'kkumssi']);
+    await addFighter();
+    const job = await held(sql, owner); assert.equal((await job.finish()).error_code, 'fighter-quota');
+    await sql.query('update public.af_creators set fighter_limit=2 where owner_id=$1', [owner]);
+    await sql.query('select public.af_admin_generation_retry($1,$2)', [other, job.id]);
+    await addFighter(); // Admission already succeeded. Submission checks still enforce the current quota.
+    await sql.query("update public.af_generation_jobs set status='needs_review',error_code='submitting-host-lost' where id=$1", [job.id]);
+    const { rows } = await sql.query('select public.af_admin_generation_retry($1,$2) as job', [other, job.id]);
+    assert.equal(rows[0].job.status, 'submitting');
+    // No fresh registration admission: resume the existing packaging/submission stage with its immutable key.
+    assert.equal((await sql.query("select count(*)::int as n from public.af_generation_events where job_id=$1 and kind='register'", [job.id])).rows[0].n, 1);
+  } finally { await sql.close(); }
+});
+
 function registration(invoke) {
   let handler;
   registerHostedTools({ register: (name, _title, _description, _schema, call) => {

@@ -37,12 +37,14 @@ function render(result){
   const output=result.structuredContent || {}, job=output.job, blocks=(result.content || []).filter(b=>b.type==='image' && b.mimeType==='image/webp');
   if(job?.id && output.statusSummary){
     const s=output.statusSummary, stamp=[Date.parse(s.updatedAt)||0,Date.parse(s.checkedAt)||0], previous=snapshots.get(job.id);
-    if(previous && (stamp[0]<previous[0] || (stamp[0]===previous[0] && stamp[1]<previous[1])))return;
-    snapshots.set(job.id,stamp);
+    if(previous && (stamp[0]<previous.stamp[0] || (stamp[0]===previous.stamp[0] && stamp[1]<previous.stamp[1])))return render(previous.result);
+    snapshots.delete(job.id);
+    snapshots.set(job.id,{stamp,result});
+    if(snapshots.size>5)snapshots.delete(snapshots.keys().next().value);
   }
   const inline=output.previewPair===true && job?.status==='appearance_ready' && blocks.length===2 &&
     blocks.every(b=>typeof b.data==='string' && b.data.length<=2666668 && /^[A-Za-z0-9+/]+=*$/.test(b.data));
-  const urls=output.previewPair===true && job?.status==='appearance_ready' && job.candidates?.length===2 ? ['a','b'].map((k,i)=>safeUrl(job.candidates[i].url,job,k,i)) : [];
+  const urls=job?.status==='appearance_ready' && job.candidates?.length===2 ? ['a','b'].map((k,i)=>safeUrl(job.candidates[i].url,job,k,i)) : [];
   if(!inline && !(urls.length===2 && urls.every(Boolean))){
     if(!result.structuredContent)return;
     if(output.statusSummary){renderStatus(output);
@@ -107,7 +109,11 @@ function statusNodes(output){
 function renderStatus(output){root.replaceChildren(...statusNodes(output));}
 function fromGlobals(){
   const api=window.openai, m=api?.toolResponseMetadata, r=m?.mcp_tool_result || m?.call_tool_result;
-  if(r || api?.toolOutput)render({...r,structuredContent:r?.structuredContent || api?.toolOutput});
+  if(api?.toolOutput){
+    // Globals can update separately. Never pair a current job with another result's images.
+    const matching=r?.structuredContent && JSON.stringify(r.structuredContent)===JSON.stringify(api.toolOutput);
+    render({structuredContent:api.toolOutput,content:matching?r.content:[]});
+  }else if(r)render(r);
 }
 window.addEventListener('message',event=>{
   const m=event.data;if(event.source!==parent || m?.jsonrpc!=='2.0')return;

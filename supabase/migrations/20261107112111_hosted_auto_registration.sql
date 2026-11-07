@@ -79,7 +79,8 @@ end $$;
 
 -- A completed motion stage may now stop at registration admission, without row.profile ever
 -- being set. The former retry inferred 'motions' from that null and could regenerate paid art.
--- Only the latest finished event identifies this stop; unrelated earlier reviews keep their route.
+-- The latest finished event identifies this stop until a later register event consumes it.
+-- A subsequent submitting-host failure resumes submission without redoing admission.
 create or replace function public.af_admin_generation_retry(p_actor uuid, p_id uuid) returns jsonb
 language plpgsql security invoker set search_path = '' as $$
 declare j public.af_generation_jobs; next text; blocked boolean;
@@ -88,8 +89,11 @@ begin
   select * into j from public.af_generation_jobs where id = p_id for update;
   if not found then raise exception 'not-found'; end if;
   if j.status <> 'needs_review' then raise exception 'review-conflict'; end if;
-  select data->'registrationBlocked' = 'true'::jsonb into blocked from public.af_generation_events
-    where job_id = p_id and kind = 'finished' order by id desc limit 1;
+  select finished.data->'registrationBlocked' = 'true'::jsonb and not exists (
+    select 1 from public.af_generation_events registered
+      where registered.job_id = p_id and registered.kind = 'register' and registered.id > finished.id
+  ) into blocked from public.af_generation_events finished
+    where finished.job_id = p_id and finished.kind = 'finished' order by finished.id desc limit 1;
   if coalesce(blocked, false) then
     -- A refusal rolls this transaction back to needs_review. Never queue generation to repair registration.
     perform public.af_generation_registration_draft(j);
