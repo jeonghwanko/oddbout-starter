@@ -299,13 +299,15 @@ npm run spec:check && npm run validate -- examples/sparring-bot/fighter.json && 
   written by publishing tools; never commit to them by hand.
 - Other sessions may be working in a shared checkout of this repository or the game's: do branch work in a
   `git worktree`, never switch a shared checkout's branch, and leave pulling it to the session working there.
-- Run only the relevant tests locally ([Commands](#commands)). Pull requests to `main` and pushes to it run the `test`
-  workflow, and a pull request merges only when it passes. Do not dispatch extra runs unless asked.
-- One change, one run (about 12 minutes). Put a change and what it brings along in one pull request: an engine pin with
+- Run only the relevant tests locally ([Commands](#commands)). Pull requests to `main` run the `test` workflow, and a
+  pull request merges only when it passes. Merges to `main` run nothing; `main`'s head runs it at most once every three
+  hours, for everything merged since, and not at all when that tree already passed. Do not dispatch extra runs unless asked.
+- One change, one run (about 11 minutes). Put a change and what it brings along in one pull request: an engine pin with
   its kit version, `host/pins.json` and records. Finish local checks before pushing. Open the pull request as a draft
-  while it still changes (a draft runs no tests), then `gh pr ready` runs `test` once. Every push after that runs it again.
-  Fetch `main` first: a head that already contains `main` merges into the tree it was tested with, so the push to `main`
-  runs no tests again. A head behind `main` gets the whole suite once more after the merge.
+  while it still changes (a draft runs no tests), then `gh pr ready` runs `test` once. A push after that waits four
+  minutes before running, and a further push in that time replaces it: push a fix's commits together, not one by one.
+  Fetch `main` first: a head that already contains `main` merges into the tree it was tested with, so the three-hourly run
+  on `main` has nothing new to test.
 - Never put `[skip ci]` or another GitHub skip marker (`[ci skip]`, `[no ci]`, `[skip actions]`, `[actions skip]`, a
   `skip-checks: true` trailer) anywhere in a pull request's last commit message, body included, even quoted: the
   required check then never reports.
@@ -353,6 +355,8 @@ Procedures: `docs/CREATOR-HOSTING.md`.
 - Never upload this checkout directly through Supabase CLI/MCP or a hand-built payload: its duel engine is a null
   adapter. `scripts/edge-bundle.mjs --list` is inspection only; the game planner imports `edgeFiles` and supplies the
   real and retained engines.
+- Deploy a `main` commit that passed `test`. Merges are tested only every three hours: when the commit has no passing
+  `test`, run `gh workflow run test --ref main` and wait for it first.
 - Verify the deployed release and served engines afterward. Do not overwrite a newer deployment from another session.
 - Batch production changes: merge the pull requests that touch any part above together, right before their deploy,
   and deploy each affected part once. Work that reaches no part can merge when it is ready.
