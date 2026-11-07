@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "about": "Everything npx oddbout-host downloads, exactly: each file's size and SHA-256 (the CLIs: their npm lockfiles in cli/). host/runner.test.mjs keeps it equal to og.mjs's versions and the kit's site. Measured 2026-11-07.",
+  "service": {
+    "apiBase": "https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter",
+    "publishableKey": "sb_publishable_6UkV7tRAQ1P4qss5cTYSwQ_kVxSIv_V"
+  },
+  "kit": {
+    "version": "0.6.17",
+    "url": "https://oddbout.com/creator-kit/0.6.17/f5a6720163b9aee64f2f491ffac23be49b77ac61325c9adff097d5ea7ec7a71f/oddbout-0.6.17.zip",
+    "bytes": 4201434,
+    "sha256": "b77e8c74c0dc5387f9dc13013df244004c4dba5f7d98b0e11aa8148f6651a103",
+    "runtime": "runtime/",
+    "runtimeManifestSha256": "66e45c52b05a1a2630fb5a114a82a5da5f5c089fecb25f2bc4b2675034aa005a",
+    "spriteGenCommit": "5fc42b6d2a57354f38e5c348d0bb35590a3ddcf0"
+  },
+  "cli": {
+    "grok": { "package": "@xai-official/grok", "version": "1.0.52", "integrity": "sha512-mWNiJL++3cUoD9QVDWHZmhLdpmRNAu1nHQs1sMT10UNQMczBZflqdtr09XRyuKEKEle61L/1/YWDtxip840b8g==", "lock": "cli/grok" },
+    "codex": { "package": "@openai/codex", "version": "0.165.0", "integrity": "sha512-aiwtQVp2KBhJld966CuU5bVfQ46VNB4mNTl6giX3WGZdt4euI3tv2RUqJpnupPNA8DXHg2z+RoQ0Zfw87dy8Lw==", "lock": "cli/codex" }
+  },
+  "python": {
+    "version": "3.12.15",
+    "release": "20261021",
+    "source": "https://github.com/astral-sh/python-build-standalone",
+    "builds": {
+      "win32-x64": { "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261021/cpython-3.12.15%2B20261021-x86_64-pc-windows-msvc-install_only.tar.gz", "bytes": 46388793, "sha256": "be7f14464d1d66f84429ad27e01f6d1482963afff64a2fb5256b2a51c7b5d398", "exe": "python/python.exe" },
+      "win32-arm64": { "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261021/cpython-3.12.15%2B20261021-aarch64-pc-windows-msvc-install_only.tar.gz", "bytes": 43575602, "sha256": "c0660992e1907a8dc31e9069676b1415d585b53f17d0aa7e9075f4b06f38fd65", "exe": "python/python.exe" },
+      "darwin-arm64": { "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261021/cpython-3.12.15%2B20261021-aarch64-apple-darwin-install_only.tar.gz", "bytes": 25158763, "sha256": "a18cc33862b53bd54a148c710def5375c1b47470cccedf817a19c2d211764584", "exe": "python/bin/python3" },
+      "darwin-x64": { "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261021/cpython-3.12.15%2B20261021-x86_64-apple-darwin-install_only.tar.gz", "bytes": 24858259, "sha256": "869e0b30959beccc616ce14907439f4d0b3170c5830a2362dade07f07b0ed3b8", "exe": "python/bin/python3" },
+      "linux-x64": { "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261021/cpython-3.12.15%2B20261021-x86_64-unknown-linux-gnu-install_only.tar.gz", "bytes": 67908973, "sha256": "5ff9f0602ce964a529ed1e8555d3abab6341926d724402ba9a15e9e877191124", "exe": "python/bin/python3" },
+      "linux-arm64": { "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261021/cpython-3.12.15%2B20261021-aarch64-unknown-linux-gnu-install_only.tar.gz", "bytes": 53023905, "sha256": "f53cca8fcd20805bddaa8bff1ef722a6918f8225d37561bd36ad901d13d580af", "exe": "python/bin/python3" }
+    }
+  },
+  "ffmpeg": {
+    "version": "9.0.2",
+    "source": "Windows: github.com/GyanD/codexffmpeg (gyan.dev essentials, GPLv3). macOS, Linux: ffmpeg.martin-riedl.de (GPL)",
+    "fallback": { "win32-arm64": "win32-x64" },
+    "builds": {
+      "win32-x64": [
+        { "url": "https://github.com/GyanD/codexffmpeg/releases/download/9.0.2/ffmpeg-9.0.2-essentials_build.zip", "bytes": 114768076, "sha256": "60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba",
+          "files": { "ffmpeg.exe": "ffmpeg-9.0.2-essentials_build/bin/ffmpeg.exe", "ffprobe.exe": "ffmpeg-9.0.2-essentials_build/bin/ffprobe.exe" } }
+      ],
+      "darwin-arm64": [
+        { "url": "https://ffmpeg.martin-riedl.de/download/macos/arm64/1789931890_9.0.2/ffmpeg.zip", "bytes": 28395699, "sha256": "c8ed4c4e6978a03c485edbfe4e0a5dc2380f8a30bba5150531b31b094492d924", "files": { "ffmpeg": "ffmpeg" } },
+        { "url": "https://ffmpeg.martin-riedl.de/download/macos/arm64/1789931890_9.0.2/ffprobe.zip", "bytes": 28317701, "sha256": "fcbe839537485eaee7a7a8bc5cbc0f90d53617e80943e8a5b2e31cb851197ea6", "files": { "ffprobe": "ffprobe" } }
+      ],
+      "darwin-x64": [
+        { "url": "https://ffmpeg.martin-riedl.de/download/macos/amd64/1789931006_9.0.2/ffmpeg.zip", "bytes": 33816391, "sha256": "7c6b4125b191cbf773832dc51f424cf2b6bb7da43007d1e066f95909e47cacd4", "files": { "ffmpeg": "ffmpeg" } },
+        { "url": "https://ffmpeg.martin-riedl.de/download/macos/amd64/1789931006_9.0.2/ffprobe.zip", "bytes": 33719233, "sha256": "2322438ed2f6319a691291b247d09c69dcaa3a982460d1f269a7e1af335cfdfd", "files": { "ffprobe": "ffprobe" } }
+      ],
+      "linux-x64": [
+        { "url": "https://ffmpeg.martin-riedl.de/download/linux/amd64/1789931100_9.0.2/ffmpeg.zip", "bytes": 33326445, "sha256": "fa8ecf4abbd290d98f7d188b8649cc6b391ae209a98452be955a15aab1909d7f", "files": { "ffmpeg": "ffmpeg" } },
+        { "url": "https://ffmpeg.martin-riedl.de/download/linux/amd64/1789931100_9.0.2/ffprobe.zip", "bytes": 33223234, "sha256": "3f428c49070be3d24ec338602b76d412e401ffcb8a5641ef0e729181a232fc32", "files": { "ffprobe": "ffprobe" } }
+      ],
+      "linux-arm64": [
+        { "url": "https://ffmpeg.martin-riedl.de/download/linux/arm64/1789931697_9.0.2/ffmpeg.zip", "bytes": 28753826, "sha256": "93a76ae90db5474eecdf951a729857c64f3de23567228d6a7d5e6e8e3cd1021b", "files": { "ffmpeg": "ffmpeg" } },
+        { "url": "https://ffmpeg.martin-riedl.de/download/linux/arm64/1789931697_9.0.2/ffprobe.zip", "bytes": 28655683, "sha256": "bcbe80fb741c180083327afaf5434812e006b33cacde2016b9aeaf6936128330", "files": { "ffprobe": "ffprobe" } }
+      ]
+    }
+  }
+}

@@ -6,15 +6,21 @@
 // folder (user mode: no service user, no sudo), signs its providers in there, gets a worker key without showing it, and starts
 // the worker as a systemd user service. Guide: docs/GENERATION-HOST.md. The API decides which jobs a host gets (H1).
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, readdirSync } from 'node:fs';
-import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
-import { homedir, totalmem, userInfo } from 'node:os';
+import { existsSync } from 'node:fs';
+import { chmod, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { userInfo } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRemoteClient } from '../api/client.mjs';
 import { JOIN_CODE } from '../api/generations.mjs';
 import { readProject } from '../mcp/connection-readiness.mjs';
 import { defaultSessionPath, login, startDeviceLogin, waitDeviceLogin } from './login.mjs';
+import { HOST_FILES, checkSystem, codexHealthy, codexOptional, defaultRoot, healthy, hostEnv, installFiles, installed, openJobs, readHostEnv,
+  signIn } from '../host/install.mjs';
+
+// The install's pieces live in host/install.mjs (2026-11-07): npx oddbout-host (host/runner.mjs) installs the same way on Windows, macOS
+// and Linux, from an npm package that carries host/ alone.
+export { HOST_FILES, checkSystem, codexHealthy, defaultRoot, healthy, hostEnv, installFiles, installed, openJobs, readHostEnv };
 
 /**
  * @typedef {{ code: number, output: string }} OgResult
@@ -27,110 +33,10 @@ import { defaultSessionPath, login, startDeviceLogin, waitDeviceLogin } from './
  */
 
 const KIT = fileURLToPath(new URL('../', import.meta.url));
-/** What a host's install runs; tests and the operator's installer stay in the checkout. */
-// style-anchor-front.webp (2026-10-31): the house front the looks take their colouring from (generation-stages.mjs STYLE_ANCHOR_FILE).
-// codex-usage.mjs (2026-10-31): the subscription's meter the worker sends with its heartbeat.
-export const HOST_FILES = Object.freeze(['og', 'generation-worker.mjs', 'generation-stages.mjs', 'codex-usage.mjs', 'sprite-outcome.mjs', 'ledger-report.mjs', 'motions.py',
-  'style-anchor-front.webp']);
+/** How a user of this command signs in again (host/install.mjs signIn). */
+const LOGIN = 'npm run host:login --';
+const CODEX_OPTIONAL = codexOptional(LOGIN);
 export const TERMS_DOC = 'docs/GENERATION-HOST.md#호스트-약속';
-const SYSTEM_DIRS = new Set(['/usr/local/bin', '/usr/bin', '/bin']);
-
-export const defaultRoot = (env = process.env) =>
-  env.ODDBOUT_HOST_ROOT || path.join(env.XDG_DATA_HOME || path.join(homedir(), '.local', 'share'), 'oddbout-host');
-/** @type {(root: string) => boolean} */
-export const installed = root => existsSync(path.join(root, 'host.env')) && existsSync(path.join(root, 'bin', 'og'));
-
-/**
- * `KEY=value` lines og reads one key at a time (never sourced). Values are checked here: og puts some on PATH. On Windows (host/og.mjs)
- * a folder may also start with its drive (`C:\…`), and TOOL_PATH separates folders with `;`, as PATH does there.
- * @param {{ nodeBin: string, python?: string, toolPath?: string, slots?: number, memory?: string, platform?: NodeJS.Platform }} options
- */
-export function hostEnv({ nodeBin, python = '', toolPath = '', slots = 3, memory = '8G', platform = process.platform }) {
-  const posix = /^\/[^:\n=]*$/, windows = /^[A-Za-z]:[\\/][^:;\r\n=]*$/;
-  /** @type {(d: string) => boolean} */
-  const dir = d => posix.test(d) || (platform === 'win32' && windows.test(d));
-  if (!dir(nodeBin) || (python && !dir(python)) || (toolPath && !toolPath.split(platform === 'win32' ? ';' : ':').every(dir))) throw new Error('host-env-path');
-  if (![2, 3].includes(slots) || !/^([4-9]|[1-5][0-9]|6[0-4])G$/.test(memory)) throw new Error('host-env-limits');
-  return ['# Written by npm run host:setup (scripts/host.mjs). og reads these keys one by one; it never sources this file.',
-    `NODE_BIN=${nodeBin}`, `PYTHON=${python}`, `TOOL_PATH=${toolPath}`, `SLOTS=${slots}`, `MEMORY=${memory}`, ''].join('\n');
-}
-/** @param {string} text */
-export function readHostEnv(text) {
-  return Object.fromEntries(text.split('\n').filter(line => /^[A-Z_]+=/.test(line)).map(line => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]));
-}
-
-/** The install's generator files from this checkout's host/, line endings made Unix (a Windows checkout writes CRLF). @param {string} root @param {string} [from] */
-export async function installFiles(root, from = path.join(KIT, 'host')) {
-  await mkdir(path.join(root, 'bin'), { recursive: true, mode: 0o700 });
-  for (const name of HOST_FILES) {
-    // A new file renamed into place: a worker's bash keeps reading the og it started with.
-    const target = path.join(root, 'bin', name), mode = name === 'og' ? 0o700 : 0o600;
-    await rm(`${target}.new`, { force: true });
-    // The style anchor is a picture: its bytes as they are. The rest are text, written with Unix line endings.
-    const source = path.join(from, name);
-    await writeFile(`${target}.new`, name.endsWith('.webp') ? await readFile(source) : (await readFile(source, 'utf8')).replace(/\r$/gm, ''), { mode });
-    await chmod(`${target}.new`, mode);
-    await rename(`${target}.new`, target);
-  }
-}
-
-/** Job folders without `.closed`: og setup refuses to change the kit under them, and so does an update. @param {string} root */
-export function openJobs(root) {
-  const output = path.join(root, 'kit', 'output');
-  if (!existsSync(output)) return [];
-  return readdirSync(output, { withFileTypes: true }).filter(d => d.isDirectory() && !d.name.startsWith('.'))
-    .filter(d => existsSync(path.join(output, d.name, 'request.json')) && !existsSync(path.join(output, d.name, '.closed'))).map(d => d.name);
-}
-
-/** One provider's line of `og health` says ok. @type {(output: string, provider: string) => boolean} */
-const answered = (output, provider) => new RegExp(`^og: ${provider} ok\\b`, 'm').test(output);
-/**
- * `og health` output → may this PC work (1.1, 2026-11-06)? Grok is the one it needs: it draws a job's pictures (unless the job asks for
- * GPT's) and films every walk and run. Codex is optional: GPT pictures, and the judges where they ask it (the worker judges with pixels
- * without it, host/generation-worker.mjs canWork). Until 2026-11-06 both had to answer. @type {(output: string) => boolean}
- */
-export const healthy = output => answered(output, 'grok');
-/** Whether codex answered too: this PC may then draw GPT pictures. @type {(output: string) => boolean} */
-export const codexHealthy = output => answered(output, 'codex');
-/** The line that says what codex adds, when it did not answer. */
-const CODEX_OPTIONAL = 'codex(ChatGPT)는 없어도 된다: 그림은 Grok으로 그리고 판정은 픽셀로 한다. GPT 그림도 고르려면: npm run host:login -- codex';
-
-/** @type {(name: string) => string} */
-const which = name => {
-  const found = spawnSync('bash', ['-c', 'command -v -- "$1"', '_', name], { encoding: 'utf8' });
-  return found.status === 0 ? found.stdout.trim() : '';
-};
-/** @type {(command: string, args: string[]) => boolean} */
-const works = (command, args) => spawnSync(command, args, { encoding: 'utf8', timeout: 20_000 }).status === 0;
-
-/** What this PC lacks for the generator (sprite-gen's setup and og's own tools), and what only deserves a warning. */
-export function checkSystem({ find = which, run = works, platform = process.platform, node = process.versions.node, memory = totalmem() } = {}) {
-  const missing = /** @type {string[]} */ ([]), warnings = /** @type {string[]} */ ([]);
-  if (platform !== 'linux') return { missing: ['Linux (이 꾸러미는 Linux 전용이다 — systemd 사용자 서비스와 flock을 쓴다)'], warnings, python: '', toolPath: '' };
-  if (Number(node.split('.')[0]) < 22) missing.push(`Node 22 이상(지금 ${node})`);
-  /** @type {Record<string, string>} */
-  const tools = {};
-  for (const name of ['bash', 'git', 'zip', 'unzip', 'flock', 'timeout', 'systemd-run', 'systemctl', 'ffmpeg', 'ffprobe', 'img2webp']) {
-    tools[name] = find(name);
-    if (!tools[name]) missing.push(name === 'img2webp' ? 'img2webp (libwebp 도구 — 예: apt install webp)' : name);
-  }
-  // sprite-gen wants Python 3.11+ with venv; og reads codex's session table with sqlite3.
-  let python = '';
-  for (const name of ['python3.13', 'python3.12', 'python3.11', 'python3']) {
-    const at = find(name);
-    if (at && run(at, ['-c', 'import sys, venv, sqlite3; sys.exit(0 if sys.version_info >= (3, 11) else 1)'])) { python = at; break; }
-  }
-  if (!python) missing.push('Python 3.11 이상(venv·sqlite3 포함)');
-  if (tools.systemctl && !run(tools.systemctl, ['--user', 'show-environment']))
-    warnings.push('systemd 사용자 관리자에 닿지 못했다. 워커는 메모리 상한(systemd 슬라이스) 없이는 돌지 않는다. 로그인 세션에서 다시 하거나 loginctl enable-linger를 켠다.');
-  if (memory < 12 * 2 ** 30) warnings.push(`메모리가 ${Math.round(memory / 2 ** 30)} GB다. --slots 2 --memory 6G 로 설치하기를 권한다.`);
-  // An NVIDIA GPU runs the loop alignment's RIFE on PyTorch (`--rife torch`): about twice as fast, the same frames (2026-10-28).
-  const gpu = Boolean(find('nvidia-smi')) && run(find('nvidia-smi'), ['-L']);
-  const toolPath = [...new Set(['ffmpeg', 'ffprobe', 'img2webp', 'zip', 'unzip', 'git'].map(name => tools[name]).filter(Boolean).map(p => path.dirname(p))
-    .filter(d => !SYSTEM_DIRS.has(d) && d !== path.dirname(process.execPath)))].join(':');
-  return { missing, warnings, python, toolPath, gpu };
-}
-
 /** @type {(args: string[], name: string) => string | undefined} */
 const flag = (args, name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };
 /** @type {Record<string, string>} */
@@ -277,20 +183,7 @@ export async function runHost(argv, deps) {
         if (!needInstall()) return 1;
         // Grok unless one is named: codex is GPT pictures' only (1.1, 2026-11-06), signed in on its own (`login codex`).
         const providers = ['codex', 'grok'].includes(args[0]) ? [args[0]] : ['grok'];
-        for (const p of providers) {
-          out(`${p} 로그인 — 아래 주소를 브라우저에서 열고 코드를 넣는다. 이 호스트가 쓸 구독 계정으로 로그인한다.`);
-          if ((await og(['login', p, ...args.filter(a => a === '--replace')])).code !== 0) return 1;
-        }
-        const health = await og(['health'], { capture: true });
-        out(health.output.trim());
-        // An account with no subscription signs in but cannot make anything: say what to do now, not at the first job.
-        if (!healthy(health.output)) { out('grok이 ok여야 일한다. 유료 구독(SuperGrok) 계정으로 다시 로그인한다: npm run host:login -- --replace'); return 1; }
-        if (providers.includes('codex') && !codexHealthy(health.output)) {
-          out('codex가 ok가 아니다: GPT 그림은 고를 수 없다(Grok 그림은 된다). 유료 구독(ChatGPT Plus·Pro) 계정으로 다시 로그인한다: npm run host:login -- codex --replace');
-          return 1;
-        }
-        if (!codexHealthy(health.output)) out(CODEX_OPTIONAL);
-        return 0;
+        return signIn({ og, out, providers, replace: args.includes('--replace'), login: LOGIN });
       }
       case 'health': return needInstall() ? (await og(['health'])).code : 1;
       case 'join': {

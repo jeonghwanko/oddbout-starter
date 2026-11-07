@@ -25,7 +25,8 @@ OpenAI로 전송한다. 이 경로에서는 검수 자료가 생성 PC 밖으로
 | 구독 | codex CLI로 로그인하는 ChatGPT 구독(그림·판정), grok CLI로 로그인하는 SuperGrok 구독(걷기·달리기 영상). 이 꾸러미는 지금 구독 로그인만 쓴다 |
 | 계정 | ODDBOUT 계정(Google 로그인) |
 
-Windows·macOS는 아직 지원하지 않는다.
+Windows·macOS는 `npx oddbout-host` 한 줄로 설치한다(2026-11-07 구현, npm 공개 전 — [host/README.md](../host/README.md#npx-oddbout-host)).
+SuperGrok만 있으면 된다. 그 명령은 Node 22.12만 요구하고 Python·ffmpeg·키트·CLI는 고정한 버전을 직접 받는다.
 
 ## 호스트 약속
 

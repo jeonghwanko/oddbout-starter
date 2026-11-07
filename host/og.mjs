@@ -297,9 +297,10 @@ const readHostEnv = text => Object.fromEntries(text.split(/\r?\n/).filter(line =
 /**
  * og for a community host's install at `root` (<root>/host.env, <root>/bin/og.mjs). `run`, `health` and `prune` are what the worker calls
  * (generation-worker.mjs ogClient); `main` is the command line.
- * @param {{ root: string, env?: NodeJS.ProcessEnv, memory?: number }} options
+ * `about`: what the worker's heartbeats say of this PC beside the logins (oddbout-host: `platform`, `runner`, `setup`).
+ * @param {{ root: string, env?: NodeJS.ProcessEnv, memory?: number, about?: Record<string, string> | null }} options
  */
-export function createOg({ root, env = process.env, memory = os.totalmem() }) {
+export function createOg({ root, env = process.env, memory = os.totalmem(), about = null }) {
   const G = path.resolve(root), platform = process.platform;
   const hostFile = path.join(G, 'host.env');
   if (!existsSync(hostFile)) die(`no host.env in ${G} — og.mjs runs a community host's install (the official host runs bash og)`);
@@ -713,7 +714,9 @@ export function createOg({ root, env = process.env, memory = os.totalmem() }) {
     /** @param {'codex' | 'grok'} p */
     const version = async p => { const r = await execCommand([p, '--version'], { limitMs: 30_000 }); return r.code === 0 ? r.stdout.trim().split('\n')[0] : 'missing'; };
     io.out(`root    ${G} (user ${user}, user install)\n`);
-    io.out(`kit     ${head.status === 0 ? head.stdout.trim() : 'missing'} (pinned ${KIT_REF_PIN.slice(0, 7)})\n`);
+    const zip = zipKit();
+    io.out(zip ? `kit     ${zip.version} (zip ${zip.sha256.slice(0, 12)}, oddbout-host)\n`
+      : `kit     ${head.status === 0 ? head.stdout.trim() : 'missing'} (pinned ${KIT_REF_PIN.slice(0, 7)})\n`);
     io.out(`codex   ${await version('codex')}   pinned: ${pinned('codex')}\n`);
     io.out(`grok    ${await version('grok')}   pinned: ${pinned('grok')}\n`);
     if (platform === 'linux') {
@@ -815,22 +818,69 @@ export function createOg({ root, env = process.env, memory = os.totalmem() }) {
     return 0;
   }
 
+  /**
+   * The kit oddbout-host unpacked from its pinned ZIP (runner.mjs, 2026-11-07): `<kit>/.oddbout-kit.json`, and no Git checkout. setup then
+   * leaves the kit as it is (no clone, no fetch) and only installs what runs it.
+   * @returns {{ version: string, sha256: string } | null}
+   */
+  const zipKit = () => {
+    if (existsSync(path.join(KIT, '.git'))) return null;
+    try { const k = JSON.parse(readFileSync(path.join(KIT, '.oddbout-kit.json'), 'utf8')); return typeof k?.sha256 === 'string' ? k : null; } catch { return null; }
+  };
+  const npmCli = () => {
+    const node = nodeExe();
+    return [path.join(path.dirname(node), 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+      path.join(path.dirname(node), '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js')].find(isFile) ?? die(`npm not found beside ${node}`);
+  };
+  /** One setup step's command, its output to `io.err`; a failure dies with `what`. @param {Io} io */
+  const stepper = io => {
+    const callerEnv = { ...env, PATH: [NODE_BIN, envValue(env, 'PATH') ?? ''].join(path.delimiter) };
+    /** @param {string} what @param {string} command @param {string[]} args @param {{ env?: NodeJS.ProcessEnv, cwd?: string }} [options] */
+    return async (what, command, args, options = {}) => {
+      const r = await capture(command, args, { env: options.env ?? callerEnv, cwd: options.cwd ?? G, onOutput: chunk => io.err(chunk) });
+      if (r.code !== 0) die(`${what} failed (exit ${r.code})`);
+      return r.stdout;
+    };
+  };
+  /**
+   * setup's steps one at a time, for oddbout-host's first run (runner.mjs reports each to the site): `kit` the kit's Node packages,
+   * `engine` sprite-gen's venv with img2webp and RIFE (sprite:setup), `slice` the Linux memory cap. The kit itself and the CLIs are the
+   * runner's (its pins.json); `og setup` runs every step after its own.
+   * @param {'kit' | 'engine' | 'slice'} name @param {Io} io
+   */
+  async function setupStep(name, io) {
+    const step = stepper(io);
+    if (name === 'kit') await step('installing the kit', nodeExe(), [npmCli(), 'ci', '--ignore-scripts', '--no-fund', '--no-audit', '--loglevel=error'], { env: svcEnv(), cwd: KIT });
+    else if (name === 'engine') {
+      for (const script of ['sprite:setup', 'sprite:status']) {
+        const spec = commandFor(['npm', 'run', script], { slice: false });
+        await step(script, spec.command, spec.args, { env: spec.env, cwd: KIT });
+      }
+      // A torch backend chosen before stays: a new venv gets PyTorch and the model again.
+      if (rifeBackend() === 'torch') await rifeTorchInstall();
+    } else if (name === 'slice') {
+      if (platform !== 'linux') return;
+      mkdirSync(UNIT_DIR, { recursive: true });
+      writeFileSync(path.join(UNIT_DIR, SLICE), `[Unit]\nDescription=ODDBOUT hosted fighter generation (memory cap)\n\n[Slice]\nMemoryMax=${SLICE_MEMORY}\nMemorySwapMax=0\n`);
+      spawnSync('systemctl', ['--user', 'daemon-reload'], { env: systemdEnv(), stdio: 'ignore' });
+    } else die(`no setup step ${name}`);
+  }
+
   /** The kit and the provider CLIs (bash og cmd_setup), with npm run as node and npm-cli.js. @param {Io} io */
   async function cmdSetup(io) {
     const open = openJobs();
     if (open.length) die(`jobs still open — setup changes the kit and CLIs under them: ${open.join(' ')}`);
     mkdirSync(path.join(G, 'tools'), { recursive: true }); mkdirSync(path.join(G, 'deliveries'), { recursive: true });
-    const node = nodeExe(), npmCli = [path.join(path.dirname(node), 'node_modules', 'npm', 'bin', 'npm-cli.js'),
-      path.join(path.dirname(node), '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js')].find(isFile) ?? die(`npm not found beside ${node}`);
-    const callerEnv = { ...env, PATH: [NODE_BIN, envValue(env, 'PATH') ?? ''].join(path.delimiter) };
-    /** @param {string} what @param {string} command @param {string[]} args @param {{ env?: NodeJS.ProcessEnv, cwd?: string }} [options] */
-    const step = async (what, command, args, options = {}) => {
-      const r = await capture(command, args, { env: options.env ?? callerEnv, cwd: options.cwd ?? G, onOutput: chunk => io.err(chunk) });
-      if (r.code !== 0) die(`${what} failed (exit ${r.code})`);
-      return r.stdout;
-    };
-    await step('installing the provider CLIs', node, [npmCli, 'install', '--prefix', path.join(G, 'tools'), '--no-fund', '--no-audit', '--loglevel=error',
+    const node = nodeExe(), step = stepper(io);
+    await step('installing the provider CLIs', node, [npmCli(), 'install', '--prefix', path.join(G, 'tools'), '--no-fund', '--no-audit', '--loglevel=error',
       `@openai/codex@${CODEX_VERSION}`, `@xai-official/grok@${GROK_VERSION}`]);
+    // A kit oddbout-host unpacked from its pinned ZIP has no Git: it changes only with the runner's next pin.
+    if (!zipKit()) await setupKitGit(step);
+    for (const name of /** @type {const} */ (['kit', 'engine', 'slice'])) await setupStep(name, io);
+    return cmdStatus(io);
+  }
+  /** The kit's Git checkout at KIT_REF and its engine submodule (bash og cmd_setup). @param {ReturnType<typeof stepper>} step */
+  async function setupKitGit(step) {
     if (!existsSync(path.join(KIT, '.git'))) await step('cloning the kit', 'git', ['clone', '--quiet', '--branch', 'main', KIT_URL, KIT]);
     if ((await step('reading the kit', 'git', ['-C', KIT, 'rev-parse', 'HEAD'])).trim() !== KIT_REF_PIN) {
       // sprite:setup patches the submodule's tracked files; drop the patch (not the venv) so the new gitlink checks out.
@@ -847,19 +897,6 @@ export function createOg({ root, env = process.env, memory = os.totalmem() }) {
       await step('resetting the engine', 'git', ['-C', path.join(KIT, at), 'clean', '-fdq']);
     }
     await step('checking out the engine', 'git', ['-C', KIT, 'submodule', 'update', '--init', '--recursive', '--quiet']);
-    await step('installing the kit', node, [npmCli, 'ci', '--ignore-scripts', '--no-fund', '--no-audit', '--loglevel=error'], { env: svcEnv(), cwd: KIT });
-    for (const script of ['sprite:setup', 'sprite:status']) {
-      const spec = commandFor(['npm', 'run', script], { slice: false });
-      await step(script, spec.command, spec.args, { env: spec.env, cwd: KIT });
-    }
-    // A torch backend chosen before stays: a new venv gets PyTorch and the model again.
-    if (rifeBackend() === 'torch') await rifeTorchInstall();
-    if (platform === 'linux') {
-      mkdirSync(UNIT_DIR, { recursive: true });
-      writeFileSync(path.join(UNIT_DIR, SLICE), `[Unit]\nDescription=ODDBOUT hosted fighter generation (memory cap)\n\n[Slice]\nMemoryMax=${SLICE_MEMORY}\nMemorySwapMax=0\n`);
-      spawnSync('systemctl', ['--user', 'daemon-reload'], { env: systemdEnv(), stdio: 'ignore' });
-    }
-    return cmdStatus(io);
   }
 
   /**
@@ -883,7 +920,7 @@ export function createOg({ root, env = process.env, memory = os.totalmem() }) {
         // A host whose files were updated before og harden ran again takes the project-docs line here: a restriction og owns.
         hardenDocs({ out: io.err, err: io.err });
         io.err(memoryNote());
-        await workerMain({ once: rest.includes('--once'), root: G, og: api, python: spritePython(KIT) });
+        await workerMain({ once: rest.includes('--once'), root: G, og: api, python: spritePython(KIT), about });
         return 0;
       case 'key': {
         // The API base on the command line, the worker key (afw_…, scope generation) on stdin — never in argv or the ledger.
@@ -1001,6 +1038,8 @@ A community host's og on Windows, macOS or Linux (bash og is the official host's
   const api = {
     root: G, slots: SLOTS, pool,
     run,
+    /** One of setup's steps (oddbout-host's first run). Throws OgError. @param {'kit' | 'engine' | 'slice'} name @param {Io} io */
+    setupStep: (/** @type {'kit' | 'engine' | 'slice'} */ name, /** @type {Io} */ io) => setupStep(name, io),
     /** `og health`'s lines (generation-worker.mjs parseHealth). */
     health: () => said(io => cmdHealth(io)),
     /** `og prune <days>`'s lines. @param {number | string} days */
