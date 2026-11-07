@@ -222,6 +222,16 @@ GPT는 자세마다 몸을 따로 그려 외형보다 2~20% 커지거나 작아�
   `side`·`gait` 이벤트와 `tried`에는 `judgeBy`(`pixels`·`pixels+codex`)가 붙는다. 픽셀 판정기가 답하지 못하면(`side-pixel-judge-<종료>`, `pixel-judge-<종료>`) 단계를 나중에 다시 돌고, codex가 대신 판정하지 않는다.
   픽셀이 보는 것: 캔버스 가장자리 잘림, 따로 떨어진 덩어리·바닥 선·테두리, 기준 그림 색 영역의 사라짐·새 색, 반투명(겹친 프레임), 프레임 높이·면적 튐, 엔진의 이음새 비율.
   보지 못하는 것: 옆모습과 3/4 시점의 구분(옆모습 `side`는 늘 `unknown`), 얼굴, 부위 크기 변화(장갑이 작아짐), 팔다리 모양. 판정 실패는 다시 그리기·다시 찍기(유료)로 이어진다.
+- 판정 기록(2026-11-07, `createJudgeArchive`): 새로 한 옆모습·걷기·달리기 판정마다 한 줄을 `<root>/judge-archive/judgments-<YYYY-MM>.jsonl`에 남긴다.
+  작업 폴더 밖이라 `og prune`이 지우지 않는다. 한 줄에는 판정 모드, 누가 정했는지(`decidedBy`), 최종 검사 결과, 픽셀 판정기의 검사·측정값(숫자만)·시간,
+  그 자리에서 판정한 codex의 검사·모델·시간만 들어간다. notes·프롬프트·신청 글·경로는 넣지 않는다. 다시 쓴 판정(JUDGE_CACHE_RULE)은 새 줄을 남기지 않는다.
+  `codex` 모드에서도 픽셀 판정기를 옆에서 함께 돌려(`shadow`, 1초 미만, 결과는 판정에 쓰지 않음) codex 판정마다 비교할 픽셀 답을 남긴다.
+  판정한 그림(정면·take, 또는 look·strip)은 `worker.env`의 `ODDBOUT_GENERATION_JUDGE_IMAGES=<일수>`(1~365)가 있을 때만 `judge-archive/images/<날짜>/<id>/`에
+  복사하고, 그 일수가 지나면 워커가 하루 한 번 지운다. 기본은 복사하지 않는다: 신청자의 캐릭터에서 나온 그림이기 때문이다. `og worker key`는 이 줄도 남긴다.
+  기록 쓰기가 실패해도 판정은 바뀌지 않는다. 읽기는 저장소의 `npm run judge:eval -- <judge-archive 복사본> [--labels labels.jsonl] [--rerun --python <venv python>]`:
+  검사마다 픽셀 판정과 기준(사람 라벨, 없으면 codex)의 일치, 판정한 비율, codex에 물은 비율, 두 판정기의 p50·p95 시간, 먼저 라벨을 달 항목(엇갈린 판정부터)을 보여준다.
+  `--rerun`은 그림이 남은 판정을 지금 체크아웃의 `motions.py pixel-judge`로 다시 판정해, 새 픽셀 판정기를 배포 전에 같은 항목으로 잰다.
+  라벨 한 줄: `{"id":"<기록 id>","checks":{"side":"fail"}}`(적은 검사만 라벨).
 - 워커는 `og harden` 없이는 시작하지 않는다. 신청자의 글이 codex 입력이 되기 때문이다.
 - `og setup`(사용자 설치는 `npm run host:setup`)은 열린 작업이 있으면 아무것도 바꾸지 않는다. 키트·CLI 판은 `og` 맨 위에 고정한다.
 - 끝난 작업 폴더(신청 글·참조 그림·생성 그림)는 워커가 하루 한 번 지운다: 닫힌 지 7일(`ODDBOUT_GENERATION_KEEP_DAYS`, 1~90),

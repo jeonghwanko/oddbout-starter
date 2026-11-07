@@ -14,7 +14,7 @@ import { ALIGN_AGAIN, BEAT_LIMIT, GROK_LIMITED, BRIEF_SCHEMA, ONE_STRIDE_OF, GAI
   verdictKeyStatus, videoEntry, VIDEO_REQUESTED, REQUESTED_MODELS, writeWhole, JUDGE_MODES, PIXEL_JUDGE, checkedPixels, hybridJudgeKey, judgesMode,
   pixelJudgeKey, sidePassed, IMAGE_PROFILES, GROK_IMAGE_MODEL, appearanceCommand, chromaKeyFor, expressionsCommand, gaitStillCommand, gaitStillPrompt,
   imageFor, imageProviderOf, requestedModels, sideCommand, FRONT_TAKES, GROK_FRONT_COLOURING, GROK_FRONT_FRAMING, GROK_FRONT_TAKES,
-  GROK_ONE_FIGURE } from './generation-stages.mjs';
+  GROK_ONE_FIGURE, createJudgeArchive, judgeImageDays, judgmentLine, numbersOnly } from './generation-stages.mjs';
 import { codexSessionFacts } from './codex-usage.mjs';
 import { ENGINE_SEAM_MAX as REVIEW_SEAM_MAX, ENGINE_CUE_RHYTHM as REVIEW_CUE_RHYTHM, lowMarginFeet as reviewLowMarginFeet } from '../tools/ai-fighter/gait.mjs';
 import { parseEnv, parseHealth } from './generation-worker.mjs';
@@ -1737,7 +1737,7 @@ test('the judges mode: codex unless one of the three is named, and a pixel answe
 });
 
 /** The side still under a judges mode: `pixels` and `codex` are queues of answers, one per call; motions.py's other commands fail (enough). */
-async function sideStage(judges, pixels, codex = [], { job: extra = {}, codexOn = true, reports = { ok: true } } = {}) {
+async function sideStage(judges, pixels, codex = [], { job: extra = {}, codexOn = true, reports = { ok: true }, archive = null } = {}) {
   const dir = await mkdtemp(path.join(tmpdir(), `gen-side-${judges}-`)), calls = [], events = [];
   await mkdir(path.join(dir, 'looks'), { recursive: true });
   await writeFile(path.join(dir, 'looks', 'front-a-0.png'), 'front');
@@ -1760,7 +1760,7 @@ async function sideStage(judges, pixels, codex = [], { job: extra = {}, codexOn 
   };
   const api = { artifact: async () => ({ ok: true }), progress: async (job, progress, event) => { if (event) events.push(event); return { ok: true }; } };
   const stages = createStages({ og, api, motionsPy, fetchBytes: async () => new Uint8Array(), toWebp: async (png, webp) => writeFile(webp, 'webp'),
-    styleAnchor: '/kit/style-anchor-front.webp', gaitStaggerMs: 0, alignPauseMs: 0, judges, codex: codexOn });
+    styleAnchor: '/kit/style-anchor-front.webp', gaitStaggerMs: 0, alignPauseMs: 0, judges, codex: codexOn, archive });
   const job = { id: '0123abcd-0006', language: 'ko', brief, choice: 'a', appearanceRound: 0, candidates: [], motionNote: null, motionRound: 0, ...extra };
   const done = await stages.motions(job, dir);
   const folder = path.join(dir, 'looks', 'side-0-a'), read = async name => JSON.parse(await readFile(path.join(folder, name), 'utf8'));
@@ -1820,6 +1820,79 @@ test('hybrid: a pixel fail is final with no codex call; an open check asks codex
   // A pixel judge that gives no answer: tried again later (nothing paid is drawn again), never decided by codex in its place.
   const broken = await sideStage('pixels', []);
   assert.deepEqual([broken.done, broken.asked(), broken.drawn()], [{ outcome: 'retry', result: { code: 'side-pixel-judge-1' } }, 0, 1]);
+});
+
+/** The archive's lines in `dir`, oldest first. */
+const archived = async dir => (await Promise.all((await readdir(dir).catch(() => [])).filter(n => n.endsWith('.jsonl')).sort()
+  .map(n => readFile(path.join(dir, n), 'utf8')))).join('').split('\n').filter(Boolean).map(line => JSON.parse(line));
+
+test('the judgment archive: one line per judgment with checks, numbers and models only; pictures only when asked, pruned by day', async () => {
+  assert.deepEqual([undefined, '', '0', '7', '365', '366', '2.5', 'x'].map(judgeImageDays), [0, 0, 0, 7, 365, 0, 0, 0]);
+  assert.deepEqual(numbersOnly({ ms: 90, note: 'a frying pan', regions: [{ lab: [50, 1, 2], name: 'red' }], seam: { engine: null, own: 1.2 } }),
+    { ms: 90, regions: [{ lab: [50, 1, 2] }], seam: { engine: null, own: 1.2 } });
+  const line = judgmentLine({ id: 'x', at: new Date('2026-11-07T01:02:03Z'), job: 'j', item: 'side-0-a/take-0', kind: 'side', mode: 'hybrid',
+    decidedBy: 'pixels', final: { ...pass5, notes: 'no' }, pixels: { model: 'pixels-v1', observed: 'pixels-v1', checks: { ...pass5, side: 'unknown', extra: 'x' },
+      measures: { ms: 80, words: 'gone' }, ms: 80 } });
+  assert.deepEqual(line, { v: 1, id: 'x', at: '2026-11-07T01:02:03.000Z', job: 'j', item: 'side-0-a/take-0', kind: 'side', mode: 'hybrid', decidedBy: 'pixels',
+    final: pass5, pixels: { model: 'pixels-v1', observed: 'pixels-v1', checks: { ...pass5, side: 'unknown' }, measures: { ms: 80 }, ms: 80 }, codex: null });
+
+  const root = await mkdtemp(path.join(tmpdir(), 'judge-archive-'));
+  await writeFile(path.join(root, 'look.png'), 'look');
+  await writeFile(path.join(root, 'side-walk.strip.json'), '{}');
+  await writeFile(path.join(root, 'side-walk.strip.png'), 'strip');
+  let now = new Date('2026-11-01T10:00:00Z');
+  const entry = { job: 'j', item: 'walk/take-0/cut', kind: 'loop', mode: 'pixels', decidedBy: 'pixels', final: { identity: 'pass', anatomy: 'pass', loop: 'pass' } };
+  const files = [path.join(root, 'look.png'), path.join(root, 'side-walk.strip.json')];
+  // None copied by default: the line alone.
+  const plain = createJudgeArchive({ dir: path.join(root, 'a'), now: () => now });
+  assert.ok(await plain.note(entry, files));
+  assert.equal(existsSync(path.join(root, 'a', 'images')), false);
+  assert.equal((await archived(path.join(root, 'a')))[0].images, undefined);
+  // With days: the pixel judge's pictures (a strip's .png beside its .json) under the day, named so the pixel judge reads them again.
+  const kept = createJudgeArchive({ dir: path.join(root, 'b'), imageDays: 3, now: () => now });
+  const id = await kept.note(entry, files);
+  assert.deepEqual((await readdir(path.join(root, 'b', 'images', '2026-11-01', id))).sort(), ['0-look.png', '1-side-walk.strip.json', '1-side-walk.strip.png']);
+  const [first] = await archived(path.join(root, 'b'));
+  assert.deepEqual([first.id, first.images, first.at], [id, ['0-look.png', '1-side-walk.strip.json'], '2026-11-01T10:00:00.000Z']);
+  now = new Date('2026-11-04T09:00:00Z');
+  assert.equal(await kept.prune(), 0, 'three days are kept');
+  now = new Date('2026-11-05T09:00:00Z');
+  assert.equal(await kept.prune(), 1);
+  assert.equal(existsSync(path.join(root, 'b', 'images', '2026-11-01')), false);
+  assert.equal((await archived(path.join(root, 'b'))).length, 1, 'the lines stay');
+  // A picture that cannot be read: no line, no throw (a judgment never waits on the archive).
+  assert.equal(await kept.note(entry, [path.join(root, 'missing.png')]), null);
+});
+
+test('hybrid with an archive: each new judgment goes in once, codex with its time only when it judged now', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'judge-archive-side-')), archive = createJudgeArchive({ dir });
+  const run = await sideStage('hybrid', [pixelSide({ whole: 'fail' }), pixelSide({ style: 'unknown' })], [{ checks: pass5, notes: 'The same boxer.' }], { archive });
+  const lines = await archived(dir);
+  assert.deepEqual(lines.map(l => [l.item, l.mode, l.decidedBy, l.final.whole, l.pixels.checks.side, l.pixels.ms, l.codex?.model ?? null]),
+    [['side-0-a/take-0', 'hybrid', 'pixels', 'fail', 'unknown', 90, null], ['side-0-a/take-1', 'hybrid', 'pixels+codex', 'pass', 'unknown', 90, JUDGE.model]]);
+  assert.equal(lines[0].job, run.job.id);
+  assert.equal(typeof lines[1].codex.ms, 'number');
+  assert.deepEqual(lines[1].codex.checks, pass5);
+  assert.ok(!JSON.stringify(lines).includes('boxer'), 'no notes in the archive');
+  await run.again();
+  assert.equal((await archived(dir)).length, 2, 'a stage run again judges nothing and archives nothing');
+});
+
+test('codex with an archive: the pixel judge runs beside it and never decides; without an archive it does not run', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'judge-archive-codex-')), archive = createJudgeArchive({ dir });
+  const run = await sideStage('codex', [pixelSide({ clean: 'fail' })], [{ checks: pass5, notes: 'The same boxer.' }], { archive });
+  assert.equal(run.asked(), 1);
+  assert.equal(sidePassed(await run.read('take-0.verdict.json')), true, 'the shadow fail changes nothing');
+  const [line] = await archived(dir);
+  assert.deepEqual([line.mode, line.decidedBy, line.shadow, line.final, line.pixels.checks.clean, line.codex.checks.clean],
+    ['codex', 'codex', true, pass5, 'fail', 'pass']);
+  // A shadow that gives no answer: the line without pixels.
+  const dir2 = await mkdtemp(path.join(tmpdir(), 'judge-archive-codex-'));
+  const quiet = await sideStage('codex', [], [{ checks: pass5, notes: 'ok' }], { archive: createJudgeArchive({ dir: dir2 }) });
+  const [bare] = await archived(dir2);
+  assert.deepEqual([quiet.asked(), bare.pixels, bare.shadow], [1, null, undefined]);
+  const none = await sideStage('codex', [pixelSide({})], [{ checks: pass5, notes: 'ok' }]);
+  assert.equal(none.pixelRuns().length, 0);
 });
 
 test('a side verdict another judges mode made is reused and marked stale, never judged again (JUDGE_CACHE_RULE)', async () => {
