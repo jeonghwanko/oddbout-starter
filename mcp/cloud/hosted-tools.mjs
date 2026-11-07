@@ -28,7 +28,8 @@ import { toolRef } from './merged-tools.mjs';
  *   tokens?: number | null, expressions?: { url: string | null } | null,
  *   progress?: number, description?: string, profile?: { name?: string } | null, createdAt?: string, updatedAt?: string, agent?: string | null,
  *   side?: { url: string | null } | null, drafts?: { clip: string, url: string | null, state?: string }[],
- *   appearanceAutoSelectAt?: string | null, candidates?: { key: string, url: string | null }[] }} HostedJob
+ *   appearanceAutoSelectAt?: string | null, appearanceAutoSelection?: { choice: 'a', selectedAt: string, deadline: string } | null,
+ *   candidates?: { key: string, url: string | null }[] }} HostedJob
  * @typedef {{ id: number, at: string, kind: string, data: any }} JobEvent  A row of af_generation_events.
  * @typedef {{ status: string, progress: number, submission: string | null, picture: number | null }} WatchTick  What a wait sees of a job;
  *   `picture`: while the motions are made, the id of its newest event that carries a picture.
@@ -57,6 +58,8 @@ export const HOSTED_INSTRUCTIONS = 'When the user wants ODDBOUT to make the figh
   + 'Use statusSummary for the current stage, completion and required action; progress is stage-local, never overall completion. '
   + 'When appearanceAutoSelectAt is present, explain that unanswered looks default to A ten minutes after the pair is ready. '
   + 'The server selects it; do not send a fabricated user choice or run a chat timer. '
+  + 'appearanceAutoSelection is the server event proving that A was selected after no answer; report its selectedAt and deadline. '
+  + 'Without that evidence, do not infer an automatic selection from choice A or elapsed time. '
   + 'Do not ask for motion approval before registration. Hosted creation includes registration into production; only the owner enters on the site. '
   + 'Never promise background chat notifications or scheduling unless the host actually supports them. '
   + 'A result\'s siteUrl is the user\'s page for that request (or, once registered, for his fighter) on the ODDBOUT website. ';
@@ -166,7 +169,9 @@ const HOSTED_FOLLOWED = new Set(['queued', 'appearance', 'appearance_ready', 'mo
  * @param {HostedJob} job @param {{ uploads?: boolean }} [options]
  */
 export function hostedNext(job, { uploads = true } = {}) {
-  const step = hostedStep(job, uploads);
+  const automatic = job.appearanceAutoSelection;
+  const step = (automatic ? `The server automatically selected A after no answer at ${automatic.selectedAt} (deadline ${automatic.deadline}). ` : '')
+    + hostedStep(job, uploads);
   return HOSTED_FOLLOWED.has(job.status) || (job.status === 'submitted' && !['registered', 'rejected'].includes(job.submission?.stage ?? '')) ? `${step} ${SITE_URL_NEXT}` : step;
 }
 /** @param {HostedJob} job @param {boolean} [uploads] */
@@ -265,6 +270,7 @@ export function hostedStatus(job) {
     stageProgress: Number.isFinite(job.progress) ? Math.max(0, Math.min(100, /** @type {number} */ (job.progress))) : null,
     updatedAt: job.updatedAt ?? null, checkedAt: new Date().toISOString(), error: job.error ?? null,
     appearanceAutoSelectAt: job.status === 'appearance_ready' ? job.appearanceAutoSelectAt ?? null : null,
+    appearanceAutoSelection: job.appearanceAutoSelection ?? null,
     queue: job.queue ? { position: job.queue.position, reason: job.queue.reason ?? 'turn', resetsAt: job.queue.resetsAt ?? null } : null };
 }
 
