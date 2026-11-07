@@ -1,9 +1,7 @@
 # ODDBOUT creator kit: agent instructions
 
-Codex loads this file automatically, Grok does in a trusted folder (`--trust` for headless runs), and Claude Code
-loads it through `CLAUDE.md`'s import. It also ships in the creator kit, where only the creation and Dots parts apply
-and the repository-only docs named below are absent. Its rules are product requirements that the code and docs
-enforce: keep them when you change either.
+Codex loads this file; Grok requires a trusted folder (`--trust` headlessly); Claude Code imports it via `CLAUDE.md`.
+Keep these product rules in code and docs. The shipped kit applies only creation/Dots rules and lacks repository-only docs.
 
 ## Start here
 
@@ -15,12 +13,11 @@ enforce: keep them when you change either.
 | Change code, tests or docs here | [Hard rules](#hard-rules), [Changing this repository](#changing-this-repository) | The doc that owns the area ([docs/README.md](docs/README.md)). [Creating a fighter](#creating-a-fighter) states product requirements the code implements: read the part your change touches |
 | Deploy or operate the service | [Hard rules](#hard-rules), [Deploys](#deploys) | `docs/CREATOR-HOSTING.md`, `docs/CLOUD-MCP.md`, `docs/GENERATION-HOST.md` |
 
-`docs/records/` and `docs/research/` (기록 in `docs/README.md`) record past results, not current procedure, unless a
-rule below tells you to read one.
+`docs/records/` and `docs/research/` are history, not procedure, unless a rule below directs you there.
 
 ## Hard rules
 
-These apply to every task. Later sections add detail; none of them relaxes these.
+These apply to every task; later sections cannot relax them.
 
 1. Never invent hashes, origins, measurements, contact timing, successful generation or registration results.
    Report only what a tool, file or server response returned or what you observed in the actual output; anything
@@ -43,8 +40,8 @@ These apply to every task. Later sections add detail; none of them relaxes these
 
 ## Creating a fighter
 
-Each user creates their own fighter. Read `docs/DOT-CREATION.md` and `docs/AUTHORING.md` before the first
-generation and the live AI Fighter spec before creating a package, and use the bundled sprite-gen workflow.
+For each user's fighter, use bundled sprite-gen: read `docs/DOT-CREATION.md` and `docs/AUTHORING.md` before generation,
+and the live AI Fighter spec before packaging.
 
 ### Intent and intake
 
@@ -77,9 +74,8 @@ generation and the live AI Fighter spec before creating a package, and use the b
 
 ### Review groups
 
-- Hosted creation is an exception to the workspace review groups below: after the appearance choice (or delegated
-  choice), finish motions and register into production without asking for motion approval. Entry remains the owner's
-  action on the website. Honor an explicit hold/edit request; do not claim registration until the server confirms it.
+- Hosted creation skips workspace motion reviews: after the appearance choice (including delegation), complete motions
+  and register into production. Honor holds/edits; await server confirmation before claiming registration. The owner enters on the site.
 
 - Creation is conversational in review groups: appearance (concept/idle), locomotion (fightIdle/walk/run), attacks
   (combo/slam/dash), defense and reactions (block/hit/groggy/fall), then final review.
