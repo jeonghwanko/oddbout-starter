@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { crc32, deflateRawSync } from 'node:zlib';
-import { JOIN_CODE as API_JOIN_CODE } from '../api/generations.mjs';
+import { JOIN_CODE as API_JOIN_CODE, HOST_SETUP_STAGES as API_SETUP_STAGES } from '../api/generations.mjs';
 import { pinProblems, PLATFORMS } from './check-pins.mjs';
 import { aboutHealth, spritePython } from './generation-worker.mjs';
 import { HOST_FILES, checkSystem, defaultRoot, hostEnv, readHostEnv } from './install.mjs';
@@ -65,6 +65,7 @@ test('pins.json pins every download for every platform the runner serves, and ag
   assert.deepEqual(PINS.service, { apiBase: site.apiBase, publishableKey: site.publishableKey });
   assert.equal(JOIN_CODE.source, API_JOIN_CODE.source);
   assert.deepEqual(STAGES, ['kit', 'python', 'sprite', 'ffmpeg', 'grok-login', 'codex-login', 'ready']);
+  assert.deepEqual(STAGES, API_SETUP_STAGES); // the steps the server passes on to the site's My PC card
   // A broken pin is named, not passed.
   const broken = structuredClone(PINS);
   broken.cli.grok.version = '1.0.53'; delete broken.python.builds['darwin-arm64']; broken.ffmpeg.builds['linux-x64'][1].files = {};

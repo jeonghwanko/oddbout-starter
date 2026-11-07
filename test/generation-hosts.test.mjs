@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { HOST_PLATFORMS, HOST_SETUP_STAGES } from '../api/generations.mjs';
+import { PAIRING_PLATFORMS } from '../api/host-pairing.mjs';
 import { generation } from './helpers/generation-database.mjs';
 
 // 커뮤니티 호스트 (2026-10-28): a creator applies to host, the operator approves him, his own worker key takes the requests that name him
@@ -396,7 +398,7 @@ test('a request names who draws its pictures: Grok by default, GPT only where th
     await host('heartbeat', { health: grokOnly });
     const own = (await call('GET', 'generations/host', undefined, theirs)).body.host;
     assert.equal(own.online, true);
-    assert.deepEqual(own.health, { codex: false, grok: true, images: ['grok'], checkedAt: grokOnly.at });
+    assert.deepEqual(own.health, { codex: false, grok: true, images: ['grok'], checkedAt: grokOnly.at, setup: null, platform: null, runner: null });
     const words = { description: '프라이팬을 든 펭귄 셰프', language: 'ko', host: 'mine' };
     const ask = body => call('POST', 'generations', { ...words, ...body }, theirs, { 'idempotency-key': crypto.randomUUID() });
     // GPT pictures on a PC that does not draw them now: refused at the check and at the request, nothing made. A provider not offered: refused.
@@ -450,7 +452,7 @@ test('his host shows his subscriptions, and he removes it once no request for hi
     await beat({ ok: false, codex: true, grok: false, at: '2026-10-28T09:00:00.000Z' });
     const own = (await call('GET', 'generations/host', undefined, theirs)).body.host;
     // `images` null: this worker says none (before 2026-11-06).
-    assert.deepEqual(own.health, { codex: true, grok: false, images: null, checkedAt: '2026-10-28T09:00:00.000Z' });
+    assert.deepEqual(own.health, { codex: true, grok: false, images: null, checkedAt: '2026-10-28T09:00:00.000Z', setup: null, platform: null, runner: null });
     assert.equal(own.online, false); // a subscription not answering keeps the PC off
     await beat({ ok: true, codex: true, grok: true, at: '2026-10-28T10:00:00.000Z' });
     assert.equal((await call('GET', 'generations/host', undefined, theirs)).body.host.online, true);
@@ -480,9 +482,51 @@ test('his host shows his subscriptions, and he removes it once no request for hi
     const back = (await call('POST', 'generations/host', { name: '고양이 공방 2', billing: 'subscription', termsAccepted: true }, theirs)).body.host;
     assert.deepEqual([back.id, back.enabled, back.approved, back.name], [applied.id, true, false, '고양이 공방 2']);
     const again = (await call('GET', 'generations/host', undefined, theirs)).body.host;
-    assert.deepEqual([again.online, again.lastSeenAt, again.health], [false, null, { codex: false, grok: false, images: null, checkedAt: null }]);
+    assert.deepEqual([again.online, again.lastSeenAt, again.health], [false, null, { codex: false, grok: false, images: null, checkedAt: null, setup: null, platform: null, runner: null }]);
     const joined = (await call('POST', 'generations/host/join', { code: (await call('POST', 'generations/host/join-codes', {}, theirs)).body.code }, null)).body;
     assert.equal(joined.host, applied.id);
+  } finally { await sql.close(); }
+});
+
+// 내 PC 카드 (계획 1.5, 2026-11-07): while it installs, the PC runner's heartbeats say its step, its OS and its version beside logins not
+// ready yet (host/runner.mjs heartbeater), and his host passes them on — the card says "설치 3/6단계" and "Windows", not "Grok 로그인 필요".
+test('his host passes on what his PC runner says, its install step, OS and version, and null for anything else', async () => {
+  const { sql, call, healthy } = await generation();
+  const theirs = 'other-token-0123456789';
+  try {
+    await healthy();
+    await call('POST', 'generations/host', { name: '고양이 공방', billing: 'subscription', termsAccepted: true }, theirs);
+    const key = (await call('POST', 'generations/host/keys', {}, theirs)).body.key;
+    const beat = health => call('POST', 'generation-worker/heartbeat', { health }, key);
+    const own = async () => (await call('GET', 'generations/host', undefined, theirs)).body.host;
+    const at = '2026-11-07T09:00:00.000Z', installing = { ok: false, codex: false, grok: false, images: [], at, platform: 'windows', runner: '0.1.1' };
+    await beat({ ...installing, setup: 'sprite' });
+    let host = await own();
+    assert.equal(host.online, false);
+    assert.deepEqual(host.health, { codex: false, grok: false, images: [], checkedAt: at, setup: 'sprite', platform: 'windows', runner: '0.1.1' });
+    // Each step, and each failed as the runner says it (`${name}-failed`).
+    for (const step of HOST_SETUP_STAGES) for (const setup of [step, `${step}-failed`]) {
+      await beat({ ...installing, setup });
+      assert.equal((await own()).health.setup, setup);
+    }
+    // Not the runner's words: that one null, the rest kept.
+    for (const [said, read] of [
+      [{ setup: 'banana', platform: 'macos', runner: 'x'.repeat(33) }, { setup: null, platform: 'macos', runner: null }],
+      [{ setup: 'failed', platform: 'win32', runner: '' }, { setup: null, platform: null, runner: null }],
+      [{ setup: 'kit-failed-failed', platform: 'Windows', runner: 11 }, { setup: null, platform: null, runner: null }],
+      [{ setup: 3, platform: null, runner: 'x'.repeat(32) }, { setup: null, platform: null, runner: 'x'.repeat(32) }],
+    ]) {
+      await beat({ ok: false, codex: false, grok: false, at, ...said });
+      const { setup, platform, runner } = (await own()).health;
+      assert.deepEqual({ setup, platform, runner }, read);
+    }
+    // Its worker running: ready and on (the worker's aboutHealth keeps the runner's words beside its logins).
+    await beat({ ok: true, codex: false, grok: true, images: ['grok'], at, setup: 'ready', platform: 'linux', runner: '0.1.1' });
+    host = await own();
+    assert.equal(host.online, true);
+    assert.deepEqual([host.health.setup, host.health.platform, host.health.runner], ['ready', 'linux', '0.1.1']);
+    // The OSes are the pairing's (a PC pairs saying its OS the same way).
+    assert.deepEqual(HOST_PLATFORMS, PAIRING_PLATFORMS);
   } finally { await sql.close(); }
 });
 
