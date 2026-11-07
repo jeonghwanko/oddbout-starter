@@ -43,6 +43,25 @@ export const PREVIEW_NOTES = Object.freeze(['run-from-walk']);
 export const DRAFT_STATES = Object.freeze(['checking', 'retaking']);
 /** Who draws a request's pictures (2026-11-06, af_generation_jobs.image_provider): `grok` (the default) or `gpt`. */
 export const IMAGE_PROVIDERS = Object.freeze(['grok', 'gpt']);
+/**
+ * What the PC runner (`npx oddbout-host`, 2026-11-07) says of the PC in its heartbeat, beside the logins (host/runner.mjs heartbeater, the
+ * worker's aboutHealth): `setup` its install step in order, a step that failed `<step>-failed` (host/runner.mjs STAGES; runner.test.mjs keeps
+ * them equal); `platform` its OS (api/host-pairing.mjs PAIRING_PLATFORMS, generation-hosts.test.mjs keeps them equal); `runner` its version.
+ */
+export const HOST_SETUP_STAGES = Object.freeze(['kit', 'python', 'sprite', 'ffmpeg', 'grok-login', 'codex-login', 'ready']);
+export const HOST_PLATFORMS = Object.freeze(['windows', 'macos', 'linux']);
+const HOST_RUNNER_CHARS = 32;
+/**
+ * Those three as his My PC card reads them (계획 1.5: "설치 3/6단계", "Windows"); anything else, and a worker before them, is null.
+ * @param {Record<string, unknown> | null | undefined} health
+ */
+const runnerSays = health => {
+  const { setup, platform, runner } = /** @type {Record<string, unknown>} */ (health ?? {});
+  const step = typeof setup === 'string' ? setup.replace(/-failed$/, '') : '';
+  return { setup: typeof setup === 'string' && HOST_SETUP_STAGES.includes(step) ? setup : null,
+    platform: typeof platform === 'string' && HOST_PLATFORMS.includes(platform) ? platform : null,
+    runner: typeof runner === 'string' && runner.length > 0 && runner.length <= HOST_RUNNER_CHARS ? runner : null };
+};
 const DRAFT_EVENTS_READ = 5;
 const CORS = { methods: 'GET, POST, PATCH, DELETE, OPTIONS', headers: 'Authorization, Content-Type, Idempotency-Key' };
 // A join code (내 PC 붙이기): made by the site for a signed-in host, copied into his PC's terminal once; 160 bits, so nobody guesses one.
@@ -374,7 +393,8 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
 
   /**
    * A creator's own host (커뮤니티 호스트): his settings, whether he is on now, today's jobs and live keys, and his subscriptions as his worker
-   * last checked them (`health` — the site's My agents shows them on his Codex and Grok cards). A removed host is none.
+   * last checked them (`health` — the site's My agents shows them on his Codex and Grok cards), with what his PC's runner says of the PC
+   * (runnerSays: the My PC card tells installing from a login to do). A removed host is none.
    * @param {string} owner
    */
   async function ownHost(owner) {
@@ -391,7 +411,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       health: { codex: data.worker_health?.codex === true, grok: data.worker_health?.grok === true,
         // The pictures it draws now (its worker's `images`, 2026-11-06): GPT's only with codex ok. Null from a worker that says none.
         images: Array.isArray(data.worker_health?.images) ? data.worker_health.images.filter((/** @type {unknown} */ name) => IMAGE_PROVIDERS.includes(/** @type {string} */ (name))) : null,
-        checkedAt: typeof data.worker_health?.at === 'string' ? data.worker_health.at : null },
+        checkedAt: typeof data.worker_health?.at === 'string' ? data.worker_health.at : null, ...runnerSays(data.worker_health) },
       keys: /** @type {{ expires_at: string, enabled: boolean }[]} */ (keys ?? []).filter(k => k.enabled && Date.parse(k.expires_at) > Date.now()).map(k => ({ expiresAt: k.expires_at })) };
   }
   /** @type {(row: { id: string, name: string, approved: boolean, enabled: boolean, accepts_any: boolean, billing: string, daily_limit: number }) => object} */
