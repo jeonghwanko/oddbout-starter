@@ -23,7 +23,7 @@
 //   makes them his profile set when the package is registered.
 import { createHash, randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { appendFile, copyFile, cp, mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { appendFile, copyFile, cp, mkdir, open, readFile, readdir, rename, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ASK_EXIT, NOT_STARTED_EXIT, judgeOutcome, readOutcome } from './sprite-outcome.mjs';
@@ -262,36 +262,49 @@ const ms = value => Number.isFinite(value) && value >= 0 ? Math.round(value) : n
 export function judgmentLine({ id, at, job, item, kind, mode, decidedBy, final, pixels = null, codex = null, shadow = false, images = null }) {
   return { v: JUDGE_ARCHIVE_VERSION, id, at: at.toISOString(), job: String(job ?? '').slice(0, 80) || null, item: String(item ?? '').slice(0, 160) || null,
     kind, mode, decidedBy, final: verdictChecks(kind, kind === 'side' ? { checks: final } : final),
+    // pixels.ms: the judge's own time (its measures); wallMs: the whole motions.py call, the interpreter's start and imports included —
+    // what a judgment costs (in codex mode, what the shadow adds).
     pixels: pixels ? { model: known(pixels.model), observed: known(pixels.observed), checks: verdictChecks(kind, kind === 'side' ? { checks: pixels.checks } : pixels.checks),
-      measures: numbersOnly(pixels.measures ?? {}), ms: ms(pixels.ms) } : null,
+      measures: numbersOnly(pixels.measures ?? {}), ms: ms(pixels.ms), wallMs: ms(pixels.wallMs) } : null,
+    // codex.wallMs: the whole judge call, og's wait for a free codex slot included (walk and run are judged at once); null for a verdict
+    // codex made in an earlier run of the stage and reused here (`reused`, its checks still the reference).
     codex: codex ? { checks: verdictChecks(kind, kind === 'side' ? { checks: codex.checks } : codex.checks), model: known(codex.model), effort: known(codex.effort),
-      observed: known(codex.observed), ms: ms(codex.ms) } : null,
+      observed: known(codex.observed), wallMs: ms(codex.wallMs), ...(codex.reused ? { reused: true } : {}) } : null,
     ...(shadow ? { shadow: true } : {}), ...(images?.length ? { images } : {}) };
 }
 /**
  * The archive in `dir` (`<root>/judge-archive`). `note(entry, files)` appends a judgmentLine and, with `imageDays`, copies `files` (the pixel
  * judge's pictures; a strip's .png beside its .json) into `images/<day>/<id>/`, named `<index>-<basename>` so the pixel judge can read them
- * again. `prune()` removes the picture days older than `imageDays` (all of them at 0) and resolves how many went.
+ * again, the folder's time set to the line's. Pictures that cannot be copied leave none (no part of them) and the line goes in without
+ * them. `prune()` removes each picture folder whose time is `imageDays` old (all of them at 0), then the emptied days, and resolves how
+ * many folders went; it runs with the worker's daily prune, so a picture goes within a day after its days are up.
  */
 export function createJudgeArchive({ dir, imageDays = 0, now = () => new Date() }) {
   const day = at => at.toISOString().slice(0, 10);
+  /** The pictures copied into `into`, or null (none left behind) when any could not be. */
+  async function copied(into, files, at) {
+    try {
+      await mkdir(into, { recursive: true });
+      const images = [];
+      for (const [index, file] of files.entries()) {
+        const name = `${index}-${path.basename(file)}`;
+        await copyFile(file, path.join(into, name));
+        images.push(name);
+        const png = file.replace(/\.json$/, '.png');
+        if (png !== file && existsSync(png)) await copyFile(png, path.join(into, `${index}-${path.basename(png)}`));
+      }
+      await utimes(into, at, at);
+      return images;
+    } catch {
+      await rm(into, { recursive: true, force: true }).catch(() => {});
+      return null;
+    }
+  }
   return {
     async note(entry, files = []) {
       try {
         const at = now(), id = randomBytes(8).toString('hex');
-        let images = null;
-        if (imageDays && files.length) {
-          const into = path.join(dir, 'images', day(at), id);
-          await mkdir(into, { recursive: true });
-          images = [];
-          for (const [index, file] of files.entries()) {
-            const name = `${index}-${path.basename(file)}`;
-            await copyFile(file, path.join(into, name));
-            images.push(name);
-            const png = file.replace(/\.json$/, '.png');
-            if (png !== file && existsSync(png)) await copyFile(png, path.join(into, `${index}-${path.basename(png)}`));
-          }
-        }
+        const images = imageDays && files.length ? await copied(path.join(dir, 'images', day(at), id), files, at) : null;
         await mkdir(dir, { recursive: true });
         // One appendFile per line: a line is written whole or, on a crash, read back as a bad line and skipped (scripts/judge-eval.mjs).
         await appendFile(path.join(dir, `judgments-${day(at).slice(0, 7)}.jsonl`), JSON.stringify(judgmentLine({ ...entry, id, at, images })) + '\n');
@@ -299,10 +312,17 @@ export function createJudgeArchive({ dir, imageDays = 0, now = () => new Date() 
       } catch { return null; }
     },
     async prune() {
-      const folder = path.join(dir, 'images'), oldest = day(new Date(now().getTime() - imageDays * 86_400_000));
+      const folder = path.join(dir, 'images'), cutoff = now().getTime() - imageDays * 86_400_000;
       let removed = 0;
-      for (const name of await readdir(folder).catch(() => []))
-        if (/^\d{4}-\d{2}-\d{2}$/.test(name) && (!imageDays || name < oldest)) { await rm(path.join(folder, name), { recursive: true, force: true }); removed += 1; }
+      for (const name of await readdir(folder).catch(() => [])) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(name)) continue;
+        const days = path.join(folder, name);
+        for (const id of await readdir(days).catch(() => [])) {
+          const at = imageDays ? await stat(path.join(days, id)).then(s => s.mtimeMs, () => -Infinity) : -Infinity;
+          if (at <= cutoff) { await rm(path.join(days, id), { recursive: true, force: true }); removed += 1; }
+        }
+        if (!(await readdir(days).catch(() => [])).length) await rm(days, { recursive: true, force: true });
+      }
       return removed;
     },
   };
@@ -1141,7 +1161,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
     const saved = await readFile(verdictFile, 'utf8').then(JSON.parse, () => null), kept = codex.parse(saved);
     if (kept) return { verdict: kept, record: saved, status: verdictKeyStatus(saved, key), by: decidedBy(saved) };
     await rm(pixelFile, { force: true });
-    const ran = await motionsPy(['pixel-judge', kind, ...pixelArgs, pixelFile]);
+    const pixelStarted = Date.now(), ran = await motionsPy(['pixel-judge', kind, ...pixelArgs, pixelFile]), pixelWall = Date.now() - pixelStarted;
     const raw = ran.code === 0 ? await readFile(pixelFile, 'utf8').then(JSON.parse, () => null) : null;
     const pixels = raw ? checkedPixels(kind, raw) : null;
     if (!pixels) return { pixelCode: ran.code === 0 ? 'invalid' : ran.code };
@@ -1174,22 +1194,26 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
     const verdict = codex.parse(record);
     if (!verdict) return { pixelCode: 'invalid' };
     await writeWhole(verdictFile, JSON.stringify(record));
-    await archive?.note({ job: current?.id, item, kind, mode: judges, decidedBy: by, final: checks, pixels: pixelPart(raw, pixels),
-      codex: asked?.fresh ? codexPart(kind, asked, took) : null }, pixelArgs);
+    // A codex verdict an earlier run of this stage saved (it stopped before the verdict above was written) is reused: its checks still go in.
+    await archive?.note({ job: current?.id, item, kind, mode: judges, decidedBy: by, final: checks, pixels: pixelPart(raw, pixels, pixelWall),
+      codex: asked ? codexPart(kind, asked, asked.fresh ? took : null) : null }, pixelArgs);
     return { verdict, record, status, by, open };
   }
-  /** The archive's pixel part: the checked answer, its measures (numbers only) and its own time. */
-  const pixelPart = (raw, pixels) => ({ model: PIXEL_JUDGE.model, observed: pixels.model, checks: pixels.checks, measures: raw?.measures, ms: raw?.measures?.ms });
-  /** The archive's codex part of a verdict codex made now: its checks, the model asked and observed, and the call's time. */
-  const codexPart = (kind, made, took) => ({ checks: verdictChecks(kind, made.verdict), model: made.record?.judge?.model, effort: made.record?.judge?.effort,
-    observed: made.record?.judge?.observed?.model, ms: took });
+  /** The archive's pixel part: the checked answer, its measures (numbers only), its own time and the whole call's. */
+  const pixelPart = (raw, pixels, wallMs) => ({ model: PIXEL_JUDGE.model, observed: pixels.model, checks: pixels.checks, measures: raw?.measures,
+    ms: raw?.measures?.ms, wallMs });
+  /** The archive's codex part: its checks, the model asked and observed, and the call's time (null: a verdict reused, not made now). */
+  const codexPart = (kind, made, wallMs) => ({ checks: verdictChecks(kind, made.verdict), model: made.record?.judge?.model, effort: made.record?.judge?.effort,
+    observed: made.record?.judge?.observed?.model, wallMs, reused: wallMs === null });
   /** The pixel judge beside codex (codex mode, an archive kept): its answer for the archive, or null. It never decides anything. */
   async function pixelsOn(kind, pixelArgs, pixelFile) {
     try {
       await rm(pixelFile, { force: true });
+      const started = Date.now();
       if ((await motionsPy(['pixel-judge', kind, ...pixelArgs, pixelFile])).code !== 0) return null;
+      const wallMs = Date.now() - started;
       const raw = await readFile(pixelFile, 'utf8').then(JSON.parse, () => null), pixels = raw ? checkedPixels(kind, raw) : null;
-      return pixels ? pixelPart(raw, pixels) : null;
+      return pixels ? pixelPart(raw, pixels, wallMs) : null;
     } catch { return null; }
   }
   /** A verdict the pixels had a hand in, as a `tried` entry or an event marks it: who decided, and the checks they left open. */

@@ -1834,7 +1834,7 @@ test('the judgment archive: one line per judgment with checks, numbers and model
     decidedBy: 'pixels', final: { ...pass5, notes: 'no' }, pixels: { model: 'pixels-v1', observed: 'pixels-v1', checks: { ...pass5, side: 'unknown', extra: 'x' },
       measures: { ms: 80, words: 'gone' }, ms: 80 } });
   assert.deepEqual(line, { v: 1, id: 'x', at: '2026-11-07T01:02:03.000Z', job: 'j', item: 'side-0-a/take-0', kind: 'side', mode: 'hybrid', decidedBy: 'pixels',
-    final: pass5, pixels: { model: 'pixels-v1', observed: 'pixels-v1', checks: { ...pass5, side: 'unknown' }, measures: { ms: 80 }, ms: 80 }, codex: null });
+    final: pass5, pixels: { model: 'pixels-v1', observed: 'pixels-v1', checks: { ...pass5, side: 'unknown' }, measures: { ms: 80 }, ms: 80, wallMs: null }, codex: null });
 
   const root = await mkdtemp(path.join(tmpdir(), 'judge-archive-'));
   await writeFile(path.join(root, 'look.png'), 'look');
@@ -1854,14 +1854,21 @@ test('the judgment archive: one line per judgment with checks, numbers and model
   assert.deepEqual((await readdir(path.join(root, 'b', 'images', '2026-11-01', id))).sort(), ['0-look.png', '1-side-walk.strip.json', '1-side-walk.strip.png']);
   const [first] = await archived(path.join(root, 'b'));
   assert.deepEqual([first.id, first.images, first.at], [id, ['0-look.png', '1-side-walk.strip.json'], '2026-11-01T10:00:00.000Z']);
-  now = new Date('2026-11-04T09:00:00Z');
+  // A picture folder goes when its own time is the days old — not a calendar day later.
+  now = new Date('2026-11-04T09:59:00Z');
   assert.equal(await kept.prune(), 0, 'three days are kept');
-  now = new Date('2026-11-05T09:00:00Z');
+  now = new Date('2026-11-04T10:00:00Z');
   assert.equal(await kept.prune(), 1);
-  assert.equal(existsSync(path.join(root, 'b', 'images', '2026-11-01')), false);
+  assert.equal(existsSync(path.join(root, 'b', 'images', '2026-11-01')), false, 'the emptied day goes too');
   assert.equal((await archived(path.join(root, 'b'))).length, 1, 'the lines stay');
-  // A picture that cannot be read: no line, no throw (a judgment never waits on the archive).
-  assert.equal(await kept.note(entry, [path.join(root, 'missing.png')]), null);
+  // A picture that cannot be read: the line goes in without pictures, none left half copied (a judgment never waits on the archive).
+  const lost = await kept.note(entry, [path.join(root, 'look.png'), path.join(root, 'missing.png')]);
+  const lostLine = (await archived(path.join(root, 'b'))).find(l => l.id === lost);
+  assert.deepEqual([Boolean(lost), lostLine?.images, existsSync(path.join(root, 'b', 'images', '2026-11-04', String(lost)))], [true, undefined, false]);
+  // At 0 days (pictures turned off) the next prune removes every picture kept before.
+  await kept.note(entry, files);
+  assert.equal(await createJudgeArchive({ dir: path.join(root, 'b'), now: () => now }).prune(), 1);
+  assert.deepEqual(await readdir(path.join(root, 'b', 'images')), []);
 });
 
 test('hybrid with an archive: each new judgment goes in once, codex with its time only when it judged now', async () => {
@@ -1871,11 +1878,25 @@ test('hybrid with an archive: each new judgment goes in once, codex with its tim
   assert.deepEqual(lines.map(l => [l.item, l.mode, l.decidedBy, l.final.whole, l.pixels.checks.side, l.pixels.ms, l.codex?.model ?? null]),
     [['side-0-a/take-0', 'hybrid', 'pixels', 'fail', 'unknown', 90, null], ['side-0-a/take-1', 'hybrid', 'pixels+codex', 'pass', 'unknown', 90, JUDGE.model]]);
   assert.equal(lines[0].job, run.job.id);
-  assert.equal(typeof lines[1].codex.ms, 'number');
+  assert.deepEqual([typeof lines[1].codex.wallMs, lines[1].codex.reused, typeof lines[1].pixels.wallMs], ['number', undefined, 'number']);
   assert.deepEqual(lines[1].codex.checks, pass5);
   assert.ok(!JSON.stringify(lines).includes('boxer'), 'no notes in the archive');
   await run.again();
   assert.equal((await archived(dir)).length, 2, 'a stage run again judges nothing and archives nothing');
+});
+
+test('hybrid with an archive: a codex verdict saved before a stop is reused, and its checks still go in (no time: not judged now)', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'judge-archive-reused-')), archive = createJudgeArchive({ dir });
+  // The take's pixels left side open; codex judged it, and the stage stopped before the take's own verdict was written.
+  const run = await sideStage('hybrid', [pixelSide({}), pixelSide({ side: 'pass' }), pixelSide({})],
+    [{ checks: { ...pass5, side: 'fail' }, notes: 'A three-quarter view.' }], { archive });
+  assert.equal(run.asked(), 1);
+  await rm(path.join(run.folder, 'take-0.verdict.json'));
+  run.calls.length = 0;
+  await run.again();
+  assert.equal(run.asked(), 0, 'codex is not asked again');
+  const again = (await archived(dir)).filter(l => l.item === 'side-0-a/take-0').at(-1);
+  assert.deepEqual([again.decidedBy, again.codex.checks.side, again.codex.wallMs, again.codex.reused], ['pixels+codex', 'fail', null, true]);
 });
 
 test('codex with an archive: the pixel judge runs beside it and never decides; without an archive it does not run', async () => {
