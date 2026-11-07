@@ -757,12 +757,15 @@ test('the sign-in-first address lists exactly what /mcp lists and says the same;
       // Default A (2026-11-08): the hosted request now explains the ten-minute deadline and no motion-approval gate.
       const request = tools.find(t => t.name === 'request_hosted_fighter');
       assert.match(request.description, /default to A after ten minutes/);
-      assert.match(request.description, /without motion approval/);
-      assert.equal(hash(tools), '232be1eaec05ee27d1fb1026356362a0eedad2da6a871317229cb4448511f423');
+      assert.match(request.description, /registration follows file validation/);
+      assert.match(request.inputSchema.properties.description.description, /Character artwork brief only/);
+      assert.match(request.inputSchema.properties.delegate.description, /does not grant app permissions/);
+      // Follow-up discovery and artwork-only briefs (2026-11-08): descriptions change, not the inventory or permission hints.
+      assert.equal(hash(tools), '9f8af89f2d5d6f72ff86bc25033e83f81a623bdb2d44463fadda1458ee0c3f25');
       // Both addresses retain the same inventory when the comparison template metadata is omitted.
       const prior = structuredClone(tools), meta = prior.find(t => t.name === 'get_hosted_fighter')._meta;
       delete meta.ui; delete meta['openai/outputTemplate'];
-      assert.equal(hash(prior), 'ab6185f75c809f8b78865663b5ea81f15b003eaff1b6422e7228fa8e8c15c281');
+      assert.equal(hash(prior), '0041b5638826dd6da1d71894488adb79aed38939d7cd228b3503551ef098972e');
     }
     // ChatGPT's published app 1.0.3 (docs/records/CLOUD-PLUGIN-REVIEW.md): four of its twelve tools are listed with their reviewed bytes (nine
     // until 2단계 B, 16a9ae15…). prepare_fighter_registration, upload_fighter_asset and submit_fighter_registration took a `kind`, and a call

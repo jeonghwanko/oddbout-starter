@@ -40,6 +40,7 @@ test('each merged tool lists its selector, needs one sign-in, and is as conseque
   const hints = name => { const a = tools.find(t => t.name === name).annotations; return [a.readOnlyHint, a.destructiveHint, a.idempotentHint, a.openWorldHint]; };
   // Reads stay reads; a write is destructive if any member is, retry-safe only if all are, open-world if any is.
   assert.deepEqual(hints('get_my_fighters'), [true, false, true, false]);
+  assert.deepEqual(hints('get_hosted_fighter'), [true, false, true, false]);
   assert.deepEqual(hints('check_creator_file'), [true, false, true, true]);
   assert.deepEqual(hints('upload_fighter_asset'), [false, false, true, true]);
   assert.deepEqual(hints('prepare_fighter_registration'), [false, false, true, true]);
