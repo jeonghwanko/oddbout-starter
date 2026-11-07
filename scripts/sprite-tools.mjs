@@ -26,7 +26,10 @@ export const REQUIRED_TOOLS = ['ffmpeg', 'ffprobe', 'img2webp'];
 /**
  * One tool's readiness: `install` says who installs it how, for every status but ok.
  * @typedef {{ actor: string, command: string, sudo?: boolean, note?: string }} Install
- * @typedef {{ status: string, required: boolean, path?: string, version?: string | null, reason?: string, effectWhenMissing?: string, install?: Install }} Tool
+ * RIFE's resident binary (`serve`, a working RIFE only): ok | missing (sprite:setup installs it) | off | not-offered | broken.
+ * @typedef {{ status: string, path?: string, reason?: string, effectWhenMissing?: string, install?: Install }} Serve
+ * @typedef {{ status: string, required: boolean, path?: string, version?: string | null, reason?: string, effectWhenMissing?: string, install?: Install,
+ *   serve?: Serve }} Tool
  * @typedef {{ spriteRoot?: string, python?: string, env?: NodeJS.ProcessEnv, platform?: NodeJS.Platform, arch?: NodeJS.Architecture,
  *   probe?: typeof runProbe, find?: typeof which, rife?: boolean }} ToolOptions  spriteRoot is required unless env is given.
  */
@@ -79,10 +82,37 @@ export function img2webpInstall(platform = process.platform, arch = process.arch
 }
 
 // sprite_gen.api.rife_status: the engine's own locate-and-check, as a status that never installs (vendor/sprite-gen/docs/api.md).
+// A RIFE that works also gets `serve`: the resident binary (rife.serve_executable) the engine runs instead of calling the binary
+// once per frame. `missing` only where `rife install` would put one beside this binary: the ncnn backend, a release pinned for
+// this platform and machine (Windows and Linux x86-64, rife_install.SERVE_ZIP_SHA256), and this RIFE the one it installed.
 const RIFE_PROBE = `
-import json
+import json, os, platform
+from pathlib import Path
 from sprite_gen.api import rife_status
-print(json.dumps(rife_status()))
+found = rife_status()
+if found.get("status") == "ok":
+    def serve_status():
+        from sprite_gen.video import rife, rife_install
+        if rife.backend() != "ncnn":
+            return {"status": "not-offered", "reason": "RIFE runs on PyTorch here (SPRITE_GEN_RIFE_BACKEND=torch), not the binary"}
+        binary = Path(found["path"])
+        serve = rife.serve_executable(binary)
+        if serve:
+            return {"status": "ok", "path": str(serve)}
+        if os.environ.get("SPRITE_GEN_RIFE_SERVE") is not None:
+            return {"status": "off", "reason": "SPRITE_GEN_RIFE_SERVE is set empty: the binary runs once per frame"}
+        name = rife.platform_release()
+        machines = rife_install.ZIP_MACHINES.get(name)
+        if not rife_install.SERVE_ZIP_SHA256.get(name) or (machines and platform.machine().lower() not in machines):
+            return {"status": "not-offered", "reason": f"no resident binary is released for {name or 'this platform'} {platform.machine()}"}
+        if binary != rife.installed_binary().resolve():
+            return {"status": "not-offered", "reason": f"rife install puts it beside {rife.installed_binary()}, not beside this RIFE"}
+        return {"status": "missing"}
+    try:
+        found["serve"] = serve_status()
+    except Exception as error:
+        found["serve"] = {"status": "broken", "reason": str(error)}
+print(json.dumps(found))
 `;
 
 /**
@@ -97,7 +127,12 @@ export async function inspectRife({ python, env, platform = process.platform, pr
   const result = await probe(python, ['-c', RIFE_PROBE], { env: { ...env, PYTHONUTF8: '1' }, timeout: 120000 });
   let found;
   try { found = JSON.parse(/** @type {string} */ (result.output.trim().split('\n').at(-1))); } catch { found = { status: 'broken', reason: result.output.trim().slice(-300) || 'rife probe failed' }; } // split gives at least one line
-  if (found.status === 'ok') return { ...found, ...optional };
+  if (found.status === 'ok') {
+    // Without the resident binary RIFE works, only slower: no warning, but sprite:setup installs it where it can.
+    if (found.serve?.status === 'missing') found.serve = { ...found.serve, effectWhenMissing: 'the loop alignment starts RIFE once per frame, about half as fast; the frames are the same',
+      install: { actor: 'agent', command: SETUP, note: 'Runs sprite-gen rife install: keeps this RIFE and puts the resident binary (rife-serve-20221029-1, SHA-256 pinned, about 2-3 MB) beside it after its check frame.' } };
+    return { ...found, ...optional };
+  }
   if (found.status === 'missing') return { ...found, ...optional, install };
   // Files present but the check frame failed: usually no Vulkan. Reinstalling does not help.
   return { ...found, ...optional, install: platform === 'linux' ? userInstall(VULKAN_INSTALL, platform)

@@ -42,7 +42,8 @@ ODDBOUT의 생성 워커가 ODDBOUT 쪽 계정으로 만든다. 작업 공간·�
 
   Linux 서버에 GPU가 없으면 RIFE용 Vulkan도 넣는다: `sudo apt install libvulkan1 mesa-vulkan-drivers`(없어도 생성은 된다).
 - `img2webp`와 RIFE는 `sprite:setup`이 sudo 없이 받는다(아래). 준비자가 따로 설치하지 않는다.
-- 디스크: 설치에 약 340MB가 든다(2026-10-23 Windows 실측: sprite-gen 63MB, venv 100MB, node_modules 102MB, 그 위에 RIFE 약 35MB).
+- 디스크: 설치에 약 340MB가 든다(2026-10-23 Windows 실측: sprite-gen 63MB, venv 100MB, node_modules 102MB, 그 위에 RIFE 약 35MB,
+  RIFE 상주 바이너리 약 7MB).
   RIFE 압축 파일은 받는 동안 약 430MB를 임시로 쓴다.
   캐릭터 작업 폴더는 생성 원본, 시도 횟수, 영상 사용 여부에 따라 크게 달라진다. 여유 5GB 이상을 권장한다.
 - 외부 접속이 필요한 곳:
@@ -74,6 +75,13 @@ npm run sprite:status
   - **RIFE:** 걷기·달리기 루프 이음새를 고친다. sprite-gen의 `rife install`(rife-ncnn-vulkan 20221029, SHA-256 고정, 사용자 데이터 폴더)을
     부르고, sprite-gen이 이미 찾는 RIFE가 있으면 건너뛴다. 확인 프레임이 실패하면(대개 Vulkan 없음) 설치를 실패시키지 않고 경고와 다음 명령을 남긴다.
     RIFE가 없으면 루프는 촬영된 그대로 잘리고 경고가 남는다.
+  - **RIFE 상주 바이너리**(`rife-ncnn-vulkan-serve`): RIFE를 프레임마다 새로 띄우지 않고 한 번 띄워 둔 채 쓴다. 고리 정렬이 Windows에서
+    약 1.9배, Linux에서 약 2.4배 빨라지고 프레임은 바이트까지 같다. 같은 `rife install`이 sprite-gen-agent 릴리스
+    `rife-serve-20221029-1`(SHA-256 고정)을 받아 RIFE 옆에 두고, RIFE 자신과 같은 확인 프레임을 내야만 남긴다. 받지 못하거나 다르면
+    두지 않을 뿐 설치는 실패하지 않는다(RIFE는 예전처럼 프레임마다 뜬다). 상주 바이너리가 생기기 전에 RIFE를 깐 작업 공간도
+    `sprite:setup`을 다시 돌리면 받는다(RIFE는 다시 받지 않고 확인만 한다). Windows·Linux x86-64만이고, macOS는 RIFE만 쓴다.
+    `rife install`이 깐 RIFE(사용자 데이터 폴더) 옆에만 둔다 — `SPRITE_GEN_RIFE`·PATH로 찾은 다른 RIFE나, RIFE를 PyTorch로 돌리는
+    호스트(`SPRITE_GEN_RIFE_BACKEND=torch`)에는 받지 않는다. `SPRITE_GEN_RIFE_SERVE=`(빈 값)으로 끌 수 있다.
   - **ffmpeg·ffprobe:** 점검만 하고, 없으면 위 표의 명령을 준비자 몫으로 알린다.
   - 끝에 도구별 상태(`ok`·`missing`·`broken`)를 출력한다. 키트가 받는 도구(img2webp)를 받지 못했을 때만 종료 코드가 1이다.
 - 설치한 커밋 SHA를 작업 기록(`creation-notes.md`)에 남긴다.
@@ -84,6 +92,8 @@ npm run sprite:status
 - `npm run sprite:status` 통과는 설치 확인일 뿐이다. 로그인이나 구독 사용 가능 여부를 뜻하지 않는다.
   JSON의 `tools`에 `ffmpeg`·`ffprobe`·`img2webp`·`rife`가 각각 `status`(`ok`·`missing`·`broken`)와 `install`(`actor`: `agent`면 에이전트가
   `npm run sprite:setup`을 실행, `user`면 준비자가 실행할 명령)로 나온다. `tools.status`가 `ready`가 아니면 생성을 시작하지 않는다.
+  작동하는 RIFE에는 `rife.serve`(상주 바이너리)가 붙는다: `ok`, `missing`(`sprite:setup`이 받는다, `install` 포함), `off`(꺼 둠),
+  `not-offered`(이 PC에는 받을 것이 없음, `reason`), `broken`. 어느 것도 경고나 생성 조건이 아니다 — 없으면 느릴 뿐 프레임은 같다.
 - **MCP `check_creation_readiness`** 를 캐릭터의 첫 생성 전, 작업 공간 재시작 뒤, 등록 전에 부른다. 상태별 의미는 [연결 안내](CONNECTION-READINESS.md)를 따른다.
   연결만 확인할 때 `purpose: "connection"`, 완성된 패키지 등록 때 `purpose: "registration"`을 지정한다.
   두 목적은 생성 구독 질문·키트 업데이트·Python 설치를 생략한다. 새 생성 준비만 기본 `purpose: "generation"`이다.
