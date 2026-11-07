@@ -7,11 +7,11 @@
   "locales": {
     "ko-KR": {
       "subtitle": "내 선수를 만들고 함께 대결하기",
-      "description": "나만의 격투 선수를 만들고, 두 후보 중 마음에 드는 외형을 고르세요. 동작을 검토하고 선수를 등록해 연습 대결이나 컵에 참가할 수 있습니다. 공방과 세계에 쓴 글은 공개됩니다. 공식 호스트에서 선수를 만들면 실패하거나 취소해도 실제 사용한 토큰이 차감되며 환불되지 않습니다. 외부 호스트에 설명이나 그림을 보내기 전에는 동의를 구합니다."
+      "description": "나만의 격투 선수를 만들고 기존 요청의 진행 상태와 미리보기를 확인하세요. 두 외형 시안이 준비된 뒤 10분 동안 선택·수정 요청이 없으면 A가 자동 선택됩니다. 동작 제작과 필수 파일 검증 후 제작 중 상태로 자동 등록하며, 동작 확인과 공개 출전은 사이트에서 진행합니다. 공방과 세계에 쓴 글은 공개됩니다. 공식 호스트는 실패·취소 시에도 실제 사용 토큰을 차감하며 반환하지 않습니다. 외부 호스트로 설명·그림을 보내기 전에는 동의를 구합니다."
     },
     "en": {
       "subtitle": "Create and play with fighters",
-      "description": "Create a fighter, choose between two looks, and review the moves. Register your fighter to practise or enter cups. Workshop and world posts are public. Creating on the official host deducts the tokens used, even if the request fails or is cancelled. Used tokens are not refunded. ODDBOUT asks before sending your description or pictures to an external host."
+      "description": "Create a fighter and follow your existing request for progress and previews. If you do not choose or request a revision within ten minutes after the two looks are ready, A is selected automatically. Motion generation and required file checks lead to automatic production registration; check motions and enter public play on the website. Workshop and world posts are public. Official-host usage deducts spent tokens even on failure or cancellation; spent tokens are not refunded. External-host sharing requires consent."
     }
   }
 }
