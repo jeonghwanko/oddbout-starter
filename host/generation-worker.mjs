@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-check
 // 호스팅 생성 워커 (P1, 2026-10-27). Runs as the generation service user (`og worker run`, a systemd user service from `og worker install`),
 // or on a community host's PC as his own account (2026-10-28, `npm run host:start`); the API tells it only the jobs meant for that host.
 // It reaches the API outward only: a heartbeat with the subscriptions' health every minute, a claim of one stage of one job at a time,
@@ -18,9 +19,13 @@ import { ASKS, CODEX_CWD, FRONT_JUDGE_SCHEMA, JUDGE_ARCHIVE_DAYS, JUDGE_ARCHIVE_
 import { codexSessionFacts, codexTokensSince, codexUsage } from './codex-usage.mjs';
 
 // <root>/bin holds this file in both installs (/srv/oddbout-gen on ODDBOUT's PC, a host's own folder in user mode).
+/**
+ * @typedef {{ ok: boolean, codex: boolean, grok: boolean, images: string[], at: string | null } & Record<string, any>} Health
+ * @typedef {Record<string, any> & { id: string, status: string, leaseToken: string }} Job  A claimed stage's job, as the API sends it.
+ */
 const ROOT = process.env.OG_ROOT || path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 /** The kit's sprite-gen venv Python (scripts/sprite-gen.mjs `spritePython`): Windows keeps a venv's programs in Scripts\ as .exe. */
-export const spritePython = (kit, platform = process.platform) =>
+export const spritePython = (/** @type {string} */ kit, /** @type {string} */ platform = process.platform) =>
   path.join(kit, 'vendor', 'sprite-gen', '.venv', ...(platform === 'win32' ? ['Scripts', 'python.exe'] : ['bin', 'python']));
 export const TIMING = Object.freeze({ heartbeatMs: 60_000, healthMs: 3_600_000, idleMs: 15_000, idleMaxMs: 60_000, renewMs: 60_000, errorMs: 60_000,
   pruneMs: 86_400_000, askedRecheckMs: 900_000, beatFloorMs: 10_000 });
@@ -28,6 +33,7 @@ export const TIMING = Object.freeze({ heartbeatMs: 60_000, healthMs: 3_600_000, 
  * The wait after a claim that took nothing (2026-11-07): idleMs, doubling to idleMaxMs while nothing comes, idleMs again after a job. Two
  * workers claiming every 15 s and beating every minute were 83 % of the project's Edge requests (the free plan's month is 500,000); a request
  * now waits at most a minute for an idle worker.
+ * @param {number} wait
  */
 export const nextIdleWait = wait => Math.min(wait * 2, TIMING.idleMaxMs);
 /**
@@ -81,11 +87,11 @@ export function createBeats(now = Date.now) {
  * A motions stage usually takes 15-30 minutes; og stops any single run at 90 (RUN_TIMEOUT).
  */
 export const STAGE_LIMIT_MS = Object.freeze({ queued: 20 * 60_000, appearance: 45 * 60_000, motions: 150 * 60_000, submitting: 30 * 60_000 });
-export const stageLimitMs = status => STAGE_LIMIT_MS[status] ?? 150 * 60_000;
-/** Days a closed job's folder stays (worker.env ODDBOUT_GENERATION_KEEP_DAYS, 1-90): the requester's words and pictures are his. */
+export const stageLimitMs = (/** @type {string} */ status) => /** @type {Record<string, number>} */ (STAGE_LIMIT_MS)[status] ?? 150 * 60_000;
+/** Days a closed job's folder stays (worker.env ODDBOUT_GENERATION_KEEP_DAYS, 1-90): the requester's words and pictures are his. @param {unknown} value */
 export const keepDays = value => { const days = Number(value ?? 7); return Number.isInteger(days) && days >= 1 && days <= 90 ? days : 7; };
 
-/** `KEY=value` lines (no quoting, no expansion). */
+/** `KEY=value` lines (no quoting, no expansion). @param {string} text @returns {Record<string, string>} */
 export function parseEnv(text) {
   return Object.fromEntries(text.split('\n').map(line => line.trim()).filter(line => line && !line.startsWith('#'))
     .map(line => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]).filter(([key]) => /^[A-Z_][A-Z0-9_]*$/.test(key)));
@@ -105,25 +111,30 @@ export const canWork = ({ codex, grok }, configured) => Boolean(grok && (codex |
  * @param {{ codex: boolean, grok: boolean }} logins @returns {string[]}
  */
 export const imagesOf = ({ codex, grok }) => grok ? (codex ? ['grok', 'gpt'] : ['grok']) : [];
-/** A health with these logins: whether it may claim (canWork) and the pictures it draws (imagesOf), the rest kept. */
+/** A health with these logins: whether it may claim (canWork) and the pictures it draws (imagesOf), the rest kept.
+ * @param {Record<string, any>} health @param {{ codex: boolean, grok: boolean }} logins @param {string | undefined} configured @param {boolean} [ok]
+ * @returns {Health} */
 const withLogins = (health, logins, configured, ok = true) =>
-  ({ ...health, ...logins, ok: ok && canWork(logins, configured), images: imagesOf(logins) });
+  /** @type {Health} */ ({ ...health, ...logins, ok: ok && canWork(logins, configured), images: imagesOf(logins) });
 /**
  * A heartbeat's health with what the runner says of this PC (`about`, oddbout-host: `platform`, `runner`, `setup`; the site's My PC card
  * reads them). The logins' own keys always win: `about` never says a PC may claim.
+ * @param {Health} health @param {Record<string, string> | null} about
  */
 export const aboutHealth = (health, about) => about ? { ...about, ...health } : health;
-/** What of the health the server claims on (not when it was checked): a change sends the heartbeat before the next claim. */
+/** What of the health the server claims on (not when it was checked): a change sends the heartbeat before the next claim. @param {Health} health */
 export const healthKey = health => JSON.stringify([health.ok, health.codex, health.grok, health.images]);
-/** `og health` lines → { ok, codex, grok, images, at }: `ok` says this host may claim (canWork), `codex` and `grok` each login. */
+/** `og health` lines → { ok, codex, grok, images, at }: `ok` says this host may claim (canWork), `codex` and `grok` each login.
+ * @param {string} output @param {string} [at] @param {string | undefined} [configured] */
 export function parseHealth(output, at = new Date().toISOString(), configured = undefined) {
-  const ok = p => new RegExp(`^og: ${p} ok\\b`, 'm').test(output);
+  const ok = (/** @type {string} */ p) => new RegExp(`^og: ${p} ok\\b`, 'm').test(output);
   return withLogins({ at }, { codex: ok('codex'), grok: ok('grok') }, configured);
 }
 
 /**
  * This PC's worker jobs not marked closed: folder → job id. A job the requester cancelled, or that expired, while it waited for him
  * never comes back to the worker, so it would stay "open" (and block og setup) until the 14-day prune; the worker asks the API.
+ * @param {string} output @returns {Promise<Map<string, string>>}
  */
 export async function unclosedJobs(output) {
   const found = new Map();
@@ -135,6 +146,7 @@ export async function unclosedJobs(output) {
   return found;
 }
 
+/** @param {string} dir @returns {Promise<string | null>} */
 const gitHead = dir => new Promise(resolve => execFile('git', ['-C', dir, 'rev-parse', 'HEAD'], { timeout: 10_000 },
   (error, out) => resolve(error ? null : String(out).trim().slice(0, 40))));
 /**
@@ -143,6 +155,7 @@ const gitHead = dir => new Promise(resolve => execFile('git', ['-C', dir, 'rev-p
  * The models are the ones the stage asks for (`requested`, 2026-11-05): what codex recorded comes when the stage ends, as its `models` event.
  * `judges`: the worker's judges mode (generation-stages JUDGE_MODES); named with the pixel judge when it is not codex. `job`: its pictures'
  * provider (requestedModels: a grok job names Grok's image model).
+ * @param {string} kit @param {(dir: string) => Promise<string | null>} [head] @param {string} [judges] @param {any} [job]
  */
 export async function versionsEvent(kit, head = gitHead, judges = 'codex', job = null) {
   const [kitRef, engine] = await Promise.all([head(kit), head(path.join(kit, 'vendor', 'sprite-gen'))]);
@@ -160,6 +173,7 @@ export const CAPTURE_BYTES = 32 * 1024;
  * @returns {Promise<string[]>}
  */
 export async function projectDocsAt(dir) {
+  /** @type {string[]} */
   const folders = [];
   for (let at = path.resolve(dir); ; at = path.dirname(at)) {
     folders.push(at);
@@ -169,7 +183,7 @@ export async function projectDocsAt(dir) {
   return folders.reverse().flatMap(folder => ['AGENTS.md', 'AGENTS.override.md'].map(name => path.join(folder, name))).filter(file => existsSync(file));
 }
 
-/** `npm run sprite -- gen …` → `sprite gen`, `codex exec …` → `codex`: the command a stage ran through og, without its arguments. */
+/** `npm run sprite -- gen …` → `sprite gen`, `codex exec …` → `codex`: the command a stage ran through og, without its arguments. @param {string[]} args */
 export const toolName = args => {
   if (args[0] !== 'npm') return String(args[0] ?? '').slice(0, 24);
   const words = args.slice(1).filter(a => !a.startsWith('-')), i = args.indexOf('--');
@@ -181,8 +195,10 @@ export const CALL_TOOLS = 12;
  * them holds at most 2000 bytes and a finish that does not fit is refused, so at most CALL_TOOLS commands are named and the rest summed.
  */
 export function createTally() {
+  /** @type {Map<string, number[]>} */
   const by = new Map();
   return {
+    /** @param {string[]} args @param {number} code @param {number} ms */
     add(args, code, ms) {
       const name = toolName(args), t = by.get(name) ?? [0, 0, 0];
       by.set(name, [t[0] + 1, t[1] + (code === 0 ? 0 : 1), t[2] + ms / 1000]);
@@ -206,16 +222,22 @@ export function createTally() {
  * pixel tools are not recorded: run again, they make no picture.
  */
 export const FREE_SPRITE_TOOLS = Object.freeze(['extract', 'prepare', 'scale-check', 'video-loop', 'video-cycle-align', 'game-pack']);
-export const generates = args => args[0] === 'npm' && args[1] === 'run' && args[2] === 'sprite'
+export const generates = (/** @type {string[]} */ args) => args[0] === 'npm' && args[1] === 'run' && args[2] === 'sprite'
   && !FREE_SPRITE_TOOLS.includes(args[args.indexOf('--') + 1]);
 export const DISPATCH_UNKNOWN = 'dispatch-unknown';
+/**
+ * @param {string} dir @param {() => string} [now]
+ * @typedef {{ file: string, record: { tool: string, startedAt: string } }} Dispatch
+ */
 export function createDispatches(dir, now = () => new Date().toISOString()) {
   const folder = path.join(dir, 'dispatches');
   let n = 0;
+  /** @param {string} file @returns {Promise<any>} */
   const read = async file => { try { return JSON.parse(await readFile(file, 'utf8')); } catch { return null; } };
   return {
     /** The records whose run never ended on record: `{ name, tool }`. One that cannot be read counts (its run may have gone out). */
     async unended() {
+      /** @type {{ name: string, tool: string | null }[]} */
       const open = [];
       for (const name of (await readdir(folder).catch(() => [])).filter(name => name.endsWith('.json')).sort()) {
         const record = await read(path.join(folder, name));
@@ -224,7 +246,7 @@ export function createDispatches(dir, now = () => new Date().toISOString()) {
       }
       return open;
     },
-    /** Before a run: its record, or null for a command that makes no picture. A record that cannot be written refuses the run. */
+    /** Before a run: its record, or null for a command that makes no picture. A record that cannot be written refuses the run. @param {string[]} args @returns {Promise<Dispatch | null>} */
     async begin(args) {
       if (!generates(args)) return null;
       await mkdir(folder, { recursive: true });
@@ -232,10 +254,10 @@ export function createDispatches(dir, now = () => new Date().toISOString()) {
       await writeFile(file, JSON.stringify(record) + '\n', { flag: 'wx' });
       return { file, record };
     },
-    /** After the run: its exit code. Not written (a full disk), the record stays open and the stage's next claim goes to an operator. */
+    /** After the run: its exit code. Not written (a full disk), the record stays open and the stage's next claim goes to an operator. @param {Dispatch | null} started @param {number} code */
     end: (started, code) => started ? writeFile(started.file, JSON.stringify({ ...started.record, end: { code, at: now() } }) + '\n').catch(() => {})
       : Promise.resolve(),
-    /** Marks open records handed to an operator, after the server took the stage's review. */
+    /** Marks open records handed to an operator, after the server took the stage's review. @param {{ name: string }[]} open */
     async handOver(open) {
       for (const { name } of open) {
         const file = path.join(folder, name);
@@ -245,45 +267,69 @@ export function createDispatches(dir, now = () => new Date().toISOString()) {
   };
 }
 
+/**
+ * The worker routes of the API, under the worker's key; a leased route also carries the stage's lease. Replies are the API's JSON with its
+ * HTTP status beside it.
+ * @param {{ base: string, key: string, fetcher?: typeof fetch }} options
+ */
 export function createApi({ base, key, fetcher = fetch }) {
+  /** @param {Record<string, string>} [extra] */
   const headers = extra => ({ authorization: `Bearer ${key}`, ...extra });
+  /** @param {Response} response @returns {Promise<any>} */
   const json = async response => { try { return { status: response.status, ...(await response.json()) }; } catch { return { status: response.status, ok: false, code: 'bad-reply' }; } };
+  /** @param {string} route @param {unknown} body */
   const post = (route, body) => fetcher(`${base}/generation-worker/${route}`, { method: 'POST', headers: headers({ 'content-type': 'application/json' }),
     body: JSON.stringify(body), signal: AbortSignal.timeout(30_000) }).then(json);
+  /** @param {{ leaseToken: string }} job @param {Record<string, string>} [extra] */
   const leased = (job, extra) => headers({ 'x-generation-lease': job.leaseToken, ...extra });
+  /** @typedef {{ id: string, leaseToken: string, status?: string }} Leased */
   return {
     // The subscription's rate-limit reading rides along (codex-usage.mjs, 2026-10-31), for the operator: it holds nothing back.
+    /** @param {Health} health @param {unknown} [usage] */
     heartbeat: (health, usage = null) => post('heartbeat', { health, ...(usage ? { usage } : {}) }),
     // The server's public contract: its features say what a package may carry (a gait at its own frame count: gait-frames-1).
     spec: () => fetcher(`${base}/spec`, { signal: AbortSignal.timeout(30_000) }).then(json),
     // The heartbeat may ride along (createBeats): `{ health, usage }`, as the heartbeat route takes it.
+    /** @param {unknown} [beat] */
     claim: (beat = null) => post('claim', beat ?? {}),
+    /** @param {string[]} jobs */
     ended: jobs => post('ended', { jobs }),
+    /** @param {Leased} job @param {number | undefined} progress @param {unknown} [event] */
     progress: (job, progress, event) => post('progress', { jobId: job.id, leaseToken: job.leaseToken, progress, ...(event ? { event } : {}) }),
+    /** @param {Leased} job @param {string} outcome @param {unknown} result */
     finish: (job, outcome, result) => post('finish', { jobId: job.id, leaseToken: job.leaseToken, outcome, result }),
     // A stage's tokens without the lease (리뷰 2026-10-31): the lease it ran under names the run, so a second report is ignored.
+    /** @param {Leased} job @param {unknown} tokens */
     usage: (job, tokens) => post(`jobs/${job.id}/usage`, { leaseToken: job.leaseToken, stage: job.status, tokens }),
+    /** @param {Leased} job @param {unknown} evidence */
     decisions: (job, evidence) => fetcher(`${base}/generation-worker/jobs/${job.id}/decisions`, {
       method: 'POST', headers: leased(job, { 'content-type': 'application/json' }), body: JSON.stringify(evidence),
       signal: AbortSignal.timeout(140_000), redirect: 'error' }).then(json),
+    /** @param {Leased} job @param {string} name @param {BodyInit} bytes */
     async artifact(job, name, bytes) {
       const reply = await fetcher(`${base}/generation-worker/jobs/${job.id}/artifacts/${name}`, { method: 'PUT', headers: leased(job, { 'content-type': 'image/webp' }),
         body: bytes, signal: AbortSignal.timeout(120_000) }).then(json);
       if (!reply.ok) throw Object.assign(new Error(reply.code ?? 'artifact-refused'), { code: reply.code ?? 'artifact-refused' });
       return reply;
     },
+    /** @param {Leased} job @param {string} text */
     submission: (job, text) => fetcher(`${base}/generation-worker/jobs/${job.id}/submission`, { method: 'POST', headers: leased(job, { 'content-type': 'application/json' }),
       body: text, signal: AbortSignal.timeout(60_000) }).then(json),
+    /** @param {Leased} job @param {string} asset @param {BodyInit} bytes */
     asset: (job, asset, bytes) => fetcher(`${base}/generation-worker/jobs/${job.id}/submission/assets/${asset}`, { method: 'PUT',
       headers: leased(job, { 'content-type': 'image/webp' }), body: bytes, signal: AbortSignal.timeout(120_000) }).then(json),
+    /** @param {Leased} job */
     submit: job => fetcher(`${base}/generation-worker/jobs/${job.id}/submission/submit`, { method: 'POST', headers: leased(job, { 'content-type': 'application/json' }),
       body: '{}', signal: AbortSignal.timeout(60_000) }).then(json),
     // 선수 프로필 세트 (2026-10-31): the chosen front (an artifact the job already holds) and its face square, before the package goes in.
+    /** @param {Leased} job @param {unknown} front */
     profileFront: (job, front) => fetcher(`${base}/generation-worker/jobs/${job.id}/profile-front`, { method: 'POST',
       headers: leased(job, { 'content-type': 'application/json' }), body: JSON.stringify(front), signal: AbortSignal.timeout(60_000) }).then(json),
     // 정면 판정 (2026-11-03): an owner's front painting to check, and the verdict under that check's lease. Only the official host gets one.
     frontClaim: () => post('profile-fronts/claim', {}),
+    /** @param {{ id: string, leaseToken: string }} set @param {unknown} verdict */
     frontFinish: (set, verdict) => post('profile-fronts/finish', { profileSetId: set.id, leaseToken: set.leaseToken, verdict }),
+    /** @param {{ id: string, leaseToken: string }} set */
     frontRelease: set => post('profile-fronts/release', { profileSetId: set.id, leaseToken: set.leaseToken }),
   };
 }
@@ -310,21 +356,25 @@ export async function reportStageTokens(api, job, tokens, say) {
  * and a signal already aborted never fires again, so each of those ran, paid, to its end. The stage now ends with `stage-stopped`.
  */
 export const STAGE_STOPPED = 'stage-stopped';
+/** @template T @param {AbortSignal | null | undefined} signal @param {() => Promise<T>} start @returns {Promise<T>} */
 export const unlessStopped = (signal, start) => signal?.aborted
   ? Promise.reject(Object.assign(new Error(STAGE_STOPPED), { code: STAGE_STOPPED })) : start();
 /** A stage past its time limit goes to an operator. The xAI requests the stopped stage named stay with it (2026-10-30 review): the
- * operator resumes them (video-resume) rather than films them again. */
+ * operator resumes them (video-resume) rather than films them again. @param {string} status @param {any} outcome */
 export function timedOutOutcome(status, outcome) {
   const requestIds = outcome?.result?.requestIds;
   return { outcome: 'review', result: { code: `${status}-stage-timeout`, ...(Array.isArray(requestIds) && requestIds.length ? { requestIds } : {}) } };
 }
-/** A stage that found a generating run with no end on record (createDispatches) goes to an operator; the tools name what to look at. */
+/** A stage that found a generating run with no end on record (createDispatches) goes to an operator; the tools name what to look at.
+ * @param {string} status @param {{ tool: string | null }[]} open */
 export const dispatchUnknownOutcome = (status, open) => ({ outcome: 'review',
   result: { code: `${status}-${DISPATCH_UNKNOWN}`, runs: open.slice(0, 8).map(record => record.tool ?? 'unreadable') } });
 /** The provider a stage's outcome code says cannot run here now (the codex question, Grok's 429), if it does. */
-export const limitedProvider = code => ({ [ASKS]: 'codex', [GROK_LIMITED]: 'grok' })[code];
+/** @param {string | null | undefined} code @returns {'codex' | 'grok' | undefined} */
+export const limitedProvider = code => /** @type {Record<string, 'codex' | 'grok'>} */ ({ [ASKS]: 'codex', [GROK_LIMITED]: 'grok' })[/** @type {string} */ (code)];
 /** The health after a stage's outcome: a provider that cannot run here now is marked down until a check passes; the host goes on claiming
- * only when its work needs no more than the providers left (canWork: a codex question on a host that judges with pixels leaves it working). */
+ * only when its work needs no more than the providers left (canWork: a codex question on a host that judges with pixels leaves it working).
+ * @param {Health} health @param {string | null | undefined} code @param {string | undefined} [configured] @returns {Health} */
 export function healthAfter(health, code, configured = undefined) {
   const provider = limitedProvider(code);
   if (!provider) return health;
@@ -336,29 +386,34 @@ export function healthAfter(health, code, configured = undefined) {
  * doubled each time it is found limited again (the stage ends first, or a requester picks this host and meets it), at most a health
  * period. A stage that made its work with the provider ends the streak. In memory only: a restarted worker asks the check again.
  */
+/** @param {() => number} [now] @param {string | undefined} [configured] */
 export function createCooldowns(now = Date.now, configured = undefined) {
+  /** @type {Map<string, { until: number, streak: number }>} */
   const by = new Map();
   return {
-    /** Marks `provider` limited; returns how long it stays down (ms). */
+    /** Marks `provider` limited; returns how long it stays down (ms). @param {string} provider */
     limit(provider) {
       const streak = (by.get(provider)?.streak ?? 0) + 1, wait = Math.min(TIMING.askedRecheckMs * 2 ** (streak - 1), TIMING.healthMs);
       by.set(provider, { until: now() + wait, streak });
       return wait;
     },
+    /** @param {string[]} providers */
     worked(providers) { for (const provider of providers) { const held = by.get(provider); if (held) by.set(provider, { ...held, streak: 0 }); } },
+    /** @param {Health} health @returns {Health} */
     apply(health) {
-      const down = p => health[p] && !(by.get(p)?.until > now()), codex = down('codex'), grok = down('grok');
+      const down = (/** @type {'codex' | 'grok'} */ p) => health[p] && !(/** @type {number} */ (by.get(p)?.until) > now()), codex = down('codex'), grok = down('grok');
       return codex === health.codex && grok === health.grok ? health : withLogins(health, { codex, grok }, configured, health.ok);
     },
   };
 }
-/** The providers a stage's work uses, for ending a limited streak when it made its work: the job's pictures' (codex for GPT's), and Grok's clips. */
+/** The providers a stage's work uses, for ending a limited streak when it made its work: the job's pictures' (codex for GPT's), and Grok's clips.
+ * @param {string} status @param {any} job @returns {string[]} */
 export function stageProviders(status, job) {
   const pictures = imageProviderOf(job) === 'grok' ? 'grok' : 'codex';
-  return ({ appearance: [pictures], motions: [...new Set([pictures, 'grok'])] })[status] ?? [];
+  return /** @type {Record<string, string[]>} */ ({ appearance: [pictures], motions: [...new Set([pictures, 'grok'])] })[status] ?? [];
 }
 /** An error's code as the finish route takes it: a string of at most 60 characters (a child process's or a reply's code may be a number). */
-export const errorCode = (error, fallback = 'stage-error') => String(error?.code ?? fallback).slice(0, 60);
+export const errorCode = (/** @type {any} */ error, fallback = 'stage-error') => String(error?.code ?? fallback).slice(0, 60);
 
 /**
  * How a stopped run ends (2026-11-02). og passes SIGTERM on to its command's own process group and waits for it (timeout's SIGKILL comes
@@ -371,13 +426,15 @@ export const STOP_GRACE_MS = 90_000, OUTPUT_DRAIN_MS = 10_000;
  * Signals a child and everything it started: its process group (spawned detached) on Linux and macOS. Windows has no process groups and
  * no SIGTERM, and a child's own kill() ends only the child (an npm or codex launcher leaves its native program running), so there it is
  * `taskkill /T /F` on the child's tree at once, whatever the signal (mcp/generation-connection.mjs stops a device login the same way).
+ * @param {import('node:child_process').ChildProcess} child @param {NodeJS.Signals} sig @param {string} [platform]
  */
 export function stopTree(child, sig, platform = process.platform) {
   if (platform === 'win32') {
     if (Number.isInteger(child.pid)) execFile('taskkill', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true }, () => {});
     return;
   }
-  try { process.kill(-child.pid, sig); } catch { try { child.kill(sig); } catch {} }
+  try { process.kill(-(/** @type {number} */ (child.pid)), sig); }
+ catch { try { child.kill(sig); } catch {} }
 }
 /** A child of its own process group where there are groups: Windows has none (detached there opens a console of its own). */
 const ownGroup = { detached: process.platform !== 'win32', windowsHide: true };
@@ -395,9 +452,10 @@ const ownGroup = { detached: process.platform !== 'win32', windowsHide: true };
 export function run(command, args, { cwd, log, stdin, signal, graceMs = STOP_GRACE_MS, drainMs = OUTPUT_DRAIN_MS, onOutput = null, env = undefined }) {
   return new Promise(resolve => {
     if (signal?.aborted) return resolve(128 + 15);   // stopped before it began: nothing started
+    /** @type {import('node:child_process').ChildProcessWithoutNullStreams} */
     let child;
     try { child = spawn(command, args, { cwd, env, stdio: ['pipe', 'pipe', 'pipe'], ...ownGroup }); } catch { return resolve(127); }
-    const write = chunk => { if (log) appendFile(log, chunk).catch(() => {}); try { onOutput?.(chunk); } catch { /* a reader never stops the run */ } };
+    const write = (/** @type {Buffer} */ chunk) => { if (log) appendFile(log, chunk).catch(() => {}); try { onOutput?.(/** @type {any} */ (chunk)); } catch { /* a reader never stops the run */ } };
     child.stdout.on('data', write); child.stderr.on('data', write);
     // A child that ends without reading its input closes the pipe: the write's EPIPE is not the run's outcome (its exit code is),
     // and with no listener it was an uncaught exception that ended the worker and every stage on it (CI, 2026-11-02).
@@ -408,11 +466,11 @@ export function run(command, args, { cwd, log, stdin, signal, graceMs = STOP_GRA
     let stopped = false;
     const stop = () => { stopped = true; stopTree(child, 'SIGTERM'); kill = setTimeout(() => stopTree(child, 'SIGKILL'), graceMs); };
     let ended = false;
-    const end = code => {
+    const end = (/** @type {number} */ code) => {
       if (ended) return;
       ended = true; clearTimeout(kill); clearTimeout(drain); signal?.removeEventListener('abort', stop); resolve(code);
     };
-    const codeOf = (code, sig) => stopped && process.platform === 'win32' ? 128 + 9 : code ?? 128 + (sig === 'SIGKILL' ? 9 : 15);
+    const codeOf = (/** @type {number | null} */ code, /** @type {NodeJS.Signals | null} */ sig) => stopped && process.platform === 'win32' ? 128 + 9 : code ?? 128 + (sig === 'SIGKILL' ? 9 : 15);
     signal?.addEventListener('abort', stop, { once: true });
     child.on('exit', (code, sig) => { drain = setTimeout(() => end(codeOf(code, sig)), drainMs); });
     child.on('close', (code, sig) => end(codeOf(code, sig)));
@@ -431,7 +489,10 @@ export function run(command, args, { cwd, log, stdin, signal, graceMs = STOP_GRA
  */
 export function readOutput(command, args, { limitMs, graceMs = STOP_GRACE_MS, drainMs = OUTPUT_DRAIN_MS }) {
   return new Promise(resolve => {
-    let output = '', ended = false, kill, drain, child;
+    let output = '', ended = false;
+    /** @type {NodeJS.Timeout | undefined} */ let kill;
+    /** @type {NodeJS.Timeout | undefined} */ let drain;
+    /** @type {import('node:child_process').ChildProcess} */ let child;
     try { child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], ...ownGroup }); } catch { return resolve(output); }
     child.stdout?.on('data', d => { output += d; }); child.stderr?.on('data', d => { output += d; });
     const limit = setTimeout(() => { stopTree(child, 'SIGTERM'); kill = setTimeout(() => stopTree(child, 'SIGKILL'), graceMs); }, limitMs);
@@ -454,9 +515,9 @@ export const OG_READ_MS = 600_000;
 export function ogClient(og, runner = run) {
   if (typeof og !== 'string') return og;
   return {
-    run: (job, args, options) => runner(og, ['run', job, '--', ...args], options),
+    run: (/** @type {string} */ job, /** @type {string[]} */ args, /** @type {any} */ options) => runner(og, ['run', job, '--', ...args], options),
     health: () => readOutput(og, ['health'], { limitMs: OG_READ_MS }),
-    prune: days => readOutput(og, ['prune', String(days)], { limitMs: OG_READ_MS }),
+    prune: (/** @type {number} */ days) => readOutput(og, ['prune', String(days)], { limitMs: OG_READ_MS }),
   };
 }
 
@@ -494,7 +555,7 @@ export function stayAwakeCommand(platform, pid) {
   }
   return null;
 }
-/** What stayAwake said in this worker process: a refusal is said once, not at every stage. */
+/** What stayAwake said in this worker process: a refusal is said once, not at every stage. @type {Set<string>} */
 const AWAKE_SAID = new Set();
 /** How long the child must live to count as holding (PowerShell compiles its P/Invoke first, a second or two). */
 export const AWAKE_SETTLE_MS = 10_000;
@@ -507,24 +568,25 @@ export const AWAKE_SETTLE_MS = 10_000;
  */
 export function stayAwake({ platform = process.platform, pid = process.pid, spawn: start = spawn, say = () => {}, said = AWAKE_SAID,
   settleMs = AWAKE_SETTLE_MS } = {}) {
-  const once = line => {
+  const once = (/** @type {string} */ line) => {
     if (said.has(line)) return;
     said.add(line);
     try { Promise.resolve(say(line)).catch(() => {}); } catch { /* the log never stops a stage */ }
   };
   const how = stayAwakeCommand(platform, pid), none = { release() {} };
   if (!how) { once(`stay awake during stages: nothing on ${platform}`); return none; }
-  let ended = false, released = false, child;
+  let ended = false, released = false;
+  /** @type {import('node:child_process').ChildProcess} */ let child;
   /** @type {ReturnType<typeof setTimeout> | undefined} */ let settle;
-  const end = why => {
+  const end = (/** @type {string} */ why) => {
     if (ended) return;
     ended = true; clearTimeout(settle);
     if (!released) once(`stay awake during stages: ${how.how} ${why} — stages run without it`);
   };
   const held = () => { if (!ended) once(`stay awake during stages: ${how.how}`); };
   try { child = start(how.command, how.args, { stdio: 'ignore', windowsHide: true }); }
-  catch (error) { end(`did not start (${error?.code ?? error?.message ?? error})`); return none; }
-  child.on('error', error => end(`did not start (${error?.code ?? error?.message ?? error})`));
+  catch (/** @type {any} */ error) { end(`did not start (${error?.code ?? error?.message ?? error})`); return none; }
+  child.on('error', (/** @type {any} */ error) => end(`did not start (${error?.code ?? error?.message ?? error})`));
   child.on('exit', (code, signal) => end(`ended (${signal ?? `exit ${code}`})`));
   // It ends with the worker on its own: it never keeps the worker's process alive.
   child.unref?.();
@@ -661,7 +723,7 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
   const workerLog = path.join(root, 'worker.log');
   // The providers run with HOME=<root> (og), so codex keeps its sessions there.
   const sessions = path.join(process.env.CODEX_HOME || path.join(root, '.codex'), 'sessions');
-  const say = line => appendFile(workerLog, `${new Date().toISOString()} ${line}\n`).catch(() => {});
+  const say = (/** @type {string} */ line) => appendFile(workerLog, `${new Date().toISOString()} ${line}\n`).catch(() => {});
   // The brief and the judges run here, beside the kit, never inside it (generation-stages briefCommand `cwd`).
   const codexCwd = path.join(root, CODEX_CWD);
   await mkdir(codexCwd, { recursive: true });
@@ -684,9 +746,11 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
   await say(archiveDays ? `judge archive keeps its lines ${archiveDays} days` + (imageDays ? `, the pictures it judged ${imageDays} days or until their job goes` : ', no pictures')
     : 'judge archive off (ODDBOUT_GENERATION_JUDGE_ARCHIVE): no lines, no shadow pixel judge');
   /** Whether a job folder the archive's pictures name is gone (og purge, og prune): its pictures go with it. */
-  const jobGone = name => !existsSync(path.join(kit, 'output', name));
+  const jobGone = (/** @type {string} */ name) => !existsSync(path.join(kit, 'output', name));
 
-  let health = { ok: false, codex: false, grok: false, images: [], at: null }, checkedAt = 0, prunedAt = 0;
+  /** @type {Health} */
+  let health = { ok: false, codex: false, grok: false, images: [], at: null };
+  let checkedAt = 0, prunedAt = 0;
   const beats = createBeats();
   /** The heartbeat's body: the health this worker reports and its subscription's reading. */
   const beatBody = async () => { const usage = await codexUsage(sessions).catch(() => null); return { health: aboutHealth(health, about), ...(usage ? { usage } : {}) }; };
@@ -736,12 +800,13 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
     }
   }
 
-  /** codex cannot run here now (exit 75: signed out, usage used up): claim nothing until a health check passes again, soon. */
+  /** codex cannot run here now (exit 75: signed out, usage used up): claim nothing until a health check passes again, soon.
+   * @param {string | null | undefined} code */
   async function providerDown(code) {
     const down = healthAfter(health, code, configured), provider = limitedProvider(code);
     if (down === health) return false;
     health = down;
-    const wait = cooldowns.limit(provider);
+    const wait = cooldowns.limit(/** @type {string} */ (provider));
     checkedAt = Date.now() - TIMING.healthMs + wait;
     // The next turn's heartbeat says so before it claims again: the server gives a job that needs this provider only to a host it is ok on.
     beats.reset();
@@ -764,6 +829,7 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
     return outcome;
   }
 
+  /** @param {Job} job */
   async function work(job) {
     const ogId = ogJobId(job), dir = path.join(kit, 'output', ogId), log = path.join(dir, 'worker.log');
     await mkdir(dir, { recursive: true });
@@ -776,7 +842,7 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
     // The codex tokens of the sessions written since the stage began (codex-usage.mjs), or null: none, or unreadable (logged).
     const spent = async () => {
       try { const tokens = await codexTokensSince(sessions, since); return tokens.total ? tokens : null; }
-      catch (error) { await say(`job ${job.id} ${job.status} tokens unread: ${error?.message ?? error}`); return null; }
+      catch (/** @type {any} */ error) { await say(`job ${job.id} ${job.status} tokens unread: ${error?.message ?? error}`); return null; }
     };
     let timedOut = false;
     const limit = setTimeout(() => { timedOut = true; controller.abort(); }, stageLimitMs(job.status));
@@ -795,7 +861,7 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
         const started = Date.now(), record = await dispatches.begin(args);
         // `capture`: the start of the run's output comes back too (a codex run's header names its session; generation-stages codexSessionId).
         let output = '';
-        const onOutput = capture ? chunk => { if (output.length < CAPTURE_BYTES) output += String(chunk).slice(0, CAPTURE_BYTES - output.length); } : null;
+        const onOutput = capture ? (/** @type {string} */ chunk) => { if (output.length < CAPTURE_BYTES) output += String(chunk).slice(0, CAPTURE_BYTES - output.length); } : null;
         const code = await og.run(ogId, args, { cwd: kit, log, stdin, signal: controller.signal, onOutput });
         await dispatches.end(record, code);
         tally.add(args, code, Date.now() - started);
@@ -828,13 +894,14 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
       renewNow();
       say(`job ${job.id} ${job.status} woke after ${Math.round(gapMs / 1000)} s — lease renewed`);
     } });
-    let outcome, unknown = [];
+    /** @type {any} */ let outcome;
+    /** @type {{ name: string, tool: string | null }[]} */ let unknown = [];
     try {
       unknown = await dispatches.unended();
-      const stage = stages[job.status];
+      const stage = /** @type {Record<string, ((job: Job, dir: string) => Promise<any>) | undefined>} */ (stages)[job.status];
       outcome = unknown.length ? dispatchUnknownOutcome(job.status, unknown)
         : stage ? await stage(job, dir) : { outcome: 'failed', result: { code: `no-stage-${job.status}` } };
-    } catch (error) {
+    } catch (/** @type {any} */ error) {
       // A numeric code (a child process's) used to throw here, outside this catch: the finish never went and the job lost a lease.
       outcome = { outcome: 'retry', result: { code: errorCode(error) } };
       await appendFile(log, `stage error: ${error?.stack ?? error}\n`).catch(() => {});
@@ -861,7 +928,7 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
   }
 
   await say('worker started');
-  let idleWait = TIMING.idleMs;
+  let idleWait = /** @type {number} */ (TIMING.idleMs);
   for (;;) {
     try {
       await keepAlive();
@@ -882,8 +949,9 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
         idleWait = nextIdleWait(idleWait);
       }
       if (once) return;
-    } catch (error) {
-      await say(`loop error ${error.message}`);
+    } catch (/** @type {any} */ error) {
+      await say(`loop error
+ ${error.message}`);
       if (once) throw error;
       await new Promise(resolve => setTimeout(resolve, TIMING.errorMs));
     }

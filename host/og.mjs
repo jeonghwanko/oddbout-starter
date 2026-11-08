@@ -245,7 +245,6 @@ export function createSlots(total) {
   };
 }
 /** @type {Map<string, ReturnType<typeof createSlots>>} */
-/** @type {Map<string, ReturnType<typeof createSlots>>} */
 const POOLS = new Map();
 /** capture's children under way: a stop of the command line ends them too (they sit in process groups of their own). */
 const CHILDREN = new Set();

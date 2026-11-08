@@ -5,14 +5,15 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-// Keep the strict-check coverage contract aligned with tsconfig.json, including broadcast runtimes and the npm packages (packages/oddbout).
-const CHECKED = ['api', 'broadcast', 'worker', 'cloudflare', 'mcp', 'scripts', 'packages'];
+// Keep the strict-check coverage contract aligned with tsconfig.json, including broadcast runtimes, the npm packages (packages/oddbout)
+// and the generation-host tools (host/, whose node:test suites live beside them and stay unchecked, as test/ does).
+const CHECKED = ['api', 'broadcast', 'worker', 'cloudflare', 'mcp', 'scripts', 'packages', 'host'];
 
 test('every module tsc covers opts into type checking', async () => {
   assert.deepEqual(JSON.parse(await readFile(new URL('../tsconfig.json', import.meta.url), 'utf8')).include, CHECKED.map(dir => `${dir}/**/*.mjs`));
   const unchecked = [];
   for (const dir of CHECKED)
-    for (const name of (await readdir(new URL(`../${dir}/`, import.meta.url), { recursive: true })).filter(name => name.endsWith('.mjs')))
+    for (const name of (await readdir(new URL(`../${dir}/`, import.meta.url), { recursive: true })).filter(name => name.endsWith('.mjs') && !name.endsWith('.test.mjs')))
       if (!/^(?:#![^\n]*\n)?\/\/ @ts-check\r?\n/.test(await readFile(new URL(`../${dir}/${name}`, import.meta.url), 'utf8'))) unchecked.push(`${dir}/${name}`);
   assert.deepEqual(unchecked, []);
 });
@@ -38,7 +39,7 @@ test('Deno checks api/ at the same strictness as tsc, in every Edge function', a
   }
 });
 
-test('tsc finds no type errors in api/, broadcast/, worker/, mcp/, scripts/, contracts/ and server/ under strict (npm run typecheck)', () => {
+test('tsc finds no type errors in api/, broadcast/, worker/, mcp/, scripts/, host/, contracts/ and server/ under strict (npm run typecheck)', () => {
   for (const config of ['tsconfig.json', 'tsconfig.vendored.json']) {
     const run = spawnSync(process.execPath, ['node_modules/typescript/bin/tsc', '-p', config], { cwd: root, encoding: 'utf8' });
     assert.equal(run.status, 0, config + '\n' + run.stdout + run.stderr);

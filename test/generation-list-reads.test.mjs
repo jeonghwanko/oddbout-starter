@@ -41,20 +41,25 @@ async function fixture(g) {
   await g.sql.query("insert into public.af_generation_events(job_id,kind,data,at) values($1,'appearance-auto-selected',$2,now())",
     [auto, { choice: 'a', reason: 'no-answer', deadline: new Date(base - 3_600_000).toISOString() }]);
   await job(g, { status: 'queued', choice: null, at: at(3) });
-  return { motions, ready, auto };
+  // Two jobs on one registered submission: the list reads it once for both.
+  const submission = crypto.randomUUID(), fighter = crypto.randomUUID();
+  await g.sql.query(`insert into public.af_submissions(id,owner_id,idempotency_key,manifest_text,manifest,manifest_sha,asset_bytes,status,fighter_id)
+    values($1,$2,gen_random_uuid(),'{}','{}'::jsonb,repeat('a',64),1,'registered',$3)`, [submission, g.owner, fighter]);
+  await g.sql.query("update public.af_generation_jobs set submission_id = $1 where id = any($2)", [submission, [ready, auto]]);
+  return { motions, ready, auto, fighter };
 }
 
 test('the list shows each job as its own read does, in reads that do not grow with its jobs', async () => {
   const g = await generation();
   try {
     await g.healthy();
-    const { motions, ready, auto } = await fixture(g);
+    const { motions, ready, auto, fighter } = await fixture(g);
     const counts = counted(g);
     const list = (await g.call('GET', 'generations')).body;
     assert.equal(list.ok, true);
     assert.equal(list.jobs.length, 4);
-    // Jobs, events, hosts: one each; one signing call for all their pictures.
-    assert.ok(counts.from <= 3, `database reads ${counts.from}`);
+    // Jobs, events, hosts, submissions: one each however many jobs share them; one signing call for all their pictures.
+    assert.ok(counts.from <= 4, `database reads ${counts.from}`);
     assert.equal(counts.signing, 1);
     for (const shown of list.jobs) {
       const own = (await g.call('GET', `generations/${shown.id}`)).body.job;
@@ -66,6 +71,7 @@ test('the list shows each job as its own read does, in reads that do not grow wi
     assert.ok(byId.get(motions).expressions.url.includes('expressions-0-a'));
     assert.ok(byId.get(ready).side.url.includes('side-0-b'));
     assert.equal(byId.get(auto).appearanceAutoSelection.choice, 'a');
+    for (const id of [ready, auto]) assert.deepEqual(byId.get(id).submission, { id: byId.get(id).submission.id, stage: 'registered', fighterId: fighter });
   } finally { await g.sql.close(); }
 });
 
