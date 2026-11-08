@@ -228,6 +228,7 @@
             <h3>Finish your top-up</h3>
             <p>Approve on PayPal, then verify here.</p>
           </div>
+          <!-- biome-ignore lint/a11y/useValidAnchor: the script sets its href before it shows it -->
           <a
             id="paypal-approval"
             class="button button-secondary"
@@ -498,7 +499,7 @@
             <div id="paid-funding" class="paid-funding" hidden>
               <p>Approve the Sandbox checkout to add credits. The approved producer will start this broadcast when funding is confirmed.</p>
               <button id="paid-checkout" class="button button-paypal" type="button">Continue PayPal checkout</button>
-              <a id="paid-paypal-link" class="button button-paypal" hidden target="_blank" rel="noopener noreferrer">Open PayPal Sandbox</a>
+              <!-- biome-ignore lint/a11y/useValidAnchor: the script sets its href before it shows it --><a id="paid-paypal-link" class="button button-paypal" hidden target="_blank" rel="noopener noreferrer">Open PayPal Sandbox</a>
             </div>
             <div id="paid-renewal" hidden>
               <h4>Approve a new deadline</h4>

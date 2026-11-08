@@ -26,7 +26,7 @@
 //   makes them his profile set when the package is registered.
 import { createHash, randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { appendFile, chmod, copyFile, cp, mkdir, open, readFile, readdir, rename, rm, stat, utimes, writeFile } from 'node:fs/promises';
+import { appendFile, copyFile, cp, mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ASK_EXIT, NOT_STARTED_EXIT, judgeOutcome, readOutcome } from './sprite-outcome.mjs';

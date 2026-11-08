@@ -643,7 +643,8 @@ test('ChatGPT\'s calls get a short text for a large result (it reads the structu
   const ask = meta => handle(new Request(CLOUD_RESOURCE, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'read_bout', arguments: { a: 'kuma', b: 'yume', seed: 1 }, ...(meta ? { _meta: meta } : {}) } }) }))
     .then(r => r.json()).then(j => j.result);
-  const plain = await ask(), chat = await ask({ 'openai/locale': 'ko', 'openai/subject': 'user-123' }), other = await ask({ 'openai/subject': 'user-456' });
+  const plain = await ask(), chat = await ask({ 'openai/locale': 'ko', 'openai/subject': 'user-123' });
+  await ask({ 'openai/subject': 'user-456' });
   assert.equal(plain.structuredContent, undefined);
   assert.match(chat.content[0].text, /^Full result in structuredContent \(\d+ characters\): ok=true, rules=39, fighters\[40\]$/);
   assert.deepEqual(chat.structuredContent, JSON.parse(plain.content[0].text));

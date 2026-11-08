@@ -182,7 +182,7 @@ test('the review CLI inspects variable source cycles without generation, resampl
       assert.ok(pixels.equals(f.data), `${motion} frame ${i} changed`);
     }
     const after = await Promise.all([readFile(sheet), readFile(metadata), readFile(planFile)]);
-    after.forEach((bytes, i) => assert.ok(bytes.equals(before[i]), 'source file changed'));
+    after.forEach((bytes, i) => { assert.ok(bytes.equals(before[i]), 'source file changed'); });
   }
 }));
 
@@ -335,7 +335,7 @@ test('each asset reads its own file\'s report, and only a fix of its own settles
   let result = scaleCheckEntries(config, '/kit', runs, reports, '/kit');
   // a.json's combo is measured; b.json's unmeasured combo/1 is settled by its own fix, not by a.json's measurement
   assert.deepEqual(result.unsettled, ['walk']);
-  assert.deepEqual(result.entries['combo'], { report: 'game.scale-check-1.json', per: 'frame' });
+  assert.deepEqual(result.entries.combo, { report: 'game.scale-check-1.json', per: 'frame' });
   assert.deepEqual(result.entries['combo-b'], { report: 'game.scale-check-2.json', per: 'frame', fix: { 'combo/1': 1.05 } });
   result = scaleCheckEntries({ ...config, scaleCheck: { fix: { walk: 1.04, 'combo/7': 1 } } }, '/kit', runs, reports, '/kit');
   assert.deepEqual(result.entries.walk, { report: 'game.scale-check-1.json', per: 'state', fix: { walk: 1.04 } });

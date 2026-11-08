@@ -92,7 +92,7 @@ export function validatePlan(plan, sequence) {
   const g = plan.geometry;
   if (!g || !Number.isInteger(g.width) || !Number.isInteger(g.height) || !positive(g.width) || !positive(g.height) ||
     !positive(g.groundTolerance) || !positive(g.groundY) || g.groundY > g.height) throw Error('Invalid common geometry');
-  if (sequence && sequence.frames.some(f => f.width !== g.width || f.height !== g.height)) throw Error('Frame canvas differs from the common geometry');
+  if (sequence?.frames.some(f => f.width !== g.width || f.height !== g.height)) throw Error('Frame canvas differs from the common geometry');
 }
 
 export function inspectGeometry(sequence, plan) {

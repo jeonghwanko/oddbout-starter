@@ -140,7 +140,7 @@ async function readCheckpoint(path) {
     const info = await stat(path);
     if (!info.isFile() || info.size > 1024 * 1024) throw new Error();
     const value = JSON.parse(await readFile(path, 'utf8'));
-    if (!value || value.schemaVersion !== 1 || typeof value.status !== 'string' || value.status.length > 64) throw new Error();
+    if (value?.schemaVersion !== 1 || typeof value.status !== 'string' || value.status.length > 64) throw new Error();
     return value;
   } catch (/** @type {any} */ error) {
     if (error?.code === 'ENOENT') return null;

@@ -64,7 +64,7 @@ function action(id, callback) {
 function element(tag, text) { const node = document.createElement(tag); node.textContent = text; return node; }
 function render(operation) {
   selected = operation; $('detail').hidden = !operation;
-  $('broadcast-notice').hidden = !operation || operation.kind !== 'broadcast';
+  $('broadcast-notice').hidden = operation?.kind !== 'broadcast';
   if (operation?.kind === 'broadcast') {
     $('detail').hidden = true;
     $('broadcast-note').textContent = `${states[operation.state] ?? operation.state}. This plan and its producer status are managed in Broadcast Studio.`;

@@ -87,7 +87,7 @@ export function createJobStore(store) {
     if (plan.engine === 'sprite') {
       if (!spriteCommands.has(plan.args[0])) fail('unsupported-sprite-command');
       if (spends(plan.args)) {
-        if (!plan.workflowArgs || plan.workflowArgs[0] !== 'workflow' || plan.workflowArgs.includes('--stage')) fail('generation-needs-workflow-preflight');
+        if (plan.workflowArgs?.[0] !== 'workflow' || plan.workflowArgs.includes('--stage')) fail('generation-needs-workflow-preflight');
         /** @type {(argv: string[], key: string) => string | undefined} */
         const option = (argv, key) => {
           const matches = argv.flatMap((value, index) => value === key || value.startsWith(`${key}=`) ? [index] : []);
@@ -293,7 +293,7 @@ export function executeEngine(root, engine, argv, { signal } = {}) {
 /** @param {CreationStore} store @param {string} id @param {string} jobId @param {{ execute?: typeof executeEngine, timeoutMs?: number }} [options] */
 export async function runCreationJob(store, id, jobId, { execute = executeEngine, timeoutMs } = {}) {
   const jobs = createJobStore(store), latest = await store.contextBeforeLock();
-  let job = await store.lock(id, async () => {
+  const job = await store.lock(id, async () => {
     const current = await jobs.read(id, jobId);
     if (current.status !== 'prepared') return current;
     if (digest(JSON.stringify(current.plan)) !== current.requestHash) fail('job-plan-changed');

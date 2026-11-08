@@ -71,8 +71,7 @@ test('handshake and request timeouts are bounded; late reply is ignored', async 
 });
 
 test('request failure redacts comments; mismatched response type rejects active work', async () => {
-  let sent;
-  const fake = websocket({ onRequest(frame, socket) { sent = frame; socket.frame(response(frame, {}, false)); } });
+  const fake = websocket({ onRequest(frame, socket) { socket.frame(response(frame, {}, false)); } });
   const client = await createObsClient({ url: 'ws://localhost:4455', ...fake });
   await assert.rejects(client.request('GetVersion'), error => {
     assert.equal(error.code, 'obs_request_failed'); assert.equal(error.status, 600);

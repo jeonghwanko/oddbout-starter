@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -33,7 +33,7 @@ test('official game-pack preserves vertical travel of full-canvas external frame
     const result = await loadSequence({ file: 'pack/game-pack.json', animation: 'run' }, dir);
     assert.deepEqual(result.frames.map(f => alphaBounds(f).bottom), [70, 60, 70]);
     assert.deepEqual(result.durations, [100, 100, 100]);
-    result.frames.forEach((f, i) => assert.deepEqual(f.data, originals[i]));
+    result.frames.forEach((f, i) => { assert.deepEqual(f.data, originals[i]); });
   } finally {
     assert.ok(path.resolve(dir).startsWith(path.resolve(tmpdir()) + path.sep));
     await rm(dir, { recursive: true, force: true });

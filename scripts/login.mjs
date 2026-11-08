@@ -297,7 +297,7 @@ export async function waitDeviceLogin({ timeoutSeconds = 600, log = console.erro
   createAuthClient = createClient, now = Date.now, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {
   const pendingPath = pendingDeviceLoginPath(sessionPath);
   const pending = await readSession(pendingPath);
-  if (!pending || pending.version !== 1 || !DEVICE_CODE.test(pending.deviceCode ?? '') || !validProjectUrl(pending.url)
+  if (pending?.version !== 1 || !DEVICE_CODE.test(pending.deviceCode ?? '') || !validProjectUrl(pending.url)
     || !isPublishableKey(pending.publishableKey)) throw new Error('pending-device-login-missing');
   const close = () => rm(pendingPath, { force: true });
   // Each step after approval is saved here before the next one runs. The server answers the token only once, so a
@@ -375,7 +375,7 @@ export function parsePastedCallback(text, { port, state }) {
 export async function finishPasteLogin({ pasted, log = console.error, createAuthClient = createClient, request = apiRequest, now = Date.now } = {}) {
   const sessionPath = defaultSessionPath(), pendingPath = pendingLoginPath(sessionPath);
   const pending = await readSession(pendingPath);
-  if (!pending || pending.version !== 1 || typeof pending.state !== 'string' || typeof pending.storage !== 'object') throw new Error('pending-login-missing');
+  if (pending?.version !== 1 || typeof pending.state !== 'string' || typeof pending.storage !== 'object') throw new Error('pending-login-missing');
   if (now() - Date.parse(pending.createdAt) > PASTE_LOGIN_TTL_MS) {
     await rm(pendingPath, { force: true });
     throw new Error('pending-login-expired');

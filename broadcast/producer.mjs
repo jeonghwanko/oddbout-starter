@@ -173,7 +173,7 @@ function contextOf(report,catalog,wallet,id,now) {
 export function createBroadcastProducer({broadcastId,model,mcp,modelCall,maxModelCalls=24,state:initial,checkpoint,now=Date.now,readRetries=1}) {
   if (!UUID.test(broadcastId)||!text(model,128)||!Number.isSafeInteger(maxModelCalls)||maxModelCalls<1||maxModelCalls>100
     || !Number.isSafeInteger(readRetries)||readRetries<0||readRetries>2) throw new Error('producer_invalid_configuration');
-  /** @type {ProducerState} */ let state=initial?structuredClone(initial):{schemaVersion:1,broadcastId,model,maxModelCalls,modelCalls:0,decisions:[],phase:'ready',pending:null};
+  /** @type {ProducerState} */ const state=initial?structuredClone(initial):{schemaVersion:1,broadcastId,model,maxModelCalls,modelCalls:0,decisions:[],phase:'ready',pending:null};
   if (state.schemaVersion!==1||state.broadcastId!==broadcastId||state.model!==model||state.maxModelCalls!==maxModelCalls
     || !Number.isSafeInteger(state.modelCalls)||state.modelCalls<0||state.modelCalls>maxModelCalls||!Array.isArray(state.decisions)
     || state.decisions.length>state.modelCalls||!['ready','model-pending'].includes(state.phase)
@@ -197,7 +197,7 @@ export function createBroadcastProducer({broadcastId,model,mcp,modelCall,maxMode
         || report.jobs.some((/** @type {any} */ job)=>job.broadcastId!==broadcastId)) throw new Error('producer_scope_mismatch');
       if(state.pending) {
         const pending=state.pending;
-        let job=pending.jobId?await read('get_broadcast_job',{jobId:pending.jobId},signal):report.jobs.find((/** @type {any} */ item)=>item.requestKey===pending.requestKey);
+        const job=pending.jobId?await read('get_broadcast_job',{jobId:pending.jobId},signal):report.jobs.find((/** @type {any} */ item)=>item.requestKey===pending.requestKey);
         if(!job) return {status:'unknown',requestKey:pending.requestKey,reason:'producer_mutation_reconciliation_required'};
         if(job.broadcastId!==broadcastId||job.requestKey!==pending.requestKey
           || JSON.stringify(job.fighterIds)!==JSON.stringify(pending.decision.fighterIds)) throw new Error('producer_scope_mismatch');

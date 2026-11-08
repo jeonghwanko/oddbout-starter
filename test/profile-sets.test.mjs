@@ -319,7 +319,7 @@ test('Postgres (정면 판정 리뷰, 2026-11-03): only a front that let him ent
     assert.equal(value(await enter()).stage, 'entered');
     await db.query("update public.af_fighters set entered_at = now() - interval '1 hour' where id = $1", [fighter]);
     await db.exec("update public.af_settings set profile_set_required_after = now()");
-    const first = await validated();
+    await validated();
     assert.equal((await judge(await claim(), side)).status, 'rejected');
     const second = await validated();
     await db.query('select public.af_admin_profile_set_reject($1,$2,$3)', [admin, second.id, '흐림']);

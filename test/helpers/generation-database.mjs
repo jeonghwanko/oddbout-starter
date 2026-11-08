@@ -30,7 +30,7 @@ export async function generation({ decisionsReviewer = null, responsesReviewer =
     } catch (error) { return { error: { message: error.message, code: error.code ?? 'P0001' } }; }
   };
   const from = table => {
-    const filters = [], values = []; let order = '', limit = '', gt = [];
+    const filters = [], values = []; let order = '', limit = '';
     /** @type {Record<string, unknown> | null} An update's columns (2026-10-31: the API writes a job's profile front and set). */
     let patch = null;
     // A row a foreign key names, as PostgREST embeds `alias:table!column(fields)` (2026-11-03: the hosted wait reads a job and its submission).

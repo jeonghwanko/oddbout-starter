@@ -68,6 +68,7 @@ export async function runLeasedJob({ send, routes, idKey, claim, folder, work })
   } finally {
     if (directory !== undefined) {
       const relative = path.relative(base, directory);
+      // biome-ignore lint/correctness/noUnsafeFinally: a folder outside the base is never removed, whatever the job did
       if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('unsafe-cleanup');
       await rm(directory, { recursive: true, force: true });
     }

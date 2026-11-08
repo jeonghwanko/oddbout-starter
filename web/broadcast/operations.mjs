@@ -5,7 +5,7 @@ export function createOperationJournal(storage, owner, { locks = globalThis.navi
     const raw = storage.getItem(key);
     if (!raw) return { pending: {}, selected: {} };
     const state = JSON.parse(raw);
-    if (!state || !state.pending || !state.selected || typeof state.pending !== 'object' || typeof state.selected !== 'object') throw new Error('Saved operations need reconciliation. Do not clear them to retry.');
+    if (!state?.pending || !state.selected || typeof state.pending !== 'object' || typeof state.selected !== 'object') throw new Error('Saved operations need reconciliation. Do not clear them to retry.');
     return state;
   }
   const write = state => storage.setItem(key, JSON.stringify(state));
