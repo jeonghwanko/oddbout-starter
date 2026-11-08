@@ -95,7 +95,7 @@ if [ "$(id -un)" != "$SVC_USER" ]; then
   personal=$( { emails_of "$NODE" "$HOME/.codex/auth.json"; echo; emails_of "$NODE" "$HOME/.grok/auth.json"; } | grep @ | sort -u | paste -sd, || true)
   if [ "${1:-}" = self-update ]; then
     here=$(dirname "$(readlink -f "$0")")
-    tar -C "$here" -c og ledger-report.mjs ledger-report.test.mjs generation-stages.mjs generation-worker.mjs codex-usage.mjs sprite-outcome.mjs motions.py style-anchor-front.webp |
+    tar -C "$here" -c og ledger-report.mjs ledger-report.test.mjs generation-stages.mjs generation-prompts.mjs judge-archive.mjs generation-worker.mjs codex-usage.mjs sprite-outcome.mjs motions.py style-anchor-front.webp |
       sudo -n -u "$SVC_USER" "$G/bin/og" --personal "$personal" self-update
     exit $?
   fi
@@ -660,19 +660,20 @@ cmd_rife() {
 cmd_self_update() {
   [ $MODE = service ] || die "a community host updates with npm run host -- update (from the kit checkout)"
   local tmp; tmp=$(mktemp -d)
-  tar -x -C "$tmp" og ledger-report.mjs ledger-report.test.mjs generation-stages.mjs generation-worker.mjs codex-usage.mjs sprite-outcome.mjs motions.py style-anchor-front.webp
+  tar -x -C "$tmp" og ledger-report.mjs ledger-report.test.mjs generation-stages.mjs generation-prompts.mjs judge-archive.mjs generation-worker.mjs codex-usage.mjs sprite-outcome.mjs motions.py style-anchor-front.webp
   # Text files only: style-anchor-front.webp is a picture, and a \r before a \n in its bytes is no line ending.
   sed -i 's/\r$//' "$tmp"/og "$tmp"/*.mjs "$tmp"/*.py
-  bash -n "$tmp/og" && "$NODE" --check "$tmp/ledger-report.mjs" && "$NODE" --check "$tmp/generation-stages.mjs" &&
+  bash -n "$tmp/og" && "$NODE" --check "$tmp/ledger-report.mjs" && "$NODE" --check "$tmp/generation-stages.mjs" && "$NODE" --check "$tmp/generation-prompts.mjs" &&
+    "$NODE" --check "$tmp/judge-archive.mjs" &&
     "$NODE" --check "$tmp/generation-worker.mjs" && "$NODE" --check "$tmp/codex-usage.mjs" && "$KIT/vendor/sprite-gen/.venv/bin/python" -I -c 'import ast, sys; ast.parse(open(sys.argv[1]).read())' "$tmp/motions.py" ||
     { rm -rf "$tmp"; die "new files do not parse — kept the old ones"; }
   # --check reads one file and follows no import: load the modules the worker loads, from the folder they will run in, so an
   # import of a file this install does not carry is refused here and not by a worker that restarts in a loop (2026-10-29).
-  "$NODE" --input-type=module -e 'for (const f of process.argv.slice(1)) await import(f)' "$tmp/generation-stages.mjs" "$tmp/ledger-report.mjs" "$tmp/codex-usage.mjs" ||
+  "$NODE" --input-type=module -e 'for (const f of process.argv.slice(1)) await import(f)' "$tmp/generation-stages.mjs" "$tmp/generation-prompts.mjs" "$tmp/judge-archive.mjs" "$tmp/ledger-report.mjs" "$tmp/codex-usage.mjs" ||
     { rm -rf "$tmp"; die "new files do not load together — kept the old ones"; }
   # Rename into place: bash keeps reading the old inode of the running script.
   install -m 750 "$tmp/og" "$HERE/og.new" && mv -f "$HERE/og.new" "$HERE/og"
-  install -m 640 "$tmp/ledger-report.mjs" "$tmp/ledger-report.test.mjs" "$tmp/generation-stages.mjs" "$tmp/generation-worker.mjs" "$tmp/codex-usage.mjs" "$tmp/sprite-outcome.mjs" "$tmp/motions.py" "$tmp/style-anchor-front.webp" "$HERE/"
+  install -m 640 "$tmp/ledger-report.mjs" "$tmp/ledger-report.test.mjs" "$tmp/generation-stages.mjs" "$tmp/generation-prompts.mjs" "$tmp/judge-archive.mjs" "$tmp/generation-worker.mjs" "$tmp/codex-usage.mjs" "$tmp/sprite-outcome.mjs" "$tmp/motions.py" "$tmp/style-anchor-front.webp" "$HERE/"
   rm -rf "$tmp"
   echo "og: updated $HERE"
 }

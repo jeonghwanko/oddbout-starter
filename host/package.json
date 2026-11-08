@@ -29,6 +29,8 @@
     "og",
     "generation-worker.mjs",
     "generation-stages.mjs",
+    "generation-prompts.mjs",
+    "judge-archive.mjs",
     "codex-usage.mjs",
     "sprite-outcome.mjs",
     "ledger-report.mjs",
