@@ -1,0 +1,26 @@
+{
+  "recordType": "Anonymized verification summary; identifying values and timestamps omitted",
+  "environment": "Dots managed cloud VM with native ODDBOUT MCP",
+  "scope": "A prior successful, explicitly owner-authorized deletion. This is not a deletion of the dedicated reviewer fixture.",
+  "sequence": ["get_profile", "prepare_fighter_deletion", "delete_fighter", "get_registered_fighter", "list_my_fighters"],
+  "result": {
+    "ok": true,
+    "stage": "deleted",
+    "deletionMode": "soft-delete",
+    "fighterSlotReleased": true,
+    "privatePackageAndHistoryRetained": true
+  },
+  "verification": {
+    "absentFromOwnedList": true,
+    "publicRosterHttpStatus": 404,
+    "absentFromRankings": true,
+    "otherOwnedFightersUnchanged": true
+  },
+  "reviewerInstructions": "The dedicated reviewer account has a separate disposable ODDBOUT Review Test fixture. Run the explicit deletion case last. If already deleted by a prior reviewer, inspect its deletion receipt; do not claim a new deletion.",
+  "limitations": [
+    "This summary omits owner identity, fighter identity, confirmation values, exact deletion time, asset sizes and historical record counts.",
+    "Private original files and history remain; this is not complete file erasure.",
+    "Server boundary checks do not certify the model's responses to prompts.",
+    "Public directory availability requires approval and publication."
+  ]
+}

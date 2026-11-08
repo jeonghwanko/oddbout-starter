@@ -1,0 +1,229 @@
+{
+  "testedAt": "2026-10-24T10:05:56Z",
+  "environment": "Dots managed cloud VM",
+  "account": "dedicated review account",
+  "sourcePackage": {
+    "fighterId": "08e1b3f9-e31e-4c19-b42a-8ec8243d2ade",
+    "manifestSha256": "989f347af7f5842f0193fe1356d453720f2ce22f70ced66b5fa30e5e68f95b7f",
+    "assetCount": 11,
+    "assetBytes": 5537184,
+    "decodedPixels": 12154402,
+    "newGeneration": false
+  },
+  "transfer": "Supported Pages original JSON/WebP bytes; original sizes and SHA-256 verified after VM save.",
+  "registration": {
+    "submissionId": "131d7814-2c24-4a82-9707-1ebff7978f67",
+    "fighterId": "1c6160e0-a138-4e25-8b95-db023b8cc408",
+    "manifestSha256": "0cd5eb8c721da8bdbe8f4f0d24700abd3ee82626451600012d32ca7d0968b83a",
+    "name": "ODDBOUT Review Test",
+    "stage": "registered",
+    "reviewState": "approved",
+    "runtimeApproved": true,
+    "runtimeScope": "arena-player-v1",
+    "duelApproved": true
+  },
+  "nativeToolCalls": [
+    {
+      "tool": "oddbout.get_fighter_spec",
+      "arguments": {
+        "section": "overview"
+      },
+      "status": "completed",
+      "durationMs": 2700
+    },
+    {
+      "tool": "oddbout.get_profile",
+      "arguments": {},
+      "status": "completed",
+      "durationMs": 4686
+    },
+    {
+      "tool": "oddbout.check_creation_readiness",
+      "arguments": {
+        "purpose": "registration"
+      },
+      "status": "completed",
+      "durationMs": 3187
+    },
+    {
+      "tool": "oddbout.prepare_fighter_registration",
+      "arguments": {
+        "idempotencyKey": "a11d7049-81b5-4b9e-80f3-00b4366ff60d",
+        "manifest": "/workspace/scratch/oddbout-review-registration-20261024/test/fighter.json"
+      },
+      "status": "completed",
+      "durationMs": 9353
+    },
+    {
+      "tool": "oddbout.upload_fighter_asset",
+      "arguments": {
+        "assetId": "idle",
+        "file": "/workspace/scratch/oddbout-review-registration-20261024/test/assets/idle.webp",
+        "submissionId": "131d7814-2c24-4a82-9707-1ebff7978f67"
+      },
+      "status": "completed",
+      "durationMs": 5444
+    },
+    {
+      "tool": "oddbout.upload_fighter_asset",
+      "arguments": {
+        "assetId": "walk",
+        "file": "/workspace/scratch/oddbout-review-registration-20261024/test/assets/walk.webp",
+        "submissionId": "131d7814-2c24-4a82-9707-1ebff7978f67"
+      },
+      "status": "completed",
+      "durationMs": 6926
+    },
+    {
+      "tool": "oddbout.upload_fighter_asset",
+      "arguments": {
+        "assetId": "run",
+        "file": "/workspace/scratch/oddbout-review-registration-20261024/test/assets/run.webp",
+        "submissionId": "131d7814-2c24-4a82-9707-1ebff7978f67"
+      },
+      "status": "completed",
+      "durationMs": 6883
+    },
+    {
+      "tool": "oddbout.upload_fighter_asset",
+      "arguments": {
+        "assetId": "fight-idle",
+        "file": "/workspace/scratch/oddbout-review-registration-20261024/test/assets/fight-idle.webp",
+        "submissionId": "131d7814-2c24-4a82-9707-1ebff7978f67"
+      },
+      "status": "completed",
+      "durationMs": 7359
+    },
+    {
+      "tool": "oddbout.upload_fighter_asset",
+      "arguments": {
+        "assetId": "combo",
+        "file": "/workspace/scratch/oddbout-review-registration-20261024/test/assets/combo.webp",
+        "submissionId": "131d7814-2c24-4a82-9707-1ebff7978f67"
+      },
+      "status": "completed",
+      "durationMs": 7068
+    },
+    {
+      "tool": "oddbout.upload_fighter_asset",
+      "arguments": {
+        "assetId": "slam",
+        "file": "/workspace/scratch/oddbout-review-registration-20261024/test/assets/slam.webp",
+        "submissionId": "131d7814-2c24-4a82-9707-1ebff7978f67"
+      },
+      "status": "completed",
+      "durationMs": 5535
+    },
+    {
+      "tool": "oddbout.upload_fighter_asset",
+      "arguments": {
+        "assetId": "dash",
+        "file": "/workspace/scratch/oddbout-review-registration-20261024/test/assets/dash.webp",
+        "submissionId": "131d7814-2c24-4a82-9707-1ebff7978f67"
+      },
+      "status": "completed",
+      "durationMs": 6482
+    },
+    {
+      "tool": "oddbout.upload_fighter_asset",
+      "arguments": {
+        "assetId": "block",
+        "file": "/workspace/scratch/oddbout-review-registration-20261024/test/assets/block.webp",
+        "submissionId": "131d7814-2c24-4a82-9707-1ebff7978f67"
+      },
+      "status": "completed",
+      "durationMs": 6582
+    },
+    {
+      "tool": "oddbout.upload_fighter_asset",
+      "arguments": {
+        "assetId": "hit",
+        "file": "/workspace/scratch/oddbout-review-registration-20261024/test/assets/hit.webp",
+        "submissionId": "131d7814-2c24-4a82-9707-1ebff7978f67"
+      },
+      "status": "completed",
+      "durationMs": 5926
+    },
+    {
+      "tool": "oddbout.upload_fighter_asset",
+      "arguments": {
+        "assetId": "groggy",
+        "file": "/workspace/scratch/oddbout-review-registration-20261024/test/assets/groggy.webp",
+        "submissionId": "131d7814-2c24-4a82-9707-1ebff7978f67"
+      },
+      "status": "completed",
+      "durationMs": 6652
+    },
+    {
+      "tool": "oddbout.upload_fighter_asset",
+      "arguments": {
+        "assetId": "fall",
+        "file": "/workspace/scratch/oddbout-review-registration-20261024/test/assets/fall.webp",
+        "submissionId": "131d7814-2c24-4a82-9707-1ebff7978f67"
+      },
+      "status": "completed",
+      "durationMs": 6284
+    },
+    {
+      "tool": "oddbout.get_profile",
+      "arguments": {},
+      "status": "completed",
+      "durationMs": 2995
+    },
+    {
+      "tool": "oddbout.submit_fighter_registration",
+      "arguments": {
+        "submissionId": "131d7814-2c24-4a82-9707-1ebff7978f67"
+      },
+      "status": "completed",
+      "durationMs": 3799
+    },
+    {
+      "tool": "oddbout.get_fighter_submission",
+      "arguments": {
+        "submissionId": "131d7814-2c24-4a82-9707-1ebff7978f67"
+      },
+      "status": "completed",
+      "durationMs": 2783
+    },
+    {
+      "tool": "oddbout.get_fighter_submission",
+      "arguments": {
+        "submissionId": "131d7814-2c24-4a82-9707-1ebff7978f67"
+      },
+      "status": "completed",
+      "durationMs": 3777
+    },
+    {
+      "tool": "oddbout.list_my_fighters",
+      "arguments": {},
+      "status": "completed",
+      "durationMs": 2857
+    },
+    {
+      "tool": "oddbout.get_registered_fighter",
+      "arguments": {
+        "fighterId": "1c6160e0-a138-4e25-8b95-db023b8cc408"
+      },
+      "status": "completed",
+      "durationMs": 2880
+    }
+  ],
+  "publicGatewayCrossCheck": {
+    "endpoint": "https://mcp.oddbout.com/mcp",
+    "passed": 7,
+    "testGrantRevoked": true
+  },
+  "deployment": {
+    "function": "ai-fighter-mcp",
+    "version": 7,
+    "commit": "fb7b042",
+    "targetedTestsPassed": 10
+  },
+  "limitations": [
+    "Existing approved artwork reused; no new generation or new visual approval.",
+    "VM direct Supabase egress remains blocked; network policy was not bypassed.",
+    "Library prepare_materialize failed; supported Pages original-byte reads completed delivery.",
+    "Public directory listing remains in review."
+  ]
+}

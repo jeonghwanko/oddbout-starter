@@ -1,0 +1,689 @@
+Wonder Lupin - Third-Party Notices
+==================================
+
+This distribution includes the following third-party software. The notices
+below are reproduced from the installed packages used to build this release.
+
+OpenTracks (formerly DOVA-SYNDROME) — lobby and duel music
+----------------------------------------------------------
+
+Free BGM used under the OpenTracks audio license (credit not required; listed here
+for provenance). Terms: https://opentracks.com/help/articles/license/
+The audio itself may not be redistributed. It ships only as a scrambled package
+that is not an audio file without conversion (audio/music/*.bin).
+
+"石畳の街並み" by MATSU
+  https://opentracks.com/bgm/detail/7299 -> audio/music/village-bgm.bin (lobby)
+"夏はsummer!!" by Keyta
+  https://opentracks.com/bgm/detail/4599 -> audio/music/village-fight-bgm.bin (duels)
+
+Edits: a whole number of bars cut at the measured tempo, one-beat circular crossfade
+loop, constant gain normalization toward -20 LUFS, stereo 44.1 kHz OGG Vorbis.
+
+Fight shouts — recorded battle cries and grunts (some audio/voice/*.ogg)
+-----------------------------------------------------------------------
+
+Some fighters' battle cries, grunts and knockout screams are recordings released
+under Creative Commons Zero 1.0 (CC0 1.0). Spoken lines are not; they are the
+generated voices described in the asset rights ledger.
+CC0 license: https://creativecommons.org/publicdomain/zero/1.0/
+
+- "Male Grunt/Yelling sounds" by HaelDB — https://opengameart.org/content/male-gruntyelling-sounds
+- "Female RPG Voice Starter Pack" by Cici Fyre — https://opengameart.org/content/female-rpg-voice-starter-pack
+
+Edits: edge silence trim, 70 Hz high-pass, gain normalization, mono 24 kHz OGG Vorbis.
+Which clip came from which recording: tools/audio/fight-voice/cc0-shouts.json.
+Original recordings: assets/audio/fight-voice-cc0-20261021/. File hashes: src/assets/runtime-media.json.
+
+Melee combat sound set (audio/sfx/combat-*.ogg)
+-----------------------------------------------
+
+Layered and edited in-house (trim, peak alignment, envelope, saturation,
+sub-bass sine layer). Hit, hurt and finisher sounds use foley audio generated
+for this project with xAI Grok Imagine (user-generated media) as the body layer;
+every other layer is one of the CC0 1.0 recordings below.
+CC0 license: https://creativecommons.org/publicdomain/zero/1.0/
+
+- "Punching Bag Sound Effects" by qubodup — https://freesound.org/s/53985/
+- "CLARKS Punches Hits heavier big boxing" by cryanrautha — https://freesound.org/s/369323/
+- "Smacks And Thwacks (m).wav" by BarryTheWhite — https://freesound.org/s/396345/
+- "Heavy Wall Pounding" by LunaFarrowe — https://freesound.org/s/448374/
+- "Swosh Sword Swing" by qubodup — https://freesound.org/s/59992/
+- "Whoosh / Dash" by Kastenfrosch — https://freesound.org/s/521999/
+- "Riser Hit sfx 010.wav" by AudioPapkin — https://freesound.org/s/510292/
+- "block3.wav" by Empiremonkey — https://freesound.org/s/616493/
+- "Thud / Falling on wooden floor" by Breviceps — https://freesound.org/s/447922/
+- "BODY FALL - V HVY - DIRT" by leonelmail — https://freesound.org/s/504626/
+- "Swishes Sound Pack" by artisticdude — https://opengameart.org/content/swishes-sound-pack
+- "RPG Sound Pack" by artisticdude — https://opengameart.org/content/rpg-sound-pack
+- "100 CC0 metal and wood SFX" by rubberduck — https://opengameart.org/content/100-cc0-metal-and-wood-sfx
+
+Kenney Impact Sounds 1.0
+------------------------
+
+Created and distributed by Kenney under Creative Commons Zero 1.0 (CC0 1.0).
+The runtime copies use the original pack's medium/heavy punch, bell, glass,
+metal, wood, and soft impact files.
+
+Source: https://kenney.nl/assets/impact-sounds
+License: https://creativecommons.org/publicdomain/zero/1.0/
+Runtime copies: audio/sfx/landing-soft.ogg,
+  audio/sfx/alert-bell.ogg, audio/sfx/glass-break.ogg,
+  audio/sfx/wood-impact-heavy.ogg, audio/sfx/metal-impact.ogg,
+  audio/sfx/body-impact-heavy.ogg
+
+Kenney RPG Audio 1.0
+--------------------
+
+Created and distributed by Kenney under Creative Commons Zero 1.0 (CC0 1.0).
+The runtime copies use the pack's cloth, leather, coins, door, blade, latch,
+and equipment-handle foley.
+
+Source: https://kenney.nl/assets/rpg-audio
+License: https://creativecommons.org/publicdomain/zero/1.0/
+Runtime copies: audio/sfx/loot-confirm.ogg, audio/sfx/throw-impact-metal.ogg,
+  audio/sfx/dodge-cloth.ogg,
+  audio/sfx/attack-swish.ogg, audio/sfx/weapon-draw.ogg,
+  audio/sfx/cloth-*.ogg, audio/sfx/leather-drop.ogg,
+  audio/sfx/metal-latch.ogg, audio/sfx/door-open.ogg,
+  audio/sfx/tool-handle.ogg
+
+Phaser 3.90.0
+-------------
+
+The MIT License (MIT)
+
+Copyright (c) 2024 Richard Davey, Phaser Studio Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+eventemitter3 5.0.4
+-------------------
+
+The MIT License (MIT)
+
+Copyright (c) 2014 Arnout Kazemier
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+NanumSquareRound (나눔스퀘어라운드)
+-----------------------------------
+
+Created by NAVER Corp. and released under the SIL Open Font License 1.1.
+
+Source: https://hangeul.naver.com/font/nanum
+License: https://openfontlicense.org/
+Full license text: fonts/OFL-1.1.txt
+Runtime copies: fonts/NanumSquareRound-Bold.woff2, fonts/NanumSquareRound-ExtraBold.woff2
+  (unmodified WOFF2 files as distributed by NAVER)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+The font files are redistributed unmodified and are not sold on their own.
+
+Pretendard
+----------
+
+Copyright (c) 2021, Kil Hyung-jin, with Reserved Font Name "Pretendard".
+Copyright 2014-2021 Adobe, with Reserved Font Name "Source".
+Copyright (c) 2016 The Inter Project Authors, with Reserved Font Name "Inter".
+Copyright 2021 The M+ FONTS Project Authors, with Reserved Font Name "M PLUS 1".
+Released under the SIL Open Font License 1.1.
+
+Source: https://github.com/orioncactus/pretendard
+License: https://github.com/orioncactus/pretendard/blob/main/LICENSE
+Full license text: fonts/Pretendard-LICENSE.txt
+Runtime copies: fonts/Pretendard-Regular.woff2, fonts/Pretendard-Bold.woff2 (unmodified official WOFF2)
+Site copies (official dynamic subset of Pretendard 1.3.9, unmodified WOFF2, bundled by the ODDBOUT site's stylesheet):
+  src/creator/assets/pretendard/Pretendard-Regular.subset.0.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.1.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.2.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.3.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.4.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.5.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.6.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.7.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.8.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.9.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.10.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.11.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.12.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.13.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.14.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.15.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.16.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.17.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.18.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.19.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.20.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.21.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.22.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.23.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.24.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.25.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.26.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.27.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.28.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.29.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.30.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.31.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.32.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.33.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.34.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.35.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.36.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.37.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.38.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.39.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.40.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.41.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.42.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.43.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.44.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.45.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.46.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.47.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.48.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.49.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.50.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.51.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.52.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.53.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.54.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.55.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.56.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.57.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.58.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.59.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.60.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.61.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.62.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.63.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.64.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.65.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.66.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.67.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.68.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.69.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.70.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.71.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.72.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.73.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.74.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.75.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.76.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.77.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.78.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.79.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.80.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.81.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.82.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.83.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.84.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.85.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.86.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.87.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.88.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.89.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.90.woff2
+  src/creator/assets/pretendard/Pretendard-Regular.subset.91.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.0.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.1.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.2.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.3.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.4.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.5.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.6.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.7.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.8.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.9.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.10.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.11.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.12.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.13.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.14.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.15.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.16.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.17.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.18.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.19.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.20.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.21.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.22.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.23.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.24.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.25.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.26.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.27.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.28.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.29.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.30.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.31.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.32.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.33.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.34.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.35.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.36.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.37.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.38.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.39.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.40.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.41.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.42.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.43.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.44.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.45.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.46.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.47.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.48.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.49.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.50.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.51.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.52.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.53.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.54.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.55.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.56.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.57.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.58.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.59.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.60.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.61.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.62.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.63.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.64.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.65.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.66.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.67.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.68.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.69.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.70.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.71.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.72.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.73.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.74.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.75.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.76.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.77.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.78.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.79.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.80.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.81.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.82.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.83.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.84.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.85.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.86.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.87.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.88.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.89.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.90.woff2
+  src/creator/assets/pretendard/Pretendard-Bold.subset.91.woff2
+
+Black Han Sans (블랙한산스) — lettering subset
+---------------------------------------------
+
+Copyright 2015 The Black Han Sans Project Authors (https://github.com/zesstype/Black-Han-Sans)
+Released under the SIL Open Font License 1.1 (no Reserved Font Name).
+
+Source: https://github.com/google/fonts/tree/main/ofl/blackhansans
+License: https://openfontlicense.org/
+Full license text: fonts/BlackHanSans-OFL.txt
+Runtime copy: fonts/BlackHanSans-Lettering.woff2
+  (modified: subset to the glyphs the game uses, re-encoded as WOFF2)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+The modified font is redistributed under the same license and is not sold on its own.
+
+Gaegu (개구) Bold, Patrick Hand, Yomogi (よもぎ) — notebook handwriting subsets
+-------------------------------------------------------------------------------
+
+Gaegu: Copyright 2018 The Gaegu Project Authors (https://github.com/JIKJISOFT/Gaegu)
+Patrick Hand: Copyright (c) 2010-2012 Patrick Wagesreiter (mail@patrickwagesreiter.at)
+Yomogi: Copyright 2020 The Yomogi Project Authors (https://github.com/satsuyako/YomogiFont)
+Each released under the SIL Open Font License 1.1 (no Reserved Font Name).
+
+Source: https://github.com/google/fonts/tree/main/ofl/gaegu, /ofl/patrickhand, /ofl/yomogi
+License: https://openfontlicense.org/
+Full license texts: fonts/Gaegu-OFL.txt, fonts/PatrickHand-OFL.txt, fonts/Yomogi-OFL.txt
+Runtime copies: fonts/Gaegu-Notebook.woff2, fonts/PatrickHand-Notebook.woff2, fonts/Yomogi-Notebook.woff2
+  (modified: subset to the glyphs the notebook's handwritten lines use, re-encoded as WOFF2)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+The modified fonts are redistributed under the same license and are not sold on their own.
+
+Google Sans — sign-in button subset (site pages)
+------------------------------------------------
+
+Copyright 2025 The Google Sans Project Authors (https://github.com/googlefonts/googlesans)
+Released under the SIL Open Font License 1.1 (no Reserved Font Name).
+
+Source: https://fonts.googleapis.com/css2?family=Google+Sans:wght@500
+License: https://openfontlicense.org/
+Full license text: fonts/GoogleSans-OFL.txt
+Runtime copy: src/creator/assets/google/GoogleSans-Medium.ttf (bundled by the creator pages' stylesheet)
+  (modified: subset served by Google Fonts for the sign-in button text)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+The modified font is redistributed under the same license and is not sold on its own.
+
+LobeHub Icons — agent marks (creator pages)
+-------------------------------------------
+
+Source: @lobehub/icons-static-svg 1.90.0 (https://github.com/lobehub/lobe-icons)
+Runtime copy: src/creator/agentLogos.ts — the path data of icons/grok.svg, icons/codex.svg,
+  icons/claude.svg and icons/gemini.svg (one-colour marks, recoloured by the page)
+The marks themselves are the trademarks of their owners (xAI, OpenAI, Anthropic, Google);
+they name the agents a player connects and imply no endorsement.
+
+MIT License
+
+Copyright (c) 2023 LobeHub
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+Matter.js 0.20.0
+----------------
+
+The MIT License (MIT)
+
+Copyright (c) Liam Brummitt and contributors.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+@supabase/supabase-js 2.117.3
+-----------------------------
+
+Source: https://github.com/supabase/supabase-js/tree/master/packages/core/supabase-js
+Runtime: browser client for the village player chat (bundled into the game).
+
+MIT License
+
+Copyright (c) 2020 Supabase
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+@supabase/auth-js 2.117.3
+-------------------------
+
+Source: https://github.com/supabase/supabase-js/tree/master/packages/core/auth-js
+
+MIT License
+
+Copyright (c) 2020 Supabase
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+tslib 2.8.1
+-----------
+
+Source: https://github.com/Microsoft/tslib
+
+Copyright (c) Microsoft Corporation.
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+PERFORMANCE OF THIS SOFTWARE.
+
+@supabase/functions-js 2.117.3
+------------------------------
+
+Source: https://github.com/supabase/supabase-js/tree/master/packages/core/functions-js
+
+MIT License
+
+Copyright (c) 2020 Supabase
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+@supabase/postgrest-js 2.117.3
+------------------------------
+
+Source: https://github.com/supabase/supabase-js/tree/master/packages/core/postgrest-js
+
+MIT License
+
+Copyright (c) 2020 Supabase
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+@supabase/realtime-js 2.117.3
+-----------------------------
+
+Source: https://github.com/supabase/supabase-js/tree/master/packages/core/realtime-js
+
+MIT License
+
+Copyright (c) 2020 Supabase
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+@supabase/phoenix 0.4.5
+-----------------------
+
+Source: https://github.com/supabase/phoenix
+
+# MIT License
+
+Copyright (c) 2014 Chris McCord
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+@supabase/storage-js 2.117.3
+----------------------------
+
+Source: https://github.com/supabase/supabase-js/tree/master/packages/core/storage-js
+
+MIT License
+
+Copyright (c) 2020 Supabase
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+iceberg-js 0.8.1
+----------------
+
+Source: https://github.com/supabase/iceberg-js
+
+MIT License
+
+Copyright (c) 2025 Supabase
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

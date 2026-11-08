@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "pages": [
+    "updates.html",
+    "updates.ko.html",
+    "updates/2026-11-03-vice-arrives.html",
+    "updates/2026-11-03-first-version-plan.html",
+    "updates.en.html",
+    "updates/2026-11-03-vice-arrives.en.html",
+    "updates/2026-11-03-first-version-plan.en.html",
+    "updates.ja.html",
+    "updates/2026-11-03-vice-arrives.ja.html",
+    "updates/2026-11-03-first-version-plan.ja.html"
+  ],
+  "assets": [
+    "art/ui/oddbout-logo.webp",
+    "art/worlds/nightcrown/cover.webp",
+    "art/worlds/nightcrown/velora-face.webp",
+    "art/worlds/nightcrown/nera-face.webp",
+    "art/worlds/nightcrown/rubia-face.webp",
+    "art/worlds/nightcrown/morne-face.webp"
+  ]
+}

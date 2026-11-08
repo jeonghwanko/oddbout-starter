@@ -1,0 +1,39 @@
+{
+  "profile": {
+    "schemaVersion": 1,
+    "revision": 1,
+    "id": "oddbout-creation",
+    "coverage": "bootstrap-only",
+    "profiles": [
+      {
+        "id": "gpt-appearance",
+        "label": "GPT 외형 제작",
+        "provider": "codex",
+        "capabilities": [
+          "gpt-image"
+        ],
+        "destinations": [
+          {
+            "host": "auth.openai.com",
+            "port": 443,
+            "purpose": "공식 기기 로그인",
+            "stage": "login"
+          },
+          {
+            "host": "chatgpt.com",
+            "port": 443,
+            "purpose": "구독 계정의 생성 요청",
+            "stage": "generation"
+          }
+        ],
+        "unresolved": [
+          "실제 생성 결과 다운로드 주소",
+          "현재 Dots 대화의 원본 파일·미리보기 전달 경로"
+        ],
+        "sources": [
+          "https://learn.chatgpt.com/docs/auth"
+        ]
+      }
+    ]
+  }
+}

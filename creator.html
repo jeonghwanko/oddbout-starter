@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="description" content="Create and manage your ODDBOUT fighters. Follow the guide to bring your character to the ring." />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <title>Create your fighter · ODDBOUT</title>
+    <script>
+      // The page's language before the module boots — the same order as platform/localePreference (?lang, the saved pick, the browser,
+      // English). test/locale-boot-scripts.test.ts runs this against resolveLocale.
+      const bootLocale = (() => {
+        const known = value => ["ko", "en", "ja"].includes(value) ? value : null;
+        let saved = null;
+        try { saved = localStorage.getItem("ai-fighter.creator.locale.v1"); } catch { /* the URL and the browser still decide */ }
+        const browser = (navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language]).map(tag => known(String(tag).split("-")[0].toLowerCase())).find(Boolean);
+        const requested = new URLSearchParams(location.search).get("lang");
+        if (requested === "qps") return "en"; // the development build's pseudo language reads English
+        return known(requested) || known(saved) || browser || "en";
+      })();
+      document.documentElement.lang = bootLocale;
+    </script>
+  <script type="module" crossorigin src="/assets/creator-DmHam7Ct.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/_oddbout-analytics-CiIVnasc.js">
+  <link rel="modulepreload" crossorigin href="/assets/_oddbout-milestones-CTI00lJ4.js">
+  <link rel="modulepreload" crossorigin href="/assets/pseudo-B3ZLOM_E.js">
+  <link rel="modulepreload" crossorigin href="/assets/Locale-D7-1bJTb.js">
+  <link rel="modulepreload" crossorigin href="/assets/FighterIdentity-D6Gr6ouO.js">
+  <link rel="modulepreload" crossorigin href="/assets/localeLoader-Ds4pezaf.js">
+  <link rel="modulepreload" crossorigin href="/assets/preload-helper-7y9sWmk5.js">
+  <link rel="modulepreload" crossorigin href="/assets/leagueCopy-D6ui8bvL.js">
+  <link rel="modulepreload" crossorigin href="/assets/leagueContent-yG-u42Eh.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-CEcV9Fij.js">
+  <link rel="modulepreload" crossorigin href="/assets/chrome-4igrYfdY.js">
+  <link rel="modulepreload" crossorigin href="/assets/storageKeys-C4z49Sal.js">
+  <link rel="modulepreload" crossorigin href="/assets/localePreference-CvgqtnQR.js">
+  <link rel="modulepreload" crossorigin href="/assets/siteDialog-CMKkua9H.js">
+  <link rel="modulepreload" crossorigin href="/assets/fighterApiBase-CeB_1v89.js">
+  <link rel="modulepreload" crossorigin href="/assets/agentNames-C9gi1FWq.js">
+  <link rel="modulepreload" crossorigin href="/assets/PublicAssetVersions-DIMNeJVo.js">
+  <link rel="modulepreload" crossorigin href="/assets/registeredFighters-DYTNBD6U.js">
+  <link rel="modulepreload" crossorigin href="/assets/dist-C9fd7Nwh.js">
+  <link rel="modulepreload" crossorigin href="/assets/oddboutSession-CO5fLQhx.js">
+  <link rel="modulepreload" crossorigin href="/assets/spec-CABr0Tau.js">
+  <link rel="modulepreload" crossorigin href="/assets/fighterLines-BqpSV2Ld.js">
+  <link rel="modulepreload" crossorigin href="/assets/fighterCreator-RLNX3di3.js">
+  <link rel="modulepreload" crossorigin href="/assets/fighterSheetData-BfweczxY.js">
+  <link rel="modulepreload" crossorigin href="/assets/arenaRankings-C84tQq3J.js">
+  <link rel="modulepreload" crossorigin href="/assets/ArenaBoutLink-C72WWppH.js">
+  <link rel="modulepreload" crossorigin href="/assets/CityTournamentRules-BrrI7WGX.js">
+  <link rel="modulepreload" crossorigin href="/assets/UtcTime-BFPbMiHs.js">
+  <link rel="modulepreload" crossorigin href="/assets/leagueSheets-DXqoolis.js">
+  <link rel="modulepreload" crossorigin href="/assets/fighterProfile-CVm1VOZn.js">
+  <link rel="modulepreload" crossorigin href="/assets/GameMenuState-BTcb0y2X.js">
+  <link rel="modulepreload" crossorigin href="/assets/accountControl-C9uyhmvf.js">
+  <link rel="modulepreload" crossorigin href="/assets/OddboutCommunity-CLWy8SdF.js">
+  <link rel="modulepreload" crossorigin href="/assets/siteChrome-DtP4fX6k.js">
+  <link rel="modulepreload" crossorigin href="/assets/rankedDuels-4JGdq1nY.js">
+  <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-BWaJ3C7D.js">
+  <link rel="modulepreload" crossorigin href="/assets/validate-Beb91gKy.js">
+  <link rel="modulepreload" crossorigin href="/assets/NativeCityOrthoPack-UR-Sg-fC.js">
+  <link rel="modulepreload" crossorigin href="/assets/packageChecker-BrGjHFCZ.js">
+  <link rel="modulepreload" crossorigin href="/assets/arena-concept-runtime-CbVbG3va.js">
+  <link rel="modulepreload" crossorigin href="/assets/fighterFace-BZxk5wVP.js">
+  <link rel="modulepreload" crossorigin href="/assets/agentLogos-DG22RJ1v.js">
+  <link rel="stylesheet" crossorigin href="/assets/fighterProfile-De6G951Q.css">
+  <link rel="stylesheet" crossorigin href="/assets/accountControl-CWZ8z-IX.css">
+  <link rel="stylesheet" crossorigin href="/assets/siteChrome-BnBZ9gvv.css">
+  <link rel="stylesheet" crossorigin href="/assets/packageChecker-DKaXO0QP.css">
+  <link rel="stylesheet" crossorigin href="/assets/creator-DSgND5vy.css">
+  <link rel="stylesheet" crossorigin href="/assets/creatorTheme-mciG_0fP.css">
+</head>
+  <body class="creator-site">
+    <div id="creator-app"></div>
+    <script>(()=>{const p={"en":["assets/en-CcTFmZfT.js","assets/en-D6bnvRC6.js","assets/en-D82gxORr.js","assets/en-DqbfxVG6.js"],"ko":["assets/ko-BS4vsCKG.js","assets/ko-C8C-Pcq4.js","assets/ko-CGXaoIXH.js","assets/ko-fWaocpRt.js"],"ja":["assets/ja-BT5QdTWC.js","assets/ja-BuW9okzh.js","assets/ja-DDNBHnB3.js","assets/ja-m6OZLMQC.js"]}[document.documentElement.lang];if(!p)return;for(const f of p){const l=document.createElement("link");l.rel="modulepreload";l.crossOrigin="";l.href="./"+f;document.head.append(l)}})()</script>
+  </body>
+</html>

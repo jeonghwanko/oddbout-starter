@@ -1,0 +1,253 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:4662fcee-19d0-4a7f-a75c-22f65297c3f0",
+  "version": 1,
+  "metadata": {
+    "component": {
+      "type": "application",
+      "name": "Wonder Lupin",
+      "version": "0.1.0"
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "name": "phaser",
+      "version": "3.90.0",
+      "scope": "required",
+      "purl": "pkg:npm/phaser@3.90.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "eventemitter3",
+      "version": "5.0.4",
+      "scope": "required",
+      "purl": "pkg:npm/eventemitter3@5.0.4",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "matter-js",
+      "version": "0.20.0",
+      "scope": "required",
+      "purl": "pkg:npm/matter-js@0.20.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@supabase/supabase-js",
+      "version": "2.117.3",
+      "scope": "required",
+      "purl": "pkg:npm/%40supabase/supabase-js@2.117.3",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@supabase/auth-js",
+      "version": "2.117.3",
+      "scope": "required",
+      "purl": "pkg:npm/%40supabase/auth-js@2.117.3",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "tslib",
+      "version": "2.8.1",
+      "scope": "required",
+      "purl": "pkg:npm/tslib@2.8.1",
+      "licenses": [
+        {
+          "license": {
+            "id": "0BSD"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@supabase/functions-js",
+      "version": "2.117.3",
+      "scope": "required",
+      "purl": "pkg:npm/%40supabase/functions-js@2.117.3",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@supabase/postgrest-js",
+      "version": "2.117.3",
+      "scope": "required",
+      "purl": "pkg:npm/%40supabase/postgrest-js@2.117.3",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@supabase/realtime-js",
+      "version": "2.117.3",
+      "scope": "required",
+      "purl": "pkg:npm/%40supabase/realtime-js@2.117.3",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@supabase/phoenix",
+      "version": "0.4.5",
+      "scope": "required",
+      "purl": "pkg:npm/%40supabase/phoenix@0.4.5",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@supabase/storage-js",
+      "version": "2.117.3",
+      "scope": "required",
+      "purl": "pkg:npm/%40supabase/storage-js@2.117.3",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "iceberg-js",
+      "version": "0.8.1",
+      "scope": "required",
+      "purl": "pkg:npm/iceberg-js@0.8.1",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "pkg:npm/phaser@3.90.0",
+      "dependsOn": [
+        "pkg:npm/eventemitter3@5.0.4"
+      ]
+    },
+    {
+      "ref": "pkg:npm/eventemitter3@5.0.4",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/matter-js@0.20.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40supabase/supabase-js@2.117.3",
+      "dependsOn": [
+        "pkg:npm/%40supabase/auth-js@2.117.3",
+        "pkg:npm/%40supabase/functions-js@2.117.3",
+        "pkg:npm/%40supabase/postgrest-js@2.117.3",
+        "pkg:npm/%40supabase/realtime-js@2.117.3",
+        "pkg:npm/%40supabase/storage-js@2.117.3"
+      ]
+    },
+    {
+      "ref": "pkg:npm/%40supabase/auth-js@2.117.3",
+      "dependsOn": [
+        "pkg:npm/tslib@2.8.1"
+      ]
+    },
+    {
+      "ref": "pkg:npm/tslib@2.8.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40supabase/functions-js@2.117.3",
+      "dependsOn": [
+        "pkg:npm/tslib@2.8.1"
+      ]
+    },
+    {
+      "ref": "pkg:npm/%40supabase/postgrest-js@2.117.3",
+      "dependsOn": [
+        "pkg:npm/tslib@2.8.1"
+      ]
+    },
+    {
+      "ref": "pkg:npm/%40supabase/realtime-js@2.117.3",
+      "dependsOn": [
+        "pkg:npm/%40supabase/phoenix@0.4.5",
+        "pkg:npm/tslib@2.8.1"
+      ]
+    },
+    {
+      "ref": "pkg:npm/%40supabase/phoenix@0.4.5",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40supabase/storage-js@2.117.3",
+      "dependsOn": [
+        "pkg:npm/iceberg-js@0.8.1",
+        "pkg:npm/tslib@2.8.1"
+      ]
+    },
+    {
+      "ref": "pkg:npm/iceberg-js@0.8.1",
+      "dependsOn": []
+    }
+  ]
+}

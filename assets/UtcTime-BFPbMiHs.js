@@ -1,0 +1,1 @@
+function e(e,t,n={}){return`${new Intl.DateTimeFormat(t,{...n,timeZone:`UTC`}).format(new Date(e))} UTC`}function t(e){let t=new Date(e);return Number.isFinite(t.getTime())?`${t.toISOString().slice(0,10)} UTC`:``}export{t as n,e as t};

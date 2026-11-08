@@ -1,0 +1,1 @@
+function e(){return!1}function t(){return e()?`${globalThis.location.origin}/local/ai-fighter`:n()}function n(){let e=`https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter`;return/^https:\/\/[a-z0-9]{20}\.supabase\.co\/functions\/v1\/ai-fighter$/.test(e)?e:null}export{n,e as r,t};

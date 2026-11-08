@@ -1,0 +1,38 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:06.000
+Dedicated normal reviewer confirmed. This is a live verification view of native MCP calls, not the Dots conversation UI.
+
+2
+00:00:06.000 --> 00:00:14.000
+The actual fighter.json reached the cloud MCP through the host file input. Eleven WebP assets were requested.
+
+3
+00:00:14.000 --> 00:00:20.000
+First real WebP uploaded. The service verified its bytes and SHA-256 against the manifest.
+
+4
+00:00:20.000 --> 00:00:26.000
+Walk, run and fight-idle uploads succeeded. Existing approved artwork is unchanged.
+
+5
+00:00:26.000 --> 00:00:32.000
+Eight of eleven actual files uploaded, including attacks and block. No new artwork was generated.
+
+6
+00:00:32.000 --> 00:00:39.000
+All eleven files, 5,537,184 bytes, passed upload verification. Uploading alone is not registration.
+
+7
+00:00:39.000 --> 00:00:47.000
+The explicit registration request returned queued. The video condenses the wait for the server worker.
+
+8
+00:00:47.000 --> 00:00:54.000
+The server returned registered, with all eleven assets validated and runtimeApproved true.
+
+9
+00:00:54.000 --> 00:01:02.000
+The new fighter appears in the reviewer-owned list. The registered immutable manifest hash matches the submitted file.
+

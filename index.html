@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta name="referrer" content="no-referrer">
+<script>if (/\/(?:index|league)\.html$/.test(location.pathname)) {
+  history.replaceState(null, "", "./" + location.search + location.hash);
+}
+const params = new URLSearchParams(location.search);
+const creatorParams = ["apply", "code", "error", "error_code", "error_description", "state"];
+const publicAnchors = ["#main", "#fighters", "#match", "#join"];
+if (creatorParams.some(key => params.has(key)) || (location.hash && !publicAnchors.includes(location.hash))) {
+  location.replace("./creator.html" + location.search + location.hash);
+}</script>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#14212d">
+  <meta name="referrer" content="no-referrer">
+  <meta name="description" content="사람과 에이전트가 함께 IP를 생성하고 확산하는 커뮤니티를 지향합니다. AI 구독으로 캐릭터와 애니메이션을 만들고, 애셋을 다듬고 활용하는 ODDBOUT의 여정을 만나보세요.">
+  <meta property="og:title" content="ODDBOUT · Agent와 함께 IP 생성과 확산">
+  <meta property="og:description" content="사람과 에이전트가 함께 IP를 생성하고 확산하는 커뮤니티를 지향합니다. AI 구독으로 캐릭터와 애니메이션을 만들고, 애셋을 다듬고 활용하는 ODDBOUT의 여정을 만나보세요.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="https://oddbout.com/og-image.jpg">
+  <meta property="og:image:type" content="image/jpeg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:url" content="https://oddbout.com/">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="canonical" href="https://oddbout.com/">
+  <link rel="icon" href="/favicon.ico" sizes="32x32"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <title>ODDBOUT · Agent와 함께 IP 생성과 확산</title>
+  <script>
+    // The HTML is the Korean copy; every other language hides it until league.ts puts its copy in.
+    // The page's language before the module boots — the same order as platform/localePreference (?lang, the saved pick, the browser,
+    // English). test/locale-boot-scripts.test.ts runs this against resolveLocale.
+    const bootLocale = (() => {
+      const known = value => ["ko", "en", "ja"].includes(value) ? value : null;
+      let saved = null;
+      try { saved = localStorage.getItem("ai-fighter.creator.locale.v1"); } catch { /* the URL and the browser still decide */ }
+      const browser = (navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language]).map(tag => known(String(tag).split("-")[0].toLowerCase())).find(Boolean);
+      const requested = new URLSearchParams(location.search).get("lang");
+      if (requested === "qps") return "en"; // the development build's pseudo language reads English
+      return known(requested) || known(saved) || browser || "en";
+    })();
+    document.documentElement.lang = bootLocale;
+    if (bootLocale !== "ko") {
+      document.documentElement.classList.add("translating");
+      setTimeout(() => document.documentElement.classList.remove("translating"), 3000);
+    }
+  </script>
+  <!-- The hero's octagon is a CSS background (league.css .hero-stage, .hero-crowd under 760px) and the page's largest paint; without this it starts only after the stylesheet arrives (2026-10-29 Lighthouse). -->
+  <link rel="preload" as="image" href="/art/ui/oddbout-hero-octagon-v1.webp?v=ba7c674d" media="(min-width: 761px)" fetchpriority="high">
+  <link rel="preload" as="image" href="/art/ui/oddbout-hero-octagon-v1-m.webp?v=ba7c674d" media="(max-width: 760px)" fetchpriority="high">
+  <script type="module" crossorigin src="/assets/league-BsB5yjO_.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/_oddbout-analytics-CiIVnasc.js">
+  <link rel="modulepreload" crossorigin href="/assets/pseudo-B3ZLOM_E.js">
+  <link rel="modulepreload" crossorigin href="/assets/Locale-D7-1bJTb.js">
+  <link rel="modulepreload" crossorigin href="/assets/fighterApiBase-CeB_1v89.js">
+  <link rel="modulepreload" crossorigin href="/assets/storageKeys-C4z49Sal.js">
+  <link rel="modulepreload" crossorigin href="/assets/preload-helper-7y9sWmk5.js">
+  <link rel="modulepreload" crossorigin href="/assets/oddboutSession-CO5fLQhx.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-CEcV9Fij.js">
+  <link rel="modulepreload" crossorigin href="/assets/localeLoader-Ds4pezaf.js">
+  <link rel="modulepreload" crossorigin href="/assets/chrome-4igrYfdY.js">
+  <link rel="modulepreload" crossorigin href="/assets/GameMenuState-BTcb0y2X.js">
+  <link rel="modulepreload" crossorigin href="/assets/accountControl-C9uyhmvf.js">
+  <link rel="modulepreload" crossorigin href="/assets/OddboutCommunity-CLWy8SdF.js">
+  <link rel="modulepreload" crossorigin href="/assets/localePreference-CvgqtnQR.js">
+  <link rel="modulepreload" crossorigin href="/assets/PublicAssetVersions-DIMNeJVo.js">
+  <link rel="modulepreload" crossorigin href="/assets/siteChrome-DtP4fX6k.js">
+  <link rel="modulepreload" crossorigin href="/assets/FighterIdentity-D6Gr6ouO.js">
+  <link rel="modulepreload" crossorigin href="/assets/leagueCopy-D6ui8bvL.js">
+  <link rel="modulepreload" crossorigin href="/assets/leagueContent-yG-u42Eh.js">
+  <link rel="modulepreload" crossorigin href="/assets/arena-concept-runtime-CbVbG3va.js">
+  <link rel="modulepreload" crossorigin href="/assets/fighterFace-BZxk5wVP.js">
+  <link rel="modulepreload" crossorigin href="/assets/siteDialog-CMKkua9H.js">
+  <link rel="modulepreload" crossorigin href="/assets/agentNames-C9gi1FWq.js">
+  <link rel="modulepreload" crossorigin href="/assets/registeredFighters-DYTNBD6U.js">
+  <link rel="modulepreload" crossorigin href="/assets/dist-C9fd7Nwh.js">
+  <link rel="modulepreload" crossorigin href="/assets/_oddbout-milestones-CTI00lJ4.js">
+  <link rel="modulepreload" crossorigin href="/assets/spec-CABr0Tau.js">
+  <link rel="modulepreload" crossorigin href="/assets/fighterLines-BqpSV2Ld.js">
+  <link rel="modulepreload" crossorigin href="/assets/fighterCreator-RLNX3di3.js">
+  <link rel="modulepreload" crossorigin href="/assets/fighterSheetData-BfweczxY.js">
+  <link rel="modulepreload" crossorigin href="/assets/arenaRankings-C84tQq3J.js">
+  <link rel="modulepreload" crossorigin href="/assets/ArenaBoutLink-C72WWppH.js">
+  <link rel="modulepreload" crossorigin href="/assets/CityTournamentRules-BrrI7WGX.js">
+  <link rel="modulepreload" crossorigin href="/assets/UtcTime-BFPbMiHs.js">
+  <link rel="modulepreload" crossorigin href="/assets/leagueSheets-DXqoolis.js">
+  <link rel="modulepreload" crossorigin href="/assets/fighterProfile-CVm1VOZn.js">
+  <link rel="stylesheet" crossorigin href="/assets/accountControl-CWZ8z-IX.css">
+  <link rel="stylesheet" crossorigin href="/assets/siteChrome-BnBZ9gvv.css">
+  <link rel="stylesheet" crossorigin href="/assets/fighterProfile-De6G951Q.css">
+  <link rel="stylesheet" crossorigin href="/assets/league-QQsmPOJx.css">
+</head>
+<body>
+  <a class="skip" href="#main"><span data-copy="skip">본문으로 건너뛰기</span></a>
+  <header class="club-header" data-club-header><a class="club-brand" href="./" aria-label="ODDBOUT home"><img src="/art/ui/oddbout-logo.webp?v=ba7c674d" alt="ODDBOUT Fight Club" width="376" height="76"></a></header>
+  <main id="main">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-top">
+        <div class="hero-stage">
+          <div class="hero-banner">
+            <div class="hero-copy">
+              <h1 id="hero-title"><span data-copy="heroFirst">밈 선수, 내가 만든 선수.</span><br> <span data-copy="heroLast">친구와 구단 키우기.</span></h1>
+              <p class="hero-invite"><span data-copy="invite">응원할 선수를 고르고 대진을 짜세요.</span></p>
+              <div class="hero-actions"><a class="button primary hero-play" id="hero-play" href="./fighter.html?club=1&amp;lang=ko" data-destination="fighter.html" data-query="club=1"><span data-copy="heroPlay">시작하기</span><span aria-hidden="true">▶</span></a><a class="hero-create" href="./creator.html?lang=ko" data-destination="creator.html"><span data-copy="heroCreate">무료로 내 선수 만들기 →</span></a></div>
+              <!-- The newest delivered update (src/creator/updates/content.mjs latestUpdate): league.ts fills it, opening the post in a new tab. The slot keeps its height so nothing moves when it fills. -->
+              <p class="hero-update-slot"><a class="hero-update" id="hero-update" hidden></a></p>
+            </div>
+            <div class="hero-crowd" aria-hidden="true"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <!-- Featured bouts (2026-10-25 사용자: "메인 배너 아래에 ... 주요 선수 경기"): league.ts fills #featured-bouts from src/app/oddbout-featured-bouts.json. With none listed it stays "Fighters": the premium faces below, each opening its profile. -->
+    <section class="featured-section wrap" id="featured" aria-labelledby="featured-title">
+      <div class="section-head"><h2 id="featured-title"><span data-copy="fightersTitle">선수들</span></h2><p id="featured-intro"><span data-copy="facesIntro">프로필을 열어 응원할 선수를 고르세요.</span></p></div>
+      <ol class="featured-bouts" id="featured-bouts" hidden></ol>
+      <!-- One empty slot per house fighter (test/league-featured-bouts.test.ts): league.ts fills the row without moving what follows. -->
+      <ul class="face-row" id="face-row"><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li></ul>
+      <div class="featured-more"><a id="featured-all" class="featured-link" href="./fighters.html?lang=ko" data-destination="fighters.html"><span>선수 23명 모두 보기</span><span aria-hidden="true">→</span></a><a id="featured-twitch" class="featured-link" href="./twitch.html?lang=en"><span data-copy="featuredTwitch">Twitch Cup</span><span aria-hidden="true">→</span></a></div>
+    </section>
+    <section class="cup-section wrap" id="cup" aria-labelledby="cup-title">
+      <div class="section-head"><h2 id="cup-title"><span data-copy="cupTitle">16강 컵</span></h2></div>
+      <div class="cup-grid">
+        <div class="cup-demo" role="img" aria-label="예시: 대표 타이푼이 16강에서 퀵캣, 8강에서 쿠마를 이기고 4강에서 엘롱 머스캣을 기다린다" data-label="cupDemo">
+          <div class="cup-champion"><img src="/art/ui/oddbout-roster-v1/typhoon.webp?v=fd9551fb" alt="" width="800" height="1200" loading="lazy"><span class="cup-champion-name"><span class="cup-star" aria-hidden="true">★</span><span data-copy="boutLeft">타이푼</span></span></div>
+          <ol class="cup-rounds">
+            <li class="done"><span class="cup-face" style="--face-x:76%;--face-y:42%"><img src="/art/arena/concept/quickcat.webp?v=062a5192" alt="" width="1116" height="600" loading="lazy"></span><span class="cup-round" data-copy="round16">16강</span><span class="cup-mark" data-copy="cupWon">KO승</span></li>
+            <li class="done"><span class="cup-face"><img src="/art/arena/concept/kuma.webp?v=062a5192" alt="" width="343" height="600" loading="lazy"></span><span class="cup-round" data-copy="round8">8강</span><span class="cup-mark" data-copy="cupWon">KO승</span></li>
+            <li class="next"><span class="cup-face" style="--face-x:58%"><img src="/art/ui/oddbout-roster-v1/elong-muscat.webp?v=fd9551fb" alt="" width="800" height="1200" loading="lazy"></span><span class="cup-round" data-copy="round4">4강</span><span class="cup-mark" data-copy="cupNext">다음 경기</span></li>
+            <li class="ahead"><span class="cup-face unknown">?</span><span class="cup-round" data-copy="roundFinal">결승</span><span class="cup-mark">&nbsp;</span></li>
+            <li class="cup-trophy"><span class="cup-trophy-mark"><svg viewBox="0 0 48 48" width="46" height="46" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round" aria-hidden="true"><path d="M14 7h20v10c0 6.6-4.5 11.5-10 11.5S14 23.6 14 17Z"/><path d="M14 11H7.5c0 6 2.8 9.4 7.4 10M34 11h6.5c0 6-2.8 9.4-7.4 10"/><path d="M24 28.5V36M16 41h16l-2-5H18Z"/></svg></span><span class="cup-round" data-copy="cupTrophy">우승</span><span class="cup-mark">&nbsp;</span></li>
+          </ol>
+        </div>
+        <div class="cup-guide">
+          <ol class="cup-steps">
+            <li><span>01</span><div><h3><span data-copy="cupStep1Title">대표 고르기</span></h3><p><span data-copy="cupStep1Body">응원할 선수 한 명.</span> <a class="cup-step-link" href="./fighters.html?lang=ko" data-destination="fighters.html"><span data-copy="cupStep1Link">선수 프로필</span></a><span data-copy="cupStep1Tail">에서 바로 고를 수도 있습니다.</span></p></div></li>
+            <li><span>02</span><div><h3><span data-copy="cupStep2Title">대진 짜기</span></h3><p><span data-copy="cupStep2Body">16칸에 누구를 어디 둘지 정하세요. 대진이 곧 전략입니다.</span></p></div></li>
+            <li><span>03</span><div><h3><span data-copy="cupStep3Title">결승까지</span></h3><p><span data-copy="cupStep3Body">경기는 AI끼리 싸웁니다. 네 번 이기면 우승.</span></p></div></li>
+          </ol>
+          <p class="cup-odds"><span data-copy="cupOdds">무작위 대진의 우승 확률은 약 6 %. 잘 짜면 오릅니다.</span></p>
+          <div class="cup-actions"><a href="./fighter.html?lang=ko" data-destination="fighter.html" class="path-link cup-start"><span data-copy="cupStart">16강 시작</span><span aria-hidden="true">→</span></a><a id="cup-practice" class="cup-practice" href="./fighter.html?lang=ko&amp;play=1&amp;fighter=tyson&amp;opponent=elon"><span data-copy="cupPractice">자동 연습 경기 보기</span><span aria-hidden="true">▷</span></a></div>
+        </div>
+      </div>
+    </section>
+    <section class="twitch-cup-entry wrap" aria-labelledby="twitch-cup-title">
+      <div class="twitch-cup-card">
+        <div><p class="twitch-cup-kicker">FOR STREAMERS</p><h2 id="twitch-cup-title">Twitch Cup</h2><p data-copy="twitchCupBody">방송 채팅을 격투 대회로. 시청자 4명, 챔피언은 하나.</p></div>
+        <a class="button primary" href="./twitch.html?lang=en"><span data-copy="twitchCupAction">Twitch Cup 열기</span><span aria-hidden="true">→</span></a>
+      </div>
+    </section>
+  </main>
+  <footer class="club-footer" data-club-footer><a class="club-brand" href="./?lang=en"><img src="/art/ui/oddbout-logo.webp?v=ba7c674d" alt="ODDBOUT Fight Club" width="376" height="76"></a><nav aria-label="Footer"><a href="./about.html?lang=en">About</a><a href="./docs.html?lang=en">Docs</a><a href="mailto:turbo08@gmail.com">Contact</a><a href="./privacy.html?lang=en">Privacy</a><a href="./credits.html?lang=en">Credits</a></nav></footer>
+  <script>(()=>{const p={"en":["assets/en-D6bnvRC6.js","assets/en-D82gxORr.js","assets/en-DqbfxVG6.js"],"ko":["assets/ko-BS4vsCKG.js","assets/ko-CGXaoIXH.js","assets/ko-fWaocpRt.js"],"ja":["assets/ja-BT5QdTWC.js","assets/ja-DDNBHnB3.js","assets/ja-m6OZLMQC.js"]}[document.documentElement.lang];if(!p)return;for(const f of p){const l=document.createElement("link");l.rel="modulepreload";l.crossOrigin="";l.href="./"+f;document.head.append(l)}})()</script>
+</body></html>

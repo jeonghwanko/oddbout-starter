@@ -1,0 +1,2 @@
+var e=new Map,t=new Map;function n(n){let r=[...new Set(n)].sort(),i=r.join(`
+`);t.set(i,r);for(let t of r)e.set(t,i)}function r(n){let r=e.get(n);return r===void 0?null:{id:r,keys:t.get(r)??[]}}var i=new Set,a=new Set;function o(e){let t=[...new Set(e)].filter(e=>!i.has(e));for(let e of t)i.add(e);if(t.length>0)for(let e of a)e(t)}function s(e){return i.has(e)}function c(e){return a.add(e),()=>{a.delete(e)}}var l=null;function u(e){l=e}function d(e,t){return l===null||l(e,t)}export{r as a,c as i,n,d as o,s as r,u as s,o as t};

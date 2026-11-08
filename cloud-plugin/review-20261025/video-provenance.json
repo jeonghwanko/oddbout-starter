@@ -1,0 +1,75 @@
+{
+  "kind": "condensed sequence of screenshots captured during actual native MCP execution",
+  "notAChatUiRecording": true,
+  "executionSurface": "Local Codex native connector with host-managed file transport to cloud MCP",
+  "capturedAtStart": "2026-10-25T02:38:05.023Z",
+  "capturedAtEnd": "2026-10-25T02:42:51.085Z",
+  "displaySeconds": 62,
+  "timing": "Waiting periods shortened; every frame was captured after the associated real tool response. No fabricated tool outcomes.",
+  "frames": [
+    {
+      "file": "00-connected.png",
+      "at": "2026-10-25T02:38:05.023Z",
+      "label": "connected",
+      "duration": 6,
+      "sha256": "5cb6b0bde673a0c6ccde64644afd3a5f085fa3f3543c3484813a85ae76727d3b"
+    },
+    {
+      "file": "01-manifest-received.png",
+      "at": "2026-10-25T02:38:33.548Z",
+      "label": "manifest-received",
+      "duration": 8,
+      "sha256": "5f4e1dbc7400b895129359e0d5a7bfff8f15058036013215b22832df87c9af04"
+    },
+    {
+      "file": "02-first-asset-uploaded.png",
+      "at": "2026-10-25T02:39:02.435Z",
+      "label": "first-asset-uploaded",
+      "duration": 6,
+      "sha256": "0464ae0b3d66b37525071436c589d18df67ceb573a9fcd506a5d5b7b093f844b"
+    },
+    {
+      "file": "03-four-assets-uploaded.png",
+      "at": "2026-10-25T02:39:43.066Z",
+      "label": "four-assets-uploaded",
+      "duration": 6,
+      "sha256": "735b12903962d82b7dbfc7c67d7b1b92ad7a17b1fc72c2e27646983c639ef68f"
+    },
+    {
+      "file": "04-eight-assets-uploaded.png",
+      "at": "2026-10-25T02:40:26.478Z",
+      "label": "eight-assets-uploaded",
+      "duration": 6,
+      "sha256": "acf3fbe6e110d5f05a73df1ca11cfce5bf76c08ffaed521e9b994c99040d906c"
+    },
+    {
+      "file": "05-all-files-verified.png",
+      "at": "2026-10-25T02:40:57.721Z",
+      "label": "all-files-verified",
+      "duration": 7,
+      "sha256": "ffa897296705ffbcaa4f2cdc23cd9d69880699f4124b560ec8202855e33d9b91"
+    },
+    {
+      "file": "06-queued.png",
+      "at": "2026-10-25T02:41:21.751Z",
+      "label": "queued",
+      "duration": 8,
+      "sha256": "bebfa679c558df9731ce8468a7a393529c355fd364ea3e1a9dd2c4c5a7fe845c"
+    },
+    {
+      "file": "07-registered.png",
+      "at": "2026-10-25T02:42:27.589Z",
+      "label": "registered",
+      "duration": 7,
+      "sha256": "7059e646dcdf490899247b91de0719fcdbb5ef7863d1489064312d58efb88cf5"
+    },
+    {
+      "file": "08-ownership-verified.png",
+      "at": "2026-10-25T02:42:51.085Z",
+      "label": "ownership-verified",
+      "duration": 8,
+      "sha256": "af23f9e5e32ccec9f8f97b4e511197c8f9f475529500c617cbb121ff6369f961"
+    }
+  ],
+  "videoSha256": "1da9faeb38547e1e51f7882c416e811ee07a72c6968c9367c40756236b647110"
+}
