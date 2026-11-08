@@ -67,6 +67,12 @@ const runnerSays = health => {
     runner: typeof runner === 'string' && runner.length > 0 && runner.length <= HOST_RUNNER_CHARS ? runner : null };
 };
 const DRAFT_EVENTS_READ = 5;
+// A job past its appearance choice: its side still, expression sheet and automatic choice can be read.
+const PAST_CHOICE = Object.freeze(['motions', 'motion_ready', 'submitting', 'submitted', 'needs_review']);
+// The event kinds a job's view reads. A list reads them for all its jobs in one query, bounded: when the bound is met, each job
+// reads its own as before, so a busy history never hides an event.
+const VIEW_EVENT_KINDS = Object.freeze(['drafts', 'side', 'expressions', 'appearance-auto-selected', 'appearance-answer']);
+const LIST_EVENTS_READ = 200;
 const CORS = { methods: 'GET, POST, PATCH, DELETE, OPTIONS', headers: 'Authorization, Content-Type, Idempotency-Key' };
 // A join code (내 PC 붙이기): made by the site for a signed-in host, copied into his PC's terminal once; 160 bits, so nobody guesses one.
 export const JOIN_CODE = /^ohj_[a-f0-9]{40}$/;
@@ -267,19 +273,77 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     if (error) throw unavailable('database-unavailable', error);
     return new Map((data ?? []).map(/** @param {{ id: string, name: string, official: boolean }} h */ h => [h.id, { id: h.id, name: h.name, official: h.official === true }]));
   }
+  /**
+   * What a list of jobs reads at once instead of job by job (N+1, 리뷰 2026-11-08: a list of five made about forty reads every 25 seconds):
+   * the view's events, hosts, submissions, and one signing call for the pictures of all of them. Each part is null when it could not be
+   * batched (events past LIST_EVENTS_READ), and the job then reads that part on its own as before.
+   * @typedef {{ events: Map<string, any[]> | null, hosts: Map<string | null, any>, submissions: Map<string, any>, signed: (paths: string[]) => Promise<Map<string, string>> }} ListReads
+   * @param {Job[]} rows @returns {Promise<ListReads>}
+   */
+  async function listReads(rows) {
+    const eventJobs = rows.filter(row => row.status === 'motions' || (row.choice && PAST_CHOICE.includes(row.status))).map(row => row.id);
+    const submissionIds = [...new Set(rows.map(row => row.submission_id).filter(Boolean))];
+    const [events, hosts, submissions] = await Promise.all([
+      (async () => {
+        /** @type {Map<string, any[]>} */
+        const byJob = new Map(eventJobs.map(job => [job, []]));
+        if (!eventJobs.length) return byJob;
+        const { data, error } = await db.from('af_generation_events').select('id,job_id,at,kind,data').in('job_id', eventJobs)
+          .in('kind', [...VIEW_EVENT_KINDS]).order('id', { ascending: false }).limit(LIST_EVENTS_READ);
+        if (error) throw unavailable('database-unavailable', error);
+        if ((data ?? []).length >= LIST_EVENTS_READ) return null;
+        for (const event of data ?? []) byJob.get(event.job_id)?.push(event);
+        return byJob;
+      })(),
+      hostsOf(rows.flatMap(row => [row.requested_host, row.assigned_host])),
+      (async () => {
+        if (!submissionIds.length) return new Map();
+        const { data, error } = await db.from('af_submissions').select('id,status,fighter_id').in('id', submissionIds);
+        if (error) throw unavailable('database-unavailable', error);
+        return new Map((data ?? []).map(/** @param {any} s */ s => [s.id, { id: s.id, stage: s.status, fighterId: s.fighter_id ?? null }]));
+      })()]);
+    return { events, hosts, submissions, signed: batchedSigned() };
+  }
+  /** Signing requests made in the same turn go out as one createSignedUrls call. @returns {(paths: string[]) => Promise<Map<string, string>>} */
+  function batchedSigned() {
+    /** @type {{ paths: string[], resolve: (urls: Map<string, string>) => void, reject: (error: unknown) => void }[]} */
+    let waiting = [];
+    const flush = () => {
+      const batch = waiting; waiting = [];
+      signed([...new Set(batch.flatMap(item => item.paths))]).then(urls => batch.forEach(item => item.resolve(urls)), error => batch.forEach(item => item.reject(error)));
+    };
+    return paths => {
+      if (!paths.length) return Promise.resolve(new Map());
+      return new Promise((resolve, reject) => { if (!waiting.length) setTimeout(flush, 0); waiting.push({ paths, resolve, reject }); });
+    };
+  }
+  /**
+   * A job's events of one or more kinds, newest first by `order`: from a list's batch when given, else read here.
+   * @param {Job} row @param {string[]} kinds @param {'at' | 'id'} order @param {number} limit @param {any[] | undefined} batch
+   * @returns {Promise<any[]>}
+   */
+  async function eventsOf(row, kinds, order, limit, batch) {
+    if (batch) {
+      const time = (/** @type {any} */ e) => Date.parse(e.at) || 0;
+      return batch.filter(e => kinds.includes(e.kind))
+        .sort((x, y) => order === 'at' ? time(y) - time(x) || Number(y.id) - Number(x.id) : Number(y.id) - Number(x.id)).slice(0, limit);
+    }
+    const query = db.from('af_generation_events').select('at,kind,data').eq('job_id', row.id);
+    const { data, error } = await (kinds.length === 1 ? query.eq('kind', kinds[0]) : query.in('kind', kinds)).order(order, { ascending: false }).limit(limit);
+    if (error) throw unavailable('database-unavailable', error);
+    return data ?? [];
+  }
   // A job as its creator reads it: no lease, no prompt, no brief beyond its profile draft; pictures as signed URLs.
   // While the motions are made: the previews the worker put up as its branches passed, and each gait's take before its gate (its latest
   // `drafts` event, this round's).
-  /** @param {Job} row */
-  async function draftsOf(row) {
+  /** @param {Job} row @param {any[]} [batch] */
+  async function draftsOf(row, batch) {
     if (row.status !== 'motions') return [];
-    const { data: rows, error } = await db.from('af_generation_events').select('data').eq('job_id', row.id).eq('kind', 'drafts')
-      .order('at', { ascending: false }).limit(DRAFT_EVENTS_READ);
-    if (error) throw unavailable('database-unavailable', error);
+    const rows = await eventsOf(row, ['drafts'], 'at', DRAFT_EVENTS_READ, batch);
     // Of the latest few, the list the worker sent last (its `seq`, 2026-11-01): a send it timed out on may land after a later one.
     // Lists without a `seq` (a worker before it) go by their time.
     const seqOf = (/** @type {any} */ r) => Number.isSafeInteger(r?.data?.seq) ? r.data.seq : -1;
-    const latest = /** @type {any[]} */ (rows ?? []);
+    const latest = /** @type {any[]} */ (rows);
     const data = latest.reduce((best, r) => seqOf(r) > seqOf(best) ? r : best, latest[0] ?? null);
     const round = `-${row.motion_revisions}`;
     return /** @type {any[]} */ (Array.isArray(data?.data?.clips) ? data.data.clips : []).filter(d => isObject(d) && MOTIONS.includes(d.clip)
@@ -288,27 +352,23 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
   /**
    * The side still drawn from the chosen front (2026-10-31, the worker's latest `side` event naming it) or his expression sheet (2026-11-03,
    * `expressions`): its artifact, or null. Only the one of the current look round and choice: a new look makes a new one.
-   * @param {Job} row @param {'side' | 'expressions'} [kind]
+   * @param {Job} row @param {'side' | 'expressions'} [kind] @param {any[]} [batch]
    */
-  async function chosenArtifactOf(row, kind = 'side') {
-    if (!row.choice || !['motions', 'motion_ready', 'submitting', 'submitted', 'needs_review'].includes(row.status)) return null;
-    const { data, error } = await db.from('af_generation_events').select('data').eq('job_id', row.id).eq('kind', kind)
-      .order('at', { ascending: false }).limit(5);
-    if (error) throw unavailable('database-unavailable', error);
+  async function chosenArtifactOf(row, kind = 'side', batch) {
+    if (!row.choice || !PAST_CHOICE.includes(row.status)) return null;
+    const data = await eventsOf(row, [kind], 'at', 5, batch);
     const name = `${kind}-${row.appearance_revisions}-${row.choice}`;
-    return (data ?? []).some(/** @param {{ data: any }} event */ event => event.data?.outcome === 'chosen' && event.data?.artifact === name) ? name : null;
+    return data.some(/** @param {{ data: any }} event */ event => event.data?.outcome === 'chosen' && event.data?.artifact === name) ? name : null;
   }
   /** A verified server timeout selection, never inferred from A or the clock. A later answer/revision invalidates older evidence.
-   * @param {Job} row
+   * @param {Job} row @param {any[]} [batch]
    * @returns {Promise<{ choice: 'a', selectedAt: string, deadline: string } | null>}
    */
-  async function autoSelectionOf(row) {
-    if (row.choice !== 'a' || !['motions', 'motion_ready', 'submitting', 'submitted', 'needs_review'].includes(row.status)) return null;
+  async function autoSelectionOf(row, batch) {
+    if (row.choice !== 'a' || !PAST_CHOICE.includes(row.status)) return null;
     try {
-      const { data, error } = await db.from('af_generation_events').select('at,kind,data').eq('job_id', row.id)
-        .in('kind', ['appearance-auto-selected', 'appearance-answer']).order('id', { ascending: false }).limit(1);
-      if (error) throw error;
-      const event = data?.[0], said = event?.data;
+      const data = await eventsOf(row, ['appearance-auto-selected', 'appearance-answer'], 'id', 1, batch);
+      const event = data[0], said = event?.data;
       // Worker progress data carries its own `kind`; only the server's event has this exact payload.
       if (event?.kind !== 'appearance-auto-selected' || !isObject(said)
         || Object.keys(said).some(key => !['choice', 'reason', 'deadline'].includes(key)) || said.choice !== 'a' || said.reason !== 'no-answer'
@@ -349,17 +409,22 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       return new Map(ids.map(job => { const n = Number(sums[job] ?? 0); return [job, Number.isSafeInteger(n) && n >= 0 ? n : 0]; }));
     } catch (error) { logSkipped('generation', 'job-tokens', error); return null; }
   }
-  /** @param {Job} row @param {Map<string, number> | null} [taken]  Read for a list at once (jobTokens); read here when not given. */
-  async function view(row, taken) {
+  /**
+   * @param {Job} row @param {Map<string, number> | null} [taken]  Read for a list at once (jobTokens); read here when not given.
+   * @param {ListReads} [list]  A list's batched reads (listReads); a single job reads its own.
+   */
+  async function view(row, taken, list) {
+    const batch = list?.events?.get(row.id);
     const candidates = candidatesOf(row), preview = previewOf(row);
     // Its reads at once (MCP 최적화 2026-11-05: eight in a row for each read of a job, which a watching chat makes every 25 seconds). A failure
     // is the one the reads in their old order met first: the four before the signed URLs, the URLs, then the rest.
     /** @type {<T>(result: PromiseSettledResult<T>) => T} */
     const value = result => { if (result.status === 'rejected') throw result.reason; return result.value; };
-    const reads = await Promise.allSettled([draftsOf(row), chosenArtifactOf(row), chosenArtifactOf(row, 'expressions'),
-      hostsOf([row.requested_host, row.assigned_host]),
+    const reads = await Promise.allSettled([draftsOf(row, batch), chosenArtifactOf(row, 'side', batch), chosenArtifactOf(row, 'expressions', batch),
+      list ? list.hosts : hostsOf([row.requested_host, row.assigned_host]),
       (async () => {
         if (!row.submission_id) return null;
+        if (list) return list.submissions.get(row.submission_id) ?? null;
         const { data, error } = await db.from('af_submissions').select('id,status,fighter_id').eq('id', row.submission_id).maybeSingle();
         if (error) throw unavailable('database-unavailable', error);
         return data ? { id: data.id, stage: data.status, fighterId: data.fighter_id ?? null } : null;
@@ -368,9 +433,9 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       row.host_choice === 'oddbout' && !row.started_at && ['queued', 'appearance'].includes(row.status) ? call('af_generation_queue', { p_id: row.id }) : null,
       taken === undefined ? jobTokens([row.id]) : taken,
       // One job's read only: a list (tokens read for it at once) shows no next per job.
-      taken === undefined ? profileFrontOf(row) : null, autoSelectionOf(row)]);
+      taken === undefined ? profileFrontOf(row) : null, autoSelectionOf(row, batch)]);
     const drafts = value(reads[0]), side = value(reads[1]), expressions = value(reads[2]), hosts = value(reads[3]);
-    const urls = await signed([...candidates.map(name => artifactPath(row.id, name)), ...preview.map(p => artifactPath(row.id, p.name)),
+    const urls = await (list ? list.signed : signed)([...candidates.map(name => artifactPath(row.id, name)), ...preview.map(p => artifactPath(row.id, p.name)),
       ...drafts.map(d => artifactPath(row.id, d.name)), ...[side, expressions].flatMap(name => name ? [artifactPath(row.id, name)] : [])]);
     const submission = value(reads[4]), queue = value(reads[5]), tokens = value(reads[6]), profileFront = value(reads[7]);
     return { id: row.id, status: row.status, progress: row.progress, error: row.error_code ?? null, description: row.description, language: row.language,
@@ -620,8 +685,9 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     if (method === 'GET' && route === 'generations') {
       const { data, error } = await db.from('af_generation_jobs').select('*').eq('owner_id', owner).order('created_at', { ascending: false }).limit(5);
       if (error) throw unavailable('database-unavailable', error);
-      const rows = data ?? [], taken = await jobTokens(rows.map(/** @param {Job} row */ row => row.id));
-      const jobs = await Promise.all(rows.map(/** @param {Job} row */ row => view(row, taken)));
+      const rows = data ?? [];
+      const [taken, list] = await Promise.all([jobTokens(rows.map(/** @param {Job} row */ row => row.id)), listReads(rows)]);
+      const jobs = await Promise.all(rows.map(/** @param {Job} row */ row => view(row, taken, list)));
       // Whether he may still ask (the request check's own rule over all his jobs): read from the newest five, it
       // fell out of view past five fighters made on his own PC (API 점검 2026-10-29).
       // His tokens (보유 토큰, 2026-10-31): granted, spent and the balance (null: not readable now); `used` is a balance at or below zero

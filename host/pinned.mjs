@@ -22,7 +22,7 @@ export function sha256File(file) {
   });
 }
 
-/** A pin as pins.json must write it: an https URL, a size, a SHA-256. @param {any} pin @returns {pin is Pin} */
+/** A pin as pins.json must write it: an https URL, a size, a SHA-256. @param {any} pin @returns {pin is Pin & Record<string, any>} A whole pin; other fields (version, files, exe) stay unchecked. */
 export const isPin = pin => Boolean(pin) && typeof pin.url === 'string' && /^https:\/\/[^\s]+$/.test(pin.url)
   && typeof pin.sha256 === 'string' && /^[a-f0-9]{64}$/.test(pin.sha256) && Number.isSafeInteger(pin.bytes) && pin.bytes > 0;
 

@@ -387,6 +387,10 @@ const ownGroup = { detached: process.platform !== 'win32', windowsHide: true };
  * exit code (signals count as 128 + n). Stopping it signals the whole group, and og passes the signal on to the command it runs (above).
  * On Windows a stopped child's tree ends at once and resolves 137 (killed). `env`: the child's environment (og.mjs: the install's).
  * One that cannot start (a .cmd Windows refuses without a shell, a missing program) resolves 127.
+ * @param {string} command @param {string[]} args
+ * @param {{ cwd?: string, log?: string | null, stdin?: string | null, signal?: AbortSignal, graceMs?: number, drainMs?: number,
+ *   onOutput?: ((chunk: string) => void) | null, env?: NodeJS.ProcessEnv }} options
+ * @returns {Promise<number>}
  */
 export function run(command, args, { cwd, log, stdin, signal, graceMs = STOP_GRACE_MS, drainMs = OUTPUT_DRAIN_MS, onOutput = null, env = undefined }) {
   return new Promise(resolve => {
