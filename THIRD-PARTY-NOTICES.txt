@@ -62,31 +62,23 @@ Kenney Impact Sounds 1.0
 ------------------------
 
 Created and distributed by Kenney under Creative Commons Zero 1.0 (CC0 1.0).
-The runtime copies use the original pack's medium/heavy punch, bell, glass,
-metal, wood, and soft impact files.
+The runtime copies use the original pack's heavy wood and body impact files.
 
 Source: https://kenney.nl/assets/impact-sounds
 License: https://creativecommons.org/publicdomain/zero/1.0/
-Runtime copies: audio/sfx/landing-soft.ogg,
-  audio/sfx/alert-bell.ogg, audio/sfx/glass-break.ogg,
-  audio/sfx/wood-impact-heavy.ogg, audio/sfx/metal-impact.ogg,
+Runtime copies: audio/sfx/wood-impact-heavy.ogg,
   audio/sfx/body-impact-heavy.ogg
 
 Kenney RPG Audio 1.0
 --------------------
 
 Created and distributed by Kenney under Creative Commons Zero 1.0 (CC0 1.0).
-The runtime copies use the pack's cloth, leather, coins, door, blade, latch,
-and equipment-handle foley.
+The runtime copies use the pack's cloth foley.
 
 Source: https://kenney.nl/assets/rpg-audio
 License: https://creativecommons.org/publicdomain/zero/1.0/
-Runtime copies: audio/sfx/loot-confirm.ogg, audio/sfx/throw-impact-metal.ogg,
-  audio/sfx/dodge-cloth.ogg,
-  audio/sfx/attack-swish.ogg, audio/sfx/weapon-draw.ogg,
-  audio/sfx/cloth-*.ogg, audio/sfx/leather-drop.ogg,
-  audio/sfx/metal-latch.ogg, audio/sfx/door-open.ogg,
-  audio/sfx/tool-handle.ogg
+Runtime copies: audio/sfx/dodge-cloth.ogg,
+  audio/sfx/cloth-light.ogg
 
 Phaser 3.90.0
 -------------
@@ -429,6 +421,8 @@ SOFTWARE.
 
 Matter.js 0.20.0
 ----------------
+
+Runtime: bundled inside Phaser 3.90.0 (Phaser's Matter physics); not a separate dependency.
 
 The MIT License (MIT)
 

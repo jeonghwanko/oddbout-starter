@@ -1,0 +1,1 @@
+import{n as e,r as t}from"./pseudo-B3ZLOM_E.js";var n=/\{([A-Za-z][A-Za-z0-9_]*)\}/gu;function r(e,t){return t===void 0?e:e.replace(n,(e,n)=>{let r=t[n];return r==null?e:String(r)})}function i(e){return Object.freeze(e)}function a(e){return Object.freeze(e)}Object.freeze({});function o(n,i,a){let o=n[i]??i;return r(e()?t(o):o,a)}export{a as n,o as r,i as t};
