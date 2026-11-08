@@ -14,8 +14,10 @@ import { appendFile, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/pro
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { ASKS, CODEX_CWD, FRONT_JUDGE_SCHEMA, JUDGE_ARCHIVE_DAYS, JUDGE_ARCHIVE_DIR, JUDGE_ARCHIVE_SALT, createJudgeArchive, judgeArchiveDays, judgeImageDays, GROK_LIMITED, PIXEL_JUDGE, createStages, frontJobId, frontJudgePrompt, frontVerdict,
-  imageProviderOf, judgeCommand, judgesFor, judgesMode, judgesNeedCodex, ogJobId, requestedModels } from './generation-stages.mjs';
+import { createStages } from './generation-stages.mjs';
+import { ASKS, CODEX_CWD, FRONT_JUDGE_SCHEMA, GROK_LIMITED, PIXEL_JUDGE, frontJobId, frontJudgePrompt, frontVerdict, imageProviderOf,
+  judgeCommand, judgesFor, judgesMode, judgesNeedCodex, ogJobId, requestedModels } from './generation-prompts.mjs';
+import { JUDGE_ARCHIVE_DAYS, JUDGE_ARCHIVE_DIR, JUDGE_ARCHIVE_SALT, createJudgeArchive, judgeArchiveDays, judgeImageDays } from './judge-archive.mjs';
 import { codexSessionFacts, codexTokensSince, codexUsage } from './codex-usage.mjs';
 
 // <root>/bin holds this file in both installs (/srv/oddbout-gen on ODDBOUT's PC, a host's own folder in user mode).
@@ -625,7 +627,7 @@ export function createWakeWatch({ now = Date.now, tickMs = 5_000, slackMs = 15_0
 export const FRONT_CHECK_MS = 5 * 60_000;
 /** After a check that could not judge, the queue waits this long, doubled each time again, at most an hour (리뷰 2026-11-03). */
 export const FRONT_RETRY_MS = 15 * 60_000;
-/** A folder of one front check (generation-stages.mjs frontJobId). */
+/** A folder of one front check (generation-prompts.mjs frontJobId). */
 const FRONT_FOLDER = /^\d{8}-front-[0-9a-f]{32}$/;
 /** A verdict a folder already holds, checked again, or null. @param {string} file */
 const savedVerdict = file => readFile(file, 'utf8').then(text => frontVerdict(JSON.parse(text))).catch(() => null);

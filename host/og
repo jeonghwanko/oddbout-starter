@@ -44,7 +44,7 @@ CODEX_VERSION=0.165.0
 GROK_VERSION=1.0.52
 RUN_TIMEOUT=${OG_RUN_TIMEOUT:-5400}
 SLOT_WAIT=${OG_SLOT_WAIT:-1800}
-# The model og health asks codex with: the hosted stages' (host/generation-stages.mjs MODELS.text — generation-stages.test.mjs keeps the two
+# The model og health asks codex with: the hosted stages' (host/generation-prompts.mjs MODELS.text — generation-stages.test.mjs keeps the two
 # the same), so a login that refuses it fails health and the worker takes no job (2026-11-03, gpt-6.1-sol).
 CODEX_MODEL=${OG_CODEX_MODEL:-gpt-6.1-sol}
 LEDGER=$G/ledger.jsonl

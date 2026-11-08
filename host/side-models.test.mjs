@@ -8,7 +8,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
-import { checkedPixels } from './generation-stages.mjs';
+import { checkedPixels } from './generation-prompts.mjs';
 
 const script = path.join(import.meta.dirname, 'side_models.py');
 /** The first Python 3.9+ on PATH that runs `check`, or undefined. @param {string} check */

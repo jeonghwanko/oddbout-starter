@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CALL_TOOLS, createTally, toolName, versionsEvent } from './generation-worker.mjs';
-import { JUDGE, MODELS, VIDEO_REQUESTED } from './generation-stages.mjs';
+import { JUDGE, MODELS, VIDEO_REQUESTED } from './generation-prompts.mjs';
 import { entry } from './ledger-report.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));

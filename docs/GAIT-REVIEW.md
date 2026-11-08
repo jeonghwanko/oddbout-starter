@@ -363,7 +363,7 @@ npm run fighter:gait -- loop-review <config.json> <loop-review.json>
   어느 발이 왼발인지는 킷·게임 어디서도 쓰지 않는다. 같은 다리를 두 번 딛는 고리는 그늘이 한 주기에 두 번 흔들려 `rhythm`에서 걸린다.
   기록은 `engine.feet: null`, `feetBy: "low-margin"`, `feetRhythm`을 남기고 `scope`에 그 사실을 적는다. 호스팅 잡 다섯 개(10-30, 10-31)의
   첫 테이크 깨끗한 컷 약 19개 중 14개가 이 이유 하나로 판정 전에 버려져 새 Grok 촬영이나 운영자 검토로 갔다. 생성기도 같은 규칙으로 컷을
-  판정에 보낸다(`host/generation-stages.mjs` `lowMarginFeet`, 테스트가 둘을 같게 묶는다).
+  판정에 보낸다(`host/generation-prompts.mjs` `lowMarginFeet`, 테스트가 둘을 같게 묶는다).
 - 기록은 최종 프레임과 시간에 묶인다(`sequenceSha256`). 엔진이 남긴 다시 찍기 사유가 하나라도 있거나, 발 이름이 없거나(위 예외 밖) 같거나,
   판정 하나라도 fail이거나, 걷기 보폭이 없으면 `status: fail`이고 패커는 그 측정값을 사용하지 않는다. 파일이 유효하면 패키징은 계속한다.
 - 같은 발 측정을 했다고 주장하지 않는다. `pack-report.json`의 `review`와 `motions.walk.stride.source`(`loop-review`)가 그 사실을 남긴다.

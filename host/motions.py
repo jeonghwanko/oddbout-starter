@@ -1001,7 +1001,7 @@ def frame_front(path: Path, out: Path) -> dict:
 # ------------------------------------------------------------------------------------------------ pixel judge
 # A judge of what pixels can decide (2026-11-06), beside the vision judge (codex, 10-15 s a call): the same verdict shapes, in well under a
 # second. Every figure is first brought to one standing height, so shares and sizes compare across pictures drawn at any scale. A check the
-# pixels cannot settle answers "unknown"; the worker's judges mode decides what that means (generation-stages.mjs JUDGE_MODES). The
+# pixels cannot settle answers "unknown"; the worker's judges mode decides what that means (generation-prompts.mjs JUDGE_MODES). The
 # thresholds were set on six probe fighters of 2026-11-05 (8 side takes and 12 walk/run loops codex had judged; codex failed 2 takes as
 # three-quarter views, 3 loops for a frying pan missing in every frame and 1 for gloves shrinking in some frames) and on defects painted
 # into their passes. What they did not show: a profile from a three-quarter view, a part changing size, a face.
@@ -1037,7 +1037,7 @@ PJ_SMALL_KEPT = (0.3, 0.2)
 # or an arm passing in front of it. Pixels cannot tell which: unknown (passing loops: 0.29 the least in a frame).
 PJ_GONE, PJ_SEEN = 0.12, 0.5
 # style (side): the share of soft steps (Lab 1.5-8 between neighbours: gradients, gloss) against the front's. Never a fail: codex's own
-# style misses are let through (generation-stages.mjs sideStyleOnly).
+# style misses are let through (generation-prompts.mjs sideStyleOnly).
 PJ_SOFT = 1.25
 # anatomy (loop), per frame: half-transparent pixels inside the body (passing frames: 0.29 % at most), height against the standing
 # height (0.925-1.006 on passing frames), the area against its neighbours' mean (a frame that lost or gained a part; passing loops: 0.20

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
-// The judges measured (2026-11-07): reads a generation host's judgment archive (host/generation-stages.mjs createJudgeArchive,
+// The judges measured (2026-11-07): reads a generation host's judgment archive (host/judge-archive.mjs createJudgeArchive,
 // `<host root>/judge-archive`, copied here — its salt file stays on the host) and, optionally, labels an operator gave. Per judges mode and
 // check it says how the pixel judge's answers stand against codex's verdicts, how often codex judged, how often hybrid would ask it, how
 // long each judge took and how often the pixel judge gave no answer; and, apart, what the labels say about each judge. It lists the items to
