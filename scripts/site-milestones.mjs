@@ -34,8 +34,8 @@ export const milestoneModule = `const {milestone, creationStart, bindIdentity} =
 const targets = {
   '/src/render/scenes/ArenaDuelScene.ts': [
     [
-      'if (decided) duel.session.settle(); else duel.session.step(control ? [control.command(this.playerSide()), null] : undefined);',
-      'if (!decided) milestone("game_start", duel.session, { mode: this.dataIn.player ? "play" : "watch" });\n        if (decided) duel.session.settle(); else duel.session.step(control ? [control.command(this.playerSide()), null] : undefined);',
+      'if (decided) duel.session.settle(); else duel.session.step(',
+      'if (!decided) milestone("game_start", duel.session, { mode: this.dataIn.player ? "play" : "watch" });\n        if (decided) duel.session.settle(); else duel.session.step(',
     ],
     [
       'private finish(result: CityFightBoutResult): void {',
