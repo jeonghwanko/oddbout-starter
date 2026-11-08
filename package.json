@@ -44,6 +44,7 @@
     "validate": "node tools/ai-fighter/validate-package.mjs",
     "test": "node --test test/*.test.mjs host/*.test.mjs",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.vendored.json",
+    "lint": "biome lint .",
     "test:fast": "node scripts/test-suite.mjs fast",
     "test:heavy": "node scripts/test-suite.mjs heavy",
     "spec:check": "node tools/ai-fighter/build-contract.mjs --check",
@@ -82,6 +83,7 @@
     "zod": "4.6.7"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.6.6",
     "@electric-sql/pglite": "0.5.10",
     "@types/node": "22.20.5",
     "@types/qrcode": "1.5.6",
