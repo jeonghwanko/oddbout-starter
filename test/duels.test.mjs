@@ -23,7 +23,7 @@ async function duelFixture() {
     const q=name==='af_duel_rankings'?'select * from af_duel_rankings()':`select to_jsonb(public.${name}(${values.map((_,i)=>'$'+(i+1)).join(',')})) as value`;
     const r=await sql.query(q,values);return {data:name==='af_duel_rankings'?r.rows:r.rows[0].value};
   }catch(error){return {error};}},from:table=>{
-    assert.ok(['af_fighters','af_submissions','af_duels'].includes(table));let filters=[],values=[];
+    assert.ok(['af_fighters','af_submissions','af_duels'].includes(table));const filters=[],values=[];
     const q={select:()=>q,eq:(k,v)=>{assert.match(k,/^\w+$/);values.push(v);filters.push(`${k}=$${values.length}`);return q;},
       not:(k)=>{assert.equal(k,'completed_at');filters.push('completed_at is not null');return q;},
       in:(k,v)=>{assert.match(k,/^\w+$/);values.push(v);filters.push(`${k}=any($${values.length})`);return q;},

@@ -77,7 +77,7 @@ test('approved budget and session references survive sign-in in a new tab', () =
   assert.equal(restored.selected('broadcastId'), 'running');
 });
 
-test('operator release takes one UUID and a note, and reports the released job without a charge', async t => {
+test('operator release takes one UUID and a note, and reports the released job without a charge', async () => {
   const { parseReleaseArgs, releaseJob } = await import('../scripts/broadcast-release.mjs');
   const id = '11111111-1111-4111-8111-111111111111';
   assert.deepEqual(parseReleaseArgs(['--job', id.toUpperCase(), '--note', 'no cup on screen']), { jobId: id, note: 'no cup on screen' });

@@ -69,6 +69,7 @@ if (option === '--dry-run') {
     if (previousSsh === undefined) delete process.env.GIT_SSH_COMMAND;
     else process.env.GIT_SSH_COMMAND = previousSsh;
     const target = await realpath(temporary);
+    // biome-ignore lint/correctness/noUnsafeFinally: a temporary folder outside its parent is never removed, whatever the publish did
     if (dirname(target) !== parent || !target.startsWith(join(parent, 'ai-fighter-pages-'))) throw new Error('Unsafe temporary directory');
     await rm(target, { recursive: true, force: true });
   }

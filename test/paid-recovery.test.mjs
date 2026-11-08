@@ -1,8 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
 import { paidFixture,taskInput,OWNER,OTHER,ORIGIN } from './helpers/paid-operations.mjs';
-import { createPaidOperations } from '../api/commerce/paid-operations.mjs';
 import { createPaymentRecovery } from '../api/commerce/payment-recovery.mjs';
 import { validateOrderBinding } from '../api/commerce/paypal.mjs';
 

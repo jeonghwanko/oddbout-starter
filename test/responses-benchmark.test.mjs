@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { generation } from './helpers/generation-database.mjs';
 import { reviewEvidence, RULES, questions } from '../api/decisions-review.mjs';
-import { createResponsesBenchmarkReviewer, responsesRequest } from '../api/responses-benchmark.mjs';
+import { createResponsesBenchmarkReviewer } from '../api/responses-benchmark.mjs';
 import { sha256 } from '../api/http.mjs';
 
 const bytes = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a0xoAAAAASUVORK5CYII=', 'base64');

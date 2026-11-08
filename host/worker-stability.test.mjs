@@ -108,7 +108,7 @@ test('a stopped stage starts no run: its next og or motions.py call ends the sta
   await assert.rejects(unlessStopped(controller.signal, start), error => error.code === STAGE_STOPPED);
   assert.equal(started, 1);
   // The stage turns it into its own end; the worker then reports the timeout or drops the cancelled job.
-  const stages = createStages({ og: args => unlessStopped(controller.signal, start), api: { artifact: async () => ({ ok: true }) },
+  const stages = createStages({ og: () => unlessStopped(controller.signal, start), api: { artifact: async () => ({ ok: true }) },
     fetchBytes: async () => new Uint8Array(), toWebp: async () => {}, signal: controller.signal });
   const dir = await mkdtemp(path.join(tmpdir(), 'look-stopped-'));
   try {

@@ -12,6 +12,7 @@ import { WebStandardStreamableHTTPServerTransport, createMcpHandler, isLegacyReq
  * @returns {(server: McpServer, request: Request, body: unknown) => Promise<Response>}
  */
 export function mcpServing(maxRequestBodySize) {
+  // biome-ignore lint/correctness/noUnsafeOptionalChaining: a request without auth info throws here, as it always has
   const modern = createMcpHandler(ctx => /** @type {{ server: McpServer }} */ (ctx.authInfo?.extra).server,
     { legacy: 'reject', responseMode: 'json', maxRequestBodySize });
   return async (server, request, body) => {

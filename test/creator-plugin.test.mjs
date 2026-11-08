@@ -114,7 +114,7 @@ test('versions survive source overwrites; revised motions preserve other choices
   await f.change({ type: 'revision', item: 'walk', feedback: 'Less bounce' });
   assert.equal((await f.store.inspect(sessionId)).decision.canAdvance, false);
   await f.record('walk', 'v2');
-  let state = await f.store.read(sessionId);
+  const state = await f.store.read(sessionId);
   assert.equal(state.items.walk.selectedVersion, 'v1');
   assert.equal(state.items.run.selectedVersion, 'v1');
   assert.deepEqual(Object.keys(state.items.walk.versions), ['v1', 'v2']);
@@ -162,7 +162,7 @@ test('a stale review of an earlier motion leaves the motions made on it standing
 });
 
 test('concurrent writers do not lose decisions; fresh revisions and context are required', async t => {
-  let current = structuredClone(context);
+  const current = structuredClone(context);
   const f = await fixture(t, { contextRequest: async () => new Response(JSON.stringify(current)) });
   const changes = await Promise.allSettled([
     f.store.change(sessionId, 1, { type: 'profile', name: 'A', description: 'A', feedback: 'A' }),
@@ -365,7 +365,7 @@ test('final package tracks every asset and metadata-only edits preserve animatio
   await f.change({ type: 'package-review', verdict: 'passed', evidence: [evidence], feedback: 'Synthetic acceptance' });
   assert.equal((await f.store.inspect(sessionId)).decision.canAdvance, true);
   await f.change({ type: 'profile', name: 'Renamed', description, ...extras, feedback: 'Change only the name' });
-  let inspected = await f.store.inspect(sessionId);
+  const inspected = await f.store.inspect(sessionId);
   assert.ok(inspected.decision.blockers.includes('package-files-unchecked'));
   assert.ok(Object.values(inspected.effectiveItems).every(item => item.selectedVersion === 'v1'));
   await assert.rejects(f.change({ type: 'package', files: [manifestPath], note: 'Old name' }), /profile-mismatch/);
@@ -683,7 +683,7 @@ test('selected files reach final without quality approvals; changed package byte
   await f.change({ type: 'profile', name, description, language, concept, moves, stats: manifest.combat.stats, feedback: 'Fixture selection' });
   assert.ok((await f.store.inspect(sessionId)).decision.blockers.includes('package-files-unchecked'));
   await f.change({ type: 'package', files: [manifestPath], note: 'File validation only; no visual approval claimed' });
-  let result = await f.store.inspect(sessionId);
+  const result = await f.store.inspect(sessionId);
   assert.equal(result.decision.canAdvance, true); assert.equal(result.decision.registrationAuthorized, false);
   assert.equal(result.effectiveItems.walk.review, 'unverified');
   const evidence = await f.put('quality-diagnostic.txt', 'Unverified motion; deferred quality work');

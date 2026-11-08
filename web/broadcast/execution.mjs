@@ -32,7 +32,7 @@ export function createExecutionPanel({api,getOwner,getJournal,onStatus=()=>{},fi
     let total=0;
     for(const source of data.funding){
       const row=rows.find(item=>item?.intentId===source.intentId);
-      if(!row||row.currency!=='USD'||!Number.isSafeInteger(row.amountCents)||!Number.isSafeInteger(row.credits)||row.credits<=0||!Number.isSafeInteger(source.credits))return null;
+      if(row?.currency!=='USD'||!Number.isSafeInteger(row.amountCents)||!Number.isSafeInteger(row.credits)||row.credits<=0||!Number.isSafeInteger(source.credits))return null;
       const scaled=row.amountCents*source.credits;if(scaled%row.credits)return null;total+=scaled/row.credits;
     }
     return data.funding.length?total:null;

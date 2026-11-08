@@ -668,7 +668,7 @@ test('a picture address an agent reports is noted by its kind (and an http host)
     assert.deepEqual([noted.ok, noted.fetched, noted.kept, noted.observed.hostname], [true, false, false, 'images.example.test']);
     assert.equal(downloads.length, 0);
     const line = logged.mock.calls.map(c => String(c.arguments[0])).find(text => text.includes('picture-link-probe'));
-    assert.ok(line && line.includes('"madeBy":"grok"') && !line.includes('secret') && !line.includes('1234'), line);
+    assert.ok(line?.includes('"madeBy":"grok"') && !line.includes('secret') && !line.includes('1234'), line);
     // The maker is one of a few words, never free text.
     const probes = () => logged.mock.calls.filter(c => String(c.arguments[0]).includes('picture-link-probe')).length, seen = probes();
     assert.equal((await raw('report_picture_link', { url: 'https://images.example.test/a.png', madeBy: 'Kim Minsu' })).isError, true);

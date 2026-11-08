@@ -51,8 +51,8 @@ test('summary counts real codex sessions, wait and unfinished runs per job', () 
   assert.deepEqual(s.providers.codex, { runs: 3, p50Ms: 90000, p95Ms: 120000 });
   assert.match(s.warnings.join('\n'), /\(local\) started 2 codex/);
   assert.equal(summarize(lines, 'b').jobs.length, 1);
-  assert.match(render(s), /끝나지 않은 실행 1  개인 계정 실행 1/);
-  assert.match(render(s), /a  등록 확인  codex 세션 4 /);
+  assert.match(render(s), /끝나지 않은 실행 1 {2}개인 계정 실행 1/);
+  assert.match(render(s), /a {2}등록 확인 {2}codex 세션 4 /);
   assert.match(render(summarize(lines, 'b')), /codex 세션 약 1\(/);
 });
 
@@ -72,9 +72,9 @@ test('runs view lists each run of a job with its result, time and codex sessions
   ];
   const rows = renderRuns(lines, 'a').split('\n');
   assert.equal(rows.length, 3);
-  assert.match(rows[0], /^10-26 10:01:00  codex  ok\(0\) .* codex 2  npm run sprite gen-set$/);
+  assert.match(rows[0], /^10-26 10:01:00 {2}codex {2}ok\(0\) .* codex 2 {2}npm run sprite gen-set$/);
   assert.match(rows[1], /failed\(1\)/);
-  assert.match(rows[2], /local  끝나지 않음 .* — +codex —/);
+  assert.match(rows[2], /local {2}끝나지 않음 .* — +codex —/);
   assert.equal(renderRuns(lines).split('\n').length, 4);
   assert.equal(renderRuns([], 'a'), '기록 없음');
 });

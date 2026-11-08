@@ -174,7 +174,7 @@ test('paste login keeps the PKCE verifier on this host and completes from the pa
   assert.equal(started.authorizationUrl, 'https://accounts.example/authorize?x=1&y=2');
   const pending = await saved(pendingLoginPath(sessionPath));
   assert.equal(pending.storage['sb-fixture-auth-token-code-verifier'], 'verifier-xyz');
-  assert.match(calls.oauth.options.redirectTo, new RegExp(`^http://127\.0\.0\.1:47821/callback/${pending.state}$`));
+  assert.match(calls.oauth.options.redirectTo, new RegExp(`^http://127\\.0\\.0\\.1:47821/callback/${pending.state}$`));
   if (process.platform !== 'win32') assert.equal((await import('node:fs/promises').then(f => f.stat(pendingLoginPath(sessionPath)))).mode & 0o777, 0o600);
   // The address carries an authorization code: entry goes only through this workspace's own terminal, never chat.
   assert.ok(logs.some(line => line.includes('대화·메시지·일반 로그에 붙여 넣지 마세요')));

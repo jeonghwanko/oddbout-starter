@@ -17,7 +17,7 @@ function fixture() {
   }
   const seq = { frames, durations: Array(16).fill(100) }; seq.sha256 = sequenceHash(seq);
   const plan = walkPlan(); plan.geometry = { width: 64, height: 80, groundY: 70, groundTolerance: 2 };
-  plan.phases.forEach((p, i) => p.support = [i < 8 ? 'near' : 'far']);
+  plan.phases.forEach((p, i) => { p.support = [i < 8 ? 'near' : 'far']; });
   const a = { sequenceSha256: seq.sha256,
     visual: { identity: 'pass', anatomy: 'pass', alternation: 'pass', loop: 'pass' },
     stances: [{ foot: 'near', start: 1, end: 3, box: [18, 38, 15, 34] },

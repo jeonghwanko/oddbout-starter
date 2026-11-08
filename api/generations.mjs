@@ -311,7 +311,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     let waiting = [];
     const flush = () => {
       const batch = waiting; waiting = [];
-      signed([...new Set(batch.flatMap(item => item.paths))]).then(urls => batch.forEach(item => item.resolve(urls)), error => batch.forEach(item => item.reject(error)));
+      signed([...new Set(batch.flatMap(item => item.paths))]).then(urls => { for (const item of batch) item.resolve(urls); }, error => { for (const item of batch) item.reject(error); });
     };
     return paths => {
       if (!paths.length) return Promise.resolve(new Map());

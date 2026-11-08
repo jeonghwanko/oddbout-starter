@@ -118,5 +118,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
     }
     if (!watch) break;
     if (waitMs) await new Promise(resolve => setTimeout(resolve, waitMs));
+    // biome-ignore lint/correctness/noConstantCondition: the loop ends at `break` (one pass without --watch) or by a throw
   } while (true);
 }

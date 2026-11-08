@@ -23,7 +23,7 @@ async function fixture(t, options = {}) {
   return { root, calls, store, configured };
 }
 async function allow(store) {
-  let view = await store.inspect();
+  const view = await store.inspect();
   let result = await store.update(view.revision, { type: 'approve-network', planHash: view.plan.planHash, feedback: '표시된 주소를 이 환경에서 허용합니다.' });
   result = await store.update(result.revision, { type: 'report-host-network', planHash: result.plan.planHash,
     status: 'allowed', evidence: 'test-host-permission-receipt-1' });

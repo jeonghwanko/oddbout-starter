@@ -68,7 +68,7 @@ export function auditAdditiveTree(before, after, files) {
   }
   for (const file of files) {
     const current = next.get(file.path);
-    if (!current || current.type !== 'blob' || current.mode !== '100644' || current.sha !== file.gitSha)
+    if (current?.type !== 'blob' || current.mode !== '100644' || current.sha !== file.gitSha)
       throw Error(`release-path-conflict: ${file.path}`);
   }
   return { preservedExistingFiles: before.filter(entry => entry.type !== 'tree').length,

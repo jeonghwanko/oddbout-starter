@@ -1,0 +1,67 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    // vendor/: the pinned engine; contracts/ and server/: the game's byte copies; the dated review copies of the plugin sites.
+    "includes": ["**", "!vendor", "!website/**/review-*", "!contracts", "!server"]
+  },
+  "formatter": {
+    "enabled": false
+  },
+  "assist": {
+    "enabled": false
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "style": {
+        // String concatenation is this code's way; the CSS cascade below is kept as the pages were drawn with it.
+        "useTemplate": "off",
+        "noDescendingSpecificity": "off"
+      },
+      "suspicious": {
+        // The sanitizing regexes name control characters on purpose; `??=` caches and `(salt = read)` assign inside expressions.
+        "noControlCharactersInRegex": "off",
+        "noAssignInExpressions": "off",
+        // Test doubles are thenables; a few helpers are named like globals (`escape`).
+        "noThenProperty": "off",
+        "noShadowRestrictedNames": "off"
+      },
+      "correctness": {
+        // Callbacks keep the parameters of the signature they stand in for.
+        "noUnusedFunctionParameters": "off"
+      },
+      "complexity": {
+        // `(push(x), value)` one-liners and the pages' !important overrides are kept as they are.
+        "noCommaOperator": "off",
+        "noImportantStyles": "off"
+      },
+      "performance": {
+        // It reads Playwright's locator.innerText() as the DOM's.
+        "useDomNodeTextContent": "off"
+      },
+      "a11y": {
+        "noSvgWithoutTitle": "off",
+        // The pages' role="group" boxes stay divs: a fieldset would draw its own border and legend layout.
+        "useSemanticElements": "off"
+      }
+    }
+  },
+  "overrides": [
+    {
+      // Google's tag snippet: dataLayer takes the Arguments object itself, and the function ships as its own source text.
+      "includes": ["scripts/site-analytics.mjs"],
+      "linter": { "rules": { "complexity": { "noArguments": "off" } } }
+    }
+  ],
+  "html": {
+    "linter": {
+      "enabled": true
+    }
+  }
+}

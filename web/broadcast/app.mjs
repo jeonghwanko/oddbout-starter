@@ -98,7 +98,7 @@ function action(id, callback, event = 'click', exclusive = false) {
     if (id === 'budget-form') budgetFeedback('');
     busyActions.add(id);
     const buttons = [...$(id).querySelectorAll('button'), ...($(id).tagName === 'BUTTON' ? [$(id)] : [])];
-    buttons.forEach(button => button.disabled = true);
+    buttons.forEach(button => { button.disabled = true; });
     try {
       if (exclusive) {
         const saved = requireJournal();
@@ -114,7 +114,7 @@ function action(id, callback, event = 'click', exclusive = false) {
       if (id === 'payout-propose') proposeFailed(error);
       if (id === 'google-signin') $('login-status').textContent = error.message;
     }
-    finally { busyActions.delete(id); buttons.forEach(button => button.disabled = false); updateControls(); }
+    finally { busyActions.delete(id); buttons.forEach(button => { button.disabled = false; }); updateControls(); }
   });
 }
 const fighters = () => $('fighterIds').value.split(',').map(id => id.trim()).filter(Boolean);
@@ -381,7 +381,7 @@ function renderPaidList() {
     button.addEventListener('click', () => selectPaidOperation(item.id,{ userSelected:true })); return button;
   }));
   if (!items.length) host.append(textElement('p','paid-broadcast-empty','No saved broadcasts yet. Ask the concierge to plan one or review your budget above.'));
-  let more = $('paid-more');
+  const more = $('paid-more');
   if (more) more.hidden = !paidNextCursor;
 }
 async function selectPaidOperation(id, { autoSession = true, userSelected = false } = {}) {

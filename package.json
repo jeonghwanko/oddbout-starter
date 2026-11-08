@@ -44,7 +44,7 @@
     "validate": "node tools/ai-fighter/validate-package.mjs",
     "test": "node --test test/*.test.mjs host/*.test.mjs",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.vendored.json",
-    "lint": "biome lint .",
+    "lint": "biome lint --error-on-warnings .",
     "test:fast": "node scripts/test-suite.mjs fast",
     "test:heavy": "node scripts/test-suite.mjs heavy",
     "spec:check": "node tools/ai-fighter/build-contract.mjs --check",

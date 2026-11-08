@@ -3,6 +3,7 @@
 interface Window {
   /** Google's tag queue: startAnalytics creates it before gtag pushes to it. */
   dataLayer: IArguments[];
+  // biome-ignore lint/suspicious/noExplicitAny: gtag('get') hands back whatever the field holds
   gtag: { (command: 'get', target: string, field: string, done: (value: any) => void): void; (...args: unknown[]): void };
   oddboutAnalyticsStarted?: boolean;
   /** Google's opt-out flag, window['ga-disable-<measurement id>']. */
@@ -11,4 +12,5 @@ interface Window {
   oddboutBindAnalytics?: (api: string, token: string, key: string) => Promise<void>;
 }
 interface Navigator { globalPrivacyControl?: boolean }
+// biome-ignore lint/suspicious/noExplicitAny: a milestone's detail is each milestone's own shape
 interface WindowEventMap { 'oddbout:milestone': CustomEvent<any> }

@@ -10,7 +10,7 @@ const FIGHTER_NAMES = { kuma:'Kuma', yume:'Yume', bravow:'Bravow', beotim:'Beoti
 const ORDER_STATES = { awaiting_media:'Ready to use', ready:'Ready to schedule', started:'Started', needs_attention:'Needs attention' };
 let config, session, client, journal, campaignProduct, campaignProducts=[], selectedProductId='', commerceCatalog;
 let orders = [], selectedOrder = null, nextCursor = null, orderRevision = 0, selectionRevision = 0, accountEpoch = 0, orderTimer;
-let selectedFile = null, selectedFileDuration = null, previewObjectUrl = '', fileRevision = 0, busy = false, topupBusy = false;
+let selectedFile = null, previewObjectUrl = '', fileRevision = 0, busy = false, topupBusy = false;
 let mediaMode='upload',previewedLink='',disposeExternal=()=>{};
 const executionPanel=createExecutionPanel({api,getOwner:()=>session?.user.id,getJournal:()=>journal,fighterName,fighterPhoto,onStatus:order=>{
   if(selectedOrder?.id!==order.id)return;selectedOrder={...selectedOrder,...order};$('purchase-state').textContent=plannedState(order);
@@ -174,7 +174,7 @@ async function purchaseCreditPack(productId,button) {
   try {
     const saved=journal, existing=saved.get('topup'), input=existing?.input??{productId};
     if(existing&&existing.input.productId!==productId) throw new Error('Continue the saved credit-pack request before choosing another pack.');
-    let op=existing??saved.begin('topup',input);saved.markDispatched('topup',op.requestKey);
+    const op=existing??saved.begin('topup',input);saved.markDispatched('topup',op.requestKey);
     const result=await api('/checkout',{base:'/commerce',body:{...input,requestKey:op.requestKey}});
     if(result.status==='credited') {saved.complete('topup',op.requestKey);walletMessage(`${Number(result.credits??0).toLocaleString()} ${creditName()} added. Your balance is ready.`,false);checkoutLink(null);await loadWallet();}
     else {saved.acknowledge('topup',op.requestKey,result);checkoutLink(result);walletMessage('Continue the same PayPal checkout. DON is added only after PayPal confirms payment.');}
@@ -201,11 +201,11 @@ function renderOrder(order) {
   $('purchase-panel').hidden=!order;
   if(!order){
     disposeExternal();previewedLink='';$('media-link').value='';setMediaMode('upload');
-    fileRevision++;$('broadcast-setup').hidden=true;selectedFile=null;selectedFileDuration=null;$('destination-url').value='';$('media-file').value='';
+    fileRevision++;$('broadcast-setup').hidden=true;selectedFile=null;$('destination-url').value='';$('media-file').value='';
     if(previewObjectUrl)URL.revokeObjectURL(previewObjectUrl);previewObjectUrl='';$('media-preview').removeAttribute('src');$('media-preview').hidden=true;
     $('host-playback').hidden=true;$('host-watch').removeAttribute('href');$('host-status').textContent=hostOrderId?'Sign in to open this host.':'';updateControls();return;
   }
-  if(previousId!==order.id){fileRevision++;selectedFile=null;selectedFileDuration=null;$('media-file').value='';if(previewObjectUrl)URL.revokeObjectURL(previewObjectUrl);previewObjectUrl='';$('media-preview').removeAttribute('src');$('media-preview').hidden=true;$('destination-url').value='';disposeExternal();previewedLink='';$('media-link').value='';setMediaMode('upload');}
+  if(previousId!==order.id){fileRevision++;selectedFile=null;$('media-file').value='';if(previewObjectUrl)URL.revokeObjectURL(previewObjectUrl);previewObjectUrl='';$('media-preview').removeAttribute('src');$('media-preview').hidden=true;$('destination-url').value='';disposeExternal();previewedLink='';$('media-link').value='';setMediaMode('upload');}
   if(previousId!==order.id||previousState!==state||previousScheduleRevision!==order.scheduleRevision||previousMediaId!==order.mediaId)$('publish-consent').checked=false;
   $('purchase-title').textContent=displayName(order);
   $('purchase-state').textContent=plannedState(order);
@@ -283,7 +283,7 @@ async function selectOrder(id) {
       updateControls();
     }
   }
-  catch(error){if(revision===selectionRevision&&session?.user.id===owner&&accountEpoch===epoch){message('Could not load that broadcast. Refresh My tickets to try again.',true);if(hostOrderId)$('host-status').textContent='This host is unavailable for the signed-in account.';}}
+  catch{if(revision===selectionRevision&&session?.user.id===owner&&accountEpoch===epoch){message('Could not load that broadcast. Refresh My tickets to try again.',true);if(hostOrderId)$('host-status').textContent='This host is unavailable for the signed-in account.';}}
 }
 async function loadOrders({more=false}={}) {
   if(!session)return;
@@ -529,7 +529,7 @@ $('google-signin').addEventListener('click',signIn);
 $('add-credits').addEventListener('click',()=>{if(!session){signIn();return;}openCredits($('credit-options').hidden);});
 $('signout').addEventListener('click',async()=>{const {error}=await client.auth.signOut();if(error)message(error.message,true);});
 $('media-file').addEventListener('change',async event=>{
-  const revision=++fileRevision,owner=session?.user.id,epoch=accountEpoch,orderId=selectedOrder?.id,file=event.currentTarget.files?.[0]??null;selectedFile=null;selectedFileDuration=null;
+  const revision=++fileRevision,owner=session?.user.id,epoch=accountEpoch,orderId=selectedOrder?.id,file=event.currentTarget.files?.[0]??null;selectedFile=null;
   if(previewObjectUrl)URL.revokeObjectURL(previewObjectUrl);previewObjectUrl='';
   if(!file){$('media-preview').hidden=true;$('media-file-name').textContent='Choose MP4 · Max 50 MB / 5 min';$('media-file-meta').textContent='';updateControls();return;}
   $('media-file-name').textContent=file.name;$('media-file-meta').textContent=`${(file.size/1024/1024).toFixed(1)} MB · Checking video…`;
@@ -538,7 +538,7 @@ $('media-file').addEventListener('change',async event=>{
   try{await new Promise((resolve,reject)=>{const video=$('media-preview');video.onloadedmetadata=()=>resolve();video.onerror=()=>reject(new Error('Video metadata could not be read.'));});
     if(revision!==fileRevision||session?.user.id!==owner||accountEpoch!==epoch||selectedOrder?.id!==orderId||$('media-file').files?.[0]!==file)return;
     const duration=$('media-preview').duration;if(!Number.isFinite(duration)||duration<=0||duration>300)throw new Error('Choose a video that is no longer than five minutes.');
-    selectedFile=file;selectedFileDuration=duration;$('media-file-meta').textContent=`${(file.size/1024/1024).toFixed(1)} MB · ${Math.ceil(duration)} sec`;message('');
+    selectedFile=file;$('media-file-meta').textContent=`${(file.size/1024/1024).toFixed(1)} MB · ${Math.ceil(duration)} sec`;message('');
   }catch(error){if(revision===fileRevision&&session?.user.id===owner&&accountEpoch===epoch&&selectedOrder?.id===orderId)message(error.message,true);}
   updateControls();
 });

@@ -2,7 +2,7 @@
 // 호스팅 생성 도구 (2026-10-28): ODDBOUT's generation worker makes the fighter; the agent carries the user's answers.
 import { z } from 'zod';
 import { GENERATION_LIMITS, UPLOAD_TICKET_HEADER, artifactPath, confirmedProfile } from '../../api/generations.mjs';
-import { Problem, readBody, UUID } from '../../api/http.mjs';
+import { readBody, UUID } from '../../api/http.mjs';
 import { encodeBase64 } from '../../api/base64.mjs';
 import { probeImage } from '../../api/image-probe.mjs';
 import spec from '../../contracts/ai-fighter/v1/spec.json' with { type: 'json' };

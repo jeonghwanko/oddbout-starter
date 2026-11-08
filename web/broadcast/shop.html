@@ -52,7 +52,7 @@
         </div>
         <p id="wallet-status" class="section-status" role="status" aria-live="polite"></p>
         <div id="credit-options" hidden>
-          <a id="credit-paypal" class="button button-paypal" href="#" target="_blank" rel="noopener noreferrer" hidden>Continue with PayPal</a>
+          <!-- biome-ignore lint/a11y/useValidAnchor: the script sets its href before it shows it --><a id="credit-paypal" class="button button-paypal" href="#" target="_blank" rel="noopener noreferrer" hidden>Continue with PayPal</a>
           <div id="credit-packs" class="credit-packs"></div>
         </div>
         <section id="my-broadcasts" class="broadcasts-section" aria-labelledby="broadcasts-title">
@@ -68,7 +68,7 @@
       </section>
       <section id="on-air-calendar" class="calendar-section" aria-labelledby="calendar-title">
         <div class="section-heading"><h2 id="calendar-title">On-Air Calendar</h2><div class="calendar-nav"><button id="calendar-prev" type="button" aria-label="Previous month">←</button><strong id="calendar-month"></strong><button id="calendar-next" type="button" aria-label="Next month">→</button></div></div>
-        <p id="calendar-zone"></p><div id="calendar-days" class="calendar-days" aria-label="Broadcast dates"></div>
+        <p id="calendar-zone"></p><div id="calendar-days" class="calendar-days" role="group" aria-label="Broadcast dates"></div>
         <div id="calendar-agenda" class="calendar-agenda" aria-live="polite"></div>
         <button id="calendar-more" class="button button-secondary" type="button" hidden>Load more broadcasts</button>
       </section>
@@ -85,7 +85,7 @@
             <div class="media-choice" role="group" aria-label="Video source"><button id="choose-upload" type="button" aria-pressed="true">Upload MP4</button><button id="choose-link" type="button" aria-pressed="false">YouTube / Twitch</button></div>
             <div id="upload-source">
             <label class="upload-zone" for="media-file"><span class="upload-symbol" aria-hidden="true">＋</span><strong id="media-file-name">Choose MP4 · Max 50 MB / 5 min</strong><span id="media-file-meta"></span><input id="media-file" name="mediaFile" type="file" accept="video/mp4,.mp4" /></label>
-            <video id="media-preview" class="media-preview" controls playsinline hidden></video>
+            <!-- biome-ignore lint/a11y/useMediaCaption: it plays the creator's own MP4, which comes with no caption file --><video id="media-preview" class="media-preview" controls playsinline hidden></video>
             </div>
             <div id="link-source" hidden>
               <label class="field" for="media-link">Video link<input id="media-link" type="url" inputmode="url" placeholder="YouTube or Twitch URL" /></label>
@@ -95,7 +95,7 @@
           </section>
           <section class="setup-card" aria-labelledby="destination-title">
             <label id="destination-title" class="field" for="destination-url">Promo URL<input id="destination-url" name="destinationUrl" type="url" inputmode="url" autocomplete="url" placeholder="https://…" /></label>
-            <div id="intro-preview" class="intro-preview" aria-labelledby="intro-title" hidden><h3 id="intro-title">AI introduction</h3><p id="intro-text"></p></div>
+            <div id="intro-preview" class="intro-preview" role="group" aria-labelledby="intro-title" hidden><h3 id="intro-title">AI introduction</h3><p id="intro-text"></p></div>
           </section>
         </div>
         <div id="promotion-actions" class="promotion-actions" hidden>
@@ -105,7 +105,7 @@
         <div id="schedule-panel" class="schedule-panel" hidden>
           <label class="field" for="broadcast-date">Start date &amp; time<input id="broadcast-date" type="datetime-local" step="60" /></label>
           <p id="schedule-timezone"></p>
-          <div class="schedule-actions"><button id="save-schedule" class="button button-primary" type="button">Add to Calendar</button><a id="open-host" class="button button-secondary" href="#" hidden>On-Air Agent →</a></div>
+          <div class="schedule-actions"><button id="save-schedule" class="button button-primary" type="button">Add to Calendar</button><!-- biome-ignore lint/a11y/useValidAnchor: the script sets its href before it shows it --><a id="open-host" class="button button-secondary" href="#" hidden>On-Air Agent →</a></div>
           <p id="schedule-status" class="section-status" role="status" aria-live="polite"></p>
         </div>
         <div id="publish-row" class="publish-row" hidden>
@@ -114,9 +114,9 @@
           <p>Starts now. Your full broadcast time begins when you press Start.</p>
         </div>
       </section>
-      <section id="host-playback" class="host-playback" hidden><a id="host-watch" class="button button-primary" target="_blank" rel="noopener noreferrer">Watch broadcast ↗</a></section>
+      <section id="host-playback" class="host-playback" hidden><!-- biome-ignore lint/a11y/useValidAnchor: the script sets its href before it shows it --><a id="host-watch" class="button button-primary" target="_blank" rel="noopener noreferrer">Watch broadcast ↗</a></section>
       <section id="execution-panel" class="execution-panel" hidden aria-labelledby="execution-title">
-        <div class="section-heading"><h2 id="execution-title">Your broadcast</h2><button id="execution-refresh" class="button button-secondary button-small">Refresh</button></div>
+        <div class="section-heading"><h2 id="execution-title">Your broadcast</h2><button type="button" id="execution-refresh" class="button button-secondary button-small">Refresh</button></div>
         <ol id="execution-trail" class="progress-trail progress-trail-large" aria-label="Ticket progress"></ol>
         <div class="execution-board">
           <section class="execution-card" aria-labelledby="execution-agent-title">
@@ -126,7 +126,7 @@
             <ol id="execution-decisions" class="decision-list" aria-label="Latest AI producer decisions"></ol>
             <p id="execution-decisions-empty" class="execution-sub" hidden>No decisions yet.</p>
             <p id="execution-agent-note"></p>
-            <div class="execution-card-actions"><button id="execution-retry" class="button button-primary button-small" hidden>Retry Agent</button><button id="execution-stop" class="button button-secondary button-small">End broadcast</button></div>
+            <div class="execution-card-actions"><button type="button" id="execution-retry" class="button button-primary button-small" hidden>Retry Agent</button><button type="button" id="execution-stop" class="button button-secondary button-small">End broadcast</button></div>
           </section>
           <div class="execution-money">
             <section class="execution-card" aria-labelledby="execution-settlement-title">
@@ -134,7 +134,7 @@
               <p id="execution-settlement" class="execution-sub"></p>
               <dl id="execution-settlement-facts" class="execution-facts" hidden></dl>
               <div id="execution-audit" class="execution-audit" hidden><h4>AI audit note</h4><p id="execution-audit-text"></p></div>
-              <button id="execution-reconcile" class="button button-secondary button-small">Check settlement</button>
+              <button type="button" id="execution-reconcile" class="button button-secondary button-small">Check settlement</button>
             </section>
             <section class="execution-card" aria-labelledby="execution-fees-title">
               <div class="execution-card-head"><h3 id="execution-fees-title">Creator fees</h3><span id="execution-fees-badge" class="execution-badge" hidden></span></div>
@@ -144,13 +144,13 @@
             </section>
           </div>
         </div>
-        <div id="execution-stop-confirm" class="execution-actions" hidden><p>Finish the current cup and end this broadcast early?</p><button id="execution-keep" class="button button-secondary">Keep running</button><button id="execution-end" class="button button-primary">End broadcast</button></div>
-        <div id="execution-pay-row" class="execution-actions" hidden><label class="consent"><input id="execution-consent" type="checkbox" />I approve these creator fees. PayPal Sandbox · no real money.</label><button id="execution-pay" class="button button-primary" disabled>Pay with PayPal</button></div>
+        <div id="execution-stop-confirm" class="execution-actions" hidden><p>Finish the current cup and end this broadcast early?</p><button type="button" id="execution-keep" class="button button-secondary">Keep running</button><button type="button" id="execution-end" class="button button-primary">End broadcast</button></div>
+        <div id="execution-pay-row" class="execution-actions" hidden><label class="consent"><input id="execution-consent" type="checkbox" />I approve these creator fees. PayPal Sandbox · no real money.</label><button type="button" id="execution-pay" class="button button-primary" disabled>Pay with PayPal</button></div>
         <p id="execution-message" class="section-status" role="status" aria-live="polite"></p>
         <details><summary>Transaction records</summary><pre id="execution-records"></pre></details>
       </section>
     </main>
-    <footer class="shop-footer" aria-label="Service information">
+    <footer class="shop-footer" role="contentinfo" aria-label="Service information">
       <p class="sandbox-notice">PayPal Sandbox · No real charges</p>
       <p class="judges-link"><a href="/broadcast/judges/">Hackathon judges: start here →</a></p>
       <p id="shop-status" class="shop-status" role="status" aria-live="polite"></p>

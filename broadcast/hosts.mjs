@@ -31,7 +31,7 @@ export async function loadHostConfig(path, hostId) {
   if (!stat.isFile() || stat.size > 64 * 1024) throw configError('host_invalid_config');
   let config;
   try { config = JSON.parse(await readFile(path, 'utf8')); } catch { throw configError('host_invalid_config'); }
-  if (!config || config.version !== 1 || Object.keys(config).some(key => !['version', 'hosts'].includes(key)) || !Array.isArray(config.hosts) || config.hosts.length > 64) throw configError('host_invalid_config');
+  if (config?.version !== 1 || Object.keys(config).some(key => !['version', 'hosts'].includes(key)) || !Array.isArray(config.hosts) || config.hosts.length > 64) throw configError('host_invalid_config');
   /** @type {BroadcastHost[]} */
   const hosts = config.hosts.map(validateHostConfig);
   if (new Set(hosts.map(host => host.id)).size !== hosts.length) throw configError('host_duplicate_id');

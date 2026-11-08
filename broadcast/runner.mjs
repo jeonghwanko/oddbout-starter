@@ -170,6 +170,7 @@ export function createPlaywrightRenderer({ arenaUrl, playwright, platform = proc
         throw new Error('runner_render_outcome_unknown');
       } finally {
         signal.removeEventListener('abort', aborted);
+        // biome-ignore lint/correctness/noUnsafeFinally: a renderer that would not close must surface over the outcome above
         try { await close(); } catch { throw new RendererCleanupError(observedResult); }
       }
     },
@@ -191,7 +192,7 @@ function checkedJob(value, hostId, workerId) {
 /** Validate the observed three-bout bracket before asking the server to charge it.
  * @param {any} value @param {Pick<CupJob,'id'|'leaseToken'|'seed'|'fighterIds'>} job */
 export function validateCupResult(value, job) {
-  if (!value || value.protocolVersion !== 1 || value.jobId !== job.id || value.leaseToken !== job.leaseToken || value.seed !== job.seed
+  if (value?.protocolVersion !== 1 || value.jobId !== job.id || value.leaseToken !== job.leaseToken || value.seed !== job.seed
     || !Array.isArray(value.bouts) || value.bouts.length !== 3) throw new Error('runner_invalid_render_result');
   const pair = (/** @type {any} */ values) => Array.isArray(values) && values.length === 2 && values.every(n => typeof n === 'number' && Number.isFinite(n) && n >= 0);
   for (let n = 0; n < 3; n++) {
