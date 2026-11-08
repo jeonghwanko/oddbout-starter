@@ -451,7 +451,7 @@ test('a request with a picture checks the account once for its three signed-in r
   }
 });
 
-test('a wait on a submitted fighter reads the job and its submission in one query a tick, and ends when the check does', async () => {
+test('a wait on a submitted fighter reads the job, its submission and its picture events in one call a tick, and ends when the check does', async () => {
   const g = await generation();
   try {
     await g.healthy();
@@ -466,6 +466,11 @@ test('a wait on a submitted fighter reads the job and its submission in one quer
         return select(columns);
       };
       return query;
+    };
+    const rpc = g.db.rpc;
+    g.db.rpc = (name, args) => {
+      reads.push(['rpc', name]);
+      return rpc(name, args);
     };
     const { call } = await connector(g, { pollMs: 10 });
     const { job } = await call('request_hosted_fighter', {
@@ -483,7 +488,7 @@ test('a wait on a submitted fighter reads the job and its submission in one quer
     reads.length = 0;
     await call('get_hosted_fighter', { jobId: job.id });
     const once = reads.splice(0);
-    const tick = ([table, columns]) => table === 'af_generation_jobs' && columns === 'status,progress,submission:af_submissions!submission_id(status)';
+    const tick = ([table, name]) => table === 'rpc' && name === 'af_hosted_watch_tick';
     // The check ends once the wait has seen it running.
     const settle = async () => {
       while (!reads.some(tick)) await new Promise(done => setTimeout(done, 5));
@@ -493,10 +498,10 @@ test('a wait on a submitted fighter reads the job and its submission in one quer
     const [waited] = await Promise.all([call('get_hosted_fighter', { jobId: job.id, waitSeconds: 5 }), settle()]);
     assert.ok(Date.now() - started < 3000, `${Date.now() - started} ms`);
     assert.equal(waited.job.status, 'submitted');
-    // Every tick is one joined read; the submission is read on its own only by the job's final read, as without a wait.
+    // Every tick is one call; the tables are read on their own only by the job's final read, as without a wait.
     assert.ok(reads.filter(tick).length >= 2, `${reads.filter(tick).length} ticks`);
-    const own = list => list.filter(([table]) => table === 'af_submissions').length;
-    assert.equal(own(reads), own(once));
+    const own = (list, name) => list.filter(([table]) => table === name).length;
+    for (const table of ['af_generation_jobs', 'af_submissions', 'af_generation_events']) assert.equal(own(reads, table), own(once, table), table);
   } finally {
     await g.sql.close();
   }
