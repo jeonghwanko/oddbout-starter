@@ -27,212 +27,54 @@
     <!--
       본문 글꼴 Pretendard 는 글자 범위 조각(unicode-range)이다(2026-11-08): 전체 판 두 굵기 1.56 MB 대신 이 페이지가 쓰는 조각만 받는다.
       부팅(render/boot/GameBoot.ts)의 loadUiFont 가 이 언어 문구의 조각을 기다리고, 표 밖 글자는 그릴 때 받아 다시 그린다(fontArrivalRedraw).
-    -->
+    -->
     <!-- 부팅의 loadUiFont 가 기다린다. 빠뜨리면 JS 를 다 받은 뒤에야 따로 받기 시작한다. -->
     <link
       rel="preload"
-      href="./fonts/BlackHanSans-Lettering.woff2?v=9bdcf1d2"
+      href="./fonts/BlackHanSans-Lettering.woff2?v=003d18a8"
       as="font"
       type="font/woff2"
       crossorigin
     />
-    <style>
-      /*
-       * 번들 글꼴. Phaser Canvas Text 는 생성 시점에 글자 폭을 재서 굳히므로, 부팅이 기다리는 글꼴(웹툰 식자 서브셋)은
-       * 부팅 전에 도착해야 한다(GameBoot 의 loadUiFont). swap 으로 두면 폴백으로 한 번 재고 끝나서 자간이 어긋난 채 남는다 — 그래서 block 이다.
-       * Pretendard 는 위 pretendardSubset.css 의 조각이다.
-       */
-      /* 구단 화면의 일반 정보 글꼴(2026-11-08 — 나눔스퀘어라운드): 부팅에서 기다리지 않고 구단 화면이 열릴 때 받는다(fontLoading.loadRoundFont). */
-      @font-face {
-        font-family: "NanumSquareRound";
-        src: url("./fonts/NanumSquareRound-Bold.woff2?v=9bdcf1d2") format("woff2");
-        font-weight: 700;
-        font-style: normal;
-        font-display: block;
-      }
-      @font-face {
-        font-family: "NanumSquareRound";
-        src: url("./fonts/NanumSquareRound-ExtraBold.woff2?v=9bdcf1d2") format("woff2");
-        font-weight: 800;
-        font-style: normal;
-        font-display: block;
-      }
-      /* 웹툰 식자(첫 타이틀 프롤로그 대사). 쓰는 글자만 남긴 10KB 서브셋이라 본문 글꼴과 함께 부팅에서 기다린다. */
-      @font-face {
-        font-family: "Black Han Sans";
-        src: url("./fonts/BlackHanSans-Lettering.woff2?v=9bdcf1d2") format("woff2");
-        font-weight: 400;
-        font-style: normal;
-        font-display: block;
-      }
-      /* 수첩 손글씨(무투장 수첩의 "어젯밤" 줄 — 언어마다 한 손, 쓰는 글자만 남긴 서브셋). 수첩이 열릴 때 받는다. */
-      @font-face {
-        font-family: "Gaegu";
-        src: url("./fonts/Gaegu-Notebook.woff2?v=9bdcf1d2") format("woff2");
-        font-weight: 700;
-        font-style: normal;
-        font-display: block;
-      }
-      @font-face {
-        font-family: "Patrick Hand";
-        src: url("./fonts/PatrickHand-Notebook.woff2?v=9bdcf1d2") format("woff2");
-        font-weight: 400;
-        font-style: normal;
-        font-display: block;
-      }
-      @font-face {
-        font-family: "Yomogi";
-        src: url("./fonts/Yomogi-Notebook.woff2?v=9bdcf1d2") format("woff2");
-        font-weight: 400;
-        font-style: normal;
-        font-display: block;
-      }
-      html,
-      body {
-        margin: 0;
-        padding: 0;
-        height: 100%;
-        background: #071923;
-        overflow: hidden;
-      }
-      body {
-        display: flex;
-        height: 100dvh;
-        box-sizing: border-box;
-        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-        flex-direction: column;
-      }
-      .game-navigation {
-        display: flex;
-        align-items: center;
-        flex: 0 0 48px;
-        box-sizing: border-box;
-        padding: 0 16px;
-        /* 2026-11-04 메뉴 리뉴얼: 위 막대는 검은 단색 하나(빗금·선 없음) — 아래 하늘 바탕 화면과 선 없이 면으로 나뉜다.
-           2026-11-07: 막대에는 로고·금화·☰(src/render/dom/gameMenuDrawer.ts)만 있다. 계정·모드·옵션·언어는 ☰ 서랍으로 옮겼다.
-           2026-11-08: 구단 페이지는 금화 왼쪽에 구단 명성(src/creator/clubFameChip.ts)을 더한다 — 가로 화면에서만.
-           2026-11-08: 구단 페이지(?club=1)에서는 로고 자리에 구단 칩(구단주 얼굴·구단 이름, 누르면 구단 홈 — src/render/dom/clubBarChip.ts)이 선다. */
-        background: #141020;
-      }
-      .game-home {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        min-height: 44px;
-        box-sizing: border-box;
-        padding: 0 12px;
-        color: #fff;
-        font: 700 16px/1.4 "Pretendard", "Malgun Gothic", sans-serif;
-        text-decoration: none;
-      }
-      .game-home[hidden] { display: none; }
-      .game-home:hover { background: rgba(255, 255, 255, 0.09); }
-      .game-home:focus-visible { outline: 2px solid #eaff50; outline-offset: -2px; }
-      /* The ODDBOUT wordmark is drawn in ink for the homepage's paper: white here, on the ink bar. */
-      .game-logo {
-        display: block;
-        width: auto;
-        height: 26px;
-        filter: brightness(0) invert(1);
-      }
-      #game {
-        position: relative;
-        width: 100%;
-        flex: 1;
-        min-height: 0;
-      }
-      #game canvas {
-        display: block;
-        touch-action: none;
-      }
-      /* JS와 번들 글꼴을 기다리는 동안에도 시스템 글꼴로 준비 상태를 보여준다. */
-      #boot-loading {
-        position: absolute;
-        inset: 0;
-        z-index: 9;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-direction: column;
-        gap: 14px;
-        background: #071923;
-        color: #fff;
-        font: 600 16px "Pretendard", system-ui, sans-serif;
-        pointer-events: none;
-      }
-      .boot-loading-ring {
-        width: 30px;
-        height: 30px;
-        border: 3px solid rgba(255, 255, 255, 0.16);
-        border-top-color: #eaff50;
-        border-radius: 50%;
-        animation: boot-loading-spin 1s linear infinite;
-      }
-      #boot-loading [lang] { display: none; }
-      html:lang(ko) #boot-loading [lang="ko"], html:lang(en) #boot-loading [lang="en"], html:lang(ja) #boot-loading [lang="ja"] { display: inline; }
-      @keyframes boot-loading-spin { to { transform: rotate(360deg); } }
-      @media (prefers-reduced-motion: reduce) {
-        .boot-loading-ring { animation: none; }
-      }
-      html[data-boot-motion="reduce"] .boot-loading-ring { animation: none; }
-      /* 부팅 실패(2026-11-07, src/render/boot/GameBoot.ts 의 showBootFailure): 준비 표시가 한 줄과 다시 단추(페이지를 다시 연다)로 바뀐다.
-         단추를 누를 수 있게 이때만 판이 누름을 받는다. */
-      #boot-loading.is-failed {
-        pointer-events: auto;
-        padding: 0 16px;
-        text-align: center;
-      }
-      .boot-failed-line { margin: 0; }
-      .boot-failed-retry {
-        min-width: 120px;
-        min-height: 44px;
-        padding: 0 22px;
-        border: 0;
-        border-radius: 12px;
-        background: #eaff50;
-        color: #141020;
-        font: 800 16px "Pretendard", system-ui, sans-serif;
-        cursor: pointer;
-      }
-    </style>
-  <script type="module" crossorigin src="/assets/fighter-BAIpJCL9.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-B0Z9INg1.js">
-  <link rel="modulepreload" crossorigin href="/assets/_oddbout-analytics-DfJ7iKZO.js">
-  <link rel="modulepreload" crossorigin href="/assets/pseudo-B3ZLOM_E.js">
-  <link rel="modulepreload" crossorigin href="/assets/Locale-D7-1bJTb.js">
-  <link rel="modulepreload" crossorigin href="/assets/preload-helper-Czpn1I53.js">
-  <link rel="modulepreload" crossorigin href="/assets/storageKeys-C4z49Sal.js">
-  <link rel="modulepreload" crossorigin href="/assets/localePreference-u1ZBJRDV.js">
-  <link rel="modulepreload" crossorigin href="/assets/PublicAssetVersions-DIMNeJVo.js">
-  <link rel="modulepreload" crossorigin href="/assets/agentNames-C9gi1FWq.js">
-  <link rel="modulepreload" crossorigin href="/assets/fighterApiBase-CeB_1v89.js">
-  <link rel="modulepreload" crossorigin href="/assets/registeredFighters-CyK5vl9V.js">
-  <link rel="modulepreload" crossorigin href="/assets/oddboutSession-DczGqyRo.js">
-  <link rel="modulepreload" crossorigin href="/assets/catalog-CEcV9Fij.js">
-  <link rel="modulepreload" crossorigin href="/assets/localeLoader-Ds4pezaf.js">
-  <link rel="modulepreload" crossorigin href="/assets/chrome-B1LS61s-.js">
+    <style>@font-face{font-family:NanumSquareRound;src:url(./fonts/NanumSquareRound-Bold.woff2?v=003d18a8)format("woff2");font-weight:700;font-style:normal;font-display:block}@font-face{font-family:NanumSquareRound;src:url(./fonts/NanumSquareRound-ExtraBold.woff2?v=003d18a8)format("woff2");font-weight:800;font-style:normal;font-display:block}@font-face{font-family:Black Han Sans;src:url(./fonts/BlackHanSans-Lettering.woff2?v=003d18a8)format("woff2");font-weight:400;font-style:normal;font-display:block}@font-face{font-family:Gaegu;src:url(./fonts/Gaegu-Notebook.woff2?v=003d18a8)format("woff2");font-weight:700;font-style:normal;font-display:block}@font-face{font-family:Patrick Hand;src:url(./fonts/PatrickHand-Notebook.woff2?v=003d18a8)format("woff2");font-weight:400;font-style:normal;font-display:block}@font-face{font-family:Yomogi;src:url(./fonts/Yomogi-Notebook.woff2?v=003d18a8)format("woff2");font-weight:400;font-style:normal;font-display:block}html,body{background:#071923;height:100%;margin:0;padding:0;overflow:hidden}body{box-sizing:border-box;height:100dvh;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);flex-direction:column;display:flex}.game-navigation{box-sizing:border-box;background:#141020;flex:0 0 48px;align-items:center;padding:0 16px;display:flex}.game-home{box-sizing:border-box;color:#fff;align-items:center;gap:8px;min-height:44px;padding:0 12px;font:700 16px/1.4 Pretendard,Malgun Gothic,sans-serif;text-decoration:none;display:inline-flex}.game-home[hidden]{display:none}.game-home:hover{background:#ffffff17}.game-home:focus-visible{outline-offset:-2px;outline:2px solid #eaff50}.game-logo{filter:brightness(0)invert();width:auto;height:26px;display:block}#game{flex:1;width:100%;min-height:0;position:relative}#game canvas{touch-action:none;display:block}#boot-loading{z-index:9;color:#fff;pointer-events:none;background:#071923;flex-direction:column;justify-content:center;align-items:center;gap:14px;font:600 16px Pretendard,system-ui,sans-serif;display:flex;position:absolute;inset:0}.boot-loading-ring{border:3px solid #ffffff29;border-top-color:#eaff50;border-radius:50%;width:30px;height:30px;animation:1s linear infinite boot-loading-spin}#boot-loading [lang]{display:none}html:lang(ko) #boot-loading [lang=ko],html:lang(en) #boot-loading [lang=en],html:lang(ja) #boot-loading [lang=ja]{display:inline}@keyframes boot-loading-spin{to{transform:rotate(360deg)}}@media (prefers-reduced-motion:reduce){.boot-loading-ring{animation:none}}html[data-boot-motion=reduce] .boot-loading-ring{animation:none}#boot-loading.is-failed{pointer-events:auto;text-align:center;padding:0 16px}.boot-failed-line{margin:0}.boot-failed-retry{color:#141020;cursor:pointer;background:#eaff50;border:0;border-radius:12px;min-width:120px;min-height:44px;padding:0 22px;font:800 16px Pretendard,system-ui,sans-serif}</style>
+  <script type="module" crossorigin src="/assets/fighter-CXrXil7G.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-BWaJ3C7D.js">
+  <link rel="modulepreload" crossorigin href="/assets/_oddbout-analytics-CiIVnasc.js">
   <link rel="modulepreload" crossorigin href="/assets/GameMenuState-BTcb0y2X.js">
-  <link rel="modulepreload" crossorigin href="/assets/accountControl-Yt0CRnEZ.js">
-  <link rel="modulepreload" crossorigin href="/assets/FighterIdentity-D6Gr6ouO.js">
-  <link rel="modulepreload" crossorigin href="/assets/arenaRankings-C0fxjJbQ.js">
-  <link rel="modulepreload" crossorigin href="/assets/CityTournamentRules-Dy6HlK73.js">
-  <link rel="modulepreload" crossorigin href="/assets/UtcTime-BFPbMiHs.js">
-  <link rel="modulepreload" crossorigin href="/assets/rankedDuels-gl63D2sl.js">
+  <link rel="modulepreload" crossorigin href="/assets/pseudo-B3ZLOM_E.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-CEcV9Fij.js">
+  <link rel="modulepreload" crossorigin href="/assets/Locale-D7-1bJTb.js">
+  <link rel="modulepreload" crossorigin href="/assets/localeLoader-Ds4pezaf.js">
+  <link rel="modulepreload" crossorigin href="/assets/preload-helper-7y9sWmk5.js">
+  <link rel="modulepreload" crossorigin href="/assets/storageKeys-C4z49Sal.js">
+  <link rel="modulepreload" crossorigin href="/assets/PublicAssetVersions-BFPZ8jsW.js">
   <link rel="modulepreload" crossorigin href="/assets/RuntimeOptions-BM7dqT3w.js">
   <link rel="modulepreload" crossorigin href="/assets/PhaserTextureFamilies-C8vBSGBz.js">
-  <link rel="modulepreload" crossorigin href="/assets/UiFeedback-VegmClNO.js">
+  <link rel="modulepreload" crossorigin href="/assets/UiFeedback-CQZg6REt.js">
+  <link rel="modulepreload" crossorigin href="/assets/fighterApiBase-CeB_1v89.js">
+  <link rel="modulepreload" crossorigin href="/assets/agentNames-C9gi1FWq.js">
+  <link rel="modulepreload" crossorigin href="/assets/registeredFighters-Y3dA0iuo.js">
+  <link rel="modulepreload" crossorigin href="/assets/oddboutSession-CO5fLQhx.js">
+  <link rel="modulepreload" crossorigin href="/assets/FighterIdentity-D6Gr6ouO.js">
+  <link rel="modulepreload" crossorigin href="/assets/arenaRankings-CCyFKDCt.js">
+  <link rel="modulepreload" crossorigin href="/assets/CityTournamentRules-BrrI7WGX.js">
   <link rel="modulepreload" crossorigin href="/assets/arena-bout-rules-DDsbTjjN.js">
+  <link rel="modulepreload" crossorigin href="/assets/rankedDuels-DLKF3Y0B.js">
   <link rel="modulepreload" crossorigin href="/assets/CityFighterIds-vw6wI0t5.js">
-  <link rel="modulepreload" crossorigin href="/assets/ArenaRoster-_PJu8kyK.js">
-  <link rel="modulepreload" crossorigin href="/assets/oddboutMailServer-DGWCMJW9.js">
+  <link rel="modulepreload" crossorigin href="/assets/ArenaRoster-CWlKvvoW.js">
+  <link rel="modulepreload" crossorigin href="/assets/oddboutMailServer-C_NROZrU.js">
   <link rel="modulepreload" crossorigin href="/assets/arena-concept-runtime-CbVbG3va.js">
   <link rel="modulepreload" crossorigin href="/assets/ArenaArtCatalog-B8zoemBA.js">
   <link rel="modulepreload" crossorigin href="/assets/FighterCombat-DoghID8o.js">
-  <link rel="modulepreload" crossorigin href="/assets/ArenaGoldDropView-EQvmhjTq.js">
-  <link rel="modulepreload" crossorigin href="/assets/TwitchArenaBout-DB_4QcaM.js">
-  <link rel="modulepreload" crossorigin href="/assets/ArenaRecordChips-BoQpEXaH.js">
-  <link rel="modulepreload" crossorigin href="/assets/fontLoading-BQcA50s8.js">
-  <link rel="modulepreload" crossorigin href="/assets/GameBoot-CDNeIoGX.js">
+  <link rel="modulepreload" crossorigin href="/assets/ArenaGoldDropView-Dzl9v4PE.js">
+  <link rel="modulepreload" crossorigin href="/assets/TwitchArenaBout-CZA8mbO9.js">
+  <link rel="modulepreload" crossorigin href="/assets/chrome-4igrYfdY.js">
+  <link rel="modulepreload" crossorigin href="/assets/accountControl-C9uyhmvf.js">
+  <link rel="modulepreload" crossorigin href="/assets/ArenaRecordChips-Bm4Hl0m-.js">
+  <link rel="modulepreload" crossorigin href="/assets/localePreference-CvgqtnQR.js">
+  <link rel="modulepreload" crossorigin href="/assets/fontLoading-CRfqvlSZ.js">
+  <link rel="modulepreload" crossorigin href="/assets/GameBoot-DDXj3WYg.js">
+  <link rel="modulepreload" crossorigin href="/assets/UtcTime-BFPbMiHs.js">
   <link rel="stylesheet" crossorigin href="/assets/accountControl-CWZ8z-IX.css">
   <link rel="stylesheet" crossorigin href="/assets/ArenaRecordChips-KffYQcGs.css">
   <link rel="stylesheet" crossorigin href="/assets/fighter-Gt1UFInE.css">
@@ -274,7 +116,7 @@
       // module comes, so the logo never shows there.
       if (bootParams.get("club") === "1") homeLink.hidden = true;
       if (bootParams.get("motion") === "reduce") document.documentElement.dataset.bootMotion = "reduce";
-    </script>
-    <script>(()=>{const p={"en":["assets/en-C0tkhiaQ.js","assets/en-D82gxORr.js","assets/en-Dlkc4kRO.js"],"ko":["assets/ko-Vi49-s0l.js","assets/ko-fWaocpRt.js"],"ja":["assets/en-Dlkc4kRO.js","assets/ja-Ds9SPoXc.js","assets/ja-m6OZLMQC.js"]}[document.documentElement.lang];if(!p)return;for(const f of p){const l=document.createElement("link");l.rel="modulepreload";l.crossOrigin="";l.href="./"+f;document.head.append(l)}})()</script>
+    </script>
+    <script>(()=>{const p={"en":["assets/en-CDR9rfxT.js","assets/en-D82gxORr.js","assets/en-Dlkc4kRO.js"],"ko":["assets/ko-DKqv-3qE.js","assets/ko-fWaocpRt.js"],"ja":["assets/en-Dlkc4kRO.js","assets/ja-CLTIgMHP.js","assets/ja-m6OZLMQC.js"]}[document.documentElement.lang];if(!p)return;for(const f of p){const l=document.createElement("link");l.rel="modulepreload";l.crossOrigin="";l.href="./"+f;document.head.append(l)}})()</script>
   </body>
 </html>
