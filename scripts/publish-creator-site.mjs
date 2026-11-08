@@ -36,8 +36,17 @@ if (option === '--dry-run') {
     }
     // No checkout means old tracked assets are absent. add -A removes stale assets
     // from the new commit without deleting anything in an existing user checkout.
-    git(parent, 'clone', '--depth=1', '--single-branch', '--no-checkout', '--branch', hosting.branch,
-      'git@github.com:jeonghwanko/oddbout-starter.git', checkout);
+    git(
+      parent,
+      'clone',
+      '--depth=1',
+      '--single-branch',
+      '--no-checkout',
+      '--branch',
+      hosting.branch,
+      'git@github.com:jeonghwanko/oddbout-starter.git',
+      checkout,
+    );
     // A targeted page update may have been built and compared against one deployed game.
     // The normal non-force push guards later races; also refuse a change made before this clone.
     const expectedHead = process.env.ODDBOUT_EXPECTED_PAGES_HEAD;
@@ -46,8 +55,7 @@ if (option === '--dry-run') {
     for (const entry of await readdir(source)) await cp(join(source, entry), join(checkout, entry), { recursive: true, errorOnExist: true, force: false });
     // The caller's build directory may change while cloning or copying.
     // Recheck the exact bytes that will be committed, before staging or pushing.
-    assert.deepEqual(await verifyArtifact(checkout, { gitCheckout: true }), release,
-      'Artifact metadata changed while preparing the publication');
+    assert.deepEqual(await verifyArtifact(checkout, { gitCheckout: true }), release, 'Artifact metadata changed while preparing the publication');
     git(checkout, 'config', 'user.name', 'AI Fighter deploy');
     git(checkout, 'config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com');
     git(checkout, 'config', 'core.autocrlf', 'false');

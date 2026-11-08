@@ -34,9 +34,15 @@ export const PROTECTED_PART = /^(?:\.codex|\.grok|\.aws|\.ssh|sessions|auth\.jso
  * @param {string[]} parts @param {{ pluginCache?: boolean }} [options]
  */
 export function isProtected(parts, { pluginCache = false } = {}) {
-  return parts.some((part, index) => PROTECTED_PART.test(part) && !(part.toLowerCase() === '.codex' &&
-    (parts[index + 1] === 'worktrees' && parts.length > index + 3 ||
-      pluginCache && parts[index + 1] === 'plugins' && parts[index + 2] === 'cache' && parts.length > index + 3)));
+  return parts.some(
+    (part, index) =>
+      PROTECTED_PART.test(part) &&
+      !(
+        part.toLowerCase() === '.codex' &&
+        ((parts[index + 1] === 'worktrees' && parts.length > index + 3) ||
+          (pluginCache && parts[index + 1] === 'plugins' && parts[index + 2] === 'cache' && parts.length > index + 3))
+      ),
+  );
 }
 
 /**
@@ -53,10 +59,12 @@ export async function pathWithoutLinks(base, parts, { allowMissing = true, visit
   let target = base;
   for (const [index, part] of parts.entries()) {
     target = path.join(target, part);
-    let info = await lstat(target).catch(/** @param {any} error */ error => {
-      if (error.code !== 'ENOENT' || !allowMissing) throw error;
-      return null;
-    });
+    let info = await lstat(target).catch(
+      /** @param {any} error */ error => {
+        if (error.code !== 'ENOENT' || !allowMissing) throw error;
+        return null;
+      },
+    );
     if (visit) info = await visit(target, info, index);
     if (info?.isSymbolicLink()) return null;
   }
@@ -76,8 +84,10 @@ const SCANNER_HOLDS = ['EPERM', 'EACCES', 'EBUSY'];
  */
 export async function renameRetrying(from, to, { stepMs = 25, done, move = rename, wait = delay, platform = process.platform } = {}) {
   for (let attempt = 0; ; attempt++) {
-    try { await move(from, to); return; }
-    catch (/** @type {any} */ error) {
+    try {
+      await move(from, to);
+      return;
+    } catch (/** @type {any} */ error) {
       if (await done?.()) return;
       if (platform !== 'win32' || !SCANNER_HOLDS.includes(error.code) || attempt >= 6) throw error;
       await wait(stepMs * (attempt + 1));
@@ -95,5 +105,7 @@ export async function fileSha256(file) {
     const hash = createHash('sha256');
     for await (const chunk of handle.createReadStream({ autoClose: false })) hash.update(chunk);
     return hash.digest('hex');
-  } finally { if (handle !== file) await handle.close(); }
+  } finally {
+    if (handle !== file) await handle.close();
+  }
 }

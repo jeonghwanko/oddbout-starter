@@ -33,13 +33,15 @@ const problem = (status, code) => error => {
   assert.equal(error.message, code);
   return true;
 };
-const paypalError = (code, { status, outcomeUnknown } = {}) => error => {
-  assert.ok(error instanceof PayPalError, `expected a PayPalError, got ${error}`);
-  assert.equal(error.code, code);
-  if (status !== undefined) assert.equal(error.status, status);
-  if (outcomeUnknown !== undefined) assert.equal(error.outcomeUnknown, outcomeUnknown);
-  return true;
-};
+const paypalError =
+  (code, { status, outcomeUnknown } = {}) =>
+  error => {
+    assert.ok(error instanceof PayPalError, `expected a PayPalError, got ${error}`);
+    assert.equal(error.code, code);
+    if (status !== undefined) assert.equal(error.status, status);
+    if (outcomeUnknown !== undefined) assert.equal(error.outcomeUnknown, outcomeUnknown);
+    return true;
+  };
 /** The payout service validates some keys synchronously, so wrap the call: a refusal is a rejection either way. */
 const refuses = (run, check, message) => assert.rejects(async () => run(), check, message);
 const minor = value => BigInt(value.replace('.', ''));
@@ -49,13 +51,29 @@ const minor = value => BigInt(value.replace('.', ''));
  * (creates nothing), {lose} creates the batch and then loses the reply, {garbage} creates the batch and answers 201 with a body
  * that has no batch header. */
 function fakePayPal() {
-  const calls = [], batches = new Map(), byRequest = new Map(), senders = new Map(), faults = [], violations = [];
-  let tokenFault = 0, created = 0;
+  const calls = [],
+    batches = new Map(),
+    byRequest = new Map(),
+    senders = new Map(),
+    faults = [],
+    violations = [];
+  let tokenFault = 0,
+    created = 0;
   const json = (data, status = 200) => new Response(JSON.stringify(data), { status });
-  const header = batch => ({ batch_header: { payout_batch_id: batch.id, batch_status: batch.status, sender_batch_header: { sender_batch_id: batch.senderBatchId } },
-    total_items:batch.body.items.length,total_pages:1,items:batch.body.items.map((item,i)=>({payout_item_id:'ITEM'+i,transaction_status:batch.status==='SUCCESS'?'SUCCESS':'PENDING',payout_item:item})) });
+  const header = batch => ({
+    batch_header: { payout_batch_id: batch.id, batch_status: batch.status, sender_batch_header: { sender_batch_id: batch.senderBatchId } },
+    total_items: batch.body.items.length,
+    total_pages: 1,
+    items: batch.body.items.map((item, i) => ({
+      payout_item_id: 'ITEM' + i,
+      transaction_status: batch.status === 'SUCCESS' ? 'SUCCESS' : 'PENDING',
+      payout_item: item,
+    })),
+  });
   async function fetch(url, init) {
-    const target = new URL(url), method = init.method ?? 'GET', path = target.pathname;
+    const target = new URL(url),
+      method = init.method ?? 'GET',
+      path = target.pathname;
     if (target.origin !== PAYPAL_ORIGIN) violations.push(`unexpected origin ${target.origin}`);
     const body = init.body && init.body !== 'grant_type=client_credentials' ? JSON.parse(init.body) : null;
     const requestId = new Headers(init.headers).get('paypal-request-id');
@@ -75,7 +93,9 @@ function fakePayPal() {
       if (!batch) {
         if (senders.has(senderBatchId)) violations.push(`sender_batch_id ${senderBatchId} reused with another request id`);
         batch = { id: `PAYOUTBATCH${++created}`, senderBatchId, status: 'PENDING', body, requestId };
-        byRequest.set(requestId, batch); senders.set(senderBatchId, batch); batches.set(batch.id, batch);
+        byRequest.set(requestId, batch);
+        senders.set(senderBatchId, batch);
+        batches.set(batch.id, batch);
       }
       if (fault?.lose) throw new TypeError('response lost after PayPal created the batch');
       if (fault?.garbage) return json({ unexpected: true }, 201);
@@ -90,10 +110,17 @@ function fakePayPal() {
     return json({}, 404);
   }
   return {
-    fetch, calls, batches, violations,
+    fetch,
+    calls,
+    batches,
+    violations,
     fail: (...next) => faults.push(...next),
-    failToken: status => { tokenFault = status; },
-    setStatus: (status, id) => { for (const batch of id ? [batches.get(id)] : batches.values()) batch.status = status; },
+    failToken: status => {
+      tokenFault = status;
+    },
+    setStatus: (status, id) => {
+      for (const batch of id ? [batches.get(id)] : batches.values()) batch.status = status;
+    },
     posts: () => calls.filter(call => call.path === '/v1/payments/payouts' && call.method === 'POST'),
     polls: () => calls.filter(call => call.path.startsWith('/v1/payments/payouts/') && call.method === 'GET'),
   };
@@ -112,39 +139,99 @@ async function fixture(t, { feeCents = 2, receivers = RECEIVERS } = {}) {
   for (const owner of [OWNER, OTHER]) {
     const topup = await store.createTopup(owner, { requestKey: 'fixture-funding', amountCents: 1000, credits: 1000, currency: 'USD' });
     await store.attachOrder(owner, topup.id, `ORDER-${owner}`);
-    await store.creditCapture(owner, topup.id, { providerOrderId: `ORDER-${owner}`, captureId: `CAPTURE-${owner}`, amountCents: 1000, currency: 'USD', status: 'COMPLETED' });
+    await store.creditCapture(owner, topup.id, {
+      providerOrderId: `ORDER-${owner}`,
+      captureId: `CAPTURE-${owner}`,
+      amountCents: 1000,
+      currency: 'USD',
+      status: 'COMPLETED',
+    });
   }
   let n = 0;
   const f = {
-    ...database, fake, adapter, payouts, plain, feeCents, service: { ...plain, payouts },
+    ...database,
+    fake,
+    adapter,
+    payouts,
+    plain,
+    feeCents,
+    service: { ...plain, payouts },
     count: async (table, where = '') => (await db.query(`select count(*)::int as n from commerce.${table} ${where}`)).rows[0].n,
     /** A started session (approved budget for 4 cups) on the demo host. */
     async session(owner, channelId = `session-${++n}`) {
-      const approval = await store.approveBudget(owner, { requestKey: `approval-${++n}`, channelId, hostId: HOST, endsAt: new Date(Date.now() + 3_600_000).toISOString(),
-        maxCredits: CUP_CREDITS * 4, allowedTools: ['host_cup'], fighterIds: FIGHTERS, priceVersion: COMMERCE_CATALOG.version });
+      const approval = await store.approveBudget(owner, {
+        requestKey: `approval-${++n}`,
+        channelId,
+        hostId: HOST,
+        endsAt: new Date(Date.now() + 3_600_000).toISOString(),
+        maxCredits: CUP_CREDITS * 4,
+        allowedTools: ['host_cup'],
+        fighterIds: FIGHTERS,
+        priceVersion: COMMERCE_CATALOG.version,
+      });
       return store.startBroadcast(owner, { requestKey: `start-${n}`, approvalId: approval.id });
     },
-    enqueue: (owner, broadcast) => store.enqueueCup(owner, { requestKey: `cup-${++n}`, broadcastId: broadcast.id, fighterIds: FIGHTERS,
-      priceVersion: COMMERCE_CATALOG.version, priceCredits: CUP_CREDITS }),
+    enqueue: (owner, broadcast) =>
+      store.enqueueCup(owner, {
+        requestKey: `cup-${++n}`,
+        broadcastId: broadcast.id,
+        fighterIds: FIGHTERS,
+        priceVersion: COMMERCE_CATALOG.version,
+        priceCredits: CUP_CREDITS,
+      }),
     /** Queue a cup, let the host claim it and finish it with a real fenced completion. 'succeeded' carries valid bout evidence. */
     async cup(owner, broadcast, outcome = 'succeeded') {
-      const queued = await f.enqueue(owner, broadcast), worker = `worker-${queued.id}`;
+      const queued = await f.enqueue(owner, broadcast),
+        worker = `worker-${queued.id}`;
       const claim = await store.claimJob(worker, { hostId: HOST });
       assert.equal(claim?.id, queued.id, 'the host must claim the cup that was just queued');
-      const result = outcome === 'succeeded' ? { protocolVersion: 1, jobId: claim.id, leaseToken: claim.leaseToken, seed: claim.seed, winnerId: claim.fighterIds[0],
-        bouts: [[claim.fighterIds[0], claim.fighterIds[1]], [claim.fighterIds[2], claim.fighterIds[3]], [claim.fighterIds[0], claim.fighterIds[2]]]
-          .map(([leftId, rightId], index) => ({ leftId, rightId, winnerId: leftId, winner: 0, seed: (claim.seed + index) >>> 0, how: 'decision', ms: 100, hp: [1, 0], contacts: [0, 0], digest: '1234abcd' })) }
-        : { reason: outcome === 'failed' ? 'confirmed-runner-failure' : 'browser-result-not-observed' };
+      const result =
+        outcome === 'succeeded'
+          ? {
+              protocolVersion: 1,
+              jobId: claim.id,
+              leaseToken: claim.leaseToken,
+              seed: claim.seed,
+              winnerId: claim.fighterIds[0],
+              bouts: [
+                [claim.fighterIds[0], claim.fighterIds[1]],
+                [claim.fighterIds[2], claim.fighterIds[3]],
+                [claim.fighterIds[0], claim.fighterIds[2]],
+              ].map(([leftId, rightId], index) => ({
+                leftId,
+                rightId,
+                winnerId: leftId,
+                winner: 0,
+                seed: (claim.seed + index) >>> 0,
+                how: 'decision',
+                ms: 100,
+                hp: [1, 0],
+                contacts: [0, 0],
+                digest: '1234abcd',
+              })),
+            }
+          : { reason: outcome === 'failed' ? 'confirmed-runner-failure' : 'browser-result-not-observed' };
       const done = await store.completeJob(worker, { jobId: claim.id, leaseToken: claim.leaseToken, outcome, result });
       assert.equal(done.status, outcome);
       return done;
     },
     /** One unknown cup (it blocks the host) and one queued cup that never ran. Call this last in a scenario. */
     async stranded(owner, broadcast) {
-      const unknown = await f.enqueue(owner, broadcast), queued = await f.enqueue(owner, broadcast);
+      const unknown = await f.enqueue(owner, broadcast),
+        queued = await f.enqueue(owner, broadcast);
       const claim = await store.claimJob('worker-unknown', { hostId: HOST });
       assert.equal(claim?.id, unknown.id);
-      assert.equal((await store.completeJob('worker-unknown', { jobId: claim.id, leaseToken: claim.leaseToken, outcome: 'unknown', result: { reason: 'browser-result-not-observed' } })).status, 'unknown');
+      assert.equal(
+        (
+          await store.completeJob('worker-unknown', {
+            jobId: claim.id,
+            leaseToken: claim.leaseToken,
+            outcome: 'unknown',
+            result: { reason: 'browser-result-not-observed' },
+          })
+        ).status,
+        'unknown',
+      );
       return { unknown, queued };
     },
     propose: (owner, broadcast, requestKey = randomUUID()) => payouts.propose(owner, { broadcastId: broadcast.id, requestKey }),
@@ -160,7 +247,8 @@ async function fixture(t, { feeCents = 2, receivers = RECEIVERS } = {}) {
       await store.approvePayout(owner, batch.id);
       return store.attachPayout(owner, batch.id, providerBatchId);
     },
-    items: async batchId => (await db.query('select job_id, fighter_id, receiver, cents from commerce.payout_items where batch_id=$1 order by fighter_id, job_id', [batchId])).rows,
+    items: async batchId =>
+      (await db.query('select job_id, fighter_id, receiver, cents from commerce.payout_items where batch_id=$1 order by fighter_id, job_id', [batchId])).rows,
     row: async batchId => (await db.query('select * from commerce.payout_batches where id=$1', [batchId])).rows[0],
   };
   return f;
@@ -180,8 +268,14 @@ test('propose: two succeeded cups pay each receiver-backed fighter once per cup;
   assert.equal(batch.currency, 'USD');
   assert.equal(batch.providerBatchId, null);
   assert.equal(batch.totalCents, 6 * 7, '3 paid fighters x 2 cups x the fee');
-  assert.deepEqual(batch.items, ['bravow', 'kuma', 'yume'].map(fighterId => ({ fighterId, receiver: RECEIVERS[fighterId], cents: 2 * 7, cups: 2 })));
-  assert.equal(batch.items.reduce((sum, item) => sum + item.cents, 0), batch.totalCents);
+  assert.deepEqual(
+    batch.items,
+    ['bravow', 'kuma', 'yume'].map(fighterId => ({ fighterId, receiver: RECEIVERS[fighterId], cents: 2 * 7, cups: 2 })),
+  );
+  assert.equal(
+    batch.items.reduce((sum, item) => sum + item.cents, 0),
+    batch.totalCents,
+  );
   assert.ok(!batch.items.some(item => item.fighterId === 'beotim'), 'no receiver, no payout');
 
   // One ledger row per paid appearance, each bound to a real succeeded job.
@@ -197,8 +291,9 @@ test('propose: two succeeded cups pay each receiver-backed fighter once per cup;
 
 test('propose: failed, queued and unknown cups, other sessions and unknown sessions are never payable', async t => {
   const f = await fixture(t);
-  const paid = await f.session(OWNER, 'with-a-paid-cup'), stuck = await f.session(OWNER, 'with-no-paid-cup');
-  await f.cup(OWNER, paid);                       // the only succeeded cup of this owner
+  const paid = await f.session(OWNER, 'with-a-paid-cup'),
+    stuck = await f.session(OWNER, 'with-no-paid-cup');
+  await f.cup(OWNER, paid); // the only succeeded cup of this owner
   await f.cup(OWNER, stuck, 'failed');
   await f.stranded(OWNER, stuck);
   const states = (await f.db.query('select status from commerce.jobs where broadcast_id=$1 order by created_at', [stuck.id])).rows.map(row => row.status);
@@ -210,7 +305,10 @@ test('propose: failed, queued and unknown cups, other sessions and unknown sessi
   // The paid cup of the other session is not borrowed by it, and it stays payable in its own session: 3 fighters, 1 cup.
   const batch = await f.propose(OWNER, paid);
   assert.equal(batch.totalCents, 3 * f.feeCents);
-  assert.deepEqual(batch.items.map(item => item.cups), [1, 1, 1]);
+  assert.deepEqual(
+    batch.items.map(item => item.cups),
+    [1, 1, 1],
+  );
   await assert.rejects(f.propose(OWNER, stuck), problem(409, 'nothing-to-pay'));
 
   // A session that does not exist.
@@ -254,10 +352,20 @@ test('propose: an appearance is paid once; a second proposal, concurrent proposa
 
   // The ledger's (job, fighter) key is the backstop even if some code path forgot to look.
   const [row] = await f.items(first.id);
-  await f.db.query(`insert into commerce.payout_batches(owner,broadcast_id,request_key,total_cents,currency) values($1,$2,'rogue',1,'USD')`, [OWNER, broadcast.id]);
+  await f.db.query(`insert into commerce.payout_batches(owner,broadcast_id,request_key,total_cents,currency) values($1,$2,'rogue',1,'USD')`, [
+    OWNER,
+    broadcast.id,
+  ]);
   const rogue = (await f.db.query(`select id from commerce.payout_batches where request_key='rogue'`)).rows[0].id;
-  await assert.rejects(f.db.query('insert into commerce.payout_items(batch_id,job_id,fighter_id,receiver,cents) values($1,$2,$3,$4,1)', [rogue, row.job_id, row.fighter_id, row.receiver]),
-    /payout_items_pkey|duplicate key/);
+  await assert.rejects(
+    f.db.query('insert into commerce.payout_items(batch_id,job_id,fighter_id,receiver,cents) values($1,$2,$3,$4,1)', [
+      rogue,
+      row.job_id,
+      row.fighter_id,
+      row.receiver,
+    ]),
+    /payout_items_pkey|duplicate key/,
+  );
   assert.equal(await f.count('payout_items', `where job_id='${row.job_id}' and fighter_id='${row.fighter_id}'`), 1);
 
   // Racing proposals over a fresh session: exactly one wins every appearance.
@@ -296,7 +404,7 @@ test('propose: another owner cannot propose for, read, approve or cancel a sessi
 // ---------------------------------------------------------------- 2. approve -> PayPal -> settle
 
 test('approve sends exactly one well-formed PayPal batch; get follows PayPal PENDING then SUCCESS to paid; approving again sends nothing', async t => {
-  const f = await fixture(t);   // fee 2 cents
+  const f = await fixture(t); // fee 2 cents
   const { broadcast } = await f.paidSession(OWNER, 2);
   const proposed = await f.propose(OWNER, broadcast);
   assert.equal(proposed.totalCents, 12);
@@ -319,7 +427,11 @@ test('approve sends exactly one well-formed PayPal batch; get follows PayPal PEN
   assert.equal(new Set(post.body.items.map(item => item.sender_item_id)).size, 3);
   for (const [fighter, email] of Object.entries(RECEIVERS)) assert.ok(byReceiver[email].note.includes(fighter));
   assert.ok(!JSON.stringify(post.body).includes('beotim'), 'the fighter without a receiver is not in the PayPal request');
-  assert.equal(post.body.items.reduce((sum, item) => sum + minor(item.amount.value), 0n), BigInt(proposed.totalCents), 'PayPal is asked to pay exactly the batch total');
+  assert.equal(
+    post.body.items.reduce((sum, item) => sum + minor(item.amount.value), 0n),
+    BigInt(proposed.totalCents),
+    'PayPal is asked to pay exactly the batch total',
+  );
 
   assert.equal(approved.status, 'submitted');
   assert.equal(approved.id, proposed.id);
@@ -356,7 +468,10 @@ test('approve sends exactly one well-formed PayPal batch; get follows PayPal PEN
   assert.equal((await f.payouts.approve(OWNER, proposed.id)).status, 'paid');
   assert.equal(f.fake.posts().length, 1);
   await assert.rejects(f.propose(OWNER, broadcast), problem(409, 'nothing-to-pay'));
-  assert.deepEqual((await f.payouts.list(OWNER, broadcast.id)).map(batch => [batch.id, batch.status]), [[proposed.id, 'paid']]);
+  assert.deepEqual(
+    (await f.payouts.list(OWNER, broadcast.id)).map(batch => [batch.id, batch.status]),
+    [[proposed.id, 'paid']],
+  );
 });
 
 test('approving a submitted batch again sends nothing; amounts are exact decimals and receivers sharing an address are one PayPal item', async t => {
@@ -380,7 +495,10 @@ test('approving a submitted batch again sends nothing; amounts are exact decimal
   assert.ok(post.body.items.every(item => /^\d+\.\d{2}$/.test(item.amount.value) && item.amount.currency === 'USD'));
   const note = post.body.items.find(item => item.receiver === 'shared.creator@personal.example.com').note;
   assert.ok(note.includes('kuma') && note.includes('yume'));
-  assert.equal(post.body.items.reduce((sum, item) => sum + minor(item.amount.value), 0n), BigInt(6 * 1999));
+  assert.equal(
+    post.body.items.reduce((sum, item) => sum + minor(item.amount.value), 0n),
+    BigInt(6 * 1999),
+  );
 });
 
 test('PayPal later denying or cancelling an in-flight batch fails it and frees its appearances for a new proposal', async t => {
@@ -472,7 +590,8 @@ test('uncertain dispatch: a refusal of a retry never frees the appearances, beca
 
 test('propose: a request key reused for another session is an idempotency conflict, never that other batch', async t => {
   const f = await fixture(t);
-  const first = await f.paidSession(OWNER, 1), second = await f.paidSession(OWNER, 1);
+  const first = await f.paidSession(OWNER, 1),
+    second = await f.paidSession(OWNER, 1);
   const key = randomUUID();
   const batch = await f.propose(OWNER, first.broadcast, key);
   await assert.rejects(f.propose(OWNER, second.broadcast, key), problem(409, 'idempotency-conflict'));
@@ -498,10 +617,16 @@ test('uncertain dispatch: repeated outages never create a second batch; concurre
 test('uncertain dispatch: a ledger failure after PayPal created the batch is retried onto the same PayPal batch', async t => {
   const f = await fixture(t);
   let failAttach = true;
-  const flaky = { ...f.store, attachPayout: async (...args) => {
-    if (failAttach) { failAttach = false; throw new Problem(503, 'commerce-unavailable'); }
-    return f.store.attachPayout(...args);
-  } };
+  const flaky = {
+    ...f.store,
+    attachPayout: async (...args) => {
+      if (failAttach) {
+        failAttach = false;
+        throw new Problem(503, 'commerce-unavailable');
+      }
+      return f.store.attachPayout(...args);
+    },
+  };
   const payouts = createPayoutService({ store: flaky, paypal: f.adapter, receivers: RECEIVERS, feeCents: 2 });
   const { broadcast } = await f.paidSession(OWNER, 2);
   const batch = await f.propose(OWNER, broadcast);
@@ -542,7 +667,10 @@ for (const status of [400, 403, 422]) {
     const again = await f.propose(OWNER, broadcast);
     assert.notEqual(again.id, batch.id);
     assert.equal(again.totalCents, 12);
-    assert.deepEqual(again.items.map(item => item.cups), [2, 2, 2]);
+    assert.deepEqual(
+      again.items.map(item => item.cups),
+      [2, 2, 2],
+    );
     assert.equal((await f.payouts.approve(OWNER, again.id)).status, 'submitted');
     assert.equal(f.fake.batches.size, 1);
     assert.equal(f.fake.posts()[1].requestId, `p-${again.id}`);
@@ -785,21 +913,34 @@ test('attach: a different provider id conflicts, the same id is idempotent, and 
 // ---------------------------------------------------------------- 7. HTTP routes
 
 const authentication = {
-  auth: { getClaims: async token => ({ data: { claims: token === `fixture-${OWNER}` || token === `fixture-${OTHER}`
-    ? { sub: token.slice(8), role: 'authenticated', is_anonymous: false } : null }, error: null }) },
+  auth: {
+    getClaims: async token => ({
+      data: {
+        claims: token === `fixture-${OWNER}` || token === `fixture-${OTHER}` ? { sub: token.slice(8), role: 'authenticated', is_anonymous: false } : null,
+      },
+      error: null,
+    }),
+  },
 };
 function httpClient(service, { agent = false } = {}) {
   const handler = createCommerceHandler({ service, authenticate: request => verifiedUserId(authentication, request), publicOrigin: ORIGIN, agent });
   return async (path, { owner = OWNER, method = 'POST', body = {}, origin = ORIGIN } = {}) => {
-    const headers = { ...(owner ? { authorization: `Bearer fixture-${owner}` } : {}), ...(origin !== null ? { origin } : {}), ...(method === 'POST' ? { 'content-type': 'application/json' } : {}) };
-    const response = await handler(new Request(`${ORIGIN}/ai-fighter/commerce/${path}`, { method, headers, ...(method === 'POST' ? { body: JSON.stringify(body) } : {}) }));
+    const headers = {
+      ...(owner ? { authorization: `Bearer fixture-${owner}` } : {}),
+      ...(origin !== null ? { origin } : {}),
+      ...(method === 'POST' ? { 'content-type': 'application/json' } : {}),
+    };
+    const response = await handler(
+      new Request(`${ORIGIN}/ai-fighter/commerce/${path}`, { method, headers, ...(method === 'POST' ? { body: JSON.stringify(body) } : {}) }),
+    );
     return { status: response.status, body: await response.json() };
   };
 }
 
 test('HTTP: approving or cancelling needs the console (own origin), confirmed:true and no agent; otherwise 403 and PayPal is never called', async t => {
   const f = await fixture(t);
-  const call = httpClient(f.service), agent = httpClient(f.service, { agent: true });
+  const call = httpClient(f.service),
+    agent = httpClient(f.service, { agent: true });
   const { broadcast } = await f.paidSession(OWNER, 2);
   const batch = await f.propose(OWNER, broadcast);
   const evil = 'https://evil.example.test';
@@ -838,7 +979,8 @@ test('HTTP: approving or cancelling needs the console (own origin), confirmed:tr
 
 test('HTTP: an agent credential cannot propose, list or read payouts (404), even though the account is valid', async t => {
   const f = await fixture(t);
-  const call = httpClient(f.service), agent = httpClient(f.service, { agent: true });
+  const call = httpClient(f.service),
+    agent = httpClient(f.service, { agent: true });
   const { broadcast } = await f.paidSession(OWNER, 1);
   const batch = await f.propose(OWNER, broadcast);
   const before = await f.count('payout_batches');
@@ -846,7 +988,10 @@ test('HTTP: an agent credential cannot propose, list or read payouts (404), even
   const proposed = await agent('payouts', { body: { broadcastId: broadcast.id, requestKey: randomUUID() } });
   assert.deepEqual([proposed.status, proposed.body], [404, { ok: false, code: 'not-found' }]);
   assert.equal(await f.count('payout_batches'), before, 'no batch was created for the agent');
-  assert.deepEqual([(await agent(`payouts/${batch.id}`, { method: 'GET' })).status, (await agent(`broadcasts/${broadcast.id}/payouts`, { method: 'GET' })).status], [404, 404]);
+  assert.deepEqual(
+    [(await agent(`payouts/${batch.id}`, { method: 'GET' })).status, (await agent(`broadcasts/${broadcast.id}/payouts`, { method: 'GET' })).status],
+    [404, 404],
+  );
   assert.equal((await call(`payouts/${batch.id}`, { method: 'GET' })).status, 200, 'the console can');
   assert.equal(f.fake.calls.length, 0);
 });
@@ -877,7 +1022,9 @@ test('HTTP: propose, list, approve and read a payout through the console route; 
   const { broadcast } = await f.paidSession(OWNER, 2);
 
   const requestKey = randomUUID();
-  const proposed = await call('payouts', { body: { broadcastId: broadcast.id, requestKey, feeCents: 10_000, receivers: { beotim: 'attacker@evil.example.com' }, owner: OTHER, totalCents: 1 } });
+  const proposed = await call('payouts', {
+    body: { broadcastId: broadcast.id, requestKey, feeCents: 10_000, receivers: { beotim: 'attacker@evil.example.com' }, owner: OTHER, totalCents: 1 },
+  });
   assert.equal(proposed.status, 200);
   assert.equal(proposed.body.ok, true);
   const batch = proposed.body.data;
@@ -903,7 +1050,13 @@ test('HTTP: propose, list, approve and read a payout through the console route; 
   assert.equal(approved.body.data.status, 'submitted');
   assert.equal(approved.body.data.providerBatchId, 'PAYOUTBATCH1');
   assert.equal(f.fake.posts().length, 1);
-  assert.deepEqual(f.fake.posts()[0].body.items.map(item => item.receiver).sort(), Object.values(RECEIVERS).sort());
+  assert.deepEqual(
+    f.fake
+      .posts()[0]
+      .body.items.map(item => item.receiver)
+      .sort(),
+    Object.values(RECEIVERS).sort(),
+  );
   assert.ok(!JSON.stringify(f.fake.posts()[0].body).includes('evil.example.com'));
   assert.ok(f.fake.posts()[0].body.items.every(item => item.amount.value === '0.04'));
 
@@ -952,10 +1105,23 @@ test('HTTP: cancelling through the console frees the batch; a PayPal failure is 
 test('payoutReceivers: rejects an empty map, a non-object, an unknown fighter and an invalid email; accepts known fighters', () => {
   const fighters = COMMERCE_CATALOG.fighters;
   assert.deepEqual(payoutReceivers(RECEIVERS, fighters), RECEIVERS);
-  for (const empty of [{}, null, undefined, [], 'kuma', 5]) assert.throws(() => payoutReceivers(empty, fighters), { message: 'payout-receivers-required' }, JSON.stringify(empty));
+  for (const empty of [{}, null, undefined, [], 'kuma', 5])
+    assert.throws(() => payoutReceivers(empty, fighters), { message: 'payout-receivers-required' }, JSON.stringify(empty));
   assert.throws(() => payoutReceivers({ ...RECEIVERS, nobody: 'nobody@personal.example.com' }, fighters), { message: 'payout-receivers-unknown-fighter' });
   assert.throws(() => payoutReceivers({ kuma: 'a@b.example.com' }, ['yume']), { message: 'payout-receivers-unknown-fighter' });
-  for (const bad of ['not-an-email', '', 'a@b', '@b.example.com', 'a b@c.example.com', 'a@b.example.com\n', ' a@b.example.com', 5, null, undefined, `${'x'.repeat(250)}@b.example.com`])
+  for (const bad of [
+    'not-an-email',
+    '',
+    'a@b',
+    '@b.example.com',
+    'a b@c.example.com',
+    'a@b.example.com\n',
+    ' a@b.example.com',
+    5,
+    null,
+    undefined,
+    `${'x'.repeat(250)}@b.example.com`,
+  ])
     assert.throws(() => payoutReceivers({ kuma: bad }, fighters), { message: 'payout-receivers-invalid-email' }, JSON.stringify(bad));
 });
 
@@ -967,7 +1133,12 @@ test('payoutsFromEnvironment: unset or 0 is off; anything else but 1 throws; 1 n
   assert.equal(payoutsFromEnvironment({}, commerce), null);
   assert.equal(payoutsFromEnvironment({ ODDBOUT_PAYOUTS: '0', ODDBOUT_PAYOUT_RECEIVERS_JSON: receivers }, commerce), null);
   assert.equal(payoutsFromEnvironment({ ODDBOUT_PAYOUTS: '0' }, { store: f.store, paypal: null, merchantId: '' }), null, 'off needs nothing else');
-  for (const bad of ['', 'yes', 'true', '2', ' 1', '1 ', 'on']) assert.throws(() => payoutsFromEnvironment({ ODDBOUT_PAYOUTS: bad, ODDBOUT_PAYOUT_RECEIVERS_JSON: receivers }, commerce), { message: 'invalid-payouts-setting' }, JSON.stringify(bad));
+  for (const bad of ['', 'yes', 'true', '2', ' 1', '1 ', 'on'])
+    assert.throws(
+      () => payoutsFromEnvironment({ ODDBOUT_PAYOUTS: bad, ODDBOUT_PAYOUT_RECEIVERS_JSON: receivers }, commerce),
+      { message: 'invalid-payouts-setting' },
+      JSON.stringify(bad),
+    );
 
   assert.throws(() => payoutsFromEnvironment(on(), { store: f.store, paypal: null, merchantId: '' }), { message: 'payouts-paypal-required' });
   assert.throws(() => payoutsFromEnvironment(on(), { store: f.store, paypal: f.adapter, merchantId: '' }), { message: 'payouts-paypal-required' });
@@ -975,8 +1146,12 @@ test('payoutsFromEnvironment: unset or 0 is off; anything else but 1 throws; 1 n
   assert.throws(() => payoutsFromEnvironment({ ODDBOUT_PAYOUTS: '1' }, commerce), { message: 'payout-receivers-required' }, 'receivers unset');
   assert.throws(() => payoutsFromEnvironment(on({ ODDBOUT_PAYOUT_RECEIVERS_JSON: '{}' }), commerce), { message: 'payout-receivers-required' });
   assert.throws(() => payoutsFromEnvironment(on({ ODDBOUT_PAYOUT_RECEIVERS_JSON: '[]' }), commerce), { message: 'payout-receivers-required' });
-  assert.throws(() => payoutsFromEnvironment(on({ ODDBOUT_PAYOUT_RECEIVERS_JSON: '{"nobody":"a@b.example.com"}' }), commerce), { message: 'payout-receivers-unknown-fighter' });
-  assert.throws(() => payoutsFromEnvironment(on({ ODDBOUT_PAYOUT_RECEIVERS_JSON: '{"kuma":"nope"}' }), commerce), { message: 'payout-receivers-invalid-email' });
+  assert.throws(() => payoutsFromEnvironment(on({ ODDBOUT_PAYOUT_RECEIVERS_JSON: '{"nobody":"a@b.example.com"}' }), commerce), {
+    message: 'payout-receivers-unknown-fighter',
+  });
+  assert.throws(() => payoutsFromEnvironment(on({ ODDBOUT_PAYOUT_RECEIVERS_JSON: '{"kuma":"nope"}' }), commerce), {
+    message: 'payout-receivers-invalid-email',
+  });
   for (const fee of ['', '0', '-1', '1.5', 'abc', '10001', 'NaN', 'Infinity', '1e9'])
     assert.throws(() => payoutsFromEnvironment(on({ ODDBOUT_PAYOUT_FEE_CENTS: fee }), commerce), { message: 'invalid-payout-fee' }, JSON.stringify(fee));
 
@@ -990,7 +1165,8 @@ test('payoutsFromEnvironment: unset or 0 is off; anything else but 1 throws; 1 n
 
 test('createPayoutService rejects a fee outside 1..10000 cents', () => {
   const parts = { store: {}, paypal: {}, receivers: RECEIVERS };
-  for (const feeCents of [0, -1, 1.5, 10_001, NaN, Infinity, '2', undefined, null, Number.MAX_SAFE_INTEGER + 1]) assert.throws(() => createPayoutService({ ...parts, feeCents }), { message: 'invalid-payout-fee' }, String(feeCents));
+  for (const feeCents of [0, -1, 1.5, 10_001, NaN, Infinity, '2', undefined, null, Number.MAX_SAFE_INTEGER + 1])
+    assert.throws(() => createPayoutService({ ...parts, feeCents }), { message: 'invalid-payout-fee' }, String(feeCents));
   for (const feeCents of [1, 2, 10_000]) assert.equal(createPayoutService({ ...parts, feeCents }).feeCents, feeCents);
 });
 
@@ -1008,9 +1184,11 @@ test('createPayout validates before any network call and formats every amount as
   await assert.rejects(send([]), invalid('paypal_invalid_input'));
   await assert.rejects(send(undefined), invalid('paypal_invalid_input'));
   await assert.rejects(send(Array.from({ length: 101 }, (_, n) => item({ senderItemId: `item-${n}` }))), invalid('paypal_invalid_input'));
-  for (const amountMinor of [0, -1, 1.5, NaN, Infinity, '4', undefined, Number.MAX_SAFE_INTEGER + 1]) await assert.rejects(send([item({ amountMinor })]), invalid('paypal_invalid_amount'), String(amountMinor));
+  for (const amountMinor of [0, -1, 1.5, NaN, Infinity, '4', undefined, Number.MAX_SAFE_INTEGER + 1])
+    await assert.rejects(send([item({ amountMinor })]), invalid('paypal_invalid_amount'), String(amountMinor));
   for (const currency of ['EUR', 'usd', '', undefined]) await assert.rejects(send([item({ currency })]), invalid('paypal_invalid_amount'), String(currency));
-  for (const senderItemId of ['', 'has space', 'a/b', undefined]) await assert.rejects(send([item({ senderItemId })]), invalid('paypal_invalid_input'), String(senderItemId));
+  for (const senderItemId of ['', 'has space', 'a/b', undefined])
+    await assert.rejects(send([item({ senderItemId })]), invalid('paypal_invalid_input'), String(senderItemId));
   await assert.rejects(send([item({ note: '' })]), invalid('paypal_invalid_input'));
   await assert.rejects(send([item({ note: 'x'.repeat(4001) })]), invalid('paypal_invalid_input'));
   await assert.rejects(send([item()], { requestId: '' }), invalid('paypal_invalid_input'));
@@ -1022,7 +1200,10 @@ test('createPayout validates before any network call and formats every amount as
   const expected = ['0.01', '0.04', '0.10', '0.99', '1.00', '1.01', '19.99', '100.00', '123.45', '1234567.89'];
   const sent = await send(amounts.map((amountMinor, index) => item({ amountMinor, senderItemId: `item-${index}` })));
   assert.deepEqual(sent, { payoutBatchId: 'PAYOUTBATCH1', status: 'PENDING' });
-  assert.deepEqual(fake.posts()[0].body.items.map(entry => entry.amount), expected.map(value => ({ value, currency: 'USD' })));
+  assert.deepEqual(
+    fake.posts()[0].body.items.map(entry => entry.amount),
+    expected.map(value => ({ value, currency: 'USD' })),
+  );
   assert.ok(fake.posts()[0].body.items.every(entry => typeof entry.amount.value === 'string' && entry.recipient_type === 'EMAIL'));
   assert.deepEqual(fake.violations, []);
 });
@@ -1030,7 +1211,10 @@ test('createPayout validates before any network call and formats every amount as
 // ---------------------------------------------------------------- 9. concierge
 
 let sequence = 0;
-const fnCall = (name, args = {}, raw = JSON.stringify(args)) => { const n = ++sequence; return { type: 'function_call', id: `fc_${n}`, call_id: `call_${n}`, name, arguments: raw }; };
+const fnCall = (name, args = {}, raw = JSON.stringify(args)) => {
+  const n = ++sequence;
+  return { type: 'function_call', id: `fc_${n}`, call_id: `call_${n}`, name, arguments: raw };
+};
 const say = text => ({ type: 'message', role: 'assistant', content: [{ type: 'output_text', text }] });
 /** The function_call_output the model was shown for one call, parsed; `raw` is exactly what it saw. */
 function shown(input, callId) {
@@ -1040,7 +1224,8 @@ function shown(input, callId) {
 }
 /** The only fake model boundary: each step is a list of output items or a function returning one (it sees the input the model sees). */
 function scriptedModel() {
-  const steps = [], calls = [];
+  const steps = [],
+    calls = [];
   const call = async (input, tools, options = {}) => {
     calls.push({ input: structuredClone(input), tools, signal: options.signal });
     const step = steps.shift();
@@ -1055,7 +1240,8 @@ const PAYOUT_TOOL = 'propose_creator_payouts';
 
 test('concierge: propose_creator_payouts is offered only when the service pays creators, and without it a call is tool-not-allowed', async t => {
   const f = await fixture(t);
-  const withPayouts = scriptedModel(), without = scriptedModel();
+  const withPayouts = scriptedModel(),
+    without = scriptedModel();
   const concierge = createConcierge({ service: f.service, modelCall: withPayouts.call });
   const plainConcierge = createConcierge({ service: f.plain, modelCall: without.call });
   const { broadcast } = await f.paidSession(OWNER, 1);
@@ -1093,7 +1279,11 @@ test('concierge: a scripted model proposing for the context session gets a payou
   const { broadcast } = await f.paidSession(OWNER, 2);
   const calls = [];
   model.script(
-    input => { const call = fnCall(PAYOUT_TOOL, { broadcastId: sessionIn(input) }); calls.push(call); return [call]; },
+    input => {
+      const call = fnCall(PAYOUT_TOOL, { broadcastId: sessionIn(input) });
+      calls.push(call);
+      return [call];
+    },
     [say('kuma, yume and bravow would be paid 0.04 each. Approve it in the console.')],
   );
   const result = await concierge.turn(OWNER, { message: 'pay the creators for this session', broadcastId: broadcast.id.toUpperCase() });
@@ -1103,13 +1293,18 @@ test('concierge: a scripted model proposing for the context session gets a payou
   const [batch] = await f.payouts.list(OWNER, broadcast.id);
   assert.equal(batch.status, 'proposed');
   const items = ['bravow', 'kuma', 'yume'].map(fighterId => ({ fighterId, cents: 4, cups: 2 }));
-  assert.deepEqual(result.actions, [{ type: 'payout', batchId: batch.id, broadcastId: broadcast.id, status: 'proposed', totalCents: 12, currency: 'USD', items }]);
+  assert.deepEqual(result.actions, [
+    { type: 'payout', batchId: batch.id, broadcastId: broadcast.id, status: 'proposed', totalCents: 12, currency: 'USD', items },
+  ]);
   assert.equal(f.fake.calls.length, 0, 'the concierge only proposes; PayPal is untouched');
   assert.equal(await f.count('payout_batches'), 1);
   assert.equal((await f.store.getPayout(OWNER, batch.id)).status, 'proposed');
 
   const seen = shown(model.calls[1].input, calls[0].call_id);
-  assert.deepEqual({ ok: seen.ok, payout: seen.payout }, { ok: true, payout: { batchId: batch.id, status: 'proposed', totalCents: 12, currency: 'USD', items } });
+  assert.deepEqual(
+    { ok: seen.ok, payout: seen.payout },
+    { ok: true, payout: { batchId: batch.id, status: 'proposed', totalCents: 12, currency: 'USD', items } },
+  );
 });
 
 test('concierge: the model is never shown a receiver email, and the page action carries none either', async t => {
@@ -1135,18 +1330,31 @@ test('concierge: proposing twice never double-pays, and bad or foreign arguments
   const f = await fixture(t);
   const model = scriptedModel();
   const concierge = createConcierge({ service: f.service, modelCall: model.call, maxSteps: 12 });
-  const mine = await f.paidSession(OWNER, 2), theirs = await f.paidSession(OTHER, 1);
+  const mine = await f.paidSession(OWNER, 2),
+    theirs = await f.paidSession(OTHER, 1);
   // Whatever else the model puts in the arguments, the fee and receivers are the server's.
-  const first = fnCall(PAYOUT_TOOL, { broadcastId: mine.broadcast.id, feeCents: 10_000, receivers: { beotim: 'attacker@evil.example.com' }, requestKey: randomUUID() });
+  const first = fnCall(PAYOUT_TOOL, {
+    broadcastId: mine.broadcast.id,
+    feeCents: 10_000,
+    receivers: { beotim: 'attacker@evil.example.com' },
+    requestKey: randomUUID(),
+  });
   const again = fnCall(PAYOUT_TOOL, { broadcastId: mine.broadcast.id });
-  const foreign = fnCall(PAYOUT_TOOL, { broadcastId: theirs.broadcast.id }), ghost = fnCall(PAYOUT_TOOL, { broadcastId: randomUUID() });
-  const notUuid = fnCall(PAYOUT_TOOL, { broadcastId: 'the-latest' }), missing = fnCall(PAYOUT_TOOL, {}), garbage = fnCall(PAYOUT_TOOL, {}, 'not json');
+  const foreign = fnCall(PAYOUT_TOOL, { broadcastId: theirs.broadcast.id }),
+    ghost = fnCall(PAYOUT_TOOL, { broadcastId: randomUUID() });
+  const notUuid = fnCall(PAYOUT_TOOL, { broadcastId: 'the-latest' }),
+    missing = fnCall(PAYOUT_TOOL, {}),
+    garbage = fnCall(PAYOUT_TOOL, {}, 'not json');
   model.script([first], [again], [foreign], [ghost], [notUuid], [missing], [garbage], [say('done')]);
   const result = await concierge.turn(OWNER, { message: 'pay', broadcastId: mine.broadcast.id });
 
   assert.deepEqual(result.toolCalls, [
-    { name: PAYOUT_TOOL, ok: true }, { name: PAYOUT_TOOL, ok: false, code: 'nothing-to-pay' }, { name: PAYOUT_TOOL, ok: false, code: 'not-found' },
-    { name: PAYOUT_TOOL, ok: false, code: 'not-found' }, { name: PAYOUT_TOOL, ok: false, code: 'invalid-broadcast' }, { name: PAYOUT_TOOL, ok: false, code: 'invalid-broadcast' },
+    { name: PAYOUT_TOOL, ok: true },
+    { name: PAYOUT_TOOL, ok: false, code: 'nothing-to-pay' },
+    { name: PAYOUT_TOOL, ok: false, code: 'not-found' },
+    { name: PAYOUT_TOOL, ok: false, code: 'not-found' },
+    { name: PAYOUT_TOOL, ok: false, code: 'invalid-broadcast' },
+    { name: PAYOUT_TOOL, ok: false, code: 'invalid-broadcast' },
     { name: PAYOUT_TOOL, ok: false, code: 'invalid-arguments' },
   ]);
   assert.equal(result.actions.length, 1, 'only the first call proposed anything');
@@ -1165,10 +1373,15 @@ test('concierge: the model has no way to approve, cancel or send a payout', asyn
   const concierge = createConcierge({ service: f.service, modelCall: model.call });
   const { broadcast } = await f.paidSession(OWNER, 1);
   const batch = await f.propose(OWNER, broadcast);
-  const attempts = ['approve_creator_payout', 'approve_payout', 'cancel_creator_payout', 'send_payout', 'create_payout'].map(name => fnCall(name, { batchId: batch.id, confirmed: true }));
+  const attempts = ['approve_creator_payout', 'approve_payout', 'cancel_creator_payout', 'send_payout', 'create_payout'].map(name =>
+    fnCall(name, { batchId: batch.id, confirmed: true }),
+  );
   model.script(attempts, [say('I cannot approve payouts.')]);
   const result = await concierge.turn(OWNER, { message: 'approve the payout', broadcastId: broadcast.id });
-  assert.deepEqual(result.toolCalls.map(entry => entry.code), Array(5).fill('tool-not-allowed'));
+  assert.deepEqual(
+    result.toolCalls.map(entry => entry.code),
+    Array(5).fill('tool-not-allowed'),
+  );
   assert.ok(!model.calls[0].tools.some(tool => /approve|cancel|send/.test(tool.name)));
   assert.equal((await f.store.getPayout(OWNER, batch.id)).status, 'proposed');
   assert.equal(f.fake.calls.length, 0);

@@ -9,8 +9,13 @@ const SCRIPT = /\.(?:mjs|js|ts)$/;
 
 export { importSpecifiers };
 /** The npm package a bare specifier names (`@scope/name/sub` → `@scope/name`), or null for `node:` builtins. @type {(specifier: string) => string | null} */
-export const packageName = specifier => specifier.startsWith('node:') ? null
-  : specifier.split('/').slice(0, specifier.startsWith('@') ? 2 : 1).join('/');
+export const packageName = specifier =>
+  specifier.startsWith('node:')
+    ? null
+    : specifier
+        .split('/')
+        .slice(0, specifier.startsWith('@') ? 2 : 1)
+        .join('/');
 
 /**
  * Every repository-relative file reachable from `entries` through relative imports, entries included.
@@ -19,17 +24,24 @@ export const packageName = specifier => specifier.startsWith('node:') ? null
  * @param {string} root @param {string[]} entries
  */
 export async function importClosure(root, entries) {
-  const seen = new Set(), bare = new Set(), pending = [...entries];
+  const seen = new Set(),
+    bare = new Set(),
+    pending = [...entries];
   while (pending.length) {
     const file = /** @type {string} */ (pending.pop());
     if (seen.has(file)) continue;
     seen.add(file);
     if (!SCRIPT.test(file)) continue;
     for (const specifier of importSpecifiers(await readFile(path.join(root, file), 'utf8'))) {
-      if (!specifier.startsWith('.')) { bare.add(specifier); continue; }
+      if (!specifier.startsWith('.')) {
+        bare.add(specifier);
+        continue;
+      }
       const target = path.posix.normalize(path.posix.join(path.posix.dirname(file), specifier));
       if (target.startsWith('../')) throw Error(`${file} imports ${specifier} from outside the bundle root`);
-      await access(path.join(root, target)).catch(() => { throw Error(`${file} imports ${specifier}, which does not exist`); });
+      await access(path.join(root, target)).catch(() => {
+        throw Error(`${file} imports ${specifier}, which does not exist`);
+      });
       pending.push(target);
     }
   }

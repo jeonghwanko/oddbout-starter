@@ -11,6 +11,10 @@ interface Window {
   /** Set by startAnalytics; site-milestones.mjs calls it after sign-in. */
   oddboutBindAnalytics?: (api: string, token: string, key: string) => Promise<void>;
 }
-interface Navigator { globalPrivacyControl?: boolean }
-// biome-ignore lint/suspicious/noExplicitAny: a milestone's detail is each milestone's own shape
-interface WindowEventMap { 'oddbout:milestone': CustomEvent<any> }
+interface Navigator {
+  globalPrivacyControl?: boolean;
+}
+interface WindowEventMap {
+  // biome-ignore lint/suspicious/noExplicitAny: a milestone's detail is each milestone's own shape
+  'oddbout:milestone': CustomEvent<any>;
+}

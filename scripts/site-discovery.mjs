@@ -23,8 +23,10 @@ export async function writeSiteDiscovery(root, siteUrl, pages) {
   }
   /** @type {(text: string) => string} */
   const escape = text => text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&apos;');
-  const xml = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
-    [...urls].map(url => '  <url><loc>' + escape(url) + '</loc></url>').join('\n') + '\n</urlset>\n';
+  const xml =
+    '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
+    [...urls].map(url => '  <url><loc>' + escape(url) + '</loc></url>').join('\n') +
+    '\n</urlset>\n';
   await writeFile(join(root, 'sitemap.xml'), xml);
   await writeFile(join(root, 'robots.txt'), 'User-agent: *\nAllow: /\n\nSitemap: ' + new URL('sitemap.xml', base).href + '\n');
   return [...urls];

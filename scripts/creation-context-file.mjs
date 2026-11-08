@@ -5,7 +5,9 @@ import { constants } from 'node:fs';
 import { lstat, open } from 'node:fs/promises';
 import source from '../deploy/creation-context-source.json' with { type: 'json' };
 
-const maxContextBytes = 128 * 1024, maxReceiptBytes = 4 * 1024, maxAgeMs = 15 * 60 * 1000;
+const maxContextBytes = 128 * 1024,
+  maxReceiptBytes = 4 * 1024,
+  maxAgeMs = 15 * 60 * 1000;
 
 /** @param {string} file @param {number} limit */
 async function boundedFile(file, limit) {
@@ -17,7 +19,8 @@ async function boundedFile(file, limit) {
       if (!info.isFile()) throw Error('creation-context-file-regular-required');
       if (info.size > limit) throw Error('creation-context-file-too-large');
       // Bounded even if a writer grows the file after stat. Never read arbitrary-sized input.
-      const bytes = Buffer.alloc(limit + 1); let size = 0;
+      const bytes = Buffer.alloc(limit + 1);
+      let size = 0;
       while (size < bytes.length) {
         const { bytesRead } = await handle.read(bytes, size, bytes.length - size, null);
         if (!bytesRead) break;
@@ -25,7 +28,9 @@ async function boundedFile(file, limit) {
       }
       if (size > limit) throw Error('creation-context-file-too-large');
       return bytes.subarray(0, size);
-    } finally { await handle.close(); }
+    } finally {
+      await handle.close();
+    }
   } catch (/** @type {any} */ error) {
     // File paths and contents must never appear in CLI/MCP errors.
     if (/^creation-context-file-/.test(error.message)) throw error;
@@ -41,15 +46,22 @@ async function boundedFile(file, limit) {
 async function checkedBytes(contextFile, contextReceipt) {
   const receiptBytes = await boundedFile(contextReceipt, maxReceiptBytes);
   let receipt;
-  try { receipt = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(receiptBytes)); }
-  catch { throw Error('creation-context-receipt-invalid'); }
-  if (receipt?.schemaVersion !== 1 || receipt.sourceUrl !== source.url ||
-      !/^[a-f0-9]{40}$/.test(receipt.gitBlobSha1 ?? '') || !/^[a-f0-9]{64}$/.test(receipt.sha256 ?? '') ||
-      typeof receipt.retrievedAt !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(receipt.retrievedAt))
+  try {
+    receipt = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(receiptBytes));
+  } catch {
+    throw Error('creation-context-receipt-invalid');
+  }
+  if (
+    receipt?.schemaVersion !== 1 ||
+    receipt.sourceUrl !== source.url ||
+    !/^[a-f0-9]{40}$/.test(receipt.gitBlobSha1 ?? '') ||
+    !/^[a-f0-9]{64}$/.test(receipt.sha256 ?? '') ||
+    typeof receipt.retrievedAt !== 'string' ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(receipt.retrievedAt)
+  )
     throw Error('creation-context-receipt-invalid');
   const fetchedAt = Date.parse(receipt.retrievedAt);
-  if (!Number.isFinite(fetchedAt) || new Date(fetchedAt).toISOString() !== receipt.retrievedAt)
-    throw Error('creation-context-receipt-invalid');
+  if (!Number.isFinite(fetchedAt) || new Date(fetchedAt).toISOString() !== receipt.retrievedAt) throw Error('creation-context-receipt-invalid');
   const bytes = await boundedFile(contextFile, maxContextBytes);
   const age = Date.now() - fetchedAt;
   if (age < 0 || age > maxAgeMs) throw Error('creation-context-receipt-expired');
@@ -57,8 +69,11 @@ async function checkedBytes(contextFile, contextReceipt) {
   const gitBlobSha1 = createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
   if (sha256 !== receipt.sha256 || gitBlobSha1 !== receipt.gitBlobSha1) throw Error('creation-context-file-integrity');
   // Validate decoding here too, including invocations that do not make a context request.
-  try { new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
-  catch { throw Error('creation-context-file-utf8'); }
+  try {
+    new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    throw Error('creation-context-file-utf8');
+  }
   return bytes;
 }
 
@@ -93,7 +108,8 @@ export function parseContextFileArgs(argv) {
       args.push(key);
     }
   }
-  const contextFile = files['--context-file'], contextReceipt = files['--context-receipt'];
+  const contextFile = files['--context-file'],
+    contextReceipt = files['--context-receipt'];
   if (Boolean(contextFile) !== Boolean(contextReceipt)) throw Error('creation-context-file-arguments');
   return { args, contextFile, contextReceipt };
 }

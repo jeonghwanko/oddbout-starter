@@ -2,7 +2,10 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { schema, spec } from '../../contracts/ai-fighter/v1/contract-source.mjs';
 
 const check = process.argv.includes('--check');
-for (const [file, value] of [['fighter.schema.json', schema], ['spec.json', spec]]) {
+for (const [file, value] of [
+  ['fighter.schema.json', schema],
+  ['spec.json', spec],
+]) {
   const target = new URL(`../../contracts/ai-fighter/v1/${file}`, import.meta.url);
   const text = JSON.stringify(value, null, 2) + '\n';
   if (check) {

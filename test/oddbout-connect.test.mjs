@@ -5,10 +5,26 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { addressKind, claudeSurface, detectHost, detectRemote, main, planServer, SIGN_IN_URL, spawnStdio, stripJsonComments }
-  from '../packages/oddbout/lib/connect.mjs';
-import { CLOUD_RESOURCE, DIRECTORY_RESOURCE, LEGACY_PUBLIC_RESOURCE, PUBLIC_DIRECTORY_RESOURCE, PUBLIC_RESOURCE, PUBLIC_SIGN_IN_RESOURCE,
-  SIGN_IN_RESOURCE } from '../mcp/cloud/resources.mjs';
+import {
+  addressKind,
+  claudeSurface,
+  detectHost,
+  detectRemote,
+  main,
+  planServer,
+  SIGN_IN_URL,
+  spawnStdio,
+  stripJsonComments,
+} from '../packages/oddbout/lib/connect.mjs';
+import {
+  CLOUD_RESOURCE,
+  DIRECTORY_RESOURCE,
+  LEGACY_PUBLIC_RESOURCE,
+  PUBLIC_DIRECTORY_RESOURCE,
+  PUBLIC_RESOURCE,
+  PUBLIC_SIGN_IN_RESOURCE,
+  SIGN_IN_RESOURCE,
+} from '../mcp/cloud/resources.mjs';
 
 // `npx -y oddbout@latest connect` (packages/oddbout, 2026-11-05): the agent hosts are fakes on PATH that log each call, so these check the
 // exact commands, that a second run changes nothing, and that an existing server is never replaced.
@@ -23,31 +39,58 @@ async function sandbox() {
   await mkdir(fakeBin);
   for (const host of ['claude', 'codex', 'gemini']) {
     if (windows) await writeFile(path.join(fakeBin, `${host}.cmd`), `@"${process.execPath}" "${fake}" ${host} %*\r\n`);
-    else { await writeFile(path.join(fakeBin, host), `#!/bin/sh\nexec "${process.execPath}" "${fake}" ${host} "$@"\n`); await chmod(path.join(fakeBin, host), 0o755); }
+    else {
+      await writeFile(path.join(fakeBin, host), `#!/bin/sh\nexec "${process.execPath}" "${fake}" ${host} "$@"\n`);
+      await chmod(path.join(fakeBin, host), 0o755);
+    }
   }
-  const home = path.join(dir, 'home'), cwd = path.join(dir, 'project');
-  await mkdir(home); await mkdir(cwd);
-  const keep = windows ? Object.fromEntries(['SystemRoot', 'ComSpec', 'PATHEXT', 'TEMP', 'TMP', 'windir'].flatMap(name => process.env[name] ? [[name, process.env[name]]] : [])) : {};
+  const home = path.join(dir, 'home'),
+    cwd = path.join(dir, 'project');
+  await mkdir(home);
+  await mkdir(cwd);
+  const keep = windows
+    ? Object.fromEntries(['SystemRoot', 'ComSpec', 'PATHEXT', 'TEMP', 'TMP', 'windir'].flatMap(name => (process.env[name] ? [[name, process.env[name]]] : [])))
+    : {};
   const system = windows ? [path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32')] : ['/usr/bin', '/bin'];
   const base = {
-    ...keep, PATH: [fakeBin, path.dirname(process.execPath), ...system].join(path.delimiter), HOME: home, USERPROFILE: home,
-    CLAUDE_CONFIG_DIR: path.join(home, '.claude'), GEMINI_CLI_HOME: home, CODEX_HOME: path.join(home, '.codex'),
-    FAKE_AGENT_LOG: path.join(dir, 'calls.jsonl'), FAKE_AGENT_STATE: path.join(dir, 'state.json'),
+    ...keep,
+    PATH: [fakeBin, path.dirname(process.execPath), ...system].join(path.delimiter),
+    HOME: home,
+    USERPROFILE: home,
+    CLAUDE_CONFIG_DIR: path.join(home, '.claude'),
+    GEMINI_CLI_HOME: home,
+    CODEX_HOME: path.join(home, '.codex'),
+    FAKE_AGENT_LOG: path.join(dir, 'calls.jsonl'),
+    FAKE_AGENT_STATE: path.join(dir, 'state.json'),
     // A Linux CI runner has no display; these tests are about the local sign-in unless they say otherwise.
     DISPLAY: ':0',
   };
   await mkdir(base.CLAUDE_CONFIG_DIR);
   const calls = async () => {
     const text = await readFile(base.FAKE_AGENT_LOG, 'utf8').catch(() => '');
-    return text.split('\n').filter(Boolean).map(line => { const { host, args } = JSON.parse(line); return `${host} ${args.join(' ')}`; });
+    return text
+      .split('\n')
+      .filter(Boolean)
+      .map(line => {
+        const { host, args } = JSON.parse(line);
+        return `${host} ${args.join(' ')}`;
+      });
   };
   /** @param {string[]} args @param {Record<string, string>} [env] @returns {Promise<{ code: number, reply: any, stderr: string, calls: string[] }>} */
   const run = async (args, env = {}) => {
     const before = (await calls()).length;
-    const { code, stdout, stderr } = await new Promise(resolve => execFile(process.execPath, [bin, ...args], { cwd, env: { ...base, ...env }, timeout: 60_000 },
-      (error, stdout, stderr) => resolve({ code: error ? /** @type {any} */ (error).code ?? 1 : 0, stdout, stderr })));
+    const { code, stdout, stderr } = await new Promise(resolve =>
+      execFile(process.execPath, [bin, ...args], { cwd, env: { ...base, ...env }, timeout: 60_000 }, (error, stdout, stderr) => {
+        const failed = /** @type {any} */ (error);
+        resolve({ code: failed ? (failed.code ?? 1) : 0, stdout, stderr });
+      }),
+    );
     let reply;
-    try { reply = JSON.parse(stdout); } catch { assert.fail(`not one JSON reply:\n${stdout}\n${stderr}`); }
+    try {
+      reply = JSON.parse(stdout);
+    } catch {
+      assert.fail(`not one JSON reply:\n${stdout}\n${stderr}`);
+    }
     return { code, reply, stderr, calls: (await calls()).slice(before) };
   };
   /**
@@ -58,7 +101,14 @@ async function sandbox() {
   const runInTerminal = async (args, env = {}) => {
     const before = (await calls()).length;
     let stdout = '';
-    const code = await main(args, { env: { ...base, FAKE_AGENT_TERMINAL: '1', ...env }, cwd, interactive: true, write: text => { stdout += text; } });
+    const code = await main(args, {
+      env: { ...base, FAKE_AGENT_TERMINAL: '1', ...env },
+      cwd,
+      interactive: true,
+      write: text => {
+        stdout += text;
+      },
+    });
     return { code, reply: JSON.parse(stdout), calls: (await calls()).slice(before) };
   };
   return { dir, home, cwd, base, run, runInTerminal, cleanup: () => rm(dir, { recursive: true, force: true }) };
@@ -78,7 +128,8 @@ test('the CLI names the same sign-in address as the server, and knows every ODDB
 test('which server to use: an ODDBOUT one already there wins, a foreign server under the name is a conflict', () => {
   const server = (/** @type {string} */ name, /** @type {string} */ url) => ({ name, url, scope: 'user', auth: /** @type {const} */ ('unknown') });
   assert.equal(planServer([], 'oddbout').action, 'add');
-  const legacy = server('oddbout-mcp', PUBLIC_RESOURCE), signIn = server('mine', SIGN_IN_RESOURCE);
+  const legacy = server('oddbout-mcp', PUBLIC_RESOURCE),
+    signIn = server('mine', SIGN_IN_RESOURCE);
   assert.deepEqual(planServer([legacy], 'oddbout').server, legacy);
   assert.deepEqual(planServer([legacy, signIn], 'oddbout').server, signIn);
   const foreign = server('oddbout', 'https://example.com/mcp');
@@ -126,7 +177,14 @@ test('Claude Code from an agent: adds the server and the skill, leaves the sign-
     assert.equal(first.reply.verify.tool, 'get_profile');
     assert.equal(first.reply.run, null);
     assert.equal(first.reply.details.skill.state, 'installed');
-    assert.deepEqual(first.reply.details.server, { name: 'oddbout', url: SIGN_IN_URL, scope: 'user', auth: 'not-signed-in', kind: 'sign-in-first', state: 'added' });
+    assert.deepEqual(first.reply.details.server, {
+      name: 'oddbout',
+      url: SIGN_IN_URL,
+      scope: 'user',
+      auth: 'not-signed-in',
+      kind: 'sign-in-first',
+      state: 'added',
+    });
     assert.match(first.reply.say, /Type \/mcp, choose oddbout, then Authenticate/);
     assert.match(first.reply.say, /only you can do it/);
     assert.ok(first.reply.rules.some((/** @type {string} */ rule) => /callback\/redirect URL in chat/.test(rule)));
@@ -139,7 +197,9 @@ test('Claude Code from an agent: adds the server and the skill, leaves the sign-
     assert.equal(second.reply.details.server.state, 'present');
     assert.equal(second.reply.details.skill.state, 'present');
     assert.deepEqual(second.reply.details.actions, []);
-  } finally { await box.cleanup(); }
+  } finally {
+    await box.cleanup();
+  }
 });
 
 test('Claude Code in a terminal: the login gets the terminal, then the run is connected and idempotent', async () => {
@@ -155,11 +215,18 @@ test('Claude Code in a terminal: the login gets the terminal, then the run is co
     ]);
     assert.equal(first.reply.status, 'connected');
     assert.equal(first.reply.details.signIn, 'done');
-    assert.deepEqual(first.reply.details.actions.at(-1), { command: 'claude mcp login oddbout', exitCode: 0, seconds: first.reply.details.actions.at(-1).seconds, terminal: true });
+    assert.deepEqual(first.reply.details.actions.at(-1), {
+      command: 'claude mcp login oddbout',
+      exitCode: 0,
+      seconds: first.reply.details.actions.at(-1).seconds,
+      terminal: true,
+    });
     const second = await box.runInTerminal(['connect', '--no-skill'], { CLAUDECODE: '1' });
     assert.deepEqual(second.calls, ['claude mcp get oddbout']);
     assert.equal(second.reply.status, 'connected');
-  } finally { await box.cleanup(); }
+  } finally {
+    await box.cleanup();
+  }
 });
 
 test('only a login handed the terminal inherits stdin; its output goes to stderr so stdout keeps the reply', () => {
@@ -180,7 +247,10 @@ test('the Claude desktop app: a new session, then its own /mcp → Connect; a te
     const desktop = await box.run(['connect'], { CLAUDECODE: '1', CLAUDE_CODE_ENTRYPOINT: 'claude-desktop' });
     assert.equal(desktop.reply.status, 'sign-in-needed');
     assert.equal(desktop.reply.details.surface, 'desktop');
-    assert.match(desktop.reply.say, /Start a new session in the Claude app \(no need to restart it\), then type \/mcp, choose oddbout, choose Connect, and approve in your browser/);
+    assert.match(
+      desktop.reply.say,
+      /Start a new session in the Claude app \(no need to restart it\), then type \/mcp, choose oddbout, choose Connect, and approve in your browser/,
+    );
     assert.match(desktop.reply.say, /let the browser open Claude when it asks/);
     assert.match(desktop.reply.say, /If ODDBOUT refuses that sign-in, sign in once from a terminal .* with `claude mcp login oddbout`/);
     assert.match(desktop.reply.say, /it loads in the new session/);
@@ -193,7 +263,9 @@ test('the Claude desktop app: a new session, then its own /mcp → Connect; a te
     assert.equal(byHand.reply.details.surface, 'unknown');
     assert.match(byHand.reply.say, /type \/mcp, choose oddbout, then Authenticate \(Connect in the desktop app\)/);
     assert.match(byHand.reply.say, /If ODDBOUT refuses the desktop app's sign-in, sign in once from a terminal/);
-  } finally { await box.cleanup(); }
+  } finally {
+    await box.cleanup();
+  }
 });
 
 test('Codex: the add signs in by itself; the skill comes from the repository marketplace; a second run changes nothing', async () => {
@@ -220,29 +292,41 @@ test('Codex: the add signs in by itself; the skill comes from the repository mar
     assert.deepEqual(second.calls, ['codex plugin marketplace list --json', 'codex plugin list --json', 'codex mcp list --json']);
     assert.equal(second.reply.status, 'connected');
     assert.equal(second.calls.filter(call => MUTATING.test(call)).length, 0);
-  } finally { await box.cleanup(); }
+  } finally {
+    await box.cleanup();
+  }
 });
 
 test('Codex: a server already at the public address under another name is reused, not doubled', async () => {
   const box = await sandbox();
   try {
-    await writeFile(box.base.FAKE_AGENT_STATE, JSON.stringify({ codex: { servers: { 'oddbout-mcp': { url: PUBLIC_RESOURCE, auth: 'o_auth' } }, marketplaces: [], plugins: [] } }));
+    await writeFile(
+      box.base.FAKE_AGENT_STATE,
+      JSON.stringify({ codex: { servers: { 'oddbout-mcp': { url: PUBLIC_RESOURCE, auth: 'o_auth' } }, marketplaces: [], plugins: [] } }),
+    );
     const { reply, calls } = await box.run(['connect', '--no-skill'], { CODEX_THREAD_ID: 'thread' });
     assert.deepEqual(calls, ['codex mcp list --json']);
     assert.equal(reply.status, 'connected');
     assert.equal(reply.details.server.name, 'oddbout-mcp');
     assert.match(reply.say, /`oddbout-mcp`/);
-  } finally { await box.cleanup(); }
+  } finally {
+    await box.cleanup();
+  }
 });
 
 test('Codex: a server saved but never signed in gets the login, not a second add', async () => {
   const box = await sandbox();
   try {
-    await writeFile(box.base.FAKE_AGENT_STATE, JSON.stringify({ codex: { servers: { oddbout: { url: SIGN_IN_URL, auth: 'not_logged_in' } }, marketplaces: [], plugins: [] } }));
+    await writeFile(
+      box.base.FAKE_AGENT_STATE,
+      JSON.stringify({ codex: { servers: { oddbout: { url: SIGN_IN_URL, auth: 'not_logged_in' } }, marketplaces: [], plugins: [] } }),
+    );
     const { reply, calls } = await box.run(['connect', '--no-skill'], { CODEX_THREAD_ID: 'thread' });
     assert.deepEqual(calls, ['codex mcp list --json', 'codex mcp login oddbout', 'codex mcp list --json']);
     assert.equal(reply.status, 'connected');
-  } finally { await box.cleanup(); }
+  } finally {
+    await box.cleanup();
+  }
 });
 
 test('a different server already named oddbout is reported and left alone', async () => {
@@ -258,7 +342,9 @@ test('a different server already named oddbout is reported and left alone', asyn
     assert.equal(reply.run, 'npx -y oddbout@latest connect --host claude --name oddbout-signin');
     assert.match(reply.say, /example\.com/);
     assert.equal(await readFile(configFile, 'utf8'), original);
-  } finally { await box.cleanup(); }
+  } finally {
+    await box.cleanup();
+  }
 });
 
 test('Gemini CLI: added once, signed in from the session; a second run does not re-add (its add would overwrite)', async () => {
@@ -273,7 +359,9 @@ test('Gemini CLI: added once, signed in from the session; a second run does not 
     const second = await box.run(['connect'], { GEMINI_CLI: '1' });
     assert.deepEqual(second.calls, []);
     assert.equal(second.reply.details.server.state, 'present');
-  } finally { await box.cleanup(); }
+  } finally {
+    await box.cleanup();
+  }
 });
 
 test('over SSH the server is added but no browser sign-in is started, and the reply keeps the callback address out of chat', async () => {
@@ -284,18 +372,26 @@ test('over SSH the server is added but no browser sign-in is started, and the re
     assert.equal(reply.status, 'sign-in-needed');
     assert.match(reply.say, /claude mcp login oddbout --no-browser/);
     assert.match(reply.say, /never into this chat/);
-  } finally { await box.cleanup(); }
+  } finally {
+    await box.cleanup();
+  }
 });
 
 test('Codex over SSH: the add is given only the time to save the server, and the login is left to a terminal there', async () => {
   const box = await sandbox();
   try {
-    const { reply, calls } = await box.run(['connect', '--no-skill', '--wait', '5'], { CODEX_THREAD_ID: 't', SSH_CONNECTION: '1 2 3 4', FAKE_AGENT_LOGIN: 'hang' });
+    const { reply, calls } = await box.run(['connect', '--no-skill', '--wait', '5'], {
+      CODEX_THREAD_ID: 't',
+      SSH_CONNECTION: '1 2 3 4',
+      FAKE_AGENT_LOGIN: 'hang',
+    });
     assert.deepEqual(calls, ['codex mcp list --json', 'codex mcp add oddbout --url https://mcp.oddbout.com/signin', 'codex mcp list --json']);
     assert.equal(reply.status, 'sign-in-needed');
     assert.equal(reply.details.server.state, 'added');
     assert.match(reply.say, /codex mcp login oddbout --no-browser/);
-  } finally { await box.cleanup(); }
+  } finally {
+    await box.cleanup();
+  }
 });
 
 test('a browser sign-in that never finishes ends at --wait with the same command to resume', async () => {
@@ -307,7 +403,9 @@ test('a browser sign-in that never finishes ends at --wait with the same command
     assert.equal(reply.next, 'rerun');
     assert.equal(reply.run, 'npx -y oddbout@latest connect --host claude');
     assert.equal(reply.details.actions.at(-1).timedOut, true);
-  } finally { await box.cleanup(); }
+  } finally {
+    await box.cleanup();
+  }
 });
 
 test('check changes nothing; an unknown host and a sandboxed Codex run nothing', async () => {
@@ -320,11 +418,16 @@ test('check changes nothing; an unknown host and a sandboxed Codex run nothing',
     const unknown = await box.run(['connect']);
     assert.deepEqual(unknown.calls, []);
     assert.equal(unknown.reply.status, 'choose-host');
-    assert.deepEqual(unknown.reply.choices.map((/** @type {any} */ choice) => choice.run), ['claude', 'codex', 'gemini'].map(host => `npx -y oddbout@latest connect --host ${host}`));
+    assert.deepEqual(
+      unknown.reply.choices.map((/** @type {any} */ choice) => choice.run),
+      ['claude', 'codex', 'gemini'].map(host => `npx -y oddbout@latest connect --host ${host}`),
+    );
     const sandboxed = await box.run(['connect'], { CODEX_THREAD_ID: 't', CODEX_SANDBOX: 'seatbelt' });
     assert.deepEqual(sandboxed.calls, []);
     assert.equal(sandboxed.reply.status, 'needs-permission');
     const usage = await box.run(['connect', '--name', 'bad name']);
     assert.equal(usage.code, 2);
-  } finally { await box.cleanup(); }
+  } finally {
+    await box.cleanup();
+  }
 });

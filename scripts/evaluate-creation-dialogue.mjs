@@ -43,11 +43,11 @@ for (const response of sample.responses) {
 const results = /** @type {any[]} */ (fixture.cases).map(test => {
   const response = responses.get(test.id);
   const errors = [];
-  if (!response) return {id:test.id, pass:false, errors:['Response missing']};
+  if (!response) return { id: test.id, pass: false, errors: ['Response missing'] };
   if (typeof response.reply !== 'string' || !response.reply.trim()) errors.push('Reply missing');
   if (!Array.isArray(response.executedTools) || response.executedTools.length) errors.push('Simulation must have no executed tools');
   if (!Array.isArray(response.questions)) errors.push('Questions must be explicit');
-  const actual = {...response.decision, questionCount: response.questions?.length};
+  const actual = { ...response.decision, questionCount: response.questions?.length };
   for (const [key, expected] of Object.entries(test.expected)) {
     if (!isDeepStrictEqual(actual[key], expected)) errors.push(`${key}: expected ${JSON.stringify(expected)}, received ${JSON.stringify(actual[key])}`);
   }
@@ -55,21 +55,35 @@ const results = /** @type {any[]} */ (fixture.cases).map(test => {
   for (const key of Object.keys(actual)) {
     if (!(key in test.expected)) errors.push(`Unexpected decision field: ${key}`);
   }
-  return {id:test.id, pass:errors.length === 0, errors};
+  return { id: test.id, pass: errors.length === 0, errors };
 });
-const scenarios = [...new Set(/** @type {any[]} */ (fixture.cases).map(test=>test.scenario))].sort();
-const expectedIds = Array.from({length:16},(_,i)=>`U${String(i+1).padStart(2,'0')}`);
+const scenarios = [...new Set(/** @type {any[]} */ (fixture.cases).map(test => test.scenario))].sort();
+const expectedIds = Array.from({ length: 16 }, (_, i) => `U${String(i + 1).padStart(2, '0')}`);
 if (!isDeepStrictEqual(scenarios, expectedIds)) throw new Error('All sixteen scenario families must be present');
 const report = {
-  evaluation:'offline-record-contract-check', revision:sample.revision,
-  limitation:'This checks authored simulation records and structured decisions, not semantic truth, a live agent, media quality or user satisfaction.',
-  actualGenerationAllowed:false,
-  hashes:{cases:createHash('sha256').update(caseBytes).digest('hex'),responses:createHash('sha256').update(responseBytes).digest('hex')},
-  families:scenarios.length, branches:results.length,
-  passed:results.filter(x=>x.pass).length, failed:results.filter(x=>!x.pass).length,
-  recordedExecutedTools:/** @type {any[]} */ (sample.responses).reduce((n,x)=>n+(x.executedTools?.length??0),0),
-  results
+  evaluation: 'offline-record-contract-check',
+  revision: sample.revision,
+  limitation: 'This checks authored simulation records and structured decisions, not semantic truth, a live agent, media quality or user satisfaction.',
+  actualGenerationAllowed: false,
+  hashes: { cases: createHash('sha256').update(caseBytes).digest('hex'), responses: createHash('sha256').update(responseBytes).digest('hex') },
+  families: scenarios.length,
+  branches: results.length,
+  passed: results.filter(x => x.pass).length,
+  failed: results.filter(x => !x.pass).length,
+  recordedExecutedTools: /** @type {any[]} */ (sample.responses).reduce((n, x) => n + (x.executedTools?.length ?? 0), 0),
+  results,
 };
-if (options['--out']) fs.writeFileSync(path.resolve(options['--out']),JSON.stringify(report,null,2)+'\n');
-console.log(JSON.stringify({evaluation:report.evaluation,revision:report.revision,families:report.families,branches:report.branches,passed:report.passed,failed:report.failed,failedIds:results.filter(x=>!x.pass).map(x=>x.id),recordedExecutedTools:report.recordedExecutedTools}));
+if (options['--out']) fs.writeFileSync(path.resolve(options['--out']), JSON.stringify(report, null, 2) + '\n');
+console.log(
+  JSON.stringify({
+    evaluation: report.evaluation,
+    revision: report.revision,
+    families: report.families,
+    branches: report.branches,
+    passed: report.passed,
+    failed: report.failed,
+    failedIds: results.filter(x => !x.pass).map(x => x.id),
+    recordedExecutedTools: report.recordedExecutedTools,
+  }),
+);
 process.exitCode = report.failed ? 1 : 0;

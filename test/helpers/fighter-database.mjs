@@ -31,30 +31,48 @@ export async function migratedDatabase() {
 /** Postgres's node text (nodeToString) as nested objects: `{TYPE :field value…}` → { type, field: [values] }, `(…)` → array. */
 export function readNodeTree(text) {
   let at = 0;
-  const skip = () => { while (/\s/.test(text[at] ?? '')) at++; };
-  const word = () => { let w = ''; while (at < text.length && !/[\s{}()]/.test(text[at])) { if (text[at] === '\\') at++; w += text[at++] ?? ''; } return w; };
+  const skip = () => {
+    while (/\s/.test(text[at] ?? '')) at++;
+  };
+  const word = () => {
+    let w = '';
+    while (at < text.length && !/[\s{}()]/.test(text[at])) {
+      if (text[at] === '\\') at++;
+      w += text[at++] ?? '';
+    }
+    return w;
+  };
   function item() {
     skip();
     if (text[at] === '(') {
       const list = [];
-      for (at++, skip(); text[at] !== ')'; skip()) { if (at >= text.length) throw Error('unterminated node list'); list.push(item()); }
-      at++; return list;
+      for (at++, skip(); text[at] !== ')'; skip()) {
+        if (at >= text.length) throw Error('unterminated node list');
+        list.push(item());
+      }
+      at++;
+      return list;
     }
     if (text[at] !== '{') return word();
-    at++; skip();
-    const node = { type: word() }; let field = null;
+    at++;
+    skip();
+    const node = { type: word() };
+    let field = null;
     for (skip(); text[at] !== '}'; skip()) {
       if (at >= text.length || (text[at] !== ':' && !field)) throw Error('malformed node text');
-      if (text[at] === ':') node[field = word().slice(1)] = []; else node[field].push(item());
+      if (text[at] === ':') node[(field = word().slice(1))] = [];
+      else node[field].push(item());
     }
-    at++; return node;
+    at++;
+    return node;
   }
   return item();
 }
 /** safeupdate's rule: an UPDATE or DELETE, at the top or in a WITH, whose WHERE is empty (`where true` still counts as one). */
 export function emptyWhere(query) {
   const ctes = Array.isArray(query.cteList?.[0]) ? query.cteList[0].map(cte => cte?.ctequery?.[0]) : [];
-  return [query, ...ctes].filter(q => q?.type === 'QUERY' && ['2', '4'].includes(q.commandType?.[0]) && q.jointree?.[0]?.quals?.[0] === '<>')
+  return [query, ...ctes]
+    .filter(q => q?.type === 'QUERY' && ['2', '4'].includes(q.commandType?.[0]) && q.jointree?.[0]?.quals?.[0] === '<>')
     .map(q => (q.commandType[0] === '2' ? 'UPDATE' : 'DELETE'));
 }
 /**
@@ -71,18 +89,26 @@ export async function enforceSafeupdate(db) {
   await db.exec('set debug_print_parse = on; set debug_pretty_print = off; set client_min_messages = log; discard plans');
   let refusal = null;
   const guard = target => {
-    for (const [method, optionsAt] of [['query', 2], ['exec', 1]]) {
+    for (const [method, optionsAt] of [
+      ['query', 2],
+      ['exec', 1],
+    ]) {
       const run = target[method].bind(target);
       target[method] = async (...args) => {
         if (refusal) throw new Error(refusal);
-        const refused = [], options = args[optionsAt] ?? {};
-        args[optionsAt] = { ...options, onNotice: notice => {
-          if (notice.message !== 'parse tree:') return options.onNotice?.(notice);
-          if (notice.where && notice.detail) for (const command of emptyWhere(readNodeTree(notice.detail)))
-            refused.push(`${command} requires a WHERE clause (safeupdate)\n  ${notice.where.replaceAll('\n', '\n  ')}`);
-        } };
+        const refused = [],
+          options = args[optionsAt] ?? {};
+        args[optionsAt] = {
+          ...options,
+          onNotice: notice => {
+            if (notice.message !== 'parse tree:') return options.onNotice?.(notice);
+            if (notice.where && notice.detail)
+              for (const command of emptyWhere(readNodeTree(notice.detail)))
+                refused.push(`${command} requires a WHERE clause (safeupdate)\n  ${notice.where.replaceAll('\n', '\n  ')}`);
+          },
+        };
         const result = await run(...args);
-        if (refused.length) throw new Error(refusal = refused.join('\n'));
+        if (refused.length) throw new Error((refusal = refused.join('\n')));
         return result;
       };
     }

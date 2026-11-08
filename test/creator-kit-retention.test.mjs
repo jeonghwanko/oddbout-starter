@@ -6,7 +6,8 @@ import path from 'node:path';
 import { git, restoreCreatorKitReleases, assertCreatorKitsUnchanged } from '../scripts/hosting-lib.mjs';
 
 test('a later whole-site deployment retains immutable kit bytes and rejects accidental edits or removals', async t => {
-  const parent = await realpath(tmpdir()), root = await mkdtemp(path.join(parent, 'kit-retention-test-'));
+  const parent = await realpath(tmpdir()),
+    root = await mkdtemp(path.join(parent, 'kit-retention-test-'));
   t.after(async () => {
     const target = await realpath(root);
     assert.equal(path.dirname(target), parent);
@@ -22,7 +23,8 @@ test('a later whole-site deployment retains immutable kit bytes and rejects acci
   const original = Buffer.from([0, 1, 10, 13, 127, 255]);
   await writeFile(file, original);
   await writeFile(path.join(root, 'index.html'), 'old site');
-  git(root, 'add', '.'); git(root, 'commit', '-m', 'fixture');
+  git(root, 'add', '.');
+  git(root, 'commit', '-m', 'fixture');
   // A --no-checkout clone has no populated index or files; emulate the relevant paths.
   git(root, 'read-tree', '--empty');
   await unlink(file);
@@ -32,9 +34,11 @@ test('a later whole-site deployment retains immutable kit bytes and rejects acci
   git(root, 'add', '-A');
   assertCreatorKitsUnchanged(root);
   assert.equal(git(root, 'diff', '--cached', '--name-only', 'HEAD'), 'index.html');
-  await writeFile(file, 'changed'); git(root, 'add', '-A');
+  await writeFile(file, 'changed');
+  git(root, 'add', '-A');
   assert.throws(() => assertCreatorKitsUnchanged(root), /must preserve/);
   restoreCreatorKitReleases(root);
-  await unlink(file); git(root, 'add', '-A');
+  await unlink(file);
+  git(root, 'add', '-A');
   assert.throws(() => assertCreatorKitsUnchanged(root), /must preserve/);
 });

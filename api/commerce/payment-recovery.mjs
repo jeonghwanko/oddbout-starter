@@ -12,7 +12,10 @@ export function createPaymentRecovery({ store, commerce }) {
     async runOne(owner = null, operationId) {
       const lease = await store.recovery(owner, 'claim', operationId ? { operationId } : {});
       if (!lease) return false;
-      let state = 'succeeded', code = null, approvalUrl, delaySeconds = 60;
+      let state = 'succeeded',
+        code = null,
+        approvalUrl,
+        delaySeconds = 60;
       try {
         const operation = await store.operation(lease.owner, 'get', { operationId: lease.operationId });
         if (!operation.payment?.providerOrderId) {
@@ -20,8 +23,9 @@ export function createPaymentRecovery({ store, commerce }) {
           const checkout = await commerce.checkout(lease.owner, { requestKey: operation.id, productId: operation.input.product.id }, operation.id);
           approvalUrl = checkout.approvalUrl;
         }
-        try { await commerce.capture(lease.owner, operation.payment.intentId); }
-        catch (error) {
+        try {
+          await commerce.capture(lease.owner, operation.payment.intentId);
+        } catch (error) {
           if (error instanceof Problem && error.message === 'paypal-approval-required') {
             if (!approvalUrl) {
               const checkout = await commerce.checkout(lease.owner, { requestKey: operation.id, productId: operation.input.product.id }, operation.id);
@@ -36,15 +40,24 @@ export function createPaymentRecovery({ store, commerce }) {
           const operation = await store.operation(lease.owner, 'get', { operationId: lease.operationId });
           state = Date.now() - Date.parse(operation.createdAt) > 86_400_000 ? 'needs_attention' : 'waiting_for_approval';
         } else {
-          const transient = code === 'paypal_capture_pending' || code === 'payment-service-unavailable'
-            || (error instanceof PayPalError && !['paypal_capture_mismatch','paypal_invalid_approval','paypal_capture_failed'].includes(code)
-              && (!error.status || error.status === 429 || error.status >= 500));
+          const transient =
+            code === 'paypal_capture_pending' ||
+            code === 'payment-service-unavailable' ||
+            (error instanceof PayPalError &&
+              !['paypal_capture_mismatch', 'paypal_invalid_approval', 'paypal_capture_failed'].includes(code) &&
+              (!error.status || error.status === 429 || error.status >= 500));
           state = transient && lease.failures < 7 ? 'pending' : 'needs_attention';
           delaySeconds = Math.min(900, 15 * 2 ** Math.min(lease.failures, 6));
         }
       }
-      await store.recovery(lease.owner, 'finish', { operationId: lease.operationId, leaseId: lease.leaseId, state, code, delaySeconds,
-        ...(approvalUrl ? { approvalUrl } : {}) });
+      await store.recovery(lease.owner, 'finish', {
+        operationId: lease.operationId,
+        leaseId: lease.leaseId,
+        state,
+        code,
+        delaySeconds,
+        ...(approvalUrl ? { approvalUrl } : {}),
+      });
       return true;
     },
   };
@@ -59,17 +72,36 @@ export function createRecoveryWorker({ recovery, continueBroadcasts, intervalMs 
   const tick = async () => {
     if (stopped || active) return;
     active = (async () => {
-      try { for (let i = 0; i < 3 && !stopped; i++) if (!await recovery.runOne()) break; }
-      catch { log({ event: 'paid_recovery_unavailable', at: new Date().toISOString() }); }
+      try {
+        for (let i = 0; i < 3 && !stopped; i++) if (!(await recovery.runOne())) break;
+      } catch {
+        log({ event: 'paid_recovery_unavailable', at: new Date().toISOString() });
+      }
       if (!stopped && continueBroadcasts) {
-        try { await continueBroadcasts(); }
-        catch { log({ event: 'broadcast_continuation_unavailable', at: new Date().toISOString() }); }
+        try {
+          await continueBroadcasts();
+        } catch {
+          log({ event: 'broadcast_continuation_unavailable', at: new Date().toISOString() });
+        }
       }
     })();
-    try { await active; } finally { active = undefined; if (!stopped) timer = setTimeout(tick, intervalMs); }
+    try {
+      await active;
+    } finally {
+      active = undefined;
+      if (!stopped) timer = setTimeout(tick, intervalMs);
+    }
   };
   return {
-    start() { if (!stopped) return; stopped = false; void tick(); },
-    async stop() { stopped = true; clearTimeout(timer); await active; },
+    start() {
+      if (!stopped) return;
+      stopped = false;
+      void tick();
+    },
+    async stop() {
+      stopped = true;
+      clearTimeout(timer);
+      await active;
+    },
   };
 }

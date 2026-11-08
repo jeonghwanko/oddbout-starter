@@ -20,8 +20,12 @@ const BASE_HEADERS = { 'content-type': 'application/json', 'cache-control': 'no-
  */
 export function jsonResponse(body, status = 200, cors) {
   const headers = { ...BASE_HEADERS };
-  if (cors) Object.assign(headers, { 'access-control-allow-origin': '*', 'access-control-allow-methods': cors.methods },
-    cors.headers ? { 'access-control-allow-headers': cors.headers } : {});
+  if (cors)
+    Object.assign(
+      headers,
+      { 'access-control-allow-origin': '*', 'access-control-allow-methods': cors.methods },
+      cors.headers ? { 'access-control-allow-headers': cors.headers } : {},
+    );
   return new Response(JSON.stringify(body), { status, headers });
 }
 
@@ -37,7 +41,9 @@ export const bearerToken = request => request.headers.get('authorization')?.matc
  * @param {Request} request
  * @returns {Promise<string | null>}
  */
-export async function verifiedUserId(db, request) { return (await verifiedUser(db, request))?.owner ?? null; }
+export async function verifiedUserId(db, request) {
+  return (await verifiedUser(db, request))?.owner ?? null;
+}
 
 /**
  * verifiedUserId with the sign-in session the token belongs to (its `session_id`, null when it names none): an action bound to a live
@@ -50,12 +56,13 @@ export async function verifiedUser(db, request) {
   const token = bearerToken(request);
   if (!token) return null;
   /** @type {(claims: any) => string | null} */
-  const session = claims => UUID.test(claims?.session_id ?? '') ? claims.session_id.toLowerCase() : null;
+  const session = claims => (UUID.test(claims?.session_id ?? '') ? claims.session_id.toLowerCase() : null);
   if (typeof db.auth.getClaims === 'function') {
     const { data, error } = await db.auth.getClaims(token);
     const claims = data?.claims;
     return !error && claims && !claims.client_id && claims.role !== 'af_mcp' && claims.is_anonymous !== true && UUID.test(claims.sub ?? '')
-      ? { owner: claims.sub, session: session(claims) } : null;
+      ? { owner: claims.sub, session: session(claims) }
+      : null;
   }
   const { data, error } = await db.auth.getUser(token);
   // Older clients lack getClaims. Decoding here only DENIES connector tokens, or reads the session of a token getUser verified as this user.
@@ -64,10 +71,13 @@ export async function verifiedUser(db, request) {
     try {
       claims = JSON.parse(atob(token.split('.')[1].replaceAll('-', '+').replaceAll('_', '/')));
       if (claims.client_id || claims.role === 'af_mcp') return null;
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   }
   return !error && data?.user && !data.user.is_anonymous && UUID.test(data.user.id ?? '')
-    ? { owner: data.user.id, session: claims?.sub === data.user.id ? session(claims) : null } : null;
+    ? { owner: data.user.id, session: claims?.sub === data.user.id ? session(claims) : null }
+    : null;
 }
 
 /**
@@ -79,7 +89,10 @@ export async function verifiedUser(db, request) {
 export function unstorableTextPath(value, at = '') {
   if (typeof value === 'string') return value.includes('\0') || !value.isWellFormed() ? at : null;
   if (!value || typeof value !== 'object') return null;
-  for (const [key, item] of Object.entries(value)) { const found = unstorableTextPath(item, `${at}/${key}`); if (found !== null) return found; }
+  for (const [key, item] of Object.entries(value)) {
+    const found = unstorableTextPath(item, `${at}/${key}`);
+    if (found !== null) return found;
+  }
   return null;
 }
 
@@ -94,8 +107,13 @@ export function unstorableTextPath(value, at = '') {
  */
 export function rpcProblem(error, statuses, { contains = false, unavailable = 'database-unavailable', otherwise } = {}) {
   const message = error?.message ?? '';
-  const code = contains ? Object.keys(statuses).sort((x, y) => y.length - x.length).find(known => message.includes(known))
-    : Object.hasOwn(statuses, message) ? message : undefined;
+  const code = contains
+    ? Object.keys(statuses)
+        .sort((x, y) => y.length - x.length)
+        .find(known => message.includes(known))
+    : Object.hasOwn(statuses, message)
+      ? message
+      : undefined;
   if (code) return new Problem(statuses[code], code);
   const problem = otherwise?.(error) ?? new Problem(503, typeof unavailable === 'function' ? unavailable(error) : unavailable);
   // The database's own error stays behind the route's code, for the server log (logFailure).
@@ -109,7 +127,8 @@ function describeError(value) {
   if (typeof value !== 'object') return { message: String(value).slice(0, 500) };
   /** @type {Record<string, string>} */
   const out = {};
-  for (const key of ['name', 'message', 'code', 'hint']) if (value[key] !== undefined && value[key] !== null && value[key] !== '') out[key] = String(value[key]).slice(0, key === 'message' ? 500 : 120);
+  for (const key of ['name', 'message', 'code', 'hint'])
+    if (value[key] !== undefined && value[key] !== null && value[key] !== '') out[key] = String(value[key]).slice(0, key === 'message' ? 500 : 120);
   return out;
 }
 
@@ -124,13 +143,28 @@ function describeError(value) {
  * @param {unknown} error
  */
 export function logFailure(scope, request, error) {
-  const problem = error instanceof Problem ? error : null, status = problem?.status ?? 503;
+  const problem = error instanceof Problem ? error : null,
+    status = problem?.status ?? 503;
   if (status < 500) return;
   let path = '';
-  try { path = new URL(request.url).pathname; } catch { /* a request without a URL logs no path */ }
+  try {
+    path = new URL(request.url).pathname;
+  } catch {
+    /* a request without a URL logs no path */
+  }
   const requestId = request.headers?.get('x-request-id') ?? '';
-  console.error(JSON.stringify({ stage: 'api-failure', scope, method: request.method, path, status, ...(problem ? { code: problem.message } : {}),
-    ...(UUID.test(requestId) ? { requestId } : {}), ...failureDetail(error) }));
+  console.error(
+    JSON.stringify({
+      stage: 'api-failure',
+      scope,
+      method: request.method,
+      path,
+      status,
+      ...(problem ? { code: problem.message } : {}),
+      ...(UUID.test(requestId) ? { requestId } : {}),
+      ...failureDetail(error),
+    }),
+  );
 }
 
 /**
@@ -140,7 +174,13 @@ export function logFailure(scope, request, error) {
  */
 export function failureDetail(error) {
   const problem = error instanceof Problem ? error : null;
-  const stack = !problem && error instanceof Error ? error.stack?.split('\n').slice(1, 4).map(line => line.trim()) : undefined;
+  const stack =
+    !problem && error instanceof Error
+      ? error.stack
+          ?.split('\n')
+          .slice(1, 4)
+          .map(line => line.trim())
+      : undefined;
   return { error: describeError(problem ? problem.cause : error), ...(stack ? { stack } : {}) };
 }
 
@@ -157,7 +197,10 @@ export function logSkipped(scope, step, error) {
   console.error(JSON.stringify({ stage: 'api-skipped', scope, step, ...(problem ? { code: problem.message } : {}), ...failureDetail(error) }));
 }
 /** A `.catch` for a skipped step: logs it (logSkipped) and resolves to null. @param {string} scope @param {string} step */
-export const skipped = (scope, step) => (/** @type {unknown} */ error) => { logSkipped(scope, step, error); return null; };
+export const skipped = (scope, step) => (/** @type {unknown} */ error) => {
+  logSkipped(scope, step, error);
+  return null;
+};
 
 /** A 5xx Problem that keeps what failed behind its code, for the request's log line (logFailure). @param {string} code @param {unknown} cause */
 export const unavailable = (code, cause) => Object.assign(new Problem(503, code), { cause });
@@ -165,13 +208,16 @@ export const unavailable = (code, cause) => Object.assign(new Problem(503, code)
 /** One database or Storage call's limit: supabase-js sets none, so a stalled call held its request until the Edge limit. */
 export const DATABASE_TIMEOUT_MS = 15_000;
 /** `signal`, also aborted after `ms`. @param {AbortSignal | null | undefined} signal @param {number} ms */
-export const within = (signal, ms) => signal ? AbortSignal.any([signal, AbortSignal.timeout(ms)]) : AbortSignal.timeout(ms);
+export const within = (signal, ms) => (signal ? AbortSignal.any([signal, AbortSignal.timeout(ms)]) : AbortSignal.timeout(ms));
 /**
  * fetch with DATABASE_TIMEOUT_MS on every call: each Edge entry hands it to supabase-js. A caller's own signal still applies.
  * @param {number} [ms] @param {typeof fetch} [base]
  * @returns {typeof fetch}
  */
-export const timedFetch = (ms = DATABASE_TIMEOUT_MS, base = fetch) => (input, init = {}) => base(input, { ...init, signal: within(init.signal, ms) });
+export const timedFetch =
+  (ms = DATABASE_TIMEOUT_MS, base = fetch) =>
+  (input, init = {}) =>
+    base(input, { ...init, signal: within(init.signal, ms) });
 
 /**
  * One module's `db.rpc`: resolves to the function's data, or throws its refusal (rpcProblem).

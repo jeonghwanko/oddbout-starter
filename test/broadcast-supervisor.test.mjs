@@ -32,7 +32,12 @@ async function until(check, label, milliseconds = 10_000) {
 }
 
 // The only fake: the external model boundary. Everything else (MCP SDK, handler, ledger SQL, producer) is real.
-const hostCup = context => ({ action: 'host_cup', fighterIds: context.eligibleFighterIds.slice(-4), reason: 'Four approved fighters are available.', episode: 'NIGHTCROWN: Test' });
+const hostCup = context => ({
+  action: 'host_cup',
+  fighterIds: context.eligibleFighterIds.slice(-4),
+  reason: 'Four approved fighters are available.',
+  episode: 'NIGHTCROWN: Test',
+});
 const wait = () => ({ action: 'wait', fighterIds: null, reason: 'Waiting for the next window.', episode: null });
 const stop = () => ({ action: 'stop', fighterIds: null, reason: 'Done for the night.', episode: null });
 function fakeModel(decide = hostCup) {
@@ -46,21 +51,31 @@ function fakeModel(decide = hostCup) {
 }
 function gate() {
   let release;
-  const open = new Promise(resolve => { release = resolve; });
+  const open = new Promise(resolve => {
+    release = resolve;
+  });
   return { open, release };
 }
 
 async function fixture(t) {
   const cleanups = [];
   // One LIFO hook: supervisors stop before the database closes and before their state directories disappear.
-  t.after(async () => { for (const cleanup of cleanups.reverse()) await cleanup(); });
+  t.after(async () => {
+    for (const cleanup of cleanups.reverse()) await cleanup();
+  });
   const database = await commerceDatabase();
   cleanups.push(() => database.db.close());
   const service = createCommerceService({ store: database.store, paypal: null, publicOrigin: ORIGIN, hosts: [{ id: 'current-pc' }] });
   for (const owner of [OWNER, OTHER]) {
     const topup = await database.store.createTopup(owner, { requestKey: 'fixture-funding', amountCents: 1000, credits: 1000, currency: 'USD' });
     await database.store.attachOrder(owner, topup.id, `ORDER-${owner}`);
-    await database.store.creditCapture(owner, topup.id, { providerOrderId: `ORDER-${owner}`, captureId: `CAPTURE-${owner}`, amountCents: 1000, currency: 'USD', status: 'COMPLETED' });
+    await database.store.creditCapture(owner, topup.id, {
+      providerOrderId: `ORDER-${owner}`,
+      captureId: `CAPTURE-${owner}`,
+      amountCents: 1000,
+      currency: 'USD',
+      status: 'COMPLETED',
+    });
   }
   const issued = createIssuedProducerGrants();
   const handle = createCommerceMcpHandler({ db: { rpc: database.rpc }, commerce: { service, publicOrigin: ORIGIN }, producers: [], issued });
@@ -70,9 +85,21 @@ async function fixture(t) {
   /** A human approval through the real handler: same-origin and explicitly confirmed. */
   async function approve(owner) {
     const human = createCommerceHandler({ service, publicOrigin: ORIGIN, authenticate: async () => owner });
-    const response = await human(new Request(`${ORIGIN}/commerce/approvals`, { method: 'POST', headers: { origin: ORIGIN, 'content-type': 'application/json' },
-      body: JSON.stringify({ confirmed: true, requestKey: randomUUID(), hostId: 'current-pc', channelId: `channel-${++channels}`,
-        endsAt: new Date(Date.now() + 3_600_000).toISOString(), maxCredits: 100, fighterIds: FIGHTERS }) }));
+    const response = await human(
+      new Request(`${ORIGIN}/commerce/approvals`, {
+        method: 'POST',
+        headers: { origin: ORIGIN, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          confirmed: true,
+          requestKey: randomUUID(),
+          hostId: 'current-pc',
+          channelId: `channel-${++channels}`,
+          endsAt: new Date(Date.now() + 3_600_000).toISOString(),
+          maxCredits: 100,
+          fighterIds: FIGHTERS,
+        }),
+      }),
+    );
     assert.equal(response.status, 200);
     return (await response.json()).data;
   }
@@ -85,23 +112,40 @@ async function fixture(t) {
   }
   /** A supervisor wired like production (in-process MCP against the real handler), plus recorders. */
   async function supervise({ model = fakeModel(), directory, wrapFetch, ...options } = {}) {
-    const mcpCalls = [], issuances = [];
-    const grants = { issue: (owner, broadcastId, expiresAt) => {
-      const grant = issued.issue(owner, broadcastId, expiresAt);
-      issuances.push({ owner, broadcastId, expiresAt, token: grant.token });
-      return grant;
-    } };
+    const mcpCalls = [],
+      issuances = [];
+    const grants = {
+      issue: (owner, broadcastId, expiresAt) => {
+        const grant = issued.issue(owner, broadcastId, expiresAt);
+        issuances.push({ owner, broadcastId, expiresAt, token: grant.token });
+        return grant;
+      },
+    };
     const mcpFetch = (input, init) => {
       let tool;
       try {
         const body = JSON.parse(init.body);
-        if (body.method === 'tools/call') { tool = body.params.name; mcpCalls.push({ tool, broadcastId: body.params.arguments?.broadcastId }); }
-      } catch { /* not a JSON-RPC body */ }
+        if (body.method === 'tools/call') {
+          tool = body.params.name;
+          mcpCalls.push({ tool, broadcastId: body.params.arguments?.broadcastId });
+        }
+      } catch {
+        /* not a JSON-RPC body */
+      }
       const request = new Request(input, init);
       return wrapFetch ? wrapFetch(request, () => handle(request), tool) : handle(request);
     };
-    const supervisor = createProducerSupervisor({ grants, service, mcpUrl: `${ORIGIN}/mcp`, mcpFetch, model: 'test-model', modelCall: model.call,
-      stateDir: directory ?? await stateDir(), pollMs: 20, ...options });
+    const supervisor = createProducerSupervisor({
+      grants,
+      service,
+      mcpUrl: `${ORIGIN}/mcp`,
+      mcpFetch,
+      model: 'test-model',
+      modelCall: model.call,
+      stateDir: directory ?? (await stateDir()),
+      pollMs: 20,
+      ...options,
+    });
     cleanups.push(() => supervisor.close());
     return { supervisor, model, mcpCalls, issuances };
   }
@@ -111,18 +155,29 @@ async function fixture(t) {
   return { ...database, service, issued, handle, approve, startedSession, stateDir, supervise, polls, jobsOf, checkpoint };
 }
 
-test('explicit retry preserves call limits and queues once; another owner cannot restart it',async t=>{
-  const f=await fixture(t),broadcast=await f.startedSession(OWNER),directory=await f.stateDir();let attempts=0;
-  const run=await f.supervise({directory,model:fakeModel(context=>{if(++attempts===1)throw new Error('invalid model response');return hostCup(context);})});
-  run.supervisor.ensure(OWNER,broadcast.id);
-  await until(()=>run.supervisor.status(OWNER,broadcast.id).canRetry,'failed model');
-  assert.equal((await f.jobsOf(OWNER,broadcast)).length,0);
-  await assert.rejects(run.supervisor.retry(OTHER,broadcast.id),/producer-retry-unavailable/);
-  await Promise.all([run.supervisor.retry(OWNER,broadcast.id),run.supervisor.retry(OWNER,broadcast.id)]);
-  await until(async()=>(await f.jobsOf(OWNER,broadcast)).length===1,'retried job');
-  assert.equal(run.model.calls.length,2);assert.equal(run.supervisor.status(OWNER,broadcast.id).modelCalls,2);
-  const saved=await f.checkpoint(directory,broadcast);assert.equal(saved.producer.retries.length,1);
-  assert.equal(saved.producer.retries[0].reason,'producer_model_outcome_unverified');
+test('explicit retry preserves call limits and queues once; another owner cannot restart it', async t => {
+  const f = await fixture(t),
+    broadcast = await f.startedSession(OWNER),
+    directory = await f.stateDir();
+  let attempts = 0;
+  const run = await f.supervise({
+    directory,
+    model: fakeModel(context => {
+      if (++attempts === 1) throw new Error('invalid model response');
+      return hostCup(context);
+    }),
+  });
+  run.supervisor.ensure(OWNER, broadcast.id);
+  await until(() => run.supervisor.status(OWNER, broadcast.id).canRetry, 'failed model');
+  assert.equal((await f.jobsOf(OWNER, broadcast)).length, 0);
+  await assert.rejects(run.supervisor.retry(OTHER, broadcast.id), /producer-retry-unavailable/);
+  await Promise.all([run.supervisor.retry(OWNER, broadcast.id), run.supervisor.retry(OWNER, broadcast.id)]);
+  await until(async () => (await f.jobsOf(OWNER, broadcast)).length === 1, 'retried job');
+  assert.equal(run.model.calls.length, 2);
+  assert.equal(run.supervisor.status(OWNER, broadcast.id).modelCalls, 2);
+  const saved = await f.checkpoint(directory, broadcast);
+  assert.equal(saved.producer.retries.length, 1);
+  assert.equal(saved.producer.retries[0].reason, 'producer_model_outcome_unverified');
 });
 
 test('auto start: ensure() runs the producer for a started session, which queues a host_cup job with the model fighters and no one else asks for a cup', async t => {
@@ -136,7 +191,10 @@ test('auto start: ensure() runs the producer for a started session, which queues
   run.supervisor.ensure(OWNER, broadcast.id);
   run.supervisor.ensure(OWNER.toUpperCase(), broadcast.id.toUpperCase());
 
-  const [job] = await until(async () => { const jobs = await f.jobsOf(OWNER, broadcast); return jobs.length > 0 && jobs; }, 'host_cup job');
+  const [job] = await until(async () => {
+    const jobs = await f.jobsOf(OWNER, broadcast);
+    return jobs.length > 0 && jobs;
+  }, 'host_cup job');
   assert.equal(job.tool, 'host_cup');
   assert.equal(job.broadcastId, broadcast.id);
   assert.equal(job.owner, OWNER);
@@ -148,7 +206,10 @@ test('auto start: ensure() runs the producer for a started session, which queues
   assert.equal(run.model.calls[0].broadcastId, broadcast.id);
   assert.deepEqual(run.model.calls[0].eligibleFighterIds, FIGHTERS);
   assert.equal(f.polls(run, 'host_cup'), 1);
-  const saved = await until(async () => { const record = await f.checkpoint(directory, broadcast); return record.producer?.pending?.status === 'queued' && record; }, 'checkpointed queued cup');
+  const saved = await until(async () => {
+    const record = await f.checkpoint(directory, broadcast);
+    return record.producer?.pending?.status === 'queued' && record;
+  }, 'checkpointed queued cup');
   assert.equal(saved.producer.pending.requestKey, job.requestKey);
   assert.equal(saved.producer.pending.jobId, job.id);
   assert.equal(saved.owner, OWNER);
@@ -172,22 +233,43 @@ test('auto start: ensure() runs the producer for a started session, which queues
   assert.equal(f.polls(run, 'host_cup'), 1);
   assert.equal((await f.jobsOf(OWNER, broadcast)).length, 1);
   // Never throws into a start request, whatever it is handed.
-  for (const [owner, id] of [['not-a-uuid', broadcast.id], [OWNER, 'not-a-uuid'], [undefined, undefined]]) assert.equal(run.supervisor.ensure(owner, id), undefined);
+  for (const [owner, id] of [
+    ['not-a-uuid', broadcast.id],
+    [OWNER, 'not-a-uuid'],
+    [undefined, undefined],
+  ])
+    assert.equal(run.supervisor.ensure(owner, id), undefined);
 });
 
 test('auto start through the demo wiring: the start response does not wait for the producer, and the status route reports it', async t => {
   const f = await fixture(t);
   const release = gate();
-  const run = await f.supervise({ model: fakeModel(async context => { await release.open; return hostCup(context); }) });
+  const run = await f.supervise({
+    model: fakeModel(async context => {
+      await release.open;
+      return hostCup(context);
+    }),
+  });
   // Same shape as scripts/broadcast-demo.mjs: wrap start to supervise the new session, and expose its status.
-  const wired = { ...f.service,
-    async start(owner, input) { const broadcast = await f.service.start(owner, input); run.supervisor.ensure(owner, broadcast.id); return broadcast; },
-    producer: (owner, id) => run.supervisor.status(owner, id) };
+  const wired = {
+    ...f.service,
+    async start(owner, input) {
+      const broadcast = await f.service.start(owner, input);
+      run.supervisor.ensure(owner, broadcast.id);
+      return broadcast;
+    },
+    producer: (owner, id) => run.supervisor.status(owner, id),
+  };
   const api = createCommerceHandler({ service: wired, publicOrigin: ORIGIN, authenticate: async () => OWNER });
 
   const approval = await f.approve(OWNER);
-  const started = await api(new Request(`${ORIGIN}/commerce/broadcasts`, { method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ requestKey: randomUUID(), approvalId: approval.id }) }));
+  const started = await api(
+    new Request(`${ORIGIN}/commerce/broadcasts`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ requestKey: randomUUID(), approvalId: approval.id }),
+    }),
+  );
   assert.equal(started.status, 200);
   const broadcast = (await started.json()).data;
   // The model call is still pending, yet the start request already returned.
@@ -205,9 +287,10 @@ test('auto start through the demo wiring: the start response does not wait for t
   assert.equal(run.model.calls.length, 1);
 });
 
-test('ownership: status is owner-scoped and an issued grant cannot reach another owner\'s session', async t => {
+test("ownership: status is owner-scoped and an issued grant cannot reach another owner's session", async t => {
   const f = await fixture(t);
-  const mine = await f.startedSession(OWNER), foreign = await f.startedSession(OTHER);
+  const mine = await f.startedSession(OWNER),
+    foreign = await f.startedSession(OTHER);
   const run = await f.supervise();
   run.supervisor.ensure(OWNER, mine.id);
   await until(async () => (await f.jobsOf(OWNER, mine)).length === 1, 'OWNER cup');
@@ -222,7 +305,10 @@ test('ownership: status is owner-scoped and an issued grant cannot reach another
   // OTHER's session was never touched by OWNER's producer: not in a model context, not in a tool call, no job, no grant.
   assert.ok(run.model.calls.every(context => context.broadcastId === mine.id));
   assert.ok(run.mcpCalls.every(call => call.broadcastId === undefined || call.broadcastId === mine.id));
-  assert.deepEqual(run.issuances.map(item => [item.owner, item.broadcastId]), [[OWNER, mine.id]]);
+  assert.deepEqual(
+    run.issuances.map(item => [item.owner, item.broadcastId]),
+    [[OWNER, mine.id]],
+  );
   assert.deepEqual(await f.jobsOf(OTHER, foreign), []);
 
   // The issued grant itself is bound to one session: another owner's session and jobs are refused by the real handler.
@@ -231,7 +317,10 @@ test('ownership: status is owner-scoped and an issued grant cannot reach another
   t.after(() => mcp.close());
   await assert.rejects(mcp.callTool('get_broadcast_report', { broadcastId: foreign.id }), /producer_mcp_call_failed/);
   await assert.rejects(mcp.callTool('get_broadcast', { broadcastId: foreign.id }), /producer_mcp_call_failed/);
-  await assert.rejects(mcp.callTool('host_cup', { broadcastId: foreign.id, requestKey: randomUUID(), fighterIds: FIGHTERS.slice(0, 4) }), /producer_mcp_call_failed/);
+  await assert.rejects(
+    mcp.callTool('host_cup', { broadcastId: foreign.id, requestKey: randomUUID(), fighterIds: FIGHTERS.slice(0, 4) }),
+    /producer_mcp_call_failed/,
+  );
   assert.deepEqual(await f.jobsOf(OTHER, foreign), []);
   const foreignJob = await f.service.cup(OTHER, { requestKey: randomUUID(), broadcastId: foreign.id, fighterIds: FIGHTERS.slice(0, 4) });
   await assert.rejects(mcp.callTool('get_broadcast_job', { jobId: foreignJob.id }), /producer_mcp_call_failed/);
@@ -239,8 +328,12 @@ test('ownership: status is owner-scoped and an issued grant cannot reach another
   assert.equal((await mcp.callTool('get_broadcast_report', { broadcastId: mine.id })).broadcast.id, mine.id);
   // A grant that pairs OWNER with OTHER's session cannot even open an MCP connection.
   const mismatched = f.issued.issue(OWNER, foreign.id, Date.parse(foreign.endsAt));
-  await assert.rejects(createProducerMcp({ url: `${ORIGIN}/mcp`, token: mismatched.token, fetchImpl: (input, init) => f.handle(new Request(input, init)) }), /producer_mcp_connection_failed/);
-  mismatched.revoke(); grant.revoke();
+  await assert.rejects(
+    createProducerMcp({ url: `${ORIGIN}/mcp`, token: mismatched.token, fetchImpl: (input, init) => f.handle(new Request(input, init)) }),
+    /producer_mcp_connection_failed/,
+  );
+  mismatched.revoke();
+  grant.revoke();
 });
 
 test('restart resume: a new supervisor continues the queued cup without another model call or a second job', async t => {
@@ -251,7 +344,10 @@ test('restart resume: a new supervisor continues the queued cup without another 
   const first = await f.supervise({ directory });
   assert.equal(await first.supervisor.resume(), 0, 'an empty state directory has nothing to resume');
   first.supervisor.ensure(OWNER, broadcast.id);
-  const [job] = await until(async () => { const jobs = await f.jobsOf(OWNER, broadcast); return jobs.length > 0 && jobs; }, 'host_cup job');
+  const [job] = await until(async () => {
+    const jobs = await f.jobsOf(OWNER, broadcast);
+    return jobs.length > 0 && jobs;
+  }, 'host_cup job');
   await until(async () => (await f.checkpoint(directory, broadcast)).producer?.pending?.status === 'queued', 'checkpointed queued cup');
   await first.supervisor.close();
   assert.equal(first.model.calls.length, 1);
@@ -268,7 +364,10 @@ test('restart resume: a new supervisor continues the queued cup without another 
   assert.equal(second.model.calls.length, 0);
   assert.equal(f.polls(second, 'host_cup'), 0);
   const jobs = await f.jobsOf(OWNER, broadcast);
-  assert.deepEqual(jobs.map(item => [item.id, item.status]), [[job.id, 'queued']]);
+  assert.deepEqual(
+    jobs.map(item => [item.id, item.status]),
+    [[job.id, 'queued']],
+  );
   assert.equal((await f.db.query("select count(*)::int as n from commerce.jobs where tool = 'host_cup'")).rows[0].n, 1);
   assert.equal(second.supervisor.status(OWNER, broadcast.id).state, 'running');
   assert.equal((await f.checkpoint(directory, broadcast)).result, null);
@@ -281,7 +380,10 @@ test('finished sessions are never restarted: resume() skips them and ensure() ma
 
   const first = await f.supervise({ directory, model: fakeModel(stop) });
   first.supervisor.ensure(OWNER, broadcast.id);
-  const finished = await until(() => { const status = first.supervisor.status(OWNER, broadcast.id); return status.state === 'finished' && status; }, 'stop decision');
+  const finished = await until(() => {
+    const status = first.supervisor.status(OWNER, broadcast.id);
+    return status.state === 'finished' && status;
+  }, 'stop decision');
   assert.equal(finished.result.status, 'stopped');
   assert.equal(finished.result.reason, 'Done for the night.');
   assert.equal(finished.decisions.at(-1).action, 'stop');
@@ -313,9 +415,10 @@ test('finished sessions are never restarted: resume() skips them and ensure() ma
   assert.equal((await f.checkpoint(directory, broadcast)).result.reason, 'Done for the night.');
 });
 
-test('limits: maxActive 1 holds the second owner\'s session in waiting until the first finishes', async t => {
+test("limits: maxActive 1 holds the second owner's session in waiting until the first finishes", async t => {
   const f = await fixture(t);
-  const first = await f.startedSession(OWNER), second = await f.startedSession(OTHER);
+  const first = await f.startedSession(OWNER),
+    second = await f.startedSession(OTHER);
   const release = gate();
   let firstWhenSecondAsked;
   const model = fakeModel(async context => {
@@ -339,14 +442,19 @@ test('limits: maxActive 1 holds the second owner\'s session in waiting until the
   await until(() => run.supervisor.status(OWNER, first.id).state === 'finished', 'first finished');
   await until(() => run.supervisor.status(OTHER, second.id).state === 'finished', 'second finished');
   assert.equal(firstWhenSecondAsked, 'finished', 'the second producer started only after the first had finished');
-  assert.deepEqual(model.calls.map(context => context.broadcastId), [first.id, second.id]);
+  assert.deepEqual(
+    model.calls.map(context => context.broadcastId),
+    [first.id, second.id],
+  );
   assert.equal(f.issued.size, 0);
 });
 
 test('limits: one account runs one producer at a time across channels, while other accounts are not held back', async t => {
   const f = await fixture(t);
-  const first = await f.startedSession(OWNER), sibling = await f.startedSession(OWNER), stranger = await f.startedSession(OTHER);
-  const sessions = (await Promise.all([first, sibling].map(async broadcast => (await f.service.report(OWNER, broadcast.id)).broadcast)));
+  const first = await f.startedSession(OWNER),
+    sibling = await f.startedSession(OWNER),
+    stranger = await f.startedSession(OTHER);
+  const sessions = await Promise.all([first, sibling].map(async broadcast => (await f.service.report(OWNER, broadcast.id)).broadcast));
   assert.notEqual(sessions[0].channelId, sessions[1].channelId);
   const release = gate();
   let firstWhenSiblingAsked;
@@ -370,14 +478,20 @@ test('limits: one account runs one producer at a time across channels, while oth
   assert.equal(run.supervisor.status(OWNER, sibling.id).state, 'waiting');
 
   release.release();
-  for (const [owner, broadcast] of [[OWNER, first], [OWNER, sibling], [OTHER, stranger]]) await until(() => run.supervisor.status(owner, broadcast.id).state === 'finished', `${broadcast.id} finished`);
+  for (const [owner, broadcast] of [
+    [OWNER, first],
+    [OWNER, sibling],
+    [OTHER, stranger],
+  ])
+    await until(() => run.supervisor.status(owner, broadcast.id).state === 'finished', `${broadcast.id} finished`);
   assert.equal(firstWhenSiblingAsked, 'finished');
   assert.equal(model.calls.length, 3);
 });
 
 test('limits: dailyModelCalls 1 refuses the second session before the model is called and records the reason', async t => {
   const f = await fixture(t);
-  const first = await f.startedSession(OWNER), second = await f.startedSession(OTHER);
+  const first = await f.startedSession(OWNER),
+    second = await f.startedSession(OTHER);
   const today = Date.now();
   const run = await f.supervise({ model: fakeModel(stop), dailyModelCalls: 1, now: () => today });
   run.supervisor.ensure(OWNER, first.id);
@@ -385,7 +499,10 @@ test('limits: dailyModelCalls 1 refuses the second session before the model is c
   assert.equal(run.supervisor.status(OWNER, first.id).result.reason, 'Done for the night.');
 
   run.supervisor.ensure(OTHER, second.id);
-  const limited = await until(() => { const status = run.supervisor.status(OTHER, second.id); return status.state === 'finished' && status; }, 'second session');
+  const limited = await until(() => {
+    const status = run.supervisor.status(OTHER, second.id);
+    return status.state === 'finished' && status;
+  }, 'second session');
   assert.equal(limited.result.reason, 'producer_daily_model_limit');
   assert.equal(run.model.calls.length, 1, 'the fake model was not invoked for the refused call');
   assert.equal(run.model.calls[0].broadcastId, first.id);
@@ -396,12 +513,23 @@ test('limits: dailyModelCalls 1 refuses the second session before the model is c
 test('grant revocation: the issued grant authenticates only while its producer runs, and never after it finishes, is closed, or fails', async t => {
   const f = await fixture(t);
   const [finishing, closing, failing] = [await f.startedSession(OWNER), await f.startedSession(OWNER), await f.startedSession(OWNER)];
-  const listTools = token => f.handle(new Request(`${ORIGIN}/mcp`, { method: 'POST', body: JSON.stringify(rpc('tools/list')),
-    headers: { accept: 'application/json, text/event-stream', 'content-type': 'application/json', authorization: `Bearer ${token}` } }));
+  const listTools = token =>
+    f.handle(
+      new Request(`${ORIGIN}/mcp`, {
+        method: 'POST',
+        body: JSON.stringify(rpc('tools/list')),
+        headers: { accept: 'application/json, text/event-stream', 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      }),
+    );
 
   // Finished by a stop decision.
   const release = gate();
-  const run = await f.supervise({ model: fakeModel(async () => { await release.open; return stop(); }) });
+  const run = await f.supervise({
+    model: fakeModel(async () => {
+      await release.open;
+      return stop();
+    }),
+  });
   run.supervisor.ensure(OWNER, finishing.id);
   await until(() => run.model.calls.length === 1, 'producer at the model');
   assert.equal(f.issued.size, 1);
@@ -427,9 +555,16 @@ test('grant revocation: the issued grant authenticates only while its producer r
   assert.equal(hold.supervisor.status(OWNER, closing.id).result, null, 'a shutdown is not recorded as a result');
 
   // The model fails: the producer ends as unverified and still revokes.
-  const broken = await f.supervise({ model: fakeModel(() => { throw new Error('model unavailable'); }) });
+  const broken = await f.supervise({
+    model: fakeModel(() => {
+      throw new Error('model unavailable');
+    }),
+  });
   broken.supervisor.ensure(OWNER, failing.id);
-  const failed = await until(() => { const status = broken.supervisor.status(OWNER, failing.id); return status.state === 'finished' && status; }, 'failed producer');
+  const failed = await until(() => {
+    const status = broken.supervisor.status(OWNER, failing.id);
+    return status.state === 'finished' && status;
+  }, 'failed producer');
   assert.notEqual(failed.result.status, 'queued');
   assert.equal(f.issued.size, 0);
   assert.equal((await listTools(broken.issuances[0].token)).status, 401);
@@ -442,23 +577,42 @@ test('autoProducerFromEnvironment: unset or 0 is off, 1 needs an explicit model 
   assert.equal(autoProducerFromEnvironment({ ODDBOUT_BROADCAST_AUTO_PRODUCER: '0' }, parts), null);
   assert.equal(autoProducerFromEnvironment({ ODDBOUT_BROADCAST_AUTO_PRODUCER: '0', ODDBOUT_BROADCAST_MODEL: 'm', OPENAI_API_KEY: 'k' }, parts), null);
 
-  for (const env of [{}, { ODDBOUT_BROADCAST_MODEL: 'test-model' }, { OPENAI_API_KEY: 'sk-test' }, { ODDBOUT_BROADCAST_MODEL: '', OPENAI_API_KEY: 'sk-test' }, { ODDBOUT_BROADCAST_MODEL: 'test-model', OPENAI_API_KEY: '' }]) {
+  for (const env of [
+    {},
+    { ODDBOUT_BROADCAST_MODEL: 'test-model' },
+    { OPENAI_API_KEY: 'sk-test' },
+    { ODDBOUT_BROADCAST_MODEL: '', OPENAI_API_KEY: 'sk-test' },
+    { ODDBOUT_BROADCAST_MODEL: 'test-model', OPENAI_API_KEY: '' },
+  ]) {
     assert.throws(() => autoProducerFromEnvironment({ ODDBOUT_BROADCAST_AUTO_PRODUCER: '1', ...env }, parts), /auto-producer-model-required/);
   }
   for (const value of ['', 'true', 'yes', 'on', '2', ' 1', '1 ', 'TRUE', '01']) {
-    assert.throws(() => autoProducerFromEnvironment({ ODDBOUT_BROADCAST_AUTO_PRODUCER: value, ODDBOUT_BROADCAST_MODEL: 'test-model', OPENAI_API_KEY: 'sk-test' }, parts), /invalid-auto-producer-setting/, JSON.stringify(value));
+    assert.throws(
+      () => autoProducerFromEnvironment({ ODDBOUT_BROADCAST_AUTO_PRODUCER: value, ODDBOUT_BROADCAST_MODEL: 'test-model', OPENAI_API_KEY: 'sk-test' }, parts),
+      /invalid-auto-producer-setting/,
+      JSON.stringify(value),
+    );
   }
 
   // A complete configuration builds a supervisor (construction only; no request is sent).
   const directory = await mkdtemp(join(tmpdir(), 'oddbout-supervisor-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
-  const complete = { ODDBOUT_BROADCAST_AUTO_PRODUCER: '1', ODDBOUT_BROADCAST_MODEL: 'test-model', OPENAI_API_KEY: 'sk-test', ODDBOUT_BROADCAST_PRODUCER_STATE_DIR: directory };
+  const complete = {
+    ODDBOUT_BROADCAST_AUTO_PRODUCER: '1',
+    ODDBOUT_BROADCAST_MODEL: 'test-model',
+    OPENAI_API_KEY: 'sk-test',
+    ODDBOUT_BROADCAST_PRODUCER_STATE_DIR: directory,
+  };
   const supervisor = autoProducerFromEnvironment(complete, parts);
   t.after(() => supervisor.close());
   assert.deepEqual(Object.keys(supervisor).sort(), ['close', 'ensure', 'resume', 'retry', 'status']);
   assert.deepEqual(supervisor.status(OWNER, randomUUID()), { state: 'none' });
   // Limits are validated up front, not when the first session starts.
-  for (const [name, value] of [['ODDBOUT_BROADCAST_AUTO_PRODUCER_MAX_ACTIVE', '0'], ['ODDBOUT_BROADCAST_AUTO_PRODUCER_DAILY_CALLS', 'many'], ['ODDBOUT_BROADCAST_MAX_MODEL_CALLS', '101']]) {
+  for (const [name, value] of [
+    ['ODDBOUT_BROADCAST_AUTO_PRODUCER_MAX_ACTIVE', '0'],
+    ['ODDBOUT_BROADCAST_AUTO_PRODUCER_DAILY_CALLS', 'many'],
+    ['ODDBOUT_BROADCAST_MAX_MODEL_CALLS', '101'],
+  ]) {
     assert.throws(() => autoProducerFromEnvironment({ ...complete, [name]: value }, parts), /producer_supervisor_invalid_configuration/, name);
   }
 });
@@ -514,12 +668,17 @@ test('shutdown while a producer is mid-poll is not an outcome: the next process 
   const directory = await f.stateDir();
 
   // The model waits, so the producer only polls. Hold the fourth report read in flight, as a SIGTERM could, then shut down.
-  let reads = 0, inFlight = false;
-  const first = await f.supervise({ directory, model: fakeModel(wait), wrapFetch: (request, forward, tool) => {
-    if (tool !== 'get_broadcast_report' || ++reads < 4) return forward();
-    inFlight = true;
-    return new Promise((_, reject) => request.signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true }));
-  } });
+  let reads = 0,
+    inFlight = false;
+  const first = await f.supervise({
+    directory,
+    model: fakeModel(wait),
+    wrapFetch: (request, forward, tool) => {
+      if (tool !== 'get_broadcast_report' || ++reads < 4) return forward();
+      inFlight = true;
+      return new Promise((_, reject) => request.signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true }));
+    },
+  });
   first.supervisor.ensure(OWNER, broadcast.id);
   await until(() => inFlight, 'a report read in flight');
   assert.equal(first.model.calls.length, 1);
@@ -528,7 +687,10 @@ test('shutdown while a producer is mid-poll is not an outcome: the next process 
   const second = await f.supervise({ directory, model: fakeModel(wait) });
   assert.equal(await second.supervisor.resume(), 1);
   const before = f.polls(second, 'get_broadcast_report');
-  const resumed = await until(() => f.polls(second, 'get_broadcast_report') >= before + 3 || second.supervisor.status(OWNER, broadcast.id).state === 'finished', 'resumed producer polls or ends');
+  const resumed = await until(
+    () => f.polls(second, 'get_broadcast_report') >= before + 3 || second.supervisor.status(OWNER, broadcast.id).state === 'finished',
+    'resumed producer polls or ends',
+  );
   assert.ok(resumed);
   assert.equal(second.supervisor.status(OWNER, broadcast.id).state, 'running', JSON.stringify(second.supervisor.status(OWNER, broadcast.id).result));
   assert.equal(second.supervisor.status(OWNER, broadcast.id).result, null);

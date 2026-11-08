@@ -22,44 +22,86 @@ const tmp = prefix => mkdtemp(path.join(os.tmpdir(), prefix));
 
 /** A ZIP as the kit's and ffmpeg's are written: stored or deflated entries, Unix modes. */
 function makeZip(files) {
-  const parts = [], central = [];
+  const parts = [],
+    central = [];
   let offset = 0;
   for (const file of files) {
-    const name = Buffer.from(file.name), data = Buffer.from(file.data ?? ''), method = file.method ?? 8;
-    const body = method === 8 ? deflateRawSync(data) : data, crc = crc32(data);
+    const name = Buffer.from(file.name),
+      data = Buffer.from(file.data ?? ''),
+      method = file.method ?? 8;
+    const body = method === 8 ? deflateRawSync(data) : data,
+      crc = crc32(data);
     const local = Buffer.alloc(30);
-    local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(20, 4); local.writeUInt16LE(method, 8); local.writeUInt32LE(crc, 14);
-    local.writeUInt32LE(body.length, 18); local.writeUInt32LE(data.length, 22); local.writeUInt16LE(name.length, 26);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(method, 8);
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(body.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(name.length, 26);
     parts.push(local, name, body);
     const entry = Buffer.alloc(46);
-    entry.writeUInt32LE(0x02014b50, 0); entry.writeUInt16LE((3 << 8) | 20, 4); entry.writeUInt16LE(20, 6); entry.writeUInt16LE(method, 10);
-    entry.writeUInt32LE(crc, 16); entry.writeUInt32LE(body.length, 20); entry.writeUInt32LE(data.length, 24); entry.writeUInt16LE(name.length, 28);
-    entry.writeUInt32LE(((file.mode ?? 0o100644) << 16) >>> 0, 38); entry.writeUInt32LE(offset, 42);
+    entry.writeUInt32LE(0x02014b50, 0);
+    entry.writeUInt16LE((3 << 8) | 20, 4);
+    entry.writeUInt16LE(20, 6);
+    entry.writeUInt16LE(method, 10);
+    entry.writeUInt32LE(crc, 16);
+    entry.writeUInt32LE(body.length, 20);
+    entry.writeUInt32LE(data.length, 24);
+    entry.writeUInt16LE(name.length, 28);
+    entry.writeUInt32LE(((file.mode ?? 0o100644) << 16) >>> 0, 38);
+    entry.writeUInt32LE(offset, 42);
     central.push(entry, name);
     offset += 30 + name.length + body.length;
   }
-  const directory = Buffer.concat(central), end = Buffer.alloc(22);
-  end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(files.length, 8); end.writeUInt16LE(files.length, 10);
-  end.writeUInt32LE(directory.length, 12); end.writeUInt32LE(offset, 16);
+  const directory = Buffer.concat(central),
+    end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(files.length, 8);
+  end.writeUInt16LE(files.length, 10);
+  end.writeUInt32LE(directory.length, 12);
+  end.writeUInt32LE(offset, 16);
   return Buffer.concat([...parts, directory, end]);
 }
 /** A creator-kit release as fetch-creator-kit.py and the runner read it: runtime/ files and the manifest of their hashes. */
 function makeKit(files, version = '9.9.9') {
-  const manifest = Buffer.from(JSON.stringify({ schemaVersion: 1, spriteGenCommit: 'e'.repeat(40),
-    files: Object.fromEntries(Object.entries(files).map(([name, data]) => [name, sha(Buffer.from(data))])) }));
-  const zip = makeZip([{ name: 'plugin.json', data: '{}' }, { name: 'runtime-manifest.json', data: manifest },
-    ...Object.entries(files).map(([name, data]) => ({ name: `runtime/${name}`, data }))]);
-  return { zip, pin: { version, url: `https://oddbout.com/creator-kit/${version}/x/oddbout-${version}.zip`, bytes: zip.length, sha256: sha(zip),
-    runtime: 'runtime/', runtimeManifestSha256: sha(manifest), spriteGenCommit: 'e'.repeat(40) } };
+  const manifest = Buffer.from(
+    JSON.stringify({
+      schemaVersion: 1,
+      spriteGenCommit: 'e'.repeat(40),
+      files: Object.fromEntries(Object.entries(files).map(([name, data]) => [name, sha(Buffer.from(data))])),
+    }),
+  );
+  const zip = makeZip([
+    { name: 'plugin.json', data: '{}' },
+    { name: 'runtime-manifest.json', data: manifest },
+    ...Object.entries(files).map(([name, data]) => ({ name: `runtime/${name}`, data })),
+  ]);
+  return {
+    zip,
+    pin: {
+      version,
+      url: `https://oddbout.com/creator-kit/${version}/x/oddbout-${version}.zip`,
+      bytes: zip.length,
+      sha256: sha(zip),
+      runtime: 'runtime/',
+      runtimeManifestSha256: sha(manifest),
+      spriteGenCommit: 'e'.repeat(40),
+    },
+  };
 }
 /** fetch for fixed bytes per URL (and a count of the calls). */
 const bytesFetcher = table => {
-  const fetcher = async url => { fetcher.calls.push(url); const body = table[url]; return body ? new Response(body) : new Response('no', { status: 404 }); };
+  const fetcher = async url => {
+    fetcher.calls.push(url);
+    const body = table[url];
+    return body ? new Response(body) : new Response('no', { status: 404 });
+  };
   fetcher.calls = [];
   return fetcher;
 };
 
-test('pins.json pins every download for every platform the runner serves, and agrees with og.mjs, the CLIs\' lockfiles and the kit\'s site', async () => {
+test("pins.json pins every download for every platform the runner serves, and agrees with og.mjs, the CLIs' lockfiles and the kit's site", async () => {
   assert.deepEqual(pinProblems(PINS), []);
   const site = JSON.parse(await readFile(path.join(here, '..', 'deploy', 'creator-site.json'), 'utf8'));
   assert.deepEqual(PINS.service, { apiBase: site.apiBase, publishableKey: site.publishableKey });
@@ -68,7 +110,9 @@ test('pins.json pins every download for every platform the runner serves, and ag
   assert.deepEqual(STAGES, API_SETUP_STAGES); // the steps the server passes on to the site's My PC card
   // A broken pin is named, not passed.
   const broken = structuredClone(PINS);
-  broken.cli.grok.version = '1.0.53'; delete broken.python.builds['darwin-arm64']; broken.ffmpeg.builds['linux-x64'][1].files = {};
+  broken.cli.grok.version = '1.0.53';
+  delete broken.python.builds['darwin-arm64'];
+  broken.ffmpeg.builds['linux-x64'][1].files = {};
   const problems = pinProblems(broken).join('\n');
   assert.match(problems, /cli\.grok: 1\.0\.53 but og\.mjs pins 1\.0\.52/);
   assert.match(problems, /python\.darwin-arm64/);
@@ -76,9 +120,10 @@ test('pins.json pins every download for every platform the runner serves, and ag
   assert.equal(PLATFORMS.length, 6);
 });
 
-test('the npm package carries host/\'s install and nothing it does not run: npm pack lists HOST_FILES, og.mjs, the runner, its pins and lockfiles', async () => {
+test("the npm package carries host/'s install and nothing it does not run: npm pack lists HOST_FILES, og.mjs, the runner, its pins and lockfiles", async () => {
   const pkg = JSON.parse(await readFile(path.join(here, 'package.json'), 'utf8'));
-  assert.equal(pkg.name, 'oddbout-host'); assert.equal(pkg.version, VERSION);
+  assert.equal(pkg.name, 'oddbout-host');
+  assert.equal(pkg.version, VERSION);
   assert.deepEqual(pkg.bin, { 'oddbout-host': 'runner.mjs' });
   for (const name of [...HOST_FILES, 'og.mjs']) assert.ok(pkg.files.includes(name), `the package lacks ${name}`);
   // Every module a shipped file imports is shipped (a flat npx cache has nothing else of this repository).
@@ -87,40 +132,60 @@ test('the npm package carries host/\'s install and nothing it does not run: npm 
       assert.ok(pkg.files.includes(local), `${name} imports ${local}, which the package does not carry`);
   assert.ok(!pkg.files.includes('check-pins.mjs'));
   assert.match(readFileSync(path.join(here, 'runner.mjs'), 'utf8'), /^#!\/usr\/bin\/env node\n/);
-  const npm = [process.env.npm_execpath && path.join(path.dirname(process.env.npm_execpath), 'npm-cli.js'),
+  const npm = [
+    process.env.npm_execpath && path.join(path.dirname(process.env.npm_execpath), 'npm-cli.js'),
     path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js'),
-    path.join(path.dirname(process.execPath), '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js')].find(file => file && existsSync(file));
+    path.join(path.dirname(process.execPath), '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+  ].find(file => file && existsSync(file));
   const packed = spawnSync(process.execPath, [npm, 'pack', '--dry-run', '--json', '--ignore-scripts'], { cwd: here, encoding: 'utf8' });
   assert.equal(packed.status, 0, packed.stderr);
-  const listed = JSON.parse(packed.stdout)[0].files.map(file => file.path).sort();
+  const listed = JSON.parse(packed.stdout)[0]
+    .files.map(file => file.path)
+    .sort();
   assert.deepEqual(listed, [...pkg.files, 'package.json', 'README.md'].sort());
 });
 
 test('a ZIP is read from its central directory, each entry checked, and a name that could leave the folder refused', async () => {
-  const zip = makeZip([{ name: 'a/', data: '' }, { name: 'a/b.txt', data: 'hello' }, { name: 'c.bin', data: Buffer.alloc(2000, 7), method: 0, mode: 0o100755 }]);
+  const zip = makeZip([
+    { name: 'a/', data: '' },
+    { name: 'a/b.txt', data: 'hello' },
+    { name: 'c.bin', data: Buffer.alloc(2000, 7), method: 0, mode: 0o100755 },
+  ]);
   const entries = readZip(zip);
-  assert.deepEqual(entries.map(e => [e.name, e.directory, e.size]), [['a/', true, 0], ['a/b.txt', false, 5], ['c.bin', false, 2000]]);
+  assert.deepEqual(
+    entries.map(e => [e.name, e.directory, e.size]),
+    [
+      ['a/', true, 0],
+      ['a/b.txt', false, 5],
+      ['c.bin', false, 2000],
+    ],
+  );
   assert.equal(zipEntry(zip, entries[1]).toString(), 'hello');
   assert.equal(entries[2].mode, 0o755);
   for (const name of ['../evil', '/etc/passwd', 'a\\..\\b', 'C:/x', 'a/../../b', 'a//b'])
     assert.throws(() => readZip(makeZip([{ name, data: 'x' }])), /zip-invalid: unsafe name/, name);
   assert.throws(() => readZip(makeZip([{ name: 'link', data: 'target', mode: 0o120777 }])), /symbolic link/);
   // A changed byte in a stored entry fails its CRC; in a deflated one, its inflation.
-  const damaged = Buffer.from(zip); damaged[entries[2].offset + 30 + 'c.bin'.length + 10] ^= 0xff;
+  const damaged = Buffer.from(zip);
+  damaged[entries[2].offset + 30 + 'c.bin'.length + 10] ^= 0xff;
   assert.throws(() => zipEntry(damaged, readZip(damaged)[2]), /zip-invalid: damaged c.bin/);
   damaged[entries[1].offset + 30 + 'a/b.txt'.length] ^= 0xff;
   assert.throws(() => zipEntry(damaged, readZip(damaged)[1]), /zip-invalid/);
   const dir = await tmp('runner-zip-');
   try {
-    const file = path.join(dir, 'x.zip'); await writeFile(file, zip);
-    assert.deepEqual(await unzip(file, path.join(dir, 'out'), name => name === 'a/b.txt' ? 'b.txt' : null), ['b.txt']);
+    const file = path.join(dir, 'x.zip');
+    await writeFile(file, zip);
+    assert.deepEqual(await unzip(file, path.join(dir, 'out'), name => (name === 'a/b.txt' ? 'b.txt' : null)), ['b.txt']);
     assert.equal(await readFile(path.join(dir, 'out', 'b.txt'), 'utf8'), 'hello');
     assert.ok(!existsSync(path.join(dir, 'out', 'c.bin')));
-  } finally { await rm(dir, { recursive: true, force: true }); }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test('a pinned download is used only with its pinned size and SHA-256, kept for the next run, and never left half-written', async () => {
-  const dir = await tmp('runner-download-'), bytes = Buffer.from('the pinned bytes');
+  const dir = await tmp('runner-download-'),
+    bytes = Buffer.from('the pinned bytes');
   const pin = { url: 'https://example.com/a.zip', bytes: bytes.length, sha256: sha(bytes) };
   try {
     const fetcher = bytesFetcher({ [pin.url]: bytes });
@@ -138,7 +203,9 @@ test('a pinned download is used only with its pinned size and SHA-256, kept for 
     await assert.rejects(download(long, dir, { fetcher: flaky }), { code: 'download-failed' });
     assert.equal(flaky.calls.length, 3);
     await assert.rejects(download({ url: 'http://example.com/x', bytes: 1, sha256: sha('x') }, dir), { code: 'pin-invalid' });
-  } finally { await rm(dir, { recursive: true, force: true }); }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test('the kit comes from its pinned ZIP: every runtime file against the release manifest, the jobs kept, no Git left to need', async () => {
@@ -154,46 +221,95 @@ test('the kit comes from its pinned ZIP: every runtime file against the release 
     assert.ok(existsSync(path.join(root, 'kit', 'output', '20261107-gen-a', 'request.json')), 'the jobs stay');
     assert.ok(!existsSync(path.join(root, 'kit', 'stale.txt')), 'nothing of the kit before');
     assert.ok(!existsSync(path.join(root, 'kit', 'plugin.json')), 'only runtime/');
-    assert.deepEqual(JSON.parse(await readFile(path.join(root, 'kit', '.oddbout-kit.json'), 'utf8')), { version: '9.9.9', sha256: pin.sha256, spriteGenCommit: 'e'.repeat(40) });
+    assert.deepEqual(JSON.parse(await readFile(path.join(root, 'kit', '.oddbout-kit.json'), 'utf8')), {
+      version: '9.9.9',
+      sha256: pin.sha256,
+      spriteGenCommit: 'e'.repeat(40),
+    });
     // A release whose files do not match its manifest, or another engine than pinned: refused, the kit as it was.
     const bad = makeKit({ 'package.json': '{}' });
-    const lying = makeZip([{ name: 'runtime-manifest.json', data: readZip(bad.zip).find(e => e.name === 'runtime-manifest.json') && zipEntry(bad.zip, readZip(bad.zip).find(e => e.name === 'runtime-manifest.json')) },
-      { name: 'runtime/package.json', data: '{"changed":true}' }]);
-    await assert.rejects(installKit(root, { ...bad.pin, url: 'https://e/l.zip', bytes: lying.length, sha256: sha(lying) }, { ...deps, fetcher: bytesFetcher({ 'https://e/l.zip': lying }) }), { code: 'kit-invalid' });
+    const lying = makeZip([
+      {
+        name: 'runtime-manifest.json',
+        data:
+          readZip(bad.zip).find(e => e.name === 'runtime-manifest.json') &&
+          zipEntry(
+            bad.zip,
+            readZip(bad.zip).find(e => e.name === 'runtime-manifest.json'),
+          ),
+      },
+      { name: 'runtime/package.json', data: '{"changed":true}' },
+    ]);
+    await assert.rejects(
+      installKit(
+        root,
+        { ...bad.pin, url: 'https://e/l.zip', bytes: lying.length, sha256: sha(lying) },
+        { ...deps, fetcher: bytesFetcher({ 'https://e/l.zip': lying }) },
+      ),
+      { code: 'kit-invalid' },
+    );
     await assert.rejects(installKit(root, { ...pin, spriteGenCommit: 'f'.repeat(40) }, deps), { code: 'kit-invalid' });
     assert.ok(existsSync(path.join(root, 'kit', 'vendor', 'sprite-gen', 'SKILL.md')));
-  } finally { await rm(root, { recursive: true, force: true }); }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
-test('the install folder is the OS\'s own per-user data folder, and checkSystem asks the runner\'s PC for less than npm run host', () => {
+test("the install folder is the OS's own per-user data folder, and checkSystem asks the runner's PC for less than npm run host", () => {
   assert.equal(defaultRoot({ LOCALAPPDATA: 'C:\\Users\\a\\AppData\\Local' }, 'win32', 'C:\\Users\\a'), 'C:\\Users\\a\\AppData\\Local\\oddbout-host');
   assert.equal(defaultRoot({}, 'darwin', '/Users/a'), '/Users/a/Library/Application Support/oddbout-host');
   assert.equal(defaultRoot({}, 'linux', '/home/a'), '/home/a/.local/share/oddbout-host');
   assert.equal(defaultRoot({ XDG_DATA_HOME: '/data' }, 'linux', '/home/a'), '/data/oddbout-host');
   assert.equal(defaultRoot({ ODDBOUT_HOST_ROOT: '/x' }, 'win32'), '/x');
   // macOS's folder has a space; host.env takes it.
-  assert.match(hostEnv({ nodeBin: '/opt/homebrew/bin', toolPath: '/Users/a/Library/Application Support/oddbout-host/ffmpeg-9.0.2', platform: 'darwin' }), /TOOL_PATH=\/Users\/a\/Library\/Application Support/);
+  assert.match(
+    hostEnv({ nodeBin: '/opt/homebrew/bin', toolPath: '/Users/a/Library/Application Support/oddbout-host/ffmpeg-9.0.2', platform: 'darwin' }),
+    /TOOL_PATH=\/Users\/a\/Library\/Application Support/,
+  );
   // The runner's PC: Node 22.12+, tar; Python and ffmpeg optional (it brings its own); the store's python alias is not a Python.
   const base = { runner: true, memory: 32 * 2 ** 30, run: () => true, env: { SystemRoot: os.tmpdir() } };
-  const mac = checkSystem({ ...base, platform: 'darwin', node: '22.12.0', find: name => name === 'tar' ? '/usr/bin/tar' : '', ask: () => null });
+  const mac = checkSystem({ ...base, platform: 'darwin', node: '22.12.0', find: name => (name === 'tar' ? '/usr/bin/tar' : ''), ask: () => null });
   assert.deepEqual([mac.missing, mac.python, mac.ffmpeg], [[], '', '']);
   assert.match(checkSystem({ ...base, platform: 'darwin', node: '22.11.0', find: () => '/usr/bin/tar', ask: () => null }).missing[0], /Node 22\.12/);
   const asked = [];
-  const found = checkSystem({ ...base, platform: 'darwin', node: '24.1.0', find: name => `/usr/local/bin/${name}`,
-    ask: (command, args) => { asked.push(command); return command.endsWith('python3.12') ? '/opt/py/bin/python3.12\n' : null; } });
+  const found = checkSystem({
+    ...base,
+    platform: 'darwin',
+    node: '24.1.0',
+    find: name => `/usr/local/bin/${name}`,
+    ask: (command, args) => {
+      asked.push(command);
+      return command.endsWith('python3.12') ? '/opt/py/bin/python3.12\n' : null;
+    },
+  });
   assert.equal(found.python, '/opt/py/bin/python3.12');
-  const win = checkSystem({ ...base, platform: 'win32', arch: 'arm64', node: '22.12.0', find: name => name === 'python' ? 'C:\\Users\\a\\AppData\\Local\\Microsoft\\WindowsApps\\python.exe' : '',
-    ask: () => { throw new Error('the store alias is never run'); } });
+  const win = checkSystem({
+    ...base,
+    platform: 'win32',
+    arch: 'arm64',
+    node: '22.12.0',
+    find: name => (name === 'python' ? 'C:\\Users\\a\\AppData\\Local\\Microsoft\\WindowsApps\\python.exe' : ''),
+    ask: () => {
+      throw new Error('the store alias is never run');
+    },
+  });
   assert.equal(win.python, '');
   assert.match(win.warnings.join('\n'), /arm64/);
-  const linux = checkSystem({ ...base, platform: 'linux', node: '22.12.0', find: name => `/usr/bin/${name}`, ask: () => null, run: command => command !== 'systemctl' });
+  const linux = checkSystem({
+    ...base,
+    platform: 'linux',
+    node: '22.12.0',
+    find: name => `/usr/bin/${name}`,
+    ask: () => null,
+    run: command => command !== 'systemctl',
+  });
   assert.match(linux.missing.join('\n'), /systemd 사용자 관리자/);
   assert.equal(checkSystem({ ...base, platform: 'linux', node: '22.12.0', find: name => `/usr/bin/${name}`, ask: () => null }).ffmpeg, '/usr/bin');
   // npm run host stays Linux's, and names the runner to the others.
   assert.match(checkSystem({ platform: 'win32' }).missing[0], /npx oddbout-host/);
 });
 
-test('the command line, the PC\'s name, one runner per install, and heartbeats that never claim more than the logins say', async () => {
+test("the command line, the PC's name, one runner per install, and heartbeats that never claim more than the logins say", async () => {
   assert.deepEqual(parseArgs([]), { command: 'start', replace: false, once: false });
   assert.deepEqual(parseArgs(['login', 'codex', '--replace']), { command: 'login', provider: 'codex', replace: true, once: false });
   assert.equal(parseArgs(['--no-codex', '--slots', '3']).slots, 3);
@@ -206,20 +322,39 @@ test('the command line, the PC\'s name, one runner per install, and heartbeats t
   const root = await tmp('runner-lock-');
   try {
     const release = takeLock(root, 100, () => true);
-    assert.equal(takeLock(root, 200, () => true), null, 'another live runner holds it');
+    assert.equal(
+      takeLock(root, 200, () => true),
+      null,
+      'another live runner holds it',
+    );
     release();
     writeFileSync(path.join(root, 'runner.lock'), '300');
-    assert.equal(typeof takeLock(root, 200, () => false), 'function', 'a dead runner\'s lock is taken over');
-  } finally { await rm(root, { recursive: true, force: true }); }
-  assert.deepEqual(aboutHealth({ ok: false, grok: false }, { ok: true, setup: 'ready', platform: 'windows' }), { ok: false, grok: false, setup: 'ready', platform: 'windows' });
+    assert.equal(typeof takeLock(root, 200, () => false), 'function', "a dead runner's lock is taken over");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+  assert.deepEqual(aboutHealth({ ok: false, grok: false }, { ok: true, setup: 'ready', platform: 'windows' }), {
+    ok: false,
+    grok: false,
+    setup: 'ready',
+    platform: 'windows',
+  });
   assert.deepEqual(aboutHealth({ ok: true }, null), { ok: true });
 });
 
 /** The fake world of one PC: the API (pairing, heartbeats), og, npm and the person at the terminal. */
 async function world({ root, kit, health = 'og: codex NOT READY — not signed in\nog: grok NOT READY — not signed in\n', approveAfter = 2 }) {
-  const api = PINS.service.apiBase, key = `afw_${'c'.repeat(64)}`;
-  const lines = [], beats = [], ogCalls = [], opened = [], npmCalls = [];
-  let polls = 0, signedIn = health, asked = 0, revoked = '';
+  const api = PINS.service.apiBase,
+    key = `afw_${'c'.repeat(64)}`;
+  const lines = [],
+    beats = [],
+    ogCalls = [],
+    opened = [],
+    npmCalls = [];
+  let polls = 0,
+    signedIn = health,
+    asked = 0,
+    revoked = '';
   const fetcher = async (url, init = {}) => {
     const route = url.startsWith(api) ? url.slice(api.length + 1) : url;
     const body = init.body ? JSON.parse(init.body) : null;
@@ -228,12 +363,19 @@ async function world({ root, kit, health = 'og: codex NOT READY — not signed i
     if (route === 'generations/host/pairings') {
       assert.equal(init.headers.apikey, PINS.service.publishableKey);
       assert.deepEqual(body, { name: '작업실 PC', platform: process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'macos' : 'linux' });
-      return Response.json({ ok: true, pairingCode: `ohp_${'a'.repeat(64)}`, userCode: 'BCDF-GHJK', interval: 5,
-        expiresAt: new Date(Date.now() + 600_000).toISOString(), url: 'https://oddbout.com/creator.html#pc=BCDF-GHJK' });
+      return Response.json({
+        ok: true,
+        pairingCode: `ohp_${'a'.repeat(64)}`,
+        userCode: 'BCDF-GHJK',
+        interval: 5,
+        expiresAt: new Date(Date.now() + 600_000).toISOString(),
+        url: 'https://oddbout.com/creator.html#pc=BCDF-GHJK',
+      });
     }
     if (route === 'generations/host/pairings/token') {
       polls += 1;
-      return polls < approveAfter ? Response.json({ ok: true, status: 'pending', interval: 5 })
+      return polls < approveAfter
+        ? Response.json({ ok: true, status: 'pending', interval: 5 })
         : Response.json({ ok: true, status: 'approved', key, host: 'h1', name: 'My PC', approved: false });
     }
     if (route === 'generation-worker/heartbeat') {
@@ -249,27 +391,56 @@ async function world({ root, kit, health = 'og: codex NOT READY — not signed i
     main: async (args, io = {}) => {
       const stdin = io.stdin ? await io.stdin() : undefined;
       ogCalls.push(args.join(' ') + (stdin !== undefined ? ` <${stdin.trim().slice(0, 4)}` : ''));
-      if (args[0] === 'worker' && args[1] === 'key') await writeFile(path.join(root, 'worker.env'), `ODDBOUT_GENERATION_API=${args[2]}\nODDBOUT_GENERATION_WORKER_KEY=${stdin.trim()}\n`);
-      if (args[0] === 'login') { io.out?.('Open https://accounts.x.ai/device and enter WXYZ\n'); signedIn = signedIn.replace(new RegExp(`og: ${args[1]} NOT READY[^\n]*`), `og: ${args[1]} ok (me@x)`); }
+      if (args[0] === 'worker' && args[1] === 'key')
+        await writeFile(path.join(root, 'worker.env'), `ODDBOUT_GENERATION_API=${args[2]}\nODDBOUT_GENERATION_WORKER_KEY=${stdin.trim()}\n`);
+      if (args[0] === 'login') {
+        io.out?.('Open https://accounts.x.ai/device and enter WXYZ\n');
+        signedIn = signedIn.replace(new RegExp(`og: ${args[1]} NOT READY[^\n]*`), `og: ${args[1]} ok (me@x)`);
+      }
       if (args[0] === 'health') io.out?.(signedIn);
       return { code: 0 };
     },
-    health: async () => { ogCalls.push('health'); return signedIn; },
+    health: async () => {
+      ogCalls.push('health');
+      return signedIn;
+    },
     // The engine step leaves sprite-gen's venv Python, as sprite:setup does.
     setupStep: async name => {
       ogCalls.push(`setup ${name}`);
       if (name === 'engine') {
         const python = spritePython(path.join(root, 'kit'));
-        await mkdir(path.dirname(python), { recursive: true }); await writeFile(python, '');
+        await mkdir(path.dirname(python), { recursive: true });
+        await writeFile(python, '');
       }
     },
-    stopAll: async () => {}, running: 0,
+    stopAll: async () => {},
+    running: 0,
   });
   const deps = {
-    root, out: line => lines.push(line), write: text => lines.push(String(text)), platform: process.platform, arch: process.arch, env: process.env,
-    nodeBin: path.dirname(process.execPath), fetcher, now: Date.now, sleep: async () => {}, hostname: () => '작업실 PC',
-    system: () => ({ missing: [], warnings: [], python: path.join(path.dirname(process.execPath), 'python'), toolPath: '', ffmpeg: path.dirname(process.execPath) }),
-    serviceActive: () => false, openUrl: url => opened.push(url), ask: async () => { asked += 1; return 'n'; },
+    root,
+    out: line => lines.push(line),
+    write: text => lines.push(String(text)),
+    platform: process.platform,
+    arch: process.arch,
+    env: process.env,
+    nodeBin: path.dirname(process.execPath),
+    fetcher,
+    now: Date.now,
+    sleep: async () => {},
+    hostname: () => '작업실 PC',
+    system: () => ({
+      missing: [],
+      warnings: [],
+      python: path.join(path.dirname(process.execPath), 'python'),
+      toolPath: '',
+      ffmpeg: path.dirname(process.execPath),
+    }),
+    serviceActive: () => false,
+    openUrl: url => opened.push(url),
+    ask: async () => {
+      asked += 1;
+      return 'n';
+    },
     loadOg: async (_root, about) => og(about),
     npm: async (args, { cwd }) => {
       npmCalls.push(path.basename(cwd));
@@ -280,9 +451,24 @@ async function world({ root, kit, health = 'og: codex NOT READY — not signed i
       }
       return 0;
     },
-    pins: { ...PINS, kit: kit.pin }, pid: process.pid, alive: () => true,
+    pins: { ...PINS, kit: kit.pin },
+    pid: process.pid,
+    alive: () => true,
   };
-  return { deps, lines, beats, ogCalls, opened, npmCalls, key, asked: () => asked, revoke: old => { revoked = old; polls = 0; } };
+  return {
+    deps,
+    lines,
+    beats,
+    ogCalls,
+    opened,
+    npmCalls,
+    key,
+    asked: () => asked,
+    revoke: old => {
+      revoked = old;
+      polls = 0;
+    },
+  };
 }
 
 test('the first run: pairs without a code to copy, installs from pins, signs Grok in, says each step to the site, and runs the worker in front', async () => {
@@ -295,13 +481,26 @@ test('the first run: pairs without a code to copy, installs from pins, signs Gro
     assert.deepEqual(opened, ['https://oddbout.com/creator.html#pc=BCDF-GHJK']);
     assert.ok(lines.some(line => line.includes('BCDF-GHJK')));
     assert.ok(!lines.join('\n').includes(key), 'the key never reaches the screen');
-    assert.deepEqual(ogCalls, [`worker key ${PINS.service.apiBase} <afw_`, 'setup kit', 'setup engine', 'setup slice', 'health', 'login grok', 'health', 'harden', 'worker run --once']);
+    assert.deepEqual(ogCalls, [
+      `worker key ${PINS.service.apiBase} <afw_`,
+      'setup kit',
+      'setup engine',
+      'setup slice',
+      'health',
+      'login grok',
+      'health',
+      'harden',
+      'worker run --once',
+    ]);
     assert.deepEqual(npmCalls, ['tools'], 'the Grok CLI from its lockfile; codex declined');
     assert.equal(asked(), 1);
     assert.ok(lines.some(line => line.includes('GPT 그림을 더하려면 나중에: npx oddbout-host login codex')));
     assert.equal(await readFile(path.join(root, 'tools', 'package-lock.json'), 'utf8'), await readFile(path.join(here, 'cli', 'grok', 'lock.json'), 'utf8'));
     // Each step to the site while it installs (the worker sends its own heartbeats once it runs).
-    assert.deepEqual(beats.map(b => b.setup), ['kit', 'sprite', 'grok-login', 'grok-login', 'ready']);
+    assert.deepEqual(
+      beats.map(b => b.setup),
+      ['kit', 'sprite', 'grok-login', 'grok-login', 'ready'],
+    );
     assert.ok(beats.every(b => b.ok === false && b.runner === VERSION));
     // The install: og.mjs beside the generator's files, host.env, the record of what it holds.
     assert.deepEqual((await readdir(path.join(root, 'bin'))).sort(), [...HOST_FILES, 'og.mjs'].sort());
@@ -309,22 +508,32 @@ test('the first run: pairs without a code to copy, installs from pins, signs Gro
     assert.equal(env.SLOTS, process.platform === 'linux' ? '3' : '2');
     assert.equal(env.TOOL_PATH, path.dirname(process.execPath));
     const record = JSON.parse(await readFile(path.join(root, 'runner.json'), 'utf8'));
-    assert.equal(record.runner, VERSION); assert.equal(record.kit, kit.pin.sha256); assert.equal(record.grok, PINS.cli.grok.integrity);
+    assert.equal(record.runner, VERSION);
+    assert.equal(record.kit, kit.pin.sha256);
+    assert.equal(record.grok, PINS.cli.grok.integrity);
     assert.ok(!existsSync(path.join(root, 'runner.lock')), 'the lock goes with the runner');
 
     // The next run: nothing to install, no pairing, the logins as they are, the worker.
-    ogCalls.length = 0; beats.length = 0; npmCalls.length = 0;
+    ogCalls.length = 0;
+    beats.length = 0;
+    npmCalls.length = 0;
     assert.equal(await runRunner(['--once'], deps), 0);
     assert.deepEqual(ogCalls, ['health', 'harden', 'worker run --once']);
     // The first heartbeat also asks whether the key still works (it does).
-    assert.deepEqual(beats.map(b => b.setup), ['ready', 'ready']);
+    assert.deepEqual(
+      beats.map(b => b.setup),
+      ['ready', 'ready'],
+    );
     assert.deepEqual(npmCalls, []);
     assert.equal(asked(), 1, 'a "no" to codex is asked once');
 
     // A key the site turned off: the next run pairs again and goes on.
     const old = `afw_${'d'.repeat(64)}`;
     await writeFile(path.join(root, 'worker.env'), `ODDBOUT_GENERATION_API=${PINS.service.apiBase}\nODDBOUT_GENERATION_WORKER_KEY=${old}\n`);
-    revoke(old); ogCalls.length = 0; opened.length = 0; lines.length = 0;
+    revoke(old);
+    ogCalls.length = 0;
+    opened.length = 0;
+    lines.length = 0;
     assert.equal(await runRunner(['--once'], deps), 0);
     assert.ok(lines.some(line => line.includes('워커 열쇠가 꺼졌거나 만료됐다')));
     assert.equal(opened.length, 1);
@@ -335,7 +544,9 @@ test('the first run: pairs without a code to copy, installs from pins, signs Gro
     await mkdir(path.join(root, 'kit', 'output', '20261107-gen-b'), { recursive: true });
     await writeFile(path.join(root, 'kit', 'output', '20261107-gen-b', 'request.json'), '{}');
     const newer = makeKit({ 'package.json': '{"name":"kit","version":"2"}' }, '9.9.10');
-    deps.pins = { ...PINS, kit: newer.pin }; lines.length = 0; ogCalls.length = 0;
+    deps.pins = { ...PINS, kit: newer.pin };
+    lines.length = 0;
+    ogCalls.length = 0;
     assert.equal(await runRunner(['--once'], deps), 0);
     assert.match(lines.join('\n'), /열린 작업 1개\(20261107-gen-b\)가 끝날 때까지/);
     assert.deepEqual(ogCalls, ['health', 'harden', 'worker run --once']);
@@ -348,7 +559,9 @@ test('the first run: pairs without a code to copy, installs from pins, signs Gro
     assert.equal(JSON.parse(await readFile(path.join(root, 'kit', '.oddbout-kit.json'), 'utf8')).version, '9.9.10');
     assert.deepEqual(ogCalls.slice(0, 3), ['setup kit', 'setup engine', 'setup slice']);
     assert.ok(existsSync(path.join(root, 'kit', 'output', '20261107-gen-b', '.closed')), 'the closed job moved with the install');
-  } finally { await rm(root, { recursive: true, force: true }); }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test('the first run stops where it must: another runner on the install, a pairing nobody approved, a service worker, a codex he asked for', async () => {
@@ -377,7 +590,11 @@ test('the first run stops where it must: another runner on the install, a pairin
     assert.deepEqual(both.npmCalls, ['tools', 'codex']);
     assert.ok(both.ogCalls.includes('login codex'));
     assert.equal(both.beats.at(-2).setup, 'codex-login');
-    assert.equal(readHostEnv(await readFile(path.join(root, 'host.env'), 'utf8')).TOOL_PATH,
-      [path.dirname(process.execPath), path.join(root, 'codex', 'node_modules', '.bin')].join(process.platform === 'win32' ? ';' : ':'));
-  } finally { await rm(root, { recursive: true, force: true }); }
+    assert.equal(
+      readHostEnv(await readFile(path.join(root, 'host.env'), 'utf8')).TOOL_PATH,
+      [path.dirname(process.execPath), path.join(root, 'codex', 'node_modules', '.bin')].join(process.platform === 'win32' ? ';' : ':'),
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

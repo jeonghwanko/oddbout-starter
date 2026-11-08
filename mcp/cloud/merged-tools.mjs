@@ -39,59 +39,147 @@ import { z } from 'zod';
  * keeps a member's name defaults to that member), `formerly` an earlier name of the merged tool itself.
  * @type {readonly MergedTool[]}
  */
-export const MERGED_TOOLS = Object.freeze(/** @type {MergedTool[]} */ ([
-  // Reads.
-  { name: 'browse_oddbout', title: 'ODDBOUT 둘러보기', summary: 'Read ODDBOUT\'s public records and guides: no sign-in, changes nothing. Choose a view.',
-    views: { fighters: 'list_fighters', rankings: 'get_rankings', record: 'get_fighter_record', cup: 'get_cup', bout: 'read_bout',
-      story: 'get_fighter_story', world: 'get_world', style_guide: 'get_style_guide', hosts: 'list_generation_hosts' } },
-  { name: 'get_my_fighters', title: '내 선수와 계정', formerly: ['get_my_fighter_updates'],
-    summary: 'Read the connected user\'s fighters, registrations and account: changes nothing. View list is the default.',
-    views: { list: 'list_my_fighters', fighter: 'get_registered_fighter', submission: 'get_fighter_submission', profile_set: 'get_profile_set',
-      career: 'get_career', inbox: 'get_workshop_inbox', readiness: 'check_creation_readiness', homepage: 'open_creator_homepage' }, defaultView: 'list' },
-  { name: 'get_hosted_fighter', title: 'ODDBOUT 제작 진행 상태 확인',
-    summary: 'Use for an existing character\'s creation progress, status, previews or registration completion, including follow-up questions. Reads only; never starts or retries generation. View job is the default.',
-    views: { job: 'get_hosted_fighter', upload: 'get_picture_upload', link: 'report_picture_link' }, defaultView: 'job' },
-  { name: 'check_creator_file', title: '제작 파일 확인', summary: 'Check the creator files this connection received or keeps. Choose a view.',
-    views: { input: 'verify_creator_file_input', source: 'get_creator_source' } },
-  // Writes.
-  { name: 'request_hosted_fighter', key: 'step', defaultView: 'request',
-    summary: 'Ask ODDBOUT to make a fighter, and pass on the user\'s answers while it does. Step request is the default.',
-    views: { request: 'request_hosted_fighter', choose_look: 'choose_hosted_look', revise_motion: 'revise_hosted_motion', picture_ticket: 'start_picture_upload' } },
-  { name: 'prepare_fighter_registration', key: 'kind', defaultView: 'package',
-    summary: 'Prepare a private upload: a fighter package (the default), a profile set, or a creator source\'s delivery to a VM.',
-    views: { package: 'prepare_fighter_registration', profile_set: 'prepare_profile_set', source_download: 'prepare_creator_source_download' } },
-  { name: 'upload_fighter_asset', key: 'kind', defaultView: 'package',
-    summary: 'Send one host-attached file: a package asset (the default), a profile-set picture, or a creator source to keep privately.',
-    views: { package: 'upload_fighter_asset', profile_set: 'upload_profile_set_asset', creator_source: 'store_creator_source' } },
-  { name: 'submit_fighter_registration', key: 'kind', defaultView: 'package',
-    summary: 'Submit what the user approved for validation and registration: an uploaded package (the default), a profile set, or a hosted fighter.',
-    views: { package: 'submit_fighter_registration', profile_set: 'submit_profile_set', hosted: 'register_hosted_fighter' } },
-  { name: 'update_fighter', key: 'kind', title: '선수 고치기', summary: 'Edit the connected user\'s registered fighter: its profile or its fighting style. Choose a kind.',
-    views: { profile: 'update_fighter_profile', style: 'update_fighter_style' } },
-  { name: 'enter_fighter', key: 'action', defaultView: 'enter',
-    summary: 'Enter the connected user\'s fighter into public play (the default) or withdraw it.', views: { enter: 'enter_fighter', withdraw: 'withdraw_fighter' } },
-  { name: 'write_story', key: 'write', title: '사연과 공방 쓰기',
-    summary: 'Write in ODDBOUT\'s stories as the connected user: a canon, a workshop note or its answer, a relation, a world or a world post. Public. Choose what to write.',
-    views: { canon: 'update_fighter_canon', note: 'post_workshop_note', resolve: 'resolve_workshop_note', relation: 'set_fighter_relation',
-      world: 'manage_world', world_post: 'write_world_post' } },
-  { name: 'manage_career', key: 'action', title: '커리어 관리', summary: 'Run the connected user\'s career: enter a cup, make a career cup\'s prep or set the auto manager. Choose an action.',
-    views: { enter: 'enter_cup', choose_prep: 'choose_career_prep', auto: 'set_career_auto' } },
-]));
+export const MERGED_TOOLS = Object.freeze(
+  /** @type {MergedTool[]} */ ([
+    // Reads.
+    {
+      name: 'browse_oddbout',
+      title: 'ODDBOUT 둘러보기',
+      summary: "Read ODDBOUT's public records and guides: no sign-in, changes nothing. Choose a view.",
+      views: {
+        fighters: 'list_fighters',
+        rankings: 'get_rankings',
+        record: 'get_fighter_record',
+        cup: 'get_cup',
+        bout: 'read_bout',
+        story: 'get_fighter_story',
+        world: 'get_world',
+        style_guide: 'get_style_guide',
+        hosts: 'list_generation_hosts',
+      },
+    },
+    {
+      name: 'get_my_fighters',
+      title: '내 선수와 계정',
+      formerly: ['get_my_fighter_updates'],
+      summary: "Read the connected user's fighters, registrations and account: changes nothing. View list is the default.",
+      views: {
+        list: 'list_my_fighters',
+        fighter: 'get_registered_fighter',
+        submission: 'get_fighter_submission',
+        profile_set: 'get_profile_set',
+        career: 'get_career',
+        inbox: 'get_workshop_inbox',
+        readiness: 'check_creation_readiness',
+        homepage: 'open_creator_homepage',
+      },
+      defaultView: 'list',
+    },
+    {
+      name: 'get_hosted_fighter',
+      title: 'ODDBOUT 제작 진행 상태 확인',
+      summary:
+        "Use for an existing character's creation progress, status, previews or registration completion, including follow-up questions. Reads only; never starts or retries generation. View job is the default.",
+      views: { job: 'get_hosted_fighter', upload: 'get_picture_upload', link: 'report_picture_link' },
+      defaultView: 'job',
+    },
+    {
+      name: 'check_creator_file',
+      title: '제작 파일 확인',
+      summary: 'Check the creator files this connection received or keeps. Choose a view.',
+      views: { input: 'verify_creator_file_input', source: 'get_creator_source' },
+    },
+    // Writes.
+    {
+      name: 'request_hosted_fighter',
+      key: 'step',
+      defaultView: 'request',
+      summary: "Ask ODDBOUT to make a fighter, and pass on the user's answers while it does. Step request is the default.",
+      views: {
+        request: 'request_hosted_fighter',
+        choose_look: 'choose_hosted_look',
+        revise_motion: 'revise_hosted_motion',
+        picture_ticket: 'start_picture_upload',
+      },
+    },
+    {
+      name: 'prepare_fighter_registration',
+      key: 'kind',
+      defaultView: 'package',
+      summary: "Prepare a private upload: a fighter package (the default), a profile set, or a creator source's delivery to a VM.",
+      views: { package: 'prepare_fighter_registration', profile_set: 'prepare_profile_set', source_download: 'prepare_creator_source_download' },
+    },
+    {
+      name: 'upload_fighter_asset',
+      key: 'kind',
+      defaultView: 'package',
+      summary: 'Send one host-attached file: a package asset (the default), a profile-set picture, or a creator source to keep privately.',
+      views: { package: 'upload_fighter_asset', profile_set: 'upload_profile_set_asset', creator_source: 'store_creator_source' },
+    },
+    {
+      name: 'submit_fighter_registration',
+      key: 'kind',
+      defaultView: 'package',
+      summary: 'Submit what the user approved for validation and registration: an uploaded package (the default), a profile set, or a hosted fighter.',
+      views: { package: 'submit_fighter_registration', profile_set: 'submit_profile_set', hosted: 'register_hosted_fighter' },
+    },
+    {
+      name: 'update_fighter',
+      key: 'kind',
+      title: '선수 고치기',
+      summary: "Edit the connected user's registered fighter: its profile or its fighting style. Choose a kind.",
+      views: { profile: 'update_fighter_profile', style: 'update_fighter_style' },
+    },
+    {
+      name: 'enter_fighter',
+      key: 'action',
+      defaultView: 'enter',
+      summary: "Enter the connected user's fighter into public play (the default) or withdraw it.",
+      views: { enter: 'enter_fighter', withdraw: 'withdraw_fighter' },
+    },
+    {
+      name: 'write_story',
+      key: 'write',
+      title: '사연과 공방 쓰기',
+      summary:
+        "Write in ODDBOUT's stories as the connected user: a canon, a workshop note or its answer, a relation, a world or a world post. Public. Choose what to write.",
+      views: {
+        canon: 'update_fighter_canon',
+        note: 'post_workshop_note',
+        resolve: 'resolve_workshop_note',
+        relation: 'set_fighter_relation',
+        world: 'manage_world',
+        world_post: 'write_world_post',
+      },
+    },
+    {
+      name: 'manage_career',
+      key: 'action',
+      title: '커리어 관리',
+      summary: "Run the connected user's career: enter a cup, make a career cup's prep or set the auto manager. Choose an action.",
+      views: { enter: 'enter_cup', choose_prep: 'choose_career_prep', auto: 'set_career_auto' },
+    },
+  ]),
+);
 
 const BY_NAME = new Map(MERGED_TOOLS.map(merged => [merged.name, merged]));
 /** @param {MergedTool} merged */
 const keyOf = merged => merged.key ?? 'view';
 /** Each member's merged tool and selector value. */
-const MEMBERS = new Map(MERGED_TOOLS.flatMap(merged => Object.entries(merged.views).map(([view, member]) => [member, { tool: merged.name, key: keyOf(merged), view }])));
+const MEMBERS = new Map(
+  MERGED_TOOLS.flatMap(merged => Object.entries(merged.views).map(([view, member]) => [member, { tool: merged.name, key: keyOf(merged), view }])),
+);
 /**
  * The names that are no longer listed: other members, as their merged tool's selector, and merged tools' earlier names (`view` null: the
  * call keeps its own selector).
  * @type {Map<string, { tool: string, key: string, view: string | null }>}
  */
-export const ALIASES = new Map(/** @type {[string, { tool: string, key: string, view: string | null }][]} */ ([
-  ...[...MEMBERS].filter(([member, { tool }]) => member !== tool),
-  ...MERGED_TOOLS.flatMap(merged => (merged.formerly ?? []).map(name => [name, { tool: merged.name, key: keyOf(merged), view: null }])),
-]));
+export const ALIASES = new Map(
+  /** @type {[string, { tool: string, key: string, view: string | null }][]} */ ([
+    ...[...MEMBERS].filter(([member, { tool }]) => member !== tool),
+    ...MERGED_TOOLS.flatMap(merged => (merged.formerly ?? []).map(name => [name, { tool: merged.name, key: keyOf(merged), view: null }])),
+  ]),
+);
 
 /** How a text names a member in the full edition. @param {string} member */
 export const toolRef = member => {
@@ -102,10 +190,14 @@ const ALIAS_NAMES = new RegExp(`\\b(${[...ALIASES.keys()].join('|')})\\b`, 'g');
 /** A text with every merged-away name written as its merged tool and selector. @param {string} text */
 export const renameTools = text => text.replace(ALIAS_NAMES, toolRef);
 /** A result with every string renamed (`renameTools`), for a caller that uses the new names. @param {unknown} value @returns {any} */
-export const renameDeep = value => typeof value === 'string' ? renameTools(value)
-  : Array.isArray(value) ? value.map(renameDeep)
-  : value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype
-    ? Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, renameDeep(entry)])) : value;
+export const renameDeep = value =>
+  typeof value === 'string'
+    ? renameTools(value)
+    : Array.isArray(value)
+      ? value.map(renameDeep)
+      : value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype
+        ? Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, renameDeep(entry)]))
+        : value;
 
 /**
  * A tools/call to a name that is no longer listed, as its merged tool (any other request unchanged).
@@ -136,7 +228,10 @@ export function memberOf(name, args) {
 /** Whether a schema may be left out (optional, or with a default). @param {z.ZodType} schema */
 const optional = schema => schema.safeParse(undefined).success;
 /** A member's arguments for its line in the description: `a, b?`. @param {z.ZodRawShape} shape */
-const argumentsOf = shape => Object.entries(shape).map(([key, schema]) => `${key}${optional(/** @type {z.ZodType} */ (schema)) ? '?' : ''}`).join(', ');
+const argumentsOf = shape =>
+  Object.entries(shape)
+    .map(([key, schema]) => `${key}${optional(/** @type {z.ZodType} */ (schema)) ? '?' : ''}`)
+    .join(', ');
 /** @param {z.ZodType} schema */
 const shapeKey = schema => JSON.stringify(z.toJSONSchema(schema.optional()));
 
@@ -155,8 +250,15 @@ export function mergingRegister(registerTool) {
     if (MEMBERS.has(name)) held.set(name, { title, description: renamed, inputSchema, run, options });
     // A tool that was not merged has no old name to be called by, so its results name merged tools as its description does
     // (2단계 B, 2026-11-06: get_fighter_spec's creation steps still named the profile-set and submission tools by their old names).
-    else registerTool(name, title, renamed, inputSchema,
-      async (/** @type {any} */ args, /** @type {ToolContext} */ context) => renameDeep(await run(args, context)), options);
+    else
+      registerTool(
+        name,
+        title,
+        renamed,
+        inputSchema,
+        async (/** @type {any} */ args, /** @type {ToolContext} */ context) => renameDeep(await run(args, context)),
+        options,
+      );
   };
   const finish = () => {
     for (const merged of MERGED_TOOLS) {
@@ -192,39 +294,53 @@ export function mergingRegister(registerTool) {
         const schemas = [...forms.values()];
         shape[name] = (schemas.length === 1 ? schemas[0] : z.union(/** @type {[z.ZodType, z.ZodType, ...z.ZodType[]]} */ (schemas))).optional();
       }
-      const lines = views.map(({ view, member, entry }) => `${key}=${view}${view === merged.defaultView ? ' (default)' : ''}`
-        + `${member === merged.name ? '' : ` (was ${member})`}`
-        + `${Object.keys(entry.inputSchema).length ? ` [${argumentsOf(entry.inputSchema)}]` : ''}: ${entry.description}`);
+      const lines = views.map(
+        ({ view, member, entry }) =>
+          `${key}=${view}${view === merged.defaultView ? ' (default)' : ''}` +
+          `${member === merged.name ? '' : ` (was ${member})`}` +
+          `${Object.keys(entry.inputSchema).length ? ` [${argumentsOf(entry.inputSchema)}]` : ''}: ${entry.description}`,
+      );
       const own = held.get(merged.name);
       const diagnostic = new Set(views.filter(({ entry }) => entry.options.diagnostic === true).map(({ view }) => view));
       const keepsMemberName = Object.values(merged.views).includes(merged.name);
       /** @param {Record<string, unknown>} args */
       const selected = args => /** @type {string} */ (args[key] ?? merged.defaultView);
-      registerTool(merged.name, merged.title ?? own?.title ?? merged.name, `${merged.summary}\n${lines.join('\n')}`, shape,
+      registerTool(
+        merged.name,
+        merged.title ?? own?.title ?? merged.name,
+        `${merged.summary}\n${lines.join('\n')}`,
+        shape,
         async (/** @type {Record<string, unknown>} */ args, /** @type {ToolContext} */ context) => {
           const { [key]: given, ...rest } = args;
           const chosen = views.find(candidate => candidate.view === selected(args)) ?? views[0];
           // Each member checks its own arguments: the merged schema leaves them all optional.
           const parsed = z.object(chosen.entry.inputSchema).safeParse(rest);
           if (!parsed.success) {
-            return { ok: false, code: 'invalid-arguments', [key]: chosen.view,
+            return {
+              ok: false,
+              code: 'invalid-arguments',
+              [key]: chosen.view,
               issues: parsed.error.issues.map(issue => ({ path: issue.path.join('.'), message: issue.message })),
-              next: `${key}=${chosen.view} takes ${argumentsOf(chosen.entry.inputSchema) || 'no arguments'}.` };
+              next: `${key}=${chosen.view} takes ${argumentsOf(chosen.entry.inputSchema) || 'no arguments'}.`,
+            };
           }
           const value = await chosen.entry.run(parsed.data, context);
           // Results name merged tools only for a caller that used the new form: a new tool name, or the selector itself. A call by an old
           // name (an alias, or a kept member name without its selector) comes from a client that may know only the old names.
           const rename = !context?.legacy && (!keepsMemberName || given !== undefined);
           return rename ? renameDeep(value) : value;
-        }, {
-          write, publicTool,
+        },
+        {
+          write,
+          publicTool,
           publish: options.some(option => option.publish === true),
           idempotent: options.every(option => option.idempotent ?? !write),
           openWorld: options.some(option => option.openWorld === true),
           files: [...new Set(options.flatMap(option => option.files ?? []))],
           diagnostic: diagnostic.size ? args => diagnostic.has(selected(args)) : false,
           logAs: args => String(memberOf(merged.name, args)),
-        });
+        },
+      );
     }
   };
   return { register: /** @type {Register} */ (/** @type {unknown} */ (hold)), finish };

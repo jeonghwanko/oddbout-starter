@@ -26,7 +26,11 @@ export async function operatorFrontForm(request) {
   if (!/^multipart\/form-data;\s*boundary=/i.test(type)) throw new Problem(415, 'multipart-required');
   const body = await readBody(request, FORM_BYTES);
   let form;
-  try { form = await new Response(body, { headers: { 'content-type': type } }).formData(); } catch { throw new Problem(400, 'invalid-body'); }
+  try {
+    form = await new Response(body, { headers: { 'content-type': type } }).formData();
+  } catch {
+    throw new Problem(400, 'invalid-body');
+  }
   const names = [...form.keys()];
   if (names.some(name => !PARTS.includes(name)) || new Set(names).size !== names.length) throw new Problem(400, 'invalid-body');
   /** @param {string} name @returns {Promise<Uint8Array<ArrayBuffer> | null>} */
@@ -38,7 +42,11 @@ export async function operatorFrontForm(request) {
   const [file, front, expressions] = await Promise.all(PARTS.map(bytes));
   if (!file || !front) throw new Problem(400, 'invalid-body');
   let text;
-  try { text = new TextDecoder('utf-8', { fatal: true }).decode(file); } catch { throw new Problem(400, 'invalid-utf8'); }
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(file);
+  } catch {
+    throw new Problem(400, 'invalid-utf8');
+  }
   return { text, front, expressions };
 }
 
@@ -55,7 +63,11 @@ export async function operatorFrontForm(request) {
  */
 export async function addOperatorFront(db, { actor, fighterId, key, reason, text, front, expressions }) {
   /** @param {string} name @param {Record<string, unknown>} args */
-  const rpc = async (name, args) => { const { data, error } = await db.rpc(name, args); if (error) throw rpcProblem(error, STATUS); return data; };
+  const rpc = async (name, args) => {
+    const { data, error } = await db.rpc(name, args);
+    if (error) throw rpcProblem(error, STATUS);
+    return data;
+  };
   const parsed = parseProfileSet(text);
   if (!parsed.ok) throw new Problem(422, 'invalid-profile-set', parsed.errors);
   const set = parsed.data;
@@ -65,13 +77,20 @@ export async function addOperatorFront(db, { actor, fighterId, key, reason, text
   const files = [{ name: 'front', bytes: front, file: set.front }];
   if (set.expressions && expressions) files.push({ name: 'expressions', bytes: expressions, file: set.expressions });
   for (const { bytes, file } of files) {
-    if (bytes.length !== file.bytes || await sha256(bytes) !== file.sha256) throw new Problem(422, 'asset-hash-or-size');
+    if (bytes.length !== file.bytes || (await sha256(bytes)) !== file.sha256) throw new Problem(422, 'asset-hash-or-size');
     const probed = probeImage(bytes);
     if (probed?.type !== 'image/webp' || probed.width !== file.width || probed.height !== file.height) throw new Problem(422, 'webp-required');
   }
   /** @type {import('./profile-sets.mjs').ProfileSetRow} */
-  const row = await rpc('af_admin_profile_set_front', { p_actor: actor, p_fighter: fighterId, p_key: key, p_text: text,
-    p_sha: await sha256(new TextEncoder().encode(text)), p_bytes: set.front.bytes, p_reason: reason });
+  const row = await rpc('af_admin_profile_set_front', {
+    p_actor: actor,
+    p_fighter: fighterId,
+    p_key: key,
+    p_text: text,
+    p_sha: await sha256(new TextEncoder().encode(text)),
+    p_bytes: set.front.bytes,
+    p_reason: reason,
+  });
   if (row.status !== 'uploading') return profileSetView(row);
   if (Date.parse(row.expires_at) <= Date.now()) throw new Problem(409, 'upload-expired');
   try {

@@ -28,8 +28,14 @@ export function createBackoff({ firstMs = 15_000, maxMs = 120_000 } = {}) {
   let wait = firstMs;
   return {
     /** The wait to take now; the one after it is twice as long. */
-    next() { const now = wait; wait = Math.min(wait * 2, maxMs); return now; },
-    reset() { wait = firstMs; },
+    next() {
+      const now = wait;
+      wait = Math.min(wait * 2, maxMs);
+      return now;
+    },
+    reset() {
+      wait = firstMs;
+    },
   };
 }
 
@@ -52,8 +58,16 @@ export async function runLeasedJob({ send, routes, idKey, claim, folder, work })
   const id = answer[idKey];
   const lease = { [idKey]: id, leaseToken: job.leaseToken };
   /** Best effort: an older API or an outage leaves the lease to expire as before. @param {string} code */
-  const release = async code => ({ ok: false, stage: 'retry-later', [idKey]: id, code,
-    requeued: await send(routes.release, { ...lease, code }).then(() => true, () => false) });
+  const release = async code => ({
+    ok: false,
+    stage: 'retry-later',
+    [idKey]: id,
+    code,
+    requeued: await send(routes.release, { ...lease, code }).then(
+      () => true,
+      () => false,
+    ),
+  });
   const deadline = AbortSignal.timeout(JOB_DEADLINE_MS);
   const base = fileURLToPath(new URL('../output/worker-jobs/', import.meta.url));
   /** @type {string | undefined} */
@@ -77,8 +91,9 @@ export async function runLeasedJob({ send, routes, idKey, claim, folder, work })
   // Same lease receipt is retryable; a stale lease can never finalize a new worker's job.
   // Back off (1 s, then 3 s) so a brief outage does not discard a finished check; both fit inside the lease.
   for (let attempt = 0; ; attempt++) {
-    try { return { ...(await send(routes.finish, finish)), [idKey]: id }; }
-    catch (/** @type {any} */ error) {
+    try {
+      return { ...(await send(routes.finish, finish)), [idKey]: id };
+    } catch (/** @type {any} */ error) {
       // A finish the server refuses (a validator version it does not take, …) says nothing about the job: hand it back, as for an
       // infrastructure failure (API 점검 2026-10-29). A lost lease is not this worker's to hand back, and a refused worker key stops the worker.
       if (error.status >= 400 && error.status < 500) {

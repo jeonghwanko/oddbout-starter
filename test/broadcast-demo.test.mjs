@@ -21,12 +21,18 @@ test('public proxy requests keep exact Host and origin checks; health is livenes
   const { server } = createBroadcastDemo({ ODDBOUT_BROADCAST_BIND_HOST: '0.0.0.0', ODDBOUT_COMMERCE_ORIGIN: 'https://demo.example' });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise(resolve => server.close(resolve)));
-  const request = (path, headers = {}) => new Promise((resolve, reject) => {
-    get(`http://127.0.0.1:${server.address().port}${path}`, { headers }, res => {
-      let body = ''; res.setEncoding('utf8'); res.on('data', chunk => { body += chunk; });
-      res.on('error', reject); res.on('end', () => resolve({ status: res.statusCode, body }));
-    }).on('error', reject);
-  });
+  const request = (path, headers = {}) =>
+    new Promise((resolve, reject) => {
+      get(`http://127.0.0.1:${server.address().port}${path}`, { headers }, res => {
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', chunk => {
+          body += chunk;
+        });
+        res.on('error', reject);
+        res.on('end', () => resolve({ status: res.statusCode, body }));
+      }).on('error', reject);
+    });
   assert.deepEqual(JSON.parse((await request('/healthz')).body), { ok: true, service: 'oddbout-broadcast-sandbox' });
   assert.deepEqual(JSON.parse((await request('/readyz')).body), { ok: true, paidTaskRecovery: false });
   assert.equal((await request('/broadcast/config', { host: 'internal', 'x-forwarded-host': 'demo.example' })).status, 403);
@@ -40,11 +46,14 @@ test('public proxy requests keep exact Host and origin checks; health is livenes
 });
 test('demo refuses privileged or malformed keys in the public browser-key setting before serving', () => {
   for (const key of ['sb_secret_not-for-a-browser', jwt('service_role'), jwt('authenticated'), 'malformed']) {
-    assert.throws(() => createBroadcastDemo({ SUPABASE_PUBLISHABLE_KEY: key }), error => {
-      assert.equal(error.message, 'invalid-browser-publishable-key');
-      assert.equal(error.message.includes(key), false);
-      return true;
-    });
+    assert.throws(
+      () => createBroadcastDemo({ SUPABASE_PUBLISHABLE_KEY: key }),
+      error => {
+        assert.equal(error.message, 'invalid-browser-publishable-key');
+        assert.equal(error.message.includes(key), false);
+        return true;
+      },
+    );
   }
 });
 
@@ -55,8 +64,13 @@ test('demo public config exposes only approved publishable key formats, never se
     t.after(() => new Promise(resolve => server.close(resolve)));
     const response = await new Promise((resolve, reject) => {
       get(`http://127.0.0.1:${server.address().port}/broadcast/config`, { headers: { host: '127.0.0.1:5180' } }, res => {
-        let body = ''; res.setEncoding('utf8'); res.on('data', chunk => { body += chunk; });
-        res.on('error', reject); res.on('end', () => resolve({ status: res.statusCode, body }));
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', chunk => {
+          body += chunk;
+        });
+        res.on('error', reject);
+        res.on('end', () => resolve({ status: res.statusCode, body }));
       }).on('error', reject);
     });
     assert.equal(response.status, 200);

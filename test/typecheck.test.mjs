@@ -10,15 +10,20 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const CHECKED = ['api', 'broadcast', 'worker', 'cloudflare', 'mcp', 'scripts', 'packages', 'host'];
 
 test('every module tsc covers opts into type checking', async () => {
-  assert.deepEqual(JSON.parse(await readFile(new URL('../tsconfig.json', import.meta.url), 'utf8')).include, CHECKED.map(dir => `${dir}/**/*.mjs`));
+  assert.deepEqual(
+    JSON.parse(await readFile(new URL('../tsconfig.json', import.meta.url), 'utf8')).include,
+    CHECKED.map(dir => `${dir}/**/*.mjs`),
+  );
   const unchecked = [];
   for (const dir of CHECKED)
-    for (const name of (await readdir(new URL(`../${dir}/`, import.meta.url), { recursive: true })).filter(name => name.endsWith('.mjs') && !name.endsWith('.test.mjs')))
+    for (const name of (await readdir(new URL(`../${dir}/`, import.meta.url), { recursive: true })).filter(
+      name => name.endsWith('.mjs') && !name.endsWith('.test.mjs'),
+    ))
       if (!/^(?:#![^\n]*\n)?\/\/ @ts-check\r?\n/.test(await readFile(new URL(`../${dir}/${name}`, import.meta.url), 'utf8'))) unchecked.push(`${dir}/${name}`);
   assert.deepEqual(unchecked, []);
 });
 
-test('the game repository\'s byte copies are type-checked without a marker (tsconfig.vendored.json: checkJs)', async () => {
+test("the game repository's byte copies are type-checked without a marker (tsconfig.vendored.json: checkJs)", async () => {
   // contracts/ and server/ are pinned byte copies (contracts/ai-fighter/SOURCE.json), so they cannot start with `// @ts-check`. A second config
   // turns checkJs on for them instead; the game repository checks the same files under its own tsconfig.server.json, where the types are written.
   const config = JSON.parse(await readFile(new URL('../tsconfig.vendored.json', import.meta.url), 'utf8'));
@@ -35,7 +40,13 @@ test('Deno checks api/ at the same strictness as tsc, in every Edge function', a
   const functions = (await readdir(new URL('../supabase/functions/', import.meta.url), { withFileTypes: true })).filter(entry => entry.isDirectory());
   for (const { name } of functions) {
     const file = `supabase/functions/${name}/deno.json`;
-    if (await readFile(new URL(`../${file}`, import.meta.url)).then(() => true, () => false)) assert.deepEqual(await read(file), { strict: true }, file);
+    if (
+      await readFile(new URL(`../${file}`, import.meta.url)).then(
+        () => true,
+        () => false,
+      )
+    )
+      assert.deepEqual(await read(file), { strict: true }, file);
   }
 });
 

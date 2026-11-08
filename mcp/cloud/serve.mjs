@@ -13,16 +13,21 @@ import { WebStandardStreamableHTTPServerTransport, createMcpHandler, isLegacyReq
  */
 export function mcpServing(maxRequestBodySize) {
   // biome-ignore lint/correctness/noUnsafeOptionalChaining: a request without auth info throws here, as it always has
-  const modern = createMcpHandler(ctx => /** @type {{ server: McpServer }} */ (ctx.authInfo?.extra).server,
-    { legacy: 'reject', responseMode: 'json', maxRequestBodySize });
+  const modern = createMcpHandler(ctx => /** @type {{ server: McpServer }} */ (ctx.authInfo?.extra).server, {
+    legacy: 'reject',
+    responseMode: 'json',
+    maxRequestBodySize,
+  });
   return async (server, request, body) => {
-    if (!await isLegacyRequest(request, body)) {
+    if (!(await isLegacyRequest(request, body))) {
       return modern.fetch(request, { parsedBody: body, authInfo: { token: 'verified-by-oddbout', clientId: 'oddbout', scopes: [], extra: { server } } });
     }
     const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     try {
       await server.connect(transport);
       return await transport.handleRequest(request, { parsedBody: body });
-    } finally { await server.close(); }
+    } finally {
+      await server.close();
+    }
   };
 }

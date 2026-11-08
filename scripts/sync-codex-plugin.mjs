@@ -18,14 +18,17 @@ if (!skill.includes('# ODDBOUT\n') || !workspace.includes('## Locate the kit and
 }
 const files = new Map([
   ['skills/create-fighter/SKILL.md', skill.replace('# ODDBOUT\n', '# ODDBOUT\n' + localScope)],
-  ['skills/create-fighter/references/workspace.md', workspace.replace(/## Locate the kit and preserve work[\s\S]*?(?=## Call the workspace tools)/, workspaceScope)],
+  [
+    'skills/create-fighter/references/workspace.md',
+    workspace.replace(/## Locate the kit and preserve work[\s\S]*?(?=## Call the workspace tools)/, workspaceScope),
+  ],
   ['skills/create-fighter/agents/openai.yaml', await readFile(path.join(source, 'skills/create-fighter/agents/openai.yaml'), 'utf8')],
   ['assets/icon.svg', await readFile(path.join(source, 'assets/icon.svg'), 'utf8')],
 ]);
 for (const [name, text] of files) {
   const destination = path.join(target, name);
   if (check) {
-    if (await readFile(destination, 'utf8') !== text) throw new Error(`Stale Codex plugin file: ${name}; run node scripts/sync-codex-plugin.mjs`);
+    if ((await readFile(destination, 'utf8')) !== text) throw new Error(`Stale Codex plugin file: ${name}; run node scripts/sync-codex-plugin.mjs`);
   } else {
     await mkdir(path.dirname(destination), { recursive: true });
     await writeFile(destination, text);

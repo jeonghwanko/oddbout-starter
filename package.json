@@ -44,7 +44,8 @@
     "validate": "node tools/ai-fighter/validate-package.mjs",
     "test": "node --test test/*.test.mjs host/*.test.mjs",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.vendored.json",
-    "lint": "biome lint --error-on-warnings .",
+    "lint": "biome lint --error-on-warnings . && prettier --check \"**/*.{mjs,js,cjs,ts}\"",
+    "format": "prettier --write \"**/*.{mjs,js,cjs,ts}\"",
     "test:fast": "node scripts/test-suite.mjs fast",
     "test:heavy": "node scripts/test-suite.mjs heavy",
     "spec:check": "node tools/ai-fighter/build-contract.mjs --check",
@@ -89,6 +90,7 @@
     "@types/qrcode": "1.5.6",
     "miniflare": "5.20261103.0-beta",
     "playwright": "1.64.1",
+    "prettier": "3.9.10",
     "typescript": "7.0.2",
     "wrangler": "4.157.0"
   }

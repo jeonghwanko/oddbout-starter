@@ -8,8 +8,14 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../', import.meta.url));
 // What coding agents load on their own (Codex and Grok: AGENTS.md; Claude Code: CLAUDE.md), the skill the plugin
 // hands them, and the pages that route them to the rest of docs/.
-const docs = ['AGENTS.md', 'CLAUDE.md', 'plugins/ai-fighter/skills/create-fighter/SKILL.md',
-  'plugins/ai-fighter/skills/create-fighter/references/workspace.md', 'docs/README.md', 'docs/START-HERE.md'];
+const docs = [
+  'AGENTS.md',
+  'CLAUDE.md',
+  'plugins/ai-fighter/skills/create-fighter/SKILL.md',
+  'plugins/ai-fighter/skills/create-fighter/references/workspace.md',
+  'docs/README.md',
+  'docs/START-HERE.md',
+];
 // The game repository's deploy scripts, which these docs name.
 const gameScripts = ['fighter:edge', 'fighter:mcp'];
 const repositoryPath = /^(?:api|contracts|deploy|docs|examples|host|mcp|packages|plugins|scripts|server|supabase|test|tools|vendor|web|website|worker)\//;
@@ -18,8 +24,16 @@ const repositoryPath = /^(?:api|contracts|deploy|docs|examples|host|mcp|packages
 const engineCheckedOut = existsSync(path.join(root, 'vendor/sprite-gen/SKILL.md'));
 
 /** GitHub's heading anchors: lower case, punctuation dropped, spaces as hyphens. @param {string} text */
-const anchors = text => new Set([...text.matchAll(/^#{1,6} +(.+)$/gm)]
-  .map(([, heading]) => heading.trim().toLowerCase().replace(/[^\p{L}\p{N}\- _]/gu, '').replace(/ /g, '-')));
+const anchors = text =>
+  new Set(
+    [...text.matchAll(/^#{1,6} +(.+)$/gm)].map(([, heading]) =>
+      heading
+        .trim()
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}\- _]/gu, '')
+        .replace(/ /g, '-'),
+    ),
+  );
 
 test('Claude Code imports the AGENTS.md that Codex and Grok load', async () => {
   assert.match(await readFile(path.join(root, 'CLAUDE.md'), 'utf8'), /^@AGENTS\.md$/m);
@@ -47,12 +61,14 @@ test('agent instructions name only files, anchors and npm scripts that exist', a
     for (const [, target, fragment] of text.matchAll(/\]\(([^)#\s]*)(?:#([^)\s]+))?\)/g)) {
       if (/^[a-z]+:/.test(target)) continue;
       const file = target ? path.join(root, path.dirname(doc), target) : path.join(root, doc);
-      if (!existsSync(file)) { missing.push(`${doc}: ${target}`); continue; }
+      if (!existsSync(file)) {
+        missing.push(`${doc}: ${target}`);
+        continue;
+      }
       if (fragment && file.endsWith('.md') && !anchors(await readFile(file, 'utf8')).has(decodeURIComponent(fragment)))
         missing.push(`${doc}: ${target}#${fragment}`);
     }
-    for (const [, name] of text.matchAll(/npm run ([\w:-]+)/g))
-      if (!scripts[name] && !gameScripts.includes(name)) missing.push(`${doc}: npm run ${name}`);
+    for (const [, name] of text.matchAll(/npm run ([\w:-]+)/g)) if (!scripts[name] && !gameScripts.includes(name)) missing.push(`${doc}: npm run ${name}`);
   }
   assert.deepEqual(missing, []);
 });

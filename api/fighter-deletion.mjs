@@ -10,13 +10,22 @@ import { cleanupPublicFiles } from './profile-sets.mjs';
 /** The client a site sign-in stands for in af_fighter_deletions, which has no OAuth client; the database reads this value as the site. */
 export const SITE_CLIENT = '00000000-0000-0000-0000-000000000000';
 const CORS = { methods: 'POST, OPTIONS', headers: 'Authorization, Content-Type' };
-const STATUS = Object.freeze({ 'authentication-required': 401, 'account-disabled': 403, 'not-found': 404, 'rate-limit': 429,
-  'invalid-deletion-confirmation': 409, 'deletion-confirmation-expired': 409, 'fighter-changed': 409, 'fighter-deleted': 409, 'fighter-promoted': 409,
-  'deletion-name-mismatch': 422 });
+const STATUS = Object.freeze({
+  'authentication-required': 401,
+  'account-disabled': 403,
+  'not-found': 404,
+  'rate-limit': 429,
+  'invalid-deletion-confirmation': 409,
+  'deletion-confirmation-expired': 409,
+  'fighter-changed': 409,
+  'fighter-deleted': 409,
+  'fighter-promoted': 409,
+  'deletion-name-mismatch': 422,
+});
 
 /** Is this path the deletion's? @param {string[]} parts */
 export function deletionRoute(parts) {
-  return parts[0] === 'fighters' && parts[2] === 'deletion' && (parts.length === 3 || parts.length === 4 && parts[3] === 'confirm');
+  return parts[0] === 'fighters' && parts[2] === 'deletion' && (parts.length === 3 || (parts.length === 4 && parts[3] === 'confirm'));
 }
 
 /**
@@ -39,10 +48,22 @@ export function createFighterDeletionHandler({ db }) {
       const identity = { p_owner: user.owner, p_fighter: parts[1].toLowerCase(), p_session: user.session, p_client: SITE_CLIENT };
       if (parts.length === 3) return json(await call('af_prepare_fighter_deletion', identity));
       let body;
-      try { body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, 2000))); }
-      catch (error) { if (error instanceof Problem) throw error; throw new Problem(400, 'invalid-body'); }
-      if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => !['confirmationToken', 'confirmName'].includes(key))
-        || !UUID.test(body.confirmationToken ?? '') || typeof body.confirmName !== 'string' || !body.confirmName || body.confirmName.length > 200)
+      try {
+        body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, 2000)));
+      } catch (error) {
+        if (error instanceof Problem) throw error;
+        throw new Problem(400, 'invalid-body');
+      }
+      if (
+        !body ||
+        typeof body !== 'object' ||
+        Array.isArray(body) ||
+        Object.keys(body).some(key => !['confirmationToken', 'confirmName'].includes(key)) ||
+        !UUID.test(body.confirmationToken ?? '') ||
+        typeof body.confirmName !== 'string' ||
+        !body.confirmName ||
+        body.confirmName.length > 200
+      )
         throw new Problem(422, 'invalid-confirmation');
       const deleted = await call('af_delete_owned_fighter', { ...identity, p_token: body.confirmationToken.toLowerCase(), p_confirm_name: body.confirmName });
       // His profile sets were withdrawn with him; their public copies go now (a retried deletion tries again).

@@ -27,21 +27,38 @@ import { profileLimits } from '../contracts/ai-fighter/profile-limits.mjs';
  */
 
 export const identifier = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/);
-const style = spec.combatStyle, range = (/** @type {{ min: number, max: number }} */ { min, max }) => z.number().int().min(min).max(max);
-const styleSchema = z.object({
-  mix: z.object(Object.fromEntries(style.actions.map(action => [action, range(style.mix)]))).strict()
-    .refine(mix => style.actions.some(action => mix[action] > 0) && mix.fast <= mix.slam + mix.combo, 'style-mix').optional(),
-  special: z.enum(style.actions).optional(), super: z.enum(style.supers).optional(), distance: range(style.grade).optional(),
-  shockwave: z.literal(true).optional(), summon: z.enum(style.summons).optional(),
-  temper: z.object(Object.fromEntries(style.temper.map(key => [key, range(style.grade).optional()]))).strict().optional(),
-  exchanges: z.object(Object.fromEntries(style.exchanges.keys.map(key => [key, range(style.exchanges).optional()]))).strict().optional(),
-}).strict();
+const style = spec.combatStyle,
+  range = (/** @type {{ min: number, max: number }} */ { min, max }) => z.number().int().min(min).max(max);
+const styleSchema = z
+  .object({
+    mix: z
+      .object(Object.fromEntries(style.actions.map(action => [action, range(style.mix)])))
+      .strict()
+      .refine(mix => style.actions.some(action => mix[action] > 0) && mix.fast <= mix.slam + mix.combo, 'style-mix')
+      .optional(),
+    special: z.enum(style.actions).optional(),
+    super: z.enum(style.supers).optional(),
+    distance: range(style.grade).optional(),
+    shockwave: z.literal(true).optional(),
+    summon: z.enum(style.summons).optional(),
+    temper: z
+      .object(Object.fromEntries(style.temper.map(key => [key, range(style.grade).optional()])))
+      .strict()
+      .optional(),
+    exchanges: z
+      .object(Object.fromEntries(style.exchanges.keys.map(key => [key, range(style.exchanges).optional()])))
+      .strict()
+      .optional(),
+  })
+  .strict();
 // The session keeps its newest history entries, so it stays under the 2 MB read limit; the full trail is in creation-history.jsonl.
 // Entries are about 0.5 KB (three real sessions, 2026-11-03), but changeSchema allows one of about 110 KB (64 long paths).
-const HISTORY_KEPT = 100, HISTORY_BYTES = 256 * 1024;
+const HISTORY_KEPT = 100,
+  HISTORY_BYTES = 256 * 1024;
 /** The newest entries: at most HISTORY_KEPT, and HISTORY_BYTES of JSON unless the newest alone is larger. @param {object[]} history */
 function recentHistory(history) {
-  let start = history.length, bytes = 0;
+  let start = history.length,
+    bytes = 0;
   while (start > 0 && history.length - start < HISTORY_KEPT) {
     bytes += Buffer.byteLength(JSON.stringify(history[start - 1]));
     if (bytes > HISTORY_BYTES && start < history.length) break;
@@ -54,27 +71,61 @@ const note = z.string().trim().min(1).max(4000);
 const files = z.array(z.string().min(1).max(512)).min(1).max(64);
 export const changeSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('version'), item: versionId, version: versionId, files, note }).strict(),
-  z.object({ type: z.literal('review'), item: versionId, version: versionId,
-    verdict: z.enum(['passed', 'failed', 'hypothetical']), evidence: files, note }).strict(),
+  z
+    .object({ type: z.literal('review'), item: versionId, version: versionId, verdict: z.enum(['passed', 'failed', 'hypothetical']), evidence: files, note })
+    .strict(),
   z.object({ type: z.literal('select'), item: versionId, version: versionId, feedback: note }).strict(),
   z.object({ type: z.literal('restore'), item: versionId, version: versionId, feedback: note }).strict(),
   z.object({ type: z.literal('revision'), item: versionId, feedback: note }).strict(),
   z.object({ type: z.literal('delegate'), groups: z.array(z.string()).max(5), feedback: note }).strict(),
   // Concept, names, bout lines, move names, duel grades and fighting style are optional; their limits are the contract's
   // (spec.json profileExtras / profileLines / combatStats / combatStyle). The style's extras budget also counts the skill clip: the package check has it.
-  z.object({ type: z.literal('profile'), name: z.string().min(1).max(profileLimits.name), description: z.string().max(profileLimits.description),
-    language: z.enum(spec.profileExtras.languages).optional(), concept: z.string().trim().min(1).max(spec.profileExtras.conceptMaxLength).optional(),
-    names: z.object(Object.fromEntries(spec.profileExtras.languages.map(language => [language, z.string().trim().min(1).max(spec.profileExtras.nameMaxLength).optional()])))
-      .strict().refine(value => Object.keys(value).length > 0).optional(),
-    lines: z.object(Object.fromEntries(spec.profileLines.keys.map(key => [key, z.string().trim().min(1).max(spec.profileLines.maxLength).optional()])))
-      .strict().refine(value => Object.keys(value).length > 0).optional(),
-    moves: z.object(Object.fromEntries(spec.profileExtras.namedMoves.map(move => [move, z.object({
-      name: z.string().trim().min(1).max(spec.profileExtras.moveNameMaxLength),
-      description: z.string().trim().min(1).max(spec.profileExtras.moveDescriptionMaxLength) }).strict()]))).strict().optional(),
-    stats: z.object(Object.fromEntries(spec.combatStats.keys.map(key => [key, z.number().int().min(spec.combatStats.min).max(spec.combatStats.max)]))).strict()
-      .refine(stats => Object.values(stats).reduce((sum, grade) => sum + grade, 0) === spec.combatStats.budget, 'stats-budget').optional(),
-    style: styleSchema.optional(),
-    feedback: note }).strict(),
+  z
+    .object({
+      type: z.literal('profile'),
+      name: z.string().min(1).max(profileLimits.name),
+      description: z.string().max(profileLimits.description),
+      language: z.enum(spec.profileExtras.languages).optional(),
+      concept: z.string().trim().min(1).max(spec.profileExtras.conceptMaxLength).optional(),
+      names: z
+        .object(
+          Object.fromEntries(
+            spec.profileExtras.languages.map(language => [language, z.string().trim().min(1).max(spec.profileExtras.nameMaxLength).optional()]),
+          ),
+        )
+        .strict()
+        .refine(value => Object.keys(value).length > 0)
+        .optional(),
+      lines: z
+        .object(Object.fromEntries(spec.profileLines.keys.map(key => [key, z.string().trim().min(1).max(spec.profileLines.maxLength).optional()])))
+        .strict()
+        .refine(value => Object.keys(value).length > 0)
+        .optional(),
+      moves: z
+        .object(
+          Object.fromEntries(
+            spec.profileExtras.namedMoves.map(move => [
+              move,
+              z
+                .object({
+                  name: z.string().trim().min(1).max(spec.profileExtras.moveNameMaxLength),
+                  description: z.string().trim().min(1).max(spec.profileExtras.moveDescriptionMaxLength),
+                })
+                .strict(),
+            ]),
+          ),
+        )
+        .strict()
+        .optional(),
+      stats: z
+        .object(Object.fromEntries(spec.combatStats.keys.map(key => [key, z.number().int().min(spec.combatStats.min).max(spec.combatStats.max)])))
+        .strict()
+        .refine(stats => Object.values(stats).reduce((sum, grade) => sum + grade, 0) === spec.combatStats.budget, 'stats-budget')
+        .optional(),
+      style: styleSchema.optional(),
+      feedback: note,
+    })
+    .strict(),
   z.object({ type: z.literal('package'), files, note }).strict(),
   z.object({ type: z.literal('package-review'), verdict: z.enum(['passed', 'failed']), evidence: files, feedback: note }).strict(),
   z.object({ type: z.literal('advance') }).strict(),
@@ -85,9 +136,13 @@ export const changeSchema = z.discriminatedUnion('type', [
 /** @type {(bytes: string | Uint8Array) => string} */
 export const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 /** @param {string} code @returns {never} */
-export function fail(code) { throw new Error(code); }
+export function fail(code) {
+  throw new Error(code);
+}
 /** @param {unknown} id */
-export function checkId(id) { return identifier.parse(id); }
+export function checkId(id) {
+  return identifier.parse(id);
+}
 const device = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\.|$)/i;
 
 /**
@@ -97,15 +152,21 @@ const device = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\.|$)/i;
 export async function localPath(root, relative, { createParents = false, directory = false } = {}) {
   const parts = relativeParts(relative, /[\\:\x00-\x1f]/);
   if (!parts || relative.length > 1024 || parts.some(p => /[. ]$/.test(p) || device.test(p))) fail('path-not-allowed');
-  return await pathWithoutLinks(await realpath(root), parts, { visit: async (target, info, i) => {
-    const needsDirectory = i < parts.length - 1 || directory;
-    if (!info && createParents && needsDirectory) {
-      await mkdir(target).catch(e => { if (e.code !== 'EEXIST') throw e; });
-      info = await lstat(target);
-    }
-    if (info && needsDirectory && !info.isDirectory()) fail('path-not-allowed');
-    return info;
-  } }) ?? fail('path-not-allowed');
+  return (
+    (await pathWithoutLinks(await realpath(root), parts, {
+      visit: async (target, info, i) => {
+        const needsDirectory = i < parts.length - 1 || directory;
+        if (!info && createParents && needsDirectory) {
+          await mkdir(target).catch(e => {
+            if (e.code !== 'EEXIST') throw e;
+          });
+          info = await lstat(target);
+        }
+        if (info && needsDirectory && !info.isDirectory()) fail('path-not-allowed');
+        return info;
+      },
+    })) ?? fail('path-not-allowed')
+  );
 }
 
 /** @param {string} file @returns {Promise<any>} parsed JSON: callers check its fields */
@@ -114,7 +175,9 @@ export async function readJson(file) {
   try {
     if ((await handle.stat()).size > 2 * 1024 * 1024) fail('record-too-large');
     return JSON.parse(await handle.readFile('utf8'));
-  } finally { await handle.close(); }
+  } finally {
+    await handle.close();
+  }
 }
 /** @param {string} file @param {unknown} data */
 export async function atomicJson(file, data) {
@@ -122,15 +185,25 @@ export async function atomicJson(file, data) {
   const bytes = JSON.stringify(data, null, 2) + '\n';
   if (Buffer.byteLength(bytes) > 2 * 1024 * 1024) fail('record-too-large');
   const handle = await open(temp, 'wx', 0o600);
-  try { await handle.writeFile(bytes); await handle.sync(); } finally { await handle.close(); }
+  try {
+    await handle.writeFile(bytes);
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
   // Windows virus scanners may briefly hold a just-written JSON file without delete sharing: retry the same atomic
   // rename, never unlink the valid prior snapshot as a workaround.
-  try { await renameRetrying(temp, file); } finally { await rm(temp, { force: true }); }
+  try {
+    await renameRetrying(temp, file);
+  } finally {
+    await rm(temp, { force: true });
+  }
 }
 
 // Inspecting a session re-checks every version, evidence and output file. A file whose size, mtime, ctime and inode are
 // all unchanged has the same bytes, so its hash is reused; rewriting a file changes its ctime even if mtime is restored.
-const HASH_CACHE_LIMIT = 5000, hashCache = /** @type {Map<string, { stamp: string, sha256: string }>} */ (new Map());
+const HASH_CACHE_LIMIT = 5000,
+  hashCache = /** @type {Map<string, { stamp: string, sha256: string }>} */ (new Map());
 /** @param {string} root @param {string} relative @returns {Promise<FileRecord>} */
 export async function fingerprint(root, relative) {
   const file = await localPath(root, relative);
@@ -138,19 +211,26 @@ export async function fingerprint(root, relative) {
   try {
     const info = await handle.stat();
     if (!info.isFile() || info.size > 256 * 1024 * 1024) fail('asset-not-regular-or-too-large');
-    const stamp = `${info.size}:${info.mtimeMs}:${info.ctimeMs}:${info.ino}`, cached = hashCache.get(file);
+    const stamp = `${info.size}:${info.mtimeMs}:${info.ctimeMs}:${info.ino}`,
+      cached = hashCache.get(file);
     if (cached?.stamp === stamp) return { path: relative, bytes: info.size, sha256: cached.sha256 };
     const sha256 = await fileSha256(handle);
-    hashCache.delete(file); hashCache.set(file, { stamp, sha256 });
+    hashCache.delete(file);
+    hashCache.set(file, { stamp, sha256 });
     if (hashCache.size > HASH_CACHE_LIMIT) hashCache.delete(/** @type {string} */ (hashCache.keys().next().value)); // not empty
     return { path: relative, bytes: info.size, sha256 };
-  } finally { await handle.close(); }
+  } finally {
+    await handle.close();
+  }
 }
 /** @param {string} root @param {{ path: string, sha256: string }[]} [records] */
 export async function unchanged(root, records) {
   for (const record of records ?? []) {
-    try { if ((await fingerprint(root, record.path)).sha256 !== record.sha256) return false; }
-    catch { return false; }
+    try {
+      if ((await fingerprint(root, record.path)).sha256 !== record.sha256) return false;
+    } catch {
+      return false;
+    }
   }
   return true;
 }
@@ -165,7 +245,13 @@ export function createCreationStore(root, { contextRequest, validatePackage = ma
   /** Fetch the context before taking a session lock: its fetch takes up to 15 s, longer than other callers wait for the lock.
    * The returned function rethrows a failed fetch where the context is needed, so lock-guarded checks still come first.
    * @returns {Promise<() => CreationContext>} */
-  const contextBeforeLock = () => latestContext().then(context => () => context, error => () => { throw error; });
+  const contextBeforeLock = () =>
+    latestContext().then(
+      context => () => context,
+      error => () => {
+        throw error;
+      },
+    );
   // Parallel tool calls on one session queue here; a lock left by a killed process is reclaimed once stale.
   /** @template T @param {string} id @param {() => Promise<T>} action @param {{ waitMs?: number }} [options] @returns {Promise<T>} */
   async function lock(id, action, { waitMs } = {}) {
@@ -190,9 +276,14 @@ export function createCreationStore(root, { contextRequest, validatePackage = ma
   }
   /** @param {Session} state @param {string} item */
   function basisFor(state, item) {
-    const groups = state.context.workflow.groups, index = groups.findIndex(g => g.id === itemGroup(state, item).id);
-    return Object.fromEntries(groups.slice(0, index).flatMap(g => [...g.motions, ...(g.auxiliaries ?? [])])
-      .map(key => [key, state.items[key]?.version ?? null]));
+    const groups = state.context.workflow.groups,
+      index = groups.findIndex(g => g.id === itemGroup(state, item).id);
+    return Object.fromEntries(
+      groups
+        .slice(0, index)
+        .flatMap(g => [...g.motions, ...(g.auxiliaries ?? [])])
+        .map(key => [key, state.items[key]?.version ?? null]),
+    );
   }
   /** @param {Session} state */
   async function effective(state) {
@@ -206,53 +297,101 @@ export function createCreationStore(root, { contextRequest, validatePackage = ma
       const version = item.versions[item.version];
       const currentBasis = basisFor(state, id);
       // A stale review of an earlier item is that item's to redo; the items made on its unchanged files stand.
-      const basisValid = Object.entries(version.basis).every(([key, value]) => currentBasis[key] === value &&
-        !problems.some(p => p.item === key && p.reason !== 'review-stale'));
-      const valid = basisValid && await unchanged(root, version.files);
+      const basisValid = Object.entries(version.basis).every(
+        ([key, value]) => currentBasis[key] === value && !problems.some(p => p.item === key && p.reason !== 'review-stale'),
+      );
+      const valid = basisValid && (await unchanged(root, version.files));
       item.filesValid = valid;
-      const reviewed = version.review?.contextRevision === state.contextRevision && await unchanged(root, version.review?.evidence);
-      item.review = valid && reviewed ? version.review?.verdict ?? 'unverified' : 'unverified';
-      if (!valid) { item.selectedVersion = null; problems.push({ item: id, reason: basisValid ? 'files-changed-or-missing' : 'basis-changed' }); }
+      const reviewed = version.review?.contextRevision === state.contextRevision && (await unchanged(root, version.review?.evidence));
+      item.review = valid && reviewed ? (version.review?.verdict ?? 'unverified') : 'unverified';
+      if (!valid) {
+        item.selectedVersion = null;
+        problems.push({ item: id, reason: basisValid ? 'files-changed-or-missing' : 'basis-changed' });
+      }
       if (version.review && !reviewed) problems.push({ item: id, reason: 'review-stale' });
     }
     view.profile = { ...state.profile, selected: Boolean(state.profile?.selected) };
-    view.packageFilesValid = Boolean(state.package?.fileValidation && state.package.contextRevision === state.contextRevision &&
-      state.package.basisHash === packageBasis(state) && await unchanged(root, state.package.files));
-    view.packageReview = state.package?.review?.verdict === 'passed' &&
+    view.packageFilesValid = Boolean(
+      state.package?.fileValidation &&
       state.package.contextRevision === state.contextRevision &&
       state.package.basisHash === packageBasis(state) &&
-      await unchanged(root, state.package.files) && await unchanged(root, state.package.review.evidence) ? 'passed' : 'unverified';
+      (await unchanged(root, state.package.files)),
+    );
+    view.packageReview =
+      state.package?.review?.verdict === 'passed' &&
+      state.package.contextRevision === state.contextRevision &&
+      state.package.basisHash === packageBasis(state) &&
+      (await unchanged(root, state.package.files)) &&
+      (await unchanged(root, state.package.review.evidence))
+        ? 'passed'
+        : 'unverified';
     return { view, problems };
   }
   /** @type {(state: Session) => string} */
-  const packageBasis = state => digest(JSON.stringify({ profile: state.profile,
-    items: Object.fromEntries(Object.entries(state.items).map(([k, v]) => [k, v.version])) }));
+  const packageBasis = state =>
+    digest(JSON.stringify({ profile: state.profile, items: Object.fromEntries(Object.entries(state.items).map(([k, v]) => [k, v.version])) }));
   /** @param {string} id */
   async function inspect(id) {
-    const state = await read(id), { view, problems } = await effective(state);
+    const state = await read(id),
+      { view, problems } = await effective(state);
     let decision, contextError;
-    try { decision = reviewCreationProgress(await latestContext(), view); }
-    catch (error) { contextError = errorCode(error, 'creation-context-unavailable', { prefix: 'creation-context-' }); }
-    return { state, effectiveItems: Object.fromEntries(Object.entries(view.items).map(([k, v]) => [k,
-      { version: v.version, selectedVersion: v.selectedVersion, review: v.review, filesValid: v.filesValid }])), problems,
-      decision: decision ?? { canAdvance: false, blockers: [contextError], nextGroup: null, registrationAuthorized: false } };
+    try {
+      decision = reviewCreationProgress(await latestContext(), view);
+    } catch (error) {
+      contextError = errorCode(error, 'creation-context-unavailable', { prefix: 'creation-context-' });
+    }
+    return {
+      state,
+      effectiveItems: Object.fromEntries(
+        Object.entries(view.items).map(([k, v]) => [k, { version: v.version, selectedVersion: v.selectedVersion, review: v.review, filesValid: v.filesValid }]),
+      ),
+      problems,
+      decision: decision ?? { canAdvance: false, blockers: [contextError], nextGroup: null, registrationAuthorized: false },
+    };
   }
   /** @param {{ sessionId: string, brief: string, mode?: 'creation' | 'dialogue-only' }} options */
   async function create({ sessionId, brief, mode = 'creation' }) {
-    checkId(sessionId); note.parse(brief); z.enum(['creation', 'dialogue-only']).parse(mode);
+    checkId(sessionId);
+    note.parse(brief);
+    z.enum(['creation', 'dialogue-only']).parse(mode);
     const context = await latestContext();
     await localPath(root, prefix(sessionId), { createParents: true, directory: true });
     return lock(sessionId, async () => {
       const filename = await fileFor(sessionId, 'creation-session.json');
-      if (await lstat(filename).then(() => true, e => { if (e.code !== 'ENOENT') throw e; return false; })) fail('session-exists');
+      if (
+        await lstat(filename).then(
+          () => true,
+          e => {
+            if (e.code !== 'ENOENT') throw e;
+            return false;
+          },
+        )
+      )
+        fail('session-exists');
       /** @type {Session} */
-      const state = { storeVersion: 1, sessionId, revision: 1, brief, mode, contextRevision: context.revision, context,
-        groupId: 'appearance', items: {}, pendingEdits: [], delegatedGroups: [], profile: {}, history: [] };
-      await save(sessionId, state); return state;
+      const state = {
+        storeVersion: 1,
+        sessionId,
+        revision: 1,
+        brief,
+        mode,
+        contextRevision: context.revision,
+        context,
+        groupId: 'appearance',
+        items: {},
+        pendingEdits: [],
+        delegatedGroups: [],
+        profile: {},
+        history: [],
+      };
+      await save(sessionId, state);
+      return state;
     });
   }
   /** @param {string[]} paths */
-  async function snapshots(paths) { return Promise.all([...new Set(paths)].map(p => fingerprint(root, p))); }
+  async function snapshots(paths) {
+    return Promise.all([...new Set(paths)].map(p => fingerprint(root, p)));
+  }
   /** @param {Session} state @param {string} item @param {string} version */
   function current(state, item, version) {
     itemGroup(state, item);
@@ -261,7 +400,8 @@ export function createCreationStore(root, { contextRequest, validatePackage = ma
   }
   /** @param {string} id @param {number} revision @param {unknown} input */
   async function change(id, revision, input) {
-    const event = changeSchema.parse(input), latest = await contextBeforeLock();
+    const event = changeSchema.parse(input),
+      latest = await contextBeforeLock();
     return lock(id, async () => {
       const state = await read(id);
       if (state.revision !== revision) fail('session-revision-conflict');
@@ -271,7 +411,8 @@ export function createCreationStore(root, { contextRequest, validatePackage = ma
       /** @type {{ [T in ChangeEvent['type']]: (event: Extract<ChangeEvent, { type: T }>) => Promise<void> }} */
       const apply = {
         version: async event => {
-          const group = itemGroup(state, event.item), item = state.items[event.item] ?? /** @type {SessionItem} */ ({ selectedVersion: null, versions: {} }); // version set below
+          const group = itemGroup(state, event.item),
+            item = state.items[event.item] ?? /** @type {SessionItem} */ ({ selectedVersion: null, versions: {} }); // version set below
           if (Object.hasOwn(item.versions, event.version)) fail('version-already-exists');
           const groupIndex = context.workflow.groups.findIndex(g => g.id === group.id);
           const { view } = await effective(state);
@@ -279,7 +420,8 @@ export function createCreationStore(root, { contextRequest, validatePackage = ma
             const decision = reviewCreationProgress(context, { ...view, groupId: context.workflow.groups[groupIndex - 1].id });
             if (!decision.canAdvance) fail('previous-group-pending');
           }
-          const source = await snapshots(event.files), recorded = [];
+          const source = await snapshots(event.files),
+            recorded = [];
           // This version is not recorded, so a folder for it is what an interrupted copy left: start it over. A failed
           // copy removes its partial files too, so the same version can be retried instead of failing on EEXIST.
           const versionFolder = `${prefix(id)}/versions/${event.item}/${event.version}`;
@@ -295,10 +437,13 @@ export function createCreationStore(root, { contextRequest, validatePackage = ma
               if (copied.sha256 !== file.sha256) fail('source-changed-during-snapshot');
               recorded.push({ ...copied, sourcePath: file.path });
             }
-          } catch (error) { await clear(); throw error; }
-          item.versions[event.version] = { files: recorded, basis: basisFor(state, event.item), note: event.note,
-            createdAt: new Date().toISOString() };
-          item.version = event.version; state.items[event.item] = item;
+          } catch (error) {
+            await clear();
+            throw error;
+          }
+          item.versions[event.version] = { files: recorded, basis: basisFor(state, event.item), note: event.note, createdAt: new Date().toISOString() };
+          item.version = event.version;
+          state.items[event.item] = item;
           state.pendingEdits = state.pendingEdits.filter(key => key !== event.item);
           if (groupIndex < context.workflow.groups.findIndex(g => g.id === state.groupId)) state.groupId = group.id;
         },
@@ -307,21 +452,29 @@ export function createCreationStore(root, { contextRequest, validatePackage = ma
           if ((state.mode === 'dialogue-only') !== (event.verdict === 'hypothetical')) {
             if (state.mode === 'dialogue-only' || event.verdict === 'hypothetical') fail('review-mode-mismatch');
           }
-          if (!await unchanged(root, version.files)) fail('version-files-changed');
-          version.review = { verdict: event.verdict, evidence: await snapshots(event.evidence), note: event.note,
-            contextRevision: state.contextRevision, source: 'agent-observation' };
+          if (!(await unchanged(root, version.files))) fail('version-files-changed');
+          version.review = {
+            verdict: event.verdict,
+            evidence: await snapshots(event.evidence),
+            note: event.note,
+            contextRevision: state.contextRevision,
+            source: 'agent-observation',
+          };
         },
         select: async event => {
           const version = current(state, event.item, event.version);
-          if (!await unchanged(root, version.files)) fail('version-files-changed');
+          if (!(await unchanged(root, version.files))) fail('version-files-changed');
           state.items[event.item].selectedVersion = event.version;
           version.feedback = event.feedback;
         },
         restore: async event => {
-          const group = itemGroup(state, event.item), item = state.items[event.item];
+          const group = itemGroup(state, event.item),
+            item = state.items[event.item];
           const version = item?.versions[event.version];
-          if (!version || !await unchanged(root, version.files)) fail('stored-version-unavailable');
-          item.version = event.version; item.selectedVersion = event.version; version.feedback = event.feedback;
+          if (!version || !(await unchanged(root, version.files))) fail('stored-version-unavailable');
+          item.version = event.version;
+          item.selectedVersion = event.version;
+          version.feedback = event.feedback;
           state.pendingEdits = state.pendingEdits.filter(key => key !== event.item);
           state.groupId = group.id;
         },
@@ -348,12 +501,18 @@ export function createCreationStore(root, { contextRequest, validatePackage = ma
           const manifest = await readJson(await localPath(root, manifests[0])); // its file validation passed above
           // The package carries exactly the recorded profile: an extra absent from one side is a mismatch too.
           /** @type {(value: unknown) => string} */
-          const canonical = value => JSON.stringify(value ?? null, (_, v) => v && typeof v === 'object' && !Array.isArray(v)
-            ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : v);
+          const canonical = value =>
+            JSON.stringify(value ?? null, (_, v) =>
+              v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : v,
+            );
           /** @type {(a: unknown, b: unknown) => boolean} */
           const same = (a, b) => canonical(a) === canonical(b);
-          if (['name', 'description', 'language', 'concept', 'moves', 'names', 'lines'].some(key => !same(manifest.profile[key], state.profile[key]))
-            || !same(manifest.combat.stats, state.profile.stats) || !same(manifest.combat.style, state.profile.style)) fail('package-profile-mismatch');
+          if (
+            ['name', 'description', 'language', 'concept', 'moves', 'names', 'lines'].some(key => !same(manifest.profile[key], state.profile[key])) ||
+            !same(manifest.combat.stats, state.profile.stats) ||
+            !same(manifest.combat.style, state.profile.style)
+          )
+            fail('package-profile-mismatch');
           // Optional clips never block a group, so the package is where they are held: each one it carries is a tracked, accepted item.
           const { view } = await effective(state);
           for (const id of Object.keys(spec.optionalClips).filter(id => Object.hasOwn(manifest.clips, id))) {
@@ -362,22 +521,27 @@ export function createCreationStore(root, { contextRequest, validatePackage = ma
           }
           const base = path.posix.dirname(manifests[0]);
           const allFiles = [...event.files, ...manifest.assets.map(asset => `${base}/${asset.path}`)];
-          state.package = { files: await snapshots(allFiles), basisHash: packageBasis(state), contextRevision: state.contextRevision,
-            fileValidation: { stage: validation.stage, pending: validation.pending } };
+          state.package = {
+            files: await snapshots(allFiles),
+            basisHash: packageBasis(state),
+            contextRevision: state.contextRevision,
+            fileValidation: { stage: validation.stage, pending: validation.pending },
+          };
         },
         'package-review': async event => {
-          if (!state.package || !await unchanged(root, state.package.files) || state.package.basisHash !== packageBasis(state)) fail('package-stale');
-          state.package.review = { verdict: event.verdict, evidence: await snapshots(event.evidence), feedback: event.feedback,
-            source: 'agent-observation' };
+          if (!state.package || !(await unchanged(root, state.package.files)) || state.package.basisHash !== packageBasis(state)) fail('package-stale');
+          state.package.review = { verdict: event.verdict, evidence: await snapshots(event.evidence), feedback: event.feedback, source: 'agent-observation' };
         },
         advance: async () => {
-          const { view } = await effective(state), decision = reviewCreationProgress(context, view);
+          const { view } = await effective(state),
+            decision = reviewCreationProgress(context, view);
           if (!decision.canAdvance) fail('group-review-pending');
           if (!decision.nextGroup) fail('already-final-group');
           state.groupId = decision.nextGroup;
         },
         'refresh-context': async () => {
-          state.context = context; state.contextRevision = context.revision;
+          state.context = context;
+          state.contextRevision = context.revision;
         },
       };
       await /** @type {(event: ChangeEvent) => Promise<void>} */ (apply[event.type])(event);
@@ -386,21 +550,30 @@ export function createCreationStore(root, { contextRequest, validatePackage = ma
       await save(id, state);
       // The full trail is append-only beside the session and holds saved changes only. Once saved the change stands,
       // so a failed append says that instead of a generic failure.
-      await appendFile(await fileFor(id, 'creation-history.jsonl'), JSON.stringify(entry) + '\n', { mode: 0o600 })
-        .catch(() => fail('change-saved-history-append-failed'));
+      await appendFile(await fileFor(id, 'creation-history.jsonl'), JSON.stringify(entry) + '\n', { mode: 0o600 }).catch(() =>
+        fail('change-saved-history-append-failed'),
+      );
       return state;
     });
   }
   async function list() {
     const dir = await localPath(root, 'output');
-    const entries = await readdir(dir, { withFileTypes: true }).catch(e => { if (e.code === 'ENOENT') return []; throw e; });
+    const entries = await readdir(dir, { withFileTypes: true }).catch(e => {
+      if (e.code === 'ENOENT') return [];
+      throw e;
+    });
     const sessions = [];
     for (const entry of entries) {
       if (!entry.isDirectory() || !entry.name.endsWith('-work')) continue;
       const id = entry.name.slice(0, -5);
       if (!identifier.safeParse(id).success) continue;
-      try { const s = await read(id); sessions.push({ sessionId: id, revision: s.revision, groupId: s.groupId, updatedAt: /** @type {string} */ (s.updatedAt), brief: s.brief }); } // save() sets it
-      catch { /* Other legacy work directories are not sessions. */ }
+      try {
+        const s = await read(id);
+        sessions.push({ sessionId: id, revision: s.revision, groupId: s.groupId, updatedAt: /** @type {string} */ (s.updatedAt), brief: s.brief });
+      } catch {
+        // save() sets it
+        /* Other legacy work directories are not sessions. */
+      }
     }
     return sessions.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }

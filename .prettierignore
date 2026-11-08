@@ -1,0 +1,7 @@
+# Prettier formats this repository's JavaScript and TypeScript only (npm run format): JSON (hashes and pins among it), CSS, HTML,
+# Markdown and YAML stay as written. vendor/ is the pinned engine; contracts/ and server/ are the game's byte copies; the dated
+# review copies of the plugin sites are kept as they were reviewed.
+vendor/
+contracts/
+server/
+website/**/review-*/

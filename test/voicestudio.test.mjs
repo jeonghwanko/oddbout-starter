@@ -8,10 +8,18 @@ import { generate, inspectWav, localBaseUrl, reuse, SOURCE_REVISION, status } fr
 function wav() {
   const dataBytes = 8820;
   const buffer = Buffer.alloc(44 + dataBytes);
-  buffer.write('RIFF', 0); buffer.writeUInt32LE(buffer.length - 8, 4); buffer.write('WAVEfmt ', 8);
-  buffer.writeUInt32LE(16, 16); buffer.writeUInt16LE(1, 20); buffer.writeUInt16LE(1, 22);
-  buffer.writeUInt32LE(44100, 24); buffer.writeUInt32LE(88200, 28);
-  buffer.writeUInt16LE(2, 32); buffer.writeUInt16LE(16, 34); buffer.write('data', 36); buffer.writeUInt32LE(dataBytes, 40);
+  buffer.write('RIFF', 0);
+  buffer.writeUInt32LE(buffer.length - 8, 4);
+  buffer.write('WAVEfmt ', 8);
+  buffer.writeUInt32LE(16, 16);
+  buffer.writeUInt16LE(1, 20);
+  buffer.writeUInt16LE(1, 22);
+  buffer.writeUInt32LE(44100, 24);
+  buffer.writeUInt32LE(88200, 28);
+  buffer.writeUInt16LE(2, 32);
+  buffer.writeUInt16LE(16, 34);
+  buffer.write('data', 36);
+  buffer.writeUInt32LE(dataBytes, 40);
   for (let offset = 44; offset < buffer.length; offset += 2) buffer.writeInt16LE(Math.round(2000 * Math.sin(offset / 7)), offset);
   return buffer;
 }
@@ -42,8 +50,14 @@ function mockFetch({ available = true, revision = SOURCE_REVISION, speech } = {}
 test('loopback policy blocks remote origins, credentials, paths and query strings', () => {
   assert.equal(localBaseUrl('http://localhost:3900'), 'http://127.0.0.1:3900');
   assert.equal(localBaseUrl('http://[::1]:3900'), 'http://[::1]:3900');
-  for (const value of ['https://example.com', 'http://127.0.0.1.evil.test', 'ftp://127.0.0.1',
-    'http://name:secret@127.0.0.1', 'http://127.0.0.1/private', 'http://127.0.0.1?token=x']) {
+  for (const value of [
+    'https://example.com',
+    'http://127.0.0.1.evil.test',
+    'ftp://127.0.0.1',
+    'http://name:secret@127.0.0.1',
+    'http://127.0.0.1/private',
+    'http://127.0.0.1?token=x',
+  ]) {
     assert.throws(() => localBaseUrl(value), /loopback origin/);
   }
 });
@@ -61,9 +75,11 @@ test('WAV inspection measures actual duration and rejects JSON, truncation, sile
   assert.equal(inspectWav(wav()).duration_seconds, 0.1);
   assert.throws(() => inspectWav(Buffer.from('{"error":"not audio"}')), /RIFF WAV/);
   assert.throws(() => inspectWav(wav().subarray(0, 100)), /RIFF WAV/);
-  const silence = wav(); silence.fill(0, 44);
+  const silence = wav();
+  silence.fill(0, 44);
   assert.throws(() => inspectWav(silence), /silent/);
-  const clipped = wav(); clipped.writeInt16LE(32767, 44);
+  const clipped = wav();
+  clipped.writeInt16LE(32767, 44);
   assert.throws(() => inspectWav(clipped), /clipped/);
 });
 
@@ -92,7 +108,8 @@ test('reuse refuses mismatched provenance and occupied outputs', async t => {
   const input = path.join(dir, 'original.wav');
   const output = path.join(dir, 'copy.wav');
   const sourceReport = path.join(dir, 'wrong.json');
-  await writeFile(input, wav()); await writeFile(sourceReport, '{"sha256":"wrong"}');
+  await writeFile(input, wav());
+  await writeFile(sourceReport, '{"sha256":"wrong"}');
   await assert.rejects(reuse({ input, output, sourceReport, ...mockFetch() }), /does not match/);
   await assert.rejects(access(output));
   await writeFile(output, 'keep this');
@@ -103,12 +120,16 @@ test('reuse refuses mismatched provenance and occupied outputs', async t => {
 test('generate calls the official route once and saves only validated WAV', async t => {
   const dir = await temporary(t);
   const output = path.join(dir, 'new.wav');
-  const mock = mockFetch({ speech: options => {
-    const body = JSON.parse(options.body);
-    assert.equal(body.model, 'supertonic3'); assert.equal(body.voice, 'M1');
-    assert.equal(body.language, 'ko'); assert.equal(body.speed, 0.85);
-    return new Response(wav(), { headers: { 'content-type': 'audio/wav' } });
-  } });
+  const mock = mockFetch({
+    speech: options => {
+      const body = JSON.parse(options.body);
+      assert.equal(body.model, 'supertonic3');
+      assert.equal(body.voice, 'M1');
+      assert.equal(body.language, 'ko');
+      assert.equal(body.speed, 0.85);
+      return new Response(wav(), { headers: { 'content-type': 'audio/wav' } });
+    },
+  });
   const result = await generate({ output, ...mock });
   assert.equal(result.generation_performed, true);
   assert.equal(mock.calls.filter(call => call.options.method === 'POST').length, 1);

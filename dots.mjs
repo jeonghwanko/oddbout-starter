@@ -11,18 +11,24 @@ const exec = promisify(execFile);
 const repository = 'https://github.com/jeonghwanko/oddbout-starter.git';
 async function plainDirectory(value) {
   if (!path.isAbsolute(value)) throw Error('absolute-path-required');
-  const target = path.resolve(value), parsed = path.parse(target);
+  const target = path.resolve(value),
+    parsed = path.parse(target);
   let current = parsed.root;
   for (const part of target.slice(parsed.root.length).split(path.sep)) {
     if (/^(?:\.codex|\.grok|\.ssh|\.aws|sessions)$/i.test(part)) throw Error('private-location-not-allowed');
     current = path.join(current, part);
-    const info = await lstat(current).catch(e => { if (e.code !== 'ENOENT') throw e; return null; });
+    const info = await lstat(current).catch(e => {
+      if (e.code !== 'ENOENT') throw e;
+      return null;
+    });
     if (info?.isSymbolicLink()) throw Error('symlink-not-allowed');
   }
   return target;
 }
-export async function launch(argv, { run = exec, loadRuntime = url => import(url),
-  releasePath = new URL('./deploy/dots-release.json', import.meta.url) } = {}) {
+export async function launch(
+  argv,
+  { run = exec, loadRuntime = url => import(url), releasePath = new URL('./deploy/dots-release.json', import.meta.url) } = {},
+) {
   const options = {};
   for (let i = 0; i < argv.length; i++) {
     const key = { '--workspace': 'workspace', '--runtime-home': 'runtimeHome', '--install': 'install' }[argv[i]];
@@ -32,20 +38,32 @@ export async function launch(argv, { run = exec, loadRuntime = url => import(url
   }
   const workspace = await plainDirectory(options.workspace ?? process.env.AI_FIGHTER_ROOT ?? path.join(homedir(), '.oddbout', 'workspace'));
   let binding;
-  try { binding = JSON.parse(await readFile(await plainDirectory(path.join(workspace, 'output/dots-workspace.json')), 'utf8')); }
-  catch (e) { if (e.code !== 'ENOENT') throw e; }
-  if (binding && (binding.schemaVersion !== 1 || binding.provider !== 'grok' || !/^[a-f0-9]{40}$/.test(binding.commit ?? ''))) throw Error('invalid-workspace-binding');
+  try {
+    binding = JSON.parse(await readFile(await plainDirectory(path.join(workspace, 'output/dots-workspace.json')), 'utf8'));
+  } catch (e) {
+    if (e.code !== 'ENOENT') throw e;
+  }
+  if (binding && (binding.schemaVersion !== 1 || binding.provider !== 'grok' || !/^[a-f0-9]{40}$/.test(binding.commit ?? '')))
+    throw Error('invalid-workspace-binding');
   const release = JSON.parse(await readFile(releasePath, 'utf8'));
-  if (release.schemaVersion !== 1 || release.repository !== repository || !/^[a-f0-9]{40}$/.test(release.commit) || release.provider !== 'grok') throw Error('invalid-release');
+  if (release.schemaVersion !== 1 || release.repository !== repository || !/^[a-f0-9]{40}$/.test(release.commit) || release.provider !== 'grok')
+    throw Error('invalid-release');
   const runtimeHome = await plainDirectory(options.runtimeHome ?? process.env.ODDBOUT_RUNTIME_HOME ?? path.join(homedir(), '.oddbout', 'runtimes'));
   const runtime = await plainDirectory(binding?.runtime ?? path.join(runtimeHome, release.commit));
   const expected = binding?.commit ?? release.commit;
   if (!/^[a-f0-9]{40}$/.test(expected)) throw Error('pinned-source-commit-required');
-  const exists = await lstat(runtime).then(() => true, e => { if (e.code !== 'ENOENT') throw e; return false; });
+  const exists = await lstat(runtime).then(
+    () => true,
+    e => {
+      if (e.code !== 'ENOENT') throw e;
+      return false;
+    },
+  );
   if (!exists) {
     if (binding) throw Error('bound-runtime-missing-restore-original-release');
     if (!options.install) return { ok: false, action: 'install-reviewed-release', version: release.version, commit: release.commit };
-    await mkdir(runtimeHome, { recursive: true }); await mkdir(runtime);
+    await mkdir(runtimeHome, { recursive: true });
+    await mkdir(runtime);
     // A failed clone remains present for inspection; never delete or blindly retry an unknown install.
     const cfg = { cwd: runtime, windowsHide: true, timeout: 600000, maxBuffer: 1024 * 1024 };
     await run('git', ['init', '--quiet'], cfg);
@@ -73,10 +91,14 @@ export async function writeCliJson(fd, value, { write = writeSync, wait = () => 
   for (let offset = 0; offset < bytes.length;) {
     if (performance.now() >= deadline) throw Error('front-door-output-timeout');
     let count;
-    try { count = write(fd, bytes, offset, bytes.length - offset); }
-    catch (error) {
+    try {
+      count = write(fd, bytes, offset, bytes.length - offset);
+    } catch (error) {
       if (error.code === 'EINTR') continue;
-      if (error.code === 'EAGAIN' || error.code === 'EWOULDBLOCK') { await wait(); continue; }
+      if (error.code === 'EAGAIN' || error.code === 'EWOULDBLOCK') {
+        await wait();
+        continue;
+      }
       throw error;
     }
     if (!Number.isInteger(count) || count <= 0 || count > bytes.length - offset) throw Error('front-door-output-write-failed');
@@ -88,10 +110,12 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
     const result = await launch(process.argv.slice(2));
     await writeCliJson(1, result);
     if (result.ok === false || result.nextAction?.action === 'repair-installation') process.exitCode = 1;
-  }
-  catch (e) {
+  } catch (e) {
     process.exitCode = 1;
-    try { await writeCliJson(2, { ok: false, code: /^[a-z][a-z-]+$/.test(e.message) ? e.message : 'front-door-failed-inspect-existing-runtime' }); }
-    catch { /* A broken stderr cannot deliver an error; preserve failure exit. */ }
+    try {
+      await writeCliJson(2, { ok: false, code: /^[a-z][a-z-]+$/.test(e.message) ? e.message : 'front-door-failed-inspect-existing-runtime' });
+    } catch {
+      /* A broken stderr cannot deliver an error; preserve failure exit. */
+    }
   }
 }

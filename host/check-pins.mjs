@@ -19,9 +19,19 @@ export const PLATFORMS = Object.freeze(['win32-x64', 'win32-arm64', 'darwin-arm6
 export function pinProblems(pins, { here = HERE } = {}) {
   const problems = [];
   const kit = pins?.kit ?? {};
-  if (!isPin(kit) || !/^\d+\.\d+\.\d+$/.test(kit.version) || !kit.url.endsWith(`/oddbout-${kit.version}.zip`) || kit.runtime !== 'runtime/'
-    || !/^[a-f0-9]{64}$/.test(kit.runtimeManifestSha256 ?? '') || !/^[a-f0-9]{40}$/.test(kit.spriteGenCommit ?? '')) problems.push('kit: a whole creator-kit release pin');
-  for (const [name, version] of /** @type {const} */ ([['grok', GROK_VERSION], ['codex', CODEX_VERSION]])) {
+  if (
+    !isPin(kit) ||
+    !/^\d+\.\d+\.\d+$/.test(kit.version) ||
+    !kit.url.endsWith(`/oddbout-${kit.version}.zip`) ||
+    kit.runtime !== 'runtime/' ||
+    !/^[a-f0-9]{64}$/.test(kit.runtimeManifestSha256 ?? '') ||
+    !/^[a-f0-9]{40}$/.test(kit.spriteGenCommit ?? '')
+  )
+    problems.push('kit: a whole creator-kit release pin');
+  for (const [name, version] of /** @type {const} */ ([
+    ['grok', GROK_VERSION],
+    ['codex', CODEX_VERSION],
+  ])) {
     const cli = pins?.cli?.[name];
     if (cli?.version !== version) problems.push(`cli.${name}: ${cli?.version} but og.mjs pins ${version}`);
     try {
@@ -32,16 +42,25 @@ export function pinProblems(pins, { here = HERE } = {}) {
         problems.push(`cli.${name}: ${cli.lock} does not ask for exactly ${cli.version}`);
       if (top?.version !== cli.version || top?.integrity !== cli.integrity) problems.push(`cli.${name}: ${cli.lock}/lock.json resolves another ${cli.package}`);
       for (const [at, entry] of Object.entries(lock.packages ?? {}))
-        if (at && (!/^https:\/\/registry\.npmjs\.org\//.test(entry.resolved ?? '') || !/^sha512-/.test(entry.integrity ?? ''))) problems.push(`cli.${name}: ${at} not pinned to the registry`);
-    } catch (/** @type {any} */ error) { problems.push(`cli.${name}: ${error.message}`); }
+        if (at && (!/^https:\/\/registry\.npmjs\.org\//.test(entry.resolved ?? '') || !/^sha512-/.test(entry.integrity ?? '')))
+          problems.push(`cli.${name}: ${at} not pinned to the registry`);
+    } catch (/** @type {any} */ error) {
+      problems.push(`cli.${name}: ${error.message}`);
+    }
   }
   for (const key of PLATFORMS) {
     const python = pins?.python?.builds?.[key];
-    if (!isPin(python) || !/^python\/[A-Za-z0-9/._-]+$/.test(python.exe ?? '') || !python.url.includes(`cpython-${pins.python.version}%2B${pins.python.release}-`))
+    if (
+      !isPin(python) ||
+      !/^python\/[A-Za-z0-9/._-]+$/.test(python.exe ?? '') ||
+      !python.url.includes(`cpython-${pins.python.version}%2B${pins.python.release}-`)
+    )
       problems.push(`python.${key}: a whole pin of ${pins?.python?.version}+${pins?.python?.release}`);
     const ffmpeg = pins?.ffmpeg?.builds?.[key] ?? pins?.ffmpeg?.builds?.[pins?.ffmpeg?.fallback?.[key]];
     const exe = key.startsWith('win32') ? '.exe' : '';
-    const files = (Array.isArray(ffmpeg) ? ffmpeg : []).flatMap(/** @param {any} pin */ pin => isPin(pin) && pin.files ? Object.keys(pin.files) : ['invalid']);
+    const files = (Array.isArray(ffmpeg) ? ffmpeg : []).flatMap(
+      /** @param {any} pin */ pin => (isPin(pin) && pin.files ? Object.keys(pin.files) : ['invalid']),
+    );
     if (files.sort().join(' ') !== `ffmpeg${exe} ffprobe${exe}`) problems.push(`ffmpeg.${key}: ffmpeg and ffprobe, each pinned`);
   }
   return problems;
@@ -59,9 +78,18 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   if (process.argv.includes('--publish')) {
     // The kit's engine is the official host's (og.mjs KIT_REF): a Grok picture job needs that engine's matte (sprite-gen-agent#55).
     const engine = engineAt(KIT_REF);
-    if (engine !== pins.kit.spriteGenCommit) problems.push(`kit ${pins.kit.version} carries sprite-gen ${pins.kit.spriteGenCommit.slice(0, 7)}; og.mjs KIT_REF ${KIT_REF.slice(0, 7)} runs ${engine.slice(0, 7) || '?'} — release the kit from KIT_REF and pin it`);
-    const release = await fetch(pins.kit.url.replace(/oddbout-[^/]+\.zip$/, 'release.json')).then(r => r.json()).catch(() => null);
-    if (release?.artifact?.sha256 !== pins.kit.sha256 || release?.artifact?.bytes !== pins.kit.bytes || release?.runtimeManifestSha256 !== pins.kit.runtimeManifestSha256)
+    if (engine !== pins.kit.spriteGenCommit)
+      problems.push(
+        `kit ${pins.kit.version} carries sprite-gen ${pins.kit.spriteGenCommit.slice(0, 7)}; og.mjs KIT_REF ${KIT_REF.slice(0, 7)} runs ${engine.slice(0, 7) || '?'} — release the kit from KIT_REF and pin it`,
+      );
+    const release = await fetch(pins.kit.url.replace(/oddbout-[^/]+\.zip$/, 'release.json'))
+      .then(r => r.json())
+      .catch(() => null);
+    if (
+      release?.artifact?.sha256 !== pins.kit.sha256 ||
+      release?.artifact?.bytes !== pins.kit.bytes ||
+      release?.runtimeManifestSha256 !== pins.kit.runtimeManifestSha256
+    )
       problems.push(`kit: ${pins.kit.version}'s release.json does not name the pinned ZIP`);
     // Every pinned file still served as pinned (downloaded once into a scratch folder; slow: about 1 GB).
     if (process.argv.includes('--download')) {

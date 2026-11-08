@@ -19,25 +19,34 @@ const exec = promisify(execFile);
 async function fixture(t) {
   const root = await mkdtemp(path.join(tmpdir(), 'context-handoff-'));
   t.after(() => rm(root, { recursive: true, force: true }));
-  const contextFile = path.join(root, 'context.json'), contextReceipt = path.join(root, 'receipt.json');
+  const contextFile = path.join(root, 'context.json'),
+    contextReceipt = path.join(root, 'receipt.json');
   const save = async (bytes = Buffer.from(JSON.stringify(gameContext)), override = {}) => {
-    const receipt = { schemaVersion: 1, sourceUrl: source.url,
+    const receipt = {
+      schemaVersion: 1,
+      sourceUrl: source.url,
       gitBlobSha1: createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex'),
-      sha256: createHash('sha256').update(bytes).digest('hex'), retrievedAt: new Date().toISOString(), ...override };
-    await writeFile(contextFile, bytes); await writeFile(contextReceipt, JSON.stringify(receipt));
+      sha256: createHash('sha256').update(bytes).digest('hex'),
+      retrievedAt: new Date().toISOString(),
+      ...override,
+    };
+    await writeFile(contextFile, bytes);
+    await writeFile(contextReceipt, JSON.stringify(receipt));
     return receipt;
   };
   await save();
   const flags = ['--context-file', contextFile, '--context-receipt', contextReceipt];
   const call = async (name, args) => {
-    const input = path.join(root, 'args.json'); await writeFile(input, JSON.stringify(args));
+    const input = path.join(root, 'args.json');
+    await writeFile(input, JSON.stringify(args));
     return toolMain(['call', root, name, input, ...flags]);
   };
   return { root, contextFile, contextReceipt, save, flags, call };
 }
 
 test('original bytes reach the normal validator and scoped tools, without another network route', async t => {
-  const f = await fixture(t), request = await fileContextRequest(f.contextFile, f.contextReceipt);
+  const f = await fixture(t),
+    request = await fileContextRequest(f.contextFile, f.contextReceipt);
   const bytes = await readFile(f.contextFile);
   assert.deepEqual(Buffer.from(await (await request(source.url)).arrayBuffer()), bytes);
   assert.deepEqual(await contextMain(f.flags), gameContext);
@@ -45,14 +54,16 @@ test('original bytes reach the normal validator and scoped tools, without anothe
   assert.equal(data.ok, true);
   assert.deepEqual(Object.keys(data.data.contract.motions), ['combo', 'slam', 'dash']);
   await assert.rejects(request('https://example.invalid/'), /creation-context-file-source/);
-  const wrong = structuredClone(gameContext); delete wrong.contract.motions.walk;
+  const wrong = structuredClone(gameContext);
+  delete wrong.contract.motions.walk;
   await f.save(Buffer.from(JSON.stringify(wrong)));
   await assert.rejects(fetchCreationContext({ request }), /creation-context-motions/);
 });
 
 test('each request rereads integrity and freshness; stale or future metadata fails closed', async t => {
   const f = await fixture(t);
-  const fetchedAt = Date.now(); let currentTime = fetchedAt;
+  const fetchedAt = Date.now();
+  let currentTime = fetchedAt;
   t.mock.method(Date, 'now', () => currentTime);
   const receipt = await f.save(undefined, { retrievedAt: new Date(fetchedAt).toISOString() });
   const request = await fileContextRequest(f.contextFile, f.contextReceipt);
@@ -76,9 +87,14 @@ test('each request rereads integrity and freshness; stale or future metadata fai
 test('receipt source, schema, strict UTC date, UTF-8 and bounded regular files are required', async t => {
   const f = await fixture(t);
   for (const override of [
-    { sourceUrl: source.gameEndpoint }, { sourceUrl: 'file:///context.json' }, { schemaVersion: 2 },
-    { retrievedAt: '2026-02-30T00:00:00.000Z' }, { retrievedAt: new Date().toISOString().replace('Z', '+00:00') },
-    { retrievedAt: 0 }, { gitBlobSha1: 'a'.repeat(39) }, { sha256: 'a'.repeat(63) },
+    { sourceUrl: source.gameEndpoint },
+    { sourceUrl: 'file:///context.json' },
+    { schemaVersion: 2 },
+    { retrievedAt: '2026-02-30T00:00:00.000Z' },
+    { retrievedAt: new Date().toISOString().replace('Z', '+00:00') },
+    { retrievedAt: 0 },
+    { gitBlobSha1: 'a'.repeat(39) },
+    { sha256: 'a'.repeat(63) },
   ]) {
     await f.save(undefined, override);
     await assert.rejects(fileContextRequest(f.contextFile, f.contextReceipt), /receipt-invalid/);
@@ -87,7 +103,8 @@ test('receipt source, schema, strict UTC date, UTF-8 and bounded regular files a
   await assert.rejects(fileContextRequest(f.contextFile, f.contextReceipt), /file-utf8/);
   await f.save(Buffer.alloc(128 * 1024 + 1));
   await assert.rejects(fileContextRequest(f.contextFile, f.contextReceipt), /file-too-large/);
-  await f.save(); await writeFile(f.contextReceipt, Buffer.alloc(4 * 1024 + 1));
+  await f.save();
+  await writeFile(f.contextReceipt, Buffer.alloc(4 * 1024 + 1));
   await assert.rejects(fileContextRequest(f.contextFile, f.contextReceipt), /file-too-large/);
   await writeFile(f.contextReceipt, Buffer.from([0xff]));
   await assert.rejects(fileContextRequest(f.contextFile, f.contextReceipt), /receipt-invalid/);
@@ -99,9 +116,13 @@ test('receipt source, schema, strict UTC date, UTF-8 and bounded regular files a
 test('explicit invocation arguments reject incomplete, duplicate, unknown and ambiguous options', async t => {
   const f = await fixture(t);
   for (const flags of [
-    ['--context-file', f.contextFile], ['--context-receipt', f.contextReceipt],
-    [...f.flags, '--context-file', f.contextFile], [...f.flags, '--context-receipt', f.contextReceipt],
-    ['--context-file', '--context-receipt', f.contextReceipt], ['--context-file=x'], ['--unknown'],
+    ['--context-file', f.contextFile],
+    ['--context-receipt', f.contextReceipt],
+    [...f.flags, '--context-file', f.contextFile],
+    [...f.flags, '--context-receipt', f.contextReceipt],
+    ['--context-file', '--context-receipt', f.contextReceipt],
+    ['--context-file=x'],
+    ['--unknown'],
   ]) {
     assert.throws(() => parseContextFileArgs(flags), /file-arguments/);
     await assert.rejects(contextMain(flags), /file-arguments/);
@@ -114,16 +135,23 @@ test('explicit invocation arguments reject incomplete, duplicate, unknown and am
 
 test('file transport defers quality reviews while preserving missing-file, context and revision guards', async t => {
   const f = await fixture(t);
-  const state = { mode: 'creation', contextRevision: gameContext.revision, groupId: 'locomotion', items: {
-    idle: { version: 'v1', selectedVersion: 'v1', review: 'failed' },
-    fightIdle: { version: 'v1', selectedVersion: 'v1', review: 'passed' },
-    run: { version: 'v1', selectedVersion: 'v1', review: 'passed' },
-  } };
-  const stateFile = path.join(f.root, 'state.json'); await writeFile(stateFile, JSON.stringify(state));
+  const state = {
+    mode: 'creation',
+    contextRevision: gameContext.revision,
+    groupId: 'locomotion',
+    items: {
+      idle: { version: 'v1', selectedVersion: 'v1', review: 'failed' },
+      fightIdle: { version: 'v1', selectedVersion: 'v1', review: 'passed' },
+      run: { version: 'v1', selectedVersion: 'v1', review: 'passed' },
+    },
+  };
+  const stateFile = path.join(f.root, 'state.json');
+  await writeFile(stateFile, JSON.stringify(state));
   const decision = await contextMain([stateFile, ...f.flags]);
   assert.equal(decision.canAdvance, false);
   assert.deepEqual(decision.blockers, ['missing:walk']);
-  const changed = structuredClone(gameContext); changed.revision = 'b'.repeat(64);
+  const changed = structuredClone(gameContext);
+  changed.revision = 'b'.repeat(64);
   await f.save(Buffer.from(JSON.stringify(changed)));
   const review = (await f.call('review_creation_progress', { stateJson: JSON.stringify(state) })).structuredContent;
   assert.equal(review.data.canAdvance, false);
@@ -145,22 +173,33 @@ test('actual CLIs preserve large Unicode JSON and sanitized failure/blocked exit
   const cli = file => fileURLToPath(new URL(`../scripts/${file}.mjs`, import.meta.url));
   const options = { timeout: 30000, windowsHide: true, maxBuffer: 1024 * 1024 };
   const result = await exec(process.execPath, [cli('creation-context'), ...f.flags], options);
-  assert.deepEqual(JSON.parse(result.stdout), large); assert.equal(result.stderr, '');
-  const argsFile = path.join(f.root, 'args.json'); await writeFile(argsFile, JSON.stringify({ section: 'context' }));
+  assert.deepEqual(JSON.parse(result.stdout), large);
+  assert.equal(result.stderr, '');
+  const argsFile = path.join(f.root, 'args.json');
+  await writeFile(argsFile, JSON.stringify({ section: 'context' }));
   const tool = await exec(process.execPath, [cli('creation-tool'), 'call', f.root, 'get_fighter_spec', argsFile, ...f.flags], options);
-  assert.deepEqual(JSON.parse(tool.stdout).structuredContent.data, large); assert.equal(tool.stderr, '');
+  assert.deepEqual(JSON.parse(tool.stdout).structuredContent.data, large);
+  assert.equal(tool.stderr, '');
   const stateFile = path.join(f.root, 'state.json');
   await writeFile(stateFile, JSON.stringify({ mode: 'creation', contextRevision: large.revision, groupId: 'appearance' }));
   await assert.rejects(exec(process.execPath, [cli('creation-context'), stateFile, ...f.flags], options), error => {
-    assert.equal(error.code, 1); assert.equal(error.stderr, '');
-    assert.deepEqual(JSON.parse(error.stdout).blockers, ['missing:idle']); return true;
+    assert.equal(error.code, 1);
+    assert.equal(error.stderr, '');
+    assert.deepEqual(JSON.parse(error.stdout).blockers, ['missing:idle']);
+    return true;
   });
   await writeFile(f.contextFile, 'secret-test-string');
-  for (const [name, args] of [['creation-context', []], ['creation-tool', ['list', f.root]]]) {
+  for (const [name, args] of [
+    ['creation-context', []],
+    ['creation-tool', ['list', f.root]],
+  ]) {
     await assert.rejects(exec(process.execPath, [cli(name), ...args, ...f.flags], options), error => {
-      assert.equal(error.code, 1); assert.equal(error.stdout, '');
+      assert.equal(error.code, 1);
+      assert.equal(error.stdout, '');
       assert.deepEqual(JSON.parse(error.stderr), { ok: false, code: 'creation-context-file-integrity' });
-      assert.ok(!error.stderr.includes(f.root)); assert.ok(!error.stderr.includes('secret-test-string')); return true;
+      assert.ok(!error.stderr.includes(f.root));
+      assert.ok(!error.stderr.includes('secret-test-string'));
+      return true;
     });
   }
 });

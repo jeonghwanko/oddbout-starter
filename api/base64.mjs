@@ -24,5 +24,7 @@ export function decodeBase64(text) {
   if (data.length % 4 === 0) data = data.replace(/={1,2}$/, '');
   if (data.length % 4 === 1 || !/^[A-Za-z0-9+/]*$/.test(data)) throw new SyntaxError('invalid-base64');
   const decoded = Buffer.from(data, 'base64');
-  return decoded.byteOffset === 0 && decoded.buffer.byteLength === decoded.byteLength ? new Uint8Array(/** @type {ArrayBuffer} */ (decoded.buffer)) : new Uint8Array(decoded);
+  return decoded.byteOffset === 0 && decoded.buffer.byteLength === decoded.byteLength
+    ? new Uint8Array(/** @type {ArrayBuffer} */ (decoded.buffer))
+    : new Uint8Array(decoded);
 }

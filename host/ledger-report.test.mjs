@@ -18,8 +18,18 @@ test('entry keeps known fields only and caps text', () => {
 });
 
 test('outcome separates questions, timeouts and interrupts from failures', () => {
-  assert.deepEqual([0, 75, 2, 3, 124, 137, 130, 129, 143, 1].map(outcome),
-    ['ok', 'needsInput', 'needsInput', 'notStarted', 'timeout', 'timeout', 'interrupted', 'interrupted', 'interrupted', 'failed']);
+  assert.deepEqual([0, 75, 2, 3, 124, 137, 130, 129, 143, 1].map(outcome), [
+    'ok',
+    'needsInput',
+    'needsInput',
+    'notStarted',
+    'timeout',
+    'timeout',
+    'interrupted',
+    'interrupted',
+    'interrupted',
+    'failed',
+  ]);
 });
 
 test('summary counts real codex sessions, wait and unfinished runs per job', () => {
@@ -46,7 +56,10 @@ test('summary counts real codex sessions, wait and unfinished runs per job', () 
   assert.equal(a.personalRuns, 1);
   assert.equal(a.state, 'closed');
   assert.deepEqual(a.providers.codex, { runs: 3, ok: 1, failed: 1, notStarted: 0, needsInput: 1, timeout: 0, interrupted: 0, ms: 181000 });
-  assert.equal(s.jobs.some(j => j.job === '_health'), false);
+  assert.equal(
+    s.jobs.some(j => j.job === '_health'),
+    false,
+  );
   // Questions are not provider calls: codex durations are the 60 s, 120 s and 90 s runs only.
   assert.deepEqual(s.providers.codex, { runs: 3, p50Ms: 90000, p95Ms: 120000 });
   assert.match(s.warnings.join('\n'), /\(local\) started 2 codex/);

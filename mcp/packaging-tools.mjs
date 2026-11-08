@@ -18,15 +18,19 @@ async function confined(root, file) {
  * @param {string} root @param {{ planPath: string, outputPath?: string, fitSheets?: boolean, outputScale?: number }} args */
 export async function packagingInputs(root, args) {
   root = await realpath(root);
-  const planFile = await localPath(root, args.planPath), plan = await readJson(planFile), base = path.dirname(planFile);
+  const planFile = await localPath(root, args.planPath),
+    plan = await readJson(planFile),
+    base = path.dirname(planFile);
   if (typeof plan.gamePack !== 'string' || !plan.motions || typeof plan.motions !== 'object') throw Error('invalid-packaging-plan');
-  const packFile = await confined(root, path.resolve(base, plan.gamePack)), pack = await readJson(packFile);
+  const packFile = await confined(root, path.resolve(base, plan.gamePack)),
+    pack = await readJson(packFile);
   if (!Array.isArray(pack.textures) || pack.textures.length > 128 || !pack.animations) throw Error('invalid-game-pack');
   let bytes = 0;
   const frames = new Map();
   for (const texture of pack.textures) {
     if (typeof texture.image !== 'string') throw Error('invalid-game-pack');
-    const file = await confined(root, path.resolve(path.dirname(packFile), texture.image)), info = await lstat(file);
+    const file = await confined(root, path.resolve(path.dirname(packFile), texture.image)),
+      info = await lstat(file);
     if (!info.isFile()) throw Error('packaging-input-not-file');
     bytes += info.size;
     for (const [key, entry] of Object.entries(texture.frames ?? {})) frames.set(key, /** @type {any} */ (entry).frame);
@@ -39,13 +43,11 @@ export async function packagingInputs(root, args) {
       if (!Array.isArray(animation?.frames) || animation.frames.length > 128) throw Error('packaging-input-frame-limit');
       for (const key of animation.frames) {
         const rect = frames.get(key);
-        if (!rect || !Number.isSafeInteger(rect.w) || !Number.isSafeInteger(rect.h) || rect.w < 1 || rect.h < 1)
-          throw Error('invalid-game-pack-frame');
+        if (!rect || !Number.isSafeInteger(rect.w) || !Number.isSafeInteger(rect.h) || rect.w < 1 || rect.h < 1) throw Error('invalid-game-pack-frame');
         pixels += rect.w * rect.h;
       }
     }
-    for (const field of ['gaitReview', 'loopReview']) if (motion[field] !== undefined)
-      await confined(root, path.resolve(base, motion[field]));
+    for (const field of ['gaitReview', 'loopReview']) if (motion[field] !== undefined) await confined(root, path.resolve(base, motion[field]));
   }
   if (pixels > 128_000_000) throw Error('packaging-input-pixel-limit');
   const out = args.outputPath === undefined ? await confined(root, path.resolve(base, plan.out)) : await localPath(root, args.outputPath);
@@ -63,34 +65,55 @@ export function makePackagingRunner(root, { timeoutMs, graceMs, queue = serialQu
   const packOnce = async (args, inspectOnly) => {
     try {
       const input = await packagingInputs(root, args);
-      const run = await forkWorker(new URL('./packaging-worker.mjs', import.meta.url),
+      const run = await forkWorker(
+        new URL('./packaging-worker.mjs', import.meta.url),
         [input.planFile, JSON.stringify({ inspectOnly, fitSheets: args.fitSheets ?? false, outputScale: args.outputScale, out: input.out })],
-        { timeoutMs: timeoutMs ?? (args.fitSheets ? 600_000 : 120_000), heapMb: 256, graceMs });
+        { timeoutMs: timeoutMs ?? (args.fitSheets ? 600_000 : 120_000), heapMb: 256, graceMs },
+      );
       if (!run.started) return { ok: false, stage: 'packaging', code: 'packaging-worker-start-failed' };
-      return /** @type {any} */ (run.message) ?? { ok: false, stage: 'packaging', code: run.timedOut ? 'packaging-timeout' : 'packaging-worker-failed',
-        next: 'Inspect the new output directory before retrying. No generation was dispatched.' };
+      return (
+        /** @type {any} */ (run.message) ?? {
+          ok: false,
+          stage: 'packaging',
+          code: run.timedOut ? 'packaging-timeout' : 'packaging-worker-failed',
+          next: 'Inspect the new output directory before retrying. No generation was dispatched.',
+        }
+      );
     } catch (/** @type {any} */ error) {
       return { ok: false, stage: 'packaging', code: /^[a-z][a-z-]+$/.test(error.message) ? error.message : 'packaging-input-unavailable' };
     }
   };
   /** @param {{ planPath: string, outputPath?: string, fitSheets?: boolean, outputScale?: number }} args @param {boolean} inspectOnly */
-  return (args, inspectOnly) => queue(() => packOnce(args, inspectOnly), () => ({ ok: false, stage: 'packaging', code: 'packaging-busy' }));
+  return (args, inspectOnly) =>
+    queue(
+      () => packOnce(args, inspectOnly),
+      () => ({ ok: false, stage: 'packaging', code: 'packaging-busy' }),
+    );
 }
 
 /** @param {import('@modelcontextprotocol/server').McpServer} server
  * @param {{ root: string, respond: import('./server.mjs').Respond, queue?: SerialQueue }} options */
 export function registerPackagingTools(server, { root, respond, queue }) {
   const run = makePackagingRunner(root, { queue });
-  const inputSchema = z.object({ planPath: z.string().min(1).max(512), outputPath: z.string().min(1).max(512).optional(),
-    fitSheets: z.boolean().default(false), outputScale: z.number().min(.25).max(1).optional() });
+  const inputSchema = z.object({
+    planPath: z.string().min(1).max(512),
+    outputPath: z.string().min(1).max(512).optional(),
+    fitSheets: z.boolean().default(false),
+    outputScale: z.number().min(0.25).max(1).optional(),
+  });
   for (const inspectOnly of [true, false]) {
     const name = inspectOnly ? 'inspect_fighter_packaging' : 'pack_fighter_package';
-    server.registerTool(name, {
-      description: inspectOnly
-        ? 'Measure and encode existing game-pack inputs without writing files. Return sheet, byte and pixel budgets. fitSheets also fits total package and per-asset budgets using measured bounded trials; outputScale sets an optional maximum density after body normalization. Preserve all frames, timing and game size; never generate.'
-        : 'Build and fully validate a new package from existing files. fitSheets fits sheet dimensions AND total/per-asset byte and pixel budgets without changing encoding or removing frames. Optional outputScale (.25–1) caps density after normalization. Requires texture-resolution-1; preserves game size and originals. Never generate, register or request quality approval. Output must be a new output/<session>-work/artifacts/ directory.',
-      inputSchema, outputSchema: z.object({ ok: z.boolean(), stage: z.string() }),
-      annotations: { readOnlyHint: inspectOnly, destructiveHint: false, idempotentHint: inspectOnly, openWorldHint: false },
-    }, async args => respond(/** @type {import('./server.mjs').ToolResult} */ (await run(args, inspectOnly))));
+    server.registerTool(
+      name,
+      {
+        description: inspectOnly
+          ? 'Measure and encode existing game-pack inputs without writing files. Return sheet, byte and pixel budgets. fitSheets also fits total package and per-asset budgets using measured bounded trials; outputScale sets an optional maximum density after body normalization. Preserve all frames, timing and game size; never generate.'
+          : 'Build and fully validate a new package from existing files. fitSheets fits sheet dimensions AND total/per-asset byte and pixel budgets without changing encoding or removing frames. Optional outputScale (.25–1) caps density after normalization. Requires texture-resolution-1; preserves game size and originals. Never generate, register or request quality approval. Output must be a new output/<session>-work/artifacts/ directory.',
+        inputSchema,
+        outputSchema: z.object({ ok: z.boolean(), stage: z.string() }),
+        annotations: { readOnlyHint: inspectOnly, destructiveHint: false, idempotentHint: inspectOnly, openWorldHint: false },
+      },
+      async args => respond(/** @type {import('./server.mjs').ToolResult} */ (await run(args, inspectOnly))),
+    );
   }
 }

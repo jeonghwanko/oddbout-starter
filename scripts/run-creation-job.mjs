@@ -14,6 +14,10 @@ export async function main(args) {
   return result.status === 'succeeded' ? 0 : result.status === 'needs-input' ? 75 : 1;
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  try { process.exitCode = await main(process.argv.slice(2)); }
-  catch (/** @type {any} */ error) { console.error(error.message); process.exitCode = 1; }
+  try {
+    process.exitCode = await main(process.argv.slice(2));
+  } catch (/** @type {any} */ error) {
+    console.error(error.message);
+    process.exitCode = 1;
+  }
 }

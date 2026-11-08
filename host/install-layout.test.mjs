@@ -19,8 +19,12 @@ test('the modules a host installs load from the flat bin folder they run in', as
   assert.deepEqual(await readFile(path.join(bin, 'style-anchor-front.webp')), await readFile(path.join(here, 'style-anchor-front.webp')));
   // generation-worker.mjs starts the worker when loaded; it imports nothing of its own but the stages, their prompts, the judge archive and
   // the usage meter.
-  assert.deepEqual(localImports(await readFile(path.join(bin, 'generation-worker.mjs'), 'utf8')),
-    ['./generation-stages.mjs', './generation-prompts.mjs', './judge-archive.mjs', './codex-usage.mjs']);
+  assert.deepEqual(localImports(await readFile(path.join(bin, 'generation-worker.mjs'), 'utf8')), [
+    './generation-stages.mjs',
+    './generation-prompts.mjs',
+    './judge-archive.mjs',
+    './codex-usage.mjs',
+  ]);
   for (const name of HOST_FILES.filter(name => name.endsWith('.mjs') && name !== 'generation-worker.mjs')) {
     await import(pathToFileURL(path.join(bin, name)).href);
   }
@@ -45,7 +49,10 @@ test('og self-update carries every file a host installs', async () => {
   const lists = {
     pack: og.match(/tar -C "\$here" -c ([^|]+)\|/)[1],
     unpack: og.match(/tar -x -C "\$tmp" ([^\n]+)/)[1],
-    install: og.match(/install -m 640 ([^\n]+) "\$HERE\/"/)[1].replaceAll('"$tmp/', '').replaceAll('"', ''),
+    install: og
+      .match(/install -m 640 ([^\n]+) "\$HERE\/"/)[1]
+      .replaceAll('"$tmp/', '')
+      .replaceAll('"', ''),
   };
   for (const [step, list] of Object.entries(lists)) {
     const names = list.trim().split(/\s+/);

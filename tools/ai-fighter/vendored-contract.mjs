@@ -10,13 +10,19 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const repository = fileURLToPath(new URL('../../', import.meta.url));
 const sourceFile = path.join(repository, 'contracts/ai-fighter/SOURCE.json');
-const hash = async file => createHash('sha256').update(await readFile(file)).digest('hex');
+const hash = async file =>
+  createHash('sha256')
+    .update(await readFile(file))
+    .digest('hex');
 
-export async function readSource() { return JSON.parse(await readFile(sourceFile, 'utf8')); }
+export async function readSource() {
+  return JSON.parse(await readFile(sourceFile, 'utf8'));
+}
 
 /** Files whose bytes differ from the pins (or from the game folder when given). */
 export async function contractDrift({ gameRoot } = {}) {
-  const source = await readSource(), drift = [];
+  const source = await readSource(),
+    drift = [];
   for (const [local, entry] of Object.entries(source.files)) {
     const actual = await hash(path.join(repository, local));
     const expected = gameRoot ? await hash(path.join(gameRoot, entry.upstream)).catch(() => 'missing') : entry.sha256;

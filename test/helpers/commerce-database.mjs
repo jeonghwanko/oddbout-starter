@@ -19,15 +19,28 @@ export async function commerceDatabase() {
   await db.exec(await readFile(COMMERCE_BROADCAST_OPERATIONS_SQL, 'utf8'));
   await enforceSafeupdate(db);
   const rpc = async (name, args) => {
-    if (!['commerce_command', 'commerce_payout', 'commerce_operation', 'commerce_operation_device', 'commerce_operation_recovery','commerce_campaign','commerce_campaign_planning','commerce_campaign_execution'].includes(name)) throw new Error(`unexpected RPC ${name}`);
+    if (
+      ![
+        'commerce_command',
+        'commerce_payout',
+        'commerce_operation',
+        'commerce_operation_device',
+        'commerce_operation_recovery',
+        'commerce_campaign',
+        'commerce_campaign_planning',
+        'commerce_campaign_execution',
+      ].includes(name)
+    )
+      throw new Error(`unexpected RPC ${name}`);
     try {
       const data = await db.transaction(async tx => {
         await tx.exec('set local role service_role');
-        return (await tx.query(`select public.${name}($1,$2,$3::jsonb) as value`,
-          [args.p_owner, args.p_command, JSON.stringify(args.p_input)])).rows[0].value;
+        return (await tx.query(`select public.${name}($1,$2,$3::jsonb) as value`, [args.p_owner, args.p_command, JSON.stringify(args.p_input)])).rows[0].value;
       });
       return { data, error: null };
-    } catch (error) { return { data: null, error }; }
+    } catch (error) {
+      return { data: null, error };
+    }
   };
   return { db, rpc, store: createCommerceStore({ rpc }) };
 }

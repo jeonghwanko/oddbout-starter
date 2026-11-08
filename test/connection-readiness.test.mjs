@@ -8,17 +8,27 @@ import { readProject } from '../mcp/connection-readiness.mjs';
 import { apiRequest } from '../api/client.mjs';
 
 test('public config yields safe login arguments; missing or malformed values never produce a login command', async t => {
-  const root = await mkdtemp(path.join(tmpdir(), 'fighter-public-config-')); t.after(() => rm(root, { recursive: true, force: true }));
+  const root = await mkdtemp(path.join(tmpdir(), 'fighter-public-config-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
   assert.equal(await readProject(root), null);
   await mkdir(path.join(root, 'deploy'));
-  const config = { apiBase: 'https://abcdefghijklmnopqrst.supabase.co/functions/v1/ai-fighter', siteUrl: 'https://example.test/creator.html',
-    publishableKey: 'sb_publishable_fixtureFixtureFixture01' };
+  const config = {
+    apiBase: 'https://abcdefghijklmnopqrst.supabase.co/functions/v1/ai-fighter',
+    siteUrl: 'https://example.test/creator.html',
+    publishableKey: 'sb_publishable_fixtureFixtureFixture01',
+  };
   const save = async value => writeFile(path.join(root, 'deploy/creator-site.json'), JSON.stringify(value));
-  await save(config); assert.match((await readProject(root)).flags, /^--url https:\/\/abcdefghijklmnopqrst\.supabase\.co --key sb_publishable_/);
+  await save(config);
+  assert.match((await readProject(root)).flags, /^--url https:\/\/abcdefghijklmnopqrst\.supabase\.co --key sb_publishable_/);
   const anon = Buffer.from(JSON.stringify({ role: 'anon' })).toString('base64url');
-  for (const change of [{ publishableKey: `e30.${anon}.sig;command` }, { siteUrl: 'https://example.test/creator.html#token=secret' },
-    { apiBase: 'https://other.test/api' }, { publishableKey: 'sb_secret_fixtureFixtureFixture01' }]) {
-    await save({ ...config, ...change }); assert.equal(await readProject(root), null);
+  for (const change of [
+    { publishableKey: `e30.${anon}.sig;command` },
+    { siteUrl: 'https://example.test/creator.html#token=secret' },
+    { apiBase: 'https://other.test/api' },
+    { publishableKey: 'sb_secret_fixtureFixtureFixture01' },
+  ]) {
+    await save({ ...config, ...change });
+    assert.equal(await readProject(root), null);
   }
 });
 
@@ -34,9 +44,14 @@ test('CONNECT 403 is infrastructure failure, while a service HTTP 403 is not rec
 });
 
 test('API client preserves safe transport codes and distinguishes non-JSON HTTP failures', async t => {
-  const realFetch = globalThis.fetch; t.after(() => { globalThis.fetch = realFetch; });
+  const realFetch = globalThis.fetch;
+  t.after(() => {
+    globalThis.fetch = realFetch;
+  });
   const request = () => apiRequest('https://abcdefghijklmnopqrst.supabase.co', 'secret', 'me');
-  globalThis.fetch = async () => { throw new Error('CONNECT tunnel failed, response 403, secret'); };
+  globalThis.fetch = async () => {
+    throw new Error('CONNECT tunnel failed, response 403, secret');
+  };
   await assert.rejects(request(), error => error.message === 'network-connect-forbidden' && !error.message.includes('secret'));
   globalThis.fetch = async () => new Response('Forbidden', { status: 403 });
   await assert.rejects(request(), error => error.message === 'api-http-403' && error.status === 403);

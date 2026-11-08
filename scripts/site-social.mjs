@@ -14,7 +14,9 @@ export function youtubeChannelPlugin(channelUrl) {
   }
   const href = url.href;
   let ownIcons = false;
-  return { name: 'oddbout-youtube-channel', enforce: 'pre',
+  return {
+    name: 'oddbout-youtube-channel',
+    enforce: 'pre',
     configResolved(config) {
       ownIcons = sourceHasSocialIcons(config.root);
     },
@@ -23,15 +25,25 @@ export function youtubeChannelPlugin(channelUrl) {
       if (ownIcons || code.includes('club-social')) return null;
       const anchor = 'element.append(logo, tagline, nav);';
       if (code.split(anchor).length !== 2) throw new Error('Review the ODDBOUT social footer hook');
-      return code.replace(anchor, anchor + '\n  const youtube = document.createElement("a"); youtube.href = ' + JSON.stringify(href) +
-        '; youtube.textContent = "YouTube"; youtube.target = "_blank"; youtube.rel = "noopener noreferrer"; nav.append(youtube);');
+      return code.replace(
+        anchor,
+        anchor +
+          '\n  const youtube = document.createElement("a"); youtube.href = ' +
+          JSON.stringify(href) +
+          '; youtube.textContent = "YouTube"; youtube.target = "_blank"; youtube.rel = "noopener noreferrer"; nav.append(youtube);',
+      );
     },
-    transformIndexHtml: { order: 'pre', handler(html) {
-      if (ownIcons) return html;
-      // Keep a usable public link in the homepage before its interactive footer mounts.
-      return html.replace(/(<footer\b[^>]*>[\s\S]*?)(<\/nav>\s*<\/footer>)/,
-        (_, content, end) => content + '<a href="' + href + '" target="_blank" rel="noopener noreferrer">YouTube</a>' + end);
-    } },
+    transformIndexHtml: {
+      order: 'pre',
+      handler(html) {
+        if (ownIcons) return html;
+        // Keep a usable public link in the homepage before its interactive footer mounts.
+        return html.replace(
+          /(<footer\b[^>]*>[\s\S]*?)(<\/nav>\s*<\/footer>)/,
+          (_, content, end) => content + '<a href="' + href + '" target="_blank" rel="noopener noreferrer">YouTube</a>' + end,
+        );
+      },
+    },
   };
 }
 

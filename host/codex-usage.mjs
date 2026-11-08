@@ -22,14 +22,24 @@ export async function recentRollouts(sessions, limit = 12) {
   /** @type {string[]} */
   const out = [];
   /** @param {string} dir */
-  const dated = async dir => (await readdir(dir, { withFileTypes: true }).catch(() => []))
-    .filter(entry => entry.isDirectory() && /^\d+$/.test(entry.name)).map(entry => entry.name).sort().reverse();
+  const dated = async dir =>
+    (await readdir(dir, { withFileTypes: true }).catch(() => []))
+      .filter(entry => entry.isDirectory() && /^\d+$/.test(entry.name))
+      .map(entry => entry.name)
+      .sort()
+      .reverse();
   for (const year of await dated(sessions)) {
     for (const month of await dated(path.join(sessions, year))) {
       for (const day of await dated(path.join(sessions, year, month))) {
         const folder = path.join(sessions, year, month, day);
-        const files = (await readdir(folder).catch(() => [])).filter(name => /^rollout-.*\.jsonl$/.test(name)).sort().reverse();
-        for (const name of files) { out.push(path.join(folder, name)); if (out.length >= limit) return out; }
+        const files = (await readdir(folder).catch(() => []))
+          .filter(name => /^rollout-.*\.jsonl$/.test(name))
+          .sort()
+          .reverse();
+        for (const name of files) {
+          out.push(path.join(folder, name));
+          if (out.length >= limit) return out;
+        }
       }
     }
   }
@@ -44,12 +54,13 @@ export async function recentRollouts(sessions, limit = 12) {
  * @returns {Promise<string[]>}
  */
 export async function rolloutsSince(sessions, sinceMs) {
-  const from = new Date(sinceMs - 86_400_000), floor = from.getUTCFullYear() * 10_000 + (from.getUTCMonth() + 1) * 100 + from.getUTCDate();
+  const from = new Date(sinceMs - 86_400_000),
+    floor = from.getUTCFullYear() * 10_000 + (from.getUTCMonth() + 1) * 100 + from.getUTCDate();
   /** @type {string[]} */
   const out = [];
   /** @param {string} dir */
-  const dated = async dir => (await readdir(dir, { withFileTypes: true }).catch(() => []))
-    .filter(entry => entry.isDirectory() && /^\d+$/.test(entry.name)).map(entry => entry.name);
+  const dated = async dir =>
+    (await readdir(dir, { withFileTypes: true }).catch(() => [])).filter(entry => entry.isDirectory() && /^\d+$/.test(entry.name)).map(entry => entry.name);
   for (const year of await dated(sessions)) {
     if (Number(year) * 10_000 + 1231 < floor) continue;
     for (const month of await dated(path.join(sessions, year))) {
@@ -74,19 +85,27 @@ export async function lastTokenCount(file) {
   try {
     const handle = await open(file, 'r');
     try {
-      const { size } = await handle.stat(), start = Math.max(0, size - TAIL_BYTES), buffer = Buffer.alloc(size - start);
+      const { size } = await handle.stat(),
+        start = Math.max(0, size - TAIL_BYTES),
+        buffer = Buffer.alloc(size - start);
       await handle.read(buffer, 0, buffer.length, start);
       text = buffer.toString('utf8');
-      if (start > 0) text = text.slice(text.indexOf('\n') + 1);   // the first line read may be cut
-    } finally { await handle.close(); }
-  } catch { return null; }
+      if (start > 0) text = text.slice(text.indexOf('\n') + 1); // the first line read may be cut
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    return null;
+  }
   const lines = text.split('\n');
   for (let i = lines.length - 1; i >= 0; i -= 1) {
     if (!lines[i].includes('"token_count"')) continue;
     try {
       const event = JSON.parse(lines[i]);
       if (event?.payload?.type === 'token_count') return event.payload;
-    } catch { /* a line still being written */ }
+    } catch {
+      /* a line still being written */
+    }
   }
   return null;
 }
@@ -101,9 +120,11 @@ function windowOf(window, now) {
   if (!window || typeof window.used_percent !== 'number' || !Number.isFinite(window.used_percent)) return null;
   const resetsAt = Number.isFinite(window.resets_at) && window.resets_at > 0 ? new Date(window.resets_at * 1000) : null;
   if (resetsAt && resetsAt.getTime() <= now) return null;
-  return { usedPercent: Math.round(Math.min(100, Math.max(0, window.used_percent)) * 10) / 10,
+  return {
+    usedPercent: Math.round(Math.min(100, Math.max(0, window.used_percent)) * 10) / 10,
     ...(Number.isInteger(window.window_minutes) && window.window_minutes > 0 ? { windowMinutes: window.window_minutes } : {}),
-    ...(resetsAt ? { resetsAt: resetsAt.toISOString() } : {}) };
+    ...(resetsAt ? { resetsAt: resetsAt.toISOString() } : {}),
+  };
 }
 
 /**
@@ -115,7 +136,7 @@ function windowOf(window, now) {
 export async function codexUsage(sessions, now = Date.now()) {
   for (const file of await recentRollouts(sessions)) {
     const limits = (await lastTokenCount(file))?.rate_limits;
-    if (!limits) continue;                  // a session that has not answered yet
+    if (!limits) continue; // a session that has not answered yet
     const windows = [windowOf(limits.primary, now), windowOf(limits.secondary, now)].filter(w => w !== null);
     if (!windows.length) return null;
     return windows.reduce((a, b) => (b.usedPercent > a.usedPercent ? b : a));
@@ -140,8 +161,11 @@ export async function codexTokensSince(sessions, sinceMs) {
     if (!written || written.mtimeMs < sinceMs) continue;
     const usage = (await lastTokenCount(file))?.info?.total_token_usage;
     if (!usage) continue;
-    sum.total += whole(usage.total_tokens); sum.input += whole(usage.input_tokens); sum.cachedInput += whole(usage.cached_input_tokens);
-    sum.output += whole(usage.output_tokens); sum.reasoning += whole(usage.reasoning_output_tokens);
+    sum.total += whole(usage.total_tokens);
+    sum.input += whole(usage.input_tokens);
+    sum.cachedInput += whole(usage.cached_input_tokens);
+    sum.output += whole(usage.output_tokens);
+    sum.reasoning += whole(usage.reasoning_output_tokens);
   }
   return sum;
 }
@@ -171,7 +195,11 @@ export async function codexSessionFacts(sessions, id, sinceMs = Date.now()) {
   for (const line of text.split('\n')) {
     if (!line.includes('"turn_context"') && !line.includes('"session_meta"')) continue;
     let record;
-    try { record = JSON.parse(line); } catch { continue; }
+    try {
+      record = JSON.parse(line);
+    } catch {
+      continue;
+    }
     const payload = record?.payload;
     if (!payload || typeof payload !== 'object') continue;
     for (const key of keys[record.type] ?? []) if (typeof payload[key] === 'string' && payload[key]) facts[key] = payload[key];

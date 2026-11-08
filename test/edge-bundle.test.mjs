@@ -9,30 +9,57 @@ import { edgeFiles, importSpecifiers } from '../scripts/edge-bundle.mjs';
 
 const repository = fileURLToPath(new URL('../', import.meta.url));
 let temporary;
-before(async () => { temporary = await mkdtemp(path.join(tmpdir(), 'fighter-edge-')); });
-after(async () => { await rm(temporary, { recursive: true, force: true }); });
+before(async () => {
+  temporary = await mkdtemp(path.join(tmpdir(), 'fighter-edge-'));
+});
+after(async () => {
+  await rm(temporary, { recursive: true, force: true });
+});
 
 test('the Edge bundle holds every module the entry imports and nothing Node-only', async () => {
   const files = await edgeFiles();
-  for (const required of ['api/handler.mjs', 'api/http.mjs', 'api/duels.mjs', 'api/fighter-statistics.mjs', 'api/account.mjs', 'api/creator-link.mjs',
-    'contracts/ai-fighter/validate.mjs', 'contracts/ai-fighter/v1/spec.json', 'contracts/ai-fighter/v1/fighter.schema.json',
-    'supabase/functions/ai-fighter/duel-engine.mjs', 'supabase/functions/ai-fighter/duel-engines.mjs', 'supabase/functions/ai-fighter/release.mjs'])
+  for (const required of [
+    'api/handler.mjs',
+    'api/http.mjs',
+    'api/duels.mjs',
+    'api/fighter-statistics.mjs',
+    'api/account.mjs',
+    'api/creator-link.mjs',
+    'contracts/ai-fighter/validate.mjs',
+    'contracts/ai-fighter/v1/spec.json',
+    'contracts/ai-fighter/v1/fighter.schema.json',
+    'supabase/functions/ai-fighter/duel-engine.mjs',
+    'supabase/functions/ai-fighter/duel-engines.mjs',
+    'supabase/functions/ai-fighter/release.mjs',
+  ])
     assert.ok(files.includes(required), required);
-  assert.ok(files.every(file => !/^(server|mcp|scripts|worker)\//.test(file)), JSON.stringify(files));
+  assert.ok(
+    files.every(file => !/^(server|mcp|scripts|worker)\//.test(file)),
+    JSON.stringify(files),
+  );
   for (const file of files) await access(path.join(repository, file));
   const config = JSON.parse(await readFile(path.join(repository, 'supabase/functions/ai-fighter/deno.json'), 'utf8'));
   // Deno supplies this builtin; it is explicitly mapped for the native base64 codec (api/base64.mjs).
   assert.equal(config.imports['node:buffer'], 'node:buffer');
 });
-test('every Edge function\'s import map provides what its bundle imports, not only ai-fighter\'s', async () => {
+test("every Edge function's import map provides what its bundle imports, not only ai-fighter's", async () => {
   // ai-fighter-mcp lacked node:buffer for api/base64.mjs until #114 (2026-10-29): only the game's MCP deploy plan walked its bundle.
   // A function without an import map may not import a bare specifier at all.
   const functions = (await readdir(path.join(repository, 'supabase/functions'), { withFileTypes: true }))
-    .filter(entry => entry.isDirectory()).map(entry => entry.name);
-  assert.ok(['ai-fighter', 'ai-fighter-mcp'].every(name => functions.includes(name)), JSON.stringify(functions));
+    .filter(entry => entry.isDirectory())
+    .map(entry => entry.name);
+  assert.ok(
+    ['ai-fighter', 'ai-fighter-mcp'].every(name => functions.includes(name)),
+    JSON.stringify(functions),
+  );
   for (const name of functions) {
     const base = `supabase/functions/${name}`;
-    if (await access(path.join(repository, base, 'deno.json')).then(() => true, () => false)) {
+    if (
+      await access(path.join(repository, base, 'deno.json')).then(
+        () => true,
+        () => false,
+      )
+    ) {
       for (const file of await edgeFiles({ entry: `${base}/index.ts`, importMap: `${base}/deno.json`, lock: `${base}/deno.lock` }))
         await access(path.join(repository, file));
     } else {
@@ -52,7 +79,10 @@ test('edge-bundle.mjs stands alone: the game deploy stages only this file of scr
   // crashbang-heroes tools/deploy/ai-fighter-edge.mjs copies api/, contracts/, the function folder and this one script.
   const { importSpecifiers } = await import('../scripts/edge-bundle.mjs');
   const source = await (await import('node:fs/promises')).readFile(path.join(repository, 'scripts/edge-bundle.mjs'), 'utf8');
-  assert.deepEqual(importSpecifiers(source).filter(specifier => !specifier.startsWith('node:')), []);
+  assert.deepEqual(
+    importSpecifiers(source).filter(specifier => !specifier.startsWith('node:')),
+    [],
+  );
 });
 
 test('the CLI cannot emit a deployable payload with the starter null engine', async () => {

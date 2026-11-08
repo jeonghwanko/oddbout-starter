@@ -6,7 +6,8 @@ import { pathToFileURL } from 'node:url';
 
 /** @param {unknown} value */
 const text = value => typeof value === 'string' && value.trim().length > 0;
-const limitation = 'Checks record consistency only; does not authenticate evidence references or verify live generation, model support, account identity, display, pixels or user feedback.';
+const limitation =
+  'Checks record consistency only; does not authenticate evidence references or verify live generation, model support, account identity, display, pixels or user feedback.';
 const scope = { evidenceScope: 'record-only', limitation };
 
 /** @param {any} record read from disk: checked here @param {{ phase: string, conversationId: string }} options */
@@ -36,21 +37,19 @@ export function checkCreationDelivery(record, { phase, conversationId }) {
   // Requested CLI models, login records and tool listings are not completed image calls.
   // These are references for human/agent inspection, not a live capability certificate.
   const evidence = result?.generationEvidence;
-  if (evidence?.status !== 'completed' ||
-      !['tool', 'invocationRef', 'completionRef', 'outputRef'].every(key => text(evidence?.[key])))
+  if (evidence?.status !== 'completed' || !['tool', 'invocationRef', 'completionRef', 'outputRef'].every(key => text(evidence?.[key])))
     blockers.push('generation:missing-call-evidence');
-  if (!text(evidence?.environment) || evidence.environment !== record?.environment ||
-      !text(evidence?.version) || evidence.version !== result?.version) blockers.push('generation:evidence-scope-mismatch');
+  if (!text(evidence?.environment) || evidence.environment !== record?.environment || !text(evidence?.version) || evidence.version !== result?.version)
+    blockers.push('generation:evidence-scope-mismatch');
   for (const key of ['fullBody', 'faceCrop']) {
     const preview = result?.previews?.[key];
-    if (preview?.status !== 'displayed' || preview?.conversationId !== conversationId ||
-        preview?.version !== result?.version || !text(preview?.evidence)) blockers.push(`preview-not-displayed:${key}`);
+    if (preview?.status !== 'displayed' || preview?.conversationId !== conversationId || preview?.version !== result?.version || !text(preview?.evidence))
+      blockers.push(`preview-not-displayed:${key}`);
   }
   const canRequestFeedback = blockers.length === 0;
   if (result?.review !== 'passed') blockers.push('appearance-unchecked');
   if (!text(result?.version) || result?.selection?.version !== result.version || !text(result?.selection?.feedback)) blockers.push('appearance-unselected');
-  return { check: 'offline-delivery-review', canRequestFeedback, canAdvanceAppearance: blockers.length === 0,
-    blockers, ...scope };
+  return { check: 'offline-delivery-review', canRequestFeedback, canAdvanceAppearance: blockers.length === 0, blockers, ...scope };
 }
 
 /** @param {string[]} args */
@@ -59,10 +58,18 @@ export async function main(args) {
   const [phase, file, conversationId] = args;
   const result = checkCreationDelivery(JSON.parse(await readFile(file, 'utf8')), { phase, conversationId });
   console.log(JSON.stringify(result, null, 2));
-  return (phase === 'preflight' ? /** @type {{ ready: boolean }} */ (result).ready : /** @type {{ canAdvanceAppearance: boolean }} */ (result).canAdvanceAppearance) ? 0 : 1;
+  return (
+    phase === 'preflight' ? /** @type {{ ready: boolean }} */ (result).ready : /** @type {{ canAdvanceAppearance: boolean }} */ (result).canAdvanceAppearance
+  )
+    ? 0
+    : 1;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  try { process.exitCode = await main(process.argv.slice(2)); }
-  catch (/** @type {any} */ error) { console.error(error.message); process.exitCode = 2; }
+  try {
+    process.exitCode = await main(process.argv.slice(2));
+  } catch (/** @type {any} */ error) {
+    console.error(error.message);
+    process.exitCode = 2;
+  }
 }

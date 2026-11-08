@@ -15,12 +15,29 @@ export const VALIDATOR_VERSION = 'ai-fighter-validator-0.2.0';
  * @type {Readonly<Record<string, number>>}
  */
 export const SUBMISSION_STATUS = Object.freeze({
-  'idempotency-conflict': 409, 'fighter-quota': 409, 'fighter-removed': 409, 'fighter-unchanged': 409, 'fighter-changed': 409,
-  'profile-not-editable': 409, 'open-submission-exists': 409, 'submission-quota': 409, 'storage-budget-full': 409, 'assets-incomplete': 409,
-  'upload-expired': 409, 'stale-validation': 409, 'submissions-paused': 409, 'beta-capacity': 409,
-  'not-found': 404, 'fighter-not-found': 404, 'rate-limit': 429, 'account-disabled': 403,
-  'validator-version': 400, 'validation-incomplete': 400, 'validation-result-limit': 400,
-  'byte-budget-mismatch': 422, 'profile-only-required': 422,
+  'idempotency-conflict': 409,
+  'fighter-quota': 409,
+  'fighter-removed': 409,
+  'fighter-unchanged': 409,
+  'fighter-changed': 409,
+  'profile-not-editable': 409,
+  'open-submission-exists': 409,
+  'submission-quota': 409,
+  'storage-budget-full': 409,
+  'assets-incomplete': 409,
+  'upload-expired': 409,
+  'stale-validation': 409,
+  'submissions-paused': 409,
+  'beta-capacity': 409,
+  'not-found': 404,
+  'fighter-not-found': 404,
+  'rate-limit': 429,
+  'account-disabled': 403,
+  'validator-version': 400,
+  'validation-incomplete': 400,
+  'validation-result-limit': 400,
+  'byte-budget-mismatch': 422,
+  'profile-only-required': 422,
 });
 /** @type {(submission: { owner_id: string, asset_source_submission?: string | null, id: string }, asset: { id: string }) => string} */
 export const objectKey = (submission, asset) => `${submission.owner_id}/${submission.asset_source_submission ?? submission.id}/${asset.id}.webp`;
@@ -29,16 +46,22 @@ export const objectKey = (submission, asset) => `${submission.owner_id}/${submis
 /** @param {Request} request */
 export async function checkedManifest(request) {
   let text;
-  try { text = new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, spec.limits.jsonBytes)); }
-  catch (error) { if (error instanceof Problem) throw error; throw new Problem(400, 'invalid-utf8'); }
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, spec.limits.jsonBytes));
+  } catch (error) {
+    if (error instanceof Problem) throw error;
+    throw new Problem(400, 'invalid-utf8');
+  }
   const parsed = parseFighterJson(text);
   if (!parsed.ok) throw new Problem(422, 'invalid-manifest', /** @type {any[]} */ (parsed.errors).slice(0, 20));
   const result = validateFighter(parsed.data);
   if (!result.ok) throw new Problem(422, 'invalid-manifest', result.errors.slice(0, 20));
   // Reject here with 422. Otherwise the jsonb cast in af_create_submission fails and the API returns 503.
   const unstorable = unstorableTextPath(parsed.data);
-  if (unstorable !== null) throw new Problem(422, 'invalid-manifest', [{ code: 'UNSUPPORTED_TEXT', path: unstorable,
-    expected: 'text without U+0000 or unpaired surrogates', actual: 'unsupported character' }]);
+  if (unstorable !== null)
+    throw new Problem(422, 'invalid-manifest', [
+      { code: 'UNSUPPORTED_TEXT', path: unstorable, expected: 'text without U+0000 or unpaired surrogates', actual: 'unsupported character' },
+    ]);
   return { text, sha: await sha256(new TextEncoder().encode(text)), bytes: result.assetBytes };
 }
 
@@ -56,14 +79,17 @@ export async function storeAsset(db, row, assetId, request) {
   if (!asset) throw new Problem(404, 'asset-not-found');
   if (request.headers.get('content-type') !== 'image/webp') throw new Problem(415, 'webp-required');
   const bytes = await readBody(request, asset.bytes);
-  if (bytes.length !== asset.bytes || await sha256(bytes) !== asset.sha256) throw new Problem(422, 'asset-hash-or-size');
-  if (new TextDecoder().decode(bytes.slice(0, 4)) !== 'RIFF' || new TextDecoder().decode(bytes.slice(8, 12)) !== 'WEBP') throw new Problem(422, 'webp-required');
-  const bucket = db.storage.from(BUCKET), path = objectKey(row, asset);
+  if (bytes.length !== asset.bytes || (await sha256(bytes)) !== asset.sha256) throw new Problem(422, 'asset-hash-or-size');
+  if (new TextDecoder().decode(bytes.slice(0, 4)) !== 'RIFF' || new TextDecoder().decode(bytes.slice(8, 12)) !== 'WEBP')
+    throw new Problem(422, 'webp-required');
+  const bucket = db.storage.from(BUCKET),
+    path = objectKey(row, asset);
   const { error } = await bucket.upload(path, bytes, { contentType: 'image/webp', cacheControl: '31536000', upsert: false });
   if (error) {
     // An existing immutable object is a successful retry only if its actual bytes still match.
     const { data, error: getError } = await bucket.download(path);
-    if (getError || !data || data.size !== asset.bytes || await sha256(await data.arrayBuffer()) !== asset.sha256) throw unavailable('storage-unavailable', getError);
+    if (getError || !data || data.size !== asset.bytes || (await sha256(await data.arrayBuffer())) !== asset.sha256)
+      throw unavailable('storage-unavailable', getError);
   }
   return { ok: true, stage: 'uploaded', assetId: asset.id, bytes: bytes.length };
 }

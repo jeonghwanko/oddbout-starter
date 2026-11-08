@@ -5,4 +5,6 @@ try {
   if (process.send) process.send(result);
 } catch {
   if (process.send) process.send({ ok: false, stage: 'packaging', code: 'packaging-failed' });
-} finally { process.disconnect(); }
+} finally {
+  process.disconnect();
+}

@@ -16,8 +16,12 @@ try {
     await writeFile(path.join(directory, 'card.webp'), result.card, { flag: 'wx', mode: 0o600 });
     await writeFile(path.join(directory, 'face.webp'), result.face, { flag: 'wx', mode: 0o600 });
     if (sheet?.ok) await writeFile(path.join(directory, 'sheet.webp'), sheet.sheet, { flag: 'wx', mode: 0o600 });
-    process.send?.({ ok: true, errors: [], derived: { ...result.derived, ...(sheet?.ok ? { sheet: sheet.derived } : {}) },
-      ...(sheet && !sheet.ok ? { sheetErrors: sheet.errors } : {}) });
+    process.send?.({
+      ok: true,
+      errors: [],
+      derived: { ...result.derived, ...(sheet?.ok ? { sheet: sheet.derived } : {}) },
+      ...(sheet && !sheet.ok ? { sheetErrors: sheet.errors } : {}),
+    });
   } else process.send?.({ ok: false, errors: [...result.errors, ...(sheet?.errors ?? [])] });
 } catch {
   // Reading its own job files failed, or the check threw: still this painting's verdict (worker/profile-sets.mjs records it).

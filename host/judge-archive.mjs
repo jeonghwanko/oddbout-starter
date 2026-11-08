@@ -32,23 +32,38 @@ export const judgeArchiveDays = value => {
   return Number.isInteger(days) && days >= 1 && days <= 730 ? days : JUDGE_ARCHIVE_DAYS;
 };
 /** Days the archive keeps the pictures it copies (worker.env ODDBOUT_GENERATION_JUDGE_IMAGES, 1-365), or 0: none copied. @param {unknown} value */
-export const judgeImageDays = value => { const days = Number(value ?? 0); return Number.isInteger(days) && days >= 1 && days <= 365 ? days : 0; };
+export const judgeImageDays = value => {
+  const days = Number(value ?? 0);
+  return Number.isInteger(days) && days >= 1 && days <= 365 ? days : 0;
+};
 /** One job's key in the archive: its id hashed with the host's salt (16 hex), or null without either.
  * @param {string | null} salt @param {string | null | undefined} jobId */
-export const archiveJobKey = (salt, jobId) => salt && jobId ? createHash('sha256').update(`${salt}\n${jobId}`).digest('hex').slice(0, 16) : null;
+export const archiveJobKey = (salt, jobId) => (salt && jobId ? createHash('sha256').update(`${salt}\n${jobId}`).digest('hex').slice(0, 16) : null);
 /** A pixel judge's measures with every string dropped (its notes' numbers are all there; no text goes to the archive).
  * @param {unknown} value @returns {any} */
-export const numbersOnly = value => Array.isArray(value) ? value.map(numbersOnly).filter(v => v !== undefined)
-  : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([k, v]) => [k, numbersOnly(v)]).filter(([, v]) => v !== undefined))
-    : typeof value === 'number' && Number.isFinite(value) || typeof value === 'boolean' || value === null ? value : undefined;
+export const numbersOnly = value =>
+  Array.isArray(value)
+    ? value.map(numbersOnly).filter(v => v !== undefined)
+    : value && typeof value === 'object'
+      ? Object.fromEntries(
+          Object.entries(value)
+            .map(([k, v]) => [k, numbersOnly(v)])
+            .filter(([, v]) => v !== undefined),
+        )
+      : (typeof value === 'number' && Number.isFinite(value)) || typeof value === 'boolean' || value === null
+        ? value
+        : undefined;
 /** A verdict's checks of its kind (side: under `checks`; loop: at the top), each as it says (pass, fail or unknown), or null.
  * @param {string} kind @param {any} value */
 export const verdictChecks = (kind, value) => {
-  const keys = kind === 'side' ? SIDE_CHECKS : LOOP_VISUAL, checks = kind === 'side' ? value?.checks : value;
-  return checks && typeof checks === 'object' ? Object.fromEntries(keys.filter(key => PIXEL_STATES.includes(checks[key])).map(key => [key, checks[key]])) : null;
+  const keys = kind === 'side' ? SIDE_CHECKS : LOOP_VISUAL,
+    checks = kind === 'side' ? value?.checks : value;
+  return checks && typeof checks === 'object'
+    ? Object.fromEntries(keys.filter(key => PIXEL_STATES.includes(checks[key])).map(key => [key, checks[key]]))
+    : null;
 };
 /** @param {any} value */
-const ms = value => Number.isFinite(value) && value >= 0 ? Math.round(value) : null;
+const ms = value => (Number.isFinite(value) && value >= 0 ? Math.round(value) : null);
 /** The checks of a part (side: flat in the entry, nested in a verdict), as verdictChecks reads them. @param {string} kind @param {any} checks */
 const partChecks = (kind, checks) => verdictChecks(kind, kind === 'side' ? { checks } : checks);
 /**
@@ -58,24 +73,64 @@ const partChecks = (kind, checks) => verdictChecks(kind, kind === 'side' ? { che
  * @param {{ id: string, at: Date, jobKey?: string | null, item?: string | null, kind: string, mode: string, decidedBy: string, final: any,
  *   pixels?: any, codex?: any, shadow?: boolean, recovered?: boolean, images?: string[] | null }} entry
  */
-export function judgmentLine({ id, at, jobKey = null, item, kind, mode, decidedBy, final, pixels = null, codex = null, shadow = false, recovered = false,
-  images = null }) {
-  return { v: JUDGE_ARCHIVE_VERSION, id, at: at.toISOString(), jobKey: typeof jobKey === 'string' && /^[0-9a-f]{16}$/.test(jobKey) ? jobKey : null,
-    item: String(item ?? '').slice(0, 160) || null, kind, mode, decidedBy, final: partChecks(kind, final),
+export function judgmentLine({
+  id,
+  at,
+  jobKey = null,
+  item,
+  kind,
+  mode,
+  decidedBy,
+  final,
+  pixels = null,
+  codex = null,
+  shadow = false,
+  recovered = false,
+  images = null,
+}) {
+  return {
+    v: JUDGE_ARCHIVE_VERSION,
+    id,
+    at: at.toISOString(),
+    jobKey: typeof jobKey === 'string' && /^[0-9a-f]{16}$/.test(jobKey) ? jobKey : null,
+    item: String(item ?? '').slice(0, 160) || null,
+    kind,
+    mode,
+    decidedBy,
+    final: partChecks(kind, final),
     // pixels.ms: the judge's own time (its measures); wallMs: the whole motions.py call, the interpreter's start and imports included —
     // what a judgment costs (in codex mode, what the shadow adds); null for an answer an earlier run left.
-    pixels: !pixels ? null : pixels.error !== undefined
-      ? { model: known(pixels.model), error: String(pixels.error).slice(0, 40), checks: null, wallMs: ms(pixels.wallMs) }
-      : { model: known(pixels.model), observed: known(pixels.observed), checks: partChecks(kind, pixels.checks), measures: numbersOnly(pixels.measures ?? {}),
-        ms: ms(pixels.ms), wallMs: ms(pixels.wallMs) },
+    pixels: !pixels
+      ? null
+      : pixels.error !== undefined
+        ? { model: known(pixels.model), error: String(pixels.error).slice(0, 40), checks: null, wallMs: ms(pixels.wallMs) }
+        : {
+            model: known(pixels.model),
+            observed: known(pixels.observed),
+            checks: partChecks(kind, pixels.checks),
+            measures: numbersOnly(pixels.measures ?? {}),
+            ms: ms(pixels.ms),
+            wallMs: ms(pixels.wallMs),
+          },
     // codex.wallMs: the whole judge call, og's wait for a free codex slot included (walk and run are judged at once); null for a verdict
     // codex made in an earlier run of the stage and reused here (`reused`, its checks still the reference).
-    codex: codex ? { checks: partChecks(kind, codex.checks), model: known(codex.model), effort: known(codex.effort),
-      observed: known(codex.observed), wallMs: ms(codex.wallMs), ...(codex.reused ? { reused: true } : {}) } : null,
-    ...(shadow ? { shadow: true } : {}), ...(recovered ? { recovered: true } : {}), ...(images?.length ? { images } : {}) };
+    codex: codex
+      ? {
+          checks: partChecks(kind, codex.checks),
+          model: known(codex.model),
+          effort: known(codex.effort),
+          observed: known(codex.observed),
+          wallMs: ms(codex.wallMs),
+          ...(codex.reused ? { reused: true } : {}),
+        }
+      : null,
+    ...(shadow ? { shadow: true } : {}),
+    ...(recovered ? { recovered: true } : {}),
+    ...(images?.length ? { images } : {}),
+  };
 }
 /** A job folder's name as the archive keeps it beside a picture folder (`.job`): one plain path part, or null. @param {unknown} name */
-const folderName = name => typeof name === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]{0,120}$/.test(name) ? name : null;
+const folderName = name => (typeof name === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]{0,120}$/.test(name) ? name : null);
 /**
  * The archive in `dir` (`<root>/judge-archive`; its salt in `saltFile`, made on first use). `note(entry, files)` appends a judgmentLine —
  * `entry.jobId` becomes its jobKey — and, with `imageDays`, copies `files` (the pixel judge's pictures; a strip's .png beside its .json)
@@ -104,7 +159,10 @@ export function createJudgeArchive({ dir, saltFile = null, lineDays = JUDGE_ARCH
    * One picture copied, readable by the archive's group (0640, as its month files are): copyFile keeps the source's mode, and a matted take
    * is owner-only (0600), so an operator in the service group could read the lines but not the pictures they were copied for (2026-11-07).
    */
-  const copyReadable = async (/** @type {string} */ from, /** @type {string} */ to) => { await copyFile(from, to); await chmod(to, 0o640); };
+  const copyReadable = async (/** @type {string} */ from, /** @type {string} */ to) => {
+    await copyFile(from, to);
+    await chmod(to, 0o640);
+  };
   /** The pictures copied into `into`, or null (none left behind) when any could not be.
    * @param {string} into @param {string[]} files @param {Date} at @param {string | null} jobFolder */
   async function copied(into, files, at, jobFolder) {
@@ -130,25 +188,40 @@ export function createJudgeArchive({ dir, saltFile = null, lineDays = JUDGE_ARCH
     /** @param {any} entry @param {string[]} [files] */
     async note({ jobId = null, jobFolder = null, ...entry }, files = []) {
       try {
-        const at = now(), id = randomBytes(8).toString('hex'), jobKey = archiveJobKey(await saltOf(), jobId);
+        const at = now(),
+          id = randomBytes(8).toString('hex'),
+          jobKey = archiveJobKey(await saltOf(), jobId);
         const images = imageDays && files.length ? await copied(path.join(dir, 'images', day(at), id), files, at, jobFolder) : null;
         await mkdir(dir, { recursive: true });
         // One appendFile per line: a line is written whole or, on a crash, read back as a bad line and skipped (scripts/judge-eval.mjs).
         await appendFile(path.join(dir, `judgments-${day(at).slice(0, 7)}.jsonl`), JSON.stringify(judgmentLine({ ...entry, id, at, jobKey, images })) + '\n');
         return id;
-      } catch { return null; }
+      } catch {
+        return null;
+      }
     },
     /** @param {{ jobGone?: (name: string) => boolean }} [options] */
     async prune({ jobGone = () => false } = {}) {
-      const nowMs = now().getTime(), cutoff = nowMs - imageDays * 86_400_000, folder = path.join(dir, 'images');
-      let pictures = 0, lines = 0;
+      const nowMs = now().getTime(),
+        cutoff = nowMs - imageDays * 86_400_000,
+        folder = path.join(dir, 'images');
+      let pictures = 0,
+        lines = 0;
       for (const name of await readdir(folder).catch(() => [])) {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(name)) continue;
         const days = path.join(folder, name);
         for (const id of await readdir(days).catch(() => [])) {
-          const at = imageDays ? await stat(path.join(days, id)).then(s => s.mtimeMs, () => -Infinity) : -Infinity;
+          const at = imageDays
+            ? await stat(path.join(days, id)).then(
+                s => s.mtimeMs,
+                () => -Infinity,
+              )
+            : -Infinity;
           const job = folderName((await readFile(path.join(days, id, '.job'), 'utf8').catch(() => '')).trim());
-          if (at <= cutoff || (job && jobGone(job))) { await rm(path.join(days, id), { recursive: true, force: true }); pictures += 1; }
+          if (at <= cutoff || (job && jobGone(job))) {
+            await rm(path.join(days, id), { recursive: true, force: true });
+            pictures += 1;
+          }
         }
         if (!(await readdir(days).catch(() => [])).length) await rm(days, { recursive: true, force: true });
       }
@@ -156,7 +229,8 @@ export function createJudgeArchive({ dir, saltFile = null, lineDays = JUDGE_ARCH
       for (const name of await readdir(dir).catch(() => [])) {
         const month = /^judgments-(\d{4})-(\d{2})\.jsonl$/.exec(name);
         if (month && Date.UTC(Number(month[1]), Number(month[2]), 1) + lineDays * 86_400_000 <= nowMs) {
-          await rm(path.join(dir, name), { force: true }); lines += 1;
+          await rm(path.join(dir, name), { force: true });
+          lines += 1;
         }
       }
       return { pictures, lines };

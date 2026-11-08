@@ -35,7 +35,9 @@ const STATES = /** @type {const} */ (['pass', 'fail', 'unknown']);
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 // An archive line's id (createJudgeArchive: 8 random bytes in hex), its time and a picture's name (`<index>-<basename>`): checked before
 // any becomes part of a path, so an edited archive copy cannot point outside its folder.
-const ID = /^[0-9a-f]{16}$/, AT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/, IMAGE = /^\d+-[A-Za-z0-9._-]+$/;
+const ID = /^[0-9a-f]{16}$/,
+  AT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/,
+  IMAGE = /^\d+-[A-Za-z0-9._-]+$/;
 
 /**
  * @typedef {Record<string, string>} Checks
@@ -50,31 +52,50 @@ const ID = /^[0-9a-f]{16}$/, AT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z
 
 /** Lines from JSON-lines text: a torn line (a crash mid-write) is counted and skipped, as the ledger does. @param {string} text */
 export function parseLines(text) {
-  /** @type {any[]} */ const lines = []; let skipped = 0;
+  /** @type {any[]} */ const lines = [];
+  let skipped = 0;
   for (const line of text.split('\n')) {
     if (!line.trim()) continue;
-    try { lines.push(JSON.parse(line)); } catch { skipped += 1; }
+    try {
+      lines.push(JSON.parse(line));
+    } catch {
+      skipped += 1;
+    }
   }
   return { lines, skipped };
 }
 
 /** An archive line as judge-eval reads it, or null: version 1 or 2, a kind, an id and a time; pictures only with names it can trust. @param {any} line */
 export function checkedLine(line) {
-  if ((line?.v !== 1 && line?.v !== 2) || (line.kind !== 'side' && line.kind !== 'loop') || typeof line.id !== 'string' || !ID.test(line.id)
-    || typeof line.at !== 'string' || !AT.test(line.at) || typeof line.mode !== 'string' || typeof line.decidedBy !== 'string') return null;
-  const images = Array.isArray(line.images) && line.images.every((/** @type {unknown} */ name) => typeof name === 'string' && IMAGE.test(name)) ? line.images : undefined;
+  if (
+    (line?.v !== 1 && line?.v !== 2) ||
+    (line.kind !== 'side' && line.kind !== 'loop') ||
+    typeof line.id !== 'string' ||
+    !ID.test(line.id) ||
+    typeof line.at !== 'string' ||
+    !AT.test(line.at) ||
+    typeof line.mode !== 'string' ||
+    typeof line.decidedBy !== 'string'
+  )
+    return null;
+  const images =
+    Array.isArray(line.images) && line.images.every((/** @type {unknown} */ name) => typeof name === 'string' && IMAGE.test(name)) ? line.images : undefined;
   return { ...line, images };
 }
 
 /** Every archive line in `dir` (judgments-*.jsonl), oldest file first; a line judge-eval cannot read is counted and skipped. @param {string} dir */
 export function readArchive(dir) {
-  /** @type {Line[]} */ const records = []; let skipped = 0;
-  for (const name of readdirSync(dir).filter(n => /^judgments-.*\.jsonl$/.test(n)).sort()) {
+  /** @type {Line[]} */ const records = [];
+  let skipped = 0;
+  for (const name of readdirSync(dir)
+    .filter(n => /^judgments-.*\.jsonl$/.test(n))
+    .sort()) {
     const parsed = parseLines(readFileSync(path.join(dir, name), 'utf8'));
     skipped += parsed.skipped;
     for (const line of parsed.lines) {
       const checked = checkedLine(line);
-      if (checked) records.push(checked); else skipped += 1;
+      if (checked) records.push(checked);
+      else skipped += 1;
     }
   }
   return { records, skipped };
@@ -85,7 +106,8 @@ export function readLabels(text) {
   /** @type {Labels} */ const labels = Object.create(null);
   for (const line of parseLines(text).lines) {
     if (typeof line?.id !== 'string' || !ID.test(line.id) || !line.checks || typeof line.checks !== 'object') continue;
-    for (const [check, value] of Object.entries(line.checks)) if (value === 'pass' || value === 'fail') (labels[line.id] ??= Object.create(null))[check] = value;
+    for (const [check, value] of Object.entries(line.checks))
+      if (value === 'pass' || value === 'fail') (labels[line.id] ??= Object.create(null))[check] = value;
   }
   return labels;
 }
@@ -96,10 +118,10 @@ export const quantile = (values, q) => {
   return sorted.length ? sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(q * sorted.length) - 1))] : null;
 };
 /** @param {number} part @param {number} whole */
-const share = (part, whole) => whole ? Math.round((part / whole) * 1000) / 1000 : null;
+const share = (part, whole) => (whole ? Math.round((part / whole) * 1000) / 1000 : null);
 /** @param {(number | null | undefined)[]} values */
 const times = values => {
-  const known = values.map(v => typeof v === 'number' ? v : NaN);
+  const known = values.map(v => (typeof v === 'number' ? v : NaN));
   return { n: known.filter(Number.isFinite).length, p50: quantile(known, 0.5), p95: quantile(known, 0.95) };
 };
 /** @param {unknown} value @returns {value is 'pass' | 'fail'} */
@@ -118,21 +140,41 @@ export const hybridWouldAsk = line => {
  * @param {Line[]} lines @param {string} check @param {Labels} labels
  */
 export function labelStrata(lines, check, labels) {
-  const strata = { agreed: { n: 0, bothRight: 0 }, disagreed: { n: 0, pixelsRight: 0, codexRight: 0 }, pixelsAlone: { n: 0, pixelsRight: 0 },
-    codexAlone: { n: 0, codexRight: 0 } };
+  const strata = {
+    agreed: { n: 0, bothRight: 0 },
+    disagreed: { n: 0, pixelsRight: 0, codexRight: 0 },
+    pixelsAlone: { n: 0, pixelsRight: 0 },
+    codexAlone: { n: 0, codexRight: 0 },
+  };
   for (const line of lines) {
     const label = labels[line.id]?.[check];
     if (!decided(label)) continue;
-    const pixel = line.pixels?.checks?.[check], codex = line.codex?.checks?.[check];
+    const pixel = line.pixels?.checks?.[check],
+      codex = line.codex?.checks?.[check];
     if (decided(pixel) && decided(codex)) {
-      if (pixel === codex) { strata.agreed.n += 1; if (pixel === label) strata.agreed.bothRight += 1; }
-      else { strata.disagreed.n += 1; if (pixel === label) strata.disagreed.pixelsRight += 1; else strata.disagreed.codexRight += 1; }
-    } else if (decided(pixel)) { strata.pixelsAlone.n += 1; if (pixel === label) strata.pixelsAlone.pixelsRight += 1; }
-    else if (decided(codex)) { strata.codexAlone.n += 1; if (codex === label) strata.codexAlone.codexRight += 1; }
+      if (pixel === codex) {
+        strata.agreed.n += 1;
+        if (pixel === label) strata.agreed.bothRight += 1;
+      } else {
+        strata.disagreed.n += 1;
+        if (pixel === label) strata.disagreed.pixelsRight += 1;
+        else strata.disagreed.codexRight += 1;
+      }
+    } else if (decided(pixel)) {
+      strata.pixelsAlone.n += 1;
+      if (pixel === label) strata.pixelsAlone.pixelsRight += 1;
+    } else if (decided(codex)) {
+      strata.codexAlone.n += 1;
+      if (codex === label) strata.codexAlone.codexRight += 1;
+    }
   }
   return {
     agreed: { n: strata.agreed.n, bothRight: share(strata.agreed.bothRight, strata.agreed.n) },
-    disagreed: { n: strata.disagreed.n, pixelsRight: share(strata.disagreed.pixelsRight, strata.disagreed.n), codexRight: share(strata.disagreed.codexRight, strata.disagreed.n) },
+    disagreed: {
+      n: strata.disagreed.n,
+      pixelsRight: share(strata.disagreed.pixelsRight, strata.disagreed.n),
+      codexRight: share(strata.disagreed.codexRight, strata.disagreed.n),
+    },
     pixelsAlone: { n: strata.pixelsAlone.n, pixelsRight: share(strata.pixelsAlone.pixelsRight, strata.pixelsAlone.n) },
     codexAlone: { n: strata.codexAlone.n, codexRight: share(strata.codexAlone.codexRight, strata.codexAlone.n) },
   };
@@ -156,14 +198,17 @@ export function evaluate(records, labels = Object.create(null)) {
     for (const check of CHECKS[kind]) {
       /** @type {Record<string, Row>} */ const matrix = Object.fromEntries(STATES.map(s => [s, { pass: 0, fail: 0, none: 0 }]));
       for (const line of lines) {
-        const pixel = line.pixels?.checks?.[check], codex = line.codex?.checks?.[check];
+        const pixel = line.pixels?.checks?.[check],
+          codex = line.codex?.checks?.[check];
         if (pixel && matrix[pixel]) matrix[pixel][decided(codex) ? codex : 'none'] += 1;
       }
       const answered = STATES.reduce((n, s) => n + matrix[s].pass + matrix[s].fail + matrix[s].none, 0);
       const open = matrix.unknown.pass + matrix.unknown.fail + matrix.unknown.none;
       const compared = matrix.pass.pass + matrix.pass.fail + matrix.fail.pass + matrix.fail.fail;
       checks[check] = {
-        matrix, answered, decidedShare: share(answered - open, answered),
+        matrix,
+        answered,
+        decidedShare: share(answered - open, answered),
         agreement: share(matrix.pass.pass + matrix.fail.fail, compared),
         passHeld: share(matrix.pass.pass, matrix.pass.pass + matrix.pass.fail),
         failHeld: share(matrix.fail.fail, matrix.fail.fail + matrix.fail.pass),
@@ -172,10 +217,15 @@ export function evaluate(records, labels = Object.create(null)) {
     }
     const withPixels = lines.filter(r => r.pixels?.checks);
     report[kind] = {
-      lines: all.length, pixelNoAnswer: all.filter(r => r.pixels?.error !== undefined).length, recovered: all.filter(r => r.recovered).length,
-      decidedBy: countBy(all, r => r.decidedBy), codexShare: share(lines.filter(r => r.codex?.checks).length, lines.length),
+      lines: all.length,
+      pixelNoAnswer: all.filter(r => r.pixels?.error !== undefined).length,
+      recovered: all.filter(r => r.recovered).length,
+      decidedBy: countBy(all, r => r.decidedBy),
+      codexShare: share(lines.filter(r => r.codex?.checks).length, lines.length),
       hybridWouldAsk: share(withPixels.filter(hybridWouldAsk).length, withPixels.length),
-      pixelMs: times(all.map(r => r.pixels?.ms)), pixelWallMs: times(all.map(r => r.pixels?.wallMs)), codexWallMs: times(lines.map(r => r.codex?.wallMs)),
+      pixelMs: times(all.map(r => r.pixels?.ms)),
+      pixelWallMs: times(all.map(r => r.pixels?.wallMs)),
+      codexWallMs: times(lines.map(r => r.codex?.wallMs)),
       checks,
     };
   }
@@ -211,19 +261,21 @@ const draw = (id, check) => createHash('sha256').update(`${id}:${check}`).digest
 export function labelQueue(records, labels = Object.create(null), { sample = 5 } = {}) {
   /** @type {Queued[]} */ const queue = [];
   /** @type {Queued[]} */ const agreed = [];
-  for (const line of records) for (const check of CHECKS[line.kind]) {
-    if (line.decidedBy === 'none' || labels[line.id]?.[check]) continue;
-    const pixel = line.pixels?.checks?.[check], codex = line.codex?.checks?.[check];
-    if (!decided(pixel)) continue;
-    const base = { id: line.id, item: line.item, kind: line.kind, mode: line.mode, check, pixels: pixel, at: line.at };
-    if (decided(codex)) (codex !== pixel ? queue : agreed).push({ ...base, codex, why: codex !== pixel ? 'disagree' : 'agree-sample' });
-    else queue.push({ ...base, codex: null, why: 'pixels-alone' });
-  }
+  for (const line of records)
+    for (const check of CHECKS[line.kind]) {
+      if (line.decidedBy === 'none' || labels[line.id]?.[check]) continue;
+      const pixel = line.pixels?.checks?.[check],
+        codex = line.codex?.checks?.[check];
+      if (!decided(pixel)) continue;
+      const base = { id: line.id, item: line.item, kind: line.kind, mode: line.mode, check, pixels: pixel, at: line.at };
+      if (decided(codex)) (codex !== pixel ? queue : agreed).push({ ...base, codex, why: codex !== pixel ? 'disagree' : 'agree-sample' });
+      else queue.push({ ...base, codex: null, why: 'pixels-alone' });
+    }
   queue.push(...agreed.sort((a, b) => draw(a.id, a.check) - draw(b.id, b.check)).slice(0, sample));
   /** @param {Queued} q */
   const rank = q => ({ disagree: 0, 'agree-sample': 2, 'pixels-alone': 4 })[q.why] ?? 6;
   /** @param {Queued} q */
-  const within = q => q.why === 'agree-sample' ? 0 : q.pixels === 'fail' ? 0 : 1;
+  const within = q => (q.why === 'agree-sample' ? 0 : q.pixels === 'fail' ? 0 : 1);
   return queue.sort((a, b) => rank(a) - rank(b) || within(a) - within(b) || b.at.localeCompare(a.at));
 }
 
@@ -236,43 +288,69 @@ export function labelQueue(records, labels = Object.create(null), { sample = 5 }
  */
 export function rerun(records, dir, { python, motions = path.join(ROOT, 'host', 'motions.py'), run = spawnSync }) {
   const work = mkdtempSync(path.join(tmpdir(), 'judge-eval-'));
-  /** @type {Line[]} */ const judged = [], before = []; let failed = 0;
+  /** @type {Line[]} */ const judged = [],
+    before = [];
+  let failed = 0;
   try {
     for (const line of records) {
       const names = line.images ?? [];
       if (names.length !== 2 || !ID.test(line.id) || !AT.test(line.at) || line.decidedBy === 'none') continue;
-      const folder = path.join(dir, 'images', line.at.slice(0, 10), line.id), out = path.join(work, `${line.id}.json`);
+      const folder = path.join(dir, 'images', line.at.slice(0, 10), line.id),
+        out = path.join(work, `${line.id}.json`);
       const args = names.map(name => path.join(folder, name));
       if (!args.every(file => existsSync(file))) continue;
-      const started = Date.now(), done = run(python, ['-I', motions, 'pixel-judge', line.kind, ...args, out], { encoding: 'utf8' }), wallMs = Date.now() - started;
+      const started = Date.now(),
+        done = run(python, ['-I', motions, 'pixel-judge', line.kind, ...args, out], { encoding: 'utf8' }),
+        wallMs = Date.now() - started;
       /** @type {any} */ let answer = null;
-      try { answer = done.status === 0 ? JSON.parse(readFileSync(out, 'utf8')) : null; } catch { answer = null; }
+      try {
+        answer = done.status === 0 ? JSON.parse(readFileSync(out, 'utf8')) : null;
+      } catch {
+        answer = null;
+      }
       const checks = answer?.kind === line.kind ? (line.kind === 'side' ? answer.checks : answer) : null;
-      if (!checks || typeof checks !== 'object') { failed += 1; continue; }
+      if (!checks || typeof checks !== 'object') {
+        failed += 1;
+        continue;
+      }
       before.push(line);
-      judged.push({ ...line, pixels: { model: String(answer.model), observed: String(answer.model),
-        checks: Object.fromEntries(CHECKS[line.kind].map(check => [check, checks[check]])), measures: answer.measures, ms: answer.measures?.ms ?? null, wallMs } });
+      judged.push({
+        ...line,
+        pixels: {
+          model: String(answer.model),
+          observed: String(answer.model),
+          checks: Object.fromEntries(CHECKS[line.kind].map(check => [check, checks[check]])),
+          measures: answer.measures,
+          ms: answer.measures?.ms ?? null,
+          wallMs,
+        },
+      });
     }
-  } finally { rmSync(work, { recursive: true, force: true }); }
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
   return { records: judged, before, failed };
 }
 
 /** @param {number | null | undefined} value */
-const pct = value => value === null || value === undefined ? '—' : `${(value * 100).toFixed(1)}%`;
+const pct = value => (value === null || value === undefined ? '—' : `${(value * 100).toFixed(1)}%`);
 /** @param {{ n: number, p50: number | null, p95: number | null }} t */
-const msText = t => t.n ? `${t.p50} / ${t.p95} ms (n ${t.n})` : '—';
+const msText = t => (t.n ? `${t.p50} / ${t.p95} ms (n ${t.n})` : '—');
 const ABOUT = /** @type {Record<string, string>} */ ({
-  codex: 'codex judged every line, the pixel judge beside it: the comparison the pixels\' answers do not select',
+  codex: "codex judged every line, the pixel judge beside it: the comparison the pixels' answers do not select",
   hybrid: 'codex only where the pixels failed nothing and left a check open: pixel fails never meet codex',
   pixels: 'no codex: only labels can say how the pixels did',
 });
 /** @param {any} s */
-const strataText = s => [
-  s.agreed.n ? `agreed ${s.agreed.n}: both right ${pct(s.agreed.bothRight)}` : '',
-  s.disagreed.n ? `disagreed ${s.disagreed.n}: pixels right ${pct(s.disagreed.pixelsRight)}, codex right ${pct(s.disagreed.codexRight)}` : '',
-  s.pixelsAlone.n ? `pixels alone ${s.pixelsAlone.n}: right ${pct(s.pixelsAlone.pixelsRight)}` : '',
-  s.codexAlone.n ? `codex alone ${s.codexAlone.n}: right ${pct(s.codexAlone.codexRight)}` : '',
-].filter(Boolean).join('; ');
+const strataText = s =>
+  [
+    s.agreed.n ? `agreed ${s.agreed.n}: both right ${pct(s.agreed.bothRight)}` : '',
+    s.disagreed.n ? `disagreed ${s.disagreed.n}: pixels right ${pct(s.disagreed.pixelsRight)}, codex right ${pct(s.disagreed.codexRight)}` : '',
+    s.pixelsAlone.n ? `pixels alone ${s.pixelsAlone.n}: right ${pct(s.pixelsAlone.pixelsRight)}` : '',
+    s.codexAlone.n ? `codex alone ${s.codexAlone.n}: right ${pct(s.codexAlone.codexRight)}` : '',
+  ]
+    .filter(Boolean)
+    .join('; ');
 
 /** The per-mode report as text: per mode and kind its totals, a line per check, then the labels by stratum. @param {Record<string, any>} byMode @param {string} title */
 export function render(byMode, title) {
@@ -280,16 +358,23 @@ export function render(byMode, title) {
   for (const [mode, report] of Object.entries(byMode)) {
     out.push('', `== ${mode} mode — ${ABOUT[mode] ?? 'an unknown mode'}`);
     for (const [kind, k] of Object.entries(report)) {
-      const by = Object.entries(/** @type {Record<string, number>} */ (k.decidedBy)).map(([who, n]) => `${who} ${n}`).join(', ');
-      out.push('', `${kind}: ${k.lines} lines (${by}); pixel judge no answer ${k.pixelNoAnswer}; recovered ${k.recovered}; `
-        + `codex verdicts on ${pct(k.codexShare)}; hybrid would ask codex on ${pct(k.hybridWouldAsk)}`,
+      const by = Object.entries(/** @type {Record<string, number>} */ (k.decidedBy))
+        .map(([who, n]) => `${who} ${n}`)
+        .join(', ');
+      out.push(
+        '',
+        `${kind}: ${k.lines} lines (${by}); pixel judge no answer ${k.pixelNoAnswer}; recovered ${k.recovered}; ` +
+          `codex verdicts on ${pct(k.codexShare)}; hybrid would ask codex on ${pct(k.hybridWouldAsk)}`,
         `  time p50 / p95: pixel judge ${msText(k.pixelMs)}, its whole call ${msText(k.pixelWallMs)}, codex call with its slot wait ${msText(k.codexWallMs)}`,
-        '  check      answered  decided   agree  pass held  fail held  pixel pass | fail | unknown → codex pass/fail/none');
+        '  check      answered  decided   agree  pass held  fail held  pixel pass | fail | unknown → codex pass/fail/none',
+      );
       const labelled = [];
       for (const [check, c] of Object.entries(/** @type {Record<string, any>} */ (k.checks))) {
         const cells = STATES.map(s => `${c.matrix[s].pass}/${c.matrix[s].fail}/${c.matrix[s].none}`).join(' | ');
-        out.push(`  ${check.padEnd(10)} ${String(c.answered).padStart(8)}  ${pct(c.decidedShare).padStart(7)}  ${pct(c.agreement).padStart(6)}`
-          + `  ${pct(c.passHeld).padStart(9)}  ${pct(c.failHeld).padStart(9)}  ${cells}`);
+        out.push(
+          `  ${check.padEnd(10)} ${String(c.answered).padStart(8)}  ${pct(c.decidedShare).padStart(7)}  ${pct(c.agreement).padStart(6)}` +
+            `  ${pct(c.passHeld).padStart(9)}  ${pct(c.failHeld).padStart(9)}  ${cells}`,
+        );
         const said = strataText(c.labels);
         if (said) labelled.push(`  ${check.padEnd(10)} ${said}`);
       }
@@ -299,35 +384,82 @@ export function render(byMode, title) {
   return out.join('\n');
 }
 
-const USAGE = 'usage: node scripts/judge-eval.mjs <archive-dir> [--labels labels.jsonl] [--json] [--queue N] [--sample N] [--rerun --python <python> [--judge <script>]]';
+const USAGE =
+  'usage: node scripts/judge-eval.mjs <archive-dir> [--labels labels.jsonl] [--json] [--queue N] [--sample N] [--rerun --python <python> [--judge <script>]]';
 const VALUED = new Set(['--labels', '--queue', '--sample', '--python', '--judge']);
 /** @param {string} file */
-const isDir = file => { try { return statSync(file).isDirectory(); } catch { return false; } };
+const isDir = file => {
+  try {
+    return statSync(file).isDirectory();
+  } catch {
+    return false;
+  }
+};
 
 /** @param {string[]} argv @param {{ out?: (line: string) => void }} [io] */
-export function main(argv, { out = line => { process.stdout.write(`${line}\n`); } } = {}) {
+export function main(
+  argv,
+  {
+    out = line => {
+      process.stdout.write(`${line}\n`);
+    },
+  } = {},
+) {
   /** @param {string} name */
-  const flag = name => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : undefined; };
+  const flag = name => {
+    const i = argv.indexOf(name);
+    return i >= 0 ? argv[i + 1] : undefined;
+  };
   const dir = argv.find((arg, i) => !arg.startsWith('--') && !VALUED.has(argv[i - 1] ?? ''));
-  if (!dir || !isDir(dir)) { out(USAGE); return 2; }
-  const python = flag('--python'), labelsFile = flag('--labels'), queueSize = Number(flag('--queue') ?? 20), sample = Number(flag('--sample') ?? 5);
-  if (argv.includes('--rerun') && !python) { out('--rerun needs --python <the sprite-gen venv python>'); return 2; }
+  if (!dir || !isDir(dir)) {
+    out(USAGE);
+    return 2;
+  }
+  const python = flag('--python'),
+    labelsFile = flag('--labels'),
+    queueSize = Number(flag('--queue') ?? 20),
+    sample = Number(flag('--sample') ?? 5);
+  if (argv.includes('--rerun') && !python) {
+    out('--rerun needs --python <the sprite-gen venv python>');
+    return 2;
+  }
   const judge = flag('--judge');
-  if (judge !== undefined && (!argv.includes('--rerun') || !existsSync(judge))) { out(`--judge needs --rerun and an existing script (${judge})`); return 2; }
-  if (labelsFile !== undefined && !existsSync(labelsFile)) { out(`no labels file at ${labelsFile}`); return 2; }
-  if (![queueSize, sample].every(n => Number.isInteger(n) && n >= 0)) { out('--queue and --sample take a whole number'); return 2; }
+  if (judge !== undefined && (!argv.includes('--rerun') || !existsSync(judge))) {
+    out(`--judge needs --rerun and an existing script (${judge})`);
+    return 2;
+  }
+  if (labelsFile !== undefined && !existsSync(labelsFile)) {
+    out(`no labels file at ${labelsFile}`);
+    return 2;
+  }
+  if (![queueSize, sample].every(n => Number.isInteger(n) && n >= 0)) {
+    out('--queue and --sample take a whole number');
+    return 2;
+  }
   const { records, skipped } = readArchive(dir);
   const labels = labelsFile ? readLabels(readFileSync(labelsFile, 'utf8')) : Object.create(null);
-  const ids = new Set(records.map(r => r.id)), labelled = Object.keys(labels).filter(id => ids.has(id)).length;
-  const byMode = evaluateByMode(records, labels), queue = labelQueue(records, labels, { sample }).slice(0, queueSize);
+  const ids = new Set(records.map(r => r.id)),
+    labelled = Object.keys(labels).filter(id => ids.has(id)).length;
+  const byMode = evaluateByMode(records, labels),
+    queue = labelQueue(records, labels, { sample }).slice(0, queueSize);
   /** @type {any} */ const result = { lines: records.length, skipped, labelled, unmatchedLabels: Object.keys(labels).length - labelled, byMode, queue };
   if (argv.includes('--rerun') && python) {
     const again = rerun(records, dir, { python, ...(judge ? { motions: judge } : {}) });
-    result.rerun = { lines: again.records.length, failed: again.failed, before: evaluateByMode(again.before, labels), after: evaluateByMode(again.records, labels) };
+    result.rerun = {
+      lines: again.records.length,
+      failed: again.failed,
+      before: evaluateByMode(again.before, labels),
+      after: evaluateByMode(again.records, labels),
+    };
   }
-  if (argv.includes('--json')) { out(JSON.stringify(result, null, 1)); return 0; }
-  out(`${records.length} lines (${skipped} unreadable skipped), ${labelled} labelled`
-    + (result.unmatchedLabels ? ` (${result.unmatchedLabels} label ids not in this archive)` : ''));
+  if (argv.includes('--json')) {
+    out(JSON.stringify(result, null, 1));
+    return 0;
+  }
+  out(
+    `${records.length} lines (${skipped} unreadable skipped), ${labelled} labelled` +
+      (result.unmatchedLabels ? ` (${result.unmatchedLabels} label ids not in this archive)` : ''),
+  );
   out(render(byMode, '\nAs archived'));
   if (result.rerun) {
     const about = `${result.rerun.lines} lines with pictures, ${result.rerun.failed} gave no answer`;

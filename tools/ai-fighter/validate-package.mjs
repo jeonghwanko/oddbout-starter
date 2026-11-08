@@ -1,6 +1,7 @@
 import { validateFighterPackage } from '../../server/ai-fighter-package.mjs';
 
-const args = process.argv.slice(2), metadataOnly = args.includes('--metadata-only');
+const args = process.argv.slice(2),
+  metadataOnly = args.includes('--metadata-only');
 const paths = args.filter(arg => arg !== '--metadata-only');
 if (paths.length !== 1 || args.some(arg => arg.startsWith('--') && arg !== '--metadata-only')) {
   console.error('Usage: npm run validate -- <package/fighter.json> [--metadata-only]');

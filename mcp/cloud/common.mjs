@@ -37,19 +37,37 @@ export { DATABASE_TIMEOUT_MS, timedFetch, unavailable, within };
 /** The time left before `deadline`, at most `cap`, at least 1 ms. @param {number} deadline @param {number} cap */
 export const timeLeft = (deadline, cap) => Math.max(1, Math.min(cap, deadline - Date.now()));
 /** A wait that ends early when `signal` aborts. @param {number} ms @param {AbortSignal} signal @returns {Promise<void>} */
-export const pause = (ms, signal) => new Promise(done => {
-  if (signal.aborted) return done();
-  const timer = setTimeout(() => { signal.removeEventListener('abort', stop); done(); }, ms), stop = () => { clearTimeout(timer); done(); };
-  signal.addEventListener('abort', stop, { once: true });
-});
+export const pause = (ms, signal) =>
+  new Promise(done => {
+    if (signal.aborted) return done();
+    const timer = setTimeout(() => {
+        signal.removeEventListener('abort', stop);
+        done();
+      }, ms),
+      stop = () => {
+        clearTimeout(timer);
+        done();
+      };
+    signal.addEventListener('abort', stop, { once: true });
+  });
 
 /**
  * A file the host attaches (ChatGPT's fileParams fill it). `error` replaces zod's messages for a value of the wrong shape, which the agent
  * reads in the call's validation error; the schema the host sees stays the same.
  * @param {string} [error]
  */
-export const fileSchema = error => z.object({ download_url: z.string({ error }).max(8192, { error }), file_id: z.string({ error }).min(1, { error }).max(256, { error }),
-  mime_type: z.string().max(128).optional(), file_name: z.string().max(512).optional() }, { error }).strict();
+export const fileSchema = error =>
+  z
+    .object(
+      {
+        download_url: z.string({ error }).max(8192, { error }),
+        file_id: z.string({ error }).min(1, { error }).max(256, { error }),
+        mime_type: z.string().max(128).optional(),
+        file_name: z.string().max(512).optional(),
+      },
+      { error },
+    )
+    .strict();
 export const FILE = fileSchema();
 /**
  * A UUID argument. zod's `uuid()` writes a 168-character pattern into every tool's schema (13 of them, 2.2 KB of each tools/list, every
@@ -65,15 +83,22 @@ export const CREATOR_PAGE = 'https://oddbout.com/creator.html';
  * @param {{ fighterId?: string | null, jobId?: string | null, submissionId?: string | null }} target
  * @returns {string | null}
  */
-export const siteUrl = ({ fighterId, jobId, submissionId }) => fighterId ? `${CREATOR_PAGE}#fighter=${fighterId}&view=motions`
-  : jobId ? `${CREATOR_PAGE}#job=${jobId}` : submissionId ? `${CREATOR_PAGE}#submission=${submissionId}` : null;
+export const siteUrl = ({ fighterId, jobId, submissionId }) =>
+  fighterId
+    ? `${CREATOR_PAGE}#fighter=${fighterId}&view=motions`
+    : jobId
+      ? `${CREATOR_PAGE}#job=${jobId}`
+      : submissionId
+        ? `${CREATOR_PAGE}#submission=${submissionId}`
+        : null;
 /**
  * What an address without the upload tools says of files (2026-11-05), since only OpenAI's file host
  * gives the files they take (allowedFileUrl). The directory edition says it its own way (directory-edition.mjs).
  */
 export const NO_FILES = 'This connector takes no files: the user uploads a package or a profile set from the ODDBOUT app in ChatGPT or with the creator kit.';
 /** What an agent does with a `siteUrl`: one sentence, shared by every result that carries one. */
-export const SITE_URL_NEXT = 'The user can follow this on the ODDBOUT website too: give him siteUrl to watch progress, pick a look, review the motions and enter the fighter (출전).';
+export const SITE_URL_NEXT =
+  'The user can follow this on the ODDBOUT website too: give him siteUrl to watch progress, pick a look, review the motions and enter the fighter (출전).';
 /**
  * 정면 판정 (2026-11-03 사용자: "MCP 서버에서 이거 체크해서 정면샷 제작해야 출전할 수 있다고 알려줘야"): what an agent tells the user about his
  * fighter's front before the entry (출전), from the API's `front` (af_fighter_front). Null when the entry asks for nothing more of it.
@@ -86,36 +111,60 @@ export function frontNext(front, { directory = false, uploads = !directory } = {
   if (!front?.required || front.ok) return null;
   // The full edition names merged tools by selector (enter_fighter's call without its action is not renamed); the directory keeps its own.
   /** @param {string} member */
-  const tool = member => directory ? member : toolRef(member);
+  const tool = member => (directory ? member : toolRef(member));
   const cannot = directory ? 'The fighter cannot enter public play yet' : 'He cannot enter (출전) yet';
   const after = directory ? 'It can enter once front.ok.' : 'He can enter once front.ok.';
-  const painting = 'a full-body front painting of this fighter: one character, whole from head to soles, facing the viewer straight on'
-    + (directory ? '' : ' (get_fighter_spec overview: profileSet)');
+  const painting =
+    'a full-body front painting of this fighter: one character, whole from head to soles, facing the viewer straight on' +
+    (directory ? '' : ' (get_fighter_spec overview: profileSet)');
   // The upload tools take files a host attaches (ChatGPT's); the directory edition has none (리뷰 2026-11-03).
-  const upload = !uploads ? 'This connector cannot upload it: the user uploads it from the ODDBOUT app in ChatGPT or with the creator kit.'
-    : `It goes in through ${tool('prepare_profile_set')}, ${tool('upload_profile_set_asset')} and ${tool('submit_profile_set')}, which take files `
-      + 'this host attaches (as ChatGPT does); otherwise the user uploads it from the ODDBOUT app in ChatGPT.';
+  const upload = !uploads
+    ? 'This connector cannot upload it: the user uploads it from the ODDBOUT app in ChatGPT or with the creator kit.'
+    : `It goes in through ${tool('prepare_profile_set')}, ${tool('upload_profile_set_asset')} and ${tool('submit_profile_set')}, which take files ` +
+      'this host attaches (as ChatGPT does); otherwise the user uploads it from the ODDBOUT app in ChatGPT.';
   const reason = String(front.reason ?? '');
   if (!front.profileSetId) return `${cannot}: it has no front painting (profile set). Make ${painting} with the user. ${upload} ${after}`;
   // Each refusal asks for what fixes it, never a paid new painting where the same one goes in again. The judge's and the operator's words
   // stay data (front.notes, front.reason), out of this instruction.
   if (front.status === 'rejected') {
-    if (front.frontCheck === 'fail') return `${cannot}: ODDBOUT's front check sent its painting back (front.reason and front.notes say what it saw). `
-      + `Tell the user, and make ${painting} with him. ${upload} ${after}`;
-    if (/^[a-z0-9-]+$/.test(reason)) return `${cannot}: the check of its front painting could not run (front.reason). Submit the same painting `
-      + `again as a new upload; do not make a new one. ${upload} ${after}`;
-    if (/^[A-Z0-9_]+$/.test(reason)) return `${cannot}: the file check refused its front painting (front.reason: its format, size, background `
-      + `or face square). Fix that and submit it again; a new painting only if the user wants one. A front ODDBOUT drew (a hosted fighter) is `
-      + `ODDBOUT's to put in again: tell the user to ask ODDBOUT. ${upload} ${after}`;
-    return `${cannot}: an ODDBOUT operator refused its front painting (front.reason gives why). Tell the user; make a new painting with him `
-      + `only if he wants. ${upload} ${after}`;
+    if (front.frontCheck === 'fail')
+      return (
+        `${cannot}: ODDBOUT's front check sent its painting back (front.reason and front.notes say what it saw). ` +
+        `Tell the user, and make ${painting} with him. ${upload} ${after}`
+      );
+    if (/^[a-z0-9-]+$/.test(reason))
+      return (
+        `${cannot}: the check of its front painting could not run (front.reason). Submit the same painting ` +
+        `again as a new upload; do not make a new one. ${upload} ${after}`
+      );
+    if (/^[A-Z0-9_]+$/.test(reason))
+      return (
+        `${cannot}: the file check refused its front painting (front.reason: its format, size, background ` +
+        `or face square). Fix that and submit it again; a new painting only if the user wants one. A front ODDBOUT drew (a hosted fighter) is ` +
+        `ODDBOUT's to put in again: tell the user to ask ODDBOUT. ${upload} ${after}`
+      );
+    return (
+      `${cannot}: an ODDBOUT operator refused its front painting (front.reason gives why). Tell the user; make a new painting with him ` +
+      `only if he wants. ${upload} ${after}`
+    );
   }
-  if (front.status === 'uploading') return `${cannot}: its front painting was never submitted (${front.profileSetId}). `
-    + (!uploads ? 'Tell the user to finish it where it was started. ' : `Finish its upload (${tool('upload_profile_set_asset')}) and ${tool('submit_profile_set')}. `) + after;
-  if (front.frontCheck === 'stalled') return `${cannot}: ODDBOUT could not check its front painting (${front.profileSetId}) automatically, and an `
-    + `operator will look at it. Nothing to upload now: tell the user and read ${tool('get_registered_fighter')} again later. ${after}`;
-  return `${cannot}: ODDBOUT is checking its front painting (${front.profileSetId}) — the file first, then whether it shows one character, `
-    + `whole, facing the viewer straight on. Tell the user; read ${tool('get_registered_fighter')} again later. ${after}`;
+  if (front.status === 'uploading')
+    return (
+      `${cannot}: its front painting was never submitted (${front.profileSetId}). ` +
+      (!uploads
+        ? 'Tell the user to finish it where it was started. '
+        : `Finish its upload (${tool('upload_profile_set_asset')}) and ${tool('submit_profile_set')}. `) +
+      after
+    );
+  if (front.frontCheck === 'stalled')
+    return (
+      `${cannot}: ODDBOUT could not check its front painting (${front.profileSetId}) automatically, and an ` +
+      `operator will look at it. Nothing to upload now: tell the user and read ${tool('get_registered_fighter')} again later. ${after}`
+    );
+  return (
+    `${cannot}: ODDBOUT is checking its front painting (${front.profileSetId}) — the file first, then whether it shows one character, ` +
+    `whole, facing the viewer straight on. Tell the user; read ${tool('get_registered_fighter')} again later. ${after}`
+  );
 }
 export const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 export const AUTH = [{ type: 'oauth2', scopes: ['openid', 'email', 'profile'] }];
@@ -123,8 +172,11 @@ export const AUTH = [{ type: 'oauth2', scopes: ['openid', 'email', 'profile'] }]
  * `compact`: a host that reads the structured content (ChatGPT) gets compactText; other hosts read only the text and keep the whole JSON.
  * @type {(value: Record<string, unknown>, compact?: boolean) => ToolOutput}
  */
-export const output = (value, compact = false) => ({ content: [{ type: 'text', text: compact ? compactText(value) : JSON.stringify(value) }], structuredContent: value,
-  ...(value.ok === false ? { isError: true } : {}) });
+export const output = (value, compact = false) => ({
+  content: [{ type: 'text', text: compact ? compactText(value) : JSON.stringify(value) }],
+  structuredContent: value,
+  ...(value.ok === false ? { isError: true } : {}),
+});
 export { compactText };
 
 // Files come from the host's fileParams capability, never arbitrary URLs or VM paths.
@@ -139,10 +191,20 @@ export const LIBRARY_FILE_HOSTS = Object.freeze(['oaisdmntprnznorth.blob.core.wi
 export function allowedFileUrl(value, additionalHosts = []) {
   try {
     const u = new URL(value);
-    return u.protocol === 'https:' && !u.username && !u.password && !u.port && !u.hash &&
-      (u.hostname === 'files.oaiusercontent.com' || u.hostname.endsWith('.oaiusercontent.com') ||
-        u.hostname === 'files.openai.com' || additionalHosts.includes(u.hostname));
-  } catch { return false; }
+    return (
+      u.protocol === 'https:' &&
+      !u.username &&
+      !u.password &&
+      !u.port &&
+      !u.hash &&
+      (u.hostname === 'files.oaiusercontent.com' ||
+        u.hostname.endsWith('.oaiusercontent.com') ||
+        u.hostname === 'files.openai.com' ||
+        additionalHosts.includes(u.hostname))
+    );
+  } catch {
+    return false;
+  }
 }
 /**
  * @param {HostFile} file @param {number} maximum @param {typeof fetch} [fetcher] @param {readonly string[]} [additionalHosts]
@@ -153,13 +215,19 @@ export async function downloadHostFile(file, maximum, fetcher = fetch, additiona
   // A network failure or the limit, before the answer or during its body, is the host's file being unavailable, not a fault of this server.
   // Only the error's name is kept: Deno's fetch errors quote the signed download URL.
   /** @type {(error: any) => Problem} */
-  const lost = error => error instanceof Problem ? error : unavailable('file-download-unavailable', { name: String(error?.name ?? 'Error') });
+  const lost = error => (error instanceof Problem ? error : unavailable('file-download-unavailable', { name: String(error?.name ?? 'Error') }));
   let response;
-  try { response = await fetcher(file.download_url, { redirect: 'error', signal, credentials: 'omit' }); }
-  catch (error) { throw lost(error); }
+  try {
+    response = await fetcher(file.download_url, { redirect: 'error', signal, credentials: 'omit' });
+  } catch (error) {
+    throw lost(error);
+  }
   if (!response.ok) throw new Problem(400, 'file-download-unavailable');
-  try { return await readBody(response, maximum); }
-  catch (error) { throw lost(error); }
+  try {
+    return await readBody(response, maximum);
+  } catch (error) {
+    throw lost(error);
+  }
 }
 
 /** One arena call: a GET, or a POST with the agent key. A network failure or a body that is not JSON is `arena-unavailable`. */
@@ -174,15 +242,31 @@ export async function arenaCall(arena, path, body, owner, timeoutMs = 20000, { s
   // function's one address (MCP 점검 2026-10-27 — every agent together had six reads a minute). `signedOut`: the owner is a host's anonymous
   // user id, which its caller chooses — the arena counts the read on every signed-out agent's pool as well (2026-10-30).
   /** @type {Record<string, string>} */
-  const headers = body !== undefined ? { 'content-type': 'application/json', 'x-arena-agent': arena.key }
-    : owner !== undefined ? { 'x-arena-agent': arena.key, 'x-arena-owner': owner, ...(signedOut ? { 'x-arena-signed-out': '1' } : {}) } : {};
+  const headers =
+    body !== undefined
+      ? { 'content-type': 'application/json', 'x-arena-agent': arena.key }
+      : owner !== undefined
+        ? { 'x-arena-agent': arena.key, 'x-arena-owner': owner, ...(signedOut ? { 'x-arena-signed-out': '1' } : {}) }
+        : {};
   let response;
   try {
-    response = await (arena.fetcher ?? fetch)(`${arena.url}/${path}`, { method: body === undefined ? 'GET' : 'POST', redirect: 'error',
-      signal: within(signal, timeoutMs), headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
-  } catch (error) { throw unavailable('arena-unavailable', error); }
+    response = await (arena.fetcher ?? fetch)(`${arena.url}/${path}`, {
+      method: body === undefined ? 'GET' : 'POST',
+      redirect: 'error',
+      signal: within(signal, timeoutMs),
+      headers,
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+  } catch (error) {
+    throw unavailable('arena-unavailable', error);
+  }
   let value;
-  try { value = await response.json(); } catch (error) { throw unavailable('arena-unavailable', error); }
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw unavailable('arena-unavailable', { message: `arena answered ${response.status} without a JSON object` });
+  try {
+    value = await response.json();
+  } catch (error) {
+    throw unavailable('arena-unavailable', error);
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    throw unavailable('arena-unavailable', { message: `arena answered ${response.status} without a JSON object` });
   return value;
 }

@@ -7,10 +7,12 @@ import { Problem } from '../http.mjs';
 function row(value) {
   if (Array.isArray(value)) return value.map(row);
   if (!value || typeof value !== 'object') return value;
-  return Object.fromEntries(Object.entries(value).map(([key, val]) => [
-    key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase()),
-    ['input', 'result', 'final_report'].includes(key) ? val : row(val),
-  ]));
+  return Object.fromEntries(
+    Object.entries(value).map(([key, val]) => [
+      key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase()),
+      ['input', 'result', 'final_report'].includes(key) ? val : row(val),
+    ]),
+  );
 }
 
 /** Server-only persistence. Owner MUST come from verified authentication, never model/body input.
@@ -24,9 +26,18 @@ export function createCommerceStore(db) {
     const { data, error } = await db.rpc(rpc, { p_owner: owner, p_command: command, p_input: input });
     if (error) {
       const known = String(error.message ?? '').match(/^commerce:([a-z_-]+)/)?.[1];
-      const status = known === 'not-found' ? 404 : known === 'insufficient-credits' ? 402
-        : known === 'invalid-input' || known === 'invalid-result' ? 422
-        : known === 'owner-required' ? 401 : known ? 409 : 503;
+      const status =
+        known === 'not-found'
+          ? 404
+          : known === 'insufficient-credits'
+            ? 402
+            : known === 'invalid-input' || known === 'invalid-result'
+              ? 422
+              : known === 'owner-required'
+                ? 401
+                : known
+                  ? 409
+                  : 503;
       throw new Problem(status, known ?? 'commerce-unavailable');
     }
     return row(data);
@@ -70,7 +81,7 @@ export function createCommerceStore(db) {
     lookupOrder: providerOrderId => command(null, 'lookup_order', { providerOrderId }),
     /** Verified signed refund/reversal only. Owner is resolved from persisted capture, never the payload.
      * @param {{eventId:string,eventType:string,captureId:string,providerOrderId?:string}} input */
-    recordPaymentAdjustment: input => command(null,'record_adjustment',input),
+    recordPaymentAdjustment: input => command(null, 'record_adjustment', input),
     /** @param {string} owner @param {string} intentId @param {string} providerOrderId */
     attachOrder: (owner, intentId, providerOrderId) => command(owner, 'attach_order', { intentId, providerOrderId }),
     /** @param {string} owner @param {string} intentId @param {any} verified */

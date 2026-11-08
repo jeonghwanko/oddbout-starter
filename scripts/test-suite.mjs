@@ -9,12 +9,27 @@ export const HEAVY = ['pack', 'runtime-fetch', 'contact-evidence', 'gait-engine'
 const root = fileURLToPath(new URL('../', import.meta.url));
 
 const mode = process.argv[2];
-if (!['fast', 'heavy'].includes(mode)) { console.error('Usage: node scripts/test-suite.mjs fast|heavy'); process.exit(2); }
+if (!['fast', 'heavy'].includes(mode)) {
+  console.error('Usage: node scripts/test-suite.mjs fast|heavy');
+  process.exit(2);
+}
 // host/ keeps the generation host's tests beside its files (they travel with them to the generation PC).
-const all = (await Promise.all(['test', 'host'].map(async dir => (await readdir(new URL(`../${dir}/`, import.meta.url)))
-  .filter(name => name.endsWith('.test.mjs')).map(name => `${dir}/${name}`)))).flat().sort();
+const all = (
+  await Promise.all(
+    ['test', 'host'].map(async dir =>
+      (await readdir(new URL(`../${dir}/`, import.meta.url))).filter(name => name.endsWith('.test.mjs')).map(name => `${dir}/${name}`),
+    ),
+  )
+)
+  .flat()
+  .sort();
 const missing = HEAVY.filter(file => !all.includes(file));
-if (missing.length) { console.error(`Heavy suites not found (update scripts/test-suite.mjs): ${missing.join(', ')}`); process.exit(2); }
+if (missing.length) {
+  console.error(`Heavy suites not found (update scripts/test-suite.mjs): ${missing.join(', ')}`);
+  process.exit(2);
+}
 const files = mode === 'heavy' ? HEAVY : all.filter(file => !HEAVY.includes(file));
 const child = spawn(process.execPath, ['--test', ...files], { cwd: root, stdio: 'inherit' });
-child.on('close', code => { process.exitCode = code ?? 1; });
+child.on('close', code => {
+  process.exitCode = code ?? 1;
+});

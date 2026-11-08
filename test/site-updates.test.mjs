@@ -36,7 +36,15 @@ test('update manifest rejects traversal, foreign pages, duplicate paths and unsu
   await writeFile(join(root, 'updates.html'), 'landing');
   for (const bad of [
     { ...manifest, version: 2 },
-    ...['../secret.html', 'updates/../admin.html', 'updates/%2e%2e/secret.html', 'https://example.com/a.html', 'creator.html', 'updates.html?x=1', 'updates.html'].map(page => ({ ...manifest, pages: ['updates.html', page] })),
+    ...[
+      '../secret.html',
+      'updates/../admin.html',
+      'updates/%2e%2e/secret.html',
+      'https://example.com/a.html',
+      'creator.html',
+      'updates.html?x=1',
+      'updates.html',
+    ].map(page => ({ ...manifest, pages: ['updates.html', page] })),
     ...['art/../secret.webp', '/art/logo.webp', 'art/%2e%2e/logo.webp', 'art/logo.webp#x'].map(asset => ({ ...manifest, assets: [asset] })),
   ]) {
     await writeManifest(root, bad);
@@ -53,9 +61,13 @@ test('static pages, nested relative styles and official art join publication and
   await writeFile(join(root, manifest.pages[1]), '<link rel="stylesheet" href="../assets/updates-abc.css">');
   await writeFile(join(root, '.vite/manifest.json'), JSON.stringify(Object.fromEntries(siteEntries.map(page => [page, { file: 'assets/main.js' }]))));
   const files = await publishedFiles(root, siteUrl);
-  for (const path of ['updates-manifest.json', ...manifest.pages, ...manifest.assets, 'assets/updates-abc.css', 'assets/main.js']) assert.ok(files.has(path), path);
+  for (const path of ['updates-manifest.json', ...manifest.pages, ...manifest.assets, 'assets/updates-abc.css', 'assets/main.js'])
+    assert.ok(files.has(path), path);
   const urls = await writeSiteDiscovery(root, siteUrl, (await readUpdatesManifest(root)).pages);
-  assert.deepEqual(urls, manifest.pages.map(page => new URL(page, siteUrl).href));
+  assert.deepEqual(
+    urls,
+    manifest.pages.map(page => new URL(page, siteUrl).href),
+  );
   assert.match(await readFile(join(root, 'sitemap.xml'), 'utf8'), /updates\/2026-11-03-vice-arrives.html/);
   // A successful HTTP response with stale update art must still fail the live check.
   for (const path of files) {
@@ -66,7 +78,19 @@ test('static pages, nested relative styles and official art join publication and
   let stale = false;
   const request = async url => {
     const path = url.pathname.slice('/game/'.length);
-    const mime = path.endsWith('.html') ? 'text/html' : path.endsWith('.css') ? 'text/css' : path.endsWith('.js') ? 'text/javascript' : path.endsWith('.webp') ? 'image/webp' : path.endsWith('.json') ? 'application/json' : path.endsWith('.xml') ? 'application/xml' : 'text/plain';
+    const mime = path.endsWith('.html')
+      ? 'text/html'
+      : path.endsWith('.css')
+        ? 'text/css'
+        : path.endsWith('.js')
+          ? 'text/javascript'
+          : path.endsWith('.webp')
+            ? 'image/webp'
+            : path.endsWith('.json')
+              ? 'application/json'
+              : path.endsWith('.xml')
+                ? 'application/xml'
+                : 'text/plain';
     return new Response(stale && path === 'art/ui/logo.webp' ? 'stale' : await readFile(join(root, path)), { headers: { 'content-type': mime } });
   };
   await verifyLiveSite(root, { siteUrl, request });

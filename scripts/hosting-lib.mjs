@@ -15,13 +15,27 @@ export const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 
 export function publicSiteText(text) {
   const base = new URL('.', hosting.siteUrl).href;
   // The game's pages may still carry the repository's old name (ai-fighter-dots-starter) until they are re-saved.
-  return text.replaceAll('https://jeonghwanko.github.io/ai-fighter-dots-starter/', base)
+  return text
+    .replaceAll('https://jeonghwanko.github.io/ai-fighter-dots-starter/', base)
     .replaceAll('https://jeonghwanko.github.io/oddbout-starter/', base)
     .replaceAll(base + 'league.html', base)
     .replaceAll('./league.html', './')
     .replace(/((?:\\)?["'])league\.html(?=(?:\\)?["'])/g, '$1');
 }
-export const siteEntries = ['creator.html', 'fighter.html', 'league.html', 'fighters.html', 'about.html', 'service.html', 'service.ko.html', 'docs.html', 'privacy.html', 'credits.html', 'admin.html', 'world.html'];
+export const siteEntries = [
+  'creator.html',
+  'fighter.html',
+  'league.html',
+  'fighters.html',
+  'about.html',
+  'service.html',
+  'service.ko.html',
+  'docs.html',
+  'privacy.html',
+  'credits.html',
+  'admin.html',
+  'world.html',
+];
 
 // The kit has its own immutable release/fingerprint. Restore it only after verifying
 // a newly built site's own artifact, then prove its staged Git objects are unchanged.
@@ -44,11 +58,16 @@ export function assertCreatorKitsUnchanged(checkout) {
 function assertPublicContent(data, path) {
   if (!['sb_secret_', 'afw_', 'AI_FIGHTER_WAKE_TOKEN', 'PRIVATE KEY', 'api.render.com', 'eyJ'].some(value => data.includes(value))) return;
   const text = data.toString('utf8').replaceAll('\\/', '/');
-  const privateValue = /sb_secret_[A-Za-z0-9_-]{20,}|afw_[a-f0-9]{64}|AI_FIGHTER_WAKE_TOKEN["'\s:=\\]+[a-f0-9]{64}|-----BEGIN [A-Z ]*PRIVATE KEY-----|https:\/\/api\.render\.com\/deploy\/[^\s"'<>]*[?&]key=[A-Za-z0-9_-]+/;
+  const privateValue =
+    /sb_secret_[A-Za-z0-9_-]{20,}|afw_[a-f0-9]{64}|AI_FIGHTER_WAKE_TOKEN["'\s:=\\]+[a-f0-9]{64}|-----BEGIN [A-Z ]*PRIVATE KEY-----|https:\/\/api\.render\.com\/deploy\/[^\s"'<>]*[?&]key=[A-Za-z0-9_-]+/;
   if (privateValue.test(text)) throw new Error(`Private credential found in artifact: ${path}`);
   for (const token of text.match(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g) ?? []) {
     let claims;
-    try { claims = JSON.parse(/** @type {string} */ (/** @type {unknown} */ (Buffer.from(token.split('.')[1], 'base64url')))); } catch { continue; }
+    try {
+      claims = JSON.parse(/** @type {string} */ (/** @type {unknown} */ (Buffer.from(token.split('.')[1], 'base64url'))));
+    } catch {
+      continue;
+    }
     if (claims.role === 'service_role') throw new Error(`Private credential found in artifact: ${path}`);
   }
 }
@@ -57,14 +76,18 @@ function assertPublicContent(data, path) {
 /** @param {string} root @param {{ gitCheckout?: boolean }} [options] */
 export async function fingerprint(root, { gitCheckout = false } = {}) {
   const hash = createHash('sha256');
-  let files = 0, bytes = 0;
+  let files = 0,
+    bytes = 0;
   /** @param {string} dir */
   async function visit(dir, prefix = '') {
     for (const entry of (await readdir(dir, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name, 'en'))) {
       const path = prefix + entry.name;
       // Only the publisher's freshly cloned checkout may contain its Git directory.
       if (gitCheckout && path === '.git' && entry.isDirectory()) continue;
-      if (entry.isSymbolicLink() || /(^|\/)(\.git(?:hub|attributes|modules)?|\.env[^/]*|node_modules|\.secret|\.ssh)(\/|$)|\.(?:tsx?|map|pem|key)$/i.test(path)) {
+      if (
+        entry.isSymbolicLink() ||
+        /(^|\/)(\.git(?:hub|attributes|modules)?|\.env[^/]*|node_modules|\.secret|\.ssh)(\/|$)|\.(?:tsx?|map|pem|key)$/i.test(path)
+      ) {
         throw new Error(`Non-public artifact rejected: ${path}`);
       }
       if (entry.isDirectory()) await visit(join(dir, entry.name), path + '/');
@@ -76,7 +99,8 @@ export async function fingerprint(root, { gitCheckout = false } = {}) {
         if (data.subarray(0, 42).toString().startsWith('version https://git-lfs.github.com/spec/v1')) {
           throw new Error(`Unresolved Git LFS asset: ${path}`);
         }
-        bytes += data.length; files++;
+        bytes += data.length;
+        files++;
         if (bytes > 950 * 1024 * 1024) throw new Error('Pages artifact exceeds the 950 MiB safety limit');
         hash.update(path + '\0' + createHash('sha256').update(data).digest('hex') + '\n');
       } else throw new Error(`Unsupported artifact: ${path}`);
@@ -95,10 +119,14 @@ export async function verifyArtifact(root, options) {
     throw new Error('Custom domain CNAME does not match the configured site');
   }
   const release = JSON.parse(await readFile(join(root, 'deployment.json'), 'utf8'));
-  if (release.siteUrl !== hosting.siteUrl || release.dirty !== false ||
-      !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(release.buildId ?? '') ||
-      !Number.isFinite(Date.parse(release.builtAt)) ||
-      !/^[a-f0-9]{40}$/.test(release.sourceCommit) || !/^[a-f0-9]{40}$/.test(release.hostingCommit)) {
+  if (
+    release.siteUrl !== hosting.siteUrl ||
+    release.dirty !== false ||
+    !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(release.buildId ?? '') ||
+    !Number.isFinite(Date.parse(release.builtAt)) ||
+    !/^[a-f0-9]{40}$/.test(release.sourceCommit) ||
+    !/^[a-f0-9]{40}$/.test(release.hostingCommit)
+  ) {
     throw new Error('Artifact requires clean, committed sources and the configured site');
   }
   // The pages' module graph resolves and every file it names is in the build, before anything is pushed (2026-10-31: the graph was first
@@ -129,7 +157,7 @@ async function fetchPublished(url, file, request, wait) {
     const answered = typeof response?.status === 'number';
     if (answered && response.status === 200) return response;
     if (answered) await response.body?.cancel().catch(() => {});
-    const status = answered ? response.status : response?.name ?? 'no-response';
+    const status = answered ? response.status : (response?.name ?? 'no-response');
     if ((answered && !TRANSIENT.has(status)) || attempt >= RETRY_WAITS_MS.length) throw new Error(`Published asset unavailable: ${file} (${status})`);
     await wait(RETRY_WAITS_MS[attempt]);
   }
@@ -144,7 +172,8 @@ async function fetchPublished(url, file, request, wait) {
  */
 export async function publishedFiles(root, siteUrl = hosting.siteUrl) {
   const manifest = JSON.parse(await readFile(join(root, '.vite/manifest.json'), 'utf8'));
-  const files = new Set(['index.html', ...siteEntries, ...policyFiles, ...discoveryFiles, ...(hosting.customDomain ? ['CNAME'] : [])]), visited = new Set();
+  const files = new Set(['index.html', ...siteEntries, ...policyFiles, ...discoveryFiles, ...(hosting.customDomain ? ['CNAME'] : [])]),
+    visited = new Set();
   /** @param {string} key */
   function visit(key) {
     if (visited.has(key)) return;
@@ -155,7 +184,10 @@ export async function publishedFiles(root, siteUrl = hosting.siteUrl) {
     for (const imported of [...(entry.imports ?? []), ...(entry.dynamicImports ?? [])]) visit(imported);
   }
   for (const page of siteEntries) {
-    if (manifest[page]) { visit(page); continue; }
+    if (manifest[page]) {
+      visit(page);
+      continue;
+    }
     // Vite can remove an HTML entry chunk when two documents share the same module (the service translations).
     // Follow the emitted module tags instead, still requiring their manifest graph and checking both HTML documents.
     const html = await readFile(join(root, page), 'utf8');
@@ -167,7 +199,8 @@ export async function publishedFiles(root, siteUrl = hosting.siteUrl) {
       if (!module && !stylesheet) continue;
       const reference = module ? attributes.src : attributes.href;
       if (!reference) throw new Error(`Missing emitted asset URL: ${page}`);
-      const base = new URL('.', siteUrl), url = new URL(reference, new URL(page, base));
+      const base = new URL('.', siteUrl),
+        url = new URL(reference, new URL(page, base));
       if (url.origin !== base.origin || !url.pathname.startsWith(base.pathname) || url.search || url.hash) {
         throw new Error(`Unsafe emitted asset URL: ${page}`);
       }
@@ -176,7 +209,8 @@ export async function publishedFiles(root, siteUrl = hosting.siteUrl) {
       if (module) {
         const key = Object.keys(manifest).find(key => manifest[key].file === file);
         if (!key) throw new Error(`Missing Vite module: ${page}: ${file}`);
-        visit(key); modules++;
+        visit(key);
+        modules++;
       }
     }
     if (!modules) throw new Error(`Missing Vite entry: ${page}`);
@@ -199,11 +233,23 @@ export async function verifyLiveSite(root, { siteUrl = hosting.siteUrl, request 
   for (const file of files) {
     const url = new URL(file, siteUrl);
     const response = await fetchPublished(url, file, request, wait);
-    const mime = file.endsWith('.html') ? 'text/html' : file.endsWith('.css') ? 'text/css'
-      : /\.(?:m?js)$/.test(file) ? /^(?:text|application)\/javascript$/
-      : file.endsWith('.wasm') ? 'application/wasm'
-      : file.endsWith('.webp') ? 'image/webp' : file.endsWith('.json') ? 'application/json'
-      : file.endsWith('.xml') ? /^(?:application|text)\/xml$/ : file.endsWith('.txt') ? 'text/plain' : null;
+    const mime = file.endsWith('.html')
+      ? 'text/html'
+      : file.endsWith('.css')
+        ? 'text/css'
+        : /\.(?:m?js)$/.test(file)
+          ? /^(?:text|application)\/javascript$/
+          : file.endsWith('.wasm')
+            ? 'application/wasm'
+            : file.endsWith('.webp')
+              ? 'image/webp'
+              : file.endsWith('.json')
+                ? 'application/json'
+                : file.endsWith('.xml')
+                  ? /^(?:application|text)\/xml$/
+                  : file.endsWith('.txt')
+                    ? 'text/plain'
+                    : null;
     const actualMime = (response.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase();
     if (mime && (typeof mime === 'string' ? actualMime !== mime : !mime.test(actualMime))) {
       throw new Error(`Incorrect published content type: ${file}`);
@@ -224,8 +270,8 @@ export async function verifyLiveSite(root, { siteUrl = hosting.siteUrl, request 
 
 /** Capture before building and compare after: a later commit must not label earlier bytes. @param {string} source @param {string} hostingRoot */
 export function buildRevision(source, hostingRoot) {
-  if (git(source, 'status', '--porcelain', '--', '.', ':!tsconfig.tsbuildinfo') ||
-      git(hostingRoot, 'status', '--porcelain')) throw new Error('Build requires clean source inputs and hosting checkout');
+  if (git(source, 'status', '--porcelain', '--', '.', ':!tsconfig.tsbuildinfo') || git(hostingRoot, 'status', '--porcelain'))
+    throw new Error('Build requires clean source inputs and hosting checkout');
   return { sourceCommit: git(source, 'rev-parse', 'HEAD'), hostingCommit: git(hostingRoot, 'rev-parse', 'HEAD') };
 }
 
@@ -243,7 +289,9 @@ export async function waitForJson(url, predicate, { timeoutMs = 15 * 60_000, int
     try {
       const response = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(Math.min(30_000, deadline - Date.now())) });
       if (response.ok && predicate(await response.json())) return;
-    } catch { /* A cold start or deploy may temporarily be unavailable. */ }
+    } catch {
+      /* A cold start or deploy may temporarily be unavailable. */
+    }
     await new Promise(resolve => setTimeout(resolve, Math.min(intervalMs, Math.max(0, deadline - Date.now()))));
   }
   throw new Error('Deployment not confirmed before timeout; inspect the hosting dashboard before retrying');

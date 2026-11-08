@@ -19,7 +19,8 @@ export function createWorkerServer({ wakeToken, run, log = console.log, commit =
   if (!/^[a-f0-9]{64}$/.test(wakeToken ?? '')) throw new Error('invalid-wake-token');
   /** @type {Promise<void> | null} */
   let active = null;
-  let stopping = false, requested = false;
+  let stopping = false,
+    requested = false;
   // Ends a wait at once when the service stops: Render's shutdown grace is shorter than the longest wait.
   const resting = new AbortController();
   // The last queue outcome, for /health. A rejected worker credential cannot recover by retrying, so it is
@@ -27,7 +28,9 @@ export function createWorkerServer({ wakeToken, run, log = console.log, commit =
   /** @type {{ status: string, since: string | null }} */
   let queue = { status: 'unknown', since: null };
   /** @param {string} status */
-  const observe = status => { if (queue.status !== status) queue = { status, since: new Date().toISOString() }; };
+  const observe = status => {
+    if (queue.status !== status) queue = { status, since: new Date().toISOString() };
+  };
   async function drain() {
     do {
       requested = false;
@@ -41,7 +44,10 @@ export function createWorkerServer({ wakeToken, run, log = console.log, commit =
           // A job handed back (an infrastructure failure) is queued again, and af_release's trigger wakes this server at once: claimed
           // again without a wait, a short outage spent the package's ten infrastructure failures in seconds. A wake during the wait does
           // not cut it short; a finished job or an empty queue starts the backoff over.
-          if (result.stage === 'retry-later') { waitMs = backoff.next(); break; }
+          if (result.stage === 'retry-later') {
+            waitMs = backoff.next();
+            break;
+          }
           backoff.reset();
           if (result.stage === 'idle') break;
         }
@@ -77,7 +83,11 @@ export function createWorkerServer({ wakeToken, run, log = console.log, commit =
     // The managed pg_net queue can be readable by database roles. It receives only
     // a short-lived HMAC, never the durable wake key stored in Vault and Render.
     // Both strings by now: the wake token was checked above, and a timestamp that is not ten digits was refused.
-    const expected = Buffer.from(`Bearer ${createHmac('sha256', /** @type {string} */ (wakeToken)).update(/** @type {string} */ (timestamp)).digest('hex')}`);
+    const expected = Buffer.from(
+      `Bearer ${createHmac('sha256', /** @type {string} */ (wakeToken))
+        .update(/** @type {string} */ (timestamp))
+        .digest('hex')}`,
+    );
     const supplied = Buffer.from(req.headers.authorization ?? '');
     if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) {
       return reply(401, { ok: false });
@@ -85,7 +95,10 @@ export function createWorkerServer({ wakeToken, run, log = console.log, commit =
     if (stopping) return reply(503, { ok: false });
     req.resume(); // No user-supplied job payload; claim only from the authenticated queue.
     requested = true;
-    if (!active) active = drain().finally(() => { active = null; });
+    if (!active)
+      active = drain().finally(() => {
+        active = null;
+      });
     reply(202, { ok: true });
   });
   server.requestTimeout = 10_000;
@@ -123,5 +136,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     },
   });
   app.server.listen(Number(process.env.PORT ?? 10000), '0.0.0.0');
-  for (const signal of ['SIGTERM', 'SIGINT']) process.once(signal, () => { void app.stop(); });
+  for (const signal of ['SIGTERM', 'SIGINT'])
+    process.once(signal, () => {
+      void app.stop();
+    });
 }

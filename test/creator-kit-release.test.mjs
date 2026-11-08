@@ -6,8 +6,17 @@ import { releaseMetadata } from '../scripts/prepare-creator-release.mjs';
 test('source bundle omits only upstream documentation media, preserving execution, workflow and license files', () => {
   assert.equal(includeVendorFile('docs/assets/village-scene.gif'), false);
   assert.equal(includeVendorFile('docs/assets/subdirectory/example.png'), false);
-  for (const name of ['LICENSE', 'NOTICE', 'SKILL.md', 'README.md', 'pyproject.toml', 'docs/pose-motion.md',
-    'docs/assets-guide.md', 'sprite_gen/serve/curator/assets/image.png', 'sprite_gen/audio/tts.mjs'])
+  for (const name of [
+    'LICENSE',
+    'NOTICE',
+    'SKILL.md',
+    'README.md',
+    'pyproject.toml',
+    'docs/pose-motion.md',
+    'docs/assets-guide.md',
+    'sprite_gen/serve/curator/assets/image.png',
+    'sprite_gen/audio/tts.mjs',
+  ])
     assert.equal(includeVendorFile(name), true, name);
 });
 

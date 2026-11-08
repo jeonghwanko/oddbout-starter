@@ -9,23 +9,62 @@ import { assertCommitted, checkLauncherImports, checkRuntimeImports, runtimeFile
 
 const repository = fileURLToPath(new URL('../', import.meta.url));
 // Side-effect-free entry modules (CLI mains are guarded); importing them evaluates the whole shipped graph.
-const entries = ['scripts/pack-fighter.mjs', 'scripts/gait.mjs', 'scripts/sprite-gen.mjs', 'scripts/run-creation-job.mjs',
-  'scripts/dots-workspace.mjs', 'scripts/dots-start.mjs', 'scripts/dots-source.mjs',
-  'scripts/creation-tool.mjs', 'scripts/check-creation-delivery.mjs', 'scripts/connect-generation.mjs',
-  'tools/ai-fighter/gait.mjs', 'server/ai-fighter-package.mjs', 'mcp/server.mjs'];
-const shippedDocs = ['README.md', 'README.ko.md', 'docs/README.md', 'docs/START-HERE.md', 'docs/CLOUD-MCP.md',
-  'docs/LOCAL-PLUGIN.md', 'docs/ODDBOUT-PLUGIN.md'];
+const entries = [
+  'scripts/pack-fighter.mjs',
+  'scripts/gait.mjs',
+  'scripts/sprite-gen.mjs',
+  'scripts/run-creation-job.mjs',
+  'scripts/dots-workspace.mjs',
+  'scripts/dots-start.mjs',
+  'scripts/dots-source.mjs',
+  'scripts/creation-tool.mjs',
+  'scripts/check-creation-delivery.mjs',
+  'scripts/connect-generation.mjs',
+  'tools/ai-fighter/gait.mjs',
+  'server/ai-fighter-package.mjs',
+  'mcp/server.mjs',
+];
+const shippedDocs = [
+  'README.md',
+  'README.ko.md',
+  'docs/README.md',
+  'docs/START-HERE.md',
+  'docs/CLOUD-MCP.md',
+  'docs/LOCAL-PLUGIN.md',
+  'docs/ODDBOUT-PLUGIN.md',
+];
 let temporary;
-before(async () => { temporary = await mkdtemp(path.join(tmpdir(), 'fighter-bundle-')); });
-after(async () => { await rm(temporary, { recursive: true, force: true }); });
+before(async () => {
+  temporary = await mkdtemp(path.join(tmpdir(), 'fighter-bundle-'));
+});
+after(async () => {
+  await rm(temporary, { recursive: true, force: true });
+});
 
 test('the runtime file list is closed over imports and keeps the Edge-only cloud MCP out', async () => {
   const files = await runtimeFileList();
-  for (const required of ['tools/ai-fighter/projected-ground.mjs', 'tools/ai-fighter/gait.mjs', 'scripts/pack-fighter.mjs',
-    'mcp/server.mjs', 'contracts/ai-fighter/v1/spec.json', 'server/ai-fighter-package.mjs',
-    'scripts/check-cloud-discovery.mjs', 'plugins/ai-fighter/mcp.json', 'plugins/ai-fighter/local-files.mjs', ...shippedDocs])
+  for (const required of [
+    'tools/ai-fighter/projected-ground.mjs',
+    'tools/ai-fighter/gait.mjs',
+    'scripts/pack-fighter.mjs',
+    'mcp/server.mjs',
+    'contracts/ai-fighter/v1/spec.json',
+    'server/ai-fighter-package.mjs',
+    'scripts/check-cloud-discovery.mjs',
+    'plugins/ai-fighter/mcp.json',
+    'plugins/ai-fighter/local-files.mjs',
+    ...shippedDocs,
+  ])
     assert.ok(files.includes(required), required);
-  for (const serverOnly of ['mcp/cloud.mjs', 'mcp/cloud/common.mjs', 'mcp/cloud/hosted-tools.mjs', 'mcp/file-input-probe.mjs', 'mcp/creator-sources.mjs', 'api/handler.mjs', 'api/http.mjs'])
+  for (const serverOnly of [
+    'mcp/cloud.mjs',
+    'mcp/cloud/common.mjs',
+    'mcp/cloud/hosted-tools.mjs',
+    'mcp/file-input-probe.mjs',
+    'mcp/creator-sources.mjs',
+    'api/handler.mjs',
+    'api/http.mjs',
+  ])
     assert.ok(!files.includes(serverOnly), `${serverOnly} stays out of the local kit`);
   // Imported for its version since #281, yet the runtime writes its own (the 0.6.12 build failed on the copy).
   assert.ok(!files.includes('package.json'), 'the runtime writes its own package.json');
@@ -51,7 +90,10 @@ test('a runtime staged from the file list imports every entry module', { timeout
 
 test('the launcher imports only Node built-ins and its own plugin directory, never runtime/ or a package', async () => {
   await checkLauncherImports(path.join(repository, 'plugins', 'ai-fighter'));
-  for (const [name, source] of [['package', "import { z } from 'zod';\n"], ['runtime', "import './runtime/mcp/x.mjs';\n"]]) {
+  for (const [name, source] of [
+    ['package', "import { z } from 'zod';\n"],
+    ['runtime', "import './runtime/mcp/x.mjs';\n"],
+  ]) {
     const plugin = path.join(temporary, `launcher-${name}`);
     await mkdir(path.join(plugin, 'runtime', 'mcp'), { recursive: true });
     await writeFile(path.join(plugin, 'runtime', 'mcp', 'x.mjs'), 'export {};\n');
@@ -63,10 +105,16 @@ test('the launcher imports only Node built-ins and its own plugin directory, nev
 test('a kit is built only from committed files', async () => {
   const repo = path.join(temporary, 'repo');
   await mkdir(path.join(repo, 'mcp'), { recursive: true });
-  const git = (...args) => { const r = spawnSync('git', args, { cwd: repo, encoding: 'utf8', timeout: 30_000 }); assert.equal(r.status, 0, r.stderr); };
-  git('init', '-q'); git('config', 'user.email', 'test@example.invalid'); git('config', 'user.name', 'test');
+  const git = (...args) => {
+    const r = spawnSync('git', args, { cwd: repo, encoding: 'utf8', timeout: 30_000 });
+    assert.equal(r.status, 0, r.stderr);
+  };
+  git('init', '-q');
+  git('config', 'user.email', 'test@example.invalid');
+  git('config', 'user.name', 'test');
   await writeFile(path.join(repo, 'mcp', 'a.mjs'), 'export const a = 1;\n');
-  git('add', '.'); git('commit', '-q', '-m', 'fixture');
+  git('add', '.');
+  git('commit', '-q', '-m', 'fixture');
   await assertCommitted(['mcp/a.mjs'], { sourceRoot: repo });
   await writeFile(path.join(repo, 'mcp', 'a.mjs'), 'export const a = 2;\n');
   await assert.rejects(assertCommitted(['mcp/a.mjs'], { sourceRoot: repo }), /Commit runtime changes before bundling:\n M mcp\/a\.mjs/);

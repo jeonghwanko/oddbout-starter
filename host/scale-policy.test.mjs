@@ -21,18 +21,32 @@ for name, per_state in calls:
 print(json.dumps(out))
 `;
 /** A scale-check record of `n` frames: `sizes[i]` measured (correction 1/size), null left for an eye check. */
-const record = (sizes) => ({ state_correction: null, frames: sizes.map((size, i) => ({ frame: `-/${i}`, how: size === null ? 'check' : 'head',
-  correction: size === null ? null : Math.round(10000 / size) / 10000 })) });
+const record = sizes => ({
+  state_correction: null,
+  frames: sizes.map((size, i) => ({
+    frame: `-/${i}`,
+    how: size === null ? 'check' : 'head',
+    correction: size === null ? null : Math.round(10000 / size) / 10000,
+  })),
+});
 async function policy(records, calls) {
   const { stdout } = await promisify(execFile)(python, ['-I', '-c', SCRIPT, import.meta.dirname, JSON.stringify(records), JSON.stringify(calls)]);
   return JSON.parse(stdout);
 }
 
-test('an unreadable clip takes its GPT row\'s measured size, not 1', { skip: !existsSync(python) }, async () => {
+test("an unreadable clip takes its GPT row's measured size, not 1", { skip: !existsSync(python) }, async () => {
   // hit's steps: guard (stance-a), recoil, stagger x5 (hurt-a), guard; groggy's: dizzyA, dizzyB (hurt-a) — all unreadable, like 빨간 파도's
-  const records = { hit: record([1.2, null, 1.25, 1.25, 1.25, 1.25, 1.25, 1.2]), groggy: record([null, null]),
-    victory: record([null, null]), fightIdle: record([1.2, 1.2]) };
-  const got = await policy(records, [['groggy', false], ['hit', false], ['victory', false]]);
+  const records = {
+    hit: record([1.2, null, 1.25, 1.25, 1.25, 1.25, 1.25, 1.2]),
+    groggy: record([null, null]),
+    victory: record([null, null]),
+    fightIdle: record([1.2, 1.2]),
+  };
+  const got = await policy(records, [
+    ['groggy', false],
+    ['hit', false],
+    ['victory', false],
+  ]);
   assert.equal(got.rows['hurt-a'], 0.8);
   assert.deepEqual(got.groggy.corrections, [0.8, 0.8]);
   assert.deepEqual(got.groggy.fix, { '-/0': 0.8, '-/1': 0.8 });
@@ -54,7 +68,7 @@ test('a row needs two measured frames; a clip with nothing measured anywhere sta
   assert.deepEqual(none.groggy.corrections, [1, 1]);
 });
 
-test('a gait is filmed, not drawn in a GPT row: it never takes the rows\' size', { skip: !existsSync(python) }, async () => {
+test("a gait is filmed, not drawn in a GPT row: it never takes the rows' size", { skip: !existsSync(python) }, async () => {
   const got = await policy({ walk: record(Array(4).fill(null)), combo: record(Array(23).fill(1.2)) }, [['walk', true]]);
   assert.ok(Math.abs(got.every - 0.8333) < 1e-3);
   assert.deepEqual(got.walk.corrections, [1, 1, 1, 1]);
