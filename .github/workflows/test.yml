@@ -135,5 +135,5 @@ jobs:
       # function that has a deno.json with that config and its lock, as it is deployed.
       - uses: denoland/setup-deno@v2
         with:
-          deno-version: v2.9.6
+          deno-version: v2.9.8
       - run: for config in supabase/functions/*/deno.json; do deno check --frozen --config "$config" "$(dirname "$config")/index.ts"; done
