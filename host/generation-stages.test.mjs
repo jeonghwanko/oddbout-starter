@@ -2565,3 +2565,11 @@ test('a resume-state file is written whole or not at all, and a scanner hold on 
     assert.deepEqual(await readdir(dir), ['uploaded.json']);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
+
+test('the constants the API checks a job by are the host\'s own, value for value', async () => {
+  // host/ ships alone (host/package.json) and imports nothing from api/, so each keeps its copy and this keeps them equal.
+  const api = await import('../api/generations.mjs');
+  const { STAT_TOTAL, IMAGE_PROVIDERS } = await import('./generation-stages.mjs');
+  assert.equal(STAT_TOTAL, api.STAT_TOTAL);
+  assert.deepEqual(IMAGE_PROVIDERS, api.IMAGE_PROVIDERS);
+});

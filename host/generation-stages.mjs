@@ -486,7 +486,7 @@ export const videoEntry = report => ({ role: 'video', requested: VIDEO_REQUESTED
 // (`og harden` turns the same off for the service's codex as a whole, image generation kept for the looks).
 export const CODEX_TOOLS_OFF = Object.freeze(['shell_tool', 'unified_exec', 'browser_use', 'browser_use_external', 'computer_use', 'apps', 'code_mode_host',
   'multi_agent', 'hooks', 'plugins', 'remote_plugin', 'image_generation']);
-/** Stats a brief and a profile carry: 1-5 each, summing to 9 (the v1 contract). */
+/** Stats a brief and a profile carry: 1-5 each, summing to 9 (the v1 contract; api/generations.mjs STAT_TOTAL, generation-stages.test.mjs keeps them equal). */
 export const STAT_TOTAL = 9;
 export const REJECT_CODES = Object.freeze(['real-person', 'minor', 'sexual', 'hate', 'gore', 'other']);
 // Anything shaped like a credential never leaves in a brief: worker keys, JWTs, provider keys, OAuth tokens, e-mail addresses.
@@ -960,6 +960,7 @@ const GROK_DOWN = Object.freeze({ retry: GROK_LIMITED });
  * before the field) is `gpt`: every job was drawn so until then, and a job GPT started never goes on in Grok.
  * Step 0 (2026-11-06, office-stable): Grok pictures took 2 of 3 fighters through unattended (GPT 1 of 3), with 4 retakes to GPT's 10.
  */
+// api/generations.mjs IMAGE_PROVIDERS takes the same names (generation-stages.test.mjs keeps them equal).
 export const IMAGE_PROVIDERS = Object.freeze(['grok', 'gpt']);
 /** @param {Job} job @returns {'grok' | 'gpt'} */
 export const imageProviderOf = job => job?.imageProvider === 'grok' ? 'grok' : 'gpt';
