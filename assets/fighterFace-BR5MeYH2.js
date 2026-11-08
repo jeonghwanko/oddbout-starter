@@ -1,0 +1,1 @@
+import{t as e}from"./PublicAssetVersions-DIMNeJVo.js";import{t}from"./arena-concept-runtime-CbVbG3va.js";var n=t.art;function r(t){let r=n[t];return r?e(`/${r.faceImage}`):null}function i(e,t){let n=r(t);return n?(e.src=n,e.width=e.height=192,!0):!1}export{i as t};
