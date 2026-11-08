@@ -914,6 +914,11 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
           p_limit: TICK_EVENTS_READ,
           p_events: first === null,
         });
+        // A tick that fails (the function missing, a grant lost, a stale schema cache) ends the wait at once and leaves the job's read to the
+        // caller; say so in the logs, or an agent that polls on "still working" retries with no wait and nothing shows why. A null row is a
+        // job that is not the owner's: no error.
+        if (error)
+          console.error(JSON.stringify({ event: 'hosted-watch-tick-failed', code: error.code ?? null, message: String(error.message ?? error).slice(0, 300) }));
         if (error || !row) break;
         const submission = row.status === 'submitted' ? (row.submission ?? null) : null;
         if (hostedSettled(row.status, submission)) break;

@@ -507,6 +507,67 @@ test('a wait on a submitted fighter reads the job, its submission and its pictur
   }
 });
 
+test("the wait's tick takes the newest picture events by id, also among events that share a time", async () => {
+  const g = await generation();
+  try {
+    await g.healthy();
+    const { job } = await (
+      await connector(g, { pollMs: 10 })
+    ).call('request_hosted_fighter', {
+      description: '빨간 글러브를 낀 고양이 복서, 귀가 크다',
+      language: 'ko',
+      idempotencyKey: crypto.randomUUID(),
+    });
+    // Five events at one instant (one transaction), the picture kinds interleaved with another kind: the cut keeps the greatest ids.
+    const { rows: added } = await g.sql.query(
+      `insert into public.af_generation_events(job_id, at, kind)
+       select $1, '2026-11-08T00:00:00Z', k from unnest(array['drafts','stage','side','drafts','expressions']) as k returning id, kind`,
+      [job.id],
+    );
+    const picture = added.filter(row => row.kind !== 'stage').map(row => Number(row.id));
+    const tick = async (limit, owner = g.owner) =>
+      (await g.sql.query('select public.af_hosted_watch_tick($1, $2, $3, $4, true) as row', [owner, job.id, ['drafts', 'side', 'expressions'], limit])).rows[0]
+        .row;
+    assert.deepEqual(
+      (await tick(2)).events.map(event => event.id),
+      picture.slice(-2).reverse(),
+    );
+    assert.deepEqual(
+      (await tick(8)).events.map(event => event.id),
+      [...picture].reverse(),
+    );
+    assert.equal(await tick(2, crypto.randomUUID()), null);
+  } finally {
+    await g.sql.close();
+  }
+});
+
+test('a tick the database refuses ends the wait at once and says why in the log', async t => {
+  const g = await generation();
+  try {
+    await g.healthy();
+    const rpc = g.db.rpc;
+    g.db.rpc = (name, args) =>
+      name === 'af_hosted_watch_tick' ? Promise.resolve({ data: null, error: { code: 'PGRST202', message: 'function not found' } }) : rpc(name, args);
+    const logged = t.mock.method(console, 'error', () => {});
+    const { call } = await connector(g, { pollMs: 10 });
+    const { job } = await call('request_hosted_fighter', {
+      description: '빨간 글러브를 낀 고양이 복서, 귀가 크다',
+      language: 'ko',
+      idempotencyKey: crypto.randomUUID(),
+    });
+    const started = Date.now();
+    const waited = await call('get_hosted_fighter', { jobId: job.id, waitSeconds: 5 });
+    assert.ok(Date.now() - started < 2000, `${Date.now() - started} ms`);
+    assert.equal(waited.job.status, 'queued');
+    const lines = logged.mock.calls.map(c => String(c.arguments[0])).filter(line => line.includes('hosted-watch-tick-failed'));
+    assert.equal(lines.length, 1);
+    assert.deepEqual(JSON.parse(lines[0]), { event: 'hosted-watch-tick-failed', code: 'PGRST202', message: 'function not found' });
+  } finally {
+    await g.sql.close();
+  }
+});
+
 test('a lost request response resumes on a fresh connector with the same job and fresh previews, even while new requests are disabled', async () => {
   const g = await generation();
   try {
