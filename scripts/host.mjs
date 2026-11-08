@@ -15,8 +15,20 @@ import { createRemoteClient } from '../api/client.mjs';
 import { JOIN_CODE } from '../api/generations.mjs';
 import { readProject } from '../mcp/connection-readiness.mjs';
 import { defaultSessionPath, login, startDeviceLogin, waitDeviceLogin } from './login.mjs';
-import { HOST_FILES, checkSystem, codexHealthy, codexOptional, defaultRoot, healthy, hostEnv, installFiles, installed, openJobs, readHostEnv,
-  signIn } from '../host/install.mjs';
+import {
+  HOST_FILES,
+  checkSystem,
+  codexHealthy,
+  codexOptional,
+  defaultRoot,
+  healthy,
+  hostEnv,
+  installFiles,
+  installed,
+  openJobs,
+  readHostEnv,
+  signIn,
+} from '../host/install.mjs';
 
 // The install's pieces live in host/install.mjs (2026-11-07): npx oddbout-host (host/runner.mjs) installs the same way on Windows, macOS
 // and Linux, from an npm package that carries host/ alone.
@@ -38,7 +50,10 @@ const LOGIN = 'npm run host:login --';
 const CODEX_OPTIONAL = codexOptional(LOGIN);
 export const TERMS_DOC = 'docs/GENERATION-HOST.md#호스트-약속';
 /** @type {(args: string[], name: string) => string | undefined} */
-const flag = (args, name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };
+const flag = (args, name) => {
+  const i = args.indexOf(name);
+  return i >= 0 ? args[i + 1] : undefined;
+};
 /** @type {Record<string, string>} */
 const MESSAGES = {
   'client-sign-in-required': 'ODDBOUT 로그인이 필요하다: npm run host -- signin (브라우저가 없으면 --device)',
@@ -92,14 +107,22 @@ export async function runHost(argv, deps) {
   const { root, out, og } = deps;
   const [command = 'help', ...args] = argv;
   /** @param {string} route @param {string} [method] @param {object} [body] */
-  const api = async (route, method = 'GET', body) => deps.request(route, { method, ...(body ? { body: JSON.stringify(body), headers: { 'content-type': 'application/json' } } : {}) });
-  const needInstall = () => { if (installed(root)) return true; out(`이 PC에 설치가 없다(${root}): npm run host:setup`); return false; };
+  const api = async (route, method = 'GET', body) =>
+    deps.request(route, { method, ...(body ? { body: JSON.stringify(body), headers: { 'content-type': 'application/json' } } : {}) });
+  const needInstall = () => {
+    if (installed(root)) return true;
+    out(`이 PC에 설치가 없다(${root}): npm run host:setup`);
+    return false;
+  };
   // Grok answered (codex too, or not: healthy), then the user unit. Approval is not needed: not approved, the worker makes its owner's
   // own requests.
   async function startWorker() {
     const health = await og(['health'], { capture: true });
     out(health.output.trim());
-    if (!healthy(health.output)) { out('grok(SuperGrok)이 ok여야 켠다: npm run host:login 뒤 npm run host:start'); return 1; }
+    if (!healthy(health.output)) {
+      out('grok(SuperGrok)이 ok여야 켠다: npm run host:login 뒤 npm run host:start');
+      return 1;
+    }
     if (!codexHealthy(health.output)) out(CODEX_OPTIONAL);
     if (!deps.linger()) out(`참고: 로그아웃하면 워커도 멈춘다. 계속 돌리려면 한 번: sudo loginctl enable-linger ${userInfo().username}`);
     if ((await og(['worker', 'install'])).code !== 0) return 1;
@@ -107,30 +130,40 @@ export async function runHost(argv, deps) {
     return 0;
   }
   /** @param {any} host  The API's host record, or none. */
-  const showHost = host => out(host
-    ? `호스트 ${host.name} (${host.id}) — ${host.approved ? '승인됨' : '승인 대기'}, ${host.enabled ? '켜짐' : '꺼짐(pause)'}, 아무 호스트 신청 ${host.acceptsAny ? '받음' : '안 받음'}, `
-      + `하루 한도 ${host.dailyLimit}${host.todayLeft != null ? `·오늘 남은 ${host.todayLeft}` : ''}, ${host.online ? '온라인' : '오프라인'}, 과금 ${host.billing}`
-      + `${host.keys ? `, 워커 열쇠 ${host.keys.length}개` : ''}`
-    : '호스트 신청이 없다: npm run host -- apply --name <이름> --accept-terms');
+  const showHost = host =>
+    out(
+      host
+        ? `호스트 ${host.name} (${host.id}) — ${host.approved ? '승인됨' : '승인 대기'}, ${host.enabled ? '켜짐' : '꺼짐(pause)'}, 아무 호스트 신청 ${host.acceptsAny ? '받음' : '안 받음'}, ` +
+            `하루 한도 ${host.dailyLimit}${host.todayLeft != null ? `·오늘 남은 ${host.todayLeft}` : ''}, ${host.online ? '온라인' : '오프라인'}, 과금 ${host.billing}` +
+            `${host.keys ? `, 워커 열쇠 ${host.keys.length}개` : ''}`
+        : '호스트 신청이 없다: npm run host -- apply --name <이름> --accept-terms',
+    );
   try {
     switch (command) {
       case 'signin': {
         // The kit's own login (scripts/login.mjs) with this kit's project, so a new host needs no URL or key.
         const project = await deps.project();
-        if (!project) { out('deploy/creator-site.json 을 읽지 못했다 — 이 체크아웃을 확인한다.'); return 1; }
+        if (!project) {
+          out('deploy/creator-site.json 을 읽지 못했다 — 이 체크아웃을 확인한다.');
+          return 1;
+        }
         const flags = ['--url', project.origin, '--key', project.publishableKey];
         if (args.includes('--device')) {
           // A link made before (this command stopped, the terminal closed) is waited on again, not replaced: it may be approved already.
-          try { await deps.signin.startDevice(flags); }
-          catch (/** @type {any} */ error) { if (error.message !== 'device-login-already-pending') throw error; out('앞서 만든 승인 링크(10분 유효)를 이어서 기다린다.'); }
+          try {
+            await deps.signin.startDevice(flags);
+          } catch (/** @type {any} */ error) {
+            if (error.message !== 'device-login-already-pending') throw error;
+            out('앞서 만든 승인 링크(10분 유효)를 이어서 기다린다.');
+          }
           await deps.signin.waitDevice(args.includes('--replace'));
-        }
-        else await deps.signin.browser([...flags, ...args.filter(a => a === '--replace')]);
+        } else await deps.signin.browser([...flags, ...args.filter(a => a === '--replace')]);
         out('ODDBOUT에 로그인했다. 다음: npm run host -- apply --name <이름> --accept-terms');
         return 0;
       }
       case 'apply': {
-        const name = flag(args, '--name'), billing = flag(args, '--billing') ?? 'subscription';
+        const name = flag(args, '--name'),
+          billing = flag(args, '--billing') ?? 'subscription';
         if (!name || !args.includes('--accept-terms')) {
           out('호스트 약속(요약 — 전문: ' + TERMS_DOC + '):');
           out('  1. 내 구독(또는 API 키)으로 다른 사람의 선수를 만든다. 그 제공자 약관이 이것을 허락하는지 내가 확인했고, 책임은 나에게 있다.');
@@ -142,29 +175,46 @@ export async function runHost(argv, deps) {
         }
         const { host } = await api('generations/host', 'POST', { name, billing, termsAccepted: true });
         showHost(host);
-        if (!host.approved) out('다른 사람의 신청은 운영자 승인을 기다린다. 승인 전에도 내 신청은 내 PC로 만든다: npm run host:setup → npm run host:login → npm run host:start');
+        if (!host.approved)
+          out('다른 사람의 신청은 운영자 승인을 기다린다. 승인 전에도 내 신청은 내 PC로 만든다: npm run host:setup → npm run host:login → npm run host:start');
         return 0;
       }
       case 'status': {
-        try { showHost((await api('generations/host')).host); } catch (/** @type {any} */ error) { out(explain(error)); }
+        try {
+          showHost((await api('generations/host')).host);
+        } catch (/** @type {any} */ error) {
+          out(explain(error));
+        }
         if (installed(root)) {
           out((await og(['status'], { capture: true })).output.trim());
           out((await og(['worker', 'status'], { capture: true })).output.split('\n').slice(0, 3).join('\n').trim());
         } else out(`이 PC에는 아직 설치가 없다(${root}).`);
         return 0;
       }
-      case 'setup': case 'update': {
+      case 'setup':
+      case 'update': {
         const previous = installed(root) ? readHostEnv(await readFile(path.join(root, 'host.env'), 'utf8')) : {};
-        const slots = Number(flag(args, '--slots') ?? previous.SLOTS ?? 3), memory = flag(args, '--memory') ?? previous.MEMORY ?? '8G';
+        const slots = Number(flag(args, '--slots') ?? previous.SLOTS ?? 3),
+          memory = flag(args, '--memory') ?? previous.MEMORY ?? '8G';
         const rife = flag(args, '--rife');
-        if (rife !== undefined && !['torch', 'ncnn'].includes(rife)) { out('--rife torch|ncnn'); return 1; }
+        if (rife !== undefined && !['torch', 'ncnn'].includes(rife)) {
+          out('--rife torch|ncnn');
+          return 1;
+        }
         const open = openJobs(root);
-        if (open.length) { out(`진행 중인 작업이 있어 바꾸지 않는다: ${open.join(', ')}. npm run host -- pause 로 새 신청을 막고 끝나기를 기다린다.`); return 1; }
+        if (open.length) {
+          out(`진행 중인 작업이 있어 바꾸지 않는다: ${open.join(', ')}. npm run host -- pause 로 새 신청을 막고 끝나기를 기다린다.`);
+          return 1;
+        }
         const system = deps.system();
         for (const line of system.warnings) out(`주의: ${line}`);
-        if (system.missing.length) { out(`이 PC에 없는 것: ${system.missing.join(', ')}`); return 1; }
+        if (system.missing.length) {
+          out(`이 PC에 없는 것: ${system.missing.join(', ')}`);
+          return 1;
+        }
         const env = hostEnv({ nodeBin: path.dirname(process.execPath), python: system.python, toolPath: system.toolPath, slots, memory });
-        await mkdir(root, { recursive: true, mode: 0o700 }); await chmod(root, 0o700);
+        await mkdir(root, { recursive: true, mode: 0o700 });
+        await chmod(root, 0o700);
         const wasRunning = installed(root) && /Active: active/.test((await og(['worker', 'status'], { capture: true })).output);
         if (wasRunning) await og(['worker', 'stop']);
         await writeFile(path.join(root, 'host.env'), env, { mode: 0o600 });
@@ -185,31 +235,45 @@ export async function runHost(argv, deps) {
         const providers = ['codex', 'grok'].includes(args[0]) ? [args[0]] : ['grok'];
         return signIn({ og, out, providers, replace: args.includes('--replace'), login: LOGIN });
       }
-      case 'health': return needInstall() ? (await og(['health'])).code : 1;
+      case 'health':
+        return needInstall() ? (await og(['health'])).code : 1;
       case 'join': {
         // 내 PC 붙이기 (2026-10-28): the code from the site becomes this PC's worker key; the PC keeps no account session.
         // One command from the site (2026-10-28): the code first — it lives thirty minutes and setup can take longer — then this PC's
         // install and the subscriptions' sign-ins when they are missing, then the worker. The key waits in this process, never on disk or
         // screen, until og takes it; a setup that fails needs a new code (a third key retires the oldest).
         const code = args[0] ?? '';
-        if (!JOIN_CODE.test(code)) { out(MESSAGES['invalid-join-code']); return 1; }
+        if (!JOIN_CODE.test(code)) {
+          out(MESSAGES['invalid-join-code']);
+          return 1;
+        }
         const joined = await deps.join(code);
         out(`호스트 ${joined.name}의 코드를 받았다.`);
         if (!installed(root)) {
           out('이 PC에 생성기를 설치한다(처음은 오래 걸린다).');
-          if (await runHost(['setup', ...args.slice(1)], deps) !== 0) { out('설치가 끝나지 않았다. 알려 준 것을 고친 뒤 사이트에서 새 코드를 받아 다시 한다.'); return 1; }
+          if ((await runHost(['setup', ...args.slice(1)], deps)) !== 0) {
+            out('설치가 끝나지 않았다. 알려 준 것을 고친 뒤 사이트에서 새 코드를 받아 다시 한다.');
+            return 1;
+          }
         }
         // The key goes straight from the API reply into og's worker.env (stdin, mode 600): never on screen, in argv or a log.
         const wrote = await og(['worker', 'key', joined.apiBase], { stdin: `${joined.key}\n`, capture: true });
-        if (wrote.code !== 0) { out(wrote.output.trim()); return 1; }
+        if (wrote.code !== 0) {
+          out(wrote.output.trim());
+          return 1;
+        }
         // Grok, when this install has not signed in to it (or it does not answer): signed in now, one device code. Codex is not asked for:
         // it adds GPT pictures only (1.1, 2026-11-06), and startWorker says how to add it.
         const before = await og(['health'], { capture: true });
-        if (!healthy(before.output) && await runHost(['login', 'grok'], deps) !== 0) {
-          out('grok 로그인이 끝나지 않았다: npm run host:login 뒤 npm run host:start'); return 1;
+        if (!healthy(before.output) && (await runHost(['login', 'grok'], deps)) !== 0) {
+          out('grok 로그인이 끝나지 않았다: npm run host:login 뒤 npm run host:start');
+          return 1;
         }
-        out(`이 PC를 호스트 ${joined.name}에 붙였다(워커 열쇠는 화면에 보이지 않는다, 90일). ${joined.approved
-          ? '승인된 호스트라 다른 사람의 신청도 받는다.' : '승인 전에는 내 신청만 이 PC로 만든다.'}`);
+        out(
+          `이 PC를 호스트 ${joined.name}에 붙였다(워커 열쇠는 화면에 보이지 않는다, 90일). ${
+            joined.approved ? '승인된 호스트라 다른 사람의 신청도 받는다.' : '승인 전에는 내 신청만 이 PC로 만든다.'
+          }`,
+        );
         return startWorker();
       }
       case 'start': {
@@ -217,31 +281,54 @@ export async function runHost(argv, deps) {
         if (!existsSync(path.join(root, 'worker.env'))) {
           // Without a join code: the key from the signed-in account (npm run host -- signin).
           const { host } = await api('generations/host');
-          if (!host) { showHost(host); return 1; }
+          if (!host) {
+            showHost(host);
+            return 1;
+          }
           if (host.billing === 'api-key') out('참고: 이 꾸러미는 지금 구독 로그인(codex·grok)만 쓴다. API 키로 내려면 그 키로 로그인한 계정을 쓴다.');
           // The key goes straight from the API reply into og's worker.env (stdin, mode 600): never on screen, in argv or a log.
           const { key } = await api('generations/host/keys', 'POST');
           const wrote = await og(['worker', 'key', await deps.apiBase()], { stdin: `${key}\n`, capture: true });
-          if (wrote.code !== 0) { out(wrote.output.trim()); return 1; }
+          if (wrote.code !== 0) {
+            out(wrote.output.trim());
+            return 1;
+          }
           out('워커 열쇠를 받아 설치 폴더에 넣었다(화면에 보이지 않는다, 90일).');
         }
         return startWorker();
       }
-      case 'stop': case 'restart': return needInstall() ? (await og(['worker', command])).code : 1;
-      case 'log': return needInstall() ? (await og(['worker', 'log', String(Number(args[0]) || 40)])).code : 1;
-      case 'pause': case 'resume': showHost((await api('generations/host', 'PATCH', { enabled: command === 'resume' })).host); return 0;
+      case 'stop':
+      case 'restart':
+        return needInstall() ? (await og(['worker', command])).code : 1;
+      case 'log':
+        return needInstall() ? (await og(['worker', 'log', String(Number(args[0]) || 40)])).code : 1;
+      case 'pause':
+      case 'resume':
+        showHost((await api('generations/host', 'PATCH', { enabled: command === 'resume' })).host);
+        return 0;
       case 'any': {
-        if (!['on', 'off'].includes(args[0])) { out('npm run host -- any on|off'); return 1; }
-        showHost((await api('generations/host', 'PATCH', { acceptsAny: args[0] === 'on' })).host); return 0;
+        if (!['on', 'off'].includes(args[0])) {
+          out('npm run host -- any on|off');
+          return 1;
+        }
+        showHost((await api('generations/host', 'PATCH', { acceptsAny: args[0] === 'on' })).host);
+        return 0;
       }
       case 'limit': {
         const limit = Number(args[0]);
-        if (!Number.isInteger(limit) || limit < 0 || limit > 50) { out('npm run host -- limit <0-50>'); return 1; }
-        showHost((await api('generations/host', 'PATCH', { dailyLimit: limit })).host); return 0;
+        if (!Number.isInteger(limit) || limit < 0 || limit > 50) {
+          out('npm run host -- limit <0-50>');
+          return 1;
+        }
+        showHost((await api('generations/host', 'PATCH', { dailyLimit: limit })).host);
+        return 0;
       }
       case 'revoke': {
         const { revoked } = await api('generations/host/keys', 'DELETE');
-        if (installed(root)) { await og(['worker', 'stop'], { capture: true }); await rm(path.join(root, 'worker.env'), { force: true }); }
+        if (installed(root)) {
+          await og(['worker', 'stop'], { capture: true });
+          await rm(path.join(root, 'worker.env'), { force: true });
+        }
         out(`워커 열쇠 ${revoked}개를 껐다. 다시 켜려면 npm run host:start (새 열쇠를 받는다).`);
         return 0;
       }
@@ -252,15 +339,24 @@ export async function runHost(argv, deps) {
           return 1;
         }
         if (installed(root)) await og(['worker', 'uninstall'], { capture: true });
-        try { await api('generations/host/keys', 'DELETE'); await api('generations/host', 'PATCH', { enabled: false }); }
-        catch (/** @type {any} */ error) { out(`서버 쪽은 하지 못했다(${explain(error)}) — 열쇠는 90일 뒤 저절로 끝난다.`); }
+        try {
+          await api('generations/host/keys', 'DELETE');
+          await api('generations/host', 'PATCH', { enabled: false });
+        } catch (/** @type {any} */ error) {
+          out(`서버 쪽은 하지 못했다(${explain(error)}) — 열쇠는 90일 뒤 저절로 끝난다.`);
+        }
         await rm(root, { recursive: true, force: true });
         out(`${root} 를 지웠다.`);
         return 0;
       }
-      default: out(USAGE); return command === 'help' ? 0 : 1;
+      default:
+        out(USAGE);
+        return command === 'help' ? 0 : 1;
     }
-  } catch (/** @type {any} */ error) { out(explain(error)); return 1; }
+  } catch (/** @type {any} */ error) {
+    out(explain(error));
+    return 1;
+  }
 }
 
 /**
@@ -270,9 +366,20 @@ export async function runHost(argv, deps) {
 function runOg(root, args, { stdin, capture = false } = {}) {
   return new Promise(resolve => {
     // Its streams are used only where piped.
-    const child = /** @type {import('node:child_process').ChildProcessWithoutNullStreams} */ (spawn(path.join(root, 'bin', 'og'), args, { stdio: [stdin === undefined ? 'inherit' : 'pipe', capture ? 'pipe' : 'inherit', capture ? 'pipe' : 'inherit'] }));
+    const child = /** @type {import('node:child_process').ChildProcessWithoutNullStreams} */ (
+      spawn(path.join(root, 'bin', 'og'), args, {
+        stdio: [stdin === undefined ? 'inherit' : 'pipe', capture ? 'pipe' : 'inherit', capture ? 'pipe' : 'inherit'],
+      })
+    );
     let output = '';
-    if (capture) { child.stdout.on('data', d => { output += d; }); child.stderr.on('data', d => { output += d; }); }
+    if (capture) {
+      child.stdout.on('data', d => {
+        output += d;
+      });
+      child.stderr.on('data', d => {
+        output += d;
+      });
+    }
     if (stdin !== undefined) child.stdin.end(stdin);
     child.on('close', code => resolve({ code: code ?? 1, output }));
     child.on('error', error => resolve({ code: 127, output: error.message }));
@@ -280,16 +387,21 @@ function runOg(root, args, { stdin, capture = false } = {}) {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const argv = process.argv.slice(2), at = argv.indexOf('--root');
+  const argv = process.argv.slice(2),
+    at = argv.indexOf('--root');
   const root = path.resolve(at >= 0 ? argv[at + 1] : defaultRoot());
   if (at >= 0) argv.splice(at, 2);
   const sessionPath = defaultSessionPath();
   /** @type {import('../api/client.mjs').RemoteClient | undefined} */
   let remote;
   runHost(argv, {
-    root, out: line => console.log(line), hostDir: path.join(KIT, 'host'),
-    request: async (route, options) => (remote ??= await createRemoteClient(sessionPath).catch(error => {
-      throw new Error(error.code === 'ENOENT' ? 'client-sign-in-required' : error.message); })).request(route, options),
+    root,
+    out: line => console.log(line),
+    hostDir: path.join(KIT, 'host'),
+    request: async (route, options) =>
+      (remote ??= await createRemoteClient(sessionPath).catch(error => {
+        throw new Error(error.code === 'ENOENT' ? 'client-sign-in-required' : error.message);
+      })).request(route, options),
     apiBase: async () => `${JSON.parse(await readFile(sessionPath, 'utf8')).url}/functions/v1/ai-fighter`,
     og: (args, options) => runOg(root, args, options),
     system: () => checkSystem(),
@@ -300,12 +412,23 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       const project = await readProject(KIT);
       if (!project) throw new Error('kit-project-missing');
       const apiBase = `${project.origin}/functions/v1/ai-fighter`;
-      const response = await fetch(`${apiBase}/generations/host/join`, { method: 'POST', body: JSON.stringify({ code }), redirect: 'error',
-        headers: { apikey: project.publishableKey, 'content-type': 'application/json' }, signal: AbortSignal.timeout(30_000) });
+      const response = await fetch(`${apiBase}/generations/host/join`, {
+        method: 'POST',
+        body: JSON.stringify({ code }),
+        redirect: 'error',
+        headers: { apikey: project.publishableKey, 'content-type': 'application/json' },
+        signal: AbortSignal.timeout(30_000),
+      });
       const result = await response.json().catch(() => null);
       if (!response.ok || result?.ok !== true) throw new Error(result?.code ?? `api-http-${response.status}`);
       return { ...result, apiBase };
     },
-    signin: { browser: argv => login({ argv }), startDevice: argv => startDeviceLogin({ argv, next: '승인하면 이 명령이 이어서 로그인을 마친다. 이 창을 닫지 않는다.' }), waitDevice: replace => waitDeviceLogin({ replace }) },
-  }).then(code => { process.exitCode = code; });
+    signin: {
+      browser: argv => login({ argv }),
+      startDevice: argv => startDeviceLogin({ argv, next: '승인하면 이 명령이 이어서 로그인을 마친다. 이 창을 닫지 않는다.' }),
+      waitDevice: replace => waitDeviceLogin({ replace }),
+    },
+  }).then(code => {
+    process.exitCode = code;
+  });
 }

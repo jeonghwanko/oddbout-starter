@@ -46,8 +46,11 @@ export const ACCOUNT_OPTIONS = [
  * @param {string[]} args @param {{ cwd?: string, timeout?: number }} [options] @returns {Promise<{ code: number, stdout: string }>}
  */
 export function runGit(args, { cwd = kitRoot, timeout = 30000 } = {}) {
-  return new Promise(resolve => execFile('git', args, { cwd, timeout, windowsHide: true, maxBuffer: 1 << 20 },
-    (error, stdout) => resolve({ code: error ? (typeof error.code === 'number' ? error.code : 1) : 0, stdout: String(stdout ?? '').trim() })));
+  return new Promise(resolve =>
+    execFile('git', args, { cwd, timeout, windowsHide: true, maxBuffer: 1 << 20 }, (error, stdout) =>
+      resolve({ code: error ? (typeof error.code === 'number' ? error.code : 1) : 0, stdout: String(stdout ?? '').trim() }),
+    ),
+  );
 }
 
 /**
@@ -78,7 +81,7 @@ export async function checkKit({ installed, ...options } = /** @type {KitOptions
   const spriteRoot = options.spriteRoot ?? path.join(options.root ?? kitRoot, 'vendor', 'sprite-gen');
   const pinned = await checkPinnedDotsKit({ ...options, spriteRoot });
   if (pinned) return pinned;
-  const present = installed ?? await installedSpriteGen(spriteRoot);
+  const present = installed ?? (await installedSpriteGen(spriteRoot));
   const result = await checkKitCore({ ...options, spriteRoot, present });
   if (present.source && present.environment) return result;
   // First run in a fresh workspace: the agent installs; nothing here is a local-change problem.
@@ -88,46 +91,94 @@ export async function checkKit({ installed, ...options } = /** @type {KitOptions
 }
 
 /** A Dots install keeps its workspace's immutable release; readiness must never fetch a moving branch. @param {KitOptions & { spriteRoot: string }} options */
-async function checkPinnedDotsKit({ root = kitRoot, workspaceRoot, spriteRoot,
-  inspectPinnedRuntime = inspectDotsRuntime, inspectEngine = inspectSpriteEngine }) {
+async function checkPinnedDotsKit({
+  root = kitRoot,
+  workspaceRoot,
+  spriteRoot,
+  inspectPinnedRuntime = inspectDotsRuntime,
+  inspectEngine = inspectSpriteEngine,
+}) {
   /** @type {KitResult} */
-  const result = { status: 'blocked', branch: null, behind: null, ahead: null, remoteChecked: false,
-    engine: null, changedFiles: [], nextCommands: [], restartRequired: false, versionPolicy: 'retain-workspace-pin' };
+  const result = {
+    status: 'blocked',
+    branch: null,
+    behind: null,
+    ahead: null,
+    remoteChecked: false,
+    engine: null,
+    changedFiles: [],
+    nextCommands: [],
+    restartRequired: false,
+    versionPolicy: 'retain-workspace-pin',
+  };
   let marker;
-  try { marker = await readRecord(await safePath('.dots-runtime.json', { root })); }
-  catch (/** @type {any} */ error) { return error.code === 'ENOENT' ? null : { ...result, reason: 'dots-runtime-marker-invalid' }; }
+  try {
+    marker = await readRecord(await safePath('.dots-runtime.json', { root }));
+  } catch (/** @type {any} */ error) {
+    return error.code === 'ENOENT' ? null : { ...result, reason: 'dots-runtime-marker-invalid' };
+  }
   if (marker?.schemaVersion !== 1 || marker.host !== 'dots') return { ...result, reason: 'dots-runtime-marker-invalid' };
   if (!workspaceRoot) return { ...result, reason: 'dots-workspace-binding-required' };
   let binding;
-  try { binding = await readRecord(await safePath('output/dots-workspace.json', { root: workspaceRoot })); }
-  catch { return { ...result, reason: 'dots-workspace-binding-required' }; }
+  try {
+    binding = await readRecord(await safePath('output/dots-workspace.json', { root: workspaceRoot }));
+  } catch {
+    return { ...result, reason: 'dots-workspace-binding-required' };
+  }
   const sourcePin = /^[a-f0-9]{40}$/.test(binding?.commit ?? '');
   const bundlePin = !binding?.commit && /^[a-f0-9]{64}$/.test(binding?.manifestSha256 ?? '');
-  if (binding?.schemaVersion !== 1 || binding.provider !== 'grok' || typeof binding.runtime !== 'string' || !path.isAbsolute(binding.runtime) ||
-      path.resolve(binding.runtime) !== path.resolve(root) || (!sourcePin && !bundlePin))
+  if (
+    binding?.schemaVersion !== 1 ||
+    binding.provider !== 'grok' ||
+    typeof binding.runtime !== 'string' ||
+    !path.isAbsolute(binding.runtime) ||
+    path.resolve(binding.runtime) !== path.resolve(root) ||
+    (!sourcePin && !bundlePin)
+  )
     return { ...result, reason: 'dots-workspace-binding-invalid' };
   let report;
   try {
-    report = await inspectPinnedRuntime({ runtime: root, workspace: workspaceRoot, provider: 'none',
-      ...(bundlePin ? { manifestSha256: binding.manifestSha256 } : {}) });
-  } catch { return { ...result, reason: 'dots-runtime-inspection-failed' }; }
+    report = await inspectPinnedRuntime({
+      runtime: root,
+      workspace: workspaceRoot,
+      provider: 'none',
+      ...(bundlePin ? { manifestSha256: binding.manifestSha256 } : {}),
+    });
+  } catch {
+    return { ...result, reason: 'dots-runtime-inspection-failed' };
+  }
   if (report.blockers?.length) return { ...result, reason: report.blockers[0] };
-  if (!Array.isArray(report.blockers) || !report.kit || report.kit.version !== binding.version ||
-      (sourcePin ? report.kit.distribution !== 'source' || report.kit.commit !== binding.commit
-        : report.kit.distribution !== 'bundle' || report.kit.manifestSha256 !== binding.manifestSha256))
+  if (
+    !Array.isArray(report.blockers) ||
+    !report.kit ||
+    report.kit.version !== binding.version ||
+    (sourcePin
+      ? report.kit.distribution !== 'source' || report.kit.commit !== binding.commit
+      : report.kit.distribution !== 'bundle' || report.kit.manifestSha256 !== binding.manifestSha256)
+  )
     return { ...result, reason: 'dots-runtime-binding-mismatch' };
   result.engine = await inspectEngine(spriteRoot);
-  return { ...result, status: result.engine.motion ? 'ready' : 'action-required',
-    reason: result.engine.motion ? null : 'motion-engine-missing', commit: report.kit.commit ?? null,
-    manifestSha256: report.kit.manifestSha256 ?? null };
+  return {
+    ...result,
+    status: result.engine.motion ? 'ready' : 'action-required',
+    reason: result.engine.motion ? null : 'motion-engine-missing',
+    commit: report.kit.commit ?? null,
+    manifestSha256: report.kit.manifestSha256 ?? null,
+  };
 }
 
 /** @param {string} spriteRoot */
 async function installedSpriteGen(spriteRoot) {
   /** @type {(file: string) => Promise<boolean>} */
-  const exists = file => access(file).then(() => true, () => false);
-  return { source: await exists(path.join(spriteRoot, 'SKILL.md')),
-    environment: await exists(path.join(spriteRoot, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python')) };
+  const exists = file =>
+    access(file).then(
+      () => true,
+      () => false,
+    );
+  return {
+    source: await exists(path.join(spriteRoot, 'SKILL.md')),
+    environment: await exists(path.join(spriteRoot, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python')),
+  };
 }
 
 /**
@@ -137,7 +188,8 @@ async function installedSpriteGen(spriteRoot) {
  * process's fetch: a kit change published a minute ago still shows.
  * @typedef {{ at: number, ok: boolean }} FetchAttempt
  */
-export const FETCH_INTERVAL_MS = 5 * 60_000, FETCH_RECORD = 'output/kit-fetch.json';
+export const FETCH_INTERVAL_MS = 5 * 60_000,
+  FETCH_RECORD = 'output/kit-fetch.json';
 const lastFetch = /** @type {Map<string, FetchAttempt>} */ (new Map());
 /** @param {string | undefined} workspaceRoot @param {string} root @returns {Promise<FetchAttempt | null>} */
 async function recordedFetch(workspaceRoot, root) {
@@ -145,17 +197,31 @@ async function recordedFetch(workspaceRoot, root) {
   try {
     const record = await readJson(await localPath(workspaceRoot, FETCH_RECORD));
     const at = Date.parse(record?.attemptedAt);
-    return record?.schemaVersion === 1 && record.kitRoot === path.resolve(root) && record.branch === KIT_BRANCH && Number.isFinite(at)
-      && typeof record.ok === 'boolean' ? { at, ok: record.ok } : null;
-  } catch { return null; }
+    return record?.schemaVersion === 1 &&
+      record.kitRoot === path.resolve(root) &&
+      record.branch === KIT_BRANCH &&
+      Number.isFinite(at) &&
+      typeof record.ok === 'boolean'
+      ? { at, ok: record.ok }
+      : null;
+  } catch {
+    return null;
+  }
 }
 /** A record that cannot be written costs the next call a fetch, never this check. @param {string | undefined} workspaceRoot @param {string} root @param {FetchAttempt} attempt */
 async function recordFetch(workspaceRoot, root, attempt) {
   if (!workspaceRoot) return;
   try {
-    await atomicJson(await localPath(workspaceRoot, FETCH_RECORD, { createParents: true }), { schemaVersion: 1, kitRoot: path.resolve(root),
-      branch: KIT_BRANCH, attemptedAt: new Date(attempt.at).toISOString(), ok: attempt.ok });
-  } catch { /* the next call fetches */ }
+    await atomicJson(await localPath(workspaceRoot, FETCH_RECORD, { createParents: true }), {
+      schemaVersion: 1,
+      kitRoot: path.resolve(root),
+      branch: KIT_BRANCH,
+      attemptedAt: new Date(attempt.at).toISOString(),
+      ok: attempt.ok,
+    });
+  } catch {
+    /* the next call fetches */
+  }
 }
 /**
  * One kit's git work at a time across processes: two readiness calls fetching or fast-forwarding the same checkout collide on git's own
@@ -172,13 +238,30 @@ async function checkKitCore(options) {
   return withFileLock(kitLock(options.root ?? kitRoot), () => checkKitLocked(options), { busy: 'kit-update-busy', waitMs: KIT_LOCK_WAIT_MS });
 }
 /** @param {KitOptions & { spriteRoot: string, present: Installed }} options */
-async function checkKitLocked({ progress, present, fetchRemote = true, git = runGit, root = kitRoot, spriteRoot, workspaceRoot,
-  inspectEngine = inspectSpriteEngine }) {
+async function checkKitLocked({
+  progress,
+  present,
+  fetchRemote = true,
+  git = runGit,
+  root = kitRoot,
+  spriteRoot,
+  workspaceRoot,
+  inspectEngine = inspectSpriteEngine,
+}) {
   /** @type {KitResult} */
-  const result = { status: 'ready', branch: null, behind: null, ahead: null, remoteChecked: false, engine: null,
-    changedFiles: [], nextCommands: [], restartRequired: false, reason: null };
-  const readEngine = async () => !present.source ? { version: null, motion: false, error: 'sprite-gen-not-installed' }
-    : inspectEngine(spriteRoot);
+  const result = {
+    status: 'ready',
+    branch: null,
+    behind: null,
+    ahead: null,
+    remoteChecked: false,
+    engine: null,
+    changedFiles: [],
+    nextCommands: [],
+    restartRequired: false,
+    reason: null,
+  };
+  const readEngine = async () => (!present.source ? { version: null, motion: false, error: 'sprite-gen-not-installed' } : inspectEngine(spriteRoot));
   const head = await git(['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: root });
   result.branch = head.stdout;
   result.engine = await readEngine();
@@ -189,8 +272,9 @@ async function checkKitLocked({ progress, present, fetchRemote = true, git = run
   const dirty = (await git(['status', '--porcelain', '--untracked-files=no', '--ignore-submodules=dirty'], { cwd: root })).stdout;
   if (fetchRemote) {
     // The workspace's last attempt and this process's own (real git only, as a long-running MCP process keeps it).
-    const recorded = await recordedFetch(workspaceRoot, root), seen = git === runGit ? lastFetch.get(root) : undefined;
-    const latest = [recorded, seen].reduce((newest, attempt) => attempt && (!newest || attempt.at > newest.at) ? attempt : newest, null);
+    const recorded = await recordedFetch(workspaceRoot, root),
+      seen = git === runGit ? lastFetch.get(root) : undefined;
+    const latest = [recorded, seen].reduce((newest, attempt) => (attempt && (!newest || attempt.at > newest.at) ? attempt : newest), null);
     /** @type {(attempt: FetchAttempt) => boolean} */
     const recent = attempt => Date.now() - attempt.at >= 0 && Date.now() - attempt.at < FETCH_INTERVAL_MS;
     if (latest && recent(latest) && !latest.ok) result.remoteRetryAt = new Date(latest.at + FETCH_INTERVAL_MS).toISOString();
@@ -234,7 +318,8 @@ async function checkKitLocked({ progress, present, fetchRemote = true, git = run
   // Recorded attempts name the pinned engine; an edited one is not that engine.
   if ((await git(['status', '--porcelain', '--untracked-files=no'], { cwd: spriteRoot })).stdout)
     return { ...result, status: 'blocked', reason: 'vendor-local-changes' };
-  if (!result.engine.motion) // a checkout still on the pre-fork upstream pin
+  if (!result.engine.motion)
+    // a checkout still on the pre-fork upstream pin
     return { ...result, status: 'action-required', reason: 'motion-engine-missing', nextCommands: ['npm run sprite:setup', 'npm run sprite:status'] };
   return { ...result, reason: result.remoteChecked ? null : 'remote-unreachable-current-unknown' };
 }
@@ -242,15 +327,24 @@ async function checkKitLocked({ progress, present, fetchRemote = true, git = run
 /** The generation-account choice: options to show; the user's stated or elicited answer only. Never inferred. @param {string | null} [choice] */
 export function accountItem(choice) {
   const option = ACCOUNT_OPTIONS.find(o => o.id === choice);
-  const verification = 'sprite-gen workflow는 사용자가 전달한 선택·접근 조건을 확인하며 구독·한도·실제 생성 성공을 보증하지 않는다.'
-    + ' 결과 표시는 이 대화에 실제 이미지를 보여준 것으로만 확인한다. creation:delivery는 기록의 누락·모순만 검사하며 표시를 증명하지 않는다.';
+  const verification =
+    'sprite-gen workflow는 사용자가 전달한 선택·접근 조건을 확인하며 구독·한도·실제 생성 성공을 보증하지 않는다.' +
+    ' 결과 표시는 이 대화에 실제 이미지를 보여준 것으로만 확인한다. creation:delivery는 기록의 누락·모순만 검사하며 표시를 증명하지 않는다.';
   if (!option) return { status: 'choice-required', options: ACCOUNT_OPTIONS.map(({ id, label }) => ({ id, label })), verification };
   if (option.id === 'stop') return { status: 'stopped', choice: option.id, verification };
-  return { status: 'chosen-unverified', choice: option.id, provider: option.provider, verification,
-    imageProvider: option.provider, motionMethod: choice === 'gpt' ? 'gpt-rows' : 'grok-video',
+  return {
+    status: 'chosen-unverified',
+    choice: option.id,
+    provider: option.provider,
+    verification,
+    imageProvider: option.provider,
+    motionMethod: choice === 'gpt' ? 'gpt-rows' : 'grok-video',
     // Choosing a provider is not a statement that its image/video entitlement was checked.
-    nextCommands: [`npm run sprite -- workflow --kind image --image-provider ${option.provider}`,
-      'npm run creation:delivery -- preflight output/<sessionId>-work/delivery-check.json <현재-대화-ID>'] };
+    nextCommands: [
+      `npm run sprite -- workflow --kind image --image-provider ${option.provider}`,
+      'npm run creation:delivery -- preflight output/<sessionId>-work/delivery-check.json <현재-대화-ID>',
+    ],
+  };
 }
 
 /**
@@ -261,14 +355,23 @@ export function accountItem(choice) {
 export async function elicitAccount(elicitInput) {
   if (!elicitInput) return { method: 'unsupported', choice: null };
   try {
-    const answer = await elicitInput({
-      message: '이번 캐릭터 생성에 쓸 본인 구독을 골라 주세요. 다른 서비스나 유료 API로 자동 전환하지 않습니다.',
-      requestedSchema: { type: 'object', required: ['account'], properties: { account: { type: 'string', title: '생성 계정',
-        oneOf: ACCOUNT_OPTIONS.map(({ id, label }) => ({ const: id, title: label })) } } },
-    }, { timeout: 5 * 60 * 1000 });
+    const answer = await elicitInput(
+      {
+        message: '이번 캐릭터 생성에 쓸 본인 구독을 골라 주세요. 다른 서비스나 유료 API로 자동 전환하지 않습니다.',
+        requestedSchema: {
+          type: 'object',
+          required: ['account'],
+          properties: { account: { type: 'string', title: '생성 계정', oneOf: ACCOUNT_OPTIONS.map(({ id, label }) => ({ const: id, title: label })) } },
+        },
+      },
+      { timeout: 5 * 60 * 1000 },
+    );
     return answer.action === 'accept' && ACCOUNT_OPTIONS.some(o => o.id === answer.content?.account)
-      ? { method: 'elicited', choice: /** @type {{ account: string }} */ (answer.content).account } : { method: answer.action ?? 'declined', choice: null };
-  } catch { return { method: 'unsupported', choice: null }; }
+      ? { method: 'elicited', choice: /** @type {{ account: string }} */ (answer.content).account }
+      : { method: answer.action ?? 'declined', choice: null };
+  } catch {
+    return { method: 'unsupported', choice: null };
+  }
 }
 
 /**
@@ -281,35 +384,74 @@ export async function checkReadiness({ store, jobs, sessionId, account, purpose 
   const needsGeneration = purpose === 'generation';
   const progress = await creationProgress({ store, jobs, sessionId });
   // A generation environment configured in this workspace keeps the provider the user stated there.
-  const workspace = needsGeneration ? environment ?? (store?.root ? createEnvironmentStore(store.root) : null) : null;
+  const workspace = needsGeneration ? (environment ?? (store?.root ? createEnvironmentStore(store.root) : null)) : null;
   // A workspace moved to another host still names its provider; its inspection below reports the rebind instead of failing this check.
   const saved = workspace ? await workspace.read({ allowMoved: true }) : null;
   const savedChoice = ACCOUNT_OPTIONS.some(o => o.id === saved?.account) ? /** @type {NonNullable<typeof saved>} */ (saved).account : null;
-  let choice = account ?? savedChoice, elicitation = savedChoice && !account ? 'saved-environment' : 'not-needed';
+  let choice = account ?? savedChoice,
+    elicitation = savedChoice && !account ? 'saved-environment' : 'not-needed';
   if (needsGeneration && !choice) ({ method: elicitation, choice } = await elicitAccount(elicitInput));
   const notRequired = { status: 'not-required', reason: 'no-generation-in-this-step', nextCommands: [] };
   // The workspace registers through the connected ODDBOUT tools; it never reads or offers a local account.
   const infrastructure = { status: 'not-required', reason: 'cloud-registration-route' };
-  const login = { status: 'connector-verification-required', userId: null, route: 'oddbout-cloud', nextTools: ['get_profile', 'check_creation_readiness'],
-    note: 'Use the connected ODDBOUT tools in this conversation. Verify its account and readiness there. Do not run workspace login or transfer credentials. This result does not verify that connection.' };
+  const login = {
+    status: 'connector-verification-required',
+    userId: null,
+    route: 'oddbout-cloud',
+    nextTools: ['get_profile', 'check_creation_readiness'],
+    note: 'Use the connected ODDBOUT tools in this conversation. Verify its account and readiness there. Do not run workspace login or transfer credentials. This result does not verify that connection.',
+  };
   const spriteRoot = kit.spriteRoot ?? path.join(kit.root ?? kitRoot, 'vendor', 'sprite-gen');
   // The kit, its tools and the workspace record are independent checks: run them together.
   const [kitItem, toolsItem, environmentItem] = await Promise.all([
     needsGeneration ? checkKit({ progress, workspaceRoot: store?.root, ...kit }) : notRequired,
     // ffmpeg, ffprobe and img2webp -exact are required; RIFE only warns (loops cut as filmed).
-    needsGeneration ? checkTools({ spriteRoot, python: path.join(spriteRoot, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'), ...tools }) : notRequired,
+    needsGeneration
+      ? checkTools({ spriteRoot, python: path.join(spriteRoot, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'), ...tools })
+      : notRequired,
     // Recorded environment preconditions are reported for the agent to resolve; they do not make generation ready here.
-    !needsGeneration ? notRequired : workspace
-      ? workspace.inspect().then(found => ({ ...found, matchesChoice: saved?.account === choice, certifiesGeneration: false }))
-      : { status: 'workspace-required', readyForGeneration: false, certifiesGeneration: false },
+    !needsGeneration
+      ? notRequired
+      : workspace
+        ? workspace.inspect().then(found => ({ ...found, matchesChoice: saved?.account === choice, certifiesGeneration: false }))
+        : { status: 'workspace-required', readyForGeneration: false, certifiesGeneration: false },
   ]);
-  const items = { kit: kitItem, tools: toolsItem, infrastructure, login,
-    account: needsGeneration ? accountItem(choice) : notRequired, ...unverifiedCreation(choice), environment: environmentItem };
-  const ready = ['ready', 'updated'].includes(items.kit.status) && !/** @type {KitResult} */ (items.kit).restartRequired && items.kit.nextCommands.length === 0 // a kit status
-    && items.tools.status === 'ready' && items.account.status === 'chosen-unverified';
-  return { purpose, kitAndAccountReady: ready, readyForGeneration: false,
-    readyForRegistration: false, progress, elicitation, items, // the connected ODDBOUT tools check registration access
-    resume: { preserveWorkspace: true, sessionIds: progress.sessions, automaticGeneration: false, automaticSubmission: false,
-      nextAction: { actor: 'agent', code: 'resume-existing-work', message: '연결 복구 뒤 같은 작업 공간에서 check_creation_readiness를 다시 호출하고 get_creation_session·get_creation_job으로 기존 버전·선택·pending/unknown 결과를 회수한다. 새 폴더·재생성·재등록으로 우회하지 않는다.' } },
-    meaning: 'kitAndAccountReady covers the kit, its required system tools (ffmpeg, ffprobe, img2webp with -exact) and provider choice only. Generation and parent display remain unverified by this tool; readyForGeneration stays false. Registration readiness means authenticated API access, not package approval or submission authorization.' };
+  const items = {
+    kit: kitItem,
+    tools: toolsItem,
+    infrastructure,
+    login,
+    account: needsGeneration ? accountItem(choice) : notRequired,
+    ...unverifiedCreation(choice),
+    environment: environmentItem,
+  };
+  const ready =
+    ['ready', 'updated'].includes(items.kit.status) &&
+    !(/** @type {KitResult} */ (items.kit).restartRequired) &&
+    items.kit.nextCommands.length === 0 && // a kit status
+    items.tools.status === 'ready' &&
+    items.account.status === 'chosen-unverified';
+  return {
+    purpose,
+    kitAndAccountReady: ready,
+    readyForGeneration: false,
+    readyForRegistration: false,
+    progress,
+    elicitation,
+    items, // the connected ODDBOUT tools check registration access
+    resume: {
+      preserveWorkspace: true,
+      sessionIds: progress.sessions,
+      automaticGeneration: false,
+      automaticSubmission: false,
+      nextAction: {
+        actor: 'agent',
+        code: 'resume-existing-work',
+        message:
+          '연결 복구 뒤 같은 작업 공간에서 check_creation_readiness를 다시 호출하고 get_creation_session·get_creation_job으로 기존 버전·선택·pending/unknown 결과를 회수한다. 새 폴더·재생성·재등록으로 우회하지 않는다.',
+      },
+    },
+    meaning:
+      'kitAndAccountReady covers the kit, its required system tools (ffmpeg, ffprobe, img2webp with -exact) and provider choice only. Generation and parent display remain unverified by this tool; readyForGeneration stays false. Registration readiness means authenticated API access, not package approval or submission authorization.',
+  };
 }

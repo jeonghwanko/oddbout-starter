@@ -17,7 +17,10 @@ export async function updateFighterProfile({ request, owner, id, key, db, rpc })
     const parsed = parseFighterJson(new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, 16000)));
     if (!parsed.ok) throw new Error('invalid-json');
     body = parsed.data;
-  } catch (error) { if (error instanceof Problem) throw error; throw new Problem(400, 'invalid-body'); }
+  } catch (error) {
+    if (error instanceof Problem) throw error;
+    throw new Problem(400, 'invalid-body');
+  }
   return applyFighterEdit({ body, owner, id, key, db, rpc });
 }
 
@@ -27,17 +30,34 @@ export async function updateFighterProfile({ request, owner, id, key, db, rpc })
  */
 export async function applyFighterEdit({ body, owner, id, key, db, rpc }) {
   // `style` (2026-10-27): the fighting style (`combat.style`) — an object replaces it, null removes it. A body edits the profile, the style or both.
-  const profileOk = body?.profile === undefined || body.profile && typeof body.profile === 'object' && !Array.isArray(body.profile)
-    && Object.keys(body.profile).length && Object.keys(body.profile).every(k => editable.has(k));
-  const styleOk = body?.style === undefined || body.style === null || body.style && typeof body.style === 'object' && !Array.isArray(body.style);
-  if (!body || Array.isArray(body) || Object.keys(body).some(k => !['profile', 'style', 'expectedManifestSha256'].includes(k))
-    || !/^[a-f0-9]{64}$/.test(body.expectedManifestSha256 ?? '') || !profileOk || !styleOk || body.profile === undefined && body.style === undefined)
+  const profileOk =
+    body?.profile === undefined ||
+    (body.profile &&
+      typeof body.profile === 'object' &&
+      !Array.isArray(body.profile) &&
+      Object.keys(body.profile).length &&
+      Object.keys(body.profile).every(k => editable.has(k)));
+  const styleOk = body?.style === undefined || body.style === null || (body.style && typeof body.style === 'object' && !Array.isArray(body.style));
+  if (
+    !body ||
+    Array.isArray(body) ||
+    Object.keys(body).some(k => !['profile', 'style', 'expectedManifestSha256'].includes(k)) ||
+    !/^[a-f0-9]{64}$/.test(body.expectedManifestSha256 ?? '') ||
+    !profileOk ||
+    !styleOk ||
+    (body.profile === undefined && body.style === undefined)
+  )
     throw new Problem(422, 'invalid-profile');
   const { data: previous, error: previousError } = await db.from('af_submissions').select('*').eq('owner_id', owner).eq('idempotency_key', key).maybeSingle();
   if (previousError) throw unavailable('database-unavailable', previousError);
   if (previous && (previous.replaces_fighter !== id || !previous.validation?.profileBaseSubmission)) throw new Problem(409, 'idempotency-conflict');
-  let query = db.from('af_submissions').select('*').eq('owner_id', owner)
-    .eq('fighter_id', id).eq('manifest_sha', body.expectedManifestSha256).eq('status', 'registered');
+  let query = db
+    .from('af_submissions')
+    .select('*')
+    .eq('owner_id', owner)
+    .eq('fighter_id', id)
+    .eq('manifest_sha', body.expectedManifestSha256)
+    .eq('status', 'registered');
   if (previous) query = query.eq('id', previous.validation.profileBaseSubmission);
   const { data: base, error } = await query.order('created_at', { ascending: false }).limit(1).maybeSingle();
   if (error) throw unavailable('database-unavailable', error);
@@ -52,6 +72,12 @@ export async function applyFighterEdit({ body, owner, id, key, db, rpc }) {
   const result = validateFighter(manifest);
   if (!result.ok || unstorableTextPath(manifest) !== null) throw new Problem(422, 'invalid-profile', result.errors?.slice(0, 20));
   const text = JSON.stringify(manifest);
-  return rpc('af_update_fighter_profile', { p_owner: owner, p_key: key, p_fighter: id, p_base: base.id,
-    p_text: text, p_sha: await sha256(new TextEncoder().encode(text)) });
+  return rpc('af_update_fighter_profile', {
+    p_owner: owner,
+    p_key: key,
+    p_fighter: id,
+    p_base: base.id,
+    p_text: text,
+    p_sha: await sha256(new TextEncoder().encode(text)),
+  });
 }

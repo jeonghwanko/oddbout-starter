@@ -11,9 +11,18 @@ appendFileSync(/** @type {string} */ (env.FAKE_AGENT_LOG), JSON.stringify({ host
 const command = args.join(' ');
 
 /** @param {string} file */
-const readJson = file => { try { return JSON.parse(readFileSync(file, 'utf8')); } catch { return {}; } };
+const readJson = file => {
+  try {
+    return JSON.parse(readFileSync(file, 'utf8'));
+  } catch {
+    return {};
+  }
+};
 /** @param {string} file @param {unknown} value */
-const writeJson = (file, value) => { mkdirSync(path.dirname(file), { recursive: true }); writeFileSync(file, JSON.stringify(value, null, 2)); };
+const writeJson = (file, value) => {
+  mkdirSync(path.dirname(file), { recursive: true });
+  writeFileSync(file, JSON.stringify(value, null, 2));
+};
 const stateFile = /** @type {string} */ (env.FAKE_AGENT_STATE);
 const state = { claude: { signedIn: [], marketplaces: [], plugins: [] }, codex: { servers: {}, marketplaces: [], plugins: [] }, ...readJson(stateFile) };
 const save = () => writeJson(stateFile, state);
@@ -22,7 +31,9 @@ const exit = (/** @type {number} */ code) => process.exit(code);
 
 /** @returns {Promise<boolean>} */
 async function signIn() {
-  if (env.FAKE_AGENT_LOGIN === 'hang') { await new Promise(() => setInterval(() => {}, 1000)); }
+  if (env.FAKE_AGENT_LOGIN === 'hang') {
+    await new Promise(() => setInterval(() => {}, 1000));
+  }
   return env.FAKE_AGENT_LOGIN !== 'fail';
 }
 
@@ -33,16 +44,28 @@ if (host === 'claude') {
   if (command === 'plugin marketplace list --json') out(state.claude.marketplaces);
   else if (command === 'plugin list --json') out(state.claude.plugins);
   else if (args[0] === 'plugin' && args[1] === 'marketplace' && args[2] === 'add') {
-    state.claude.marketplaces.push({ name: 'oddbout', source: 'git', url: args[3] }); save(); out('✔ Successfully added marketplace: oddbout');
+    state.claude.marketplaces.push({ name: 'oddbout', source: 'git', url: args[3] });
+    save();
+    out('✔ Successfully added marketplace: oddbout');
   } else if (args[0] === 'plugin' && args[1] === 'install') {
-    state.claude.plugins.push({ id: args[2], version: '0.1.0', scope: 'user', enabled: true }); save(); out(`✔ Successfully installed plugin: ${args[2]}`);
+    state.claude.plugins.push({ id: args[2], version: '0.1.0', scope: 'user', enabled: true });
+    save();
+    out(`✔ Successfully installed plugin: ${args[2]}`);
   } else if (args[0] === 'mcp' && args[1] === 'add') {
     const [name, url] = args.slice(-2);
-    if (config.mcpServers[name]) { process.stderr.write(`MCP server ${name} already exists in user config\n`); exit(1); }
-    config.mcpServers[name] = { type: 'http', url }; writeJson(configFile, config); out(`Added HTTP MCP server ${name} with URL: ${url} to user config`);
+    if (config.mcpServers[name]) {
+      process.stderr.write(`MCP server ${name} already exists in user config\n`);
+      exit(1);
+    }
+    config.mcpServers[name] = { type: 'http', url };
+    writeJson(configFile, config);
+    out(`Added HTTP MCP server ${name} with URL: ${url} to user config`);
   } else if (args[0] === 'mcp' && args[1] === 'get') {
     const entry = config.mcpServers[args[2]];
-    if (!entry) { process.stderr.write(`No MCP server named "${args[2]}".\n`); exit(1); }
+    if (!entry) {
+      process.stderr.write(`No MCP server named "${args[2]}".\n`);
+      exit(1);
+    }
     const status = state.claude.signedIn.includes(args[2]) ? '✓ Connected' : '! Needs authentication';
     out(`${args[2]}:\n  Scope: User config (available in all your projects)\n  Status: ${status}\n  Type: http\n  URL: ${entry.url}`);
   } else if (command === 'mcp login --help') out('Usage: claude mcp login [options] <name>');
@@ -50,37 +73,73 @@ if (host === 'claude') {
     // As Claude Code 2.1.283: no terminal on stdin, no sign-in, browser or not. A test cannot open a terminal, so FAKE_AGENT_TERMINAL=1
     // stands in for one where the CLI was given it.
     if (!process.stdin.isTTY && env.FAKE_AGENT_TERMINAL !== '1') {
-      process.stderr.write(`Couldn't complete authentication for "${args[2]}": stdin isn't a terminal, so authentication can't be completed here.\n`); exit(1);
+      process.stderr.write(`Couldn't complete authentication for "${args[2]}": stdin isn't a terminal, so authentication can't be completed here.\n`);
+      exit(1);
     }
-    if (!(await signIn())) { process.stderr.write('Authentication failed\n'); exit(1); }
-    state.claude.signedIn.push(args[2]); save(); out(`Authenticated with ${args[2]}.`);
-  } else { process.stderr.write(`fake claude: unexpected ${command}\n`); exit(64); }
+    if (!(await signIn())) {
+      process.stderr.write('Authentication failed\n');
+      exit(1);
+    }
+    state.claude.signedIn.push(args[2]);
+    save();
+    out(`Authenticated with ${args[2]}.`);
+  } else {
+    process.stderr.write(`fake claude: unexpected ${command}\n`);
+    exit(64);
+  }
 } else if (host === 'codex') {
   const servers = state.codex.servers;
-  const list = () => Object.entries(servers).map(([name, server]) => ({ name, enabled: true, disabled_reason: null,
-    transport: { type: 'streamable_http', url: server.url }, startup_timeout_sec: null, tool_timeout_sec: null, auth_status: server.auth }));
+  const list = () =>
+    Object.entries(servers).map(([name, server]) => ({
+      name,
+      enabled: true,
+      disabled_reason: null,
+      transport: { type: 'streamable_http', url: server.url },
+      startup_timeout_sec: null,
+      tool_timeout_sec: null,
+      auth_status: server.auth,
+    }));
   if (command === 'mcp list --json') out(list());
   else if (command === 'plugin marketplace list --json') out({ marketplaces: state.codex.marketplaces });
   else if (command === 'plugin list --json') out({ installed: state.codex.plugins, available: [] });
   else if (args[0] === 'plugin' && args[1] === 'marketplace' && args[2] === 'add') {
-    state.codex.marketplaces.push({ name: 'oddbout', root: '/tmp/oddbout', marketplaceSource: { sourceType: 'git', source: `${args[3]}.git` } }); save();
+    state.codex.marketplaces.push({ name: 'oddbout', root: '/tmp/oddbout', marketplaceSource: { sourceType: 'git', source: `${args[3]}.git` } });
+    save();
   } else if (args[0] === 'plugin' && args[1] === 'add') {
-    state.codex.plugins.push({ pluginId: args[2], name: 'oddbout', marketplaceName: 'oddbout', installed: true, enabled: true }); save();
+    state.codex.plugins.push({ pluginId: args[2], name: 'oddbout', marketplaceName: 'oddbout', installed: true, enabled: true });
+    save();
   } else if (args[0] === 'mcp' && (args[1] === 'add' || args[1] === 'login')) {
     // As codex-rs: `add` saves the server first, then signs in at once when the server asks for OAuth.
     const name = args[2];
-    if (args[1] === 'add') { servers[name] = { url: args[args.indexOf('--url') + 1], auth: 'not_logged_in' }; save(); }
-    out(`Authorize \`${name}\` by opening this URL in your browser:\nhttps://ztfxxhtmtrvxvuxlqmgz.supabase.co/auth/v1/oauth/authorize?client_id=x&code_challenge=y&state=z\n`);
-    if (!(await signIn())) { process.stderr.write('Error: OAuth login failed\n'); exit(1); }
-    servers[name].auth = 'o_auth'; save(); out('Successfully logged in.');
-  } else { process.stderr.write(`fake codex: unexpected ${command}\n`); exit(64); }
+    if (args[1] === 'add') {
+      servers[name] = { url: args[args.indexOf('--url') + 1], auth: 'not_logged_in' };
+      save();
+    }
+    out(
+      `Authorize \`${name}\` by opening this URL in your browser:\nhttps://ztfxxhtmtrvxvuxlqmgz.supabase.co/auth/v1/oauth/authorize?client_id=x&code_challenge=y&state=z\n`,
+    );
+    if (!(await signIn())) {
+      process.stderr.write('Error: OAuth login failed\n');
+      exit(1);
+    }
+    servers[name].auth = 'o_auth';
+    save();
+    out('Successfully logged in.');
+  } else {
+    process.stderr.write(`fake codex: unexpected ${command}\n`);
+    exit(64);
+  }
 } else if (host === 'gemini') {
   const settingsFile = path.join(/** @type {string} */ (env.GEMINI_CLI_HOME), '.gemini', 'settings.json');
   if (args[0] === 'mcp' && args[1] === 'add') {
     // As Gemini CLI 0.67: a second add of the same name replaces it without asking.
     const settings = readJson(settingsFile);
     const [name, url] = args.slice(-2);
-    settings.mcpServers = { ...settings.mcpServers, [name]: { url, type: 'http' } }; writeJson(settingsFile, settings);
+    settings.mcpServers = { ...settings.mcpServers, [name]: { url, type: 'http' } };
+    writeJson(settingsFile, settings);
     out(`MCP server "${name}" added to user settings. (http)`);
-  } else { process.stderr.write(`fake gemini: unexpected ${command}\n`); exit(64); }
+  } else {
+    process.stderr.write(`fake gemini: unexpected ${command}\n`);
+    exit(64);
+  }
 } else exit(64);

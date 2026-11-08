@@ -9,8 +9,11 @@ const sandbox = new URL('../supabase/sandbox/', import.meta.url);
 const sandboxFiles = (await readdir(sandbox)).filter(name => name.endsWith('.sql')).sort();
 // Applied before this rule (2026-10-27). They stay as written; production already ran them.
 // 20261028180000 broke the rule and ran in production the same day; 20261028181000 restates its three functions whole.
-const STRING_PATCHED = ['20261024022222_ai_fighter_profile_edits.sql', '20261024104406_ai_fighter_owner_deletion.sql',
-  '20261028180000_oddbout_account_fighter_limit.sql'];
+const STRING_PATCHED = [
+  '20261024022222_ai_fighter_profile_edits.sql',
+  '20261024104406_ai_fighter_owner_deletion.sql',
+  '20261028180000_oddbout_account_fighter_limit.sql',
+];
 
 test('a migration restates a changed function instead of string-patching its live definition', async () => {
   // replace() over pg_get_functiondef hides the resulting body: reading it needs every earlier migration replayed
@@ -43,7 +46,10 @@ test('every migration has its own version', () => {
   // `supabase db push` and `db reset` key the history on this version; 20261021090000 was once used twice.
   const versions = migrations.map(name => name.slice(0, 14));
   assert.deepEqual([...new Set(versions.filter((version, index) => versions.indexOf(version) !== index))], []);
-  assert.ok(migrations.every(name => /^\d{14}_[a-z0-9_]+\.sql$/.test(name)), 'name: <14-digit version>_<snake_case>.sql');
+  assert.ok(
+    migrations.every(name => /^\d{14}_[a-z0-9_]+\.sql$/.test(name)),
+    'name: <14-digit version>_<snake_case>.sql',
+  );
 });
 
 test('every table turns on row level security, and every function is closed to clients unless a grant names them', async () => {
@@ -53,20 +59,25 @@ test('every table turns on row level security, and every function is closed to c
   // so with a grant to that role.
   const sql = (await Promise.all(migrations.map(name => readFile(new URL(name, directory), 'utf8')))).join('\n').replace(/--[^\n]*/g, '');
   const tables = [...sql.matchAll(/create\s+table\s+(?:if\s+not\s+exists\s+)?public\.([a-z0-9_]+)/gi)].map(match => match[1]);
-  const open = tables.filter(table => !new RegExp(String.raw`alter\s+table\s+(?:if\s+exists\s+)?public\.${table}\s+enable\s+row\s+level\s+security`, 'i').test(sql));
+  const open = tables.filter(
+    table => !new RegExp(String.raw`alter\s+table\s+(?:if\s+exists\s+)?public\.${table}\s+enable\s+row\s+level\s+security`, 'i').test(sql),
+  );
   assert.deepEqual(open, []);
   /** @type {(verb: string) => Map<string, Set<string>>} the roles each function is revoked from or granted to */
   const roles = verb => {
     const out = new Map();
-    for (const [, names, who] of sql.matchAll(new RegExp(String.raw`${verb}\s+(?:all|execute)[^;]*?\bon\s+function\b([^;]*?)\b${verb === 'grant' ? 'to' : 'from'}\b([^;]*);`, 'gi')))
+    for (const [, names, who] of sql.matchAll(
+      new RegExp(String.raw`${verb}\s+(?:all|execute)[^;]*?\bon\s+function\b([^;]*?)\b${verb === 'grant' ? 'to' : 'from'}\b([^;]*);`, 'gi'),
+    ))
       for (const [, fn] of names.matchAll(/public\.([a-z0-9_]+)\s*\(/gi))
         for (const role of who.split(',').map(role => role.trim().toLowerCase())) out.set(fn, (out.get(fn) ?? new Set()).add(role));
     return out;
   };
-  const revoked = roles('revoke'), granted = roles('grant');
+  const revoked = roles('revoke'),
+    granted = roles('grant');
   const functions = new Set([...sql.matchAll(/create\s+(?:or\s+replace\s+)?function\s+public\.([a-z0-9_]+)\s*\(/gi)].map(match => match[1]));
-  const loose = [...functions].filter(fn => !revoked.get(fn)?.has('public')
-    || ['anon', 'authenticated'].some(role => !revoked.get(fn)?.has(role) && !granted.get(fn)?.has(role)));
+  const loose = [...functions].filter(
+    fn => !revoked.get(fn)?.has('public') || ['anon', 'authenticated'].some(role => !revoked.get(fn)?.has(role) && !granted.get(fn)?.has(role)),
+  );
   assert.deepEqual(loose, []);
 });
-

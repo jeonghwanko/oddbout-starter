@@ -8,7 +8,8 @@ import { createCommerceStore } from '../api/commerce/store.mjs';
 
 /** @param {string[]} argv */
 export function parseReleaseArgs(argv) {
-  let jobId; let note;
+  let jobId;
+  let note;
   for (let i = 0; i < argv.length; i += 2) {
     const [name, value] = [argv[i], argv[i + 1]];
     if (name === '--job' && value !== undefined) jobId = value;
@@ -31,8 +32,9 @@ export async function releaseJob(argv, { env = process.env, store } = {}) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  try { console.log(JSON.stringify(await releaseJob(process.argv.slice(2)))); }
-  catch (/** @type {any} */ error) {
+  try {
+    console.log(JSON.stringify(await releaseJob(process.argv.slice(2))));
+  } catch (/** @type {any} */ error) {
     console.error(JSON.stringify({ ok: false, code: error?.message ?? 'release_failed' }));
     console.error('Usage: node --env-file=.env scripts/broadcast-release.mjs --job <unknown job UUID> --note "<what you checked>"');
     process.exitCode = 1;

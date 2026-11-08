@@ -18,8 +18,17 @@ export const PAIRING_PLATFORMS = Object.freeze(['windows', 'macos', 'linux']);
 const PAIRING_CODE = /^ohp_[a-f0-9]{64}$/;
 const SITE_CORS = { methods: 'GET, POST, OPTIONS', headers: 'Authorization, Content-Type' };
 /** @type {Record<string, number>} */
-const errorStatus = { 'rate-limit': 429, 'slow-down': 429, 'pairing-not-found': 404, 'user-code-collision': 409, 'account-disabled': 403,
-  'host-not-found': 404, 'invalid-host': 422, 'host-terms-required': 422, 'join-code-invalid': 410 };
+const errorStatus = {
+  'rate-limit': 429,
+  'slow-down': 429,
+  'pairing-not-found': 404,
+  'user-code-collision': 409,
+  'account-disabled': 403,
+  'host-not-found': 404,
+  'invalid-host': 422,
+  'host-terms-required': 422,
+  'join-code-invalid': 410,
+};
 
 /** @type {(bytes: Uint8Array) => string} */
 const hex = bytes => Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
@@ -34,7 +43,7 @@ export const hostPairingRoute = parts => parts[0] === 'generations' && parts[1] 
  * @returns {import('./http.mjs').Route}
  */
 export function createHostPairingHandler({ db, limiter = null, random = n => crypto.getRandomValues(new Uint8Array(n)) }) {
-  const rpc = rpcCaller(db, errorStatus, { unavailable: error => error.code === 'PGRST202' ? 'pairing-not-ready' : 'pairing-unavailable' });
+  const rpc = rpcCaller(db, errorStatus, { unavailable: error => (error.code === 'PGRST202' ? 'pairing-not-ready' : 'pairing-unavailable') });
   /** @param {string} name @param {Record<string, unknown>} args */
   async function call(name, args) {
     const data = await rpc(name, args);
@@ -47,7 +56,9 @@ export function createHostPairingHandler({ db, limiter = null, random = n => cry
     try {
       const value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
       if (value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).every(key => allowed.includes(key))) return value;
-    } catch { /* below */ }
+    } catch {
+      /* below */
+    }
     throw new Problem(400, 'invalid-body');
   }
   /** The signed-in owner (the site's routes). @param {Request} request */
@@ -61,7 +72,7 @@ export function createHostPairingHandler({ db, limiter = null, random = n => cry
   async function start(request) {
     // No account: one caller is braked by a keyed hash of his address, under the database's 120 per 10 minutes for everyone.
     const { bucket, limit, windowSeconds } = CLIENT_LIMITS.hostPairing;
-    if (limiter && !await limiter.allow(request, bucket, limit, windowSeconds)) throw new Problem(429, 'rate-limit');
+    if (limiter && !(await limiter.allow(request, bucket, limit, windowSeconds))) throw new Problem(429, 'rate-limit');
     const { name, platform } = await body(request, ['name', 'platform']);
     // The PC's name as it says it (its host name): one line of 1-40 characters; the runner shortens a longer one.
     const pc = text(name, 40, '/name', { code: 'invalid-pc' });
@@ -69,11 +80,23 @@ export function createHostPairingHandler({ db, limiter = null, random = n => cry
     const pairingCode = `ohp_${hex(random(32))}`;
     for (let attempt = 0; ; attempt++) {
       try {
-        const row = await call('af_generation_host_pairing_start', { p_secret_hash: await hashOf(pairingCode), p_user_code: newUserCode(random),
-          p_pc_name: pc, p_platform: platform, p_ttl_seconds: PAIRING_TTL_SECONDS });
+        const row = await call('af_generation_host_pairing_start', {
+          p_secret_hash: await hashOf(pairingCode),
+          p_user_code: newUserCode(random),
+          p_pc_name: pc,
+          p_platform: platform,
+          p_ttl_seconds: PAIRING_TTL_SECONDS,
+        });
         const userCode = formatUserCode(row.userCode);
-        return { ok: true, stage: 'host-pairing', pairingCode, userCode, expiresAt: row.expiresAt, interval: PAIRING_POLL_INTERVAL_SECONDS,
-          url: `${PAIRING_PAGE}#pc=${userCode}` };
+        return {
+          ok: true,
+          stage: 'host-pairing',
+          pairingCode,
+          userCode,
+          expiresAt: row.expiresAt,
+          interval: PAIRING_POLL_INTERVAL_SECONDS,
+          url: `${PAIRING_PAGE}#pc=${userCode}`,
+        };
       } catch (/** @type {any} */ error) {
         if (error.message !== 'user-code-collision' || attempt >= 2) throw error;
       }
@@ -83,11 +106,19 @@ export function createHostPairingHandler({ db, limiter = null, random = n => cry
   async function view(request, typed) {
     await owner(request);
     let decoded = '';
-    try { decoded = decodeURIComponent(typed); } catch { /* not a code */ }
+    try {
+      decoded = decodeURIComponent(typed);
+    } catch {
+      /* not a code */
+    }
     const code = normalizeUserCode(decoded);
     if (!code) throw new Problem(400, 'invalid-user-code');
     const row = await call('af_generation_host_pairing_view', { p_user_code: code });
-    return { ok: true, stage: 'host-pairing', pairing: { userCode: formatUserCode(row.userCode), name: row.name, platform: row.platform, expiresAt: row.expiresAt } };
+    return {
+      ok: true,
+      stage: 'host-pairing',
+      pairing: { userCode: formatUserCode(row.userCode), name: row.name, platform: row.platform, expiresAt: row.expiresAt },
+    };
   }
   /** @param {Request} request */
   async function approve(request) {
@@ -109,11 +140,23 @@ export function createHostPairingHandler({ db, limiter = null, random = n => cry
     if (state.status === 'expired') throw new Problem(410, 'pairing-expired');
     if (state.status === 'consumed') throw new Problem(410, 'pairing-consumed');
     if (state.status !== 'approved' || typeof state.host !== 'string') throw new Problem(503, 'pairing-unavailable');
-    return [{ ok: true, stage: 'host-pairing', status: 'approved', key, host: state.host, name: state.name, approved: state.approved === true,
-      expiresAt: state.expiresAt }, 200];
+    return [
+      {
+        ok: true,
+        stage: 'host-pairing',
+        status: 'approved',
+        key,
+        host: state.host,
+        name: state.name,
+        approved: state.approved === true,
+        expiresAt: state.expiresAt,
+      },
+      200,
+    ];
   }
   return async (request, parts) => {
-    const route = parts.join('/'), site = parts.length === 4 && parts[3] !== 'token';
+    const route = parts.join('/'),
+      site = parts.length === 4 && parts[3] !== 'token';
     /** @type {(value: any, status?: number) => Response} */
     const reply = (value, status = 200) => jsonResponse(value, status, site ? SITE_CORS : undefined);
     try {

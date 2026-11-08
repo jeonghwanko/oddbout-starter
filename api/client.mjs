@@ -18,7 +18,7 @@ export function validProjectUrl(url) {
 /** @type {(bytes: number) => number} */
 export const transferTimeoutMs = bytes => 30000 + Math.ceil(Math.max(0, bytes || 0) / 65536) * 1000;
 /** @type {(body: string | { byteLength?: number } | null | undefined) => number} */
-const bodyBytes = body => body == null ? 0 : typeof body === 'string' ? Buffer.byteLength(body) : body.byteLength ?? 0;
+const bodyBytes = body => (body == null ? 0 : typeof body === 'string' ? Buffer.byteLength(body) : (body.byteLength ?? 0));
 
 /**
  * @param {string} url @param {string} token @param {string} route
@@ -26,14 +26,30 @@ const bodyBytes = body => body == null ? 0 : typeof body === 'string' ? Buffer.b
  */
 export async function apiRequest(url, token, route, { method = 'GET', body, headers = {}, timeoutMs = transferTimeoutMs(bodyBytes(body)) } = {}) {
   let response;
-  try { response = await runtimeFetch(`${url}/functions/v1/ai-fighter/${route}`, { method, body, headers: { authorization: `Bearer ${token}`, ...headers }, redirect: 'error', signal: AbortSignal.timeout(timeoutMs) }); }
-  catch (error) { throw new Error(transportCode(error)); }
-  let result;
-  try { result = await response.json(); } catch {
-    const error = /** @type {Error & { status?: number }} */ (new Error(response.ok ? 'invalid-api-response' : `api-http-${response.status}`));
-    error.status = response.status; throw error;
+  try {
+    response = await runtimeFetch(`${url}/functions/v1/ai-fighter/${route}`, {
+      method,
+      body,
+      headers: { authorization: `Bearer ${token}`, ...headers },
+      redirect: 'error',
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (error) {
+    throw new Error(transportCode(error));
   }
-  if (!response.ok) { const error = /** @type {Error & { status?: number }} */ (new Error(result?.code ?? `api-http-${response.status}`)); error.status = response.status; throw error; }
+  let result;
+  try {
+    result = await response.json();
+  } catch {
+    const error = /** @type {Error & { status?: number }} */ (new Error(response.ok ? 'invalid-api-response' : `api-http-${response.status}`));
+    error.status = response.status;
+    throw error;
+  }
+  if (!response.ok) {
+    const error = /** @type {Error & { status?: number }} */ (new Error(result?.code ?? `api-http-${response.status}`));
+    error.status = response.status;
+    throw error;
+  }
   if (!result || typeof result !== 'object') throw new Error('invalid-api-response');
   return result;
 }
@@ -41,15 +57,23 @@ export async function apiRequest(url, token, route, { method = 'GET', body, head
 /** Expiry time in milliseconds from the JWT payload, or 0. Only decides when to refresh; the server verifies the token. */
 /** @param {string} token */
 function accessTokenExpiry(token) {
-  try { return JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8')).exp * 1000 || 0; }
-  catch { return 0; }
+  try {
+    return JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8')).exp * 1000 || 0;
+  } catch {
+    return 0;
+  }
 }
 /** @param {string} token */
 function tokenSubject(token) {
-  try { return JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8')).sub ?? null; }
-  catch { return null; }
+  try {
+    return JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8')).sub ?? null;
+  } catch {
+    return null;
+  }
 }
-const REFRESH_MARGIN_MS = 60000, LOCK_STALE_MS = 30000, LOCK_WAIT_MS = 15000;
+const REFRESH_MARGIN_MS = 60000,
+  LOCK_STALE_MS = 30000,
+  LOCK_WAIT_MS = 15000;
 
 /**
  * Run `task` while holding `<configPath>.lock`. Only one process refreshes or replaces a session file at a time.
@@ -71,7 +95,10 @@ export async function writeSessionFile(configPath, config) {
     // Windows virus scanners can briefly hold the just-written file; retry the same rename. Giving up here after a
     // token refresh would lose the rotated refresh token, the only valid one.
     await renameRetrying(temporary, configPath);
-  } catch (error) { await rm(temporary, { force: true }); throw error; }
+  } catch (error) {
+    await rm(temporary, { force: true });
+    throw error;
+  }
 }
 
 /**
@@ -85,18 +112,25 @@ export async function writeSessionFile(configPath, config) {
 export async function createRemoteClient(configPath, { createAuthClient = createClient } = {}) {
   const config = JSON.parse(await readFile(configPath, 'utf8'));
   if (!validProjectUrl(config.url) || !config.publishableKey || !config.accessToken || !config.refreshToken) throw new Error('invalid-client-config');
-  const auth = createAuthClient(config.url, config.publishableKey, { global: { fetch: runtimeFetch }, auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
+  const auth = createAuthClient(config.url, config.publishableKey, {
+    global: { fetch: runtimeFetch },
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
   const fresh = () => accessTokenExpiry(config.accessToken) - Date.now() > REFRESH_MARGIN_MS;
   async function adoptSaved() {
     let saved;
-    try { saved = JSON.parse(await readFile(configPath, 'utf8')); }
-    catch (/** @type {any} */ error) { throw new Error(error.code === 'ENOENT' ? 'client-sign-in-required' : 'invalid-client-config'); }
+    try {
+      saved = JSON.parse(await readFile(configPath, 'utf8'));
+    } catch (/** @type {any} */ error) {
+      throw new Error(error.code === 'ENOENT' ? 'client-sign-in-required' : 'invalid-client-config');
+    }
     if (!saved.accessToken || typeof saved.accessToken !== 'string' || !saved.refreshToken || typeof saved.refreshToken !== 'string')
       throw new Error('invalid-client-config');
     // Never keep using a logged-out account, or change the owner halfway through an upload.
-    if (saved.url !== config.url || saved.publishableKey !== config.publishableKey
-      || tokenSubject(saved.accessToken) !== tokenSubject(config.accessToken)) throw new Error('client-account-changed');
-    config.accessToken = saved.accessToken; config.refreshToken = saved.refreshToken;
+    if (saved.url !== config.url || saved.publishableKey !== config.publishableKey || tokenSubject(saved.accessToken) !== tokenSubject(config.accessToken))
+      throw new Error('client-account-changed');
+    config.accessToken = saved.accessToken;
+    config.refreshToken = saved.refreshToken;
   }
   let pendingAuth;
   async function token() {
@@ -115,11 +149,14 @@ export async function createRemoteClient(configPath, { createAuthClient = create
             throw new Error(code);
           throw new Error('client-sign-in-required');
         }
-        config.accessToken = data.session.access_token; config.refreshToken = data.session.refresh_token;
+        config.accessToken = data.session.access_token;
+        config.refreshToken = data.session.refresh_token;
         await writeSessionFile(configPath, config); // The old refresh token is now spent.
         return config.accessToken;
       });
-    })().finally(() => { pendingAuth = undefined; });
+    })().finally(() => {
+      pendingAuth = undefined;
+    });
     return pendingAuth;
   }
   return {

@@ -41,7 +41,10 @@ export function parseArgs(argv) {
   const flags = {};
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (!arg.startsWith('--')) { positional.push(arg); continue; }
+    if (!arg.startsWith('--')) {
+      positional.push(arg);
+      continue;
+    }
     const name = arg.slice(2);
     if (['yes', 'help'].includes(name)) flags[name] = true;
     else if (i + 1 < argv.length && !argv[i + 1].startsWith('--')) flags[name] = argv[++i];
@@ -69,53 +72,94 @@ function id(value, what) {
 export function planCall([command, target, official], flags) {
   const query = (/** @type {Record<string, string>} */ values) => new URLSearchParams(values).toString();
   switch (command) {
-    case 'whoami': return { method: 'GET', route: 'me' };
-    case 'review': return { method: 'GET', route: `generations?${query({ status: 'needs_review' })}` };
-    case 'open': return { method: 'GET', route: `generations?${query({ status: 'open' })}` };
-    case 'show': return { method: 'GET', route: `generations/${id(target, 'job')}` };
-    case 'retry': return { method: 'POST', route: `generations/${id(target, 'job')}/retry`, body: {}, change: `신청 ${target}의 멈춘 단계를 다시 돌립니다.` };
-    case 'cancel': return { method: 'POST', route: `generations/${id(target, 'job')}/cancel`, body: {}, change: `신청 ${target}을 취소합니다. 제작자에게 취소로 보입니다.` };
-    case 'hosts': return { method: 'GET', route: 'generation-hosts' };
-    case 'host-approve': return { method: 'POST', route: `generation-hosts/${id(target, 'host')}/approval`, body: { approved: true },
-      change: `호스트 ${target}을 승인합니다. 다른 사람의 신청도 만듭니다.` };
-    case 'host-withdraw': return { method: 'POST', route: `generation-hosts/${id(target, 'host')}/approval`, body: { approved: false },
-      change: `호스트 ${target}의 승인을 거둡니다. 자기 신청만 만듭니다.` };
+    case 'whoami':
+      return { method: 'GET', route: 'me' };
+    case 'review':
+      return { method: 'GET', route: `generations?${query({ status: 'needs_review' })}` };
+    case 'open':
+      return { method: 'GET', route: `generations?${query({ status: 'open' })}` };
+    case 'show':
+      return { method: 'GET', route: `generations/${id(target, 'job')}` };
+    case 'retry':
+      return { method: 'POST', route: `generations/${id(target, 'job')}/retry`, body: {}, change: `신청 ${target}의 멈춘 단계를 다시 돌립니다.` };
+    case 'cancel':
+      return { method: 'POST', route: `generations/${id(target, 'job')}/cancel`, body: {}, change: `신청 ${target}을 취소합니다. 제작자에게 취소로 보입니다.` };
+    case 'hosts':
+      return { method: 'GET', route: 'generation-hosts' };
+    case 'host-approve':
+      return {
+        method: 'POST',
+        route: `generation-hosts/${id(target, 'host')}/approval`,
+        body: { approved: true },
+        change: `호스트 ${target}을 승인합니다. 다른 사람의 신청도 만듭니다.`,
+      };
+    case 'host-withdraw':
+      return {
+        method: 'POST',
+        route: `generation-hosts/${id(target, 'host')}/approval`,
+        body: { approved: false },
+        change: `호스트 ${target}의 승인을 거둡니다. 자기 신청만 만듭니다.`,
+      };
     case 'profiles': {
       const status = typeof flags.status === 'string' ? flags.status : 'review';
       if (!['review', 'approved', 'rejected'].includes(status)) throw new Error('invalid-value:--status');
       return { method: 'GET', route: `profile-sets?${query({ status })}` };
     }
-    case 'profile-approve': return { method: 'POST', route: `profile-sets/${id(target, 'profile-set')}/approve`, body: {},
-      change: `프로필 세트 ${target}을 승인합니다. 홈과 무투장에 보입니다.` };
+    case 'profile-approve':
+      return {
+        method: 'POST',
+        route: `profile-sets/${id(target, 'profile-set')}/approve`,
+        body: {},
+        change: `프로필 세트 ${target}을 승인합니다. 홈과 무투장에 보입니다.`,
+      };
     case 'profile-reject': {
       const reason = text(flags.reason, 'reason');
-      return { method: 'POST', route: `profile-sets/${id(target, 'profile-set')}/reject`, body: { reason },
-        change: `프로필 세트 ${target}을 돌려보냅니다. 제작자에게 보이는 이유: ${reason}` };
+      return {
+        method: 'POST',
+        route: `profile-sets/${id(target, 'profile-set')}/reject`,
+        body: { reason },
+        change: `프로필 세트 ${target}을 돌려보냅니다. 제작자에게 보이는 이유: ${reason}`,
+      };
     }
     case 'fighters': {
-      const status = typeof flags.status === 'string' ? flags.status : 'active', page = typeof flags.page === 'string' ? flags.page : '0';
+      const status = typeof flags.status === 'string' ? flags.status : 'active',
+        page = typeof flags.page === 'string' ? flags.page : '0';
       if (!['active', 'removed', 'all'].includes(status)) throw new Error('invalid-value:--status');
       if (!/^(0|[1-9][0-9]{0,4})$/.test(page)) throw new Error('invalid-value:--page');
       return { method: 'GET', route: `fighters?${query({ status, search: typeof flags.search === 'string' ? flags.search : '', page })}` };
     }
-    case 'fighter': return { method: 'GET', route: `fighters/${id(target, 'fighter')}` };
-    case 'storage': return { method: 'GET', route: 'storage' };
-    case 'fighter-remove': case 'fighter-restore': {
-      const version = Number(text(flags.version, 'version')), reason = text(flags.reason, 'reason');
+    case 'fighter':
+      return { method: 'GET', route: `fighters/${id(target, 'fighter')}` };
+    case 'storage':
+      return { method: 'GET', route: 'storage' };
+    case 'fighter-remove':
+    case 'fighter-restore': {
+      const version = Number(text(flags.version, 'version')),
+        reason = text(flags.reason, 'reason');
       if (!Number.isSafeInteger(version) || version < 0) throw new Error('invalid-value:--version');
       const action = command === 'fighter-remove' ? 'remove' : 'restore';
-      return { method: 'POST', route: `fighters/${id(target, 'fighter')}/moderation`, body: { action, version, reason },
-        change: `선수 ${target}을 ${action === 'remove' ? '내립니다' : '복원합니다'}. 제작자에게 보이는 사유: ${reason}` };
+      return {
+        method: 'POST',
+        route: `fighters/${id(target, 'fighter')}/moderation`,
+        body: { action, version, reason },
+        change: `선수 ${target}을 ${action === 'remove' ? '내립니다' : '복원합니다'}. 제작자에게 보이는 사유: ${reason}`,
+      };
     }
     // 정식 선수로 올리기 (2026-11-05): the registered fighter retires; his story, relations and world place go with the official id.
     case 'fighter-promote': {
-      const version = Number(text(flags.version, 'version')), reason = text(flags.reason, 'reason');
+      const version = Number(text(flags.version, 'version')),
+        reason = text(flags.reason, 'reason');
       if (!Number.isSafeInteger(version) || version < 0) throw new Error('invalid-value:--version');
       if (!official || !/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(official) || official.length > 32) throw new Error('invalid-id:official');
-      return { method: 'POST', route: `fighters/${id(target, 'fighter')}/promotion`, body: { version, official, reason },
-        change: `선수 ${target}을 정식 선수 ${official}(으)로 올리고 등록판을 내립니다(명단·대결·컵에서 빠지고 이야기·관계·세계는 ${official}로). 제작자에게 보이는 사유: ${reason}` };
+      return {
+        method: 'POST',
+        route: `fighters/${id(target, 'fighter')}/promotion`,
+        body: { version, official, reason },
+        change: `선수 ${target}을 정식 선수 ${official}(으)로 올리고 등록판을 내립니다(명단·대결·컵에서 빠지고 이야기·관계·세계는 ${official}로). 제작자에게 보이는 사유: ${reason}`,
+      };
     }
-    default: throw new Error(`unknown-command:${command ?? ''}`);
+    default:
+      throw new Error(`unknown-command:${command ?? ''}`);
   }
 }
 
@@ -124,13 +168,19 @@ export function planCall([command, target, official], flags) {
  * @param {{ argv?: string[], connect?: (sessionPath: string) => Promise<Client>, env?: NodeJS.ProcessEnv, wait?: (ms: number) => Promise<unknown> }} [options]
  *   `wait`: the pause between polls of a replaced package's validation.
  */
-export async function runAdmin({ argv = process.argv.slice(2), connect = createRemoteClient, env = process.env,
-  wait = (/** @type {number} */ ms) => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {
+export async function runAdmin({
+  argv = process.argv.slice(2),
+  connect = createRemoteClient,
+  env = process.env,
+  wait = (/** @type {number} */ ms) => new Promise(resolve => setTimeout(resolve, ms)),
+} = {}) {
   const { positional, flags } = parseArgs(argv);
   if (flags.help || !positional.length) return { ok: true, usage: USAGE };
   const signIn = async () => {
     const sessionPath = typeof flags.session === 'string' ? flags.session : env.ODDBOUT_ADMIN_SESSION || defaultSessionPath();
-    return connect(sessionPath).catch(error => { throw error?.code === 'ENOENT' ? new Error('client-sign-in-required') : error; });
+    return connect(sessionPath).catch(error => {
+      throw error?.code === 'ENOENT' ? new Error('client-sign-in-required') : error;
+    });
   };
   if (positional[0] === 'replace-package') return replacePackage(positional, flags, signIn, wait);
   if (positional[0] === 'edit-profile') return editProfile(positional, flags, signIn);
@@ -138,17 +188,20 @@ export async function runAdmin({ argv = process.argv.slice(2), connect = createR
   if (positional[0] === 'profile-expressions') return addSheets(positional, flags, signIn);
   if (positional[0] === 'profile-front') return addFront(positional, flags, signIn);
   const call = planCall(positional, flags);
-  if (call.change && flags.yes !== true) return { ok: true, dryRun: true, change: call.change, request: { method: call.method, route: `admin/${call.route}`, body: call.body } };
+  if (call.change && flags.yes !== true)
+    return { ok: true, dryRun: true, change: call.change, request: { method: call.method, route: `admin/${call.route}`, body: call.body } };
   const client = await signIn();
-  const result = await client.request(`admin/${call.route}`, call.method === 'POST'
-    ? { method: 'POST', body: JSON.stringify(call.body ?? {}), headers: { 'content-type': 'application/json' } } : {});
+  const result = await client.request(
+    `admin/${call.route}`,
+    call.method === 'POST' ? { method: 'POST', body: JSON.stringify(call.body ?? {}), headers: { 'content-type': 'application/json' } } : {},
+  );
   return call.change ? { ...result, done: call.change } : result;
 }
 
 /** One idempotency key per (fighter, content): a rerun after a dropped connection resumes the same submission. @param {string[]} parts */
 export function editKey(...parts) {
   const hex = createHash('sha256').update(parts.join('\n')).digest('hex');
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-${(8 | parseInt(hex[16], 16) & 3).toString(16)}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-${(8 | (parseInt(hex[16], 16) & 3)).toString(16)}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 const sha256 = (/** @type {Uint8Array} */ bytes) => createHash('sha256').update(bytes).digest('hex');
 
@@ -159,11 +212,13 @@ const sha256 = (/** @type {Uint8Array} */ bytes) => createHash('sha256').update(
  */
 export async function readPackage(where) {
   const manifestPath = (await stat(where)).isDirectory() ? path.join(where, 'fighter.json') : where;
-  const text = await readFile(manifestPath, 'utf8'), parsed = parseFighterJson(text);
+  const text = await readFile(manifestPath, 'utf8'),
+    parsed = parseFighterJson(text);
   const checked = parsed.ok ? validateFighter(parsed.data) : parsed;
   if (!parsed.ok || !checked.ok) throw Object.assign(new Error('package-invalid'), { errors: (checked.errors ?? []).slice(0, 10) });
   /** @type {{ id: string, path: string, bytes: number, sha256: string }[]} */
-  const assets = parsed.data.assets, files = [];
+  const assets = parsed.data.assets,
+    files = [];
   for (const asset of assets) {
     const bytes = await readFile(path.join(path.dirname(manifestPath), asset.path));
     if (bytes.length !== asset.bytes || sha256(bytes) !== asset.sha256) throw new Error(`asset-mismatch:${asset.id}`);
@@ -176,8 +231,11 @@ export async function readPackage(where) {
 async function jsonFlag(value, name) {
   if (value === undefined) return undefined;
   if (typeof value !== 'string') throw new Error(`missing-value:--${name}`);
-  try { return JSON.parse(value.startsWith('@') ? await readFile(value.slice(1), 'utf8') : value); }
-  catch { throw new Error(`invalid-value:--${name}`); }
+  try {
+    return JSON.parse(value.startsWith('@') ? await readFile(value.slice(1), 'utf8') : value);
+  } catch {
+    throw new Error(`invalid-value:--${name}`);
+  }
 }
 
 /** The fighter an edit is about, as the operator sees him before it: name, owner, entry and package hash. @param {Client} client @param {string} fighter */
@@ -196,20 +254,37 @@ const reasonHeader = reason => ({ 'x-admin-reason': encodeURIComponent(reason) }
  * @param {(ms: number) => Promise<unknown>} wait
  */
 async function replacePackage([, target, where], flags, signIn, wait) {
-  const fighter = id(target, 'fighter'), reason = text(flags.reason, 'reason');
+  const fighter = id(target, 'fighter'),
+    reason = text(flags.reason, 'reason');
   if (!where) throw new Error('missing-value:package');
-  const pkg = await readPackage(where), client = await signIn(), now = await current(client, fighter);
+  const pkg = await readPackage(where),
+    client = await signIn(),
+    now = await current(client, fighter);
   const key = typeof flags.key === 'string' ? id(flags.key, 'key') : editKey('package', fighter, now.manifestSha256, pkg.sha);
-  const change = `선수 「${now.name}」(${fighter}, 주인 ${now.ownerId}, ${now.entered ? '출전 중 — 유지' : '출전 안 함'})의 패키지를 `
-    + `${pkg.sha.slice(0, 12)}…(파일 ${pkg.files.length}개)로 바꿉니다. 사유: ${reason}`;
+  const change =
+    `선수 「${now.name}」(${fighter}, 주인 ${now.ownerId}, ${now.entered ? '출전 중 — 유지' : '출전 안 함'})의 패키지를 ` +
+    `${pkg.sha.slice(0, 12)}…(파일 ${pkg.files.length}개)로 바꿉니다. 사유: ${reason}`;
   const warning = pkg.name !== now.name ? { warning: 'name-differs', packageName: pkg.name, fighterName: now.name } : {};
-  if (flags.yes !== true) return { ok: true, dryRun: true, change, ...warning,
-    request: { method: 'POST', route: `admin/fighters/${fighter}/submissions`, manifestSha256: pkg.sha, idempotencyKey: key } };
-  let state = await client.request(`admin/fighters/${fighter}/submissions`, { method: 'POST',
-    headers: { 'content-type': 'application/json', 'idempotency-key': key, ...reasonHeader(reason) }, body: pkg.text });
+  if (flags.yes !== true)
+    return {
+      ok: true,
+      dryRun: true,
+      change,
+      ...warning,
+      request: { method: 'POST', route: `admin/fighters/${fighter}/submissions`, manifestSha256: pkg.sha, idempotencyKey: key },
+    };
+  let state = await client.request(`admin/fighters/${fighter}/submissions`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'idempotency-key': key, ...reasonHeader(reason) },
+    body: pkg.text,
+  });
   if (state.stage === 'uploading' && state.code !== 'upload-expired') {
-    for (const file of pkg.files) await client.request(`admin/submissions/${state.submissionId}/assets/${file.id}`, { method: 'PUT',
-      headers: { 'content-type': 'image/webp' }, body: file.bytes });
+    for (const file of pkg.files)
+      await client.request(`admin/submissions/${state.submissionId}/assets/${file.id}`, {
+        method: 'PUT',
+        headers: { 'content-type': 'image/webp' },
+        body: file.bytes,
+      });
     state = await client.request(`admin/submissions/${state.submissionId}/submit`, { method: 'POST' });
   }
   for (let polls = 0; !['registered', 'rejected'].includes(state.stage) && state.code !== 'upload-expired' && polls < 60; polls++) {
@@ -217,8 +292,14 @@ async function replacePackage([, target, where], flags, signIn, wait) {
     state = await client.request(`admin/submissions/${state.submissionId}`);
   }
   if (state.stage === 'registered' && state.availability === 'active') return { ...state, ...warning, done: change };
-  const code = state.code === 'upload-expired' ? 'upload-expired' : state.stage === 'rejected' ? 'validation-rejected'
-    : state.stage === 'registered' ? `package-${state.availability ?? 'inactive'}` : 'validation-timeout';
+  const code =
+    state.code === 'upload-expired'
+      ? 'upload-expired'
+      : state.stage === 'rejected'
+        ? 'validation-rejected'
+        : state.stage === 'registered'
+          ? `package-${state.availability ?? 'inactive'}`
+          : 'validation-timeout';
   return { ...state, ok: false, code };
 }
 
@@ -227,17 +308,27 @@ async function replacePackage([, target, where], flags, signIn, wait) {
  * @param {string[]} positional @param {Record<string, string | true>} flags @param {() => Promise<Client>} signIn
  */
 async function editProfile([, target], flags, signIn) {
-  const fighter = id(target, 'fighter'), reason = text(flags.reason, 'reason');
-  const profile = await jsonFlag(flags.profile, 'profile'), style = await jsonFlag(flags.style, 'style');
+  const fighter = id(target, 'fighter'),
+    reason = text(flags.reason, 'reason');
+  const profile = await jsonFlag(flags.profile, 'profile'),
+    style = await jsonFlag(flags.style, 'style');
   if (profile === undefined && style === undefined) throw new Error('missing-value:--profile');
   const edit = { ...(profile === undefined ? {} : { profile }), ...(style === undefined ? {} : { style }) };
-  const client = await signIn(), now = await current(client, fighter);
-  const change = `선수 「${now.name}」(${fighter}, 주인 ${now.ownerId})의 ${[profile === undefined ? null : `프로필(${Object.keys(profile ?? {}).join(', ')})`,
-    style === undefined ? null : style === null ? '전투 스타일 지우기' : '전투 스타일'].filter(Boolean).join('·')}을 고칩니다. 출전은 그대로입니다. 사유: ${reason}`;
+  const client = await signIn(),
+    now = await current(client, fighter);
+  const change = `선수 「${now.name}」(${fighter}, 주인 ${now.ownerId})의 ${[
+    profile === undefined ? null : `프로필(${Object.keys(profile ?? {}).join(', ')})`,
+    style === undefined ? null : style === null ? '전투 스타일 지우기' : '전투 스타일',
+  ]
+    .filter(Boolean)
+    .join('·')}을 고칩니다. 출전은 그대로입니다. 사유: ${reason}`;
   if (flags.yes !== true) return { ok: true, dryRun: true, change, request: { method: 'PATCH', route: `admin/fighters/${fighter}/profile`, body: edit } };
   const body = JSON.stringify({ ...edit, expectedManifestSha256: now.manifestSha256 });
-  const result = await client.request(`admin/fighters/${fighter}/profile`, { method: 'PATCH',
-    headers: { 'content-type': 'application/json', 'idempotency-key': editKey('profile', fighter, now.manifestSha256, body), ...reasonHeader(reason) }, body });
+  const result = await client.request(`admin/fighters/${fighter}/profile`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json', 'idempotency-key': editKey('profile', fighter, now.manifestSha256, body), ...reasonHeader(reason) },
+    body,
+  });
   return { ...result, done: change };
 }
 
@@ -253,24 +344,43 @@ async function storageRemove([, ...targets], flags, signIn) {
   if (oldest !== null && (targets.length || !Number.isSafeInteger(oldest) || oldest < 1 || oldest > 50)) throw new Error('invalid-value:--oldest');
   if (oldest === null && (!targets.length || targets.length > 50)) throw new Error('missing-value:submission');
   const ids = [...new Set(targets.map(target => id(target, 'submission')))];
-  const client = await signIn(), report = await client.request('admin/storage');
+  const client = await signIn(),
+    report = await client.request('admin/storage');
   /** @type {{ submissionId: string, email?: string, name?: string, reason: string, createdAt: string, bytes: number }[]} */
   const unused = report.unused;
-  const chosen = oldest !== null ? unused.slice(0, oldest) : ids.map(wanted => {
-    const folder = unused.find(row => row.submissionId === wanted);
-    if (!folder) throw Object.assign(new Error('not-unused'), { errors: [wanted] });
-    return folder;
-  });
+  const chosen =
+    oldest !== null
+      ? unused.slice(0, oldest)
+      : ids.map(wanted => {
+          const folder = unused.find(row => row.submissionId === wanted);
+          if (!folder) throw Object.assign(new Error('not-unused'), { errors: [wanted] });
+          return folder;
+        });
   if (!chosen.length) return { ok: true, nothing: true, usedBytes: report.usedBytes, limitBytes: report.limitBytes };
   const bytes = chosen.reduce((sum, folder) => sum + folder.bytes, 0);
-  const since = chosen.map(folder => folder.createdAt).sort()[0].slice(0, 10);
-  const change = `안 쓰는 패키지 폴더 ${chosen.length}개(${megabytes(bytes)}, ${since}부터)의 파일을 지웁니다. 되돌릴 수 없습니다. `
-    + `업로드 예약 ${megabytes(report.usedBytes)} → ${megabytes(report.usedBytes - bytes)} / ${megabytes(report.limitBytes)}`;
-  const folders = chosen.map(({ submissionId, email, name, reason, createdAt, bytes: size }) => ({ submissionId, email, name, reason, createdAt, bytes: size }));
+  const since = chosen
+    .map(folder => folder.createdAt)
+    .sort()[0]
+    .slice(0, 10);
+  const change =
+    `안 쓰는 패키지 폴더 ${chosen.length}개(${megabytes(bytes)}, ${since}부터)의 파일을 지웁니다. 되돌릴 수 없습니다. ` +
+    `업로드 예약 ${megabytes(report.usedBytes)} → ${megabytes(report.usedBytes - bytes)} / ${megabytes(report.limitBytes)}`;
+  const folders = chosen.map(({ submissionId, email, name, reason, createdAt, bytes: size }) => ({
+    submissionId,
+    email,
+    name,
+    reason,
+    createdAt,
+    bytes: size,
+  }));
   const submissionIds = chosen.map(folder => folder.submissionId);
-  if (flags.yes !== true) return { ok: true, dryRun: true, change, folders, request: { method: 'POST', route: 'admin/storage/removals', body: { submissionIds } } };
-  const result = await client.request('admin/storage/removals', { method: 'POST', body: JSON.stringify({ submissionIds }),
-    headers: { 'content-type': 'application/json' } });
+  if (flags.yes !== true)
+    return { ok: true, dryRun: true, change, folders, request: { method: 'POST', route: 'admin/storage/removals', body: { submissionIds } } };
+  const result = await client.request('admin/storage/removals', {
+    method: 'POST',
+    body: JSON.stringify({ submissionIds }),
+    headers: { 'content-type': 'application/json' },
+  });
   return { ...result, done: change };
 }
 
@@ -284,36 +394,62 @@ async function storageRemove([, ...targets], flags, signIn) {
  * @param {string[]} positional @param {Record<string, string | true>} flags @param {() => Promise<Client>} signIn
  */
 async function addSheets([, list], flags, signIn) {
-  const reason = text(flags.reason, 'reason'), attempt = flags.attempt === undefined ? '1' : text(flags.attempt, 'attempt');
+  const reason = text(flags.reason, 'reason'),
+    attempt = flags.attempt === undefined ? '1' : text(flags.attempt, 'attempt');
   if (!/^[1-9][0-9]{0,2}$/.test(attempt)) throw new Error('invalid-value:--attempt');
   if (!list) throw new Error('missing-value:sheets');
   let entries;
-  try { entries = JSON.parse(await readFile(list, 'utf8')).sheets; } catch { throw new Error('invalid-value:sheets'); }
+  try {
+    entries = JSON.parse(await readFile(list, 'utf8')).sheets;
+  } catch {
+    throw new Error('invalid-value:sheets');
+  }
   if (!Array.isArray(entries) || !entries.length || entries.length > 50) throw new Error('invalid-value:sheets');
   const sheets = [];
   for (const entry of entries) {
-    const set = id(entry?.profileSetId, 'profile-set'), fighter = id(entry?.fighterId, 'fighter');
-    if (typeof entry.file !== 'string' || !/^[a-z0-9][a-z0-9._-]{0,80}\.webp$/i.test(entry.file)) throw Object.assign(new Error('invalid-value:sheets'), { errors: [set] });
-    const bytes = await readFile(path.join(path.dirname(list), entry.file)), probed = probeImage(bytes), sha = sha256(bytes);
+    const set = id(entry?.profileSetId, 'profile-set'),
+      fighter = id(entry?.fighterId, 'fighter');
+    if (typeof entry.file !== 'string' || !/^[a-z0-9][a-z0-9._-]{0,80}\.webp$/i.test(entry.file))
+      throw Object.assign(new Error('invalid-value:sheets'), { errors: [set] });
+    const bytes = await readFile(path.join(path.dirname(list), entry.file)),
+      probed = probeImage(bytes),
+      sha = sha256(bytes);
     if (sha !== entry.sha256 || probed?.type !== 'image/webp' || probed.width !== 1536 || probed.height !== 1024 || !(await checkExpressionSheet(bytes)).ok)
       throw Object.assign(new Error('sheet-mismatch'), { errors: [entry.file] });
-    sheets.push({ fighterId: fighter, profileSetId: set, name: typeof entry.name === 'string' ? entry.name : '', bytes, sha,
-      key: editKey('expressions', set, sha, ...(attempt === '1' ? [] : [attempt])) });
+    sheets.push({
+      fighterId: fighter,
+      profileSetId: set,
+      name: typeof entry.name === 'string' ? entry.name : '',
+      bytes,
+      sha,
+      key: editKey('expressions', set, sha, ...(attempt === '1' ? [] : [attempt])),
+    });
   }
-  const change = `선수 ${sheets.length}명(${sheets.map(sheet => sheet.name || sheet.fighterId).join(', ')})의 승인된 정면에 표정 시트를 붙인 새 프로필 세트를 `
-    + `주인 이름으로 올립니다. 검사와 운영자 승인 뒤에 무투장에 보이고, 그때까지 지금 세트가 그대로입니다. 사유: ${reason}`;
+  const change =
+    `선수 ${sheets.length}명(${sheets.map(sheet => sheet.name || sheet.fighterId).join(', ')})의 승인된 정면에 표정 시트를 붙인 새 프로필 세트를 ` +
+    `주인 이름으로 올립니다. 검사와 운영자 승인 뒤에 무투장에 보이고, 그때까지 지금 세트가 그대로입니다. 사유: ${reason}`;
   const planned = sheets.map(({ fighterId, profileSetId, name, sha, key }) => ({ fighterId, profileSetId, name, sha256: sha, idempotencyKey: key }));
   if (flags.yes !== true) return { ok: true, dryRun: true, change, sheets: planned };
-  const client = await signIn(), results = [];
+  const client = await signIn(),
+    results = [];
   for (const sheet of sheets) {
     try {
-      const answer = await client.request(`admin/profile-sets/${sheet.profileSetId}/expressions`, { method: 'POST',
-        headers: { 'content-type': 'image/webp', 'idempotency-key': sheet.key, 'x-admin-fighter': sheet.fighterId, ...reasonHeader(reason) }, body: sheet.bytes });
+      const answer = await client.request(`admin/profile-sets/${sheet.profileSetId}/expressions`, {
+        method: 'POST',
+        headers: { 'content-type': 'image/webp', 'idempotency-key': sheet.key, 'x-admin-fighter': sheet.fighterId, ...reasonHeader(reason) },
+        body: sheet.bytes,
+      });
       results.push({ fighterId: sheet.fighterId, name: sheet.name, ok: true, profileSetId: answer.profileSet?.profileSetId, stage: answer.profileSet?.stage });
-    } catch (error) { results.push({ fighterId: sheet.fighterId, name: sheet.name, ok: false, code: error instanceof Error ? error.message : String(error) }); }
+    } catch (error) {
+      results.push({ fighterId: sheet.fighterId, name: sheet.name, ok: false, code: error instanceof Error ? error.message : String(error) });
+    }
   }
-  return { ok: results.every(result => result.ok), results, done: change,
-    next: 'npm run admin -- profiles --status review 로 검사를 통과한 새 세트(KO 얼굴)를 보고 profile-approve <set> --yes' };
+  return {
+    ok: results.every(result => result.ok),
+    results,
+    done: change,
+    next: 'npm run admin -- profiles --status review 로 검사를 통과한 새 세트(KO 얼굴)를 보고 profile-approve <set> --yes',
+  };
 }
 
 /**
@@ -326,42 +462,77 @@ async function addSheets([, list], flags, signIn) {
  * @param {string[]} positional @param {Record<string, string | true>} flags @param {() => Promise<Client>} signIn
  */
 async function addFront([, target, folder], flags, signIn) {
-  const fighter = id(target, 'fighter'), reason = text(flags.reason, 'reason'), attempt = flags.attempt === undefined ? '1' : text(flags.attempt, 'attempt');
+  const fighter = id(target, 'fighter'),
+    reason = text(flags.reason, 'reason'),
+    attempt = flags.attempt === undefined ? '1' : text(flags.attempt, 'attempt');
   if (!/^[1-9][0-9]{0,2}$/.test(attempt)) throw new Error('invalid-value:--attempt');
   if (!folder) throw new Error('missing-value:set');
   let file;
-  try { file = await readFile(path.join(folder, 'profile-set.json')); } catch { throw new Error('invalid-value:set'); }
-  const manifest = new TextDecoder().decode(file), parsed = parseProfileSet(manifest);
+  try {
+    file = await readFile(path.join(folder, 'profile-set.json'));
+  } catch {
+    throw new Error('invalid-value:set');
+  }
+  const manifest = new TextDecoder().decode(file),
+    parsed = parseProfileSet(manifest);
   if (!parsed.ok) throw Object.assign(new Error('profile-set-invalid'), { errors: parsed.errors });
   const set = parsed.data;
   /** @type {{ name: 'front' | 'expressions', bytes: Buffer }[]} */
   const pictures = [];
-  for (const [name, entry] of /** @type {const} */ ([['front', set.front], ['expressions', set.expressions]])) {
+  for (const [name, entry] of /** @type {const} */ ([
+    ['front', set.front],
+    ['expressions', set.expressions],
+  ])) {
     if (!entry) continue;
     let bytes;
-    try { bytes = await readFile(path.join(folder, entry.path)); } catch { throw Object.assign(new Error('asset-mismatch'), { errors: [entry.path] }); }
+    try {
+      bytes = await readFile(path.join(folder, entry.path));
+    } catch {
+      throw Object.assign(new Error('asset-mismatch'), { errors: [entry.path] });
+    }
     const probed = probeImage(bytes);
-    if (bytes.length !== entry.bytes || sha256(bytes) !== entry.sha256 || probed?.type !== 'image/webp' || probed.width !== entry.width || probed.height !== entry.height)
+    if (
+      bytes.length !== entry.bytes ||
+      sha256(bytes) !== entry.sha256 ||
+      probed?.type !== 'image/webp' ||
+      probed.width !== entry.width ||
+      probed.height !== entry.height
+    )
       throw Object.assign(new Error('asset-mismatch'), { errors: [entry.path] });
     pictures.push({ name, bytes });
   }
-  const front = /** @type {Buffer} */ (pictures[0].bytes), sheet = pictures[1]?.bytes;
-  const checked = await checkProfileSet(front, set), sheetChecked = sheet ? await checkExpressionSheet(sheet) : { ok: true };
-  if (!checked.ok || !sheetChecked.ok) throw Object.assign(new Error('profile-set-invalid'),
-    { errors: [...(checked.ok ? [] : checked.errors), ...(sheetChecked.ok ? [] : /** @type {any} */ (sheetChecked).errors)] });
-  const sha = sha256(file), key = editKey('front', fighter, sha, ...(attempt === '1' ? [] : [attempt]));
-  const client = await signIn(), now = await current(client, fighter);
-  const change = `선수 「${now.name}」(${fighter}, 주인 ${now.ownerId})의 프로필 세트(정면 ${set.front.width} × ${set.front.height}, 얼굴 칸 `
-    + `${set.face.x}·${set.face.y}·${set.face.side}, 표정 시트 ${sheet ? '있음' : '없음'})를 주인 이름으로 올립니다. 승인된 세트가 없는 선수만 됩니다. `
-    + `검사와 운영자 승인 뒤에 홈·명단·무투장에 보입니다. 사유: ${reason}`;
+  const front = /** @type {Buffer} */ (pictures[0].bytes),
+    sheet = pictures[1]?.bytes;
+  const checked = await checkProfileSet(front, set),
+    sheetChecked = sheet ? await checkExpressionSheet(sheet) : { ok: true };
+  if (!checked.ok || !sheetChecked.ok)
+    throw Object.assign(new Error('profile-set-invalid'), {
+      errors: [...(checked.ok ? [] : checked.errors), ...(sheetChecked.ok ? [] : /** @type {any} */ (sheetChecked).errors)],
+    });
+  const sha = sha256(file),
+    key = editKey('front', fighter, sha, ...(attempt === '1' ? [] : [attempt]));
+  const client = await signIn(),
+    now = await current(client, fighter);
+  const change =
+    `선수 「${now.name}」(${fighter}, 주인 ${now.ownerId})의 프로필 세트(정면 ${set.front.width} × ${set.front.height}, 얼굴 칸 ` +
+    `${set.face.x}·${set.face.y}·${set.face.side}, 표정 시트 ${sheet ? '있음' : '없음'})를 주인 이름으로 올립니다. 승인된 세트가 없는 선수만 됩니다. ` +
+    `검사와 운영자 승인 뒤에 홈·명단·무투장에 보입니다. 사유: ${reason}`;
   const request = { method: 'POST', route: `admin/fighters/${fighter}/profile-sets`, manifestSha256: sha, idempotencyKey: key };
   if (flags.yes !== true) return { ok: true, dryRun: true, change, request };
   const form = new FormData();
   form.append('profile-set', new Blob([new Uint8Array(file)], { type: 'application/json' }), 'profile-set.json');
   for (const { name, bytes } of pictures) form.append(name, new Blob([new Uint8Array(bytes)], { type: 'image/webp' }), `${name}.webp`);
-  const result = await client.request(request.route, { method: 'POST', headers: { 'idempotency-key': key, ...reasonHeader(reason) }, body: form,
-    timeoutMs: transferTimeoutMs(file.length + pictures.reduce((sum, picture) => sum + picture.bytes.length, 0)) });
-  return { ...result, done: change, next: 'npm run admin -- profiles --status review 로 검사를 통과한 새 세트(카드·얼굴·KO 얼굴)를 보고 profile-approve <set> --yes' };
+  const result = await client.request(request.route, {
+    method: 'POST',
+    headers: { 'idempotency-key': key, ...reasonHeader(reason) },
+    body: form,
+    timeoutMs: transferTimeoutMs(file.length + pictures.reduce((sum, picture) => sum + picture.bytes.length, 0)),
+  });
+  return {
+    ...result,
+    done: change,
+    next: 'npm run admin -- profiles --status review 로 검사를 통과한 새 세트(카드·얼굴·KO 얼굴)를 보고 profile-approve <set> --yes',
+  };
 }
 
 export const USAGE = [
@@ -405,14 +576,28 @@ const HINTS = /** @type {Record<string, string>} */ ({
 });
 
 function isEntry() {
-  try { return Boolean(process.argv[1]) && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url)); } catch { return false; }
+  try {
+    return Boolean(process.argv[1]) && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
 }
 if (isEntry()) {
-  runAdmin().then(answer => { console.log(JSON.stringify(answer, null, 2)); }, error => {
-    const code = error instanceof Error ? error.message : String(error);
-    const errors = /** @type {any} */ (error)?.errors;
-    console.log(JSON.stringify({ ok: false, code, ...(errors ? { errors } : {}),
-      hint: HINTS[code] ?? (code.startsWith('unknown-command') ? USAGE.join('\n') : undefined) }, null, 2));
-    process.exitCode = 1;
-  });
+  runAdmin().then(
+    answer => {
+      console.log(JSON.stringify(answer, null, 2));
+    },
+    error => {
+      const code = error instanceof Error ? error.message : String(error);
+      const errors = /** @type {any} */ (error)?.errors;
+      console.log(
+        JSON.stringify(
+          { ok: false, code, ...(errors ? { errors } : {}), hint: HINTS[code] ?? (code.startsWith('unknown-command') ? USAGE.join('\n') : undefined) },
+          null,
+          2,
+        ),
+      );
+      process.exitCode = 1;
+    },
+  );
 }

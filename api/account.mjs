@@ -24,7 +24,8 @@ export function accountTokens(value) {
   const row = /** @type {Record<string, unknown> | null} */ (value && typeof value === 'object' ? value : null);
   const [granted, spent, balance] = ['granted', 'spent', 'balance'].map(key => Number(row?.[key]));
   return Number.isSafeInteger(granted) && Number.isSafeInteger(spent) && Number.isSafeInteger(balance) && granted >= 0 && spent >= 0
-    ? { granted, spent, balance } : null;
+    ? { granted, spent, balance }
+    : null;
 }
 
 /**
@@ -32,14 +33,18 @@ export function accountTokens(value) {
  * @returns {import('./http.mjs').Route}
  */
 export function createAccountHandler({ db, creatorLink = null }) {
-  const rpc = rpcCaller(db, errorStatus, { unavailable: error => error.code === 'PGRST202' ? 'account-not-ready' : 'account-unavailable' });
+  const rpc = rpcCaller(db, errorStatus, { unavailable: error => (error.code === 'PGRST202' ? 'account-not-ready' : 'account-unavailable') });
   /** @param {string} name @param {Record<string, unknown>} args */
   async function call(name, args) {
     const data = await rpc(name, args);
     if (!data || typeof data !== 'object' || typeof data.invited !== 'boolean') throw new Problem(503, 'account-unavailable');
-    return { invited: data.invited, expiresAt: data.invited ? data.expiresAt ?? null : null, request: data.request ?? null,
+    return {
+      invited: data.invited,
+      expiresAt: data.invited ? (data.expiresAt ?? null) : null,
+      request: data.request ?? null,
       ...(data.accessMode === 'open' ? { accessMode: 'open', canSubmit: data.canSubmit === true } : {}),
-      ...(Number.isInteger(data.fighterLimit) && data.fighterLimit > 0 ? { fighterLimit: data.fighterLimit } : {}) };
+      ...(Number.isInteger(data.fighterLimit) && data.fighterLimit > 0 ? { fighterLimit: data.fighterLimit } : {}),
+    };
   }
   /**
    * His tokens (보유 토큰, 2026-10-31): granted, spent by the official host on his jobs, and the balance (below zero when a job outran it).
@@ -50,7 +55,9 @@ export function createAccountHandler({ db, creatorLink = null }) {
     try {
       const data = await rpc('af_generation_balance', { p_owner: owner });
       return accountTokens(data);
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   }
   return async (request, parts) => {
     try {
@@ -76,8 +83,11 @@ export function createAccountHandler({ db, creatorLink = null }) {
       const bytes = await readBody(request, 4000);
       if (bytes.length) {
         let body;
-        try { body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); }
-        catch { throw new Problem(400, 'invalid-body'); }
+        try {
+          body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+        } catch {
+          throw new Problem(400, 'invalid-body');
+        }
         if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Problem(400, 'invalid-body');
         if (body.note !== undefined) {
           if (typeof body.note !== 'string') throw new Problem(400, 'invalid-body');

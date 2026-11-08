@@ -28,16 +28,30 @@ const CHECK_TIMEOUT_MS = 30000;
  * @param {string} directory @param {{ childModule?: string, timeoutMs?: number }} [options]  tests replace the child and its deadline
  * @returns {Promise<ChildVerdict>}
  */
-export function checkInChild(directory, { childModule = fileURLToPath(new URL('./profile-set-child.mjs', import.meta.url)), timeoutMs = CHECK_TIMEOUT_MS } = {}) {
+export function checkInChild(
+  directory,
+  { childModule = fileURLToPath(new URL('./profile-set-child.mjs', import.meta.url)), timeoutMs = CHECK_TIMEOUT_MS } = {},
+) {
   return new Promise((resolve, reject) => {
     const child = fork(childModule, [directory], {
-      stdio: ['ignore', 'ignore', 'ignore', 'ipc'], execArgv: ['--max-old-space-size=256'], env: { ...process.env, VIPS_CONCURRENCY: '1' } });
+      stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+      execArgv: ['--max-old-space-size=256'],
+      env: { ...process.env, VIPS_CONCURRENCY: '1' },
+    });
     /** @type {ChildVerdict | undefined} */
     let result;
     let timedOut = false;
-    const timer = setTimeout(() => { timedOut = true; child.kill(); }, timeoutMs);
-    child.on('message', message => { if (!timedOut) result ??= /** @type {ChildVerdict} */ (message); });
-    child.once('error', () => { clearTimeout(timer); reject(new RetryLater('check-start-failed')); });
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill();
+    }, timeoutMs);
+    child.on('message', message => {
+      if (!timedOut) result ??= /** @type {ChildVerdict} */ (message);
+    });
+    child.once('error', () => {
+      clearTimeout(timer);
+      reject(new RetryLater('check-start-failed'));
+    });
     child.once('exit', () => {
       clearTimeout(timer);
       resolve(result ?? { ok: false, stage: 'profile-set-check', errors: [{ code: timedOut ? 'CHECK_TIMEOUT' : 'CHECK_CRASHED', path: '' }] });
@@ -52,13 +66,20 @@ export function checkInChild(directory, { childModule = fileURLToPath(new URL('.
  */
 export async function runProfileSetWithConfig(config, profileSetId, check = {}) {
   if (!validProjectUrl(config.url) || !/^afw_[a-f0-9]{64}$/.test(config.workerToken ?? '')) throw new Error('invalid-worker-config');
-  const project = /** @type {string} */ (config.url), token = /** @type {string} */ (config.workerToken);
+  const project = /** @type {string} */ (config.url),
+    token = /** @type {string} */ (config.workerToken);
   /** @type {(route: string, body: object) => Promise<any>} */
-  const send = (route, body) => apiRequest(project, token, route, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-  return runLeasedJob({ send, idKey: 'profileSetId', claim: profileSetId ? { profileSetId } : {}, folder: 'profile-set-',
+  const send = (route, body) =>
+    apiRequest(project, token, route, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  return runLeasedJob({
+    send,
+    idKey: 'profileSetId',
+    claim: profileSetId ? { profileSetId } : {},
+    folder: 'profile-set-',
     routes: { claim: 'worker/profile-sets/claim', finish: 'worker/profile-sets/finish', release: 'worker/profile-sets/release' },
     /** @param {ClaimedSet} job @param {string} directory @param {AbortSignal} deadline */
-    work: (job, directory, deadline) => validateProfileSet(project, token, job, directory, deadline, check) });
+    work: (job, directory, deadline) => validateProfileSet(project, token, job, directory, deadline, check),
+  });
 }
 
 /**
@@ -74,9 +95,11 @@ async function download(project, file, downloadUrl, target, deadline) {
     const response = await fetch(url, { redirect: 'error', signal: AbortSignal.any([AbortSignal.timeout(transferTimeoutMs(file.bytes)), deadline]) });
     if (!response.ok) throw new RetryLater('download-failed');
     bytes = await readBody(response, file.bytes);
-  } catch (error) { throw error instanceof RetryLater ? error : new RetryLater(deadline.aborted ? 'job-deadline' : 'download-failed'); }
+  } catch (error) {
+    throw error instanceof RetryLater ? error : new RetryLater(deadline.aborted ? 'job-deadline' : 'download-failed');
+  }
   // A mismatch now is a storage fault, not the creator's painting.
-  if (bytes.length !== file.bytes || await sha256(bytes) !== file.sha256) throw new RetryLater('download-integrity');
+  if (bytes.length !== file.bytes || (await sha256(bytes)) !== file.sha256) throw new RetryLater('download-integrity');
   await writeFile(target, bytes, { flag: 'wx', mode: 0o600 });
 }
 
@@ -91,7 +114,7 @@ async function validateProfileSet(project, token, job, directory, deadline, chec
   let verdict;
   /** @type {any} */
   let derived = null;
-  if (await sha256(new TextEncoder().encode(job.manifestText)) !== job.manifestSha256) throw new RetryLater('server-manifest-hash');
+  if ((await sha256(new TextEncoder().encode(job.manifestText))) !== job.manifestSha256) throw new RetryLater('server-manifest-hash');
   const parsed = parseProfileSet(job.manifestText);
   if (!parsed.ok) verdict = { ok: false, stage: 'server-manifest', errors: [{ code: 'invalid-server-manifest', path: '' }] };
   else {
@@ -108,24 +131,37 @@ async function validateProfileSet(project, token, job, directory, deadline, chec
       /** @type {Record<string, { sha256: string, bytes: number }>} */
       const stored = {};
       for (const name of ['card', 'face', ...(verdict.derived.sheet ? ['sheet'] : [])]) {
-        const file = await readFile(path.join(directory, `${name}.webp`)), hash = await sha256(file);
+        const file = await readFile(path.join(directory, `${name}.webp`)),
+          hash = await sha256(file);
         let answer;
         try {
-          answer = await apiRequest(project, token, `worker/profile-sets/${job.profileSetId}/derived/${name}`, { method: 'PUT',
-            headers: { 'content-type': 'image/webp', 'x-profile-set-lease': job.leaseToken }, body: file });
-        } catch { throw new RetryLater('derived-upload-failed'); }
+          answer = await apiRequest(project, token, `worker/profile-sets/${job.profileSetId}/derived/${name}`, {
+            method: 'PUT',
+            headers: { 'content-type': 'image/webp', 'x-profile-set-lease': job.leaseToken },
+            body: file,
+          });
+        } catch {
+          throw new RetryLater('derived-upload-failed');
+        }
         if (answer.sha256 !== hash || answer.bytes !== file.length) throw new RetryLater('derived-upload-integrity');
         stored[name] = { sha256: hash, bytes: file.length };
       }
-      derived = { card: { ...stored.card, ...verdict.derived.card }, face: { ...stored.face, ...verdict.derived.face },
-        ...(stored.sheet ? { sheet: { ...stored.sheet, ...verdict.derived.sheet } } : {}) };
+      derived = {
+        card: { ...stored.card, ...verdict.derived.card },
+        face: { ...stored.face, ...verdict.derived.face },
+        ...(stored.sheet ? { sheet: { ...stored.sheet, ...verdict.derived.sheet } } : {}),
+      };
     }
   }
   /** @type {(errors: { code: string, path?: string }[]) => { code: string, path: string }[]} */
   const listed = errors => errors.slice(0, 20).map(e => ({ code: e.code, path: e.path ?? '' }));
   // A sheet that failed is left out of a passing set; its errors say why (af_profile_set_finish takes a set without its sheet only so).
-  const result = { validatorVersion: PROFILE_SET_VALIDATOR_VERSION, stage: verdict.ok ? 'profile-set-full-decode' : verdict.stage ?? 'profile-set-check',
-    errors: listed(verdict.errors), manifestSha256: job.manifestSha256,
-    ...(verdict.ok && verdict.sheetErrors?.length ? { sheetErrors: listed(verdict.sheetErrors) } : {}) };
+  const result = {
+    validatorVersion: PROFILE_SET_VALIDATOR_VERSION,
+    stage: verdict.ok ? 'profile-set-full-decode' : (verdict.stage ?? 'profile-set-check'),
+    errors: listed(verdict.errors),
+    manifestSha256: job.manifestSha256,
+    ...(verdict.ok && verdict.sheetErrors?.length ? { sheetErrors: listed(verdict.sheetErrors) } : {}),
+  };
   return { passed: verdict.ok, result, ...(verdict.ok ? { derived } : {}) };
 }

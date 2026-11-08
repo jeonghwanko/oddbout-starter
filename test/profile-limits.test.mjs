@@ -9,11 +9,18 @@ const profileEvent = profile => changeSchema.safeParse({ type: 'profile', feedba
 const packageAccepts = profile => validateFighter({ ...structuredClone(example), profile: { ...example.profile, ...profile } }).ok;
 
 test('a session accepts exactly the profile text the package contract accepts', () => {
-  for (const [field, limit] of [['name', profileLimits.name], ['description', profileLimits.description]]) {
-    const longest = 'x'.repeat(limit), over = 'x'.repeat(limit + 1);
+  for (const [field, limit] of [
+    ['name', profileLimits.name],
+    ['description', profileLimits.description],
+  ]) {
+    const longest = 'x'.repeat(limit),
+      over = 'x'.repeat(limit + 1);
     assert.deepEqual([profileEvent({ name: 'N', [field]: longest }), packageAccepts({ [field]: longest })], [true, true], `${field} at ${limit}`);
     assert.deepEqual([profileEvent({ name: 'N', [field]: over }), packageAccepts({ [field]: over })], [false, false], `${field} over ${limit}`);
   }
-  assert.deepEqual([profileLimits.name, profileLimits.description, profileLimits.concept, profileLimits.moveName, profileLimits.moveDescription], [40, 600, 800, 24, 160],
-    'contract v1 values; change this only together with contracts/ai-fighter/v1');
+  assert.deepEqual(
+    [profileLimits.name, profileLimits.description, profileLimits.concept, profileLimits.moveName, profileLimits.moveDescription],
+    [40, 600, 800, 24, 160],
+    'contract v1 values; change this only together with contracts/ai-fighter/v1',
+  );
 });

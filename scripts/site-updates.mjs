@@ -17,11 +17,18 @@ export async function readUpdatesManifest(root) {
   if (!landing && source === null) return { pages: [], assets: [] };
   if (!landing?.isFile() || source === null) throw new Error('Incomplete updates output: landing and manifest are both required');
   const manifest = JSON.parse(source);
-  const pages = manifest?.pages, assets = manifest?.assets;
-  if (manifest?.version !== 1 || !Array.isArray(pages) || !Array.isArray(assets) ||
-      !pages.includes('updates.html') || new Set(pages).size !== pages.length || new Set(assets).size !== assets.length ||
-      pages.some(page => typeof page !== 'string' || !/^(?:updates(?:\.(?:ko|en|ja))?|updates\/[a-z0-9]+(?:-[a-z0-9]+)*(?:\.(?:en|ja))?)\.html$/.test(page)) ||
-      assets.some(asset => typeof asset !== 'string' || !/^art\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+\.webp$/.test(asset))) {
+  const pages = manifest?.pages,
+    assets = manifest?.assets;
+  if (
+    manifest?.version !== 1 ||
+    !Array.isArray(pages) ||
+    !Array.isArray(assets) ||
+    !pages.includes('updates.html') ||
+    new Set(pages).size !== pages.length ||
+    new Set(assets).size !== assets.length ||
+    pages.some(page => typeof page !== 'string' || !/^(?:updates(?:\.(?:ko|en|ja))?|updates\/[a-z0-9]+(?:-[a-z0-9]+)*(?:\.(?:en|ja))?)\.html$/.test(page)) ||
+    assets.some(asset => typeof asset !== 'string' || !/^art\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+\.webp$/.test(asset))
+  ) {
     throw new Error('Invalid updates manifest');
   }
   return { pages, assets };
@@ -42,8 +49,8 @@ export async function updatesPublishedFiles(root, siteUrl) {
       if (!attributes.href || /[\\%]/.test(attributes.href)) throw new Error(`Unsafe updates stylesheet: ${page}`);
       const url = new URL(attributes.href, new URL(page, base));
       const file = url.pathname.slice(base.pathname.length);
-      if (url.origin !== base.origin || !url.pathname.startsWith(base.pathname) || url.search || url.hash ||
-          !/^assets\/[a-zA-Z0-9_-]+\.css$/.test(file)) throw new Error(`Unsafe updates stylesheet: ${page}`);
+      if (url.origin !== base.origin || !url.pathname.startsWith(base.pathname) || url.search || url.hash || !/^assets\/[a-zA-Z0-9_-]+\.css$/.test(file))
+        throw new Error(`Unsafe updates stylesheet: ${page}`);
       files.add(file);
     }
   }

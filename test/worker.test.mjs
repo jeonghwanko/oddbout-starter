@@ -9,7 +9,9 @@ import { runOnce } from '../worker/run.mjs';
 const url = 'https://abcdefghijklmnopqrst.supabase.co';
 const manifestText = await readFile(new URL('../examples/sparring-bot/fighter.json', import.meta.url), 'utf8');
 const manifest = JSON.parse(manifestText);
-const assetBytes = new Map(await Promise.all(manifest.assets.map(async a => [a.id, await readFile(new URL(`../examples/sparring-bot/${a.path}`, import.meta.url))])));
+const assetBytes = new Map(
+  await Promise.all(manifest.assets.map(async a => [a.id, await readFile(new URL(`../examples/sparring-bot/${a.path}`, import.meta.url))])),
+);
 let directory, config, realFetch;
 before(async () => {
   directory = await mkdtemp(path.join(tmpdir(), 'fighter-worker-'));
@@ -17,7 +19,10 @@ before(async () => {
   await writeFile(config, JSON.stringify({ url, workerToken: `afw_${'a'.repeat(64)}` }));
   realFetch = globalThis.fetch;
 });
-after(async () => { globalThis.fetch = realFetch; await rm(directory, { recursive: true, force: true }); });
+after(async () => {
+  globalThis.fetch = realFetch;
+  await rm(directory, { recursive: true, force: true });
+});
 
 /** A claimed job served by a stub API. `download(id)` returns the asset response or throws. */
 async function serve(download, text = manifestText, { finishFailures = 0, release = 200, finishRefusal = null, claim = {} } = {}) {
@@ -25,18 +30,36 @@ async function serve(download, text = manifestText, { finishFailures = 0, releas
   const manifestSha256 = await sha256(new TextEncoder().encode(text));
   globalThis.fetch = async (target, init) => {
     const route = String(target);
-    if (route.endsWith('/worker/claim')) return Response.json({ ok: true, stage: 'validating', submissionId: crypto.randomUUID(), leaseToken: crypto.randomUUID(),
-      manifestText: text, manifestSha256, files: manifest.assets.map(a => ({ ...a, downloadUrl: `${url}/storage/v1/object/sign/ai-fighter-beta/${a.id}.webp?token=t` })), ...claim });
+    if (route.endsWith('/worker/claim'))
+      return Response.json({
+        ok: true,
+        stage: 'validating',
+        submissionId: crypto.randomUUID(),
+        leaseToken: crypto.randomUUID(),
+        manifestText: text,
+        manifestSha256,
+        files: manifest.assets.map(a => ({ ...a, downloadUrl: `${url}/storage/v1/object/sign/ai-fighter-beta/${a.id}.webp?token=t` })),
+        ...claim,
+      });
     if (route.endsWith('/worker/finish')) {
       if (calls.finishAttempts++ < finishFailures) return Response.json({ ok: false, code: 'service-unavailable' }, { status: 503 });
       if (finishRefusal) return Response.json({ ok: false, stage: 'api', code: finishRefusal.code }, { status: finishRefusal.status });
-      calls.finish = JSON.parse(init.body); return Response.json({ ok: true, stage: calls.finish.passed ? 'registered' : 'rejected' });
+      calls.finish = JSON.parse(init.body);
+      return Response.json({ ok: true, stage: calls.finish.passed ? 'registered' : 'rejected' });
     }
-    if (route.endsWith('/worker/release')) { calls.release = JSON.parse(init.body); return Response.json({ ok: release === 200, stage: 'requeued' }, { status: release }); }
+    if (route.endsWith('/worker/release')) {
+      calls.release = JSON.parse(init.body);
+      return Response.json({ ok: release === 200, stage: 'requeued' }, { status: release });
+    }
     const id = new URL(route).pathname.split('/').at(-1).replace('.webp', '');
-    calls.inFlight++; calls.maxInFlight = Math.max(calls.maxInFlight, calls.inFlight);
-    try { await new Promise(resolve => setTimeout(resolve, 5)); return await download(id); }
-    finally { calls.inFlight--; }
+    calls.inFlight++;
+    calls.maxInFlight = Math.max(calls.maxInFlight, calls.inFlight);
+    try {
+      await new Promise(resolve => setTimeout(resolve, 5));
+      return await download(id);
+    } finally {
+      calls.inFlight--;
+    }
   };
   return calls;
 }
@@ -51,9 +74,15 @@ test('a valid package registers, with at most four downloads at once', async () 
 });
 test('infrastructure failures leave the job for a retry instead of rejecting the creator', async () => {
   for (const [download, expected] of [
-    [id => { if (id === 'walk') throw new TypeError('fetch failed'); return ok(id); }, 'download-failed'],
-    [id => id === 'walk' ? new Response('server error', { status: 500 }) : ok(id), 'download-failed'],
-    [id => id === 'walk' ? new Response(Buffer.alloc(assetBytes.get('walk').length)) : ok(id), 'download-integrity'],
+    [
+      id => {
+        if (id === 'walk') throw new TypeError('fetch failed');
+        return ok(id);
+      },
+      'download-failed',
+    ],
+    [id => (id === 'walk' ? new Response('server error', { status: 500 }) : ok(id)), 'download-failed'],
+    [id => (id === 'walk' ? new Response(Buffer.alloc(assetBytes.get('walk').length)) : ok(id)), 'download-integrity'],
   ]) {
     const calls = await serve(download);
     const result = await runOnce(config);
@@ -72,7 +101,7 @@ test('an unexpected error hands the job back as worker-error instead of letting 
   assert.deepEqual([calls.release.code, calls.release.submissionId, calls.release.leaseToken.length], ['worker-error', result.submissionId, 36]);
 });
 test('if the hand-back fails, the job still waits for its lease to expire', async () => {
-  const calls = await serve(id => id === 'walk' ? new Response('server error', { status: 500 }) : ok(id), manifestText, { release: 404 });
+  const calls = await serve(id => (id === 'walk' ? new Response('server error', { status: 500 }) : ok(id)), manifestText, { release: 404 });
   const result = await runOnce(config);
   assert.deepEqual([result.stage, result.code, result.requeued], ['retry-later', 'download-failed', false]);
   assert.equal(calls.finish, null);
@@ -107,9 +136,13 @@ test('a finish the server refuses hands the job back instead of letting its leas
   let calls = await serve(ok, manifestText, { finishRefusal: { status: 400, code: 'validator-version' } });
   const result = await runOnce(config);
   assert.deepEqual([result.stage, result.code, result.requeued], ['retry-later', 'finish-refused-validator-version', true]);
-  assert.equal(calls.finishAttempts, 1); assert.equal(calls.release.code, 'finish-refused-validator-version');
+  assert.equal(calls.finishAttempts, 1);
+  assert.equal(calls.release.code, 'finish-refused-validator-version');
   // A lost lease is not this worker's to hand back, and a refused worker key stops the worker.
-  for (const refusal of [{ status: 409, code: 'stale-validation' }, { status: 401, code: 'worker-required' }]) {
+  for (const refusal of [
+    { status: 409, code: 'stale-validation' },
+    { status: 401, code: 'worker-required' },
+  ]) {
     calls = await serve(ok, manifestText, { finishRefusal: refusal });
     await assert.rejects(runOnce(config), new RegExp(refusal.code));
     assert.equal(calls.release, null);

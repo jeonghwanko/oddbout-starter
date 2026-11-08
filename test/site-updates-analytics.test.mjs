@@ -11,8 +11,11 @@ test('every emitted translation and detail gets one executable tag; neutral redi
   const root = await mkdtemp(join(tmpdir(), 'oddbout-update-analytics-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const details = ['2026-11-03-vice-arrives', '2026-11-02-new-arena'];
-  const pages = ['updates.html', ...['ko', 'en', 'ja'].map(lang => `updates.${lang}.html`),
-    ...details.flatMap(slug => ['', '.en', '.ja'].map(lang => `updates/${slug}${lang}.html`))];
+  const pages = [
+    'updates.html',
+    ...['ko', 'en', 'ja'].map(lang => `updates.${lang}.html`),
+    ...details.flatMap(slug => ['', '.en', '.ja'].map(lang => `updates/${slug}${lang}.html`)),
+  ];
   await mkdir(join(root, 'updates'));
   await writeFile(join(root, 'updates-manifest.json'), JSON.stringify({ version: 1, pages, assets: [] }));
   const original = '<!doctype html><html lang="en"><head><title>Updates</title></head><body>Updates</body></html>';
@@ -21,12 +24,16 @@ test('every emitted translation and detail gets one executable tag; neutral redi
   await writeUpdatesAnalytics(root, pages, 'G-ABC123DEF4', 'https://oddbout.com/'); // harmless rerun
   for (const page of pages) {
     const html = await readFile(join(root, page), 'utf8');
-    if (page === 'updates.html') { assert.equal(html, original); continue; }
+    if (page === 'updates.html') {
+      assert.equal(html, original);
+      continue;
+    }
     const tags = [...html.matchAll(/<script data-oddbout-updates-analytics>([\s\S]*?)<\/script>/g)];
     assert.equal(tags.length, 1, page);
     for (const [href, gpc, expectedViews] of [
       [`https://oddbout.com/${page}?utm_source=tiktok&utm_medium=social&utm_campaign=profile&email=private#private`, false, 1],
-      [`https://oddbout.com/${page}`, true, 0], [`http://localhost/${page}`, false, 0],
+      [`https://oddbout.com/${page}`, true, 0],
+      [`http://localhost/${page}`, false, 0],
     ]) {
       const scripts = [];
       const window = { location: new URL(href), addEventListener() {}, dispatchEvent() {} };

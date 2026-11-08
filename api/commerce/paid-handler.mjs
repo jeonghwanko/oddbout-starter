@@ -19,15 +19,27 @@ export function createPaidOperationHandler({ service, store, publicOrigin, authe
     for (const [id, item] of rates) if (item.until <= now) rates.delete(id);
     const entry = rates.get(key) ?? { count: 0, until: now + 60_000 };
     if (entry.count >= limit || rates.size > 10000) throw new Problem(429, 'too-many-requests');
-    entry.count++; rates.set(key, entry);
+    entry.count++;
+    rates.set(key, entry);
   };
   return async (/** @type {Request} */ request, /** @type {{clientAddress?:string}} */ context = {}) => {
     const requestId = randomUUID();
-    const url = new URL(request.url), [prefix, ...route] = url.pathname.split('/').filter(Boolean);
-    const agent = prefix === 'paid-agent', origin = request.headers.get('origin'), method = request.method;
-    const json = (/** @type {any} */ data, status = 200) => new Response(JSON.stringify(data), {
-      status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff',
-        'x-request-id': requestId, ...(status === 429 ? { 'retry-after': '60' } : {}) } });
+    const url = new URL(request.url),
+      [prefix, ...route] = url.pathname.split('/').filter(Boolean);
+    const agent = prefix === 'paid-agent',
+      origin = request.headers.get('origin'),
+      method = request.method;
+    const json = (/** @type {any} */ data, status = 200) =>
+      new Response(JSON.stringify(data), {
+        status,
+        headers: {
+          'content-type': 'application/json',
+          'cache-control': 'no-store',
+          'x-content-type-options': 'nosniff',
+          'x-request-id': requestId,
+          ...(status === 429 ? { 'retry-after': '60' } : {}),
+        },
+      });
     try {
       if (url.origin !== publicOrigin || (origin && origin !== publicOrigin)) throw new Problem(403, 'origin-not-allowed');
       if (!['paid-agent', 'paid-operations'].includes(prefix)) throw new Problem(404, 'not-found');
@@ -37,15 +49,20 @@ export function createPaidOperationHandler({ service, store, publicOrigin, authe
         body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, 16384)));
         if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Problem(422, 'invalid-input');
       }
-      const input = /** @type {Record<string,any>} */ (body), path = route.join('/');
+      const input = /** @type {Record<string,any>} */ (body),
+        path = route.join('/');
       if (agent && path === 'connect' && method === 'POST') {
         limit('connect:' + hash(context.clientAddress ?? 'local'), 20);
         if (typeof input.label !== 'string' || !input.label.trim() || input.label.length > 64) throw new Problem(422, 'invalid-input');
-        const token = `obt_${randomBytes(32).toString('base64url')}`, id = randomUUID(), userCode = randomBytes(4).toString('hex').toUpperCase();
+        const token = `obt_${randomBytes(32).toString('base64url')}`,
+          id = randomUUID(),
+          userCode = randomBytes(4).toString('hex').toUpperCase();
         const device = await store.operationDevice(null, 'begin', { id, userCode, label: input.label, secretHash: hash(token) });
         // Only the local MCP transport receives token. It must never emit it to its caller/model or save it in a URL.
-        return json({ ok: true, data: { token, userCode, expiresAt: device.approveBy,
-          verificationUrl: `${publicOrigin}/broadcast/tasks/#device=${id}&code=${userCode}` } });
+        return json({
+          ok: true,
+          data: { token, userCode, expiresAt: device.approveBy, verificationUrl: `${publicOrigin}/broadcast/tasks/#device=${id}&code=${userCode}` },
+        });
       }
       let owner;
       if (agent) {
@@ -63,26 +80,36 @@ export function createPaidOperationHandler({ service, store, publicOrigin, authe
       };
       let data;
       if (path === 'catalog' && method === 'GET') data = service.catalog();
-      else if (path === 'operations/page' && method === 'GET') data = await service.page(owner, {
-        ...(url.searchParams.has('limit') ? { limit: Number(url.searchParams.get('limit')) } : {}),
-        ...(url.searchParams.has('cursor') ? { cursor: url.searchParams.get('cursor') ?? '' } : {}),
-        ...(url.searchParams.has('filter') ? { filter: url.searchParams.get('filter') ?? '' } : {}),
-        ...(url.searchParams.has('query') ? { query: url.searchParams.get('query') ?? '' } : {}),
-        ...(url.searchParams.has('kind') ? { kind: url.searchParams.get('kind') ?? '' } : {}) });
+      else if (path === 'operations/page' && method === 'GET')
+        data = await service.page(owner, {
+          ...(url.searchParams.has('limit') ? { limit: Number(url.searchParams.get('limit')) } : {}),
+          ...(url.searchParams.has('cursor') ? { cursor: url.searchParams.get('cursor') ?? '' } : {}),
+          ...(url.searchParams.has('filter') ? { filter: url.searchParams.get('filter') ?? '' } : {}),
+          ...(url.searchParams.has('query') ? { query: url.searchParams.get('query') ?? '' } : {}),
+          ...(url.searchParams.has('kind') ? { kind: url.searchParams.get('kind') ?? '' } : {}),
+        });
       else if (path === 'operations' && method === 'GET') data = await service.list(owner);
       else if (path === 'operations' && method === 'POST') data = await service.prepare(owner, input);
       else if (path === 'broadcasts' && method === 'POST') data = await service.prepareBroadcast(owner, input);
       else if (route[0] === 'operations' && route.length >= 2 && route.length <= 3) {
-        const id = operationId(route[1]), action = route[2];
+        const id = operationId(route[1]),
+          action = route[2];
         if (method === 'GET' && !action) data = await service.get(owner, id);
         else if (method === 'GET' && action === 'events') data = await service.events(owner, id, url.searchParams.get('before') ?? undefined);
         else if (method === 'POST' && action === 'resume') data = await service.resume(owner, id);
         else if (method === 'POST' && action === 'reconcile' && !agent) data = await service.reconcile(owner, id);
         else if (method === 'POST' && ['approve', 'cancel', 'checkout', 'renew', 'retry-payment'].includes(action)) {
           humanConsent();
-          data = action === 'renew' ? await service.renew(owner, id, input.endsAt, input.startWhenFunded === true)
-            : action === 'retry-payment' ? await service.retryPayment(owner, id) : action === 'approve' ? await service.approve(owner, id, input.startWhenFunded === true)
-            : action === 'cancel' ? await service.cancel(owner, id) : await service.checkout(owner, id);
+          data =
+            action === 'renew'
+              ? await service.renew(owner, id, input.endsAt, input.startWhenFunded === true)
+              : action === 'retry-payment'
+                ? await service.retryPayment(owner, id)
+                : action === 'approve'
+                  ? await service.approve(owner, id, input.startWhenFunded === true)
+                  : action === 'cancel'
+                    ? await service.cancel(owner, id)
+                    : await service.checkout(owner, id);
         } else throw new Problem(404, 'not-found');
       } else if (!agent && path === 'devices' && method === 'GET') data = await store.operationDevice(owner, 'list');
       else if (!agent && path === 'devices/approve' && method === 'POST') {
@@ -90,7 +117,8 @@ export function createPaidOperationHandler({ service, store, publicOrigin, authe
         if (!/^[A-F0-9]{8}$/.test(input.userCode)) throw new Problem(422, 'invalid-input');
         data = await store.operationDevice(owner, 'approve', { id: operationId(input.id), userCode: input.userCode });
       } else if (!agent && path === 'devices/revoke' && method === 'POST') {
-        humanConsent(); data = await store.operationDevice(owner, 'revoke', { id: operationId(input.id) });
+        humanConsent();
+        data = await store.operationDevice(owner, 'revoke', { id: operationId(input.id) });
       } else throw new Problem(404, 'not-found');
       return json({ ok: true, data });
     } catch (error) {

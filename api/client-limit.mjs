@@ -20,11 +20,11 @@ function ipv6Groups(value) {
   if (dotted) {
     if (!IPV4.test(dotted[2])) return null;
     const [a, b, c, d] = dotted[2].split('.').map(Number);
-    text = `${dotted[1]}${(a << 8 | b).toString(16)}:${(c << 8 | d).toString(16)}`;
+    text = `${dotted[1]}${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`;
   }
   const halves = text.split('::');
   if (halves.length > 2) return null;
-  const [head, tail] = halves.map(half => half ? half.split(':') : []);
+  const [head, tail] = halves.map(half => (half ? half.split(':') : []));
   const missing = 8 - head.length - (tail?.length ?? 0);
   // `::` stands for at least one group of zeros; without it the eight groups are all written.
   if (tail ? missing < 1 : missing !== 0) return null;
@@ -51,7 +51,10 @@ export function clientAddress(request, source) {
   if (!groups) return null;
   if (groups.slice(0, 5).every(group => group === 0) && groups[5] === 0xffff)
     return [groups[6] >> 8, groups[6] & 255, groups[7] >> 8, groups[7] & 255].join('.');
-  return `${groups.slice(0, 4).map(group => group.toString(16)).join(':')}::/64`;
+  return `${groups
+    .slice(0, 4)
+    .map(group => group.toString(16))
+    .join(':')}::/64`;
 }
 
 /** @param {string} secret @param {string} text */
@@ -78,8 +81,12 @@ export function createClientLimiter({ db, secret, source, now = () => new Date()
       if (!address) return true; // Nothing to key on: the global brakes still apply.
       const day = now().toISOString().slice(0, 10);
       try {
-        const { data, error } = await db.rpc('af_rate_hit', { p_bucket: bucket, p_key: await keyedHash(secret, `${bucket}|${day}|${address}`),
-          p_limit: limit, p_window_seconds: windowSeconds });
+        const { data, error } = await db.rpc('af_rate_hit', {
+          p_bucket: bucket,
+          p_key: await keyedHash(secret, `${bucket}|${day}|${address}`),
+          p_limit: limit,
+          p_window_seconds: windowSeconds,
+        });
         if (error) throw error;
         return data !== false;
       } catch {
@@ -92,7 +99,7 @@ export function createClientLimiter({ db, secret, source, now = () => new Date()
 
 // The brakes in use. Each stays well under its route's global limit so one caller cannot spend it for everyone.
 export const CLIENT_LIMITS = Object.freeze({
-  duel: { bucket: 'duel-start', limit: 25, windowSeconds: 86_400 },          // global: 100 a day
+  duel: { bucket: 'duel-start', limit: 25, windowSeconds: 86_400 }, // global: 100 a day
   deviceLogin: { bucket: 'device-login-start', limit: 10, windowSeconds: 600 }, // global: 120 per 10 minutes
   hostPairing: { bucket: 'host-pairing-start', limit: 10, windowSeconds: 600 }, // global: 120 per 10 minutes
 });

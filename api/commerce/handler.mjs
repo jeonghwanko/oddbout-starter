@@ -12,19 +12,36 @@ export function createCommerceHandler({ service, authenticate, publicOrigin, age
   /** @param {Request} request @param {string[]} [segments] */
   return async (request, segments) => {
     const path = segments ?? new URL(request.url).pathname.split('/').filter(Boolean);
-    const prefix = path.indexOf('commerce'), route = path.slice(prefix + 1), method = request.method;
+    const prefix = path.indexOf('commerce'),
+      route = path.slice(prefix + 1),
+      method = request.method;
     const origin = request.headers.get('origin');
     /** @param {any} value @param {number} [status] */
-    const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: {
-      'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff',
-      ...(origin === publicOrigin ? { 'access-control-allow-origin': origin, vary: 'Origin',
-        'access-control-allow-methods': 'GET, POST, OPTIONS', 'access-control-allow-headers': 'Authorization, Content-Type' } : {}),
-    } });
+    const json = (value, status = 200) =>
+      new Response(JSON.stringify(value), {
+        status,
+        headers: {
+          'content-type': 'application/json',
+          'cache-control': 'no-store',
+          'x-content-type-options': 'nosniff',
+          ...(origin === publicOrigin
+            ? {
+                'access-control-allow-origin': origin,
+                vary: 'Origin',
+                'access-control-allow-methods': 'GET, POST, OPTIONS',
+                'access-control-allow-headers': 'Authorization, Content-Type',
+              }
+            : {}),
+        },
+      });
     try {
       if (origin && origin !== publicOrigin) throw new Problem(403, 'origin-not-allowed');
       if (method === 'OPTIONS') return json({ ok: true });
       if (route.join('/') === 'webhook' && method === 'POST') {
-        return json({ ok: true, ...await service.webhook(request.headers, new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, 262144))) });
+        return json({
+          ok: true,
+          ...(await service.webhook(request.headers, new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, 262144)))),
+        });
       }
       if (route.join('/') === 'catalog' && method === 'GET') return json({ ok: true, catalog: service.catalog() });
       const owner = await authenticate(request);
@@ -40,9 +57,8 @@ export function createCommerceHandler({ service, authenticate, publicOrigin, age
       else if (route.join('/') === 'checkout' && method === 'POST') data = await service.checkout(owner, body);
       else if (route.length === 3 && route[0] === 'topups' && route[2] === 'checkout' && method === 'POST') {
         if (agent || origin !== publicOrigin || body?.confirmed !== true) throw new Problem(403, 'web-approval-required');
-        data = await service.recoverCheckout(owner,route[1]);
-      }
-      else if (route.length === 3 && route[0] === 'topups' && route[2] === 'capture' && method === 'POST') data = await service.capture(owner, route[1]);
+        data = await service.recoverCheckout(owner, route[1]);
+      } else if (route.length === 3 && route[0] === 'topups' && route[2] === 'capture' && method === 'POST') data = await service.capture(owner, route[1]);
       else if (route.join('/') === 'quote' && method === 'POST') data = service.quote(body);
       else if (route.join('/') === 'approvals' && method === 'POST') {
         if (agent || origin !== publicOrigin || body?.confirmed !== true) throw new Problem(403, 'web-approval-required');
@@ -57,7 +73,8 @@ export function createCommerceHandler({ service, authenticate, publicOrigin, age
         // Money leaves only on the owner's own console click, like a budget approval.
         if (agent || origin !== publicOrigin || body?.confirmed !== true) throw new Problem(403, 'web-approval-required');
         data = route[2] === 'approve' ? await service.payouts.approve(owner, route[1]) : await service.payouts.cancel(owner, route[1]);
-      } else if (route.length === 2 && route[0] === 'payouts' && method === 'GET' && service.payouts && !agent) data = await service.payouts.get(owner, route[1]);
+      } else if (route.length === 2 && route[0] === 'payouts' && method === 'GET' && service.payouts && !agent)
+        data = await service.payouts.get(owner, route[1]);
       else if (route.length === 3 && route[0] === 'broadcasts') {
         if (route[2] === 'stop' && method === 'POST') data = await service.stop(owner, route[1]);
         else if (route[2] === 'report' && method === 'GET') data = await service.report(owner, route[1]);

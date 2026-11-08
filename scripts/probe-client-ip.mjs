@@ -7,8 +7,12 @@ import { pathToFileURL } from 'node:url';
 import { clientAddress } from '../api/client-limit.mjs';
 
 const SPOOF = { xff: '192.0.2.66', cf: '192.0.2.77' }; // TEST-NET-1: never a real caller
-const CASES = { plain: {}, forwarded: { 'x-forwarded-for': SPOOF.xff }, cloudflare: { 'cf-connecting-ip': SPOOF.cf },
-  both: { 'x-forwarded-for': SPOOF.xff, 'cf-connecting-ip': SPOOF.cf } };
+const CASES = {
+  plain: {},
+  forwarded: { 'x-forwarded-for': SPOOF.xff },
+  cloudflare: { 'cf-connecting-ip': SPOOF.cf },
+  both: { 'x-forwarded-for': SPOOF.xff, 'cf-connecting-ip': SPOOF.cf },
+};
 
 /**
  * `echoes`: case name → the probe's JSON, or `{ rejectedByEdge: true }` when the edge refused that spoofed request
@@ -21,12 +25,30 @@ export function judge(echoes) {
   const verdicts = {};
   const reached = Object.fromEntries(Object.entries(echoes).filter(([, echo]) => !echo.rejectedByEdge));
   for (const source of ['cf-connecting-ip', 'forwarded-last']) {
-    const seen = Object.fromEntries(Object.entries(reached).map(([name, echo]) => [name, clientAddress(new Request('https://probe', {
-      headers: Object.fromEntries([['cf-connecting-ip', echo.cfConnectingIp], ['x-forwarded-for', echo.forwardedFor]].filter(([, v]) => v)) }), source)]));
+    const seen = Object.fromEntries(
+      Object.entries(reached).map(([name, echo]) => [
+        name,
+        clientAddress(
+          new Request('https://probe', {
+            headers: Object.fromEntries(
+              [
+                ['cf-connecting-ip', echo.cfConnectingIp],
+                ['x-forwarded-for', echo.forwardedFor],
+              ].filter(([, v]) => v),
+            ),
+          }),
+          source,
+        ),
+      ]),
+    );
     const values = Object.values(seen);
-    const reason = values.some(v => v === null) ? 'missing-or-not-an-address'
-      : values.some(v => v === SPOOF.xff || v === SPOOF.cf) ? 'client-controlled'
-      : new Set(values).size !== 1 ? 'unstable' : null;
+    const reason = values.some(v => v === null)
+      ? 'missing-or-not-an-address'
+      : values.some(v => v === SPOOF.xff || v === SPOOF.cf)
+        ? 'client-controlled'
+        : new Set(values).size !== 1
+          ? 'unstable'
+          : null;
     verdicts[source] = { trusted: reason === null, reason, seen };
   }
   return verdicts;
@@ -43,7 +65,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   for (const [name, headers] of Object.entries(CASES)) {
     const response = await fetch(url, { headers, redirect: 'error', signal: AbortSignal.timeout(15_000) });
     const text = await response.text();
-    if (response.status === 403 && /error code: 1000/.test(text) && 'cf-connecting-ip' in headers) { echoes[name] = { rejectedByEdge: true }; continue; }
+    if (response.status === 403 && /error code: 1000/.test(text) && 'cf-connecting-ip' in headers) {
+      echoes[name] = { rejectedByEdge: true };
+      continue;
+    }
     if (!response.ok) throw new Error(`probe-http-${response.status}`);
     echoes[name] = JSON.parse(text);
   }

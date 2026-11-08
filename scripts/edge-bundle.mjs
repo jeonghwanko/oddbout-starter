@@ -13,7 +13,8 @@ export const importSpecifiers = source => [...source.matchAll(SPECIFIER)].map(ma
 
 const REPOSITORY = fileURLToPath(new URL('../', import.meta.url));
 const ENTRY = 'supabase/functions/ai-fighter/index.ts';
-const IMPORT_MAP = 'supabase/functions/ai-fighter/deno.json', LOCK = 'supabase/functions/ai-fighter/deno.lock';
+const IMPORT_MAP = 'supabase/functions/ai-fighter/deno.json',
+  LOCK = 'supabase/functions/ai-fighter/deno.lock';
 
 /**
  * Repository-relative files reachable from the Edge entry. A bare specifier must be in the Deno import map:
@@ -21,7 +22,8 @@ const IMPORT_MAP = 'supabase/functions/ai-fighter/deno.json', LOCK = 'supabase/f
  */
 export async function edgeFiles({ root = REPOSITORY, entry = ENTRY, importMap = IMPORT_MAP, lock = LOCK } = {}) {
   const mapped = JSON.parse(await readFile(path.join(root, importMap), 'utf8')).imports ?? {};
-  const seen = new Set(), pending = [entry];
+  const seen = new Set(),
+    pending = [entry];
   while (pending.length) {
     const file = /** @type {string} */ (pending.pop());
     if (seen.has(file)) continue;
@@ -44,7 +46,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   // This checkout carries a null duel engine. Emitting an upload payload here let a handler-only change
   // erase the live game's engine. Only the game's planner may combine sources, engines and a live version.
   if (process.argv.length !== 3 || process.argv[2] !== '--list') {
-    console.error('Direct Edge deploy payloads are disabled. Use the game repository: npm run fighter:edge -- plan, then deploy --plan <id>. Use --list only to inspect source paths.');
+    console.error(
+      'Direct Edge deploy payloads are disabled. Use the game repository: npm run fighter:edge -- plan, then deploy --plan <id>. Use --list only to inspect source paths.',
+    );
     process.exitCode = 1;
   } else console.log(JSON.stringify(await edgeFiles()));
 }

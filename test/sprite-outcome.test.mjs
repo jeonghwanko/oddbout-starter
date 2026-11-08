@@ -58,31 +58,37 @@ test('a report is read only when this run wrote it and it carries the outcome ke
   assert.equal((await readOutcome(file, { since: Date.now() - 5000 })).provider_submitted, false);
   const old = new Date(Date.now() - 3600_000);
   await utimes(file, old, old);
-  assert.equal(await readOutcome(file, { since: Date.now() }), null, 'an earlier run\'s report never answers for this one');
-  await writeFile(file, JSON.stringify({ provider: 'codex' }));   // a report from before sprite-gen wrote outcomes
+  assert.equal(await readOutcome(file, { since: Date.now() }), null, "an earlier run's report never answers for this one");
+  await writeFile(file, JSON.stringify({ provider: 'codex' })); // a report from before sprite-gen wrote outcomes
   assert.equal(await readOutcome(file), null);
   assert.equal(await readOutcome(path.join(dir, 'none.json')), null);
   assert.equal(await readOutcome(null), null);
 });
 
-test('the kit wrapper passes a stop on and waits for sprite-gen to write its report', { skip: process.platform === 'win32' && 'Windows ends a process on SIGTERM without a handler' }, async () => {
-  const { spawn } = await import('node:child_process');
-  const { readFile: read } = await import('node:fs/promises');
-  const dir = await mkdtemp(path.join(os.tmpdir(), 'sprite-wrapper-'));
-  const done = path.join(dir, 'report.json');
-  // A stand-in for sprite-gen: on SIGTERM it takes a moment to write its report, then exits 143.
-  const engine = `process.on('SIGTERM', () => setTimeout(() => { require('fs').writeFileSync(${JSON.stringify(done)}, 'written'); process.exit(143); }, 300));`
-    + ' console.log("ready"); setInterval(() => {}, 1000);';
-  const wrapper = `import { run } from ${JSON.stringify(new URL('../scripts/sprite-gen.mjs', import.meta.url).href)};`
-    + ` process.exitCode = await run(process.execPath, ['-e', ${JSON.stringify(engine)}]);`;
-  const child = spawn(process.execPath, ['--input-type=module', '-e', wrapper], { stdio: ['ignore', 'pipe', 'inherit'] });
-  await new Promise(resolve => child.stdout.once('data', resolve));
-  child.kill('SIGTERM');   // the wrapper alone, as a stop sent to one process
-  const code = await new Promise(resolve => child.once('exit', resolve));
-  assert.equal(code, 143);
-  assert.equal(await read(done, 'utf8'), 'written', 'the wrapper ended after sprite-gen wrote its report');
-  await rm(dir, { recursive: true, force: true });
-});
+test(
+  'the kit wrapper passes a stop on and waits for sprite-gen to write its report',
+  { skip: process.platform === 'win32' && 'Windows ends a process on SIGTERM without a handler' },
+  async () => {
+    const { spawn } = await import('node:child_process');
+    const { readFile: read } = await import('node:fs/promises');
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'sprite-wrapper-'));
+    const done = path.join(dir, 'report.json');
+    // A stand-in for sprite-gen: on SIGTERM it takes a moment to write its report, then exits 143.
+    const engine =
+      `process.on('SIGTERM', () => setTimeout(() => { require('fs').writeFileSync(${JSON.stringify(done)}, 'written'); process.exit(143); }, 300));` +
+      ' console.log("ready"); setInterval(() => {}, 1000);';
+    const wrapper =
+      `import { run } from ${JSON.stringify(new URL('../scripts/sprite-gen.mjs', import.meta.url).href)};` +
+      ` process.exitCode = await run(process.execPath, ['-e', ${JSON.stringify(engine)}]);`;
+    const child = spawn(process.execPath, ['--input-type=module', '-e', wrapper], { stdio: ['ignore', 'pipe', 'inherit'] });
+    await new Promise(resolve => child.stdout.once('data', resolve));
+    child.kill('SIGTERM'); // the wrapper alone, as a stop sent to one process
+    const code = await new Promise(resolve => child.once('exit', resolve));
+    assert.equal(code, 143);
+    assert.equal(await read(done, 'utf8'), 'written', 'the wrapper ended after sprite-gen wrote its report');
+    await rm(dir, { recursive: true, force: true });
+  },
+);
 
 test('an error whose code is not a string is an outcome nobody can read: never retried, whatever its retryable says', () => {
   for (const odd of [503, null, { status: 503 }]) {

@@ -15,8 +15,13 @@ test('both service languages are built, verified and discoverable at their own c
       await writeFile(join(root, file), `<link rel="canonical" href="https://example.com/${file}">`);
     }
     const urls = await writeSiteDiscovery(root, 'https://example.com/', pages);
-    assert.deepEqual(urls, pages.map(file => `https://example.com/${file}`));
+    assert.deepEqual(
+      urls,
+      pages.map(file => `https://example.com/${file}`),
+    );
     const sitemap = await readFile(join(root, 'sitemap.xml'), 'utf8');
     for (const url of urls) assert.ok(sitemap.includes(`<loc>${url}</loc>`));
-  } finally { await rm(root, { recursive: true, force: true }); }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

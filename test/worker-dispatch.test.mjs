@@ -42,10 +42,16 @@ test('dispatch wakes only pending work, retries expired leases, and hides its cr
     assert.equal(await count(), 1, 'active leases do not wake it');
     await db.exec("update public.af_submissions set lease_until=now()-interval '1 second'; select af_private.wake_worker()");
     assert.equal(await count(), 2, 'expired leases retry');
-    await db.exec("update vault.decrypted_secrets set decrypted_secret='https://untrusted.example/wake' where name='ai_fighter_worker_url'; select af_private.wake_worker()");
+    await db.exec(
+      "update vault.decrypted_secrets set decrypted_secret='https://untrusted.example/wake' where name='ai_fighter_worker_url'; select af_private.wake_worker()",
+    );
     assert.equal(await count(), 2, 'invalid destination fails closed');
-    const permissions = (await db.query(`select has_schema_privilege('authenticated','af_private','usage') as schema_access,
-      has_function_privilege('anon','af_private.wake_worker()','execute') as execute_access`)).rows[0];
+    const permissions = (
+      await db.query(`select has_schema_privilege('authenticated','af_private','usage') as schema_access,
+      has_function_privilege('anon','af_private.wake_worker()','execute') as execute_access`)
+    ).rows[0];
     assert.deepEqual(permissions, { schema_access: false, execute_access: false });
-  } finally { await db.close(); }
+  } finally {
+    await db.close();
+  }
 });

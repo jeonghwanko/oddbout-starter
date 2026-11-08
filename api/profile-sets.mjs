@@ -9,8 +9,17 @@ import { BUCKET } from './submissions.mjs';
 import { probeImage } from './image-probe.mjs';
 import { PROFILE_SET_ASSETS, PROFILE_SET_LIMITS, PROFILE_SET_VERSION, parseProfileSet } from './profile-set-contract.mjs';
 // The set file's contract lives in profile-set-contract.mjs (no imports: the validator and the kit read it); the API's callers import it here.
-export { PROFILE_SET_ASSETS, PROFILE_SET_EXPRESSIONS, PROFILE_SET_EXPRESSIONS_PROMPT, PROFILE_SET_LIMITS, PROFILE_SET_SPEC, PROFILE_SET_STYLE,
-  PROFILE_SET_VERSION, STYLE_ANCHOR_URL, parseProfileSet } from './profile-set-contract.mjs';
+export {
+  PROFILE_SET_ASSETS,
+  PROFILE_SET_EXPRESSIONS,
+  PROFILE_SET_EXPRESSIONS_PROMPT,
+  PROFILE_SET_LIMITS,
+  PROFILE_SET_SPEC,
+  PROFILE_SET_STYLE,
+  PROFILE_SET_VERSION,
+  STYLE_ANCHOR_URL,
+  parseProfileSet,
+} from './profile-set-contract.mjs';
 /** @typedef {import('./profile-set-contract.mjs').ProfileSetFile} ProfileSetFile */
 /** @typedef {import('./profile-set-contract.mjs').FaceSquare} FaceSquare */
 
@@ -31,7 +40,9 @@ export const PUBLIC_BUCKET = 'af-profile-sets';
 /** @type {(value: unknown) => boolean} */
 const int = value => Number.isSafeInteger(value);
 /** @param {unknown} value @returns {value is Record<string, any>} */
-function object(value) { return Boolean(value) && typeof value === 'object' && !Array.isArray(value); }
+function object(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
 
 /**
  * The private object of a set's file: the uploads `front` and `expressions`, the derived `card`, `face` and `sheet`.
@@ -43,8 +54,11 @@ export const publicProfileSetPath = (fighter, sha) => `${fighter}/${sha}.webp`;
 /** The derived files a set has: the card and face always, the arena's sheet when he sent an expression sheet. @param {any} derived */
 export const derivedNames = derived => ['card', 'face', ...(object(derived?.sheet) ? ['sheet'] : [])];
 /** Is this the arena's sheet as the validator makes it? @param {unknown} sheet */
-const runtimeSheet = sheet => object(sheet) && sheet.width === PROFILE_SET_LIMITS.sheet.width && sheet.height === PROFILE_SET_LIMITS.sheet.height
-  && sheet.cell === PROFILE_SET_LIMITS.sheet.cell;
+const runtimeSheet = sheet =>
+  object(sheet) &&
+  sheet.width === PROFILE_SET_LIMITS.sheet.width &&
+  sheet.height === PROFILE_SET_LIMITS.sheet.height &&
+  sheet.cell === PROFILE_SET_LIMITS.sheet.cell;
 
 /**
  * The roster's `profileSet` for a fighter whose approved set af_roster_entries joined (`profile_set`), or nothing. The addresses are this
@@ -55,7 +69,10 @@ const runtimeSheet = sheet => object(sheet) && sheet.width === PROFILE_SET_LIMIT
  *   expressions?: { url: string, width: number, height: number, cell: number } } }}
  */
 export function rosterProfileSet(db, row) {
-  const set = row.profile_set, card = set?.derived?.card, face = set?.derived?.face, sheet = set?.derived?.sheet;
+  const set = row.profile_set,
+    card = set?.derived?.card,
+    face = set?.derived?.face,
+    sheet = set?.derived?.sheet;
   if (!set || !object(card) || !object(face) || !object(card.face)) return {};
   const bucket = db.storage?.from?.(PUBLIC_BUCKET);
   if (typeof bucket?.getPublicUrl !== 'function') return {};
@@ -65,23 +82,58 @@ export function rosterProfileSet(db, row) {
     const address = bucket.getPublicUrl(publicProfileSetPath(row.id, sha))?.data?.publicUrl;
     return typeof address === 'string' && address.startsWith('https://') ? address : null;
   };
-  const cardUrl = url(card.sha256), faceUrl = url(face.sha256);
-  if (!cardUrl || !faceUrl || ![card.width, card.height, card.face.x, card.face.y, card.face.side, face.size].every(int)
-    || card.height !== PROFILE_SET_LIMITS.cardHeight || card.width < 1 || card.width > PROFILE_SET_LIMITS.cardMaxWidth || face.size !== PROFILE_SET_LIMITS.faceSize) return {};
+  const cardUrl = url(card.sha256),
+    faceUrl = url(face.sha256);
+  if (
+    !cardUrl ||
+    !faceUrl ||
+    ![card.width, card.height, card.face.x, card.face.y, card.face.side, face.size].every(int) ||
+    card.height !== PROFILE_SET_LIMITS.cardHeight ||
+    card.width < 1 ||
+    card.width > PROFILE_SET_LIMITS.cardMaxWidth ||
+    face.size !== PROFILE_SET_LIMITS.faceSize
+  )
+    return {};
   // A sheet that does not read leaves his card and face: the arena then shows his face square for every mood.
   const sheetUrl = runtimeSheet(sheet) ? url(sheet.sha256) : null;
-  return { profileSet: { id: set.id, card: { url: cardUrl, width: card.width, height: card.height,
-    face: { x: card.face.x, y: card.face.y, side: card.face.side } }, face: { url: faceUrl, size: face.size },
-    ...(sheetUrl ? { expressions: { url: sheetUrl, width: sheet.width, height: sheet.height, cell: sheet.cell } } : {}) } };
+  return {
+    profileSet: {
+      id: set.id,
+      card: { url: cardUrl, width: card.width, height: card.height, face: { x: card.face.x, y: card.face.y, side: card.face.side } },
+      face: { url: faceUrl, size: face.size },
+      ...(sheetUrl ? { expressions: { url: sheetUrl, width: sheet.width, height: sheet.height, cell: sheet.cell } } : {}),
+    },
+  };
 }
 
 /** The refusals of the profile-set functions and their statuses. @type {Readonly<Record<string, number>>} */
 export const PROFILE_SET_STATUS = Object.freeze({
-  'idempotency-conflict': 409, 'open-profile-set-exists': 409, 'profile-set-quota': 409, 'submissions-paused': 409, 'assets-incomplete': 409,
-  'upload-expired': 409, 'upload-closed': 409, 'stale-validation': 409, 'review-conflict': 409, 'fighter-deleted': 409,
-  'not-found': 404, 'fighter-not-found': 404, 'rate-limit': 429, 'account-disabled': 403, 'admin-required': 403,
-  'validator-version': 400, 'validation-incomplete': 400, 'validation-result-limit': 400, 'invalid-release-code': 400, 'invalid-review': 400,
-  'invalid-query': 400, 'byte-budget-mismatch': 422, 'invalid-reason': 400, 'fighter-mismatch': 409, 'stale-check': 409, 'invalid-verdict': 422,
+  'idempotency-conflict': 409,
+  'open-profile-set-exists': 409,
+  'profile-set-quota': 409,
+  'submissions-paused': 409,
+  'assets-incomplete': 409,
+  'upload-expired': 409,
+  'upload-closed': 409,
+  'stale-validation': 409,
+  'review-conflict': 409,
+  'fighter-deleted': 409,
+  'not-found': 404,
+  'fighter-not-found': 404,
+  'rate-limit': 429,
+  'account-disabled': 403,
+  'admin-required': 403,
+  'validator-version': 400,
+  'validation-incomplete': 400,
+  'validation-result-limit': 400,
+  'invalid-release-code': 400,
+  'invalid-review': 400,
+  'invalid-query': 400,
+  'byte-budget-mismatch': 422,
+  'invalid-reason': 400,
+  'fighter-mismatch': 409,
+  'stale-check': 409,
+  'invalid-verdict': 422,
 });
 
 /** Is this path a profile set's? (The worker's are under `worker/`, the operator's under `admin/`.) @param {string[]} parts */
@@ -98,22 +150,53 @@ const uploadExpired = row => row.status === 'uploading' && Date.parse(row.expire
  * @param {ProfileSetRow} row @param {Record<string, string | null>} [urls]
  */
 export function profileSetView(row, urls) {
-  const card = row.derived?.card, face = row.derived?.face, sheet = row.derived?.sheet, expressions = row.manifest.expressions;
-  return { ok: true, stage: row.status, profileSetId: row.id, fighterId: row.fighter_id, manifestSha256: row.manifest_sha,
-    front: row.manifest.front, face: row.manifest.face, ...(expressions ? { expressions } : {}), ...(uploadExpired(row) ? { code: 'upload-expired' } : {}),
-    ...(row.status === 'uploading' && !uploadExpired(row) ? { assets: [{ id: 'front', bytes: row.manifest.front.bytes, sha256: row.manifest.front.sha256 },
-      ...(expressions ? [{ id: 'expressions', bytes: expressions.bytes, sha256: expressions.sha256 }] : [])] } : {}),
-    ...(card && face ? { derived: { card: { width: card.width, height: card.height, face: card.face }, face: { size: face.size },
-      ...(sheet ? { sheet: { width: sheet.width, height: sheet.height, cell: sheet.cell } } : {}) } } : {}),
-    ...(row.reason ? { reason: row.reason } : {}), ...(row.validation?.errors ? { errors: row.validation.errors } : {}),
+  const card = row.derived?.card,
+    face = row.derived?.face,
+    sheet = row.derived?.sheet,
+    expressions = row.manifest.expressions;
+  return {
+    ok: true,
+    stage: row.status,
+    profileSetId: row.id,
+    fighterId: row.fighter_id,
+    manifestSha256: row.manifest_sha,
+    front: row.manifest.front,
+    face: row.manifest.face,
+    ...(expressions ? { expressions } : {}),
+    ...(uploadExpired(row) ? { code: 'upload-expired' } : {}),
+    ...(row.status === 'uploading' && !uploadExpired(row)
+      ? {
+          assets: [
+            { id: 'front', bytes: row.manifest.front.bytes, sha256: row.manifest.front.sha256 },
+            ...(expressions ? [{ id: 'expressions', bytes: expressions.bytes, sha256: expressions.sha256 }] : []),
+          ],
+        }
+      : {}),
+    ...(card && face
+      ? {
+          derived: {
+            card: { width: card.width, height: card.height, face: card.face },
+            face: { size: face.size },
+            ...(sheet ? { sheet: { width: sheet.width, height: sheet.height, cell: sheet.cell } } : {}),
+          },
+        }
+      : {}),
+    ...(row.reason ? { reason: row.reason } : {}),
+    ...(row.validation?.errors ? { errors: row.validation.errors } : {}),
     // A sheet the validator left out of a passing set (2026-11-03): the set goes on with his face square only.
     ...(Array.isArray(row.validation?.sheetErrors) && row.validation.sheetErrors.length ? { sheetErrors: row.validation.sheetErrors } : {}),
     ...frontCheckView(row),
-    createdAt: row.created_at, ...(row.approved_at ? { approvedAt: row.approved_at } : {}), ...(urls ? { urls } : {}),
-    pending: { uploading: [...PROFILE_SET_ASSETS.filter(id => id === 'front' || expressions).map(id => `upload-${id}`), 'submit'],
-      queued: ['server-validation', ...(row.based_on ? [] : ['front-check']), 'operator-review'],
-      validating: ['server-validation', ...(row.based_on ? [] : ['front-check']), 'operator-review'],
-      review: [...(frontCheckPending(row) ? ['front-check'] : []), 'operator-review'] }[row.status] ?? [] };
+    createdAt: row.created_at,
+    ...(row.approved_at ? { approvedAt: row.approved_at } : {}),
+    ...(urls ? { urls } : {}),
+    pending:
+      {
+        uploading: [...PROFILE_SET_ASSETS.filter(id => id === 'front' || expressions).map(id => `upload-${id}`), 'submit'],
+        queued: ['server-validation', ...(row.based_on ? [] : ['front-check']), 'operator-review'],
+        validating: ['server-validation', ...(row.based_on ? [] : ['front-check']), 'operator-review'],
+        review: [...(frontCheckPending(row) ? ['front-check'] : []), 'operator-review'],
+      }[row.status] ?? [],
+  };
 }
 /** @type {(row: ProfileSetRow) => boolean} */
 const frontCheckPending = row => row.status === 'review' && !row.front_check && !row.based_on;
@@ -135,17 +218,21 @@ function frontCheckView(row) {
  * @param {any} db @param {ProfileSetRow} row @param {number} seconds @returns {Promise<Record<string, string | null>>}
  */
 export async function signProfileSet(db, row, seconds) {
-  const names = [...(row.status === 'uploading' ? [] : ['front', ...(row.manifest.expressions ? ['expressions'] : [])]),
-    ...(row.derived ? derivedNames(row.derived).filter(name => object(row.derived[name])) : [])];
+  const names = [
+    ...(row.status === 'uploading' ? [] : ['front', ...(row.manifest.expressions ? ['expressions'] : [])]),
+    ...(row.derived ? derivedNames(row.derived).filter(name => object(row.derived[name])) : []),
+  ];
   if (!names.length) return {};
   const paths = names.map(name => profileSetKey(row.owner_id, row.id, name));
   const { data, error } = await db.storage.from(BUCKET).createSignedUrls(paths, seconds);
   if (error || !Array.isArray(data)) throw unavailable('storage-unavailable', error);
   const signed = new Map(data.map(item => [item?.path, item]));
-  return Object.fromEntries(names.map((name, index) => {
-    const item = signed.get(paths[index]);
-    return [name, item && !item.error && typeof item.signedUrl === 'string' ? item.signedUrl : null];
-  }));
+  return Object.fromEntries(
+    names.map((name, index) => {
+      const item = signed.get(paths[index]);
+      return [name, item && !item.error && typeof item.signedUrl === 'string' ? item.signedUrl : null];
+    }),
+  );
 }
 
 /** @type {(bytes: Uint8Array) => boolean} */
@@ -161,14 +248,19 @@ export async function storeOnce(db, bucketName, path, bytes, hash, upsert = fals
   const { error } = await bucket.upload(path, bytes, { contentType: 'image/webp', cacheControl, upsert });
   if (!error) return true;
   const { data, error: getError } = await bucket.download(path);
-  if (getError || !data || data.size !== bytes.length || await sha256(new Uint8Array(await data.arrayBuffer())) !== hash) throw unavailable('storage-unavailable', getError);
+  if (getError || !data || data.size !== bytes.length || (await sha256(new Uint8Array(await data.arrayBuffer()))) !== hash)
+    throw unavailable('storage-unavailable', getError);
   return false;
 }
 
 /** A small JSON body. @param {Request} request @param {number} limit */
 async function jsonBody(request, limit) {
-  try { return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, limit))); }
-  catch (error) { if (error instanceof Problem) throw error; throw new Problem(400, 'invalid-body'); }
+  try {
+    return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, limit)));
+  } catch (error) {
+    if (error instanceof Problem) throw error;
+    throw new Problem(400, 'invalid-body');
+  }
 }
 
 /**
@@ -207,8 +299,13 @@ export function createProfileSetHandler({ db, authenticate }) {
         if (!UUID.test(parts[1] ?? '')) throw new Problem(400, 'invalid-id');
         const fighter = parts[1].toLowerCase();
         if (method === 'GET') {
-          const { data, error } = await db.from('af_profile_sets').select('*').eq('fighter_id', fighter).eq('owner_id', owner)
-            .order('created_at', { ascending: false }).limit(10);
+          const { data, error } = await db
+            .from('af_profile_sets')
+            .select('*')
+            .eq('fighter_id', fighter)
+            .eq('owner_id', owner)
+            .order('created_at', { ascending: false })
+            .limit(10);
           if (error) throw unavailable('database-unavailable', error);
           return json({ ok: true, fighterId: fighter, profileSets: (data ?? []).map(/** @param {ProfileSetRow} row */ row => profileSetView(row)) });
         }
@@ -216,24 +313,36 @@ export function createProfileSetHandler({ db, authenticate }) {
         const key = request.headers.get('idempotency-key');
         if (!UUID.test(key ?? '')) throw new Problem(400, 'invalid-id');
         let text;
-        try { text = new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, PROFILE_SET_LIMITS.jsonBytes)); }
-        catch (error) { if (error instanceof Problem) throw error; throw new Problem(400, 'invalid-utf8'); }
+        try {
+          text = new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, PROFILE_SET_LIMITS.jsonBytes));
+        } catch (error) {
+          if (error instanceof Problem) throw error;
+          throw new Problem(400, 'invalid-utf8');
+        }
         const parsed = parseProfileSet(text);
         if (!parsed.ok) throw new Problem(422, 'invalid-profile-set', parsed.errors);
-        const row = await rpc('af_profile_set_create', { p_owner: owner, p_fighter: fighter, p_key: /** @type {string} */ (key).toLowerCase(), p_text: text,
-          p_sha: await sha256(new TextEncoder().encode(text)), p_bytes: parsed.data.front.bytes });
+        const row = await rpc('af_profile_set_create', {
+          p_owner: owner,
+          p_fighter: fighter,
+          p_key: /** @type {string} */ (key).toLowerCase(),
+          p_text: text,
+          p_sha: await sha256(new TextEncoder().encode(text)),
+          p_bytes: parsed.data.front.bytes,
+        });
         return json(profileSetView(row));
       }
       const row = await readSet(parts[1], owner);
       if (method === 'GET' && parts.length === 2) return json(profileSetView(row, await signProfileSet(db, row, 600)));
-      if (method === 'POST' && parts.length === 3 && parts[2] === 'submit') return json(profileSetView(await rpc('af_profile_set_submit', { p_owner: owner, p_id: row.id })));
+      if (method === 'POST' && parts.length === 3 && parts[2] === 'submit')
+        return json(profileSetView(await rpc('af_profile_set_submit', { p_owner: owner, p_id: row.id })));
       if (method === 'PUT' && parts.length === 4 && parts[2] === 'assets' && PROFILE_SET_ASSETS.includes(parts[3])) {
-        const id = /** @type {'front' | 'expressions'} */ (parts[3]), file = row.manifest[id];
+        const id = /** @type {'front' | 'expressions'} */ (parts[3]),
+          file = row.manifest[id];
         if (!file) throw new Problem(404, 'route-not-found');
         if (row.status !== 'uploading' || uploadExpired(row)) throw new Problem(409, 'upload-closed');
         if (request.headers.get('content-type') !== 'image/webp') throw new Problem(415, 'webp-required');
         const bytes = await readBody(request, file.bytes);
-        if (bytes.length !== file.bytes || await sha256(bytes) !== file.sha256) throw new Problem(422, 'asset-hash-or-size');
+        if (bytes.length !== file.bytes || (await sha256(bytes)) !== file.sha256) throw new Problem(422, 'asset-hash-or-size');
         if (!webp(bytes)) throw new Problem(422, 'webp-required');
         await storeOnce(db, BUCKET, profileSetKey(row.owner_id, row.id, id), bytes, file.sha256);
         return json({ ok: true, stage: 'uploaded', assetId: id, bytes: bytes.length });
@@ -241,7 +350,8 @@ export function createProfileSetHandler({ db, authenticate }) {
       throw new Problem(404, 'route-not-found');
     } catch (error) {
       logFailure('profile-sets', request, error);
-      if (error instanceof Problem) return json({ ok: false, stage: 'api', code: error.message, ...(error.errors ? { errors: error.errors } : {}) }, error.status);
+      if (error instanceof Problem)
+        return json({ ok: false, stage: 'api', code: error.message, ...(error.errors ? { errors: error.errors } : {}) }, error.status);
       return json({ ok: false, stage: 'api', code: 'service-unavailable' }, 503);
     }
   };
@@ -251,7 +361,8 @@ export function createProfileSetHandler({ db, authenticate }) {
    * @param {Request} request @param {string[]} parts @param {string | null} _worker
    */
   async function workerRoute(request, parts, _worker) {
-    const route = parts.slice(2).join('/'), method = request.method;
+    const route = parts.slice(2).join('/'),
+      method = request.method;
     if (method === 'PUT' && parts.length === 5 && parts[3] === 'derived' && ['card', 'face', 'sheet'].includes(parts[4])) {
       const lease = request.headers.get('x-profile-set-lease');
       if (!UUID.test(lease ?? '')) throw new Problem(400, 'invalid-id');
@@ -277,15 +388,36 @@ export function createProfileSetHandler({ db, authenticate }) {
       // The lease is five minutes; the URL outlives it so a slow job fails on its deadline, not on a dead link.
       const { front, expressions } = await signProfileSet(db, { ...row, derived: null }, 360);
       if (!front || (row.manifest.expressions && !expressions)) throw new Problem(503, 'storage-unavailable');
-      return { ok: true, stage: 'validating', profileSetId: row.id, leaseToken: row.lease_token, manifestText: row.manifest_text,
-        manifestSha256: row.manifest_sha, front: { ...row.manifest.front, downloadUrl: front }, face: row.manifest.face,
-        ...(row.manifest.expressions ? { expressions: { ...row.manifest.expressions, downloadUrl: expressions } } : {}) };
+      return {
+        ok: true,
+        stage: 'validating',
+        profileSetId: row.id,
+        leaseToken: row.lease_token,
+        manifestText: row.manifest_text,
+        manifestSha256: row.manifest_sha,
+        front: { ...row.manifest.front, downloadUrl: front },
+        face: row.manifest.face,
+        ...(row.manifest.expressions ? { expressions: { ...row.manifest.expressions, downloadUrl: expressions } } : {}),
+      };
     }
     if (route === 'finish') {
-      if (!UUID.test(body.profileSetId ?? '') || !UUID.test(body.leaseToken ?? '') || !/^[a-f0-9]{64}$/.test(body.manifestSha256 ?? '')
-        || typeof body.passed !== 'boolean' || !object(body.result) || (body.passed && !object(body.derived))) throw new Problem(400, 'invalid-result');
-      const row = await rpc('af_profile_set_finish', { p_id: body.profileSetId, p_lease: body.leaseToken, p_sha: body.manifestSha256,
-        p_passed: body.passed, p_result: body.result, p_derived: body.passed ? body.derived : null });
+      if (
+        !UUID.test(body.profileSetId ?? '') ||
+        !UUID.test(body.leaseToken ?? '') ||
+        !/^[a-f0-9]{64}$/.test(body.manifestSha256 ?? '') ||
+        typeof body.passed !== 'boolean' ||
+        !object(body.result) ||
+        (body.passed && !object(body.derived))
+      )
+        throw new Problem(400, 'invalid-result');
+      const row = await rpc('af_profile_set_finish', {
+        p_id: body.profileSetId,
+        p_lease: body.leaseToken,
+        p_sha: body.manifestSha256,
+        p_passed: body.passed,
+        p_result: body.result,
+        p_derived: body.passed ? body.derived : null,
+      });
       return profileSetView(row);
     }
     if (route === 'release') {
@@ -315,7 +447,7 @@ export async function publishProfileSet(db, set) {
     if (error || !data) throw unavailable('storage-unavailable', error);
     const bytes = new Uint8Array(await data.arrayBuffer());
     // The private object can change only under a live validation lease; what the operator approves is what the validator recorded.
-    if (bytes.length !== file.bytes || await sha256(bytes) !== file.sha256) throw new Problem(409, 'review-conflict');
+    if (bytes.length !== file.bytes || (await sha256(bytes)) !== file.sha256) throw new Problem(409, 'review-conflict');
     const path = publicProfileSetPath(set.fighterId, file.sha256);
     if (await storeOnce(db, PUBLIC_BUCKET, path, bytes, file.sha256, false, '86400')) written.push(path);
   }
@@ -331,13 +463,19 @@ export async function removePublicFiles(db, fighterId, paths) {
   if (!paths.length) return true;
   const bucket = db.storage.from(PUBLIC_BUCKET);
   /** @type {() => Promise<any>} */
-  const remove = () => Promise.resolve().then(() => bucket.remove(paths)).catch(caught => ({ error: caught }));
+  const remove = () =>
+    Promise.resolve()
+      .then(() => bucket.remove(paths))
+      .catch(caught => ({ error: caught }));
   let result = await remove();
   if (result?.error) result = await remove();
   if (!result?.error) return true;
   // The record answers `{ error }` or throws as Storage does; one that did not land leaves the log line, the only trace of these copies.
-  const recorded = await Promise.resolve().then(() => db.rpc('af_profile_set_cleanup_failed', { p_fighter: fighterId, p_paths: paths,
-    p_error: String(result.error?.message ?? result.error).slice(0, 200) })).catch(caught => ({ error: caught }));
+  const recorded = await Promise.resolve()
+    .then(() =>
+      db.rpc('af_profile_set_cleanup_failed', { p_fighter: fighterId, p_paths: paths, p_error: String(result.error?.message ?? result.error).slice(0, 200) }),
+    )
+    .catch(caught => ({ error: caught }));
   if (recorded?.error) logSkipped('profile-sets', 'public-cleanup-record', recorded.error);
   return false;
 }
@@ -355,10 +493,12 @@ export async function cleanupPublicFiles(db, fighterId) {
     /** @type {string[]} */
     const shas = data.flatMap(row => (Array.isArray(row?.shas) ? row.shas : [])).filter(sha => typeof sha === 'string' && /^[a-f0-9]{64}$/.test(sha));
     const paths = [...new Set(shas)].map(sha => publicProfileSetPath(fighterId, sha));
-    if (!await removePublicFiles(db, fighterId, paths)) return { removed: 0, failed: paths.length };
+    if (!(await removePublicFiles(db, fighterId, paths))) return { removed: 0, failed: paths.length };
     await db.rpc('af_profile_set_unpublished', { p_fighter: fighterId, p_ids: data.map(row => row.id) });
     return { removed: paths.length };
-  } catch { return { removed: 0 }; }
+  } catch {
+    return { removed: 0 };
+  }
 }
 
 /**
@@ -373,7 +513,11 @@ export async function cleanupPublicFiles(db, fighterId) {
  */
 export async function addOperatorSheet(db, { actor, setId, fighterId, key, reason, bytes }) {
   /** @param {string} name @param {Record<string, unknown>} args */
-  const rpc = async (name, args) => { const { data, error } = await db.rpc(name, args); if (error) throw rpcProblem(error, PROFILE_SET_STATUS); return data; };
+  const rpc = async (name, args) => {
+    const { data, error } = await db.rpc(name, args);
+    if (error) throw rpcProblem(error, PROFILE_SET_STATUS);
+    return data;
+  };
   const { data: from, error } = await db.from('af_profile_sets').select('*').eq('id', setId).maybeSingle();
   if (error) throw unavailable('database-unavailable', error);
   if (!from) throw new Problem(404, 'not-found');
@@ -387,7 +531,12 @@ export async function addOperatorSheet(db, { actor, setId, fighterId, key, reaso
   if (!parsed.ok) throw new Problem(422, 'invalid-profile-set', parsed.errors);
   const sha = await sha256(new TextEncoder().encode(text));
   // A retry after the set went past its upload (even approved, which supersedes `from`): the same set, for the same sheet only.
-  const { data: earlier, error: earlierError } = await db.from('af_profile_sets').select('*').eq('owner_id', from.owner_id).eq('idempotency_key', key).maybeSingle();
+  const { data: earlier, error: earlierError } = await db
+    .from('af_profile_sets')
+    .select('*')
+    .eq('owner_id', from.owner_id)
+    .eq('idempotency_key', key)
+    .maybeSingle();
   if (earlierError) throw unavailable('database-unavailable', earlierError);
   if (earlier && (earlier.manifest_sha !== sha || earlier.based_on !== from.id)) throw new Problem(409, 'idempotency-conflict');
   if (earlier && earlier.status !== 'uploading') return profileSetView(earlier);
@@ -396,10 +545,17 @@ export async function addOperatorSheet(db, { actor, setId, fighterId, key, reaso
   const { data: download, error: downloadError } = await db.storage.from(BUCKET).download(profileSetKey(from.owner_id, from.id, 'front'));
   if (downloadError || !download) throw unavailable('storage-unavailable', downloadError);
   const frontBytes = new Uint8Array(await download.arrayBuffer());
-  if (frontBytes.length !== front.bytes || await sha256(frontBytes) !== front.sha256) throw new Problem(409, 'review-conflict');
+  if (frontBytes.length !== front.bytes || (await sha256(frontBytes)) !== front.sha256) throw new Problem(409, 'review-conflict');
   /** @type {ProfileSetRow} */
-  const row = await rpc('af_admin_profile_set_expressions', { p_actor: actor, p_from: from.id, p_key: key, p_text: text, p_sha: sha,
-    p_bytes: front.bytes, p_reason: reason });
+  const row = await rpc('af_admin_profile_set_expressions', {
+    p_actor: actor,
+    p_from: from.id,
+    p_key: key,
+    p_text: text,
+    p_sha: sha,
+    p_bytes: front.bytes,
+    p_reason: reason,
+  });
   if (row.status !== 'uploading') return profileSetView(row);
   try {
     await storeOnce(db, BUCKET, profileSetKey(row.owner_id, row.id, 'front'), frontBytes, front.sha256);
@@ -421,7 +577,10 @@ export async function claimFrontCheck(db, host) {
   if (error) throw rpcProblem(error, PROFILE_SET_STATUS);
   if (!row?.id) return null;
   // A link Storage cannot sign is the API's failure, not a take: the set goes back to the queue.
-  const front = await signProfileSet(db, { ...row, derived: null }, 600).then(urls => urls.front, () => null);
+  const front = await signProfileSet(db, { ...row, derived: null }, 600).then(
+    urls => urls.front,
+    () => null,
+  );
   if (!front) {
     await db.rpc('af_profile_set_front_release', { p_id: row.id, p_lease: row.front_lease_token });
     throw new Problem(503, 'storage-unavailable');
@@ -446,9 +605,13 @@ export async function releaseFrontCheck(db, host, body) {
  */
 export async function finishFrontCheck(db, host, body) {
   if (host !== null) throw new Problem(403, 'worker-required');
-  if (!object(body) || !UUID.test(body.profileSetId ?? '') || !UUID.test(body.leaseToken ?? '') || !object(body.verdict)) throw new Problem(400, 'invalid-result');
-  const { data: row, error } = await db.rpc('af_profile_set_front_finish', { p_id: body.profileSetId.toLowerCase(),
-    p_lease: body.leaseToken.toLowerCase(), p_verdict: body.verdict });
+  if (!object(body) || !UUID.test(body.profileSetId ?? '') || !UUID.test(body.leaseToken ?? '') || !object(body.verdict))
+    throw new Problem(400, 'invalid-result');
+  const { data: row, error } = await db.rpc('af_profile_set_front_finish', {
+    p_id: body.profileSetId.toLowerCase(),
+    p_lease: body.leaseToken.toLowerCase(),
+    p_verdict: body.verdict,
+  });
   if (error) throw rpcProblem(error, PROFILE_SET_STATUS);
   return { ok: true, profileSetId: row.id, stage: row.status, ...frontCheckView(row) };
 }
@@ -459,6 +622,7 @@ export async function finishFrontCheck(db, host, body) {
  * @param {any} db @param {string} id
  */
 export async function expireUpload(db, id) {
-  await Promise.resolve().then(() => db.from('af_profile_sets').update({ expires_at: new Date().toISOString() }).eq('id', id).eq('status', 'uploading'))
+  await Promise.resolve()
+    .then(() => db.from('af_profile_sets').update({ expires_at: new Date().toISOString() }).eq('id', id).eq('status', 'uploading'))
     .catch(() => {});
 }

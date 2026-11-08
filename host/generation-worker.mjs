@@ -15,8 +15,23 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createStages } from './generation-stages.mjs';
-import { ASKS, CODEX_CWD, FRONT_JUDGE_SCHEMA, GROK_LIMITED, PIXEL_JUDGE, frontJobId, frontJudgePrompt, frontVerdict, imageProviderOf,
-  judgeCommand, judgesFor, judgesMode, judgesNeedCodex, ogJobId, requestedModels } from './generation-prompts.mjs';
+import {
+  ASKS,
+  CODEX_CWD,
+  FRONT_JUDGE_SCHEMA,
+  GROK_LIMITED,
+  PIXEL_JUDGE,
+  frontJobId,
+  frontJudgePrompt,
+  frontVerdict,
+  imageProviderOf,
+  judgeCommand,
+  judgesFor,
+  judgesMode,
+  judgesNeedCodex,
+  ogJobId,
+  requestedModels,
+} from './generation-prompts.mjs';
 import { JUDGE_ARCHIVE_DAYS, JUDGE_ARCHIVE_DIR, JUDGE_ARCHIVE_SALT, createJudgeArchive, judgeArchiveDays, judgeImageDays } from './judge-archive.mjs';
 import { codexSessionFacts, codexTokensSince, codexUsage } from './codex-usage.mjs';
 
@@ -29,8 +44,17 @@ const ROOT = process.env.OG_ROOT || path.dirname(path.dirname(fileURLToPath(impo
 /** The kit's sprite-gen venv Python (scripts/sprite-gen.mjs `spritePython`): Windows keeps a venv's programs in Scripts\ as .exe. */
 export const spritePython = (/** @type {string} */ kit, /** @type {string} */ platform = process.platform) =>
   path.join(kit, 'vendor', 'sprite-gen', '.venv', ...(platform === 'win32' ? ['Scripts', 'python.exe'] : ['bin', 'python']));
-export const TIMING = Object.freeze({ heartbeatMs: 60_000, healthMs: 3_600_000, idleMs: 15_000, idleMaxMs: 60_000, renewMs: 60_000, errorMs: 60_000,
-  pruneMs: 86_400_000, askedRecheckMs: 900_000, beatFloorMs: 10_000 });
+export const TIMING = Object.freeze({
+  heartbeatMs: 60_000,
+  healthMs: 3_600_000,
+  idleMs: 15_000,
+  idleMaxMs: 60_000,
+  renewMs: 60_000,
+  errorMs: 60_000,
+  pruneMs: 86_400_000,
+  askedRecheckMs: 900_000,
+  beatFloorMs: 10_000,
+});
 /**
  * The wait after a claim that took nothing (2026-11-07): idleMs, doubling to idleMaxMs while nothing comes, idleMs again after a job. Two
  * workers claiming every 15 s and beating every minute were 83 % of the project's Edge requests (the free plan's month is 500,000); a request
@@ -50,7 +74,9 @@ export const nextIdleWait = wait => Math.min(wait * 2, TIMING.idleMaxMs);
  * @param {() => number} [now]
  */
 export function createBeats(now = Date.now) {
-  let inClaim = false, urgent = false, at = 0;
+  let inClaim = false,
+    urgent = false,
+    at = 0;
   const due = (aheadMs = 0) => urgent || now() - at + aheadMs >= TIMING.heartbeatMs;
   return {
     /** @param {boolean} claiming this turn claims (healthy) @param {number} [aheadMs] @returns {boolean} beat on its own route now */
@@ -67,16 +93,25 @@ export function createBeats(now = Date.now) {
      * A heartbeat went through on its own route; its reply says whether claims take one.
      * @param {{ claimBeats?: boolean } | null | undefined} [reply]
      */
-    beaten: reply => { at = now(); urgent = false; if (reply?.claimBeats === true) inClaim = true; },
+    beaten: reply => {
+      at = now();
+      urgent = false;
+      if (reply?.claimBeats === true) inClaim = true;
+    },
     /** The next turn beats on its own route before it claims: the health changed. */
-    reset: () => { urgent = true; },
+    reset: () => {
+      urgent = true;
+    },
     /**
      * What a carrying claim's reply says: 'taken' (`beat: true`), else 'apart' — beat on the heartbeat route now (a failed claim teaches nothing;
      * one answered without `beat` stops the carrying).
      * @param {{ ok?: boolean, beat?: boolean } | null | undefined} reply @returns {'taken' | 'apart'}
      */
     claimed: reply => {
-      if (reply?.ok && reply.beat === true) { at = now(); return 'taken'; }
+      if (reply?.ok && reply.beat === true) {
+        at = now();
+        return 'taken';
+      }
       if (reply?.ok) inClaim = false;
       return 'apart';
     },
@@ -91,12 +126,21 @@ export function createBeats(now = Date.now) {
 export const STAGE_LIMIT_MS = Object.freeze({ queued: 20 * 60_000, appearance: 45 * 60_000, motions: 150 * 60_000, submitting: 30 * 60_000 });
 export const stageLimitMs = (/** @type {string} */ status) => /** @type {Record<string, number>} */ (STAGE_LIMIT_MS)[status] ?? 150 * 60_000;
 /** Days a closed job's folder stays (worker.env ODDBOUT_GENERATION_KEEP_DAYS, 1-90): the requester's words and pictures are his. @param {unknown} value */
-export const keepDays = value => { const days = Number(value ?? 7); return Number.isInteger(days) && days >= 1 && days <= 90 ? days : 7; };
+export const keepDays = value => {
+  const days = Number(value ?? 7);
+  return Number.isInteger(days) && days >= 1 && days <= 90 ? days : 7;
+};
 
 /** `KEY=value` lines (no quoting, no expansion). @param {string} text @returns {Record<string, string>} */
 export function parseEnv(text) {
-  return Object.fromEntries(text.split('\n').map(line => line.trim()).filter(line => line && !line.startsWith('#'))
-    .map(line => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]).filter(([key]) => /^[A-Z_][A-Z0-9_]*$/.test(key)));
+  return Object.fromEntries(
+    text
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line && !line.startsWith('#'))
+      .map(line => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)])
+      .filter(([key]) => /^[A-Z_][A-Z0-9_]*$/.test(key)),
+  );
 }
 
 /**
@@ -112,7 +156,7 @@ export const canWork = ({ codex, grok }, configured) => Boolean(grok && (codex |
  * draws, af_generation_claim_for): Grok's with grok, GPT's with codex as well (their walk and run are Grok clips).
  * @param {{ codex: boolean, grok: boolean }} logins @returns {string[]}
  */
-export const imagesOf = ({ codex, grok }) => grok ? (codex ? ['grok', 'gpt'] : ['grok']) : [];
+export const imagesOf = ({ codex, grok }) => (grok ? (codex ? ['grok', 'gpt'] : ['grok']) : []);
 /** A health with these logins: whether it may claim (canWork) and the pictures it draws (imagesOf), the rest kept.
  * @param {Record<string, any>} health @param {{ codex: boolean, grok: boolean }} logins @param {string | undefined} configured @param {boolean} [ok]
  * @returns {Health} */
@@ -123,7 +167,7 @@ const withLogins = (health, logins, configured, ok = true) =>
  * reads them). The logins' own keys always win: `about` never says a PC may claim.
  * @param {Health} health @param {Record<string, string> | null} about
  */
-export const aboutHealth = (health, about) => about ? { ...about, ...health } : health;
+export const aboutHealth = (health, about) => (about ? { ...about, ...health } : health);
 /** What of the health the server claims on (not when it was checked): a change sends the heartbeat before the next claim. @param {Health} health */
 export const healthKey = health => JSON.stringify([health.ok, health.codex, health.grok, health.images]);
 /** `og health` lines → { ok, codex, grok, images, at }: `ok` says this host may claim (canWork), `codex` and `grok` each login.
@@ -149,8 +193,10 @@ export async function unclosedJobs(output) {
 }
 
 /** @param {string} dir @returns {Promise<string | null>} */
-const gitHead = dir => new Promise(resolve => execFile('git', ['-C', dir, 'rev-parse', 'HEAD'], { timeout: 10_000 },
-  (error, out) => resolve(error ? null : String(out).trim().slice(0, 40))));
+const gitHead = dir =>
+  new Promise(resolve =>
+    execFile('git', ['-C', dir, 'rev-parse', 'HEAD'], { timeout: 10_000 }, (error, out) => resolve(error ? null : String(out).trim().slice(0, 40))),
+  );
 /**
  * What made a stage's work (measurement, 2026-10-29): the kit and engine commits and the models, sent as a `versions` event when the
  * stage starts, so each number in docs/MEASUREMENT.md can be read per release. A commit that cannot be read is null, never a failure.
@@ -161,8 +207,12 @@ const gitHead = dir => new Promise(resolve => execFile('git', ['-C', dir, 'rev-p
  */
 export async function versionsEvent(kit, head = gitHead, judges = 'codex', job = null) {
   const [kitRef, engine] = await Promise.all([head(kit), head(path.join(kit, 'vendor', 'sprite-gen'))]);
-  return { kind: 'versions', kit: kitRef, engine, requested: { ...requestedModels(job),
-    ...(judges === 'codex' ? {} : { judges, pixelJudge: PIXEL_JUDGE.model }) } };
+  return {
+    kind: 'versions',
+    kit: kitRef,
+    engine,
+    requested: { ...requestedModels(job), ...(judges === 'codex' ? {} : { judges, pixelJudge: PIXEL_JUDGE.model }) },
+  };
 }
 /** How much of a run's output the stage may read back (`og(args, { capture: true })`): codex exec's header, which names its session, comes first. */
 export const CAPTURE_BYTES = 32 * 1024;
@@ -180,15 +230,22 @@ export async function projectDocsAt(dir) {
   for (let at = path.resolve(dir); ; at = path.dirname(at)) {
     folders.push(at);
     if (existsSync(path.join(at, '.git'))) break;
-    if (path.dirname(at) === at) { folders.splice(1); break; }   // no checkout above: codex reads the folder itself only
+    if (path.dirname(at) === at) {
+      folders.splice(1);
+      break;
+    } // no checkout above: codex reads the folder itself only
   }
-  return folders.reverse().flatMap(folder => ['AGENTS.md', 'AGENTS.override.md'].map(name => path.join(folder, name))).filter(file => existsSync(file));
+  return folders
+    .reverse()
+    .flatMap(folder => ['AGENTS.md', 'AGENTS.override.md'].map(name => path.join(folder, name)))
+    .filter(file => existsSync(file));
 }
 
 /** `npm run sprite -- gen …` → `sprite gen`, `codex exec …` → `codex`: the command a stage ran through og, without its arguments. @param {string[]} args */
 export const toolName = args => {
   if (args[0] !== 'npm') return String(args[0] ?? '').slice(0, 24);
-  const words = args.slice(1).filter(a => !a.startsWith('-')), i = args.indexOf('--');
+  const words = args.slice(1).filter(a => !a.startsWith('-')),
+    i = args.indexOf('--');
   return `${words[1] ?? ''}${i >= 0 && args[i + 1] ? ` ${args[i + 1]}` : ''}`.slice(0, 24);
 };
 export const CALL_TOOLS = 12;
@@ -202,12 +259,17 @@ export function createTally() {
   return {
     /** @param {string[]} args @param {number} code @param {number} ms */
     add(args, code, ms) {
-      const name = toolName(args), t = by.get(name) ?? [0, 0, 0];
+      const name = toolName(args),
+        t = by.get(name) ?? [0, 0, 0];
       by.set(name, [t[0] + 1, t[1] + (code === 0 ? 0 : 1), t[2] + ms / 1000]);
     },
-    get size() { return by.size; },
+    get size() {
+      return by.size;
+    },
     value() {
-      const sorted = [...by].sort((a, b) => b[1][0] - a[1][0]), kept = sorted.slice(0, CALL_TOOLS - 1), rest = sorted.slice(CALL_TOOLS - 1);
+      const sorted = [...by].sort((a, b) => b[1][0] - a[1][0]),
+        kept = sorted.slice(0, CALL_TOOLS - 1),
+        rest = sorted.slice(CALL_TOOLS - 1);
       if (rest.length === 1) kept.push(rest[0]);
       else if (rest.length) kept.push(['other', rest.reduce((sum, [, t]) => sum.map((v, i) => v + t[i]), [0, 0, 0])]);
       return Object.fromEntries(kept.map(([name, [runs, failed, seconds]]) => [name, [runs, failed, Math.round(seconds)]]));
@@ -224,8 +286,8 @@ export function createTally() {
  * pixel tools are not recorded: run again, they make no picture.
  */
 export const FREE_SPRITE_TOOLS = Object.freeze(['extract', 'prepare', 'scale-check', 'video-loop', 'video-cycle-align', 'game-pack']);
-export const generates = (/** @type {string[]} */ args) => args[0] === 'npm' && args[1] === 'run' && args[2] === 'sprite'
-  && !FREE_SPRITE_TOOLS.includes(args[args.indexOf('--') + 1]);
+export const generates = (/** @type {string[]} */ args) =>
+  args[0] === 'npm' && args[1] === 'run' && args[2] === 'sprite' && !FREE_SPRITE_TOOLS.includes(args[args.indexOf('--') + 1]);
 export const DISPATCH_UNKNOWN = 'dispatch-unknown';
 /**
  * @param {string} dir @param {() => string} [now]
@@ -235,7 +297,13 @@ export function createDispatches(dir, now = () => new Date().toISOString()) {
   const folder = path.join(dir, 'dispatches');
   let n = 0;
   /** @param {string} file @returns {Promise<any>} */
-  const read = async file => { try { return JSON.parse(await readFile(file, 'utf8')); } catch { return null; } };
+  const read = async file => {
+    try {
+      return JSON.parse(await readFile(file, 'utf8'));
+    } catch {
+      return null;
+    }
+  };
   return {
     /** The records whose run never ended on record: `{ name, tool }`. One that cannot be read counts (its run may have gone out). */
     async unended() {
@@ -243,8 +311,7 @@ export function createDispatches(dir, now = () => new Date().toISOString()) {
       const open = [];
       for (const name of (await readdir(folder).catch(() => [])).filter(name => name.endsWith('.json')).sort()) {
         const record = await read(path.join(folder, name));
-        if (!record || (record.end == null && record.handedOver == null))
-          open.push({ name, tool: typeof record?.tool === 'string' ? record.tool : null });
+        if (!record || (record.end == null && record.handedOver == null)) open.push({ name, tool: typeof record?.tool === 'string' ? record.tool : null });
       }
       return open;
     },
@@ -252,18 +319,19 @@ export function createDispatches(dir, now = () => new Date().toISOString()) {
     async begin(args) {
       if (!generates(args)) return null;
       await mkdir(folder, { recursive: true });
-      const file = path.join(folder, `${Date.now()}-${process.pid}-${n++}.json`), record = { tool: toolName(args), startedAt: now() };
+      const file = path.join(folder, `${Date.now()}-${process.pid}-${n++}.json`),
+        record = { tool: toolName(args), startedAt: now() };
       await writeFile(file, JSON.stringify(record) + '\n', { flag: 'wx' });
       return { file, record };
     },
     /** After the run: its exit code. Not written (a full disk), the record stays open and the stage's next claim goes to an operator. @param {Dispatch | null} started @param {number} code */
-    end: (started, code) => started ? writeFile(started.file, JSON.stringify({ ...started.record, end: { code, at: now() } }) + '\n').catch(() => {})
-      : Promise.resolve(),
+    end: (started, code) =>
+      started ? writeFile(started.file, JSON.stringify({ ...started.record, end: { code, at: now() } }) + '\n').catch(() => {}) : Promise.resolve(),
     /** Marks open records handed to an operator, after the server took the stage's review. @param {{ name: string }[]} open */
     async handOver(open) {
       for (const { name } of open) {
         const file = path.join(folder, name);
-        await writeFile(file, JSON.stringify({ ...(await read(file) ?? {}), handedOver: now() }) + '\n');
+        await writeFile(file, JSON.stringify({ ...((await read(file)) ?? {}), handedOver: now() }) + '\n');
       }
     },
   };
@@ -278,10 +346,21 @@ export function createApi({ base, key, fetcher = fetch }) {
   /** @param {Record<string, string>} [extra] */
   const headers = extra => ({ authorization: `Bearer ${key}`, ...extra });
   /** @param {Response} response @returns {Promise<any>} */
-  const json = async response => { try { return { status: response.status, ...(await response.json()) }; } catch { return { status: response.status, ok: false, code: 'bad-reply' }; } };
+  const json = async response => {
+    try {
+      return { status: response.status, ...(await response.json()) };
+    } catch {
+      return { status: response.status, ok: false, code: 'bad-reply' };
+    }
+  };
   /** @param {string} route @param {unknown} body */
-  const post = (route, body) => fetcher(`${base}/generation-worker/${route}`, { method: 'POST', headers: headers({ 'content-type': 'application/json' }),
-    body: JSON.stringify(body), signal: AbortSignal.timeout(30_000) }).then(json);
+  const post = (route, body) =>
+    fetcher(`${base}/generation-worker/${route}`, {
+      method: 'POST',
+      headers: headers({ 'content-type': 'application/json' }),
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30_000),
+    }).then(json);
   /** @param {{ leaseToken: string }} job @param {Record<string, string>} [extra] */
   const leased = (job, extra) => headers({ 'x-generation-lease': job.leaseToken, ...extra });
   /** @typedef {{ id: string, leaseToken: string, status?: string }} Leased */
@@ -304,29 +383,58 @@ export function createApi({ base, key, fetcher = fetch }) {
     /** @param {Leased} job @param {unknown} tokens */
     usage: (job, tokens) => post(`jobs/${job.id}/usage`, { leaseToken: job.leaseToken, stage: job.status, tokens }),
     /** @param {Leased} job @param {unknown} evidence */
-    decisions: (job, evidence) => fetcher(`${base}/generation-worker/jobs/${job.id}/decisions`, {
-      method: 'POST', headers: leased(job, { 'content-type': 'application/json' }), body: JSON.stringify(evidence),
-      signal: AbortSignal.timeout(140_000), redirect: 'error' }).then(json),
+    decisions: (job, evidence) =>
+      fetcher(`${base}/generation-worker/jobs/${job.id}/decisions`, {
+        method: 'POST',
+        headers: leased(job, { 'content-type': 'application/json' }),
+        body: JSON.stringify(evidence),
+        signal: AbortSignal.timeout(140_000),
+        redirect: 'error',
+      }).then(json),
     /** @param {Leased} job @param {string} name @param {BodyInit} bytes */
     async artifact(job, name, bytes) {
-      const reply = await fetcher(`${base}/generation-worker/jobs/${job.id}/artifacts/${name}`, { method: 'PUT', headers: leased(job, { 'content-type': 'image/webp' }),
-        body: bytes, signal: AbortSignal.timeout(120_000) }).then(json);
+      const reply = await fetcher(`${base}/generation-worker/jobs/${job.id}/artifacts/${name}`, {
+        method: 'PUT',
+        headers: leased(job, { 'content-type': 'image/webp' }),
+        body: bytes,
+        signal: AbortSignal.timeout(120_000),
+      }).then(json);
       if (!reply.ok) throw Object.assign(new Error(reply.code ?? 'artifact-refused'), { code: reply.code ?? 'artifact-refused' });
       return reply;
     },
     /** @param {Leased} job @param {string} text */
-    submission: (job, text) => fetcher(`${base}/generation-worker/jobs/${job.id}/submission`, { method: 'POST', headers: leased(job, { 'content-type': 'application/json' }),
-      body: text, signal: AbortSignal.timeout(60_000) }).then(json),
+    submission: (job, text) =>
+      fetcher(`${base}/generation-worker/jobs/${job.id}/submission`, {
+        method: 'POST',
+        headers: leased(job, { 'content-type': 'application/json' }),
+        body: text,
+        signal: AbortSignal.timeout(60_000),
+      }).then(json),
     /** @param {Leased} job @param {string} asset @param {BodyInit} bytes */
-    asset: (job, asset, bytes) => fetcher(`${base}/generation-worker/jobs/${job.id}/submission/assets/${asset}`, { method: 'PUT',
-      headers: leased(job, { 'content-type': 'image/webp' }), body: bytes, signal: AbortSignal.timeout(120_000) }).then(json),
+    asset: (job, asset, bytes) =>
+      fetcher(`${base}/generation-worker/jobs/${job.id}/submission/assets/${asset}`, {
+        method: 'PUT',
+        headers: leased(job, { 'content-type': 'image/webp' }),
+        body: bytes,
+        signal: AbortSignal.timeout(120_000),
+      }).then(json),
     /** @param {Leased} job */
-    submit: job => fetcher(`${base}/generation-worker/jobs/${job.id}/submission/submit`, { method: 'POST', headers: leased(job, { 'content-type': 'application/json' }),
-      body: '{}', signal: AbortSignal.timeout(60_000) }).then(json),
+    submit: job =>
+      fetcher(`${base}/generation-worker/jobs/${job.id}/submission/submit`, {
+        method: 'POST',
+        headers: leased(job, { 'content-type': 'application/json' }),
+        body: '{}',
+        signal: AbortSignal.timeout(60_000),
+      }).then(json),
     // 선수 프로필 세트 (2026-10-31): the chosen front (an artifact the job already holds) and its face square, before the package goes in.
     /** @param {Leased} job @param {unknown} front */
-    profileFront: (job, front) => fetcher(`${base}/generation-worker/jobs/${job.id}/profile-front`, { method: 'POST',
-      headers: leased(job, { 'content-type': 'application/json' }), body: JSON.stringify(front), signal: AbortSignal.timeout(60_000) }).then(json),
+    profileFront: (job, front) =>
+      fetcher(`${base}/generation-worker/jobs/${job.id}/profile-front`, {
+        method: 'POST',
+        headers: leased(job, { 'content-type': 'application/json' }),
+        body: JSON.stringify(front),
+        signal: AbortSignal.timeout(60_000),
+      }).then(json),
     // 정면 판정 (2026-11-03): an owner's front painting to check, and the verdict under that check's lease. Only the official host gets one.
     frontClaim: () => post('profile-fronts/claim', {}),
     /** @param {{ id: string, leaseToken: string }} set @param {unknown} verdict */
@@ -348,7 +456,9 @@ export function createApi({ base, key, fetcher = fetch }) {
 export async function reportStageTokens(api, job, tokens, say) {
   if (!tokens?.total) return null;
   const reply = await api.usage(job, tokens).catch(error => ({ ok: false, code: error?.message ?? 'usage-failed' }));
-  await say(`job ${job.id} ${job.status} ${tokens.total} tokens ${reply.ok ? (reply.kept ? 'reported' : 'reported before') : `not reported (${reply.code ?? reply.status})`}`);
+  await say(
+    `job ${job.id} ${job.status} ${tokens.total} tokens ${reply.ok ? (reply.kept ? 'reported' : 'reported before') : `not reported (${reply.code ?? reply.status})`}`,
+  );
   return reply;
 }
 
@@ -359,8 +469,7 @@ export async function reportStageTokens(api, job, tokens, say) {
  */
 export const STAGE_STOPPED = 'stage-stopped';
 /** @template T @param {AbortSignal | null | undefined} signal @param {() => Promise<T>} start @returns {Promise<T>} */
-export const unlessStopped = (signal, start) => signal?.aborted
-  ? Promise.reject(Object.assign(new Error(STAGE_STOPPED), { code: STAGE_STOPPED })) : start();
+export const unlessStopped = (signal, start) => (signal?.aborted ? Promise.reject(Object.assign(new Error(STAGE_STOPPED), { code: STAGE_STOPPED })) : start());
 /** A stage past its time limit goes to an operator. The xAI requests the stopped stage named stay with it (2026-10-30 review): the
  * operator resumes them (video-resume) rather than films them again. @param {string} status @param {any} outcome */
 export function timedOutOutcome(status, outcome) {
@@ -369,11 +478,14 @@ export function timedOutOutcome(status, outcome) {
 }
 /** A stage that found a generating run with no end on record (createDispatches) goes to an operator; the tools name what to look at.
  * @param {string} status @param {{ tool: string | null }[]} open */
-export const dispatchUnknownOutcome = (status, open) => ({ outcome: 'review',
-  result: { code: `${status}-${DISPATCH_UNKNOWN}`, runs: open.slice(0, 8).map(record => record.tool ?? 'unreadable') } });
+export const dispatchUnknownOutcome = (status, open) => ({
+  outcome: 'review',
+  result: { code: `${status}-${DISPATCH_UNKNOWN}`, runs: open.slice(0, 8).map(record => record.tool ?? 'unreadable') },
+});
 /** The provider a stage's outcome code says cannot run here now (the codex question, Grok's 429), if it does. */
 /** @param {string | null | undefined} code @returns {'codex' | 'grok' | undefined} */
-export const limitedProvider = code => /** @type {Record<string, 'codex' | 'grok'>} */ ({ [ASKS]: 'codex', [GROK_LIMITED]: 'grok' })[/** @type {string} */ (code)];
+export const limitedProvider = code =>
+  /** @type {Record<string, 'codex' | 'grok'>} */ ({ [ASKS]: 'codex', [GROK_LIMITED]: 'grok' })[/** @type {string} */ (code)];
 /** The health after a stage's outcome: a provider that cannot run here now is marked down until a check passes; the host goes on claiming
  * only when its work needs no more than the providers left (canWork: a codex question on a host that judges with pixels leaves it working).
  * @param {Health} health @param {string | null | undefined} code @param {string | undefined} [configured] @returns {Health} */
@@ -395,15 +507,23 @@ export function createCooldowns(now = Date.now, configured = undefined) {
   return {
     /** Marks `provider` limited; returns how long it stays down (ms). @param {string} provider */
     limit(provider) {
-      const streak = (by.get(provider)?.streak ?? 0) + 1, wait = Math.min(TIMING.askedRecheckMs * 2 ** (streak - 1), TIMING.healthMs);
+      const streak = (by.get(provider)?.streak ?? 0) + 1,
+        wait = Math.min(TIMING.askedRecheckMs * 2 ** (streak - 1), TIMING.healthMs);
       by.set(provider, { until: now() + wait, streak });
       return wait;
     },
     /** @param {string[]} providers */
-    worked(providers) { for (const provider of providers) { const held = by.get(provider); if (held) by.set(provider, { ...held, streak: 0 }); } },
+    worked(providers) {
+      for (const provider of providers) {
+        const held = by.get(provider);
+        if (held) by.set(provider, { ...held, streak: 0 });
+      }
+    },
     /** @param {Health} health @returns {Health} */
     apply(health) {
-      const down = (/** @type {'codex' | 'grok'} */ p) => health[p] && !(/** @type {number} */ (by.get(p)?.until) > now()), codex = down('codex'), grok = down('grok');
+      const down = (/** @type {'codex' | 'grok'} */ p) => health[p] && !(/** @type {number} */ (by.get(p)?.until) > now()),
+        codex = down('codex'),
+        grok = down('grok');
       return codex === health.codex && grok === health.grok ? health : withLogins(health, { codex, grok }, configured, health.ok);
     },
   };
@@ -422,7 +542,8 @@ export const errorCode = (/** @type {any} */ error, fallback = 'stage-error') =>
  * 30 s later); a group still there after STOP_GRACE_MS gets SIGKILL. A run resolves when its output closes, or OUTPUT_DRAIN_MS after it
  * exited: a process that left the group and still holds the pipes held the stage, and the worker, until it ended.
  */
-export const STOP_GRACE_MS = 90_000, OUTPUT_DRAIN_MS = 10_000;
+export const STOP_GRACE_MS = 90_000,
+  OUTPUT_DRAIN_MS = 10_000;
 
 /**
  * Signals a child and everything it started: its process group (spawned detached) on Linux and macOS. Windows has no process groups and
@@ -435,8 +556,13 @@ export function stopTree(child, sig, platform = process.platform) {
     if (Number.isInteger(child.pid)) execFile('taskkill', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true }, () => {});
     return;
   }
-  try { process.kill(-(/** @type {number} */ (child.pid)), sig); }
- catch { try { child.kill(sig); } catch {} }
+  try {
+    process.kill(-(/** @type {number} */ (child.pid)), sig);
+  } catch {
+    try {
+      child.kill(sig);
+    } catch {}
+  }
 }
 /** A child of its own process group where there are groups: Windows has none (detached there opens a console of its own). */
 const ownGroup = { detached: process.platform !== 'win32', windowsHide: true };
@@ -453,12 +579,24 @@ const ownGroup = { detached: process.platform !== 'win32', windowsHide: true };
  */
 export function run(command, args, { cwd, log, stdin, signal, graceMs = STOP_GRACE_MS, drainMs = OUTPUT_DRAIN_MS, onOutput = null, env = undefined }) {
   return new Promise(resolve => {
-    if (signal?.aborted) return resolve(128 + 15);   // stopped before it began: nothing started
+    if (signal?.aborted) return resolve(128 + 15); // stopped before it began: nothing started
     /** @type {import('node:child_process').ChildProcessWithoutNullStreams} */
     let child;
-    try { child = spawn(command, args, { cwd, env, stdio: ['pipe', 'pipe', 'pipe'], ...ownGroup }); } catch { return resolve(127); }
-    const write = (/** @type {Buffer} */ chunk) => { if (log) appendFile(log, chunk).catch(() => {}); try { onOutput?.(/** @type {any} */ (chunk)); } catch { /* a reader never stops the run */ } };
-    child.stdout.on('data', write); child.stderr.on('data', write);
+    try {
+      child = spawn(command, args, { cwd, env, stdio: ['pipe', 'pipe', 'pipe'], ...ownGroup });
+    } catch {
+      return resolve(127);
+    }
+    const write = (/** @type {Buffer} */ chunk) => {
+      if (log) appendFile(log, chunk).catch(() => {});
+      try {
+        onOutput?.(/** @type {any} */ (chunk));
+      } catch {
+        /* a reader never stops the run */
+      }
+    };
+    child.stdout.on('data', write);
+    child.stderr.on('data', write);
     // A child that ends without reading its input closes the pipe: the write's EPIPE is not the run's outcome (its exit code is),
     // and with no listener it was an uncaught exception that ended the worker and every stage on it (CI, 2026-11-02).
     child.stdin.on('error', () => {});
@@ -466,15 +604,26 @@ export function run(command, args, { cwd, log, stdin, signal, graceMs = STOP_GRA
     /** @type {NodeJS.Timeout | undefined} */ let kill;
     /** @type {NodeJS.Timeout | undefined} */ let drain;
     let stopped = false;
-    const stop = () => { stopped = true; stopTree(child, 'SIGTERM'); kill = setTimeout(() => stopTree(child, 'SIGKILL'), graceMs); };
+    const stop = () => {
+      stopped = true;
+      stopTree(child, 'SIGTERM');
+      kill = setTimeout(() => stopTree(child, 'SIGKILL'), graceMs);
+    };
     let ended = false;
     const end = (/** @type {number} */ code) => {
       if (ended) return;
-      ended = true; clearTimeout(kill); clearTimeout(drain); signal?.removeEventListener('abort', stop); resolve(code);
+      ended = true;
+      clearTimeout(kill);
+      clearTimeout(drain);
+      signal?.removeEventListener('abort', stop);
+      resolve(code);
     };
-    const codeOf = (/** @type {number | null} */ code, /** @type {NodeJS.Signals | null} */ sig) => stopped && process.platform === 'win32' ? 128 + 9 : code ?? 128 + (sig === 'SIGKILL' ? 9 : 15);
+    const codeOf = (/** @type {number | null} */ code, /** @type {NodeJS.Signals | null} */ sig) =>
+      stopped && process.platform === 'win32' ? 128 + 9 : (code ?? 128 + (sig === 'SIGKILL' ? 9 : 15));
     signal?.addEventListener('abort', stop, { once: true });
-    child.on('exit', (code, sig) => { drain = setTimeout(() => end(codeOf(code, sig)), drainMs); });
+    child.on('exit', (code, sig) => {
+      drain = setTimeout(() => end(codeOf(code, sig)), drainMs);
+    });
     child.on('close', (code, sig) => end(codeOf(code, sig)));
     child.on('error', () => end(127));
   });
@@ -491,15 +640,37 @@ export function run(command, args, { cwd, log, stdin, signal, graceMs = STOP_GRA
  */
 export function readOutput(command, args, { limitMs, graceMs = STOP_GRACE_MS, drainMs = OUTPUT_DRAIN_MS }) {
   return new Promise(resolve => {
-    let output = '', ended = false;
+    let output = '',
+      ended = false;
     /** @type {NodeJS.Timeout | undefined} */ let kill;
     /** @type {NodeJS.Timeout | undefined} */ let drain;
     /** @type {import('node:child_process').ChildProcess} */ let child;
-    try { child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], ...ownGroup }); } catch { return resolve(output); }
-    child.stdout?.on('data', d => { output += d; }); child.stderr?.on('data', d => { output += d; });
-    const limit = setTimeout(() => { stopTree(child, 'SIGTERM'); kill = setTimeout(() => stopTree(child, 'SIGKILL'), graceMs); }, limitMs);
-    const end = () => { if (ended) return; ended = true; clearTimeout(limit); clearTimeout(kill); clearTimeout(drain); resolve(output); };
-    child.on('exit', () => { drain = setTimeout(end, drainMs); });
+    try {
+      child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], ...ownGroup });
+    } catch {
+      return resolve(output);
+    }
+    child.stdout?.on('data', d => {
+      output += d;
+    });
+    child.stderr?.on('data', d => {
+      output += d;
+    });
+    const limit = setTimeout(() => {
+      stopTree(child, 'SIGTERM');
+      kill = setTimeout(() => stopTree(child, 'SIGKILL'), graceMs);
+    }, limitMs);
+    const end = () => {
+      if (ended) return;
+      ended = true;
+      clearTimeout(limit);
+      clearTimeout(kill);
+      clearTimeout(drain);
+      resolve(output);
+    };
+    child.on('exit', () => {
+      drain = setTimeout(end, drainMs);
+    });
     child.on('close', end);
     child.on('error', end);
   });
@@ -545,15 +716,23 @@ export function stayAwakeCommand(platform, pid) {
   if (!Number.isInteger(pid) || pid <= 0) return null;
   if (platform === 'darwin') return { command: 'caffeinate', args: ['-i', '-w', String(pid)], how: 'caffeinate' };
   if (platform === 'linux')
-    return { command: 'systemd-inhibit', args: ['--what=sleep:idle', '--who=oddbout-host', '--why=generating a fighter', '--mode=block',
-      'tail', `--pid=${pid}`, '-f', '/dev/null'], how: 'systemd-inhibit' };
+    return {
+      command: 'systemd-inhibit',
+      args: ['--what=sleep:idle', '--who=oddbout-host', '--why=generating a fighter', '--mode=block', 'tail', `--pid=${pid}`, '-f', '/dev/null'],
+      how: 'systemd-inhibit',
+    };
   if (platform === 'win32') {
-    const script = ["$ErrorActionPreference = 'Stop'",
+    const script = [
+      "$ErrorActionPreference = 'Stop'",
       'Add-Type -Namespace OddboutHost -Name Power -MemberDefinition \'[DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint esFlags);\'',
       'if ([OddboutHost.Power]::SetThreadExecutionState([uint32]2147483649) -eq 0) { exit 3 }',
-      `while (Get-Process -Id ${pid} -ErrorAction SilentlyContinue) { Start-Sleep -Seconds 20 }`].join('\n');
-    return { command: 'powershell.exe', args: ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
-      how: 'SetThreadExecutionState' };
+      `while (Get-Process -Id ${pid} -ErrorAction SilentlyContinue) { Start-Sleep -Seconds 20 }`,
+    ].join('\n');
+    return {
+      command: 'powershell.exe',
+      args: ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
+      how: 'SetThreadExecutionState',
+    };
   }
   return null;
 }
@@ -568,38 +747,66 @@ export const AWAKE_SETTLE_MS = 10_000;
  * @param {{ platform?: string, pid?: number, spawn?: typeof spawn, say?: (line: string) => unknown, said?: Set<string>, settleMs?: number }} [options]
  * @returns {{ release: () => void }}
  */
-export function stayAwake({ platform = process.platform, pid = process.pid, spawn: start = spawn, say = () => {}, said = AWAKE_SAID,
-  settleMs = AWAKE_SETTLE_MS } = {}) {
+export function stayAwake({
+  platform = process.platform,
+  pid = process.pid,
+  spawn: start = spawn,
+  say = () => {},
+  said = AWAKE_SAID,
+  settleMs = AWAKE_SETTLE_MS,
+} = {}) {
   const once = (/** @type {string} */ line) => {
     if (said.has(line)) return;
     said.add(line);
-    try { Promise.resolve(say(line)).catch(() => {}); } catch { /* the log never stops a stage */ }
+    try {
+      Promise.resolve(say(line)).catch(() => {});
+    } catch {
+      /* the log never stops a stage */
+    }
   };
-  const how = stayAwakeCommand(platform, pid), none = { release() {} };
-  if (!how) { once(`stay awake during stages: nothing on ${platform}`); return none; }
-  let ended = false, released = false;
+  const how = stayAwakeCommand(platform, pid),
+    none = { release() {} };
+  if (!how) {
+    once(`stay awake during stages: nothing on ${platform}`);
+    return none;
+  }
+  let ended = false,
+    released = false;
   /** @type {import('node:child_process').ChildProcess} */ let child;
   /** @type {ReturnType<typeof setTimeout> | undefined} */ let settle;
   const end = (/** @type {string} */ why) => {
     if (ended) return;
-    ended = true; clearTimeout(settle);
+    ended = true;
+    clearTimeout(settle);
     if (!released) once(`stay awake during stages: ${how.how} ${why} — stages run without it`);
   };
-  const held = () => { if (!ended) once(`stay awake during stages: ${how.how}`); };
-  try { child = start(how.command, how.args, { stdio: 'ignore', windowsHide: true }); }
-  catch (/** @type {any} */ error) { end(`did not start (${error?.code ?? error?.message ?? error})`); return none; }
+  const held = () => {
+    if (!ended) once(`stay awake during stages: ${how.how}`);
+  };
+  try {
+    child = start(how.command, how.args, { stdio: 'ignore', windowsHide: true });
+  } catch (/** @type {any} */ error) {
+    end(`did not start (${error?.code ?? error?.message ?? error})`);
+    return none;
+  }
   child.on('error', (/** @type {any} */ error) => end(`did not start (${error?.code ?? error?.message ?? error})`));
   child.on('exit', (code, signal) => end(`ended (${signal ?? `exit ${code}`})`));
   // It ends with the worker on its own: it never keeps the worker's process alive.
   child.unref?.();
-  settle = setTimeout(held, settleMs); settle.unref?.();
+  settle = setTimeout(held, settleMs);
+  settle.unref?.();
   return {
     release() {
       if (released) return;
-      released = true; clearTimeout(settle);
+      released = true;
+      clearTimeout(settle);
       if (ended) return;
       held();
-      try { child.kill(); } catch { /* gone already */ }
+      try {
+        child.kill();
+      } catch {
+        /* gone already */
+      }
     },
   };
 }
@@ -614,10 +821,15 @@ export function stayAwake({ platform = process.platform, pid = process.pid, spaw
 export function createWakeWatch({ now = Date.now, tickMs = 5_000, slackMs = 15_000, onWake }) {
   let last = now();
   const timer = setInterval(() => {
-    const at = now(), gap = at - last;
+    const at = now(),
+      gap = at - last;
     last = at;
     if (gap <= tickMs + slackMs) return;
-    try { onWake(gap); } catch { /* a renewal's failure is its own */ }
+    try {
+      onWake(gap);
+    } catch {
+      /* a renewal's failure is its own */
+    }
   }, tickMs);
   timer.unref?.();
   return { stop: () => clearInterval(timer) };
@@ -630,7 +842,10 @@ export const FRONT_RETRY_MS = 15 * 60_000;
 /** A folder of one front check (generation-prompts.mjs frontJobId). */
 const FRONT_FOLDER = /^\d{8}-front-[0-9a-f]{32}$/;
 /** A verdict a folder already holds, checked again, or null. @param {string} file */
-const savedVerdict = file => readFile(file, 'utf8').then(text => frontVerdict(JSON.parse(text))).catch(() => null);
+const savedVerdict = file =>
+  readFile(file, 'utf8')
+    .then(text => frontVerdict(JSON.parse(text)))
+    .catch(() => null);
 
 /**
  * Close every front check's folder left open (리뷰 2026-11-03: a worker stopped mid-check skipped its `finally`, and an open folder stops
@@ -657,51 +872,95 @@ export async function closeFrontFolders(output) {
  *   worked?: () => void, fetcher?: typeof fetch, runner?: typeof run, now?: () => Date, codexCwd?: string | null }} deps
  *   `codexCwd`: the folder outside the kit codex runs in (generation-stages `briefCommand` `cwd`). `og`: ogClient's.
  */
-export function createFrontCheck({ api, og, python, kit, say, providerDown, worked = () => {}, fetcher = fetch, runner = run, now = () => new Date(),
-  codexCwd = null }) {
+export function createFrontCheck({
+  api,
+  og,
+  python,
+  kit,
+  say,
+  providerDown,
+  worked = () => {},
+  fetcher = fetch,
+  runner = run,
+  now = () => new Date(),
+  codexCwd = null,
+}) {
   const ogRun = ogClient(og, runner);
   /** @returns {Promise<'judged' | 'idle' | 'off' | 'failed'>} */
   return async function checkFront() {
     const claimed = await api.frontClaim().catch(error => ({ ok: false, code: error.message }));
-    if (!claimed.ok) { await say(`front claim failed ${claimed.code ?? claimed.status}`); return 'failed'; }
+    if (!claimed.ok) {
+      await say(`front claim failed ${claimed.code ?? claimed.status}`);
+      return 'failed';
+    }
     if (claimed.frontChecks === false) return 'off';
     const set = claimed.profileSet;
     if (!set) return 'idle';
-    const ogId = frontJobId(set, now()), dir = path.join(kit, 'output', ogId), log = path.join(dir, 'worker.log');
+    const ogId = frontJobId(set, now()),
+      dir = path.join(kit, 'output', ogId),
+      log = path.join(dir, 'worker.log');
     await mkdir(dir, { recursive: true });
     await rm(path.join(dir, '.closed'), { force: true });
-    await writeFile(path.join(dir, 'request.json'), JSON.stringify({ id: ogId, api: { profileSetId: set.id }, createdAt: now().toISOString() }, null, 2) + '\n');
-    const signal = AbortSignal.timeout(FRONT_CHECK_MS), out = path.join(dir, 'verdict.json');
+    await writeFile(
+      path.join(dir, 'request.json'),
+      JSON.stringify({ id: ogId, api: { profileSetId: set.id }, createdAt: now().toISOString() }, null, 2) + '\n',
+    );
+    const signal = AbortSignal.timeout(FRONT_CHECK_MS),
+      out = path.join(dir, 'verdict.json');
     /** @param {string} why */
-    const giveBack = async why => { await api.frontRelease(set).catch(() => null); await say(`front ${set.id} given back (${why})`); };
+    const giveBack = async why => {
+      await api.frontRelease(set).catch(() => null);
+      await say(`front ${set.id} given back (${why})`);
+    };
     try {
       let verdict = await savedVerdict(out);
       if (!verdict) {
         const response = await fetcher(set.front.downloadUrl, { signal: AbortSignal.timeout(60_000), redirect: 'error' });
         const bytes = response.ok ? new Uint8Array(await response.arrayBuffer()) : null;
         if (!bytes || bytes.length !== set.front.bytes || createHash('sha256').update(bytes).digest('hex') !== set.front.sha256) {
-          await say(`front ${set.id} download ${response.status}${bytes ? ' (not its bytes)' : ''}`); return 'failed';
+          await say(`front ${set.id} download ${response.status}${bytes ? ' (not its bytes)' : ''}`);
+          return 'failed';
         }
-        const webp = path.join(dir, 'front.webp'), png = path.join(dir, 'front.png');
+        const webp = path.join(dir, 'front.webp'),
+          png = path.join(dir, 'front.png');
         await writeFile(webp, bytes);
         // codex takes the PNG the look judge takes; the painting's own pixels, alpha kept.
-        if (await runner(python, ['-I', '-c', 'import sys\nfrom PIL import Image\nImage.open(sys.argv[1]).save(sys.argv[2], "PNG")', webp, png], { cwd: kit, log, signal }) !== 0) {
-          await say(`front ${set.id} unreadable`); return 'failed';
+        if (
+          (await runner(python, ['-I', '-c', 'import sys\nfrom PIL import Image\nImage.open(sys.argv[1]).save(sys.argv[2], "PNG")', webp, png], {
+            cwd: kit,
+            log,
+            signal,
+          })) !== 0
+        ) {
+          await say(`front ${set.id} unreadable`);
+          return 'failed';
         }
         const schema = path.join(dir, 'schema.json');
         await writeFile(schema, JSON.stringify(FRONT_JUDGE_SCHEMA));
         if (codexCwd) await mkdir(codexCwd, { recursive: true });
         const code = await ogRun.run(ogId, judgeCommand({ schema, out, refs: [png], cwd: codexCwd }), { cwd: kit, log, stdin: frontJudgePrompt(), signal });
-        if (code === 75) { await giveBack('codex cannot run here now'); await providerDown(ASKS); return 'failed'; }
-        if (code === 3) { await giveBack('og did not start it'); return 'failed'; }
+        if (code === 75) {
+          await giveBack('codex cannot run here now');
+          await providerDown(ASKS);
+          return 'failed';
+        }
+        if (code === 3) {
+          await giveBack('og did not start it');
+          return 'failed';
+        }
         verdict = code === 0 ? await savedVerdict(out) : null;
-        if (!verdict) { await say(`front ${set.id} no verdict (exit ${code})`); return 'failed'; }
+        if (!verdict) {
+          await say(`front ${set.id} no verdict (exit ${code})`);
+          return 'failed';
+        }
         worked();
       }
       const reply = await api.frontFinish(set, verdict).catch(error => ({ ok: false, code: error.message }));
-      await say(`front ${set.id} → ${reply.ok ? reply.frontCheck?.status ?? reply.stage : `finish refused ${reply.code ?? reply.status}`}`);
+      await say(`front ${set.id} → ${reply.ok ? (reply.frontCheck?.status ?? reply.stage) : `finish refused ${reply.code ?? reply.status}`}`);
       return reply.ok ? 'judged' : 'failed';
-    } finally { await writeFile(path.join(dir, '.closed'), '').catch(() => {}); }
+    } finally {
+      await writeFile(path.join(dir, '.closed'), '').catch(() => {});
+    }
   };
 }
 
@@ -715,13 +974,22 @@ export function createFrontCheck({ api, og, python, kit, say, providerDown, work
  *   keepAwake?: (options: { say: (line: string) => unknown }) => { release: () => void },
  *   wakeWatch?: (options: { onWake: (gapMs: number) => void }) => { stop: () => void } }} [options]
  */
-export async function main({ once = false, root = ROOT, og: ogGiven, python: pythonGiven, about = null,
-  keepAwake = ({ say }) => stayAwake({ say }), wakeWatch = ({ onWake }) => createWakeWatch({ onWake }) } = {}) {
+export async function main({
+  once = false,
+  root = ROOT,
+  og: ogGiven,
+  python: pythonGiven,
+  about = null,
+  keepAwake = ({ say }) => stayAwake({ say }),
+  wakeWatch = ({ onWake }) => createWakeWatch({ onWake }),
+} = {}) {
   const env = parseEnv(await readFile(path.join(root, 'worker.env'), 'utf8'));
   if (!/^https:\/\//.test(env.ODDBOUT_GENERATION_API ?? '') || !/^afw_[a-f0-9]{64}$/.test(env.ODDBOUT_GENERATION_WORKER_KEY ?? ''))
     throw new Error('worker.env needs ODDBOUT_GENERATION_API (https) and ODDBOUT_GENERATION_WORKER_KEY (afw_…)');
   const api = createApi({ base: env.ODDBOUT_GENERATION_API.replace(/\/$/, ''), key: env.ODDBOUT_GENERATION_WORKER_KEY });
-  const og = ogClient(ogGiven ?? path.join(root, 'bin', 'og')), kit = path.join(root, 'kit'), python = pythonGiven ?? spritePython(kit);
+  const og = ogClient(ogGiven ?? path.join(root, 'bin', 'og')),
+    kit = path.join(root, 'kit'),
+    python = pythonGiven ?? spritePython(kit);
   const workerLog = path.join(root, 'worker.log');
   // The providers run with HOME=<root> (og), so codex keeps its sessions there.
   const sessions = path.join(process.env.CODEX_HOME || path.join(root, '.codex'), 'sessions');
@@ -734,32 +1002,45 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
   // runs and pixels where it does not (judgesFor, read again for each claim).
   const configured = env.ODDBOUT_GENERATION_JUDGES || undefined;
   const named = configured ? judgesMode(configured) : null;
-  if (configured && configured !== named)
-    await say(`ODDBOUT_GENERATION_JUDGES=${configured} is not one of codex, pixels, hybrid: codex judges`);
+  if (configured && configured !== named) await say(`ODDBOUT_GENERATION_JUDGES=${configured} is not one of codex, pixels, hybrid: codex judges`);
   else if (named && named !== 'codex') await say(`judges ${named}: the pixel judge ${PIXEL_JUDGE.model} judges the side takes and the loops first`);
   else if (!named) await say('judges: codex where codex runs, the pixel judge where it does not (ODDBOUT_GENERATION_JUDGES names none)');
 
   // Every side and loop judgment, one line each outside the job folders (generation-stages createJudgeArchive), kept the days worker.env
   // names (ODDBOUT_GENERATION_JUDGE_ARCHIVE, `off`: none written, no shadow); its pictures only when worker.env names the days to keep
   // them (ODDBOUT_GENERATION_JUDGE_IMAGES). Turned off, the archive still prunes what it kept: its lines at the default days, every picture.
-  const archiveDays = judgeArchiveDays(env.ODDBOUT_GENERATION_JUDGE_ARCHIVE), imageDays = archiveDays ? judgeImageDays(env.ODDBOUT_GENERATION_JUDGE_IMAGES) : 0;
-  const archive = createJudgeArchive({ dir: path.join(root, JUDGE_ARCHIVE_DIR), saltFile: path.join(root, JUDGE_ARCHIVE_SALT),
-    lineDays: archiveDays || JUDGE_ARCHIVE_DAYS, imageDays });
-  await say(archiveDays ? `judge archive keeps its lines ${archiveDays} days` + (imageDays ? `, the pictures it judged ${imageDays} days or until their job goes` : ', no pictures')
-    : 'judge archive off (ODDBOUT_GENERATION_JUDGE_ARCHIVE): no lines, no shadow pixel judge');
+  const archiveDays = judgeArchiveDays(env.ODDBOUT_GENERATION_JUDGE_ARCHIVE),
+    imageDays = archiveDays ? judgeImageDays(env.ODDBOUT_GENERATION_JUDGE_IMAGES) : 0;
+  const archive = createJudgeArchive({
+    dir: path.join(root, JUDGE_ARCHIVE_DIR),
+    saltFile: path.join(root, JUDGE_ARCHIVE_SALT),
+    lineDays: archiveDays || JUDGE_ARCHIVE_DAYS,
+    imageDays,
+  });
+  await say(
+    archiveDays
+      ? `judge archive keeps its lines ${archiveDays} days` +
+          (imageDays ? `, the pictures it judged ${imageDays} days or until their job goes` : ', no pictures')
+      : 'judge archive off (ODDBOUT_GENERATION_JUDGE_ARCHIVE): no lines, no shadow pixel judge',
+  );
   /** Whether a job folder the archive's pictures name is gone (og purge, og prune): its pictures go with it. */
   const jobGone = (/** @type {string} */ name) => !existsSync(path.join(kit, 'output', name));
 
   /** @type {Health} */
   let health = { ok: false, codex: false, grok: false, images: [], at: null };
-  let checkedAt = 0, prunedAt = 0;
+  let checkedAt = 0,
+    prunedAt = 0;
   const beats = createBeats();
   /** The heartbeat's body: the health this worker reports and its subscription's reading. */
-  const beatBody = async () => { const usage = await codexUsage(sessions).catch(() => null); return { health: aboutHealth(health, about), ...(usage ? { usage } : {}) }; };
+  const beatBody = async () => {
+    const usage = await codexUsage(sessions).catch(() => null);
+    return { health: aboutHealth(health, about), ...(usage ? { usage } : {}) };
+  };
   async function beatApart() {
     const { health: reported, usage } = await beatBody();
     const reply = await api.heartbeat(reported, usage ?? null).catch(error => ({ ok: false, code: error.message }));
-    if (reply.ok) beats.beaten(reply); else await say(`heartbeat failed ${reply.code ?? reply.status}`);
+    if (reply.ok) beats.beaten(reply);
+    else await say(`heartbeat failed ${reply.code ?? reply.status}`);
   }
   /**
    * A step that may hold the loop for minutes (the hourly health check waits for a codex slot, a front check runs codex) with the heartbeat
@@ -770,26 +1051,46 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
   async function beatingDuring(step) {
     /** @type {ReturnType<typeof setTimeout> | undefined} */
     let timer;
-    const tick = () => { timer = setTimeout(tick, TIMING.heartbeatMs); beatApart().catch(() => {}); };
+    const tick = () => {
+      timer = setTimeout(tick, TIMING.heartbeatMs);
+      beatApart().catch(() => {});
+    };
     timer = setTimeout(tick, beats.nextInMs());
-    try { return await step(); } finally { clearTimeout(timer); }
+    try {
+      return await step();
+    } finally {
+      clearTimeout(timer);
+    }
   }
   const cooldowns = createCooldowns(Date.now, configured);
   async function keepAlive() {
     if (Date.now() - checkedAt >= TIMING.healthMs) {
       // A health check waits for a codex slot like any run; past ten minutes it counts as not healthy.
       const before = healthKey(health);
-      health = cooldowns.apply(parseHealth(await beatingDuring(() => og.health()), undefined, configured)); checkedAt = Date.now();
+      health = cooldowns.apply(parseHealth(await beatingDuring(() => og.health()), undefined, configured));
+      checkedAt = Date.now();
       // Changed (a login went or came back): the server hears it before the next claim.
       if (healthKey(health) !== before) beats.reset();
-      await say(`health codex=${health.codex} grok=${health.grok} → ${health.ok ? `claims (judges ${judgesFor(configured, health)})`
-        : configured && judgesNeedCodex(judgesMode(configured)) && health.grok ? `no claims: judges ${judgesMode(configured)} need codex` : 'no claims'}`);
+      await say(
+        `health codex=${health.codex} grok=${health.grok} → ${
+          health.ok
+            ? `claims (judges ${judgesFor(configured, health)})`
+            : configured && judgesNeedCodex(judgesMode(configured)) && health.grok
+              ? `no claims: judges ${judgesMode(configured)} need codex`
+              : 'no claims'
+        }`,
+      );
       for (const name of await closeFrontFolders(path.join(kit, 'output'))) await say(`front folder ${name} closed`);
       // Jobs that ended while they waited for their requester (cancelled, expired): closed here, so og setup can update again.
       const unclosed = await unclosedJobs(path.join(kit, 'output'));
       if (unclosed.size) {
-        const reply = await api.ended([...unclosed.values()].slice(0, 50)).catch(() => null), ended = new Set(reply?.ended ?? []);
-        for (const [name, id] of unclosed) if (ended.has(id)) { await writeFile(path.join(kit, 'output', name, '.closed'), '').catch(() => {}); await say(`job ${id} ended — closed`); }
+        const reply = await api.ended([...unclosed.values()].slice(0, 50)).catch(() => null),
+          ended = new Set(reply?.ended ?? []);
+        for (const [name, id] of unclosed)
+          if (ended.has(id)) {
+            await writeFile(path.join(kit, 'output', name, '.closed'), '').catch(() => {});
+            await say(`job ${id} ended — closed`);
+          }
       }
     }
     if (Date.now() - prunedAt >= TIMING.pruneMs) {
@@ -805,85 +1106,160 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
   /** codex cannot run here now (exit 75: signed out, usage used up): claim nothing until a health check passes again, soon.
    * @param {string | null | undefined} code */
   async function providerDown(code) {
-    const down = healthAfter(health, code, configured), provider = limitedProvider(code);
+    const down = healthAfter(health, code, configured),
+      provider = limitedProvider(code);
     if (down === health) return false;
     health = down;
     const wait = cooldowns.limit(/** @type {string} */ (provider));
     checkedAt = Date.now() - TIMING.healthMs + wait;
     // The next turn's heartbeat says so before it claims again: the server gives a job that needs this provider only to a host it is ok on.
     beats.reset();
-    await say(`${provider} cannot run now: ${health.ok ? `claims go on without it (judges ${judgesFor(configured, health)})` : 'no claims until health passes'}`
-      + ` (checked again in ${Math.round(wait / 60_000)} minutes)`);
+    await say(
+      `${provider} cannot run now: ${health.ok ? `claims go on without it (judges ${judgesFor(configured, health)})` : 'no claims until health passes'}` +
+        ` (checked again in ${Math.round(wait / 60_000)} minutes)`,
+    );
     return true;
   }
 
   const checkFront = createFrontCheck({ api, og, python, kit, say, providerDown, worked: () => cooldowns.worked(['codex']), codexCwd });
   // The front queue is asked once a minute while it is empty (a claim every idle turn would double this PC's calls), at once after a
   // verdict, after a failure only once FRONT_RETRY_MS (doubling) has passed, and never on a host that checks none.
-  let frontDue = 0, frontWait = FRONT_RETRY_MS;
+  let frontDue = 0,
+    frontWait = FRONT_RETRY_MS;
   async function frontTurn() {
     // A check holds the loop: the heartbeat goes on beside it (beatingDuring).
-    const outcome = await beatingDuring(() => checkFront().catch(error => { say(`front check error ${error.message}`); return 'failed'; }));
-    if (outcome === 'judged') { frontDue = 0; frontWait = FRONT_RETRY_MS; }
-    else if (outcome === 'idle') frontDue = Date.now() + TIMING.heartbeatMs;
+    const outcome = await beatingDuring(() =>
+      checkFront().catch(error => {
+        say(`front check error ${error.message}`);
+        return 'failed';
+      }),
+    );
+    if (outcome === 'judged') {
+      frontDue = 0;
+      frontWait = FRONT_RETRY_MS;
+    } else if (outcome === 'idle') frontDue = Date.now() + TIMING.heartbeatMs;
     else if (outcome === 'off') frontDue = Infinity;
-    else { frontDue = Date.now() + frontWait; frontWait = Math.min(frontWait * 2, TIMING.healthMs); }
+    else {
+      frontDue = Date.now() + frontWait;
+      frontWait = Math.min(frontWait * 2, TIMING.healthMs);
+    }
     return outcome;
   }
 
   /** @param {Job} job */
   async function work(job) {
-    const ogId = ogJobId(job), dir = path.join(kit, 'output', ogId), log = path.join(dir, 'worker.log');
+    const ogId = ogJobId(job),
+      dir = path.join(kit, 'output', ogId),
+      log = path.join(dir, 'worker.log');
     await mkdir(dir, { recursive: true });
     // og's job marker: `og run` refuses a folder without it. Who and what only; the description stays in the API.
-    await writeFile(path.join(dir, 'request.json'), JSON.stringify({ id: ogId, api: { jobId: job.id, owner: job.owner }, createdAt: new Date().toISOString() }, null, 2) + '\n');
+    await writeFile(
+      path.join(dir, 'request.json'),
+      JSON.stringify({ id: ogId, api: { jobId: job.id, owner: job.owner }, createdAt: new Date().toISOString() }, null, 2) + '\n',
+    );
     // The judges this stage runs with: worker.env's, or codex where it runs now and pixels where it does not (judgesFor).
     const judges = judgesFor(configured, health);
     await api.progress(job, undefined, await versionsEvent(kit, undefined, judges, job)).catch(() => {});
-    const controller = new AbortController(), tally = createTally(), since = Date.now();
+    const controller = new AbortController(),
+      tally = createTally(),
+      since = Date.now();
     // The codex tokens of the sessions written since the stage began (codex-usage.mjs), or null: none, or unreadable (logged).
     const spent = async () => {
-      try { const tokens = await codexTokensSince(sessions, since); return tokens.total ? tokens : null; }
-      catch (/** @type {any} */ error) { await say(`job ${job.id} ${job.status} tokens unread: ${error?.message ?? error}`); return null; }
+      try {
+        const tokens = await codexTokensSince(sessions, since);
+        return tokens.total ? tokens : null;
+      } catch (/** @type {any} */ error) {
+        await say(`job ${job.id} ${job.status} tokens unread: ${error?.message ?? error}`);
+        return null;
+      }
     };
     let timedOut = false;
-    const limit = setTimeout(() => { timedOut = true; controller.abort(); }, stageLimitMs(job.status));
+    const limit = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, stageLimitMs(job.status));
     // The lease runs five minutes: renew it every minute, and at once when the PC woke (below); a job cancelled meanwhile (lease lost)
     // stops the stage's child.
     const renewNow = () => {
-      api.progress(job, undefined).then(reply => { if (!reply.ok && reply.code === 'lease-lost') controller.abort(); }).catch(() => {});
+      api
+        .progress(job, undefined)
+        .then(reply => {
+          if (!reply.ok && reply.code === 'lease-lost') controller.abort();
+        })
+        .catch(() => {});
     };
     const renew = setInterval(renewNow, TIMING.renewMs);
     // The kit tree's loop review takes a low-margin cut (tools/ai-fighter/gait.mjs `lowMarginFeet`, 2026-11-01): read per job, as `og setup` moves it.
-    const lowMarginFeetTaken = await readFile(path.join(kit, 'tools', 'ai-fighter', 'gait.mjs'), 'utf8')
-      .then(text => text.includes('export const lowMarginFeet'), () => false);
+    const lowMarginFeetTaken = await readFile(path.join(kit, 'tools', 'ai-fighter', 'gait.mjs'), 'utf8').then(
+      text => text.includes('export const lowMarginFeet'),
+      () => false,
+    );
     const dispatches = createDispatches(dir);
     const stages = createStages({
-      og: (args, { stdin, capture = false } = {}) => unlessStopped(controller.signal, async () => {
-        const started = Date.now(), record = await dispatches.begin(args);
-        // `capture`: the start of the run's output comes back too (a codex run's header names its session; generation-stages codexSessionId).
-        let output = '';
-        const onOutput = capture ? (/** @type {string} */ chunk) => { if (output.length < CAPTURE_BYTES) output += String(chunk).slice(0, CAPTURE_BYTES - output.length); } : null;
-        const code = await og.run(ogId, args, { cwd: kit, log, stdin, signal: controller.signal, onOutput });
-        await dispatches.end(record, code);
-        tally.add(args, code, Date.now() - started);
-        return capture ? { code, output } : { code };
-      }),
+      og: (args, { stdin, capture = false } = {}) =>
+        unlessStopped(controller.signal, async () => {
+          const started = Date.now(),
+            record = await dispatches.begin(args);
+          // `capture`: the start of the run's output comes back too (a codex run's header names its session; generation-stages codexSessionId).
+          let output = '';
+          const onOutput = capture
+            ? (/** @type {string} */ chunk) => {
+                if (output.length < CAPTURE_BYTES) output += String(chunk).slice(0, CAPTURE_BYTES - output.length);
+              }
+            : null;
+          const code = await og.run(ogId, args, { cwd: kit, log, stdin, signal: controller.signal, onOutput });
+          await dispatches.end(record, code);
+          tally.add(args, code, Date.now() - started);
+          return capture ? { code, output } : { code };
+        }),
       // What codex recorded for a run's session (its rollout under this worker's sessions folder), for the verdicts and the `models` event.
-      codexSession: (id, sinceMs) => codexSessionFacts(sessions, id, sinceMs), codexCwd, judges, codex: health.codex, archive: archiveDays ? archive : null,
-      api, signal: controller.signal, lowMarginFeetTaken,
-      fetchBytes: async url => { const r = await fetch(url, { signal: AbortSignal.timeout(60_000) }); if (!r.ok) throw new Error(`download ${r.status}`); return new Uint8Array(await r.arrayBuffer()); },
-      motionsPy: args => unlessStopped(controller.signal, () => run(python, ['-I', path.join(root, 'bin', 'motions.py'), ...args], { cwd: kit, log, signal: controller.signal })
-        .then(code => ({ code }))),
+      codexSession: (id, sinceMs) => codexSessionFacts(sessions, id, sinceMs),
+      codexCwd,
+      judges,
+      codex: health.codex,
+      archive: archiveDays ? archive : null,
+      api,
+      signal: controller.signal,
+      lowMarginFeetTaken,
+      fetchBytes: async url => {
+        const r = await fetch(url, { signal: AbortSignal.timeout(60_000) });
+        if (!r.ok) throw new Error(`download ${r.status}`);
+        return new Uint8Array(await r.arrayBuffer());
+      },
+      motionsPy: args =>
+        unlessStopped(controller.signal, () =>
+          run(python, ['-I', path.join(root, 'bin', 'motions.py'), ...args], { cwd: kit, log, signal: controller.signal }).then(code => ({ code })),
+        ),
       // Method 5: at 6 libwebp's slowest alpha search took 3–7 s per transparent look instead of 0.1–0.2 s, for 1 % fewer bytes. `size`: the
       // longest side kept (1024), or `<width>x<height>` exactly (the expression sheet, which its profile set takes at 1536 × 1024).
       toWebp: async (from, to, size = '1024') => {
-        const code = await run(python, ['-I', '-c', 'import sys\nfrom PIL import Image\nim = Image.open(sys.argv[1]); a = sys.argv[3]\nif "x" in a: im = im.resize(tuple(int(n) for n in a.split("x")), Image.LANCZOS)\nelse: im.thumbnail((int(a), int(a)))\nim.save(sys.argv[2], "WEBP", quality=90, method=5)', from, to, String(size)], { cwd: kit, log });
+        const code = await run(
+          python,
+          [
+            '-I',
+            '-c',
+            'import sys\nfrom PIL import Image\nim = Image.open(sys.argv[1]); a = sys.argv[3]\nif "x" in a: im = im.resize(tuple(int(n) for n in a.split("x")), Image.LANCZOS)\nelse: im.thumbnail((int(a), int(a)))\nim.save(sys.argv[2], "WEBP", quality=90, method=5)',
+            from,
+            to,
+            String(size),
+          ],
+          { cwd: kit, log },
+        );
         if (code !== 0) throw Object.assign(new Error('webp-failed'), { code: 'webp-failed' });
       },
       // Review evidence over the server's limits (2 MiB, 2048 px): lossless WebP, at most 2048 px, nearest so pixel art stays sharp.
       fitImage: async (from, to) => {
-        const code = await run(python, ['-I', '-c', 'import sys\nfrom PIL import Image\nim = Image.open(sys.argv[1]); im.thumbnail((2048, 2048), Image.NEAREST); im.save(sys.argv[2], "WEBP", lossless=True, method=6)', from, to], { cwd: kit, log });
+        const code = await run(
+          python,
+          [
+            '-I',
+            '-c',
+            'import sys\nfrom PIL import Image\nim = Image.open(sys.argv[1]); im.thumbnail((2048, 2048), Image.NEAREST); im.save(sys.argv[2], "WEBP", lossless=True, method=6)',
+            from,
+            to,
+          ],
+          { cwd: kit, log },
+        );
         if (code !== 0) throw Object.assign(new Error('evidence-fit-failed'), { code: 'evidence-fit-failed' });
       },
     });
@@ -892,22 +1268,32 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
     // the token, not the time): the host's other PC claiming it, or any claim's sweep of an expired third lease (`stage-attempts`). Then the
     // renewal's `lease-lost` stops the stage.
     const awake = keepAwake({ say });
-    const wake = wakeWatch({ onWake: gapMs => {
-      renewNow();
-      say(`job ${job.id} ${job.status} woke after ${Math.round(gapMs / 1000)} s — lease renewed`);
-    } });
+    const wake = wakeWatch({
+      onWake: gapMs => {
+        renewNow();
+        say(`job ${job.id} ${job.status} woke after ${Math.round(gapMs / 1000)} s — lease renewed`);
+      },
+    });
     /** @type {any} */ let outcome;
     /** @type {{ name: string, tool: string | null }[]} */ let unknown = [];
     try {
       unknown = await dispatches.unended();
       const stage = /** @type {Record<string, ((job: Job, dir: string) => Promise<any>) | undefined>} */ (stages)[job.status];
-      outcome = unknown.length ? dispatchUnknownOutcome(job.status, unknown)
-        : stage ? await stage(job, dir) : { outcome: 'failed', result: { code: `no-stage-${job.status}` } };
+      outcome = unknown.length
+        ? dispatchUnknownOutcome(job.status, unknown)
+        : stage
+          ? await stage(job, dir)
+          : { outcome: 'failed', result: { code: `no-stage-${job.status}` } };
     } catch (/** @type {any} */ error) {
       // A numeric code (a child process's) used to throw here, outside this catch: the finish never went and the job lost a lease.
       outcome = { outcome: 'retry', result: { code: errorCode(error) } };
       await appendFile(log, `stage error: ${error?.stack ?? error}\n`).catch(() => {});
-    } finally { clearInterval(renew); clearTimeout(limit); wake.stop(); awake.release(); }
+    } finally {
+      clearInterval(renew);
+      clearTimeout(limit);
+      wake.stop();
+      awake.release();
+    }
     if (timedOut) {
       await say(`job ${job.id} ${job.status} stopped after ${Math.round(stageLimitMs(job.status) / 60_000)} minutes`);
       outcome = timedOutOutcome(job.status, outcome);
@@ -916,13 +1302,16 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
       await reportStageTokens(api, job, await spent(), say);
       return;
     }
-    if (!await providerDown(outcome.result?.code) && outcome.outcome === 'ok') cooldowns.worked(stageProviders(job.status, job));
+    if (!(await providerDown(outcome.result?.code)) && outcome.outcome === 'ok') cooldowns.worked(stageProviders(job.status, job));
     // The stage's codex tokens beside its calls (2026-10-31): the server's daily budget and the creator's balance count them. A finish
     // refused (or lost) keeps none, so they go on their own route.
     const tokens = await spent();
-    const reply = await api.finish(job, outcome.outcome, { ...outcome.result, ...(tally.size ? { calls: tally.value() } : {}), ...(tokens ? { tokens } : {}) })
+    const reply = await api
+      .finish(job, outcome.outcome, { ...outcome.result, ...(tally.size ? { calls: tally.value() } : {}), ...(tokens ? { tokens } : {}) })
       .catch(error => ({ ok: false, code: error?.message ?? 'finish-failed' }));
-    await say(`job ${job.id} ${job.status} → ${outcome.outcome}${outcome.result?.code ? ` (${outcome.result.code})` : ''} ${reply.ok ? reply.status : `finish refused ${reply.code}`}`);
+    await say(
+      `job ${job.id} ${job.status} → ${outcome.outcome}${outcome.result?.code ? ` (${outcome.result.code})` : ''} ${reply.ok ? reply.status : `finish refused ${reply.code}`}`,
+    );
     if (!reply.ok) await reportStageTokens(api, job, tokens, say);
     if (unknown.length && reply.ok)
       await dispatches.handOver(unknown).catch(error => say(`job ${job.id} dispatch records not handed over: ${error?.message ?? error}`));
@@ -935,16 +1324,19 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
     try {
       await keepAlive();
       // A front judged: the queue may hold more, so the next turn comes soon again.
-      if (health.codex && Date.now() >= frontDue && await frontTurn() === 'judged') idleWait = TIMING.idleMs;
+      if (health.codex && Date.now() >= frontDue && (await frontTurn()) === 'judged') idleWait = TIMING.idleMs;
       // The heartbeat on its own route when this turn's claim does not carry it (createBeats) — after the front turn, which may have changed
       // the health. Either way, counting the wait that follows this turn.
       if (beats.apart(health.ok, idleWait)) await beatApart();
       const carried = beats.carry(health.ok, idleWait);
-      const claimed = health.ok ? await api.claim(carried ? await beatBody() : null).catch(error => ({ ok: false, code: error.message }))
+      const claimed = health.ok
+        ? await api.claim(carried ? await beatBody() : null).catch(error => ({ ok: false, code: error.message }))
         : { ok: true, stage: 'idle' };
       if (carried && beats.claimed(claimed) === 'apart') await beatApart();
-      if (claimed.ok && claimed.job) { idleWait = TIMING.idleMs; await work(claimed.job); }
-      else {
+      if (claimed.ok && claimed.job) {
+        idleWait = TIMING.idleMs;
+        await work(claimed.job);
+      } else {
         if (!claimed.ok) await say(`claim failed ${claimed.code ?? claimed.status}`);
         if (once) return;
         await new Promise(resolve => setTimeout(resolve, idleWait));
@@ -961,5 +1353,8 @@ export async function main({ once = false, root = ROOT, og: ogGiven, python: pyt
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  main({ once: process.argv.includes('--once') }).catch(error => { console.error(`generation-worker: ${error.message}`); process.exit(1); });
+  main({ once: process.argv.includes('--once') }).catch(error => {
+    console.error(`generation-worker: ${error.message}`);
+    process.exit(1);
+  });
 }

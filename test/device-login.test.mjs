@@ -7,22 +7,37 @@ import { formatUserCode, newUserCode, normalizeUserCode } from '../api/device-lo
 /** The real migrations in PGlite, behind a supabase-js-shaped rpc and a token → user map for auth. */
 async function server() {
   const pg = await migratedDatabase();
-  const owner = crypto.randomUUID(), other = crypto.randomUUID();
+  const owner = crypto.randomUUID(),
+    other = crypto.randomUUID();
   await pg.query('insert into auth.users values($1,$2),($3,$4)', [owner, 'creator@example.test', other, 'other@example.test']);
   const tokens = { 'fixture-owner-token': owner, 'fixture-other-token': other };
   const rpc = async (name, args) => {
     const keys = Object.keys(args);
     try {
-      const result = await pg.query(`select to_jsonb(public.${name}(${keys.map((key, i) => `${key} => $${i + 1}`).join(',')})) as value`, keys.map(key => args[key]));
+      const result = await pg.query(
+        `select to_jsonb(public.${name}(${keys.map((key, i) => `${key} => $${i + 1}`).join(',')})) as value`,
+        keys.map(key => args[key]),
+      );
       return { data: result.rows[0].value };
-    } catch (error) { return { error: { message: error.message } }; }
+    } catch (error) {
+      return { error: { message: error.message } };
+    }
   };
   const minted = [];
-  const creatorLink = async who => { minted.push(who); return { tokenHash: 'a'.repeat(56), expiresAt: '2026-10-24T00:10:00.000Z' }; };
-  const db = { rpc, auth: { getUser: async token => tokens[token] ? { data: { user: { id: tokens[token] } } } : { error: new Error('invalid') } } };
+  const creatorLink = async who => {
+    minted.push(who);
+    return { tokenHash: 'a'.repeat(56), expiresAt: '2026-10-24T00:10:00.000Z' };
+  };
+  const db = { rpc, auth: { getUser: async token => (tokens[token] ? { data: { user: { id: tokens[token] } } } : { error: new Error('invalid') }) } };
   const handle = createHandler({ db, creatorLink });
-  const post = (route, body, token) => handle(new Request(`https://test/ai-fighter/${route}`, { method: 'POST',
-    headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) }));
+  const post = (route, body, token) =>
+    handle(
+      new Request(`https://test/ai-fighter/${route}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      }),
+    );
   return { pg, owner, other, minted, handle, post };
 }
 
@@ -38,7 +53,7 @@ test('start, approve on the homepage, then exactly one magic-link token for the 
   assert.ok(!JSON.stringify(row).includes(started.deviceCode));
 
   const pending = await post('device-logins/token', { deviceCode: started.deviceCode });
-  assert.deepEqual([(pending.status), (await pending.json()).status], [200, 'pending']);
+  assert.deepEqual([pending.status, (await pending.json()).status], [200, 'pending']);
   // Approval needs the user's own sign-in; dashes and case in the typed code do not matter.
   assert.equal((await post('device-logins/approve', { userCode: started.userCode })).status, 401);
   const approved = await post('device-logins/approve', { userCode: started.userCode.toLowerCase().replace('-', ' ') }, 'fixture-owner-token');
@@ -47,11 +62,11 @@ test('start, approve on the homepage, then exactly one magic-link token for the 
   // A second approval of the same code finds nothing open.
   assert.equal((await post('device-logins/approve', { userCode: started.userCode }, 'fixture-other-token')).status, 404);
 
-  await pg.query('update public.af_device_logins set polled_at = now() - interval \'10 seconds\'');
+  await pg.query("update public.af_device_logins set polled_at = now() - interval '10 seconds'");
   const granted = await (await post('device-logins/token', { deviceCode: started.deviceCode })).json();
   assert.deepEqual([granted.status, granted.tokenHash], ['approved', 'a'.repeat(56)]);
   assert.deepEqual(minted, [owner]);
-  await pg.query('update public.af_device_logins set polled_at = now() - interval \'10 seconds\'');
+  await pg.query("update public.af_device_logins set polled_at = now() - interval '10 seconds'");
   const again = await post('device-logins/token', { deviceCode: started.deviceCode });
   assert.deepEqual([again.status, (await again.json()).code], [410, 'device-login-consumed']);
   assert.deepEqual(minted, [owner]);
@@ -91,14 +106,20 @@ test('Postgres caps unauthenticated starts and per-user approvals, and hides the
   // Two open requests cannot share a pairing code.
   await assert.rejects(start(2, 'BCDFGHJK'), /user-code-collision/);
   // 120 requests created in the last 10 minutes stop further unauthenticated starts.
-  await pg.query(`insert into public.af_device_logins(device_code_hash,user_code,status,owner_id,expires_at)
-    select lpad(to_hex(g),64,'0'),'ZZZZZZZZ','consumed',$1,now()+interval '10 minutes' from generate_series(1000,1118) g`, [owner]);
+  await pg.query(
+    `insert into public.af_device_logins(device_code_hash,user_code,status,owner_id,expires_at)
+    select lpad(to_hex(g),64,'0'),'ZZZZZZZZ','consumed',$1,now()+interval '10 minutes' from generate_series(1000,1118) g`,
+    [owner],
+  );
   await assert.rejects(start(3, 'CCCCCCCC'), /rate-limit/);
   await pg.query("update public.af_device_logins set created_at = now() - interval '1 hour'");
   await start(3, 'CCCCCCCC');
   // Ten approvals by one user within an hour stop the eleventh.
-  await pg.query(`insert into public.af_device_logins(device_code_hash,user_code,status,owner_id,expires_at,approved_at,created_at)
-    select lpad(to_hex(g),64,'0'),'XXXXXXXX','approved',$1,now()+interval '10 minutes',now(),now()-interval '1 hour' from generate_series(2000,2009) g`, [owner]);
+  await pg.query(
+    `insert into public.af_device_logins(device_code_hash,user_code,status,owner_id,expires_at,approved_at,created_at)
+    select lpad(to_hex(g),64,'0'),'XXXXXXXX','approved',$1,now()+interval '10 minutes',now(),now()-interval '1 hour' from generate_series(2000,2009) g`,
+    [owner],
+  );
   await assert.rejects(pg.query('select public.af_device_login_approve($1,$2)', [owner, 'CCCCCCCC']), /rate-limit/);
   await assert.rejects(pg.query('select public.af_device_login_start($1,$2,30)', [hash(4), 'DDDDDDDD']), /invalid-ttl/);
   await pg.query('set role anon');
@@ -113,7 +134,10 @@ test('Postgres caps unauthenticated starts and per-user approvals, and hides the
 test('a host pairing shares the code alphabet, never the codes: neither approval finds the other kind', async () => {
   const { post } = await server();
   // Rejection sampling: bytes 240 and up are skipped, so each of the 20 letters stays equally likely.
-  assert.equal(newUserCode(() => Uint8Array.from([255, 240, 0, 1, 19, 20, 39, 239, 2, 3, 250, 4])), 'BCZBZZDF');
+  assert.equal(
+    newUserCode(() => Uint8Array.from([255, 240, 0, 1, 19, 20, 39, 239, 2, 3, 250, 4])),
+    'BCZBZZDF',
+  );
   for (let i = 0; i < 50; i++) assert.ok(normalizeUserCode(formatUserCode(newUserCode(n => crypto.getRandomValues(new Uint8Array(n))))));
   const pairing = await (await post('generations/host/pairings', { name: 'DESKTOP-7Q2K', platform: 'windows' })).json();
   const device = await (await post('device-logins')).json();

@@ -16,9 +16,11 @@ export async function resolveManifest(root, relative) {
   const parts = relativeParts(relative, /[\\:\0]/);
   if (!parts || !relative.endsWith('/fighter.json')) return null;
   // Every component must exist: a missing one throws (PACKAGE_UNAVAILABLE), a link is refused (PATH_NOT_ALLOWED).
-  const canonicalRoot = await realpath(root), target = await pathWithoutLinks(canonicalRoot, parts, { allowMissing: false });
+  const canonicalRoot = await realpath(root),
+    target = await pathWithoutLinks(canonicalRoot, parts, { allowMissing: false });
   if (!target) return null;
-  const resolved = await realpath(target), within = path.relative(canonicalRoot, resolved);
+  const resolved = await realpath(target),
+    within = path.relative(canonicalRoot, resolved);
   if (within.startsWith(`..${path.sep}`) || within === '..' || path.isAbsolute(within)) return null;
   return resolved;
 }
@@ -37,9 +39,17 @@ export function makePackageValidator(root, { timeoutMs = 20000, queue = serialQu
       if (!manifest) return issue('PATH_NOT_ALLOWED');
       const run = await forkWorker(new URL('./package-worker.mjs', import.meta.url), [manifest], { timeoutMs, heapMb: 128 });
       if (!run.started) return issue('WORKER_START_FAILED');
-      return /** @type {PackageCheck | undefined} */ (run.message)
-        ?? issue(run.timedOut ? 'VALIDATION_TIMEOUT' : run.code === 0 ? 'WORKER_NO_RESULT' : 'WORKER_FAILED');
-    } catch { return issue('PACKAGE_UNAVAILABLE'); }
+      return (
+        /** @type {PackageCheck | undefined} */ (run.message) ??
+        issue(run.timedOut ? 'VALIDATION_TIMEOUT' : run.code === 0 ? 'WORKER_NO_RESULT' : 'WORKER_FAILED')
+      );
+    } catch {
+      return issue('PACKAGE_UNAVAILABLE');
+    }
   };
-  return relative => queue(() => validateOnce(relative), () => issue('VALIDATOR_BUSY'));
+  return relative =>
+    queue(
+      () => validateOnce(relative),
+      () => issue('VALIDATOR_BUSY'),
+    );
 }

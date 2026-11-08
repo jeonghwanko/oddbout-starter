@@ -112,7 +112,10 @@ test('the claim sends the heartbeat body the heartbeat route takes, or an empty 
   /** @type {{ url: string, body: unknown }[]} */
   const sent = [];
   /** @type {typeof fetch} */
-  const fetcher = async (url, init) => { sent.push({ url: String(url), body: JSON.parse(String(init?.body)) }); return new Response('{"ok":true,"stage":"idle"}'); };
+  const fetcher = async (url, init) => {
+    sent.push({ url: String(url), body: JSON.parse(String(init?.body)) });
+    return new Response('{"ok":true,"stage":"idle"}');
+  };
   const api = createApi({ base: 'https://api.test/ai-fighter', key: `afw_${'a'.repeat(64)}`, fetcher });
   await api.claim();
   await api.claim({ health: { ok: true, codex: true }, usage: { at: 'x' } });

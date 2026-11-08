@@ -1,7 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { ARENA_URL, createCloudHandler, timedFetch } from '../../../mcp/cloud.mjs';
 
-const url = Deno.env.get('SUPABASE_URL'), secret = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+const url = Deno.env.get('SUPABASE_URL'),
+  secret = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 if (!url || !secret) throw new Error('Missing server credentials');
 // Every database, Storage and Auth call ends by DATABASE_TIMEOUT_MS (2026-11-03): supabase-js sets no limit of its own.
 const db = createClient(url, secret, { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: timedFetch() } });

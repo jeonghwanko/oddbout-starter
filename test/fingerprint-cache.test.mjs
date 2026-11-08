@@ -20,5 +20,7 @@ test('a reused hash never hides a rewrite, even one that keeps the size and rest
     const second = await fingerprint(root, 'evidence.txt');
     assert.notEqual(second.sha256, first.sha256);
     assert.equal(second.bytes, 4);
-  } finally { await rm(root, { recursive: true, force: true }); }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

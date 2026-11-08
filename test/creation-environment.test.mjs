@@ -8,7 +8,14 @@ import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { createEnvironmentStore, probeDestination } from '../mcp/creation-environment.mjs';
-import { bundledProfiles, profileHash, canonical, verifyProfileEnvelope, fetchProfileEnvelope, publishEnvironmentProfiles } from '../mcp/environment-profiles.mjs';
+import {
+  bundledProfiles,
+  profileHash,
+  canonical,
+  verifyProfileEnvelope,
+  fetchProfileEnvelope,
+  publishEnvironmentProfiles,
+} from '../mcp/environment-profiles.mjs';
 import { inspectGenerationLogin, publicDeviceChallenge, runDeviceLogin } from '../mcp/generation-connection.mjs';
 import { createServer } from '../mcp/server.mjs';
 import { main as connect } from '../scripts/connect-generation.mjs';
@@ -16,17 +23,34 @@ import { main as connect } from '../scripts/connect-generation.mjs';
 async function fixture(t, options = {}) {
   const root = await mkdtemp(path.join(tmpdir(), 'fighter-environment-'));
   t.after(() => rm(root, { recursive: true, force: true }));
-  const calls = [], store = createEnvironmentStore(root, { loginProbe: async () => ({ status: 'signed-in', accountIdentity: 'unknown', imageAccess: 'unknown' }),
-    fetchImpl: async (url, init) => { calls.push({ url, init }); return new Response(null, { status: 204 }); }, ...options });
-  const configured = await store.update(0, { type: 'configure', host: 'dots', account: 'gpt', conversationId: 'chat-1',
-    confirmedAccess: ['gpt-image'], feedback: '내 GPT 이미지 기능을 사용할 수 있어요. 이 VM에서 연결해줘.' });
+  const calls = [],
+    store = createEnvironmentStore(root, {
+      loginProbe: async () => ({ status: 'signed-in', accountIdentity: 'unknown', imageAccess: 'unknown' }),
+      fetchImpl: async (url, init) => {
+        calls.push({ url, init });
+        return new Response(null, { status: 204 });
+      },
+      ...options,
+    });
+  const configured = await store.update(0, {
+    type: 'configure',
+    host: 'dots',
+    account: 'gpt',
+    conversationId: 'chat-1',
+    confirmedAccess: ['gpt-image'],
+    feedback: '내 GPT 이미지 기능을 사용할 수 있어요. 이 VM에서 연결해줘.',
+  });
   return { root, calls, store, configured };
 }
 async function allow(store) {
   const view = await store.inspect();
   let result = await store.update(view.revision, { type: 'approve-network', planHash: view.plan.planHash, feedback: '표시된 주소를 이 환경에서 허용합니다.' });
-  result = await store.update(result.revision, { type: 'report-host-network', planHash: result.plan.planHash,
-    status: 'allowed', evidence: 'test-host-permission-receipt-1' });
+  result = await store.update(result.revision, {
+    type: 'report-host-network',
+    planHash: result.plan.planHash,
+    status: 'allowed',
+    evidence: 'test-host-permission-receipt-1',
+  });
   await store.update(result.revision, { type: 'check-network' });
 }
 
@@ -55,10 +79,14 @@ test('restart restores choices; stale probes, another host, modified delivery an
   const { store, root } = await fixture(t, { now: () => time, hostId: 'host-a' });
   await allow(store);
   const state = await store.read();
-  const record = { version: 1, environment: state.environmentId, conversationId: 'chat-1',
+  const record = {
+    version: 1,
+    environment: state.environmentId,
+    conversationId: 'chat-1',
     generation: { status: 'ready', route: 'codex-image', evidence: 'test-tool-access' },
     delivery: { status: 'ready', route: 'host-attachment', evidence: 'test-host-capability', conversationId: 'chat-1', fullBody: true, faceCrop: true },
-    previousGeneration: { status: 'none', evidence: 'no-attempts' } };
+    previousGeneration: { status: 'none', evidence: 'no-attempts' },
+  };
   await writeFile(path.join(root, 'delivery.json'), JSON.stringify(record));
   await store.update(state.revision, { type: 'delivery', path: 'delivery.json' });
   assert.equal((await store.inspect()).readyForGeneration, true);
@@ -92,8 +120,14 @@ test('CAS preserves decisions, changing provider clears permission, unsupported 
   await allow(store);
   const state = await store.read();
   await assert.rejects(store.update(0, { type: 'revoke-network', feedback: 'stale' }), /revision-conflict/);
-  await store.update(state.revision, { type: 'configure', account: 'grok', host: 'dots', conversationId: 'chat-1',
-    confirmedAccess: ['grok-image'], feedback: 'Grok으로 바꿔줘' });
+  await store.update(state.revision, {
+    type: 'configure',
+    account: 'grok',
+    host: 'dots',
+    conversationId: 'chat-1',
+    confirmedAccess: ['grok-image'],
+    feedback: 'Grok으로 바꿔줘',
+  });
   const view = await store.inspect();
   assert.equal(view.generation.status, 'adapter-unavailable');
   assert.equal(view.network.approved, false);
@@ -102,7 +136,8 @@ test('CAS preserves decisions, changing provider clears permission, unsupported 
 });
 
 test('changed remote content needs a trusted signature; rollback, wildcards, extra fields and redirects fail closed', async () => {
-  const bundled = await bundledProfiles(), next = structuredClone(bundled);
+  const bundled = await bundledProfiles(),
+    next = structuredClone(bundled);
   next.revision++;
   next.profiles[0].destinations.push({ host: 'files.oaiusercontent.com', port: 443, purpose: 'test-only-download', stage: 'download' });
   assert.equal(verifyProfileEnvelope({ profile: bundled }, { bundled }).trust, 'bundled-content');
@@ -111,16 +146,25 @@ test('changed remote content needs a trusted signature; rollback, wildcards, ext
   const trustedKeys = { release: publicKey.export({ type: 'spki', format: 'pem' }) };
   const signature = sign(null, Buffer.from(canonical(next)), privateKey).toString('base64');
   assert.equal(verifyProfileEnvelope({ profile: next, keyId: 'release', signature }, { bundled, trustedKeys }).trust, 'signed-release');
-  const altered = structuredClone(next); altered.profiles[0].destinations[0].host = 'different.org';
+  const altered = structuredClone(next);
+  altered.profiles[0].destinations[0].host = 'different.org';
   assert.throws(() => verifyProfileEnvelope({ profile: altered, keyId: 'release', signature }, { bundled, trustedKeys }), /signature-invalid/);
   assert.throws(() => verifyProfileEnvelope({ profile: bundled }, { bundled, minimumRevision: 2 }), /rollback/);
   for (const host of ['*.openai.com', '127.0.0.1', 'x.localhost', 'x.internal', 'https://chatgpt.com']) {
-    const invalid = structuredClone(bundled); invalid.profiles[0].destinations[0].host = host;
+    const invalid = structuredClone(bundled);
+    invalid.profiles[0].destinations[0].host = host;
     assert.throws(() => profileHash(invalid));
   }
   assert.throws(() => profileHash({ ...bundled, command: 'execute-untrusted-text' }));
-  await assert.rejects(fetchProfileEnvelope('https://profiles.oddbout.com/v1.json', { bundled,
-    fetchImpl: async (_url, init) => { assert.equal(init.redirect, 'error'); throw Error('redirect'); } }));
+  await assert.rejects(
+    fetchProfileEnvelope('https://profiles.oddbout.com/v1.json', {
+      bundled,
+      fetchImpl: async (_url, init) => {
+        assert.equal(init.redirect, 'error');
+        throw Error('redirect');
+      },
+    }),
+  );
   const denied = await probeDestination({ host: 'chatgpt.com' }, async () => new Response(null, { status: 403 }));
   assert.equal(denied.status, 'unverified');
 });
@@ -133,21 +177,28 @@ test('profile updates invalidate approvals and the public export contains no wor
   const envelope = JSON.parse(await readFile(path.join(output, exported.path), 'utf8'));
   assert.equal(exported.hash, profileHash(envelope.profile));
   assert.ok(!JSON.stringify(envelope).includes((await store.read()).environmentId));
-  const next = structuredClone(envelope.profile); next.revision++;
+  const next = structuredClone(envelope.profile);
+  next.revision++;
   const { publicKey, privateKey } = generateKeyPairSync('ed25519');
   const update = { profile: next, keyId: 'release', signature: sign(null, Buffer.from(canonical(next)), privateKey).toString('base64') };
-  const reader = createEnvironmentStore(root, { trustedKeys: { release: publicKey.export({ type: 'spki', format: 'pem' }) },
-    fetchImpl: async () => new Response(JSON.stringify(update)), profileSource: 'https://oddbout.com/creation-environments/v1.json',
-    loginProbe: async () => ({ status: 'signed-in' }) });
+  const reader = createEnvironmentStore(root, {
+    trustedKeys: { release: publicKey.export({ type: 'spki', format: 'pem' }) },
+    fetchImpl: async () => new Response(JSON.stringify(update)),
+    profileSource: 'https://oddbout.com/creation-environments/v1.json',
+    loginProbe: async () => ({ status: 'signed-in' }),
+  });
   await reader.update((await reader.read()).revision, { type: 'refresh-profile' });
   assert.equal((await reader.inspect()).network.approved, false);
 });
 
 test('login diagnostics and public challenge never return credentials, callback URLs or unknown success', async () => {
   const resolve = async () => ({ command: 'test-codex', prefix: [] });
-  for (const [result, expected] of [[{ code: 0, text: 'Logged in using ChatGPT' }, 'signed-in'],
+  for (const [result, expected] of [
+    [{ code: 0, text: 'Logged in using ChatGPT' }, 'signed-in'],
     [{ code: 0, text: 'Logged in using API key sk-test-secret' }, 'api-billing-blocked'],
-    [{ code: 0, text: 'unexpected new output' }, 'unknown'], [{ code: 1, text: 'Not logged in' }, 'sign-in-required']]) {
+    [{ code: 0, text: 'unexpected new output' }, 'unknown'],
+    [{ code: 1, text: 'Not logged in' }, 'sign-in-required'],
+  ]) {
     const view = await inspectGenerationLogin({ resolve, run: async () => result });
     assert.equal(view.status, expected);
     assert.ok(!JSON.stringify(view).includes('sk-test-secret'));
@@ -161,18 +212,27 @@ test('login diagnostics and public challenge never return credentials, callback 
 });
 
 test('device flow streams only the public challenge and rechecks official login status', async () => {
-  const output = [], invocations = [];
-  const result = await runDeviceLogin({ emit: item => output.push(item), resolve: async () => ({ command: 'test-cli', prefix: [] }),
-    run: async () => ({ code: 0, text: '--device-auth' }), inspect: async () => ({ status: 'signed-in', imageAccess: 'unknown' }),
+  const output = [],
+    invocations = [];
+  const result = await runDeviceLogin({
+    emit: item => output.push(item),
+    resolve: async () => ({ command: 'test-cli', prefix: [] }),
+    run: async () => ({ code: 0, text: '--device-auth' }),
+    inspect: async () => ({ status: 'signed-in', imageAccess: 'unknown' }),
     spawnImpl: (command, args, options) => {
       invocations.push({ command, args, options });
-      const child = new EventEmitter(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
+      const child = new EventEmitter();
+      child.stdout = new PassThrough();
+      child.stderr = new PassThrough();
       queueMicrotask(() => {
         child.stdout.write('https://auth.openai.com/codex/');
-        child.stdout.write('device\nABCD-12345\n'); child.stderr.write('token=PRIVATE'); child.emit('close', 0);
+        child.stdout.write('device\nABCD-12345\n');
+        child.stderr.write('token=PRIVATE');
+        child.emit('close', 0);
       });
       return child;
-    } });
+    },
+  });
   assert.equal(result.status, 'signed-in');
   assert.equal(output.length, 1);
   assert.ok(!JSON.stringify(output).includes('PRIVATE'));
@@ -184,18 +244,25 @@ test('device flow streams only the public challenge and rechecks official login 
 test('device flow waits for the complete code line across chunks and interleaved stderr', async () => {
   const output = [];
   let emittedBeforeComplete;
-  const result = await runDeviceLogin({ emit: item => output.push(item), resolve: async () => ({ command: 'test-cli', prefix: [] }),
-    run: async () => ({ code: 0, text: '--device-auth' }), inspect: async () => ({ status: 'signed-in' }),
+  const result = await runDeviceLogin({
+    emit: item => output.push(item),
+    resolve: async () => ({ command: 'test-cli', prefix: [] }),
+    run: async () => ({ code: 0, text: '--device-auth' }),
+    inspect: async () => ({ status: 'signed-in' }),
     spawnImpl: () => {
-      const child = new EventEmitter(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
+      const child = new EventEmitter();
+      child.stdout = new PassThrough();
+      child.stderr = new PassThrough();
       queueMicrotask(() => {
         child.stdout.write('https://auth.openai.com/codex/device\nABCD-1234');
         child.stderr.write('PRIVATE diagnostic\n');
         emittedBeforeComplete = output.length;
-        child.stdout.write('56\n'); child.emit('close', 0);
+        child.stdout.write('56\n');
+        child.emit('close', 0);
       });
       return child;
-    } });
+    },
+  });
   assert.equal(emittedBeforeComplete, 0);
   assert.equal(result.status, 'signed-in');
   assert.equal(output.length, 1);
@@ -205,16 +272,23 @@ test('device flow waits for the complete code line across chunks and interleaved
 
 test('device flow never combines separate streams into a synthetic pairing code', async () => {
   const output = [];
-  const result = await runDeviceLogin({ emit: item => output.push(item), resolve: async () => ({ command: 'test-cli', prefix: [] }),
+  const result = await runDeviceLogin({
+    emit: item => output.push(item),
+    resolve: async () => ({ command: 'test-cli', prefix: [] }),
     run: async () => ({ code: 0, text: '--device-auth' }),
     spawnImpl: () => {
-      const child = new EventEmitter(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
+      const child = new EventEmitter();
+      child.stdout = new PassThrough();
+      child.stderr = new PassThrough();
       queueMicrotask(() => {
         child.stdout.write('https://auth.openai.com/codex/device\nABCD-');
-        child.stderr.write('12345\n'); child.stdout.write('\n'); child.emit('close', 1);
+        child.stderr.write('12345\n');
+        child.stdout.write('\n');
+        child.emit('close', 1);
       });
       return child;
-    } });
+    },
+  });
   assert.equal(result.status, 'login-failed');
   assert.deepEqual(output, []);
 });
@@ -223,13 +297,31 @@ test('prepared connection command is revision-bound and executes no generation',
   const { root, store } = await fixture(t, { loginProbe: async () => ({ status: 'sign-in-required' }) });
   await allow(store);
   const prepared = await store.prepareLogin();
-  const output = []; let calls = 0;
+  const output = [];
+  let calls = 0;
   assert.equal(prepared.execution.cwd, root);
   assert.ok(prepared.execution.args[0].endsWith('connect-generation.mjs'));
-  await assert.rejects(connect([root, '0'], { makeStore: () => store, connect: async () => { calls++; } }), /revision-conflict/);
+  await assert.rejects(
+    connect([root, '0'], {
+      makeStore: () => store,
+      connect: async () => {
+        calls++;
+      },
+    }),
+    /revision-conflict/,
+  );
   assert.equal(calls, 0);
-  assert.equal(await connect([root, String(prepared.revision)], { makeStore: () => store, emit: item => output.push(item),
-    connect: async () => { calls++; return { status: 'signed-in' }; } }), 0);
+  assert.equal(
+    await connect([root, String(prepared.revision)], {
+      makeStore: () => store,
+      emit: item => output.push(item),
+      connect: async () => {
+        calls++;
+        return { status: 'signed-in' };
+      },
+    }),
+    0,
+  );
   assert.equal(calls, 1);
   assert.equal(output[0].status, 'signed-in');
 });
@@ -239,12 +331,19 @@ test('MCP connection tools are discoverable and configure without logging in or 
   t.after(() => rm(root, { recursive: true, force: true }));
   const server = createServer({ root });
   const client = new Client({ name: 'environment-test', version: '1' });
-  const [a, b] = InMemoryTransport.createLinkedPair(); await server.connect(a); await client.connect(b);
-  t.after(async () => { await client.close(); await server.close(); });
+  const [a, b] = InMemoryTransport.createLinkedPair();
+  await server.connect(a);
+  await client.connect(b);
+  t.after(async () => {
+    await client.close();
+    await server.close();
+  });
   const call = async (name, args = {}) => (await client.callTool({ name, arguments: args })).structuredContent;
   assert.equal((await call('get_creation_environment')).data.status, 'not-configured');
-  const result = await call('update_creation_environment', { expectedRevision: 0, change: { type: 'configure',
-    account: 'stop', host: 'dots', conversationId: 'this-chat', feedback: '지금 생성하지 않음' } });
+  const result = await call('update_creation_environment', {
+    expectedRevision: 0,
+    change: { type: 'configure', account: 'stop', host: 'dots', conversationId: 'this-chat', feedback: '지금 생성하지 않음' },
+  });
   assert.equal(result.ok, true);
   const view = (await call('get_creation_environment')).data;
   assert.equal(view.generation.status, 'stopped');

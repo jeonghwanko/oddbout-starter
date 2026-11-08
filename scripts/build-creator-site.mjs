@@ -21,7 +21,8 @@ import { fingerprint, buildRevision, assertSameRevision, siteEntries, publicSite
 // Build the AI Fighter entries with explicit public settings, without loading source .env files.
 const [sourceArg, outputArg] = process.argv.slice(2);
 if (!sourceArg || !outputArg) throw new Error('Usage: node scripts/build-creator-site.mjs <kaito_web> <empty-output-directory>');
-const source = resolve(sourceArg), output = resolve(outputArg);
+const source = resolve(sourceArg),
+  output = resolve(outputArg);
 const relativeOutput = relative(source, output);
 if (!relativeOutput || (!isAbsolute(relativeOutput) && relativeOutput !== '..' && !relativeOutput.startsWith('..\\') && !relativeOutput.startsWith('../'))) {
   throw new Error('Output directory must be outside the source tree');
@@ -40,39 +41,64 @@ const { creationContextPlugin } = await import(pathToFileURL(join(source, 'tools
 // Per-match-up share previews: the game writes every shareable pair's page and card and links them. Older sources have no plugin and
 // keep linking fighter.html, so a rollback still builds.
 const boutShareModule = join(source, 'tools/ai-fighter/bout-share-pages.mjs');
-const boutSharePages = await readFile(boutShareModule).then(() => true, () => false)
-  ? [(await import(pathToFileURL(boutShareModule).href)).boutSharePagesPlugin(new URL('.', config.gameUrl).href)] : [];
+const boutSharePages = (await readFile(boutShareModule).then(
+  () => true,
+  () => false,
+))
+  ? [(await import(pathToFileURL(boutShareModule).href)).boutSharePagesPlugin(new URL('.', config.gameUrl).href)]
+  : [];
 // The plugins that shape the game's shipped bundle (2026-10-30 — the sound registry's game copy, without its source and rights records).
 // configFile: false keeps the game's vite.config.ts out, so the game lists them for both builds. Older sources have no list and build without.
 const gamePluginsModule = join(source, 'tools/ai-fighter/site-build-plugins.mjs');
-const gamePlugins = await readFile(gamePluginsModule).then(() => true, () => false)
-  ? (await import(pathToFileURL(gamePluginsModule).href)).siteBuildPlugins() : [];
+const gamePlugins = (await readFile(gamePluginsModule).then(
+  () => true,
+  () => false,
+))
+  ? (await import(pathToFileURL(gamePluginsModule).href)).siteBuildPlugins()
+  : [];
 await build({
-  configFile: false, root: source, envDir: false, base: config.base,
-  plugins: [creationContextPlugin(), ...boutSharePages, ...gamePlugins, milestonePlugin(), youtubeChannelPlugin(config.youtubeChannelUrl), googleAnalyticsPlugin(config.analyticsMeasurementId, config.siteUrl, config.apiBase), {
-    name: 'standalone-creator-origin',
-    transformIndexHtml: { order: 'pre',
-      /** @param {string} html @param {{ filename: string }} context */
-      handler(html, context) {
-      const text = publicSiteText(html);
-      return context.filename.replaceAll('\\', '/').endsWith('/privacy.html') ? sitePrivacyNotice(text) : text;
-    } },
-    /** @param {string} code @param {string} id */
-    transform(code, id) {
-      code = publicSiteText(code);
-      if (!id.replaceAll('\\', '/').endsWith('/src/platform/fighterCreator.ts')) return code;
-      const old = 'export const PUBLIC_CREATOR_ORIGIN = "https://rupin.pryzm.gg";';
-      if (!code.includes(old)) throw new Error('Creator origin source changed; review the standalone build');
-      return code.replace(old, `export const PUBLIC_CREATOR_ORIGIN = ${JSON.stringify(new URL(config.siteUrl).origin)};`);
+  configFile: false,
+  root: source,
+  envDir: false,
+  base: config.base,
+  plugins: [
+    creationContextPlugin(),
+    ...boutSharePages,
+    ...gamePlugins,
+    milestonePlugin(),
+    youtubeChannelPlugin(config.youtubeChannelUrl),
+    googleAnalyticsPlugin(config.analyticsMeasurementId, config.siteUrl, config.apiBase),
+    {
+      name: 'standalone-creator-origin',
+      transformIndexHtml: {
+        order: 'pre',
+        /** @param {string} html @param {{ filename: string }} context */
+        handler(html, context) {
+          const text = publicSiteText(html);
+          return context.filename.replaceAll('\\', '/').endsWith('/privacy.html') ? sitePrivacyNotice(text) : text;
+        },
+      },
+      /** @param {string} code @param {string} id */
+      transform(code, id) {
+        code = publicSiteText(code);
+        if (!id.replaceAll('\\', '/').endsWith('/src/platform/fighterCreator.ts')) return code;
+        const old = 'export const PUBLIC_CREATOR_ORIGIN = "https://rupin.pryzm.gg";';
+        if (!code.includes(old)) throw new Error('Creator origin source changed; review the standalone build');
+        return code.replace(old, `export const PUBLIC_CREATOR_ORIGIN = ${JSON.stringify(new URL(config.siteUrl).origin)};`);
+      },
     },
-  }],
+  ],
   define: {
     'import.meta.env.VITE_AI_FIGHTER_API_BASE': JSON.stringify(config.apiBase),
     'import.meta.env.VITE_AI_FIGHTER_PUBLISHABLE_KEY': JSON.stringify(config.publishableKey),
     'import.meta.env.VITE_AI_FIGHTER_GAME_URL': JSON.stringify(config.gameUrl),
   },
   build: {
-    target: 'es2022', manifest: true, outDir: output, emptyOutDir: false, copyPublicDir: false,
+    target: 'es2022',
+    manifest: true,
+    outDir: output,
+    emptyOutDir: false,
+    copyPublicDir: false,
     rolldownOptions: { input: Object.fromEntries(siteEntries.map(page => [page.replace('.html', ''), join(source, page)])) },
   },
 });
@@ -98,13 +124,16 @@ const updatesOutput = await readUpdatesManifest(output);
 await writeUpdatesAnalytics(output, updatesOutput.pages, config.analyticsMeasurementId, config.siteUrl, config.apiBase);
 await writeSiteDiscovery(output, config.siteUrl, ['index.html', ...siteEntries, ...policyFiles, ...updatesOutput.pages]);
 // The game's public 404 belongs to another site and links to the domain root, which is not ours.
-await writeFile(join(output, '404.html'), `<!doctype html>
+await writeFile(
+  join(output, '404.html'),
+  `<!doctype html>
 <html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer"><meta name="robots" content="noindex"><title>AI Fighter · 페이지를 찾을 수 없습니다</title>
 <style>html,body{height:100%;margin:0}body{display:grid;place-items:center;background:#14212d;color:#f5f2e9;font:16px/1.6 Arial,sans-serif;text-align:center}h1{font-size:28px;margin:0 0 12px}a{color:#e9f56a}</style>
 <main><h1>페이지를 찾을 수 없습니다 · Page not found</h1>
 <p><a href="${config.base}">AI Fighter 홈으로 · Back to AI Fighter</a></p></main></html>
-`);
+`,
+);
 const assets = await readdir(join(output, 'assets'));
 const js = (await Promise.all(assets.filter(f => f.endsWith('.js')).map(f => readFile(join(output, 'assets', f), 'utf8')))).join('\n');
 const css = (await Promise.all(assets.filter(f => f.endsWith('.css')).map(f => readFile(join(output, 'assets', f), 'utf8')))).join('\n');
@@ -115,18 +144,24 @@ if (js.includes('rupin.pryzm.gg') || js.includes('findthem')) throw new Error('O
 // Every font a stylesheet loads must be in the output at the address it gives: the site's Pretendard slices are bundled (assets/), the
 // game page's whole fonts stay under fonts/. A font inlined as a data URI has no file to check.
 const fontUrls = [...css.matchAll(/url\(\s*['"]?([^'")]+\.woff2?)(?:[?#][^'")]*)?['"]?\s*\)/g)].map(match => match[1]);
-if (!fontUrls.some(url => /Pretendard-Regular/.test(url)) || !fontUrls.some(url => /Pretendard-Bold/.test(url))) throw new Error('Site stylesheet does not load Pretendard');
+if (!fontUrls.some(url => /Pretendard-Regular/.test(url)) || !fontUrls.some(url => /Pretendard-Bold/.test(url)))
+  throw new Error('Site stylesheet does not load Pretendard');
 for (const url of new Set(fontUrls)) {
   if (/^[a-z]+:/i.test(url)) throw new Error(`Font loaded from another origin: ${url}`);
   const path = url.startsWith(config.base) ? url.slice(config.base.length) : join('assets', url);
-  await readFile(join(output, path)).catch(() => { throw new Error(`Incorrect deployed font URL: ${url}`); });
+  await readFile(join(output, path)).catch(() => {
+    throw new Error(`Incorrect deployed font URL: ${url}`);
+  });
 }
 for (const font of ['Pretendard-Regular.woff2', 'Pretendard-Bold.woff2']) await readFile(join(output, 'fonts', font));
 assertSameRevision(revision, buildRevision(source, hostingRoot));
 const release = {
-  buildId: randomUUID(), siteUrl: config.siteUrl, builtAt,
-  ...revision, dirty: false,
-  ...await fingerprint(output),
+  buildId: randomUUID(),
+  siteUrl: config.siteUrl,
+  builtAt,
+  ...revision,
+  dirty: false,
+  ...(await fingerprint(output)),
 };
 await writeFile(join(output, 'deployment.json'), JSON.stringify(release, null, 2) + '\n');
 console.log(JSON.stringify({ output, ...release, checks: 'public-config-and-font-paths-passed' }));

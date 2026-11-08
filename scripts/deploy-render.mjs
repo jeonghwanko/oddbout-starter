@@ -14,14 +14,26 @@ if (option === '--dry-run') {
   console.log(JSON.stringify({ status: 'verified-only', commit, service: 'ai-fighter-validator' }));
 } else {
   let hook;
-  try { hook = new URL(/** @type {string} */ (process.env.AI_FIGHTER_RENDER_DEPLOY_HOOK)); } catch { throw new Error('Missing Render deploy hook'); }
-  if (hook.origin !== 'https://api.render.com' || hook.pathname !== '/deploy/srv-dbbohr8m7kps73flja7g' ||
-      hook.username || hook.password || !hook.searchParams.get('key')) throw new Error('Unexpected Render deploy hook');
+  try {
+    hook = new URL(/** @type {string} */ (process.env.AI_FIGHTER_RENDER_DEPLOY_HOOK));
+  } catch {
+    throw new Error('Missing Render deploy hook');
+  }
+  if (
+    hook.origin !== 'https://api.render.com' ||
+    hook.pathname !== '/deploy/srv-dbbohr8m7kps73flja7g' ||
+    hook.username ||
+    hook.password ||
+    !hook.searchParams.get('key')
+  )
+    throw new Error('Unexpected Render deploy hook');
   hook.searchParams.set('ref', commit);
   let response;
   try {
     response = await fetch(hook, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(30_000) });
-  } catch { throw new Error('Render deploy request failed; check the dashboard before retrying (outcome unknown)'); }
+  } catch {
+    throw new Error('Render deploy request failed; check the dashboard before retrying (outcome unknown)');
+  }
   if (!response.ok) throw new Error(`Render deploy rejected (${response.status})`);
   console.log(JSON.stringify({ status: 'accepted', commit }));
   // The previous deployment may still return 200 while the new one builds.

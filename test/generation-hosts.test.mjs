@@ -21,36 +21,58 @@ test('a host applies, is approved, gets a key and takes the requests meant for h
     assert.equal((await call('POST', 'generations/host', { name: '고양이 공방', billing: 'api-key' }, theirs)).body.code, 'host-terms-required');
     const applied = (await call('POST', 'generations/host', { name: '고양이 공방', billing: 'api-key', termsAccepted: true }, theirs)).body.host;
     assert.equal(applied.approved, false);
-    assert.deepEqual((await call('GET', 'generations/hosts', undefined, null)).body.hosts.map(h => h.name), ['ODDBOUT']);
+    assert.deepEqual(
+      (await call('GET', 'generations/hosts', undefined, null)).body.hosts.map(h => h.name),
+      ['ODDBOUT'],
+    );
     // Not approved yet: a key all the same, for his own requests on his own PC (내 선수는 내 PC로, 2026-10-28).
     const issued = (await call('POST', 'generations/host/keys', {}, theirs)).body;
-    assert.match(issued.key, /^afw_[a-f0-9]{64}$/); assert.equal(issued.host, applied.id);
+    assert.match(issued.key, /^afw_[a-f0-9]{64}$/);
+    assert.equal(issued.host, applied.id);
     const host = (method, path, body, headers) => call(method, `generation-worker/${path}`, body, issued.key, headers);
     assert.equal((await host('POST', 'heartbeat', { health: { ok: true, codex: true, grok: true } })).body.capabilities.hosts, 0);
-    assert.deepEqual((await call('GET', 'generations/hosts', undefined, null)).body.hosts.map(h => h.name), ['ODDBOUT']);
+    assert.deepEqual(
+      (await call('GET', 'generations/hosts', undefined, null)).body.hosts.map(h => h.name),
+      ['ODDBOUT'],
+    );
     assert.equal((await call('GET', 'generations/host', undefined, theirs)).body.host.online, true);
-    const ask = body => call('POST', 'generations', { description: '빨간 글러브를 낀 고양이 복서', language: 'ko', ...body }, undefined, { 'idempotency-key': crypto.randomUUID() });
+    const ask = body =>
+      call('POST', 'generations', { description: '빨간 글러브를 낀 고양이 복서', language: 'ko', ...body }, undefined, {
+        'idempotency-key': crypto.randomUUID(),
+      });
     assert.equal((await ask({ host: applied.id, hostConsent: true })).body.code, 'invalid-host');
     // His own request names himself, with no consent to give: the brief is ODDBOUT's, the rest his PC's.
     assert.equal((await ask({ host: 'mine' })).body.code, 'host-not-found'); // the requester has no host of his own
-    const self = (await call('POST', 'generations', { description: '파란 망토를 두른 고양이 검객', language: 'ko', host: 'mine' }, theirs,
-      { 'idempotency-key': crypto.randomUUID() })).body.job;
+    const self = (
+      await call('POST', 'generations', { description: '파란 망토를 두른 고양이 검객', language: 'ko', host: 'mine' }, theirs, {
+        'idempotency-key': crypto.randomUUID(),
+      })
+    ).body.job;
     assert.deepEqual([self.host.choice, self.host.requested.name], ['host', '고양이 공방']);
     const finishOk = (via, c, result) => via('POST', 'finish', { jobId: c.id, leaseToken: c.leaseToken, outcome: 'ok', result });
     let mineHeld = (await work('POST', 'claim', {})).body.job;
-    assert.equal(mineHeld.id, self.id); await finishOk(work, mineHeld, { brief: { profile: { name: '파란 칼날' } } });
+    assert.equal(mineHeld.id, self.id);
+    await finishOk(work, mineHeld, { brief: { profile: { name: '파란 칼날' } } });
     assert.equal((await work('POST', 'claim', {})).body.stage, 'idle');
     mineHeld = (await host('POST', 'claim', {})).body.job;
     assert.deepEqual([mineHeld.id, mineHeld.status], [self.id, 'appearance']);
     await call('DELETE', `generations/${self.id}`, undefined, theirs);
-    await sql.query('update public.af_generation_jobs set created_at = now() - interval \'2 days\' where id = $1', [self.id]);
+    await sql.query("update public.af_generation_jobs set created_at = now() - interval '2 days' where id = $1", [self.id]);
     // Approved: other people's requests too.
     await sql.query('update public.af_generation_hosts set approved = true where id = $1', [applied.id]);
     assert.equal((await host('POST', 'heartbeat', { health: { ok: true, codex: true, grok: true } })).body.capabilities.hosts, 1);
     const listed = (await call('GET', 'generations/hosts', undefined, null)).body.hosts;
-    assert.deepEqual(listed.map(h => [h.name, h.official, h.online]), [['ODDBOUT', true, true], ['고양이 공방', false, true]]);
+    assert.deepEqual(
+      listed.map(h => [h.name, h.official, h.online]),
+      [
+        ['ODDBOUT', true, true],
+        ['고양이 공방', false, true],
+      ],
+    );
     const mine = (await call('GET', 'generations/host', undefined, theirs)).body.host;
-    assert.equal(mine.online, true); assert.equal(mine.keys.length, 1); assert.equal(mine.billing, 'api-key');
+    assert.equal(mine.online, true);
+    assert.equal(mine.keys.length, 1);
+    assert.equal(mine.billing, 'api-key');
 
     // A request that names him: consent first. The brief is ODDBOUT's; the looks on are his, and the job stays his.
     assert.equal((await ask({ host: applied.id })).body.code, 'host-consent-required');
@@ -74,12 +96,14 @@ test('a host applies, is approved, gets a key and takes the requests meant for h
 
     // Any host: the official worker leaves it to an online host; with none on, it takes it itself.
     const open = (await ask({ host: 'any', hostConsent: true })).body.job;
-    held = (await work('POST', 'claim', {})).body.job; await finish(work, held, { brief: { profile: {} } });
+    held = (await work('POST', 'claim', {})).body.job;
+    await finish(work, held, { brief: { profile: {} } });
     assert.equal((await work('POST', 'claim', {})).body.stage, 'idle');
     assert.equal((await host('POST', 'claim', {})).body.job.id, open.id);
     await call('DELETE', `generations/${open.id}`);
     const fallback = (await ask({ host: 'any', hostConsent: true })).body.job;
-    held = (await work('POST', 'claim', {})).body.job; await finish(work, held, { brief: { profile: {} } });
+    held = (await work('POST', 'claim', {})).body.job;
+    await finish(work, held, { brief: { profile: {} } });
     await sql.query("update public.af_generation_hosts set worker_seen_at = now() - interval '10 minutes' where id = $1", [applied.id]);
     held = (await work('POST', 'claim', {})).body.job;
     assert.equal(held.id, fallback.id);
@@ -92,14 +116,19 @@ test('a host applies, is approved, gets a key and takes the requests meant for h
     assert.equal((await call('PATCH', 'generations/host', { dailyLimit: 0 }, theirs)).body.host.dailyLimit, 0);
     assert.equal((await ask({ host: applied.id, hostConsent: true })).body.code, 'host-capacity');
     await call('PATCH', 'generations/host', { dailyLimit: 5, enabled: false }, theirs);
-    assert.deepEqual((await call('GET', 'generations/hosts', undefined, null)).body.hosts.map(h => h.name), ['ODDBOUT']);
+    assert.deepEqual(
+      (await call('GET', 'generations/hosts', undefined, null)).body.hosts.map(h => h.name),
+      ['ODDBOUT'],
+    );
     assert.equal((await ask({ host: applied.id, hostConsent: true })).body.code, 'host-offline');
     // Nobody else's host to change; his keys switched off at once.
     assert.equal((await call('PATCH', 'generations/host', { enabled: true })).body.code, 'not-found');
     assert.equal((await call('DELETE', 'generations/host/keys', undefined, theirs)).body.revoked, 1);
     assert.equal((await host('POST', 'heartbeat', { health: { ok: true } })).status, 403);
     assert.ok(other);
-  } finally { await sql.close(); }
+  } finally {
+    await sql.close();
+  }
 });
 
 // 내 PC 붙이기 (2026-10-28): the site gives a signed-in host a join code; his PC trades it once, within thirty minutes, for a worker key.
@@ -111,7 +140,8 @@ test('a join code becomes a worker key once, on a PC with no account session; a 
     assert.equal((await call('POST', 'generations/host/join-codes', {}, theirs)).body.code, 'host-not-found');
     const applied = (await call('POST', 'generations/host', { name: '고양이 공방', billing: 'subscription', termsAccepted: true }, theirs)).body.host;
     const made = (await call('POST', 'generations/host/join-codes', {}, theirs)).body;
-    assert.match(made.code, /^ohj_[a-f0-9]{40}$/); assert.equal(made.host, applied.id);
+    assert.match(made.code, /^ohj_[a-f0-9]{40}$/);
+    assert.equal(made.host, applied.id);
     assert.ok(Date.parse(made.expiresAt) - Date.now() > 29 * 60_000);
     const join = code => call('POST', 'generations/host/join', { code }, null);
     assert.equal((await join('ohj_nothex')).body.code, 'invalid-join-code');
@@ -131,7 +161,9 @@ test('a join code becomes a worker key once, on a PC with no account session; a 
     const late = (await call('POST', 'generations/host/join-codes', {}, theirs)).body.code;
     await sql.query("update public.af_generation_host_joins set expires_at = now() - interval '1 second' where used_at is null");
     assert.equal((await join(late)).body.code, 'join-code-invalid');
-  } finally { await sql.close(); }
+  } finally {
+    await sql.close();
+  }
 });
 
 // 2026-11-07: a claim may carry the heartbeat (one request a turn instead of two). It is recorded before the claim reads the host's health.
@@ -151,7 +183,10 @@ test('a claim carrying the heartbeat records it first and says so; a bare claim 
     const carried = (await claim({ health: { ok: true, codex: false, grok: true }, usage: { usedPercent: 42.5, windowMinutes: 300 } })).body;
     assert.deepEqual([carried.ok, carried.stage, carried.beat], [true, 'idle', true]);
     // The subscription's reading rides along as on the heartbeat route; one that does not parse is left out, never the claim.
-    assert.deepEqual((await sql.query('select usage from public.af_generation_hosts where not official')).rows[0].usage, { usedPercent: 42.5, windowMinutes: 300 });
+    assert.deepEqual((await sql.query('select usage from public.af_generation_hosts where not official')).rows[0].usage, {
+      usedPercent: 42.5,
+      windowMinutes: 300,
+    });
     assert.equal((await claim({ health: { ok: true, codex: false, grok: true }, usage: { usedPercent: 'lots' } })).body.beat, true);
     const row = await seen();
     assert.ok(row.worker_seen_at);
@@ -161,7 +196,9 @@ test('a claim carrying the heartbeat records it first and says so; a bare claim 
     assert.equal((await claim({ health: 'ok' })).body.code, 'invalid-health');
     assert.equal((await claim({ health: { ok: true }, lease: 1 })).body.code, 'invalid-body');
     assert.equal((await call('POST', 'generation-worker/heartbeat', { health: { ok: true } }, key)).body.claimBeats, true);
-  } finally { await sql.close(); }
+  } finally {
+    await sql.close();
+  }
 });
 
 // The carried health is recorded before the claim reads it: the official host's brief needs codex.
@@ -169,13 +206,16 @@ test('a claim carrying the health it reports is judged on that health, not the o
   const { sql, call, work, healthy } = await generation();
   try {
     await healthy(); // recorded: codex ok
-    const job = (await call('POST', 'generations', { description: '빨간 글러브를 낀 고양이 복서', language: 'ko' }, undefined,
-      { 'idempotency-key': crypto.randomUUID() })).body.job;
+    const job = (
+      await call('POST', 'generations', { description: '빨간 글러브를 낀 고양이 복서', language: 'ko' }, undefined, { 'idempotency-key': crypto.randomUUID() })
+    ).body.job;
     const down = (await work('POST', 'claim', { health: { ok: true, codex: false, grok: true } })).body;
     assert.deepEqual([down.stage, down.beat, down.job], ['idle', true, undefined]);
     const up = (await work('POST', 'claim', { health: { ok: true, codex: true, grok: true } })).body;
     assert.deepEqual([up.beat, up.job?.id, up.job?.status], [true, job.id, 'queued']);
-  } finally { await sql.close(); }
+  } finally {
+    await sql.close();
+  }
 });
 
 // His own PC pays for his own fighters, so they need no tokens (보유 토큰, 2026-10-31); one request at a time still.
@@ -187,7 +227,8 @@ test('fighters made on his own PC need no tokens: at zero ODDBOUT refuses, his P
     await call('POST', 'generations/host', { name: '고양이 공방', billing: 'subscription', termsAccepted: true }, theirs);
     const key = (await call('POST', 'generations/host/keys', {}, theirs)).body.key;
     await call('POST', 'generation-worker/heartbeat', { health: { ok: true } }, key);
-    const ask = body => call('POST', 'generations', { description: '빨간 글러브를 낀 고양이 복서', language: 'ko', ...body }, theirs, { 'idempotency-key': crypto.randomUUID() });
+    const ask = body =>
+      call('POST', 'generations', { description: '빨간 글러브를 낀 고양이 복서', language: 'ko', ...body }, theirs, { 'idempotency-key': crypto.randomUUID() });
     const free = (await ask({})).body.job;
     await sql.query("update public.af_generation_jobs set status = 'submitted' where id = $1", [free.id]); // made
     await sql.query('update public.af_creators set token_grant = 0 where owner_id = (select owner_id from public.af_generation_jobs where id = $1)', [free.id]);
@@ -197,10 +238,15 @@ test('fighters made on his own PC need no tokens: at zero ODDBOUT refuses, his P
     assert.equal((await ask({ host: 'mine' })).body.code, 'generation-quota'); // one at a time
     await sql.query("update public.af_generation_jobs set status = 'submitted' where id = $1", [mine.id]);
     assert.equal((await call('GET', 'generations', undefined, theirs)).body.used, true); // no tokens left
-    await sql.query('update public.af_creators set token_grant = 500000 where owner_id = (select owner_id from public.af_generation_jobs where id = $1)', [free.id]);
+    await sql.query('update public.af_creators set token_grant = 500000 where owner_id = (select owner_id from public.af_generation_jobs where id = $1)', [
+      free.id,
+    ]);
     const after = (await call('GET', 'generations', undefined, theirs)).body;
-    assert.equal(after.used, false); assert.equal(after.tokens.spent, 0); // his own PC's fighter takes no tokens
-  } finally { await sql.close(); }
+    assert.equal(after.used, false);
+    assert.equal(after.tokens.spent, 0); // his own PC's fighter takes no tokens
+  } finally {
+    await sql.close();
+  }
 });
 
 // A job cancelled or expired while it waited for its requester never comes back to the worker; the worker asks, and closes its folder.
@@ -213,8 +259,11 @@ test('the worker learns which of its own jobs ended, and finds the folders it ha
     const key = (await call('POST', 'generations/host/keys', {}, theirs)).body.key;
     const host = (path, body) => call('POST', `generation-worker/${path}`, body, key);
     await host('heartbeat', { health: { ok: true } });
-    const mine = (await call('POST', 'generations', { description: '파란 망토를 두른 고양이 검객', language: 'ko', host: 'mine' }, theirs,
-      { 'idempotency-key': crypto.randomUUID() })).body.job;
+    const mine = (
+      await call('POST', 'generations', { description: '파란 망토를 두른 고양이 검객', language: 'ko', host: 'mine' }, theirs, {
+        'idempotency-key': crypto.randomUUID(),
+      })
+    ).body.job;
     let held = (await work('POST', 'claim', {})).body.job;
     await work('POST', 'finish', { jobId: held.id, leaseToken: held.leaseToken, outcome: 'ok', result: { brief: { profile: {} } } });
     held = (await host('claim', {})).body.job;
@@ -226,19 +275,26 @@ test('the worker learns which of its own jobs ended, and finds the folders it ha
     assert.deepEqual((await host('ended', { jobs: [mine.id] })).body.ended, [mine.id]);
     assert.equal((await host('ended', { jobs: Array(51).fill(mine.id) })).status, 422);
     // A job still with the official host (its brief not written) is not over for it; a community host never hears of another's job.
-    const queued = (await call('POST', 'generations', { description: '빨간 글러브를 낀 고양이 복서', language: 'ko' }, undefined, { 'idempotency-key': crypto.randomUUID() })).body.job;
+    const queued = (
+      await call('POST', 'generations', { description: '빨간 글러브를 낀 고양이 복서', language: 'ko' }, undefined, { 'idempotency-key': crypto.randomUUID() })
+    ).body.job;
     assert.deepEqual((await work('POST', 'ended', { jobs: [queued.id] })).body.ended, []);
     assert.deepEqual((await host('ended', { jobs: [queued.id] })).body.ended, []);
 
     const { unclosedJobs } = await import('../host/generation-worker.mjs');
     const output = await mkdtemp(path.join(os.tmpdir(), 'gen-out-'));
     try {
-      const open = `20261028-gen-${mine.id.replaceAll('-', '')}`, closed = `20261027-gen-${'b'.repeat(32)}`;
+      const open = `20261028-gen-${mine.id.replaceAll('-', '')}`,
+        closed = `20261027-gen-${'b'.repeat(32)}`;
       for (const name of [open, closed, '20261026-red-cat']) await mkdir(path.join(output, name));
       await writeFile(path.join(output, closed, '.closed'), '');
       assert.deepEqual([...(await unclosedJobs(output)).entries()], [[open, mine.id]]);
-    } finally { await rm(output, { recursive: true, force: true }); }
-  } finally { await sql.close(); }
+    } finally {
+      await rm(output, { recursive: true, force: true });
+    }
+  } finally {
+    await sql.close();
+  }
 });
 
 // 사라진 호스트 (2026-11-05): only the host that took a job claims it again, so a job whose host never came back stayed in a working state for
@@ -258,8 +314,10 @@ test('a job whose community host is gone preserves uncertain work and completed 
     const official = (path, body) => work('POST', path, body);
     const beat = () => host('heartbeat', { health: { ok: true, codex: true, grok: true } });
     const finish = (send, c, outcome, result) => send('finish', { jobId: c.id, leaseToken: c.leaseToken, outcome, result });
-    const ask = body => call('POST', 'generations', { description: '빨간 글러브를 낀 고양이 복서', language: 'ko', ...body }, undefined,
-      { 'idempotency-key': crypto.randomUUID() });
+    const ask = body =>
+      call('POST', 'generations', { description: '빨간 글러브를 낀 고양이 복서', language: 'ko', ...body }, undefined, {
+        'idempotency-key': crypto.randomUUID(),
+      });
     const read = async id => (await call('GET', `generations/${id}`)).body.job;
     const gone = since => sql.query(`update public.af_generation_hosts set worker_seen_at = now() - interval '${since}' where id = $1`, [applied.id]);
     const lapse = id => sql.query("update public.af_generation_jobs set lease_expires_at = now() - interval '1 minute' where id = $1", [id]);
@@ -267,7 +325,8 @@ test('a job whose community host is gone preserves uncertain work and completed 
 
     // The host takes the looks of a request that named it, and its PC goes away under the lease.
     const named = (await ask({ host: applied.id, hostConsent: true })).body.job;
-    let held = (await official('claim', {})).body.job; await finish(official, held, 'ok', { brief: { profile: {} } });
+    let held = (await official('claim', {})).body.job;
+    await finish(official, held, 'ok', { brief: { profile: {} } });
     held = (await host('claim', {})).body.job;
     assert.deepEqual([held.id, held.status], [named.id, 'appearance']);
     await lapse(named.id);
@@ -286,20 +345,28 @@ test('a job whose community host is gone preserves uncertain work and completed 
     await beat();
     assert.equal((await host('claim', {})).body.stage, 'idle');
     assert.equal((await call('DELETE', `generations/${named.id}`)).body.job.status, 'cancelled');
-    assert.equal((await sql.query('select public.af_generation_spends(j) as spends from public.af_generation_jobs j where id = $1', [named.id])).rows[0].spends, false);
+    assert.equal(
+      (await sql.query('select public.af_generation_spends(j) as spends from public.af_generation_jobs j where id = $1', [named.id])).rows[0].spends,
+      false,
+    );
 
     // An open request: the host paints the looks and goes away before the motions the creator then chose. It never took them, so the
     // job fails; it does not go to another host (the looks are on that PC). Its free fighter comes back, and the host, back, closes it.
     const open = (await ask({ host: 'any', hostConsent: true })).body.job;
-    held = (await official('claim', {})).body.job; await finish(official, held, 'ok', { brief: { profile: {} } });
+    held = (await official('claim', {})).body.job;
+    await finish(official, held, 'ok', { brief: { profile: {} } });
     held = (await host('claim', {})).body.job;
-    assert.equal(held.id, open.id); await finish(host, held, 'ok', { candidates: ['look-a-0', 'look-b-0'] });
+    assert.equal(held.id, open.id);
+    await finish(host, held, 'ok', { candidates: ['look-a-0', 'look-b-0'] });
     await gone('25 hours');
     assert.equal((await call('POST', `generations/${open.id}/appearance`, { choose: 'a' })).body.job.status, 'motions');
     assert.equal((await official('claim', {})).body.stage, 'idle');
     job = await read(open.id);
     assert.deepEqual([job.status, job.error, job.host.assigned.name], ['failed', 'host-lost', '고양이 공방']);
-    assert.equal((await sql.query('select public.af_generation_spends(j) as spends from public.af_generation_jobs j where id = $1', [open.id])).rows[0].spends, false);
+    assert.equal(
+      (await sql.query('select public.af_generation_spends(j) as spends from public.af_generation_jobs j where id = $1', [open.id])).rows[0].spends,
+      false,
+    );
     await beat();
     assert.deepEqual((await host('ended', { jobs: [open.id] })).body.ended, [open.id]);
 
@@ -307,30 +374,47 @@ test('a job whose community host is gone preserves uncertain work and completed 
     // that used three leases still fail as before. The official host's job waits for it, however long it has been away. Any host's
     // claim runs the rule: here a second PC's, the creator's own (an official claim would take the official host's job back).
     const officialHost = (await sql.query('select id from public.af_generation_hosts where official')).rows[0].id;
-    const insert = async (status, hostId, leases, leased) => (await sql.query(`insert into public.af_generation_jobs(owner_id, idempotency_key,
+    const insert = async (status, hostId, leases, leased) =>
+      (
+        await sql.query(
+          `insert into public.af_generation_jobs(owner_id, idempotency_key,
         description, language, status, brief, choice, profile, assigned_host, host_choice, requested_host, host_consent, stage_leases, lease_token,
         lease_expires_at, started_at)
       values ($1, gen_random_uuid(), '빨간 글러브를 낀 고양이 복서', 'ko', $2, '{}', 'a', $3, $4, 'host', $4, true, $5,
         case when $6 then gen_random_uuid() end, case when $6 then now() - interval '1 minute' end, now()) returning id`,
-      [owner, status, status === 'submitting' ? '{}' : null, hostId, leases, leased])).rows[0].id;
+          [owner, status, status === 'submitting' ? '{}' : null, hostId, leases, leased],
+        )
+      ).rows[0].id;
     const heldRegistration = await insert('submitting', applied.id, 1, true);
     assert.equal((await call('DELETE', `generations/${heldRegistration}`)).body.code, 'generation-state');
-    const untaken = await insert('submitting', applied.id, 0, false), spent = await insert('motions', applied.id, 3, true);
-    await sql.query("update public.af_generation_jobs set host_choice = 'oddbout', requested_host = null, host_consent = false where id = $1",
-      [await insert('motions', officialHost, 1, true)]);
+    const untaken = await insert('submitting', applied.id, 0, false),
+      spent = await insert('motions', applied.id, 3, true);
+    await sql.query("update public.af_generation_jobs set host_choice = 'oddbout', requested_host = null, host_consent = false where id = $1", [
+      await insert('motions', officialHost, 1, true),
+    ]);
     await sql.query("update public.af_generation_hosts set worker_seen_at = now() - interval '25 hours'");
     await call('POST', 'generations/host', { name: '내 작업실', billing: 'subscription', termsAccepted: true });
     const second = (await call('POST', 'generations/host/keys', {})).body.key;
     assert.equal((await call('POST', 'generation-worker/claim', {}, second)).body.stage, 'idle');
-    const rows = Object.fromEntries((await sql.query("select id, status, error_code from public.af_generation_jobs where status not in ('cancelled', 'failed') or id = any($1)",
-      [[untaken, spent]])).rows.map(row => [row.id, [row.status, row.error_code]]));
+    const rows = Object.fromEntries(
+      (
+        await sql.query("select id, status, error_code from public.af_generation_jobs where status not in ('cancelled', 'failed') or id = any($1)", [
+          [untaken, spent],
+        ])
+      ).rows.map(row => [row.id, [row.status, row.error_code]]),
+    );
     assert.deepEqual(rows[heldRegistration], ['needs_review', 'submitting-host-lost']);
     assert.deepEqual(rows[untaken], ['needs_review', 'submitting-host-lost']);
     assert.deepEqual(rows[spent], ['failed', 'stage-attempts']);
-    assert.deepEqual(Object.values(rows).filter(([status]) => status === 'motions'), [['motions', null]]);
+    assert.deepEqual(
+      Object.values(rows).filter(([status]) => status === 'motions'),
+      [['motions', null]],
+    );
     // Waiting for an operator, the registration can be cancelled now.
     assert.equal((await call('DELETE', `generations/${heldRegistration}`)).body.job.status, 'cancelled');
-  } finally { await sql.close(); }
+  } finally {
+    await sql.close();
+  }
 });
 
 // 운영자 화면 (2026-10-28): the hosts (approve, withdraw) and the requests a stage left for the operator (run it again, or cancel).
@@ -343,7 +427,13 @@ test('the admin approves and withdraws hosts, and runs a stopped stage again or 
     await sql.query('insert into public.af_admins(owner_id) values($1)', [owner]);
     const applied = (await call('POST', 'generations/host', { name: '고양이 공방', billing: 'subscription', termsAccepted: true }, theirs)).body.host;
     let hosts = (await call('GET', 'admin/generation-hosts')).body.hosts;
-    assert.deepEqual(hosts.map(h => [h.name, h.official, h.approved]), [['ODDBOUT', true, true], ['고양이 공방', false, false]]);
+    assert.deepEqual(
+      hosts.map(h => [h.name, h.official, h.approved]),
+      [
+        ['ODDBOUT', true, true],
+        ['고양이 공방', false, false],
+      ],
+    );
     assert.equal((await call('POST', `admin/generation-hosts/${applied.id}/approval`, { approved: 'yes' })).status, 400);
     assert.equal((await call('POST', `admin/generation-hosts/${applied.id}/approval`, { approved: true })).body.host.approved, true);
     assert.equal((await call('POST', `admin/generation-hosts/${hosts[0].id}/approval`, { approved: false })).status, 404); // the official host stays
@@ -352,19 +442,32 @@ test('the admin approves and withdraws hosts, and runs a stopped stage again or 
     assert.equal((await call('POST', `admin/generation-hosts/${applied.id}/approval`, { approved: false })).body.host.approved, false);
 
     // A request whose looks the worker left for the operator: listed, run again from the looks, then cancelled.
-    const job = (await call('POST', 'generations', { description: '빨간 글러브를 낀 고양이 복서', language: 'ko' }, undefined, { 'idempotency-key': crypto.randomUUID() })).body.job;
+    const job = (
+      await call('POST', 'generations', { description: '빨간 글러브를 낀 고양이 복서', language: 'ko' }, undefined, { 'idempotency-key': crypto.randomUUID() })
+    ).body.job;
     const finish = (c, outcome, result) => work('POST', 'finish', { jobId: c.id, leaseToken: c.leaseToken, outcome, result });
-    let held = (await work('POST', 'claim', {})).body.job; await finish(held, 'ok', { brief: { profile: {} } });
-    held = (await work('POST', 'claim', {})).body.job; assert.equal(held.status, 'appearance');
+    let held = (await work('POST', 'claim', {})).body.job;
+    await finish(held, 'ok', { brief: { profile: {} } });
+    held = (await work('POST', 'claim', {})).body.job;
+    assert.equal(held.status, 'appearance');
     await finish(held, 'review', { code: 'look-unclear' });
     const waiting = (await call('GET', 'admin/generations?status=needs_review')).body.jobs;
-    assert.deepEqual(waiting.map(j => [j.id, j.status, j.errorCode, j.official]), [[job.id, 'needs_review', 'look-unclear', true]]);
+    assert.deepEqual(
+      waiting.map(j => [j.id, j.status, j.errorCode, j.official]),
+      [[job.id, 'needs_review', 'look-unclear', true]],
+    );
     assert.equal((await call('GET', 'admin/generations?status=everything')).status, 400);
     // 상세 (2026-11-01): the whole request, its hosts by name and its latest events, newest first; the brief stays out.
     const detail = (await call('GET', `admin/generations/${job.id}`)).body.job;
-    assert.deepEqual([detail.id, detail.status, detail.errorCode, detail.description, detail.official], [job.id, 'needs_review', 'look-unclear', '빨간 글러브를 낀 고양이 복서', true]);
-    assert.equal('brief' in detail, false); assert.deepEqual(detail.candidates, []); assert.deepEqual(detail.refs, []);
-    assert.equal(detail.events[0].kind, 'finished'); assert.equal(detail.events.at(-1).kind, 'created');
+    assert.deepEqual(
+      [detail.id, detail.status, detail.errorCode, detail.description, detail.official],
+      [job.id, 'needs_review', 'look-unclear', '빨간 글러브를 낀 고양이 복서', true],
+    );
+    assert.equal('brief' in detail, false);
+    assert.deepEqual(detail.candidates, []);
+    assert.deepEqual(detail.refs, []);
+    assert.equal(detail.events[0].kind, 'finished');
+    assert.equal(detail.events.at(-1).kind, 'created');
     assert.equal((await call('GET', 'admin/generations/not-a-uuid')).status, 400);
     assert.equal((await call('GET', `admin/generations/${crypto.randomUUID()}`)).status, 404);
     assert.equal((await call('GET', `admin/generations/${job.id}`, undefined, theirs)).status, 403);
@@ -374,10 +477,18 @@ test('the admin approves and withdraws hosts, and runs a stopped stage again or 
     assert.equal((await call('GET', 'admin/generations?status=open')).body.jobs.length, 1);
     assert.equal((await call('POST', `admin/generations/${job.id}/cancel`, {})).body.job.status, 'cancelled');
     assert.equal((await call('POST', `admin/generations/${job.id}/cancel`, {})).status, 409);
-    assert.deepEqual((await call('GET', `admin/generations/${job.id}`)).body.job.events.slice(0, 2).map(e => [e.kind, e.data.action]), [['operator', 'cancel'], ['claimed', undefined]]);
+    assert.deepEqual(
+      (await call('GET', `admin/generations/${job.id}`)).body.job.events.slice(0, 2).map(e => [e.kind, e.data.action]),
+      [
+        ['operator', 'cancel'],
+        ['claimed', undefined],
+      ],
+    );
     assert.equal((await call('GET', `generations/${job.id}`)).body.job.status, 'cancelled');
     assert.equal((await call('GET', 'admin/generation-hosts', undefined, theirs)).status, 403);
-  } finally { await sql.close(); }
+  } finally {
+    await sql.close();
+  }
 });
 
 // My agents (2026-10-28): the site shows his subscriptions as his worker last checked them, and he removes his host there. A request for him
@@ -435,9 +546,11 @@ test('a request names who draws its pictures: Grok by default, GPT only where th
     await host('heartbeat', { health: both });
     assert.deepEqual([(await host('claim', {})).body.job?.id, gptJob.imageProvider], [gptJob.id, 'gpt']);
     // A job made before the column (its default for old rows) reads as GPT's, and a worker that says nothing of `images` is not held back.
-    const [{ fn }] = (await sql.query("select public.af_generation_host_images(h) as fn from public.af_generation_hosts h where h.official")).rows;
+    const [{ fn }] = (await sql.query('select public.af_generation_host_images(h) as fn from public.af_generation_hosts h where h.official')).rows;
     assert.deepEqual(fn, ['grok', 'gpt']);
-  } finally { await sql.close(); }
+  } finally {
+    await sql.close();
+  }
 });
 
 test('his host shows his subscriptions, and he removes it once no request for him is open; applying again brings it back', async () => {
@@ -457,8 +570,10 @@ test('his host shows his subscriptions, and he removes it once no request for hi
     await beat({ ok: true, codex: true, grok: true, at: '2026-10-28T10:00:00.000Z' });
     assert.equal((await call('GET', 'generations/host', undefined, theirs)).body.host.online, true);
     // A request on his PC, not over: he cannot remove the host its files are on.
-    const ask = () => call('POST', 'generations', { description: '파란 망토를 두른 고양이 검객', language: 'ko', host: 'mine' }, theirs,
-      { 'idempotency-key': crypto.randomUUID() });
+    const ask = () =>
+      call('POST', 'generations', { description: '파란 망토를 두른 고양이 검객', language: 'ko', host: 'mine' }, theirs, {
+        'idempotency-key': crypto.randomUUID(),
+      });
     const job = (await ask()).body.job;
     const busy = await call('DELETE', 'generations/host', undefined, theirs);
     assert.deepEqual([busy.status, busy.body.code], [409, 'host-busy']);
@@ -475,17 +590,27 @@ test('his host shows his subscriptions, and he removes it once no request for hi
     assert.equal((await call('PATCH', 'generations/host', { enabled: true }, theirs)).status, 404);
     assert.equal((await ask()).body.code, 'host-not-found');
     assert.equal((await call('DELETE', 'generations/host', undefined, theirs)).body.code, 'host-not-found');
-    const [row] = (await sql.query('select removed_at is not null as removed, enabled, approved from public.af_generation_hosts where id = $1', [applied.id])).rows;
+    const [row] = (await sql.query('select removed_at is not null as removed, enabled, approved from public.af_generation_hosts where id = $1', [applied.id]))
+      .rows;
     assert.deepEqual(row, { removed: true, enabled: false, approved: false });
-    assert.deepEqual((await call('GET', 'generations/hosts', undefined, null)).body.hosts.map(h => h.name), ['ODDBOUT']);
+    assert.deepEqual(
+      (await call('GET', 'generations/hosts', undefined, null)).body.hosts.map(h => h.name),
+      ['ODDBOUT'],
+    );
     // Applying again: the same host, switched on, not approved, nothing of the old worker's report; a new PC joins it.
     const back = (await call('POST', 'generations/host', { name: '고양이 공방 2', billing: 'subscription', termsAccepted: true }, theirs)).body.host;
     assert.deepEqual([back.id, back.enabled, back.approved, back.name], [applied.id, true, false, '고양이 공방 2']);
     const again = (await call('GET', 'generations/host', undefined, theirs)).body.host;
-    assert.deepEqual([again.online, again.lastSeenAt, again.health], [false, null, { codex: false, grok: false, images: null, checkedAt: null, setup: null, platform: null, runner: null }]);
-    const joined = (await call('POST', 'generations/host/join', { code: (await call('POST', 'generations/host/join-codes', {}, theirs)).body.code }, null)).body;
+    assert.deepEqual(
+      [again.online, again.lastSeenAt, again.health],
+      [false, null, { codex: false, grok: false, images: null, checkedAt: null, setup: null, platform: null, runner: null }],
+    );
+    const joined = (await call('POST', 'generations/host/join', { code: (await call('POST', 'generations/host/join-codes', {}, theirs)).body.code }, null))
+      .body;
     assert.equal(joined.host, applied.id);
-  } finally { await sql.close(); }
+  } finally {
+    await sql.close();
+  }
 });
 
 // 내 PC 카드 (계획 1.5, 2026-11-07): while it installs, the PC runner's heartbeats say its step, its OS and its version beside logins not
@@ -499,22 +624,36 @@ test('his host passes on what his PC runner says, its install step, OS and versi
     const key = (await call('POST', 'generations/host/keys', {}, theirs)).body.key;
     const beat = health => call('POST', 'generation-worker/heartbeat', { health }, key);
     const own = async () => (await call('GET', 'generations/host', undefined, theirs)).body.host;
-    const at = '2026-11-07T09:00:00.000Z', installing = { ok: false, codex: false, grok: false, images: [], at, platform: 'windows', runner: '0.1.1' };
+    const at = '2026-11-07T09:00:00.000Z',
+      installing = { ok: false, codex: false, grok: false, images: [], at, platform: 'windows', runner: '0.1.1' };
     await beat({ ...installing, setup: 'sprite' });
     let host = await own();
     assert.equal(host.online, false);
     assert.deepEqual(host.health, { codex: false, grok: false, images: [], checkedAt: at, setup: 'sprite', platform: 'windows', runner: '0.1.1' });
     // Each step, and each failed as the runner says it (`${name}-failed`).
-    for (const step of HOST_SETUP_STAGES) for (const setup of [step, `${step}-failed`]) {
-      await beat({ ...installing, setup });
-      assert.equal((await own()).health.setup, setup);
-    }
+    for (const step of HOST_SETUP_STAGES)
+      for (const setup of [step, `${step}-failed`]) {
+        await beat({ ...installing, setup });
+        assert.equal((await own()).health.setup, setup);
+      }
     // Not the runner's words: that one null, the rest kept.
     for (const [said, read] of [
-      [{ setup: 'banana', platform: 'macos', runner: 'x'.repeat(33) }, { setup: null, platform: 'macos', runner: null }],
-      [{ setup: 'failed', platform: 'win32', runner: '' }, { setup: null, platform: null, runner: null }],
-      [{ setup: 'kit-failed-failed', platform: 'Windows', runner: 11 }, { setup: null, platform: null, runner: null }],
-      [{ setup: 3, platform: null, runner: 'x'.repeat(32) }, { setup: null, platform: null, runner: 'x'.repeat(32) }],
+      [
+        { setup: 'banana', platform: 'macos', runner: 'x'.repeat(33) },
+        { setup: null, platform: 'macos', runner: null },
+      ],
+      [
+        { setup: 'failed', platform: 'win32', runner: '' },
+        { setup: null, platform: null, runner: null },
+      ],
+      [
+        { setup: 'kit-failed-failed', platform: 'Windows', runner: 11 },
+        { setup: null, platform: null, runner: null },
+      ],
+      [
+        { setup: 3, platform: null, runner: 'x'.repeat(32) },
+        { setup: null, platform: null, runner: 'x'.repeat(32) },
+      ],
     ]) {
       await beat({ ok: false, codex: false, grok: false, at, ...said });
       const { setup, platform, runner } = (await own()).health;
@@ -527,7 +666,9 @@ test('his host passes on what his PC runner says, its install step, OS and versi
     assert.deepEqual([host.health.setup, host.health.platform, host.health.runner], ['ready', 'linux', '0.1.1']);
     // The OSes are the pairing's (a PC pairs saying its OS the same way).
     assert.deepEqual(HOST_PLATFORMS, PAIRING_PLATFORMS);
-  } finally { await sql.close(); }
+  } finally {
+    await sql.close();
+  }
 });
 
 // Removal, the other paths: an approved host loses approval and leaves the operator's list; a job he took (an open request) keeps him; his
@@ -544,8 +685,11 @@ test('a removed host is refused everywhere: approval, the operator list, a job h
     const host = (method, path, body) => call(method, `generation-worker/${path}`, body, key);
     await host('POST', 'heartbeat', { health: { ok: true, codex: true, grok: true } });
     // Another creator's open request after the official brief: the approved host takes it, so it is his until it ends.
-    const job = (await call('POST', 'generations', { description: '빨간 글러브를 낀 고양이 복서', language: 'ko', host: 'any', hostConsent: true },
-      undefined, { 'idempotency-key': crypto.randomUUID() })).body.job;
+    const job = (
+      await call('POST', 'generations', { description: '빨간 글러브를 낀 고양이 복서', language: 'ko', host: 'any', hostConsent: true }, undefined, {
+        'idempotency-key': crypto.randomUUID(),
+      })
+    ).body.job;
     const brief = (await work('POST', 'claim', {})).body.job;
     await work('POST', 'finish', { jobId: brief.id, leaseToken: brief.leaseToken, outcome: 'ok', result: { brief: { profile: {} } } });
     assert.equal((await host('POST', 'claim', {})).body.job.id, job.id);
@@ -556,20 +700,33 @@ test('a removed host is refused everywhere: approval, the operator list, a job h
     assert.equal((await call('DELETE', 'generations/host', undefined, theirs)).status, 200);
     const [row] = (await sql.query('select approved, enabled from public.af_generation_hosts where id = $1', [applied.id])).rows;
     assert.deepEqual(row, { approved: false, enabled: false });
-    assert.deepEqual((await call('GET', 'admin/generation-hosts')).body.hosts.map(h => h.name), ['ODDBOUT']);
+    assert.deepEqual(
+      (await call('GET', 'admin/generation-hosts')).body.hosts.map(h => h.name),
+      ['ODDBOUT'],
+    );
     assert.equal((await call('POST', `admin/generation-hosts/${applied.id}/approval`, { approved: true })).status, 404);
     assert.equal((await call('POST', 'generations/host/join', { code }, null)).body.code, 'join-code-invalid'); // removal deleted it
     const late = `ohj_${'c'.repeat(40)}`;
-    await sql.query("insert into public.af_generation_host_joins(code_hash, host_id, expires_at) values ($1, $2, now() + interval '30 minutes')",
-      [await (await import('../api/handler.mjs')).sha256(new TextEncoder().encode(late)), applied.id]);
+    await sql.query("insert into public.af_generation_host_joins(code_hash, host_id, expires_at) values ($1, $2, now() + interval '30 minutes')", [
+      await (await import('../api/handler.mjs')).sha256(new TextEncoder().encode(late)),
+      applied.id,
+    ]);
     assert.equal((await call('POST', 'generations/host/join', { code: late }, null)).body.code, 'join-code-invalid');
     assert.equal((await sql.query('select count(*)::int as n from public.af_workers where host_id = $1 and enabled', [applied.id])).rows[0].n, 0);
-    assert.equal((await call('POST', 'generations', { description: '파란 망토를 두른 고양이 검객', language: 'ko', host: applied.id }, theirs,
-      { 'idempotency-key': crypto.randomUUID() })).body.code, 'invalid-host');
+    assert.equal(
+      (
+        await call('POST', 'generations', { description: '파란 망토를 두른 고양이 검객', language: 'ko', host: applied.id }, theirs, {
+          'idempotency-key': crypto.randomUUID(),
+        })
+      ).body.code,
+      'invalid-host',
+    );
     // Even switched on by hand, a removed host claims nothing.
     await sql.query('update public.af_generation_hosts set enabled = true where id = $1', [applied.id]);
     assert.equal((await sql.query('select (public.af_generation_claim_for($1)).id as id', [applied.id])).rows[0].id, null);
-  } finally { await sql.close(); }
+  } finally {
+    await sql.close();
+  }
 });
 
 // 내 PC 연결, 코드 복사 없이 (2026-11-05): the PC starts a pairing with no account and opens the site; the owner presses Connect there; the
@@ -620,17 +777,27 @@ test('a PC pairs without a copied code: the site shows its name and OS, Connect 
     assert.deepEqual([granted.host, granted.name, granted.approved], [approved.host.id, 'My PC', false]);
     // The key is the host's, made from the join code the approval kept (labelled with the PC's OS); the code is spent. The PC connects
     // before it installs, so its first heartbeat tells how setup goes.
-    const beat = await call('POST', 'generation-worker/heartbeat', { health: { ok: false, setup: 'python', platform: 'windows', codex: false, grok: false } }, granted.key);
+    const beat = await call(
+      'POST',
+      'generation-worker/heartbeat',
+      { health: { ok: false, setup: 'python', platform: 'windows', codex: false, grok: false } },
+      granted.key,
+    );
     assert.equal(beat.status, 200);
     const [key] = (await sql.query('select label from public.af_workers where host_id = $1 and enabled', [approved.host.id])).rows;
     assert.match(key.label, /^host-pair-windows-\d{4}-\d{2}-\d{2}$/);
-    assert.equal((await sql.query('select count(*)::int as n from public.af_generation_host_joins where host_id = $1 and used_at is null', [approved.host.id])).rows[0].n, 0);
+    assert.equal(
+      (await sql.query('select count(*)::int as n from public.af_generation_host_joins where host_id = $1 and used_at is null', [approved.host.id])).rows[0].n,
+      0,
+    );
     assert.equal((await sql.query('select join_hash from public.af_generation_host_pairings')).rows[0].join_hash, null);
     await unpaced();
     const again = await poll();
     assert.deepEqual([again.status, again.body.code], [410, 'pairing-consumed']);
     assert.equal((await sql.query('select count(*)::int as n from public.af_workers where host_id = $1', [approved.host.id])).rows[0].n, 1);
-  } finally { await sql.close(); }
+  } finally {
+    await sql.close();
+  }
 });
 
 test('Connect keeps his host and its name, brings a removed one back, five an hour; codes expire and the start is checked', async () => {
@@ -669,7 +836,9 @@ test('Connect keeps his host and its name, brings a removed one back, five an ho
     await sql.query("update public.af_generation_host_pairings set approved_at = now() - interval '61 minutes' where approved_at is not null");
     assert.equal((await approve(sixth.userCode)).status, 200);
     // A disabled account cannot Connect.
-    await sql.query('update public.af_creators set enabled = false where owner_id = (select owner_id from public.af_generation_hosts where id = $1)', [applied.id]);
+    await sql.query('update public.af_creators set enabled = false where owner_id = (select owner_id from public.af_generation_hosts where id = $1)', [
+      applied.id,
+    ]);
     assert.equal((await approve((await start()).userCode)).body.code, 'account-disabled');
     await sql.query('update public.af_creators set enabled = true where not enabled');
 
@@ -677,7 +846,14 @@ test('Connect keeps his host and its name, brings a removed one back, five an ho
     const late = await start();
     await sql.query("update public.af_generation_host_pairings set expires_at = now() + interval '2 seconds' where status = 'pending'");
     await approve(late.userCode);
-    assert.equal((await sql.query("select count(*)::int as n from public.af_generation_host_pairings where status = 'approved' and expires_at < now() + interval '50 seconds'")).rows[0].n, 0);
+    assert.equal(
+      (
+        await sql.query(
+          "select count(*)::int as n from public.af_generation_host_pairings where status = 'approved' and expires_at < now() + interval '50 seconds'",
+        )
+      ).rows[0].n,
+      0,
+    );
     const gone = await start();
     await sql.query("update public.af_generation_host_pairings set expires_at = now() - interval '1 second' where status = 'pending'");
     const expired = await poll(gone.pairingCode);
@@ -686,8 +862,13 @@ test('Connect keeps his host and its name, brings a removed one back, five an ho
     assert.equal((await approve(gone.userCode)).body.code, 'pairing-not-found');
 
     // What a PC may say, and the secret's form.
-    for (const pc of [{ name: '', platform: 'windows' }, { name: 'x'.repeat(41), platform: 'windows' }, { name: 'a\nb', platform: 'linux' },
-      { name: 'pc', platform: 'android' }, { name: 'pc' }])
+    for (const pc of [
+      { name: '', platform: 'windows' },
+      { name: 'x'.repeat(41), platform: 'windows' },
+      { name: 'a\nb', platform: 'linux' },
+      { name: 'pc', platform: 'android' },
+      { name: 'pc' },
+    ])
       assert.equal((await call('POST', 'generations/host/pairings', pc, null)).body.code, 'invalid-pc', JSON.stringify(pc));
     assert.equal((await call('POST', 'generations/host/pairings', { name: 'pc', platform: 'linux', owner: 'me' }, null)).body.code, 'invalid-body');
     assert.equal((await poll('ohp_short')).status, 400);
@@ -700,7 +881,9 @@ test('Connect keeps his host and its name, brings a removed one back, five an ho
     assert.equal((await raw('OPTIONS', 'generations/host/pairings/BCDF-GHJK')).headers.get('access-control-allow-origin'), '*');
     assert.equal((await raw('OPTIONS', 'generations/host/pairings')).headers.get('access-control-allow-origin'), null);
     assert.equal((await raw('OPTIONS', 'generations/host/pairings/token')).headers.get('access-control-allow-origin'), null);
-  } finally { await sql.close(); }
+  } finally {
+    await sql.close();
+  }
 });
 
 test('Postgres brakes unauthenticated pairing starts, refuses a shared open code, and hides the table from clients', async () => {
@@ -710,9 +893,12 @@ test('Postgres brakes unauthenticated pairing starts, refuses a shared open code
     const start = (n, code) => sql.query("select public.af_generation_host_pairing_start($1, $2, 'pc', 'linux', 600)", [hash(n), code]);
     await start(1, 'BCDFGHJK');
     await assert.rejects(start(2, 'BCDFGHJK'), /user-code-collision/);
-    await sql.query(`insert into public.af_generation_host_pairings(secret_hash, user_code, pc_name, platform, status, owner_id, join_hash, expires_at)
+    await sql.query(
+      `insert into public.af_generation_host_pairings(secret_hash, user_code, pc_name, platform, status, owner_id, join_hash, expires_at)
       select lpad(to_hex(g), 64, '0'), 'ZZZZZZZZ', 'pc', 'linux', 'approved', $1, lpad(to_hex(g), 64, '0'), now() + interval '10 minutes'
-      from generate_series(1000, 1118) g`, [owner]);
+      from generate_series(1000, 1118) g`,
+      [owner],
+    );
     await assert.rejects(start(3, 'CCCCCCCC'), /rate-limit/);
     await sql.query("update public.af_generation_host_pairings set created_at = now() - interval '1 hour' where created_at > now() - interval '1 hour'");
     await start(3, 'CCCCCCCC');
@@ -721,5 +907,7 @@ test('Postgres brakes unauthenticated pairing starts, refuses a shared open code
     await assert.rejects(sql.query('select * from public.af_generation_host_pairings'), /permission denied/);
     await assert.rejects(sql.query('select public.af_generation_host_pairing_view($1)', ['BCDFGHJK']), /permission denied/);
     await sql.query('reset role');
-  } finally { await sql.close(); }
+  } finally {
+    await sql.close();
+  }
 });

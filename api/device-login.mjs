@@ -37,7 +37,7 @@ export function newUserCode(random) {
  * @returns {import('./http.mjs').Route}
  */
 export function createDeviceLoginHandler({ db, creatorLink = null, limiter = null, random = n => crypto.getRandomValues(new Uint8Array(n)) }) {
-  const rpc = rpcCaller(db, errorStatus, { unavailable: error => error.code === 'PGRST202' ? 'device-login-not-ready' : 'device-login-unavailable' });
+  const rpc = rpcCaller(db, errorStatus, { unavailable: error => (error.code === 'PGRST202' ? 'device-login-not-ready' : 'device-login-unavailable') });
   /** @param {string} name @param {Record<string, unknown>} args */
   async function call(name, args) {
     const data = await rpc(name, args);
@@ -50,21 +50,33 @@ export function createDeviceLoginHandler({ db, creatorLink = null, limiter = nul
     try {
       const value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
       if (value && typeof value === 'object' && !Array.isArray(value)) return value;
-    } catch { /* below */ }
+    } catch {
+      /* below */
+    }
     throw new Problem(400, 'invalid-body');
   }
   /** @param {Request} request */
   async function start(request) {
     // Unauthenticated: one caller is braked by a keyed hash of their address, under the global 120 per 10 minutes.
     const { bucket, limit, windowSeconds } = CLIENT_LIMITS.deviceLogin;
-    if (limiter && !await limiter.allow(request, bucket, limit, windowSeconds)) throw new Problem(429, 'rate-limit');
+    if (limiter && !(await limiter.allow(request, bucket, limit, windowSeconds))) throw new Problem(429, 'rate-limit');
     const deviceCode = `afd_${Array.from(random(32), b => b.toString(16).padStart(2, '0')).join('')}`;
     const hash = await sha256(new TextEncoder().encode(deviceCode));
     for (let attempt = 0; ; attempt++) {
       try {
-        const row = await call('af_device_login_start', { p_device_code_hash: hash, p_user_code: newUserCode(random), p_ttl_seconds: DEVICE_LOGIN_TTL_SECONDS });
-        return { ok: true, stage: 'device-login', deviceCode, userCode: formatUserCode(row.userCode), expiresAt: row.expiresAt,
-          interval: DEVICE_POLL_INTERVAL_SECONDS };
+        const row = await call('af_device_login_start', {
+          p_device_code_hash: hash,
+          p_user_code: newUserCode(random),
+          p_ttl_seconds: DEVICE_LOGIN_TTL_SECONDS,
+        });
+        return {
+          ok: true,
+          stage: 'device-login',
+          deviceCode,
+          userCode: formatUserCode(row.userCode),
+          expiresAt: row.expiresAt,
+          interval: DEVICE_POLL_INTERVAL_SECONDS,
+        };
       } catch (/** @type {any} */ error) {
         if (error.message !== 'user-code-collision' || attempt >= 2) throw error;
       }
@@ -96,7 +108,8 @@ export function createDeviceLoginHandler({ db, creatorLink = null, limiter = nul
     return [{ ok: true, stage: 'device-login', status: 'approved', tokenHash: link.tokenHash, expiresAt: link.expiresAt }, 200];
   }
   return async (request, parts) => {
-    const route = parts.join('/'), cors = route === 'device-logins/approve' ? APPROVE_CORS : undefined;
+    const route = parts.join('/'),
+      cors = route === 'device-logins/approve' ? APPROVE_CORS : undefined;
     /** @type {(value: any, status?: number) => Response} */
     const reply = (value, status = 200) => jsonResponse(value, status, cors);
     try {

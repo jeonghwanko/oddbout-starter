@@ -7,8 +7,12 @@ const mimeType = 'text/html;profile=mcp-app';
 const storageOrigin = new URL(CLOUD_RESOURCE).origin;
 const domain = 'https://hosted-looks.oddbout.com';
 const csp = { connectDomains: [], resourceDomains: [storageOrigin] };
-const meta = { ui: { domain, csp, prefersBorder: true }, 'openai/widgetDomain': domain,
-  'openai/widgetCSP': { connect_domains: [], resource_domains: [storageOrigin] }, 'openai/widgetPrefersBorder': true };
+const meta = {
+  ui: { domain, csp, prefersBorder: true },
+  'openai/widgetDomain': domain,
+  'openai/widgetCSP': { connect_domains: [], resource_domains: [storageOrigin] },
+  'openai/widgetPrefersBorder': true,
+};
 
 // The resource is public and cacheable: it has no job or owner data. Only the invoking tool result supplies the pictures.
 const text = `<!doctype html>

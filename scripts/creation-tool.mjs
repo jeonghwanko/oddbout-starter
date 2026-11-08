@@ -27,14 +27,19 @@ export async function creationTool({ workspace, name, args = {}, contextRequest 
     await client.connect(clientSide);
     const options = { timeout: IN_PROCESS_TIMEOUT_MS };
     if (!name) return await client.listTools(undefined, options);
-    try { return await client.callTool({ name, arguments: args }, options); }
-    catch (error) {
+    try {
+      return await client.callTool({ name, arguments: args }, options);
+    } catch (error) {
       // SDK v2 answers a tool the server does not list with the spec's -32602, not a tool result (v1 gave one): name it, so a mistyped
       // tool reads as one and not as a workspace command that failed.
-      if (error instanceof ProtocolError && error.code === ProtocolErrorCode.InvalidParams && /^Tool .+ not found$/.test(error.message)) throw Error('unknown-tool');
+      if (error instanceof ProtocolError && error.code === ProtocolErrorCode.InvalidParams && /^Tool .+ not found$/.test(error.message))
+        throw Error('unknown-tool');
       throw error;
     }
-  } finally { await client.close(); await server.close(); }
+  } finally {
+    await client.close();
+    await server.close();
+  }
 }
 
 /** @param {string[]} argv */
@@ -42,8 +47,8 @@ export async function main(argv) {
   // Arguments are in a JSON file so prompts and shell metacharacters are never executed as code.
   const { args: positional, contextFile, contextReceipt } = parseContextFileArgs(argv);
   const [operation, workspace, name, input, ...extra] = positional;
-  if (extra.length || !['list', 'call'].includes(operation) || operation === 'list' && (name || input)
-    || operation === 'call' && !name) throw Error('usage: creation:tool -- list <absolute-workspace> | call <absolute-workspace> <tool> [arguments.json]');
+  if (extra.length || !['list', 'call'].includes(operation) || (operation === 'list' && (name || input)) || (operation === 'call' && !name))
+    throw Error('usage: creation:tool -- list <absolute-workspace> | call <absolute-workspace> <tool> [arguments.json]');
   const args = input ? JSON.parse(await readFile(input, 'utf8')) : {};
   if (!args || typeof args !== 'object' || Array.isArray(args)) throw Error('arguments-object-required');
   const contextRequest = contextFile && contextReceipt ? await fileContextRequest(contextFile, contextReceipt) : undefined;
@@ -57,7 +62,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   } catch (/** @type {any} */ error) {
     // Do not echo file contents, login data or arbitrary server exception text.
     process.exitCode = 1;
-    try { await writeCliJson(2, { ok: false, code: /^[a-z][a-z-]+$/.test(error.message) ? error.message : 'workspace-command-failed' }); }
-    catch { /* Preserve failure when stderr cannot deliver an error. */ }
+    try {
+      await writeCliJson(2, { ok: false, code: /^[a-z][a-z-]+$/.test(error.message) ? error.message : 'workspace-command-failed' });
+    } catch {
+      /* Preserve failure when stderr cannot deliver an error. */
+    }
   }
 }

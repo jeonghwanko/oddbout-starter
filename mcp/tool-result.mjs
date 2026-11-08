@@ -11,9 +11,13 @@
 export function compactText(value) {
   const text = JSON.stringify(value);
   if (text.length <= 1200 || value?.ok === false) return text;
-  const parts = Object.entries(value).map(([key, item]) => Array.isArray(item) ? `${key}[${item.length}]`
-    : item && typeof item === 'object' ? `${key}{${Object.keys(item).slice(0, 8).join(',')}${Object.keys(item).length > 8 ? ',…' : ''}}`
-      // A page link for the user is whole or useless (siteUrl, 2026-11-03): a link cut at 40 characters opens nothing.
-      : `${key}=${(JSON.stringify(item) ?? String(item)).slice(0, key === 'siteUrl' ? 200 : 40)}`);
+  const parts = Object.entries(value).map(([key, item]) =>
+    Array.isArray(item)
+      ? `${key}[${item.length}]`
+      : item && typeof item === 'object'
+        ? `${key}{${Object.keys(item).slice(0, 8).join(',')}${Object.keys(item).length > 8 ? ',…' : ''}}`
+        : // A page link for the user is whole or useless (siteUrl, 2026-11-03): a link cut at 40 characters opens nothing.
+          `${key}=${(JSON.stringify(item) ?? String(item)).slice(0, key === 'siteUrl' ? 200 : 40)}`,
+  );
   return `Full result in structuredContent (${text.length} characters): ${parts.join(', ')}`;
 }

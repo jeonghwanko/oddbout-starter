@@ -1,66 +1,111 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdir} from 'node:fs/promises';
-import {fileURLToPath} from 'node:url';
-import {chromium} from 'playwright';
-import {createBroadcastDemo} from '../../scripts/broadcast-demo.mjs';
-import {createCommerceHandler} from '../../api/commerce/handler.mjs';
-import {createPaidOperations} from '../../api/commerce/paid-operations.mjs';
-import {createPaidOperationHandler} from '../../api/commerce/paid-handler.mjs';
-import {paidFixture,OWNER,OTHER} from '../helpers/paid-operations.mjs';
+import { mkdir } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { chromium } from 'playwright';
+import { createBroadcastDemo } from '../../scripts/broadcast-demo.mjs';
+import { createCommerceHandler } from '../../api/commerce/handler.mjs';
+import { createPaidOperations } from '../../api/commerce/paid-operations.mjs';
+import { createPaidOperationHandler } from '../../api/commerce/paid-handler.mjs';
+import { paidFixture, OWNER, OTHER } from '../helpers/paid-operations.mjs';
 
-const ORIGIN='http://127.0.0.1:5195';
-test('Showrunner packs, same-order purchase history and credited balance survive checkout return and account changes',{timeout:90000},async t=>{
-  const f=await paidFixture(t),authenticate=async request=>{
-    const value=request.headers.get('authorization');return value===`Bearer fixture-${OWNER}`?OWNER:value===`Bearer fixture-${OTHER}`?OTHER:null;
-  };
-  const commerce=createCommerceHandler({service:f.commerce,publicOrigin:ORIGIN,authenticate});
-  const paid=createPaidOperations({store:f.store,commerce:f.commerce,publicOrigin:ORIGIN,ensureProducer:()=>{}});
-  const paidHandler=createPaidOperationHandler({store:f.store,service:paid,publicOrigin:ORIGIN,authenticate});
-  const {server}=createBroadcastDemo({ODDBOUT_BROADCAST_PORT:'5195'});
-  await new Promise(r=>server.listen(5195,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)));
-  const browser=await chromium.launch({channel:process.env.ODDBOUT_TEST_BROWSER_CHANNEL??'chrome',headless:true});t.after(()=>browser.close());
-  const context=await browser.newContext({viewport:{width:1280,height:900}});
-  await context.route('**/broadcast/config',r=>r.fulfill({json:{paidOperations:true,autoProducer:true,concierge:false,authConfigured:true,commerceEnabled:true,supabaseUrl:'https://fixture.example',publishableKey:'fixture-public'}}));
-  await context.route('**/broadcast/supabase.js',r=>r.fulfill({contentType:'text/javascript',body:`
+const ORIGIN = 'http://127.0.0.1:5195';
+test('Showrunner packs, same-order purchase history and credited balance survive checkout return and account changes', { timeout: 90000 }, async t => {
+  const f = await paidFixture(t),
+    authenticate = async request => {
+      const value = request.headers.get('authorization');
+      return value === `Bearer fixture-${OWNER}` ? OWNER : value === `Bearer fixture-${OTHER}` ? OTHER : null;
+    };
+  const commerce = createCommerceHandler({ service: f.commerce, publicOrigin: ORIGIN, authenticate });
+  const paid = createPaidOperations({ store: f.store, commerce: f.commerce, publicOrigin: ORIGIN, ensureProducer: () => {} });
+  const paidHandler = createPaidOperationHandler({ store: f.store, service: paid, publicOrigin: ORIGIN, authenticate });
+  const { server } = createBroadcastDemo({ ODDBOUT_BROADCAST_PORT: '5195' });
+  await new Promise(r => server.listen(5195, '127.0.0.1', r));
+  t.after(() => new Promise(r => server.close(r)));
+  const browser = await chromium.launch({ channel: process.env.ODDBOUT_TEST_BROWSER_CHANNEL ?? 'chrome', headless: true });
+  t.after(() => browser.close());
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await context.route('**/broadcast/config', r =>
+    r.fulfill({
+      json: {
+        paidOperations: true,
+        autoProducer: true,
+        concierge: false,
+        authConfigured: true,
+        commerceEnabled: true,
+        supabaseUrl: 'https://fixture.example',
+        publishableKey: 'fixture-public',
+      },
+    }),
+  );
+  await context.route('**/broadcast/supabase.js', r =>
+    r.fulfill({
+      contentType: 'text/javascript',
+      body: `
     let owner='${OWNER}',changed;const value=()=>({access_token:'fixture-'+owner,user:{id:owner,email:'owner@example.test'}});
     globalThis.testAccount=id=>{owner=id;changed?.('SIGNED_IN',value());};
-    globalThis.supabase={createClient(){return{auth:{onAuthStateChange(fn){changed=fn},async getSession(){return{data:{session:value()}}},async signOut(){changed('SIGNED_OUT',null);return{};}}}}};`}));
-  for(const [pattern,handler] of [['**/commerce/**',commerce],['**/paid-operations/**',paidHandler]]) await context.route(pattern,async route=>{
-    const req=route.request(),res=await handler(new Request(req.url(),{method:req.method(),headers:req.headers(),...(req.postData()?{body:req.postData()}: {})}));
-    await route.fulfill({status:res.status,body:await res.text(),contentType:'application/json'});
-  });
-  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
-  await page.goto(ORIGIN + '/broadcast/operator/');await page.locator('#signout').waitFor();
-  assert.match(await page.title(),/Showrunner/);
-  assert.match(await page.locator('link[rel="icon"]').getAttribute('href'),/showrunner\.svg/);
-  const icon=await page.request.get(ORIGIN+'/broadcast/assets/showrunner.svg');assert.equal(icon.status(),200);assert.match(icon.headers()['content-type'],/image\/svg\+xml/);
+    globalThis.supabase={createClient(){return{auth:{onAuthStateChange(fn){changed=fn},async getSession(){return{data:{session:value()}}},async signOut(){changed('SIGNED_OUT',null);return{};}}}}};`,
+    }),
+  );
+  for (const [pattern, handler] of [
+    ['**/commerce/**', commerce],
+    ['**/paid-operations/**', paidHandler],
+  ])
+    await context.route(pattern, async route => {
+      const req = route.request(),
+        res = await handler(new Request(req.url(), { method: req.method(), headers: req.headers(), ...(req.postData() ? { body: req.postData() } : {}) }));
+      await route.fulfill({ status: res.status, body: await res.text(), contentType: 'application/json' });
+    });
+  const page = await context.newPage(),
+    errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await page.goto(ORIGIN + '/broadcast/operator/');
+  await page.locator('#signout').waitFor();
+  assert.match(await page.title(), /Showrunner/);
+  assert.match(await page.locator('link[rel="icon"]').getAttribute('href'), /showrunner\.svg/);
+  const icon = await page.request.get(ORIGIN + '/broadcast/assets/showrunner.svg');
+  assert.equal(icon.status(), 200);
+  assert.match(icon.headers()['content-type'], /image\/svg\+xml/);
   await page.locator('[data-product-id="studio-series-5000"]').click();
-  assert.equal(await page.locator('#productId').inputValue(),'studio-series-5000');
-  assert.equal(await page.locator('[data-product-id="sandbox-50000"]').count(),0);
-  assert.match(await page.locator('#topup-form').innerText(),/50(?:\.00)?/);
-  assert.equal(f.orders.size,0);
-  await page.locator('#topup-form button[type="submit"]').click();await page.locator('#paypal-approval').waitFor();
-  assert.match(await page.locator('#paypal-approval').getAttribute('href'),/ORDER1/);
-  const purchase=(await f.commerce.purchases(OWNER)).items[0];assert.equal(purchase.credits,5000);assert.equal(purchase.amountCents,5000);
-  assert.equal((await f.store.wallet(OWNER)).balanceCredits,0);
-  await page.reload();await page.locator('#purchase-list').getByText('Series',{exact:true}).waitFor();
-  await page.locator('#purchase-list').getByRole('button',{name:/Continue/i}).first().click();
-  await page.locator('#paypal-approval').waitFor();assert.equal(f.orders.size,1);
-  f.orders.get('ORDER1').status='APPROVED';
-  await page.goto(ORIGIN+'/broadcast/operator/?intent='+purchase.id);
-  await page.waitForFunction(()=>document.getElementById('available').textContent.replaceAll(',','')==='5000',null,{timeout:30000});
-  await page.locator('#purchase-list').getByText(/credited|completed|added/i).first().waitFor();
-  assert.equal((await f.store.wallet(OWNER)).balanceCredits,5000);assert.equal(f.orders.size,1);
-  assert.doesNotMatch(await page.locator('#activity-summary').textContent(),/Continue this PayPal checkout/);
-  assert.equal((await f.db.query("select count(*)::int n from commerce.ledger where kind='topup'")).rows[0].n,1);
-  await mkdir(new URL('../../output/showrunner-tests/',import.meta.url),{recursive:true});
-  await page.screenshot({path:fileURLToPath(new URL('../../output/showrunner-tests/storefront-desktop.png',import.meta.url)),fullPage:true});
-  await page.setViewportSize({width:390,height:844});
-  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
-  await page.screenshot({path:fileURLToPath(new URL('../../output/showrunner-tests/storefront-mobile.png',import.meta.url)),fullPage:true});
-  await page.evaluate(id=>globalThis.testAccount(id),OTHER);
-  await page.waitForFunction(()=>document.getElementById('available').textContent==='0');
-  assert.equal(await page.locator('#purchase-list').getByText('Series',{exact:true}).count(),0);
-  assert.deepEqual(errors,[]);
+  assert.equal(await page.locator('#productId').inputValue(), 'studio-series-5000');
+  assert.equal(await page.locator('[data-product-id="sandbox-50000"]').count(), 0);
+  assert.match(await page.locator('#topup-form').innerText(), /50(?:\.00)?/);
+  assert.equal(f.orders.size, 0);
+  await page.locator('#topup-form button[type="submit"]').click();
+  await page.locator('#paypal-approval').waitFor();
+  assert.match(await page.locator('#paypal-approval').getAttribute('href'), /ORDER1/);
+  const purchase = (await f.commerce.purchases(OWNER)).items[0];
+  assert.equal(purchase.credits, 5000);
+  assert.equal(purchase.amountCents, 5000);
+  assert.equal((await f.store.wallet(OWNER)).balanceCredits, 0);
+  await page.reload();
+  await page.locator('#purchase-list').getByText('Series', { exact: true }).waitFor();
+  await page
+    .locator('#purchase-list')
+    .getByRole('button', { name: /Continue/i })
+    .first()
+    .click();
+  await page.locator('#paypal-approval').waitFor();
+  assert.equal(f.orders.size, 1);
+  f.orders.get('ORDER1').status = 'APPROVED';
+  await page.goto(ORIGIN + '/broadcast/operator/?intent=' + purchase.id);
+  await page.waitForFunction(() => document.getElementById('available').textContent.replaceAll(',', '') === '5000', null, { timeout: 30000 });
+  await page
+    .locator('#purchase-list')
+    .getByText(/credited|completed|added/i)
+    .first()
+    .waitFor();
+  assert.equal((await f.store.wallet(OWNER)).balanceCredits, 5000);
+  assert.equal(f.orders.size, 1);
+  assert.doesNotMatch(await page.locator('#activity-summary').textContent(), /Continue this PayPal checkout/);
+  assert.equal((await f.db.query("select count(*)::int n from commerce.ledger where kind='topup'")).rows[0].n, 1);
+  await mkdir(new URL('../../output/showrunner-tests/', import.meta.url), { recursive: true });
+  await page.screenshot({ path: fileURLToPath(new URL('../../output/showrunner-tests/storefront-desktop.png', import.meta.url)), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  await page.screenshot({ path: fileURLToPath(new URL('../../output/showrunner-tests/storefront-mobile.png', import.meta.url)), fullPage: true });
+  await page.evaluate(id => globalThis.testAccount(id), OTHER);
+  await page.waitForFunction(() => document.getElementById('available').textContent === '0');
+  assert.equal(await page.locator('#purchase-list').getByText('Series', { exact: true }).count(), 0);
+  assert.deepEqual(errors, []);
 });

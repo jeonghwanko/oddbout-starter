@@ -10,7 +10,8 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const sha = data => createHash('sha256').update(data).digest('hex');
 async function fixture(t) {
   const scratch = path.join(root, 'output', `portable-test-${randomUUID()}`);
-  const plugin = path.join(scratch, 'plugin'); await mkdir(path.join(plugin, 'runtime'), { recursive: true });
+  const plugin = path.join(scratch, 'plugin');
+  await mkdir(path.join(plugin, 'runtime'), { recursive: true });
   t.after(() => rm(scratch, { recursive: true, force: true }));
   for (const file of ['launcher.mjs', 'local-files.mjs']) await cp(path.join(root, 'plugins', 'ai-fighter', file), path.join(plugin, file));
   const data = 'export const fixture = true;\n';
@@ -31,7 +32,8 @@ test('portable startup copies verified bundled bytes and preserves the user work
   await writeFile(path.join(first.runtime, 'local-setup.txt'), 'keep venv');
   assert.deepEqual(await f.initialize({ base: f.base }), first);
   assert.equal(await readFile(path.join(first.runtime, 'local-setup.txt'), 'utf8'), 'keep venv');
-  f.manifest.version = 'next'; await f.save();
+  f.manifest.version = 'next';
+  await f.save();
   const second = await f.initialize({ base: f.base });
   assert.notEqual(first.runtime, second.runtime);
   assert.equal(second.root, first.root);
@@ -42,16 +44,22 @@ test('portable startup rejects corrupt files, unsupported platforms and paths ou
   const f = await fixture(t);
   await writeFile(path.join(f.plugin, 'runtime', 'entry.mjs'), 'modified');
   await assert.rejects(f.initialize({ base: f.base }), /integrity check failed/);
-  f.manifest.platform = 'unsupported'; await f.save();
+  f.manifest.platform = 'unsupported';
+  await f.save();
   await assert.rejects(f.initialize({ base: f.base }), /bundle requires/);
-  f.manifest.platform = process.platform; f.manifest.files = { '../outside': sha('ignored') }; await f.save();
+  f.manifest.platform = process.platform;
+  f.manifest.files = { '../outside': sha('ignored') };
+  await f.save();
   await assert.rejects(f.initialize({ base: f.base }), /Invalid bundled path/);
   await assert.rejects(f.initialize({ base: 'relative' }), /absolute directory/);
 });
 
 test('source distribution extracts on the host without native dependencies or a desktop platform requirement', async t => {
   const f = await fixture(t);
-  f.manifest.distribution = 'source'; f.manifest.platform = 'any'; f.manifest.arch = 'any'; await f.save();
+  f.manifest.distribution = 'source';
+  f.manifest.platform = 'any';
+  f.manifest.arch = 'any';
+  await f.save();
   const result = await f.initialize({ base: f.base });
   assert.equal(result.distribution, 'source');
   assert.equal(result.registration, 'oddbout-cloud');
@@ -60,7 +68,8 @@ test('source distribution extracts on the host without native dependencies or a 
 });
 
 test('launcher reads its own normal Codex plugin cache but refuses cache writes and credential locations', async t => {
-  const f = await fixture(t), cached = path.join(f.scratch, '.codex/plugins/cache/oddbout/0.5.5');
+  const f = await fixture(t),
+    cached = path.join(f.scratch, '.codex/plugins/cache/oddbout/0.5.5');
   await cp(f.plugin, cached, { recursive: true });
   const launcher = await import(pathToFileURL(path.join(cached, 'launcher.mjs')).href);
   const installed = await launcher.initialize({ base: f.base });
@@ -73,17 +82,44 @@ test('launcher reads its own normal Codex plugin cache but refuses cache writes 
 });
 
 test('Windows scanner locks retry only the atomic install rename; permanent and unrelated failures propagate', async t => {
-  const f = await fixture(t), marker = path.join(f.scratch, 'absent-marker');
-  let calls = 0; const delays = [];
-  await commitRuntime('pending', 'target', marker, { platform: 'win32', wait: async ms => delays.push(ms),
-    move: async (source, target) => { assert.deepEqual([source, target], ['pending', 'target']); if (++calls < 3) throw Object.assign(Error('busy'), { code: 'EPERM' }); } });
-  assert.equal(calls, 3); assert.deepEqual(delays, [100, 200]);
+  const f = await fixture(t),
+    marker = path.join(f.scratch, 'absent-marker');
+  let calls = 0;
+  const delays = [];
+  await commitRuntime('pending', 'target', marker, {
+    platform: 'win32',
+    wait: async ms => delays.push(ms),
+    move: async (source, target) => {
+      assert.deepEqual([source, target], ['pending', 'target']);
+      if (++calls < 3) throw Object.assign(Error('busy'), { code: 'EPERM' });
+    },
+  });
+  assert.equal(calls, 3);
+  assert.deepEqual(delays, [100, 200]);
   calls = 0;
-  await assert.rejects(commitRuntime('pending', 'target', marker, { platform: 'win32', wait: async () => {},
-    move: async () => { calls++; throw Object.assign(Error('locked'), { code: 'EPERM' }); } }), /locked/);
+  await assert.rejects(
+    commitRuntime('pending', 'target', marker, {
+      platform: 'win32',
+      wait: async () => {},
+      move: async () => {
+        calls++;
+        throw Object.assign(Error('locked'), { code: 'EPERM' });
+      },
+    }),
+    /locked/,
+  );
   assert.equal(calls, 7);
   calls = 0;
-  await assert.rejects(commitRuntime('pending', 'target', marker, { platform: 'win32', wait: async () => assert.fail('no retry'),
-    move: async () => { calls++; throw Object.assign(Error('disk'), { code: 'ENOSPC' }); } }), /disk/);
+  await assert.rejects(
+    commitRuntime('pending', 'target', marker, {
+      platform: 'win32',
+      wait: async () => assert.fail('no retry'),
+      move: async () => {
+        calls++;
+        throw Object.assign(Error('disk'), { code: 'ENOSPC' });
+      },
+    }),
+    /disk/,
+  );
   assert.equal(calls, 1);
 });

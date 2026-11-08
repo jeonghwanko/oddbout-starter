@@ -22,12 +22,25 @@ export function createAdminStorage({ db, rpc }) {
     if (parts.length === 2 && request.method === 'GET') return rpc('af_admin_storage', { p_actor: actor });
     if (parts.length !== 3 || request.method !== 'POST') throw new Problem(404, 'not-found');
     let body;
-    try { body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, 4000))); }
-    catch (error) { if (error instanceof Problem) throw error; throw new Problem(400, 'invalid-body'); }
+    try {
+      body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, 4000)));
+    } catch (error) {
+      if (error instanceof Problem) throw error;
+      throw new Problem(400, 'invalid-body');
+    }
     const ids = body?.submissionIds;
-    if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => key !== 'submissionIds') || !Array.isArray(ids)
-      || !ids.length || ids.length > STORAGE_REMOVALS_MAX || ids.some(id => typeof id !== 'string' || !UUID.test(id))
-      || new Set(ids.map(id => id.toLowerCase())).size !== ids.length) throw new Problem(400, 'invalid-review');
+    if (
+      !body ||
+      typeof body !== 'object' ||
+      Array.isArray(body) ||
+      Object.keys(body).some(key => key !== 'submissionIds') ||
+      !Array.isArray(ids) ||
+      !ids.length ||
+      ids.length > STORAGE_REMOVALS_MAX ||
+      ids.some(id => typeof id !== 'string' || !UUID.test(id)) ||
+      new Set(ids.map(id => id.toLowerCase())).size !== ids.length
+    )
+      throw new Problem(400, 'invalid-review');
     const named = ids.map(id => id.toLowerCase());
     /** @type {{ submissionId: string, bytes: number, keys: string[] }[]} */
     const folders = await rpc('af_admin_storage_folders', { p_actor: actor, p_ids: named });

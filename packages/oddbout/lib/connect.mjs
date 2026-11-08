@@ -53,15 +53,18 @@ export const HOSTS = {
 /** @type {Readonly<Record<string, Host>>} */
 const HOST_NAMES = { claude: 'claude-code', 'claude-code': 'claude-code', codex: 'codex', gemini: 'gemini-cli', 'gemini-cli': 'gemini-cli' };
 /** Set in the commands Codex runs (codex-rs: thread, tool call and sandbox variables; the npm launcher's own marker). */
-const CODEX_MARKERS = ['CODEX_THREAD_ID', 'CODEX_TOOL_CALL_ID', 'CODEX_SESSION_ID', 'CODEX_SANDBOX', 'CODEX_SANDBOX_NETWORK_DISABLED',
-  'CODEX_MANAGED_BY_NPM'];
+const CODEX_MARKERS = ['CODEX_THREAD_ID', 'CODEX_TOOL_CALL_ID', 'CODEX_SESSION_ID', 'CODEX_SANDBOX', 'CODEX_SANDBOX_NETWORK_DISABLED', 'CODEX_MANAGED_BY_NPM'];
 
 /** ODDBOUT's MCP addresses: the sign-in-first and public ones are the full server; the directory edition cannot make fighters. */
 /** @type {ReadonlyMap<string, AddressKind>} */
 const ADDRESSES = new Map([
-  [SIGN_IN_URL, 'sign-in-first'], [`${SUPABASE_FUNCTION}/signin`, 'sign-in-first'],
-  ['https://mcp.oddbout.com/mcp', 'public'], [SUPABASE_FUNCTION, 'public'], ['https://ai-fighter-validator.onrender.com/mcp', 'public'],
-  ['https://mcp.oddbout.com/claude', 'directory'], [`${SUPABASE_FUNCTION}/claude`, 'directory'],
+  [SIGN_IN_URL, 'sign-in-first'],
+  [`${SUPABASE_FUNCTION}/signin`, 'sign-in-first'],
+  ['https://mcp.oddbout.com/mcp', 'public'],
+  [SUPABASE_FUNCTION, 'public'],
+  ['https://ai-fighter-validator.onrender.com/mcp', 'public'],
+  ['https://mcp.oddbout.com/claude', 'directory'],
+  [`${SUPABASE_FUNCTION}/claude`, 'directory'],
 ]);
 /** @param {unknown} url @returns {AddressKind | null} */
 export function addressKind(url) {
@@ -69,7 +72,9 @@ export function addressKind(url) {
   try {
     const parsed = new URL(url);
     return ADDRESSES.get(`${parsed.protocol}//${parsed.host}${parsed.pathname.replace(/\/+$/, '')}`) ?? null;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 /** @param {Env} env @returns {{ host: Host | null, markers: Host[] }} */
@@ -117,13 +122,21 @@ export function planServer(servers, name) {
 
 /** Comments are allowed in Gemini CLI's settings.json. @param {string} text */
 export function stripJsonComments(text) {
-  let out = '', quoted = false;
+  let out = '',
+    quoted = false;
   for (let i = 0; i < text.length; i++) {
-    const c = text[i], next = text[i + 1];
+    const c = text[i],
+      next = text[i + 1];
     if (quoted) {
       out += c;
-      if (c === '\\') { out += next ?? ''; i++; } else if (c === '"') quoted = false;
-    } else if (c === '"') { quoted = true; out += c; } else if (c === '/' && next === '/') {
+      if (c === '\\') {
+        out += next ?? '';
+        i++;
+      } else if (c === '"') quoted = false;
+    } else if (c === '"') {
+      quoted = true;
+      out += c;
+    } else if (c === '/' && next === '/') {
       while (i < text.length && text[i] !== '\n') i++;
       out += '\n';
     } else if (c === '/' && next === '*') {
@@ -137,16 +150,24 @@ export function stripJsonComments(text) {
 
 /** @param {string} file */
 function isFile(file) {
-  try { return statSync(file).isFile(); } catch { return false; }
+  try {
+    return statSync(file).isFile();
+  } catch {
+    return false;
+  }
 }
 /** @param {string} file @param {boolean} [comments] @returns {{ value: any, error: string | null }} */
 function readJson(file, comments = false) {
   let text;
-  try { text = readFileSync(file, 'utf8'); } catch (/** @type {any} */ error) {
+  try {
+    text = readFileSync(file, 'utf8');
+  } catch (/** @type {any} */ error) {
     return error?.code === 'ENOENT' ? { value: {}, error: null } : { value: {}, error: `${file}: ${error?.message ?? error}` };
   }
   if (!text.trim()) return { value: {}, error: null };
-  try { return { value: JSON.parse(comments ? stripJsonComments(text) : text), error: null }; } catch (/** @type {any} */ error) {
+  try {
+    return { value: JSON.parse(comments ? stripJsonComments(text) : text), error: null };
+  } catch (/** @type {any} */ error) {
     return { value: {}, error: `${file}: ${error?.message ?? error}` };
   }
 }
@@ -154,7 +175,7 @@ function readJson(file, comments = false) {
 function configServers(map, scope) {
   if (!map || typeof map !== 'object') return [];
   return Object.entries(map).flatMap(([name, entry]) => {
-    const url = entry && typeof entry === 'object' ? entry.url ?? entry.httpUrl ?? entry.serverUrl : null;
+    const url = entry && typeof entry === 'object' ? (entry.url ?? entry.httpUrl ?? entry.serverUrl) : null;
     return typeof url === 'string' ? [{ name, url, scope, auth: /** @type {Auth} */ ('unknown') }] : [];
   });
 }
@@ -171,11 +192,12 @@ function samePath(a, b) {
 export function findExecutable(name, env, platform) {
   const dirs = (env.PATH ?? env.Path ?? '').split(path.delimiter).filter(Boolean);
   const extensions = platform === 'win32' ? (env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean) : [''];
-  for (const dir of dirs) for (const extension of extensions) {
-    const file = path.join(dir, name + extension.toLowerCase());
-    if (isFile(file)) return file;
-    if (extension && isFile(path.join(dir, name + extension))) return path.join(dir, name + extension);
-  }
+  for (const dir of dirs)
+    for (const extension of extensions) {
+      const file = path.join(dir, name + extension.toLowerCase());
+      if (isFile(file)) return file;
+      if (extension && isFile(path.join(dir, name + extension))) return path.join(dir, name + extension);
+    }
   return null;
 }
 
@@ -199,25 +221,42 @@ export function spawnStdio(terminal) {
  */
 export function runCommand(file, args, { env, cwd, timeoutMs, echo = false, terminal = false }) {
   for (const arg of args) if (!SAFE_ARG.test(arg)) throw new Error(`Refusing an argument with special characters: ${arg}`);
-  const windows = process.platform === 'win32', started = Date.now();
+  const windows = process.platform === 'win32',
+    started = Date.now();
   return new Promise(resolve => {
-    let stdout = '', stderr = '', timedOut = false, done = false;
+    let stdout = '',
+      stderr = '',
+      timedOut = false,
+      done = false;
     /** @type {ReturnType<typeof setTimeout> | undefined} */
     let timer;
     /** @param {number | null} code @param {string} [error] */
     const finish = (code, error) => {
       if (done) return;
-      done = true; clearTimeout(timer);
+      done = true;
+      clearTimeout(timer);
       resolve({ code, stdout, stderr, timedOut, seconds: Math.round((Date.now() - started) / 100) / 10, ...(error ? { error } : {}) });
     };
     /** @type {import('node:child_process').ChildProcess} */
     let child;
     try {
       child = spawn(windows ? `"${file}"` : file, args, { cwd, env, shell: windows, windowsHide: true, stdio: spawnStdio(terminal) });
-    } catch (/** @type {any} */ error) { finish(null, String(error?.message ?? error)); return; }
-    timer = setTimeout(() => { timedOut = true; killTree(child); }, timeoutMs);
-    child.stdout?.on('data', chunk => { if (stdout.length < OUTPUT_LIMIT) stdout += chunk; if (echo) process.stderr.write(chunk); });
-    child.stderr?.on('data', chunk => { if (stderr.length < OUTPUT_LIMIT) stderr += chunk; if (echo) process.stderr.write(chunk); });
+    } catch (/** @type {any} */ error) {
+      finish(null, String(error?.message ?? error));
+      return;
+    }
+    timer = setTimeout(() => {
+      timedOut = true;
+      killTree(child);
+    }, timeoutMs);
+    child.stdout?.on('data', chunk => {
+      if (stdout.length < OUTPUT_LIMIT) stdout += chunk;
+      if (echo) process.stderr.write(chunk);
+    });
+    child.stderr?.on('data', chunk => {
+      if (stderr.length < OUTPUT_LIMIT) stderr += chunk;
+      if (echo) process.stderr.write(chunk);
+    });
     child.on('error', error => finish(null, error.message));
     child.on('close', code => finish(code));
   });
@@ -231,8 +270,14 @@ function killTree(child) {
 
 /** The last lines of a command's output, with URL queries (codes, states) and anything token-like hidden. @param {RunResult} result */
 function outputTail(result) {
-  return `${result.stdout}\n${result.stderr}${result.error ? `\n${result.error}` : ''}`.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
-    .slice(-6).join('\n').replace(/(https?:\/\/[^\s?#]+)[?#]\S*/g, '$1?…').replace(/\b(eyJ[\w-]{10,}|[A-Za-z0-9_-]{40,})\b/g, '…');
+  return `${result.stdout}\n${result.stderr}${result.error ? `\n${result.error}` : ''}`
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean)
+    .slice(-6)
+    .join('\n')
+    .replace(/(https?:\/\/[^\s?#]+)[?#]\S*/g, '$1?…')
+    .replace(/\b(eyJ[\w-]{10,}|[A-Za-z0-9_-]{40,})\b/g, '…');
 }
 
 /**
@@ -246,9 +291,15 @@ function outputTail(result) {
 /** @param {RunResult} result @returns {any} */
 function parseJson(result) {
   if (result.code !== 0) return null;
-  try { return JSON.parse(result.stdout); } catch {
+  try {
+    return JSON.parse(result.stdout);
+  } catch {
     const start = result.stdout.search(/[[{]/);
-    try { return start < 0 ? null : JSON.parse(result.stdout.slice(start)); } catch { return null; }
+    try {
+      return start < 0 ? null : JSON.parse(result.stdout.slice(start));
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -260,13 +311,15 @@ async function listServers(ctx) {
     const result = await ctx.run(['mcp', 'list', '--json'], { timeoutMs: 30_000 });
     const list = parseJson(result);
     if (!Array.isArray(list)) return { servers: [], error: `codex mcp list --json failed: ${outputTail(result) || 'no JSON'}` };
-    return { servers: list.flatMap(entry => {
-      const url = entry?.transport?.url;
-      if (typeof url !== 'string' || typeof entry.name !== 'string') return [];
-      /** @type {Auth} */
-      const auth = entry.auth_status === 'o_auth' ? 'signed-in' : entry.auth_status === 'not_logged_in' ? 'not-signed-in' : 'unknown';
-      return [{ name: entry.name, url, scope: entry.enabled === false ? 'user (disabled)' : 'user', auth }];
-    }) };
+    return {
+      servers: list.flatMap(entry => {
+        const url = entry?.transport?.url;
+        if (typeof url !== 'string' || typeof entry.name !== 'string') return [];
+        /** @type {Auth} */
+        const auth = entry.auth_status === 'o_auth' ? 'signed-in' : entry.auth_status === 'not_logged_in' ? 'not-signed-in' : 'unknown';
+        return [{ name: entry.name, url, scope: entry.enabled === false ? 'user (disabled)' : 'user', auth }];
+      }),
+    };
   }
   if (ctx.host === 'claude-code') {
     const file = path.join(ctx.env.CLAUDE_CONFIG_DIR || homedir(), '.claude.json');
@@ -299,7 +352,9 @@ async function claudeAuth(ctx, server) {
 
 /** @param {unknown} source */
 function isOurRepository(source) {
-  return typeof source === 'string' && /^(?:https:\/\/github\.com\/|git@github\.com:)?jeonghwanko\/oddbout-starter(?:\.git)?\/?(?:[#@].*)?$/i.test(source.trim());
+  return (
+    typeof source === 'string' && /^(?:https:\/\/github\.com\/|git@github\.com:)?jeonghwanko\/oddbout-starter(?:\.git)?\/?(?:[#@].*)?$/i.test(source.trim())
+  );
 }
 
 /** @param {Context} ctx @returns {Promise<SkillResult>} */
@@ -312,18 +367,22 @@ async function ensureSkill(ctx) {
   const list = Array.isArray(markets) ? markets : markets?.marketplaces;
   if (!Array.isArray(list)) return { state: 'failed', reason: `${HOSTS[ctx.host].bin} could not list plugin marketplaces (it may be too old for plugins).` };
   const market = list.find(entry => entry?.name === 'oddbout');
-  const source = codex ? market?.marketplaceSource?.source : market?.repo ?? market?.url;
+  const source = codex ? market?.marketplaceSource?.source : (market?.repo ?? market?.url);
   if (market && !isOurRepository(source)) {
-    return { state: 'other-marketplace', reason: `A plugin marketplace named "oddbout" already points to ${source ?? market.root ?? 'another source'}; left as it is.` };
+    return {
+      state: 'other-marketplace',
+      reason: `A plugin marketplace named "oddbout" already points to ${source ?? market.root ?? 'another source'}; left as it is.`,
+    };
   }
   const installed = async () => {
     const plugins = parseJson(await ctx.run(['plugin', 'list', '--json'], { timeoutMs: 30_000 }));
     const rows = codex ? plugins?.installed : plugins;
     // A Claude Code install scoped to another project does not load here.
-    const here = (/** @type {any} */ row) => !['project', 'local'].includes(row?.scope) || (typeof row?.projectPath === 'string' && samePath(row.projectPath, ctx.cwd));
+    const here = (/** @type {any} */ row) =>
+      !['project', 'local'].includes(row?.scope) || (typeof row?.projectPath === 'string' && samePath(row.projectPath, ctx.cwd));
     return Array.isArray(rows) && rows.some(row => (codex ? row?.pluginId : row?.id) === PLUGIN && row?.enabled !== false && (codex || here(row)));
   };
-  if (market && await installed()) return { state: 'present', plugin: PLUGIN };
+  if (market && (await installed())) return { state: 'present', plugin: PLUGIN };
   if (!ctx.mutate) return { state: 'would-install', plugin: PLUGIN };
   if (!market) {
     // Sparse and shallow: only the marketplace file and the skills package, not the whole repository.
@@ -355,7 +414,8 @@ async function ensureServer(ctx, name) {
   if (listed.error) return { state: 'failed', server: null, others: [], signIn: 'skipped', error: listed.error };
   const plan = planServer(listed.servers, name);
   if (plan.action === 'conflict') return { state: 'conflict', server: plan.server, others: plan.others, signIn: 'skipped' };
-  let server = plan.server, state = /** @type {'present' | 'added' | 'would-add'} */ (plan.action === 'reuse' ? 'present' : 'would-add');
+  let server = plan.server,
+    state = /** @type {'present' | 'added' | 'would-add'} */ (plan.action === 'reuse' ? 'present' : 'would-add');
   /** @type {SignIn} */
   let signIn = 'unknown';
   let loginTried = false;
@@ -365,14 +425,19 @@ async function ensureServer(ctx, name) {
     // browser can return to this machine, the add is given only the time to save it.
     const codexAdd = ctx.host === 'codex';
     if (codexAdd && !ctx.remote) process.stderr.write(`Opening your browser to sign in to ODDBOUT (waiting up to ${Math.round(ctx.waitMs / 1000)}s)…\n`);
-    const result = await ctx.run(addArgs(ctx.host, name), { timeoutMs: codexAdd ? (ctx.remote ? Math.min(20_000, ctx.waitMs) : ctx.waitMs) : 60_000, echo: codexAdd, record: true });
+    const result = await ctx.run(addArgs(ctx.host, name), {
+      timeoutMs: codexAdd ? (ctx.remote ? Math.min(20_000, ctx.waitMs) : ctx.waitMs) : 60_000,
+      echo: codexAdd,
+      record: true,
+    });
     loginTried = codexAdd && !ctx.remote;
     const again = await listServers(ctx);
     server = again.servers.find(entry => entry.name === name && addressKind(entry.url) === 'sign-in-first') ?? null;
     if (!server) {
-      const error = result.code === 0 && !result.timedOut
-        ? `\`${addArgs(ctx.host, name).join(' ')}\` said it worked, but ${HOSTS[ctx.host].label}'s settings${again.error ? '' : ' that I can read'} don't list \`${name}\`${again.error ? ` (${again.error})` : ''}`
-        : outputTail(result) || 'the server was not saved';
+      const error =
+        result.code === 0 && !result.timedOut
+          ? `\`${addArgs(ctx.host, name).join(' ')}\` said it worked, but ${HOSTS[ctx.host].label}'s settings${again.error ? '' : ' that I can read'} don't list \`${name}\`${again.error ? ` (${again.error})` : ''}`
+          : outputTail(result) || 'the server was not saved';
       return { state: 'failed', server: null, others: plan.others, signIn: 'skipped', error };
     }
     state = 'added';
@@ -412,10 +477,10 @@ async function ensureServer(ctx, name) {
 
 export const RULES = [
   'Tell the user what `say` says, in their language and your own words. Do not paste this JSON to them.',
-  'Never ask the user for, accept or repeat a token, authorization code, API key or callback/redirect URL in chat. Sign-in happens only in their browser and in the agent\'s own sign-in prompt.',
+  "Never ask the user for, accept or repeat a token, authorization code, API key or callback/redirect URL in chat. Sign-in happens only in their browser and in the agent's own sign-in prompt.",
   'Do not remove, rename or change an MCP server that is already configured unless the user explicitly asks you to.',
   'Run `run` only when `next` is "rerun", and only after the user agrees when `say` asks them something.',
-  'The connection is confirmed only when ODDBOUT\'s get_profile returns the user\'s account in a conversation that has ODDBOUT\'s tools. A sign-in success, a tool listing or this reply is not that confirmation.',
+  "The connection is confirmed only when ODDBOUT's get_profile returns the user's account in a conversation that has ODDBOUT's tools. A sign-in success, a tool listing or this reply is not that confirmation.",
   'Connecting does not ask you to create, generate or register a fighter. Wait for the user to ask.',
 ];
 
@@ -435,7 +500,8 @@ export function claudeSurface(env) {
 }
 
 /** @param {string} name */
-const terminalSignIn = name => `sign in once from a terminal (PowerShell or Terminal, not this chat) with \`claude mcp login ${name}\`, then start a new session`;
+const terminalSignIn = name =>
+  `sign in once from a terminal (PowerShell or Terminal, not this chat) with \`claude mcp login ${name}\`, then start a new session`;
 /** @param {string} name */
 const desktopConnect = name => `type /mcp, choose ${name}, choose Connect, and approve in your browser with Google (let the browser open Claude when it asks)`;
 /**
@@ -468,8 +534,9 @@ function claudeSteps(surface, name) {
 /** How the running session gets the new server and skill. @param {Host} host @param {string} name @param {ClaudeSurface} surface */
 function loadHint(host, name, surface) {
   if (host === 'claude-code') return claudeSteps(surface, name).agent;
-  if (host === 'codex') return 'Codex loads MCP servers and skills when a session starts: if ODDBOUT\'s tools are not available to you, ask the user to exit and run `codex resume --last` to continue this conversation with them.';
-  return 'Gemini CLI loads MCP servers when it starts: if ODDBOUT\'s tools are not available to you, ask the user to restart Gemini CLI in a trusted folder.';
+  if (host === 'codex')
+    return "Codex loads MCP servers and skills when a session starts: if ODDBOUT's tools are not available to you, ask the user to exit and run `codex resume --last` to continue this conversation with them.";
+  return "Gemini CLI loads MCP servers when it starts: if ODDBOUT's tools are not available to you, ask the user to restart Gemini CLI in a trusted folder.";
 }
 
 /** @param {Host} host @param {string} name @param {ClaudeSurface} surface */
@@ -483,7 +550,9 @@ function userLoad(host, name, surface) {
 function skillLine(skill, host, surface) {
   if (skill.state === 'installed') {
     if (host !== 'claude-code') return 'I also installed the create-fighter skill.';
-    return surface === 'desktop' ? 'I also installed the create-fighter skill; it loads in the new session.' : 'I also installed the create-fighter skill (type /reload-plugins to load it now).';
+    return surface === 'desktop'
+      ? 'I also installed the create-fighter skill; it loads in the new session.'
+      : 'I also installed the create-fighter skill (type /reload-plugins to load it now).';
   }
   if (skill.state === 'present') return 'The create-fighter skill was already installed.';
   if (skill.state === 'failed') return 'The create-fighter skill could not be installed; the connection works without it.';
@@ -493,7 +562,11 @@ function skillLine(skill, host, surface) {
 /** @param {Host} host @param {string} name */
 function remoteSignIn(host, name) {
   if (host === 'gemini-cli') {
-    return 'This session runs on another machine (SSH or a container), and Gemini CLI signs in through a browser on the same machine. Sign in by running Gemini CLI on the computer with your browser, then type /mcp auth ' + name + '.';
+    return (
+      'This session runs on another machine (SSH or a container), and Gemini CLI signs in through a browser on the same machine. Sign in by running Gemini CLI on the computer with your browser, then type /mcp auth ' +
+      name +
+      '.'
+    );
   }
   const command = host === 'codex' ? `codex mcp login ${name} --no-browser` : `claude mcp login ${name} --no-browser`;
   return `This session runs on another machine (SSH or a container), so your browser can't hand the sign-in back to it. In a terminal on that machine (for SSH, \`ssh -t\`), run \`${command}\`, open the link it prints on your computer and sign in. It then asks for the address your browser ends on: paste it only into that terminal prompt, never into this chat.`;
@@ -508,77 +581,196 @@ export function compose({ host, name, mode, remote, server, skill, ctx, binary, 
   const label = HOSTS[host].label;
   const used = server.server?.name ?? name;
   const details = {
-    host, hostSource, binary, ...(host === 'claude-code' ? { surface } : {}), remote: remote.remote, remoteReasons: remote.reasons,
+    host,
+    hostSource,
+    binary,
+    ...(host === 'claude-code' ? { surface } : {}),
+    remote: remote.remote,
+    remoteReasons: remote.reasons,
     server: server.server ? { ...server.server, kind: addressKind(server.server.url), state: server.state } : null,
     otherOddboutServers: server.others.map(other => ({ name: other.name, url: other.url, scope: other.scope, kind: addressKind(other.url) })),
-    signIn: server.signIn, skill, actions: ctx.actions, notes: ctx.notes, docs: DOCS,
+    signIn: server.signIn,
+    skill,
+    actions: ctx.actions,
+    notes: ctx.notes,
+    docs: DOCS,
   };
   const base = { oddbout: mode, version: VERSION, host, rules: RULES, details };
   const again = `${COMMAND} connect --host ${HOSTS[host].bin}${name === SERVER_NAME ? '' : ` --name ${name}`}`;
-  const verify = { tool: 'get_profile', arguments: {}, show: 'only the user\'s ODDBOUT nickname and that the connection works', ifToolsMissing: loadHint(host, used, surface) };
-  const extra = [skillLine(skill, host, surface), details.otherOddboutServers.length ? `You also have ${details.otherOddboutServers.map(other => `\`${other.name}\` (${other.url})`).join(', ')}; I left ${details.otherOddboutServers.length > 1 ? 'them' : 'it'} as ${details.otherOddboutServers.length > 1 ? 'they are' : 'it is'}.` : '']
-    .filter(Boolean).join(' ');
+  const verify = {
+    tool: 'get_profile',
+    arguments: {},
+    show: "only the user's ODDBOUT nickname and that the connection works",
+    ifToolsMissing: loadHint(host, used, surface),
+  };
+  const extra = [
+    skillLine(skill, host, surface),
+    details.otherOddboutServers.length
+      ? `You also have ${details.otherOddboutServers.map(other => `\`${other.name}\` (${other.url})`).join(', ')}; I left ${details.otherOddboutServers.length > 1 ? 'them' : 'it'} as ${details.otherOddboutServers.length > 1 ? 'they are' : 'it is'}.`
+      : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
   const join = (/** @type {string[]} */ parts) => parts.filter(Boolean).join(' ');
 
   if (server.state === 'failed') {
-    return { ...base, status: 'failed', next: 'stop', run: null, verify: null,
-      say: join([`I couldn't connect ODDBOUT to ${label}: ${server.error ?? 'unknown error'}.`, 'Nothing else was changed.', extra]) };
+    return {
+      ...base,
+      status: 'failed',
+      next: 'stop',
+      run: null,
+      verify: null,
+      say: join([`I couldn't connect ODDBOUT to ${label}: ${server.error ?? 'unknown error'}.`, 'Nothing else was changed.', extra]),
+    };
   }
   if (server.state === 'conflict') {
     const other = server.server;
-    return { ...base, status: 'conflict', next: 'ask-user', run: `${COMMAND} connect --host ${HOSTS[host].bin} --name ${name}-signin`, verify: null,
-      say: join([`${label} already has an MCP server named \`${other?.name}\` that points to ${other?.url}, which is not ODDBOUT's full server, so I left it as it is.`,
-        `I can add ODDBOUT next to it as \`${name}-signin\` — shall I? Or you can change or remove that entry yourself and I'll run this again.`, extra]) };
+    return {
+      ...base,
+      status: 'conflict',
+      next: 'ask-user',
+      run: `${COMMAND} connect --host ${HOSTS[host].bin} --name ${name}-signin`,
+      verify: null,
+      say: join([
+        `${label} already has an MCP server named \`${other?.name}\` that points to ${other?.url}, which is not ODDBOUT's full server, so I left it as it is.`,
+        `I can add ODDBOUT next to it as \`${name}-signin\` — shall I? Or you can change or remove that entry yourself and I'll run this again.`,
+        extra,
+      ]),
+    };
   }
   if (mode === 'check' && server.state === 'would-add') {
-    return { ...base, status: 'not-connected', next: 'rerun', run: again, verify: null,
-      say: join([`ODDBOUT isn't connected to ${label} yet. Running \`${again}\` adds it and opens your browser to sign in with Google.`]) };
+    return {
+      ...base,
+      status: 'not-connected',
+      next: 'rerun',
+      run: again,
+      verify: null,
+      say: join([`ODDBOUT isn't connected to ${label} yet. Running \`${again}\` adds it and opens your browser to sign in with Google.`]),
+    };
   }
   if (server.signIn === 'needed') {
-    return { ...base, status: 'sign-in-needed', next: 'rerun', run: again, verify: null,
-      say: join([`ODDBOUT is added to ${label} as \`${used}\` but not signed in. Running \`${again}\` opens your browser to sign in with Google.`]) };
+    return {
+      ...base,
+      status: 'sign-in-needed',
+      next: 'rerun',
+      run: again,
+      verify: null,
+      say: join([`ODDBOUT is added to ${label} as \`${used}\` but not signed in. Running \`${again}\` opens your browser to sign in with Google.`]),
+    };
   }
   // A session loads servers and skills when it starts: the user reloads only when this run changed something.
   const changed = server.state === 'added' || server.signIn === 'done' || skill.state === 'installed';
   if (server.signIn === 'not-needed' || server.signIn === 'done') {
-    return { ...base, status: 'connected', next: 'verify', run: null, verify,
-      say: join([`ODDBOUT is connected to ${label} as \`${used}\` and signed in.`, extra, changed ? userLoad(host, used, surface) : '',
-        changed ? 'Then I\'ll check your account with get_profile.' : 'I\'ll check your account with get_profile.']) };
+    return {
+      ...base,
+      status: 'connected',
+      next: 'verify',
+      run: null,
+      verify,
+      say: join([
+        `ODDBOUT is connected to ${label} as \`${used}\` and signed in.`,
+        extra,
+        changed ? userLoad(host, used, surface) : '',
+        changed ? "Then I'll check your account with get_profile." : "I'll check your account with get_profile.",
+      ]),
+    };
   }
   if (server.signIn === 'timed-out') {
-    return { ...base, status: 'sign-in-pending', next: 'rerun', run: again, verify: null,
-      say: join([`ODDBOUT is added to ${label} as \`${used}\`, but the browser sign-in didn't finish in time.`, 'Tell me when you\'re ready and I\'ll open the sign-in again.', extra]) };
+    return {
+      ...base,
+      status: 'sign-in-pending',
+      next: 'rerun',
+      run: again,
+      verify: null,
+      say: join([
+        `ODDBOUT is added to ${label} as \`${used}\`, but the browser sign-in didn't finish in time.`,
+        "Tell me when you're ready and I'll open the sign-in again.",
+        extra,
+      ]),
+    };
   }
   if (server.signIn === 'remote') {
-    return { ...base, status: 'sign-in-needed', next: 'user-signs-in', run: null, verify,
-      say: join([`ODDBOUT is added to ${label} as \`${used}\`.`, remoteSignIn(host, used), extra, 'Tell me when you\'ve signed in and I\'ll check your account.']) };
+    return {
+      ...base,
+      status: 'sign-in-needed',
+      next: 'user-signs-in',
+      run: null,
+      verify,
+      say: join([
+        `ODDBOUT is added to ${label} as \`${used}\`.`,
+        remoteSignIn(host, used),
+        extra,
+        "Tell me when you've signed in and I'll check your account.",
+      ]),
+    };
   }
   if (server.signIn === 'in-session' && host === 'claude-code') {
     // Run from an agent's command tool, which has no terminal: Claude Code's login cannot start there, so its own /mcp panel signs in (the
     // desktop app's from a new session).
-    const why = surface === 'unknown' ? '' : surface === 'desktop' ? 'The Claude app signs in from its own /mcp screen.' : 'Claude Code signs in from its own screen.';
-    return { ...base, status: 'sign-in-needed', next: 'user-signs-in', run: null, verify,
-      say: join([`ODDBOUT is added to Claude Code as \`${used}\`.`, extra,
-        `One step is left, and only you can do it.${why ? ` ${why}` : ''}`, claudeSteps(surface, used).signIn,
-        surface === 'desktop' ? 'In the new session, ask me to check your ODDBOUT account.' : 'Then I\'ll check your account with get_profile.']) };
+    const why =
+      surface === 'unknown' ? '' : surface === 'desktop' ? 'The Claude app signs in from its own /mcp screen.' : 'Claude Code signs in from its own screen.';
+    return {
+      ...base,
+      status: 'sign-in-needed',
+      next: 'user-signs-in',
+      run: null,
+      verify,
+      say: join([
+        `ODDBOUT is added to Claude Code as \`${used}\`.`,
+        extra,
+        `One step is left, and only you can do it.${why ? ` ${why}` : ''}`,
+        claudeSteps(surface, used).signIn,
+        surface === 'desktop' ? 'In the new session, ask me to check your ODDBOUT account.' : "Then I'll check your account with get_profile.",
+      ]),
+    };
   }
   if (server.signIn === 'in-session') {
-    return { ...base, status: 'sign-in-needed', next: 'user-signs-in', run: null, verify,
-      say: join([`ODDBOUT is added to Gemini CLI as \`${used}\`.`, 'Restart Gemini CLI (it loads servers when it starts; Gemini skips them in a folder you haven\'t trusted), then type',
-        `/mcp auth ${used} and approve in your browser with Google.`, extra, 'Then I\'ll check your account with get_profile.']) };
+    return {
+      ...base,
+      status: 'sign-in-needed',
+      next: 'user-signs-in',
+      run: null,
+      verify,
+      say: join([
+        `ODDBOUT is added to Gemini CLI as \`${used}\`.`,
+        "Restart Gemini CLI (it loads servers when it starts; Gemini skips them in a folder you haven't trusted), then type",
+        `/mcp auth ${used} and approve in your browser with Google.`,
+        extra,
+        "Then I'll check your account with get_profile.",
+      ]),
+    };
   }
   if (server.signIn === 'failed' || server.signIn === 'unsupported') {
     const how = host === 'codex' ? `To sign in, run \`codex mcp login ${used}\` and approve in your browser with Google.` : claudeSteps(surface, used).signIn;
-    return { ...base, status: 'sign-in-needed', next: 'user-signs-in', run: null, verify,
-      say: join([`ODDBOUT is added to ${label} as \`${used}\`, but the sign-in didn't complete.`, how, extra]) };
+    return {
+      ...base,
+      status: 'sign-in-needed',
+      next: 'user-signs-in',
+      run: null,
+      verify,
+      say: join([`ODDBOUT is added to ${label} as \`${used}\`, but the sign-in didn't complete.`, how, extra]),
+    };
   }
   // Signed in or not is unknown (a public-address server, or `check`): get_profile settles it.
-  const fix = host === 'codex' ? `run \`codex mcp login ${used}\` and approve in the browser` : host === 'claude-code' ? `follow these steps: ${claudeSteps(surface, used).signIn}`
-    : `type \`/mcp auth ${used}\` and approve in the browser`;
-  return { ...base, status: 'registered', next: 'verify', run: null,
+  const fix =
+    host === 'codex'
+      ? `run \`codex mcp login ${used}\` and approve in the browser`
+      : host === 'claude-code'
+        ? `follow these steps: ${claudeSteps(surface, used).signIn}`
+        : `type \`/mcp auth ${used}\` and approve in the browser`;
+  return {
+    ...base,
+    status: 'registered',
+    next: 'verify',
+    run: null,
     verify: { ...verify, ifSignInRequired: `If get_profile says ODDBOUT needs a sign-in (authentication-required), ask the user to ${fix}` },
-    say: join([`ODDBOUT is set up in ${label} as \`${used}\`.`, extra, changed ? userLoad(host, used, surface) : '',
-      `${changed ? 'Then I' : 'I'}'ll check your account with get_profile; if it asks for a sign-in, you'll approve it in your browser.`]) };
+    say: join([
+      `ODDBOUT is set up in ${label} as \`${used}\`.`,
+      extra,
+      changed ? userLoad(host, used, surface) : '',
+      `${changed ? 'Then I' : 'I'}'ll check your account with get_profile; if it asks for a sign-in, you'll approve it in your browser.`,
+    ]),
+  };
 }
 
 // ---- Command line --------------------------------------------------------------------------------------------------------------------
@@ -606,18 +798,31 @@ Never writes a token: the agent's own MCP client signs in.`;
  * @returns {Promise<number>}
  */
 export async function main(argv, io = {}) {
-  const env = io.env ?? process.env, cwd = io.cwd ?? process.cwd(), platform = io.platform ?? process.platform;
+  const env = io.env ?? process.env,
+    cwd = io.cwd ?? process.cwd(),
+    platform = io.platform ?? process.platform;
   const interactive = io.interactive ?? Boolean(process.stdin.isTTY);
   const write = io.write ?? (text => process.stdout.write(text));
-  const reply = (/** @type {object} */ value, code = 0) => { write(JSON.stringify(value, null, 2) + '\n'); return code; };
-  const fail = (/** @type {string} */ say, code = 1, extra = {}) => reply({ oddbout: 'error', version: VERSION, status: 'failed', next: 'stop', say, run: null, rules: RULES, ...extra }, code);
+  const reply = (/** @type {object} */ value, code = 0) => {
+    write(JSON.stringify(value, null, 2) + '\n');
+    return code;
+  };
+  const fail = (/** @type {string} */ say, code = 1, extra = {}) =>
+    reply({ oddbout: 'error', version: VERSION, status: 'failed', next: 'stop', say, run: null, rules: RULES, ...extra }, code);
 
   /** @type {{ command: string | null, host: string | null, name: string, skill: boolean, wait: number, local: boolean | null }} */
   const options = { command: null, host: null, name: SERVER_NAME, skill: true, wait: 110, local: null };
   for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i], value = () => argv[++i] ?? '';
-    if (arg === '--help' || arg === '-h' || arg === 'help') { write(USAGE + '\n'); return 0; }
-    if (arg === '--version' || arg === '-v') { write(VERSION + '\n'); return 0; }
+    const arg = argv[i],
+      value = () => argv[++i] ?? '';
+    if (arg === '--help' || arg === '-h' || arg === 'help') {
+      write(USAGE + '\n');
+      return 0;
+    }
+    if (arg === '--version' || arg === '-v') {
+      write(VERSION + '\n');
+      return 0;
+    }
     if (arg === '--host') options.host = value();
     else if (arg.startsWith('--host=')) options.host = arg.slice(7);
     else if (arg === '--name') options.name = value();
@@ -636,38 +841,76 @@ export async function main(argv, io = {}) {
   if (!Number.isFinite(options.wait) || options.wait < 5 || options.wait > 900) return fail('--wait takes 5 to 900 seconds.', 2);
 
   const detected = detectHost(env);
-  const host = options.host ? HOST_NAMES[options.host.toLowerCase()] ?? null : detected.host;
+  const host = options.host ? (HOST_NAMES[options.host.toLowerCase()] ?? null) : detected.host;
   if (options.host && !host) return fail(`Unknown --host ${options.host}: use claude, codex or gemini.`, 2);
   if (!host) {
-    return reply({ oddbout: mode, version: VERSION, status: 'choose-host', next: 'rerun', run: null, rules: RULES,
+    return reply({
+      oddbout: mode,
+      version: VERSION,
+      status: 'choose-host',
+      next: 'rerun',
+      run: null,
+      rules: RULES,
       say: 'Which agent is this — Claude Code, Codex or Gemini CLI? (For claude.ai, ChatGPT or Grok in a browser, connect from My agents on oddbout.com instead.)',
-      choices: Object.entries({ claude: 'Claude Code', codex: 'Codex', gemini: 'Gemini CLI' }).map(([flag, label]) => ({ host: label, run: `${COMMAND} ${mode} --host ${flag}` })),
+      choices: Object.entries({ claude: 'Claude Code', codex: 'Codex', gemini: 'Gemini CLI' }).map(([flag, label]) => ({
+        host: label,
+        run: `${COMMAND} ${mode} --host ${flag}`,
+      })),
       agent: 'If you are one of these agents yourself, rerun with your own --host without asking the user.',
-      details: { markers: detected.markers, docs: DOCS } });
+      details: { markers: detected.markers, docs: DOCS },
+    });
   }
-  const binary = findExecutable(HOSTS[host].bin, env, platform)
-    ?? (host === 'claude-code' && env.CLAUDE_CODE_EXECPATH && isFile(env.CLAUDE_CODE_EXECPATH) ? env.CLAUDE_CODE_EXECPATH : null);
+  const binary =
+    findExecutable(HOSTS[host].bin, env, platform) ??
+    (host === 'claude-code' && env.CLAUDE_CODE_EXECPATH && isFile(env.CLAUDE_CODE_EXECPATH) ? env.CLAUDE_CODE_EXECPATH : null);
   if (!binary) {
-    return fail(`The \`${HOSTS[host].bin}\` command isn't on this machine's PATH, so I can't add ODDBOUT to ${HOSTS[host].label} from here. Install the ${HOSTS[host].label} command line, or add the server by hand: ${DOCS}`,
-      1, { host, details: { docs: DOCS } });
+    return fail(
+      `The \`${HOSTS[host].bin}\` command isn't on this machine's PATH, so I can't add ODDBOUT to ${HOSTS[host].label} from here. Install the ${HOSTS[host].label} command line, or add the server by hand: ${DOCS}`,
+      1,
+      { host, details: { docs: DOCS } },
+    );
   }
   // Codex runs commands in a sandbox by default: this one writes ~/.codex/config.toml, fetches the skill and opens the browser.
   if (host === 'codex' && mode === 'connect' && (env.CODEX_SANDBOX || env.CODEX_SANDBOX_NETWORK_DISABLED)) {
-    return reply({ oddbout: mode, version: VERSION, host, status: 'needs-permission', next: 'rerun', run: `${COMMAND} connect --host codex`, rules: RULES,
-      say: 'Connecting needs to run outside Codex\'s sandbox: it saves the server in your Codex settings, downloads the create-fighter skill and opens your browser to sign in. Approve running it with full access when Codex asks.',
-      agent: 'Rerun `run` with escalated permissions (outside the sandbox).', details: { docs: DOCS } });
+    return reply({
+      oddbout: mode,
+      version: VERSION,
+      host,
+      status: 'needs-permission',
+      next: 'rerun',
+      run: `${COMMAND} connect --host codex`,
+      rules: RULES,
+      say: "Connecting needs to run outside Codex's sandbox: it saves the server in your Codex settings, downloads the create-fighter skill and opens your browser to sign in. Approve running it with full access when Codex asks.",
+      agent: 'Rerun `run` with escalated permissions (outside the sandbox).',
+      details: { docs: DOCS },
+    });
   }
 
-  const remote = options.local === null ? detectRemote(env, platform, isFile) : { remote: !options.local, reasons: [options.local ? 'flag --local' : 'flag --remote'] };
+  const remote =
+    options.local === null ? detectRemote(env, platform, isFile) : { remote: !options.local, reasons: [options.local ? 'flag --local' : 'flag --remote'] };
   /** @type {Context} */
   const ctx = {
-    host, bin: binary, env, cwd, mutate: mode === 'connect', remote: remote.remote, interactive, waitMs: options.wait * 1000, actions: [], notes: [],
+    host,
+    bin: binary,
+    env,
+    cwd,
+    mutate: mode === 'connect',
+    remote: remote.remote,
+    interactive,
+    waitMs: options.wait * 1000,
+    actions: [],
+    notes: [],
     async run(args, { timeoutMs = 60_000, echo = false, terminal = false, record = false } = {}) {
       const result = await runCommand(binary, args, { env, cwd, timeoutMs, echo, terminal });
       if (record) {
         // A command given the terminal wrote to it directly, so there is no output to keep.
-        ctx.actions.push({ command: [HOSTS[host].bin, ...args].join(' '), exitCode: result.code, seconds: result.seconds,
-          ...(result.timedOut ? { timedOut: true } : {}), ...(terminal ? { terminal: true } : result.code !== 0 ? { output: outputTail(result) } : {}) });
+        ctx.actions.push({
+          command: [HOSTS[host].bin, ...args].join(' '),
+          exitCode: result.code,
+          seconds: result.seconds,
+          ...(result.timedOut ? { timedOut: true } : {}),
+          ...(terminal ? { terminal: true } : result.code !== 0 ? { output: outputTail(result) } : {}),
+        });
       }
       return result;
     },
@@ -678,7 +921,17 @@ export async function main(argv, io = {}) {
   /** @type {SkillResult} */
   const skill = options.skill ? await ensureSkill(ctx) : { state: 'skipped' };
   const server = await ensureServer(ctx, options.name);
-  const result = compose({ host, name: options.name, mode, remote, server, skill, ctx, binary, hostSource: options.host ? 'flag' : 'environment',
-    surface: claudeSurface(env) });
+  const result = compose({
+    host,
+    name: options.name,
+    mode,
+    remote,
+    server,
+    skill,
+    ctx,
+    binary,
+    hostSource: options.host ? 'flag' : 'environment',
+    surface: claudeSurface(env),
+  });
   return reply(result, result.status === 'failed' ? 1 : 0);
 }

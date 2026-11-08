@@ -9,9 +9,15 @@ const DEFAULT_TEXT = '하암… 한 판만 하고, 다시 잘래.';
 
 export function localBaseUrl(value = 'http://127.0.0.1:3900') {
   const url = new URL(value);
-  if (!['http:', 'https:'].includes(url.protocol)
-      || !['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)
-      || url.username || url.password || url.search || url.hash || url.pathname !== '/') {
+  if (
+    !['http:', 'https:'].includes(url.protocol) ||
+    !['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname) ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    url.pathname !== '/'
+  ) {
     throw new Error('VoiceStudio URL must be a loopback origin without credentials, path, query or fragment.');
   }
   // A hosts-file change must not send the localhost alias to another machine.
@@ -29,7 +35,10 @@ async function responseBytes(response, limit) {
     const { done, value } = await reader.read();
     if (done) break;
     bytes += value.length;
-    if (bytes > limit) { await reader.cancel(); throw new Error('Response exceeds size limit.'); }
+    if (bytes > limit) {
+      await reader.cancel();
+      throw new Error('Response exceeds size limit.');
+    }
     chunks.push(Buffer.from(value));
   }
   return Buffer.concat(chunks);
@@ -37,7 +46,9 @@ async function responseBytes(response, limit) {
 
 async function request(base, endpoint, { fetchImpl = fetch, timeoutMs = 30000, ...options } = {}) {
   const response = await fetchImpl(`${localBaseUrl(base)}${endpoint}`, {
-    ...options, redirect: 'error', signal: AbortSignal.timeout(timeoutMs),
+    ...options,
+    redirect: 'error',
+    signal: AbortSignal.timeout(timeoutMs),
   });
   if (!response.ok) {
     const body = await responseBytes(response, 64 * 1024);
@@ -61,7 +72,9 @@ export async function status({ baseUrl, fetchImpl } = {}) {
   const speechRoute = Boolean(schema.paths?.['/v1/audio/speech']?.post);
   const revisionMatches = health.source_revision === SOURCE_REVISION;
   return {
-    base_url: base, health, speech_route_present: speechRoute,
+    base_url: base,
+    health,
+    speech_route_present: speechRoute,
     source_revision_verified: revisionMatches,
     engine: engine ?? null,
     ready: speechRoute && revisionMatches && engine?.available === true,
@@ -72,9 +85,14 @@ export async function status({ baseUrl, fetchImpl } = {}) {
 
 export function inspectWav(bytes) {
   const buffer = Buffer.from(bytes);
-  if (buffer.length < 44 || buffer.length > MAX_WAV_BYTES
-      || buffer.toString('ascii', 0, 4) !== 'RIFF' || buffer.toString('ascii', 8, 12) !== 'WAVE'
-      || buffer.readUInt32LE(4) + 8 !== buffer.length) throw new Error('Invalid or truncated RIFF WAV.');
+  if (
+    buffer.length < 44 ||
+    buffer.length > MAX_WAV_BYTES ||
+    buffer.toString('ascii', 0, 4) !== 'RIFF' ||
+    buffer.toString('ascii', 8, 12) !== 'WAVE' ||
+    buffer.readUInt32LE(4) + 8 !== buffer.length
+  )
+    throw new Error('Invalid or truncated RIFF WAV.');
   let format;
   let data;
   for (let offset = 12; offset + 8 <= buffer.length;) {
@@ -84,16 +102,28 @@ export function inspectWav(bytes) {
     const id = buffer.toString('ascii', offset, offset + 4);
     if (id === 'fmt ') {
       if (size < 16) throw new Error('Invalid WAV format chunk.');
-      format = { encoding: buffer.readUInt16LE(offset + 8), channels: buffer.readUInt16LE(offset + 10),
-        sample_rate: buffer.readUInt32LE(offset + 12), block_align: buffer.readUInt16LE(offset + 20),
-        bits_per_sample: buffer.readUInt16LE(offset + 22) };
+      format = {
+        encoding: buffer.readUInt16LE(offset + 8),
+        channels: buffer.readUInt16LE(offset + 10),
+        sample_rate: buffer.readUInt32LE(offset + 12),
+        block_align: buffer.readUInt16LE(offset + 20),
+        bits_per_sample: buffer.readUInt16LE(offset + 22),
+      };
     }
     if (id === 'data') data = buffer.subarray(offset + 8, end);
     offset = end + (size % 2);
   }
-  if (!format || !data?.length || format.encoding !== 1 || format.bits_per_sample !== 16
-      || format.channels !== 1 || format.sample_rate !== 44100
-      || format.block_align !== 2 || data.length % 2) throw new Error('Expected a nonempty 44.1 kHz mono PCM16 WAV.');
+  if (
+    !format ||
+    !data?.length ||
+    format.encoding !== 1 ||
+    format.bits_per_sample !== 16 ||
+    format.channels !== 1 ||
+    format.sample_rate !== 44100 ||
+    format.block_align !== 2 ||
+    data.length % 2
+  )
+    throw new Error('Expected a nonempty 44.1 kHz mono PCM16 WAV.');
   let peak = 0;
   let squareSum = 0;
   let clipped = 0;
@@ -107,19 +137,31 @@ export function inspectWav(bytes) {
   const rms = Math.sqrt(squareSum / frames);
   if (rms < 0.001) throw new Error('WAV is silent or near-silent.');
   if (clipped) throw new Error('WAV contains full-scale clipped samples.');
-  return { bytes: buffer.length, sha256: createHash('sha256').update(buffer).digest('hex'),
-    sample_rate: format.sample_rate, channels: format.channels, bits_per_sample: format.bits_per_sample,
-    frames, duration_seconds: frames / format.sample_rate,
-    peak_dbfs: 20 * Math.log10(peak / 32768), rms_dbfs: 20 * Math.log10(rms),
-    clipped_samples: clipped, runtime_fighter_contract: false };
+  return {
+    bytes: buffer.length,
+    sha256: createHash('sha256').update(buffer).digest('hex'),
+    sample_rate: format.sample_rate,
+    channels: format.channels,
+    bits_per_sample: format.bits_per_sample,
+    frames,
+    duration_seconds: frames / format.sample_rate,
+    peak_dbfs: 20 * Math.log10(peak / 32768),
+    rms_dbfs: 20 * Math.log10(rms),
+    clipped_samples: clipped,
+    runtime_fighter_contract: false,
+  };
 }
 
 async function save(output, bytes, provenance) {
   const destination = path.resolve(output);
   const reportPath = `${destination}.provenance.json`;
   for (const file of [destination, reportPath]) {
-    try { await stat(file); throw new Error(`Refusing to overwrite ${file}`); }
-    catch (error) { if (error.code !== 'ENOENT') throw error; }
+    try {
+      await stat(file);
+      throw new Error(`Refusing to overwrite ${file}`);
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
   }
   await mkdir(path.dirname(destination), { recursive: true });
   await writeFile(destination, bytes, { flag: 'wx' });
@@ -136,36 +178,59 @@ export async function reuse({ input, output, sourceReport, baseUrl, fetchImpl })
   const previous = sourceReport ? JSON.parse(await readFile(sourceReport, 'utf8')) : null;
   if (previous && previous.sha256 !== wav.sha256) throw new Error('Source report SHA256 does not match the WAV.');
   const originalRevision = previous?.health?.source_revision ?? previous?.source_revision ?? null;
-  return save(output, bytes, { operation: 'reuse-existing-wav', generation_performed: false,
-    created_at: new Date().toISOString(), source_file: path.resolve(input),
+  return save(output, bytes, {
+    operation: 'reuse-existing-wav',
+    generation_performed: false,
+    created_at: new Date().toISOString(),
+    source_file: path.resolve(input),
     source_report: sourceReport ? path.resolve(sourceReport) : null,
-    original_request: previous?.request ?? null, original_generation_status: previous?.response_status ?? null,
+    original_request: previous?.request ?? null,
+    original_generation_status: previous?.response_status ?? null,
     ai_generated: previous?.ai_generated === true ? true : null,
-    source_revision: originalRevision, model_revision: originalRevision === SOURCE_REVISION ? MODEL_REVISION : null,
+    source_revision: originalRevision,
+    model_revision: originalRevision === SOURCE_REVISION ? MODEL_REVISION : null,
     connected_service_revision: SOURCE_REVISION,
-    base_url: connected.base_url, wav });
+    base_url: connected.base_url,
+    wav,
+  });
 }
 
-export async function generate({ output, text = DEFAULT_TEXT, voice = 'M1', language = 'ko', speed = 0.85,
-    baseUrl, fetchImpl } = {}) {
+export async function generate({ output, text = DEFAULT_TEXT, voice = 'M1', language = 'ko', speed = 0.85, baseUrl, fetchImpl } = {}) {
   if (typeof text !== 'string' || !text.trim() || text.length > 4096) throw new Error('Text must contain 1–4096 characters.');
   if (!['M1', 'M3', 'M4', 'M5', 'F3', 'F4', 'F5'].includes(voice)) throw new Error('Unsupported Supertonic-3 preset.');
   if (!Number.isFinite(speed) || speed < 0.7 || speed > 2) throw new Error('Supertonic-3 speed must be 0.7–2.0.');
   // Refuse occupied outputs before any synthesis work.
   for (const file of [output, `${output}.provenance.json`]) {
-    try { await stat(file); throw new Error(`Refusing to overwrite ${file}`); }
-    catch (error) { if (error.code !== 'ENOENT') throw error; }
+    try {
+      await stat(file);
+      throw new Error(`Refusing to overwrite ${file}`);
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
   }
   const connected = await status({ baseUrl, fetchImpl });
   if (!connected.ready) throw new Error('Pinned Supertonic-3 service is not ready; inspect status.');
   const body = { model: 'supertonic3', voice, language, speed, response_format: 'wav', input: text };
-  const response = await request(connected.base_url, '/v1/audio/speech', { fetchImpl,
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), timeoutMs: 600000 });
+  const response = await request(connected.base_url, '/v1/audio/speech', {
+    fetchImpl,
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+    timeoutMs: 600000,
+  });
   if (!response.headers.get('content-type')?.toLowerCase().startsWith('audio/')) throw new Error('Speech response is not audio.');
   const bytes = await responseBytes(response, MAX_WAV_BYTES);
   const wav = inspectWav(bytes);
-  return save(output, bytes, { operation: 'local-synthesis', generation_performed: true,
+  return save(output, bytes, {
+    operation: 'local-synthesis',
+    generation_performed: true,
     ai_generated: true,
-    created_at: new Date().toISOString(), source_revision: SOURCE_REVISION, model_revision: MODEL_REVISION,
-    base_url: connected.base_url, request: body, response_status: response.status, wav });
+    created_at: new Date().toISOString(),
+    source_revision: SOURCE_REVISION,
+    model_revision: MODEL_REVISION,
+    base_url: connected.base_url,
+    request: body,
+    response_status: response.status,
+    wav,
+  });
 }

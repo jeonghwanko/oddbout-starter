@@ -26,8 +26,14 @@ const option = (argv, key) => {
  * @param {string[]} args @returns {string | null} */
 export function outcomeReportPath(args) {
   const [verb] = args;
-  if (verb === 'gen-set') { const run = option(args, '--run-dir'); return run ? path.posix.join(run, 'reports/gen-set/set.report.json') : null; }
-  if (verb === 'video-set') { const out = option(args, '--out-dir'); return out ? path.posix.join(out, 'set.report.json') : null; }
+  if (verb === 'gen-set') {
+    const run = option(args, '--run-dir');
+    return run ? path.posix.join(run, 'reports/gen-set/set.report.json') : null;
+  }
+  if (verb === 'video-set') {
+    const out = option(args, '--out-dir');
+    return out ? path.posix.join(out, 'set.report.json') : null;
+  }
   return option(args, '--report') ?? null;
 }
 
@@ -36,10 +42,12 @@ export function outcomeReportPath(args) {
 export async function readOutcome(file, { since = 0 } = {}) {
   if (!file) return null;
   try {
-    if ((await stat(file)).mtimeMs + 1000 < since) return null;   // an earlier run's report never answers for this one
+    if ((await stat(file)).mtimeMs + 1000 < since) return null; // an earlier run's report never answers for this one
     const report = JSON.parse(await readFile(file, 'utf8'));
     return typeof report?.provider_submitted === 'boolean' && Array.isArray(report.errors) ? report : null;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -53,20 +61,26 @@ export async function readOutcome(file, { since = 0 } = {}) {
 export function judgeOutcome({ code, report }) {
   // sprite-gen's codes are strings. An error with any other code is one no documented writer made: it still counts, but as an outcome
   // nobody can read — its `retryable` is not trusted, so it never sends a paid request again (2026-10-30 review).
-  const errors = (/** @type {any[]} */ (Array.isArray(report?.errors) ? report.errors : [])).filter(e => e && typeof e === 'object' && 'code' in e)
-    .map(e => typeof e.code === 'string' ? e : { ...e, code: 'outcome-unknown', retryable: false, written: String(e.code).slice(0, 40) });
-  const charge = code === NOT_STARTED_EXIT || code === 2 ? 'not-charged'
-    : report ? (report.provider_submitted ? 'request-sent' : 'not-charged') : 'unknown';
+  const errors = /** @type {any[]} */ (Array.isArray(report?.errors) ? report.errors : [])
+    .filter(e => e && typeof e === 'object' && 'code' in e)
+    .map(e => (typeof e.code === 'string' ? e : { ...e, code: 'outcome-unknown', retryable: false, written: String(e.code).slice(0, 40) }));
+  const charge = code === NOT_STARTED_EXIT || code === 2 ? 'not-charged' : report ? (report.provider_submitted ? 'request-sent' : 'not-charged') : 'unknown';
   const requestIds = [...new Set([report?.request_id, ...errors.map(e => e.request_id)].filter(id => typeof id === 'string' && id))];
   const codes = [...new Set(errors.map(e => e.code))];
   let next;
   if (code === ASK_EXIT || codes.includes('provider-asks')) next = 'answer';
   // A video-set item's unfinished clip names its request in the item's own clip.report.json, not in the set's errors.
   else if (requestIds.length || codes.includes('generation-unfinished')) next = 'resume';
-  else if (charge === 'unknown' || codes.some(c => UNSEEN.has(c))
-    || (charge === 'request-sent' && codes.includes('interrupted'))) next = 'inspect';
+  else if (charge === 'unknown' || codes.some(c => UNSEEN.has(c)) || (charge === 'request-sent' && codes.includes('interrupted'))) next = 'inspect';
   else if (errors.length && errors.every(e => e.retryable === true)) next = 'retry';
   else next = errors.length || charge === 'not-charged' ? 'fix' : 'inspect';
-  return { charge, next, codes, requestIds,
-    ...(errors.length ? { errors: errors.slice(0, 8).map(({ state, code: c, retryable, item }) => ({ state, code: c, retryable, ...(item ? { item } : {}) })) } : {}) };
+  return {
+    charge,
+    next,
+    codes,
+    requestIds,
+    ...(errors.length
+      ? { errors: errors.slice(0, 8).map(({ state, code: c, retryable, item }) => ({ state, code: c, retryable, ...(item ? { item } : {}) })) }
+      : {}),
+  };
 }

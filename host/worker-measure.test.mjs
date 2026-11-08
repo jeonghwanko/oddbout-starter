@@ -37,10 +37,17 @@ test('calls are runs, failures and seconds per command, small enough for the fin
 
 test('the versions event names the kit, the engine and the models asked for, and a commit it cannot read is null', async () => {
   const seen = [];
-  const event = await versionsEvent('/kit', async dir => { seen.push(dir); return dir === '/kit' ? 'a'.repeat(40) : null; });
+  const event = await versionsEvent('/kit', async dir => {
+    seen.push(dir);
+    return dir === '/kit' ? 'a'.repeat(40) : null;
+  });
   // Requested only (2026-11-05): what codex recorded comes with the stage's end, as its `models` event, never copied from these.
-  assert.deepEqual(event, { kind: 'versions', kit: 'a'.repeat(40), engine: null,
-    requested: { text: MODELS.text, imageAgent: MODELS.image, judge: JUDGE.model, judgeEffort: JUDGE.effort, video: VIDEO_REQUESTED } });
+  assert.deepEqual(event, {
+    kind: 'versions',
+    kit: 'a'.repeat(40),
+    engine: null,
+    requested: { text: MODELS.text, imageAgent: MODELS.image, judge: JUDGE.model, judgeEffort: JUDGE.effort, video: VIDEO_REQUESTED },
+  });
   assert.deepEqual(seen, ['/kit', path.join('/kit', 'vendor', 'sprite-gen')]);
   assert.ok(JSON.stringify(event).length < 2000);
   // A worker whose judges are not codex's says so, with the pixel judge it asks for (2026-11-06).
@@ -50,16 +57,26 @@ test('the versions event names the kit, the engine and the models asked for, and
 });
 
 test('og report --json is the summary as data', async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), 'ledger-json-')), file = path.join(dir, 'ledger.jsonl');
+  const dir = await mkdtemp(path.join(tmpdir(), 'ledger-json-')),
+    file = path.join(dir, 'ledger.jsonl');
   try {
     const at = new Date('2026-10-29T05:00:00Z');
-    const lines = [entry({ job: '20261029-gen-ab', kind: 'run', phase: 'start', run: '1', tool: 'npm run sprite gen', provider: 'codex' }, at),
-      entry({ job: '20261029-gen-ab', kind: 'run', phase: 'end', run: '1', tool: 'npm run sprite gen', provider: 'codex', ms: 34000, exit: 0 }, at)];
+    const lines = [
+      entry({ job: '20261029-gen-ab', kind: 'run', phase: 'start', run: '1', tool: 'npm run sprite gen', provider: 'codex' }, at),
+      entry({ job: '20261029-gen-ab', kind: 'run', phase: 'end', run: '1', tool: 'npm run sprite gen', provider: 'codex', ms: 34000, exit: 0 }, at),
+    ];
     await writeFile(file, lines.map(line => JSON.stringify(line)).join('\n') + '\n{broken\n');
     const out = JSON.parse(execFileSync(process.execPath, [path.join(here, 'ledger-report.mjs'), file, '--json'], { encoding: 'utf8' }));
     assert.equal(out.skipped, 1);
-    assert.deepEqual(out.jobs.map(j => [j.job, j.providers.codex.runs, j.providers.codex.ok, j.activeMs]), [['20261029-gen-ab', 1, 1, 34000]]);
-    const none = JSON.parse(execFileSync(process.execPath, [path.join(here, 'ledger-report.mjs'), path.join(dir, 'missing.jsonl'), '--json'], { encoding: 'utf8' }));
+    assert.deepEqual(
+      out.jobs.map(j => [j.job, j.providers.codex.runs, j.providers.codex.ok, j.activeMs]),
+      [['20261029-gen-ab', 1, 1, 34000]],
+    );
+    const none = JSON.parse(
+      execFileSync(process.execPath, [path.join(here, 'ledger-report.mjs'), path.join(dir, 'missing.jsonl'), '--json'], { encoding: 'utf8' }),
+    );
     assert.deepEqual(none.jobs, []);
-  } finally { await rm(dir, { recursive: true, force: true }); }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });

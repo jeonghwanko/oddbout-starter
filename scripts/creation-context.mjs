@@ -21,7 +21,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
     if ('canAdvance' in result && !result.canAdvance) process.exitCode = 1;
   } catch (/** @type {any} */ error) {
     process.exitCode = 1;
-    try { await writeCliJson(2, { ok: false, code: /^[a-z][a-z-]+$/.test(error.message) ? error.message : 'creation-context-command-failed' }); }
-    catch { /* Preserve failure when stderr cannot deliver an error. */ }
+    try {
+      await writeCliJson(2, { ok: false, code: /^[a-z][a-z-]+$/.test(error.message) ? error.message : 'creation-context-command-failed' });
+    } catch {
+      /* Preserve failure when stderr cannot deliver an error. */
+    }
   }
 }

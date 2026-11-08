@@ -1,7 +1,13 @@
 // @ts-check
 // Runtime-independent policy shared by Render and Cloudflare. No arbitrary upstreams.
-import { ALLOWED_ORIGINS, CLOUD_RESOURCE as UPSTREAM, LEGACY_PUBLIC_RESOURCE, PUBLIC_DIRECTORY_RESOURCE, PUBLIC_RESOURCE, PUBLIC_SIGN_IN_RESOURCE }
-  from '../mcp/cloud/resources.mjs';
+import {
+  ALLOWED_ORIGINS,
+  CLOUD_RESOURCE as UPSTREAM,
+  LEGACY_PUBLIC_RESOURCE,
+  PUBLIC_DIRECTORY_RESOURCE,
+  PUBLIC_RESOURCE,
+  PUBLIC_SIGN_IN_RESOURCE,
+} from '../mcp/cloud/resources.mjs';
 export { LEGACY_PUBLIC_RESOURCE, PUBLIC_DIRECTORY_RESOURCE, PUBLIC_RESOURCE, PUBLIC_SIGN_IN_RESOURCE };
 const METADATA = '/.well-known/oauth-protected-resource';
 /**
@@ -11,20 +17,37 @@ const METADATA = '/.well-known/oauth-protected-resource';
 const PROBED_HERE = new Set(['', '/claude']);
 /** How long the Worker keeps a metadata answer: the same for every request at its host and path, changed only by a deploy. */
 const METADATA_CACHE_SECONDS = 300;
-const ROUTES = new Map([['/mcp', ''], ['/mcp' + METADATA, METADATA], [METADATA + '/mcp', METADATA]]);
-const SIGN_IN_ROUTES = new Map([['/signin', '/signin'], ['/signin' + METADATA, '/signin' + METADATA], [METADATA + '/signin', '/signin' + METADATA]]);
-const DIRECTORY_ROUTES = new Map([['/claude', '/claude'], ['/claude' + METADATA, '/claude' + METADATA], [METADATA + '/claude', '/claude' + METADATA]]);
+const ROUTES = new Map([
+  ['/mcp', ''],
+  ['/mcp' + METADATA, METADATA],
+  [METADATA + '/mcp', METADATA],
+]);
+const SIGN_IN_ROUTES = new Map([
+  ['/signin', '/signin'],
+  ['/signin' + METADATA, '/signin' + METADATA],
+  [METADATA + '/signin', '/signin' + METADATA],
+]);
+const DIRECTORY_ROUTES = new Map([
+  ['/claude', '/claude'],
+  ['/claude' + METADATA, '/claude' + METADATA],
+  [METADATA + '/claude', '/claude' + METADATA],
+]);
 export const DOMAIN_CHALLENGE = 'c8ZJAeo0-MPwQFn6nJQ1rcg_qzCq_kxMyIcZJksSfrM';
 export const BRANDED_DOMAIN_CHALLENGE = 'v4qUmFhpjDn1BF6ilHvAVROEnUfTK5XJMumPWkOK8PY';
 export const GATEWAY_METHODS = ['POST', 'GET', 'HEAD', 'OPTIONS'];
 /** Match the raw path before the Node Request constructor normalizes it. @param {string} host @param {string} route */
 export function gatewayRoute(host, route) {
   const branded = host.toLowerCase().replace(/:443$/, '') === 'mcp.oddbout.com';
-  const signIn = branded && SIGN_IN_ROUTES.has(route), directory = branded && DIRECTORY_ROUTES.has(route);
+  const signIn = branded && SIGN_IN_ROUTES.has(route),
+    directory = branded && DIRECTORY_ROUTES.has(route);
   const path = signIn ? SIGN_IN_ROUTES.get(route) : directory ? DIRECTORY_ROUTES.get(route) : ROUTES.get(route);
   if (path === undefined && route !== '/.well-known/openai-apps-challenge') return null;
-  return { path, branded, challenge: route === '/.well-known/openai-apps-challenge',
-    resource: signIn ? PUBLIC_SIGN_IN_RESOURCE : directory ? PUBLIC_DIRECTORY_RESOURCE : branded ? PUBLIC_RESOURCE : LEGACY_PUBLIC_RESOURCE };
+  return {
+    path,
+    branded,
+    challenge: route === '/.well-known/openai-apps-challenge',
+    resource: signIn ? PUBLIC_SIGN_IN_RESOURCE : directory ? PUBLIC_DIRECTORY_RESOURCE : branded ? PUBLIC_RESOURCE : LEGACY_PUBLIC_RESOURCE,
+  };
 }
 /** @param {number} status @param {string} body @param {string} [type] */
 export function gatewayReply(status, body, type = 'application/json') {
@@ -34,9 +57,12 @@ export function gatewayReply(status, body, type = 'application/json') {
 export async function readGatewayBody(body, signal) {
   if (!body) return new Uint8Array();
   const reader = body.getReader();
-  const abort = () => { void reader.cancel().catch(() => {}); };
+  const abort = () => {
+    void reader.cancel().catch(() => {});
+  };
   signal.addEventListener('abort', abort, { once: true });
-  const chunks = []; let bytes = 0;
+  const chunks = [];
+  let bytes = 0;
   try {
     signal.throwIfAborted();
     while (true) {
@@ -44,13 +70,23 @@ export async function readGatewayBody(body, signal) {
       signal.throwIfAborted();
       if (done) break;
       bytes += value.byteLength;
-      if (bytes > 65_536) { void reader.cancel().catch(() => {}); return null; }
+      if (bytes > 65_536) {
+        void reader.cancel().catch(() => {});
+        return null;
+      }
       chunks.push(value);
     }
-    const result = new Uint8Array(bytes); let offset = 0;
-    for (const chunk of chunks) { result.set(chunk, offset); offset += chunk.byteLength; }
+    const result = new Uint8Array(bytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+      result.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
     return result;
-  } finally { signal.removeEventListener('abort', abort); reader.releaseLock(); }
+  } finally {
+    signal.removeEventListener('abort', abort);
+    reader.releaseLock();
+  }
 }
 /**
  * `cache`: where the Worker keeps the metadata answers (Workers' `caches.default`, MCP 최적화 2026-11-05) — a successful GET of one is the
@@ -61,31 +97,57 @@ export async function readGatewayBody(body, signal) {
  * @returns {Promise<Response | null>}
  */
 export async function gatewayFetch(request, { fetcher = fetch, headerTimeoutMs = 45_000, totalTimeoutMs = 160_000, cache = null } = {}) {
-  const url = new URL(request.url), path = request.url.slice(url.origin.length);
+  const url = new URL(request.url),
+    path = request.url.slice(url.origin.length);
   // Keep even an empty '?' significant; only exact, fixed paths belong to the gateway.
   const route = gatewayRoute(url.hostname, path);
   if (!route) return null;
-  if (route.challenge) return gatewayReply(request.method === 'GET' ? 200 : 405,
-    request.method === 'GET' ? (route.branded ? BRANDED_DOMAIN_CHALLENGE : DOMAIN_CHALLENGE) : '', 'text/plain');
+  if (route.challenge)
+    return gatewayReply(
+      request.method === 'GET' ? 200 : 405,
+      request.method === 'GET' ? (route.branded ? BRANDED_DOMAIN_CHALLENGE : DOMAIN_CHALLENGE) : '',
+      'text/plain',
+    );
   if (!GATEWAY_METHODS.includes(request.method)) return gatewayReply(405, '{}');
   if (['GET', 'HEAD'].includes(request.method) && route.path !== undefined && PROBED_HERE.has(route.path)) {
-    const origin = request.headers.get('origin'), refused = origin !== null && !ALLOWED_ORIGINS.has(origin);
+    const origin = request.headers.get('origin'),
+      refused = origin !== null && !ALLOWED_ORIGINS.has(origin);
     return new Response(request.method === 'HEAD' ? null : refused ? '{"error":"origin_not_allowed"}' : '{"error":"method_not_allowed"}', {
-      status: refused ? 403 : 405, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff',
-        ...(refused ? {} : { allow: 'POST, OPTIONS' }), 'x-request-id': crypto.randomUUID() } });
+      status: refused ? 403 : 405,
+      headers: {
+        'content-type': 'application/json',
+        'cache-control': 'no-store',
+        'x-content-type-options': 'nosniff',
+        ...(refused ? {} : { allow: 'POST, OPTIONS' }),
+        'x-request-id': crypto.randomUUID(),
+      },
+    });
   }
   const cacheKey = cache && request.method === 'GET' && route.path?.endsWith(METADATA) ? new Request(url.origin + path) : null;
   if (cache && cacheKey) {
     const kept = await cache.match(cacheKey).catch(() => undefined);
-    if (kept) return new Response(kept.body, { status: 200, headers: { 'content-type': kept.headers.get('content-type') ?? 'application/json',
-      'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'x-request-id': crypto.randomUUID() } });
+    if (kept)
+      return new Response(kept.body, {
+        status: 200,
+        headers: {
+          'content-type': kept.headers.get('content-type') ?? 'application/json',
+          'cache-control': 'no-store',
+          'x-content-type-options': 'nosniff',
+          'x-request-id': crypto.randomUUID(),
+        },
+      });
   }
   const control = new AbortController();
   const abort = () => control.abort();
   request.signal.addEventListener('abort', abort, { once: true });
   if (request.signal.aborted) abort();
-  const headerTimer = setTimeout(abort, headerTimeoutMs), totalTimer = setTimeout(abort, totalTimeoutMs);
-  const cleanup = () => { clearTimeout(headerTimer); clearTimeout(totalTimer); request.signal.removeEventListener('abort', abort); };
+  const headerTimer = setTimeout(abort, headerTimeoutMs),
+    totalTimer = setTimeout(abort, totalTimeoutMs);
+  const cleanup = () => {
+    clearTimeout(headerTimer);
+    clearTimeout(totalTimer);
+    request.signal.removeEventListener('abort', abort);
+  };
   try {
     const requestId = crypto.randomUUID();
     const headers = new Headers({ 'x-oddbout-public-resource': route.resource, 'x-request-id': requestId });
@@ -95,10 +157,18 @@ export async function gatewayFetch(request, { fetcher = fetch, headerTimeoutMs =
     // Both runtimes must receive a decoded upstream body; compression is negotiated again at the edge.
     headers.set('accept-encoding', 'identity');
     const body = await readGatewayBody(request.body, control.signal);
-    if (body === null) { cleanup(); return gatewayReply(413, '{"error":"body_limit"}'); }
+    if (body === null) {
+      cleanup();
+      return gatewayReply(413, '{"error":"body_limit"}');
+    }
     // Workers supports manual, not error. Reject redirects without sending credentials onward.
-    const response = await fetcher(UPSTREAM + route.path, { method: request.method, headers, redirect: 'manual', signal: control.signal,
-      ...(request.method === 'POST' ? { body } : {}) });
+    const response = await fetcher(UPSTREAM + route.path, {
+      method: request.method,
+      headers,
+      redirect: 'manual',
+      signal: control.signal,
+      ...(request.method === 'POST' ? { body } : {}),
+    });
     clearTimeout(headerTimer);
     if (response.status >= 300 && response.status < 400) {
       void response.body?.cancel().catch(() => {});
@@ -106,27 +176,56 @@ export async function gatewayFetch(request, { fetcher = fetch, headerTimeoutMs =
     }
     const responseHeaders = new Headers({ 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'x-request-id': requestId });
     for (const [name, value] of response.headers) {
-      if (['content-type', 'www-authenticate', 'retry-after', 'allow', 'access-control-allow-origin', 'access-control-allow-methods',
-        'access-control-allow-headers', 'access-control-expose-headers'].includes(name) || name.startsWith('mcp-')) responseHeaders.set(name, value);
+      if (
+        [
+          'content-type',
+          'www-authenticate',
+          'retry-after',
+          'allow',
+          'access-control-allow-origin',
+          'access-control-allow-methods',
+          'access-control-allow-headers',
+          'access-control-expose-headers',
+        ].includes(name) ||
+        name.startsWith('mcp-')
+      )
+        responseHeaders.set(name, value);
     }
     if (cache && cacheKey && response.status === 200) {
       const body = await readGatewayBody(response.body, control.signal);
       cleanup();
       if (body === null) return gatewayReply(502, '{"error":"mcp_upstream_unavailable"}');
-      await cache.put(cacheKey, new Response(body, { headers: { 'content-type': responseHeaders.get('content-type') ?? 'application/json',
-        'cache-control': `public, max-age=${METADATA_CACHE_SECONDS}` } })).catch(() => {});
+      await cache
+        .put(
+          cacheKey,
+          new Response(body, {
+            headers: {
+              'content-type': responseHeaders.get('content-type') ?? 'application/json',
+              'cache-control': `public, max-age=${METADATA_CACHE_SECONDS}`,
+            },
+          }),
+        )
+        .catch(() => {});
       return new Response(body, { status: 200, headers: responseHeaders });
     }
     if (!response.body || request.method === 'HEAD' || [204, 205, 304].includes(response.status)) {
       void response.body?.cancel().catch(() => {});
-      cleanup(); return new Response(null, { status: response.status, headers: responseHeaders });
+      cleanup();
+      return new Response(null, { status: response.status, headers: responseHeaders });
     }
     const reader = response.body.getReader();
     /** @type {() => void} */ let streamAbort;
-    const finish = () => { control.signal.removeEventListener('abort', streamAbort); cleanup(); };
+    const finish = () => {
+      control.signal.removeEventListener('abort', streamAbort);
+      cleanup();
+    };
     const stream = new ReadableStream({
       start(controller) {
-        streamAbort = () => { controller.error(new Error('mcp_upstream_unavailable')); void reader.cancel().catch(() => {}); finish(); };
+        streamAbort = () => {
+          controller.error(new Error('mcp_upstream_unavailable'));
+          void reader.cancel().catch(() => {});
+          finish();
+        };
         control.signal.addEventListener('abort', streamAbort, { once: true });
         if (control.signal.aborted) streamAbort();
       },
@@ -134,13 +233,25 @@ export async function gatewayFetch(request, { fetcher = fetch, headerTimeoutMs =
         try {
           const { value, done } = await reader.read();
           if (control.signal.aborted) return;
-          if (done) { finish(); controller.close(); } else controller.enqueue(value);
-        } catch { finish(); controller.error(new Error('mcp_upstream_unavailable')); }
+          if (done) {
+            finish();
+            controller.close();
+          } else controller.enqueue(value);
+        } catch {
+          finish();
+          controller.error(new Error('mcp_upstream_unavailable'));
+        }
       },
-      cancel() { finish(); control.abort(); return reader.cancel().catch(() => {}); },
+      cancel() {
+        finish();
+        control.abort();
+        return reader.cancel().catch(() => {});
+      },
     });
     return new Response(stream, { status: response.status, headers: responseHeaders });
   } catch {
-    cleanup(); control.abort(); return gatewayReply(502, '{"error":"mcp_upstream_unavailable"}');
+    cleanup();
+    control.abort();
+    return gatewayReply(502, '{"error":"mcp_upstream_unavailable"}');
   }
 }

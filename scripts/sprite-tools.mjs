@@ -12,7 +12,8 @@ import { runtimeFetch } from '../api/runtime-fetch.mjs';
 // on the downloaded archives 2026-10-26. Statically linked; only bin/img2webp and README.md are kept.
 /** @type {{ version: string, license: string, url: (name: string) => string, archives: Record<string, [string, string]> }} */
 export const LIBWEBP = {
-  version: '1.6.0', license: 'BSD-3-Clause (https://chromium.googlesource.com/webm/libwebp/+/refs/heads/main/COPYING)',
+  version: '1.6.0',
+  license: 'BSD-3-Clause (https://chromium.googlesource.com/webm/libwebp/+/refs/heads/main/COPYING)',
   url: name => `https://storage.googleapis.com/downloads.webmproject.org/releases/webp/${name}`,
   archives: {
     'linux-x64': ['libwebp-1.6.0-linux-x86-64.tar.gz', '1c5ffab71efecefa0e3c23516c3a3a1dccb45cc310ae1095c6f14ae268e38067'],
@@ -54,7 +55,13 @@ export async function which(name, env = process.env, platform = process.platform
   for (const dir of pathValue.split(path.delimiter).filter(Boolean))
     for (const extension of extensions) {
       const file = path.join(dir, name + extension);
-      if (await access(file, platform === 'win32' ? constants.F_OK : constants.X_OK).then(() => true, () => false)) return file;
+      if (
+        await access(file, platform === 'win32' ? constants.F_OK : constants.X_OK).then(
+          () => true,
+          () => false,
+        )
+      )
+        return file;
     }
   return null;
 }
@@ -64,20 +71,26 @@ export async function which(name, env = process.env, platform = process.platform
  * @param {string} command @param {string[]} args @param {{ env?: NodeJS.ProcessEnv, timeout?: number }} [options] @returns {Promise<{ code: number, output: string }>}
  */
 export function runProbe(command, args, { env = process.env, timeout = 30000 } = {}) {
-  return new Promise(resolve => execFile(command, args, { env, timeout, windowsHide: true, maxBuffer: 4 << 20 },
-    (error, stdout, stderr) => resolve({ code: error ? (typeof error.code === 'number' ? error.code : 1) : 0,
-      output: `${stdout ?? ''}${stderr ?? ''}` })));
+  return new Promise(resolve =>
+    execFile(command, args, { env, timeout, windowsHide: true, maxBuffer: 4 << 20 }, (error, stdout, stderr) =>
+      resolve({ code: error ? (typeof error.code === 'number' ? error.code : 1) : 0, output: `${stdout ?? ''}${stderr ?? ''}` }),
+    ),
+  );
 }
 
 const platformKey = (platform = process.platform, arch = process.arch) => `${platform}-${arch}`;
 /** @param {string} command @param {NodeJS.Platform} platform */
-const userInstall = (command, platform) => ({ actor: 'user', command, sudo: platform === 'linux' && command.startsWith('sudo '),
-  note: 'The kit never runs this itself: the person preparing the workspace runs it, then npm run sprite:status.' });
+const userInstall = (command, platform) => ({
+  actor: 'user',
+  command,
+  sudo: platform === 'linux' && command.startsWith('sudo '),
+  note: 'The kit never runs this itself: the person preparing the workspace runs it, then npm run sprite:status.',
+});
 
 /** img2webp install advice: the kit's pinned download where one exists, else libwebp >= 1.5 from the system. */
 export function img2webpInstall(platform = process.platform, arch = process.arch) {
-  if (LIBWEBP.archives[platformKey(platform, arch)]) return { actor: 'agent', command: SETUP,
-    note: `Downloads libwebp ${LIBWEBP.version} (SHA-256 pinned) into vendor/sprite-gen/.venv; no sudo.` };
+  if (LIBWEBP.archives[platformKey(platform, arch)])
+    return { actor: 'agent', command: SETUP, note: `Downloads libwebp ${LIBWEBP.version} (SHA-256 pinned) into vendor/sprite-gen/.venv; no sudo.` };
   return userInstall(platform === 'darwin' ? 'brew install webp' : 'install libwebp >= 1.5 (img2webp with -exact) on PATH', platform);
 }
 
@@ -120,47 +133,92 @@ print(json.dumps(found))
  * @param {{ python?: string, env: NodeJS.ProcessEnv, platform?: NodeJS.Platform, probe?: typeof runProbe }} options @returns {Promise<Tool>}
  */
 export async function inspectRife({ python, env, platform = process.platform, probe = runProbe }) {
-  const install = { actor: 'agent', command: SETUP, note: 'Runs sprite-gen rife install (rife-ncnn-vulkan 20221029, SHA-256 pinned, about 430 MB download, user data directory, no sudo).' };
+  const install = {
+    actor: 'agent',
+    command: SETUP,
+    note: 'Runs sprite-gen rife install (rife-ncnn-vulkan 20221029, SHA-256 pinned, about 430 MB download, user data directory, no sudo).',
+  };
   const optional = { required: false, effectWhenMissing: 'walk/run loops are cut as filmed, with a warning; generation still works' };
-  if (!python || !(await access(python).then(() => true, () => false)))
+  if (
+    !python ||
+    !(await access(python).then(
+      () => true,
+      () => false,
+    ))
+  )
     return { status: 'missing', ...optional, reason: 'sprite-gen-not-installed', install };
   const result = await probe(python, ['-c', RIFE_PROBE], { env: { ...env, PYTHONUTF8: '1' }, timeout: 120000 });
   let found;
-  try { found = JSON.parse(/** @type {string} */ (result.output.trim().split('\n').at(-1))); } catch { found = { status: 'broken', reason: result.output.trim().slice(-300) || 'rife probe failed' }; } // split gives at least one line
+  try {
+    found = JSON.parse(/** @type {string} */ (result.output.trim().split('\n').at(-1)));
+  } catch {
+    found = { status: 'broken', reason: result.output.trim().slice(-300) || 'rife probe failed' };
+  } // split gives at least one line
   if (found.status === 'ok') {
     // Without the resident binary RIFE works, only slower: no warning, but sprite:setup installs it where it can.
-    if (found.serve?.status === 'missing') found.serve = { ...found.serve, effectWhenMissing: 'the loop alignment starts RIFE once per frame, about half as fast; the frames are the same',
-      install: { actor: 'agent', command: SETUP, note: 'Runs sprite-gen rife install: keeps this RIFE and puts the resident binary (rife-serve-20221029-1, SHA-256 pinned, about 2-3 MB) beside it after its check frame.' } };
+    if (found.serve?.status === 'missing')
+      found.serve = {
+        ...found.serve,
+        effectWhenMissing: 'the loop alignment starts RIFE once per frame, about half as fast; the frames are the same',
+        install: {
+          actor: 'agent',
+          command: SETUP,
+          note: 'Runs sprite-gen rife install: keeps this RIFE and puts the resident binary (rife-serve-20221029-1, SHA-256 pinned, about 2-3 MB) beside it after its check frame.',
+        },
+      };
     return { ...found, ...optional };
   }
   if (found.status === 'missing') return { ...found, ...optional, install };
   // Files present but the check frame failed: usually no Vulkan. Reinstalling does not help.
-  return { ...found, ...optional, install: platform === 'linux' ? userInstall(VULKAN_INSTALL, platform)
-    : { actor: 'user', command: 'update the GPU driver (Vulkan), then npm run sprite:status' } };
+  return {
+    ...found,
+    ...optional,
+    install:
+      platform === 'linux' ? userInstall(VULKAN_INSTALL, platform) : { actor: 'user', command: 'update the GPU driver (Vulkan), then npm run sprite:status' },
+  };
 }
 
 /** ffmpeg, ffprobe, img2webp and RIFE, each { status: ok|missing|broken, ... install }. @param {ToolOptions} [options] */
-export async function inspectTools({ spriteRoot, python, env = toolEnv(/** @type {string} */ (spriteRoot)), platform = process.platform, arch = process.arch,
-  probe = runProbe, find = which, rife = true } = {}) {
+export async function inspectTools({
+  spriteRoot,
+  python,
+  env = toolEnv(/** @type {string} */ (spriteRoot)),
+  platform = process.platform,
+  arch = process.arch,
+  probe = runProbe,
+  find = which,
+  rife = true,
+} = {}) {
   /** @type {Record<string, Tool>} */
   const tools = {};
   for (const name of ['ffmpeg', 'ffprobe']) {
     const found = await find(name, env, platform);
     const install = userInstall(FFMPEG_INSTALL[platform] ?? 'install ffmpeg (with ffprobe) on PATH', platform);
-    if (!found) { tools[name] = { status: 'missing', required: true, install }; continue; }
+    if (!found) {
+      tools[name] = { status: 'missing', required: true, install };
+      continue;
+    }
     const result = await probe(found, ['-version'], { env });
-    tools[name] = result.code === 0
-      ? { status: 'ok', required: true, path: found, version: result.output.match(/version (\S+)/)?.[1] ?? null }
-      : { status: 'broken', required: true, path: found, reason: result.output.trim().slice(0, 300) || `exit ${result.code}`, install };
+    tools[name] =
+      result.code === 0
+        ? { status: 'ok', required: true, path: found, version: result.output.match(/version (\S+)/)?.[1] ?? null }
+        : { status: 'broken', required: true, path: found, reason: result.output.trim().slice(0, 300) || `exit ${result.code}`, install };
   }
   const img2webp = await find('img2webp', env, platform);
   if (!img2webp) tools.img2webp = { status: 'missing', required: true, install: img2webpInstall(platform, arch) };
   else {
-    const version = await probe(img2webp, ['-version'], { env }), help = await probe(img2webp, ['-h'], { env });
+    const version = await probe(img2webp, ['-version'], { env }),
+      help = await probe(img2webp, ['-h'], { env });
     const exact = help.output.includes('-exact');
-    tools.img2webp = { status: exact ? 'ok' : 'broken', required: true, path: img2webp,
+    tools.img2webp = {
+      status: exact ? 'ok' : 'broken',
+      required: true,
+      path: img2webp,
       version: version.output.match(/version:?\s*(\d+\.\d+\.\d+)/i)?.[1] ?? null,
-      ...(exact ? {} : { reason: 'no -exact option (libwebp < 1.5; Ubuntu 24.04 apt ships 1.3.x); video-loop refuses it', install: img2webpInstall(platform, arch) }) };
+      ...(exact
+        ? {}
+        : { reason: 'no -exact option (libwebp < 1.5; Ubuntu 24.04 apt ships 1.3.x); video-loop refuses it', install: img2webpInstall(platform, arch) }),
+    };
   }
   tools.rife = rife ? await inspectRife({ python, env, platform, probe }) : { status: 'not-checked', required: false };
   return tools;
@@ -172,15 +230,32 @@ export function toolsItem(tools) {
   const installs = missing.map(name => ({ tool: name, ...tools[name].install }));
   const nextCommands = [...new Set(installs.filter(i => i.actor === 'agent').map(i => i.command))];
   const userCommands = [...new Set(installs.filter(i => i.actor === 'user').map(i => i.command))];
-  const warnings = ['ok', 'not-checked'].includes(tools.rife?.status) ? []
+  const warnings = ['ok', 'not-checked'].includes(tools.rife?.status)
+    ? []
     : [{ tool: 'rife', status: tools.rife.status, message: tools.rife.effectWhenMissing, ...tools.rife.install }];
-  return { status: missing.length ? 'action-required' : 'ready', missing, ...tools, warnings, nextCommands,
-    ...(userCommands.length ? { nextAction: { actor: 'user', code: 'install-system-tools', commands: userCommands,
-      message: `${missing.join(', ')} 가 없거나 쓸 수 없다. 작업 공간을 준비하는 사람이 위 명령을 실행한 뒤 npm run sprite:status 로 다시 확인한다. 키트는 sudo 를 실행하지 않는다.` } } : {}) };
+  return {
+    status: missing.length ? 'action-required' : 'ready',
+    missing,
+    ...tools,
+    warnings,
+    nextCommands,
+    ...(userCommands.length
+      ? {
+          nextAction: {
+            actor: 'user',
+            code: 'install-system-tools',
+            commands: userCommands,
+            message: `${missing.join(', ')} 가 없거나 쓸 수 없다. 작업 공간을 준비하는 사람이 위 명령을 실행한 뒤 npm run sprite:status 로 다시 확인한다. 키트는 sudo 를 실행하지 않는다.`,
+          },
+        }
+      : {}),
+  };
 }
 
 /** @param {ToolOptions & { inspect?: typeof inspectTools }} [options] */
-export async function checkTools({ inspect = inspectTools, ...options } = {}) { return toolsItem(await inspect(options)); }
+export async function checkTools({ inspect = inspectTools, ...options } = {}) {
+  return toolsItem(await inspect(options));
+}
 
 /** @type {(data: Uint8Array) => string} */
 const sha256 = data => createHash('sha256').update(data).digest('hex');
@@ -202,10 +277,21 @@ else:
  * @param {{ spriteRoot: string, python: string, platform?: NodeJS.Platform, arch?: NodeJS.Architecture, archivePath?: string,
  *   download?: typeof runtimeFetch, log?: (message: string) => void }} [options]
  */
-export async function installImg2webp({ spriteRoot, python, platform = process.platform, arch = process.arch, archivePath, download = runtimeFetch, log = console.error } = /** @type {{ spriteRoot: string, python: string }} */ ({})) {
+export async function installImg2webp(
+  {
+    spriteRoot,
+    python,
+    platform = process.platform,
+    arch = process.arch,
+    archivePath,
+    download = runtimeFetch,
+    log = console.error,
+  } = /** @type {{ spriteRoot: string, python: string }} */ ({}),
+) {
   const entry = LIBWEBP.archives[platformKey(platform, arch)];
   if (!entry) throw Error(`No pinned libwebp build for ${platformKey(platform, arch)}: ${img2webpInstall(platform, arch).command}`);
-  const [name, expected] = entry, top = name.replace(/\.(tar\.gz|zip)$/, '');
+  const [name, expected] = entry,
+    top = name.replace(/\.(tar\.gz|zip)$/, '');
   const bin = toolBin(spriteRoot);
   await mkdir(bin, { recursive: true });
   const work = await mkdtemp(path.join(path.dirname(bin), '.img2webp-'));
@@ -215,10 +301,12 @@ export async function installImg2webp({ spriteRoot, python, platform = process.p
     else {
       log(`img2webp: downloading ${LIBWEBP.url(name)}`);
       let response;
-      try { response = await download(LIBWEBP.url(name)); }
-      catch (/** @type {any} */ error) {
+      try {
+        response = await download(LIBWEBP.url(name));
+      } catch (/** @type {any} */ error) {
         const reason = ['network-connect-forbidden', 'network-timeout', 'network-dns-failed', 'api-unreachable'].includes(error.code)
-          ? error.code : 'api-unreachable';
+          ? error.code
+          : 'api-unreachable';
         throw Error(`img2webp: network ${reason} host=storage.googleapis.com`);
       }
       if (!response.ok) throw Error(`img2webp: download failed (HTTP ${response.status}) ${LIBWEBP.url(name)}`);
@@ -227,14 +315,22 @@ export async function installImg2webp({ spriteRoot, python, platform = process.p
     const actual = sha256(await readFile(archive));
     if (actual !== expected) throw Error(`img2webp: ${name} has SHA-256 ${actual}, expected ${expected}; nothing was installed`);
     const exe = platform === 'win32' ? 'img2webp.exe' : 'img2webp';
-    for (const [member, file] of [[`${top}/bin/${exe}`, exe], [`${top}/README.md`, 'libwebp-README.md']]) {
+    for (const [member, file] of [
+      [`${top}/bin/${exe}`, exe],
+      [`${top}/README.md`, 'libwebp-README.md'],
+    ]) {
       const staged = path.join(work, file);
       const result = await runProbe(python, ['-c', EXTRACT, archive, member, staged], { timeout: 60000 });
       if (result.code) throw Error(`img2webp: could not unpack ${member}: ${result.output.trim().slice(0, 300)}`);
       await rename(staged, path.join(bin, file));
     }
     if (platform !== 'win32') await chmod(path.join(bin, exe), 0o755);
-    await writeFile(path.join(bin, 'libwebp-install.json'), JSON.stringify({ version: LIBWEBP.version, archive: name, sha256: expected, license: LIBWEBP.license }, null, 2) + '\n');
+    await writeFile(
+      path.join(bin, 'libwebp-install.json'),
+      JSON.stringify({ version: LIBWEBP.version, archive: name, sha256: expected, license: LIBWEBP.license }, null, 2) + '\n',
+    );
     return path.join(bin, exe);
-  } finally { await rm(work, { recursive: true, force: true }); }
+  } finally {
+    await rm(work, { recursive: true, force: true });
+  }
 }

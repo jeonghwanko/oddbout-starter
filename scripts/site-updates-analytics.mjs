@@ -9,10 +9,14 @@ import { analyticsSource } from './site-analytics.mjs';
  */
 export async function writeUpdatesAnalytics(root, pages, measurementId, siteUrl, apiBase = null) {
   if (!measurementId || !pages.length) return;
-  const slugs = [...new Set(pages.flatMap(page => {
-    const match = /^updates\/([a-z0-9]+(?:-[a-z0-9]+)*)(?:\.(?:en|ja))?\.html$/.exec(page);
-    return match ? [match[1]] : [];
-  }))];
+  const slugs = [
+    ...new Set(
+      pages.flatMap(page => {
+        const match = /^updates\/([a-z0-9]+(?:-[a-z0-9]+)*)(?:\.(?:en|ja))?\.html$/.exec(page);
+        return match ? [match[1]] : [];
+      }),
+    ),
+  ];
   const source = analyticsSource(measurementId, siteUrl, apiBase, slugs);
   for (const page of pages) {
     if (page === 'updates.html') continue;
