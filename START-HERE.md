@@ -4,7 +4,7 @@
 이 문서에는 게임이 직접 생성한 현재 규격이 아래 JSON으로 포함되어 있습니다.
 다른 안내만 읽고 규격을 읽었다고 간주하지 마세요. 첫 응답 전에 아래 JSON의
 revision, workflow, contract, controls, timing을 읽고 이번 대화의 기준으로 저장하세요.
-첫 응답에는 “게임 규격 03d49ab5be30 기준”이라고 출처를 짧게 밝히고,
+첫 응답에는 “게임 규격 b41a9111f10b 기준”이라고 출처를 짧게 밝히고,
 캐릭터 설명이나 참고 이미지를 요청하세요. 사용자에게 기술 수치를 고르라고 하지 마세요.
 
 ## 제작 범위
@@ -28,7 +28,7 @@ review_creation_progress가 연결되어 있으면 선택 상태를 검사하고
 
 ## 자료 갱신
 
-이 문서는 게임 소스에서 자동 생성한 시작 시점의 스냅샷입니다. 현재 revision: 03d49ab5be30728f0448ba9f3cabb0a7d83e33b19d5ddc9768d478cd65cfc472
+이 문서는 게임 소스에서 자동 생성한 시작 시점의 스냅샷입니다. 현재 revision: b41a9111f10b7feb7c266bd94233bfe4855bec8051fc74872b357db0cf1ff9ad
 새 묶음·재개·패키징 전에 [현재 게임 JSON](https://raw.githubusercontent.com/jeonghwanko/oddbout-starter/refs/heads/codex/game-context/creation-context.json)을 다시 읽고 revision을 비교하세요.
 바뀌면 이전 자료·선택을 보관하고 영향을 받은 항목만 설명·재검토하세요. 가져오지 못하면 그 사실을 말하고,
 외형 상담만 계속할 수 있습니다. 규격에 의존하는 묶음으로 진행하거나 수치를 추정하지 마세요.
@@ -486,69 +486,43 @@ Dot의 제품 기억을 초기화하는 기능은 아닙니다. 이전 기록의
     }
   },
   "controls": {
-    "defaultsOnly": true,
-    "rebindable": true,
-    "source": "InputBindings + NativeCityFightInputController",
+    "source": "FightTuning",
     "actions": [
       {
         "action": "move",
-        "keys": [
-          "LEFT",
-          "RIGHT"
-        ],
         "motion": "walk",
         "behavior": "상대를 보며 전진·후진. 방향키 두 번 돌진·백스텝 입력은 제거됐다."
       },
       {
         "action": "combo",
-        "keys": [
-          "C"
-        ],
         "motion": "combo",
-        "behavior": "누름마다 연타 구간 진행. 공중 연계는 게임 상태가 결정.",
-        "defaultPad": "A"
+        "behavior": "누름마다 연타 구간 진행. 공중 연계는 게임 상태가 결정."
       },
       {
         "action": "heavy",
-        "keys": [
-          "V"
-        ],
         "motion": "slam",
-        "behavior": "누르고 모은 뒤 놓으면 강타. 준비 자세를 유지할 수 있어야 한다.",
-        "defaultPad": "Y"
+        "behavior": "누르고 모은 뒤 놓으면 강타. 준비 자세를 유지할 수 있어야 한다."
       },
       {
         "action": "guard",
-        "keys": [
-          "Z"
-        ],
         "motion": "block",
-        "behavior": "누르는 동안 가드. 현재 조작에서 패리 제거.",
-        "defaultPad": "LB"
+        "behavior": "누르는 동안 가드. 현재 조작에서 패리 제거."
       },
       {
         "action": "evade",
-        "keys": [
-          "X"
-        ],
         "motion": null,
-        "behavior": "상대와 거리에 따라 넘기·회피. v1 추가 필수 모션 아님; 현재 스킨 어댑터의 대체 표현 사용.",
-        "defaultPad": "B"
+        "behavior": "상대와 거리에 따라 넘기·회피. v1 추가 필수 모션 아님; 현재 스킨 어댑터의 대체 표현 사용."
       },
       {
         "action": "super",
-        "keys": [
-          "S"
-        ],
         "motion": "slam",
-        "behavior": "게이지를 쓰는 강화 강타. 별도 필살기 클립을 추가하거나 dash를 대체하지 않음. 오토전에서는 기술 방출.",
-        "defaultPad": "RB"
+        "behavior": "게이지를 쓰는 강화 강타. 별도 필살기 클립을 추가하거나 dash를 대체하지 않음."
       }
     ],
     "unboundRequired": [
       {
         "motion": "dash",
-        "reason": "v1 필수 애셋이며 상대/어댑터가 사용한다. 현재 플레이어 직접 입력 키는 없다."
+        "reason": "v1 필수 애셋이며 상대/어댑터가 사용한다. 대응하는 동작이 없다."
       }
     ]
   },
@@ -652,18 +626,17 @@ Dot의 제품 기억을 초기화하는 기능은 아닙니다. 이전 기록의
     "onChange": "Keep previous context and selections, report only affected requirements, recheck affected items. Never silently mix revisions.",
     "unavailable": "Appearance consultation may continue. Do not invent controls/timing, advance a rules-dependent group, generate or package against an unverified current contract."
   },
-  "revision": "03d49ab5be30728f0448ba9f3cabb0a7d83e33b19d5ddc9768d478cd65cfc472",
+  "revision": "b41a9111f10b7feb7c266bd94233bfe4855bec8051fc74872b357db0cf1ff9ad",
   "provenance": {
-    "sourceCommit": "8f78252051a448f42d8e328e37b37685acaa1333",
+    "sourceCommit": "e9ce22e8e7947e1c98b78488acfc8d2e6bb6fe5b",
     "sourceDirty": false,
     "sourceFiles": {
-      "tools/ai-fighter/creation-context.mjs": "e25f8fcac9b72a9aace46009164f955b097be3412d88c3a0047c9898ee6140e9",
-      "tools/ai-fighter/export-creation-context.mjs": "67d772fa9c0bab21a98e637db0da0b93c3f3453fde52029ce5ef5c5251f9579a",
-      "contracts/ai-fighter/v1/contract-source.mjs": "d302ba31b83057e32c402f0b522c9579c8e2f0c28c214e203d4393afc6c7bd42",
+      "tools/ai-fighter/creation-context.mjs": "d53e8fc6ac7857642eab69c46b78f39fe74ec5cd96674a8001bb976bbdd29eaa",
+      "tools/ai-fighter/export-creation-context.mjs": "feab63e02fb852d98f72476bc6e08395b132e0c4f0880c35a259bcc101908da8",
+      "contracts/ai-fighter/v1/contract-source.mjs": "6c34a93137bf0a4d0ac5172be72bba32b7d33388c17abed23b0e0edd19073970",
       "src/world/native-city-combat.json": "20ebcbfddb44bb35e7d5f48fa3a2c1e85e9d46c0b67feb35fbfeeef4630d7c0d",
-      "src/app/InputBindings.ts": "d51c07636dcbe02d33deedb0fc8b38b5f58b47b4bc40cadaffd776c8fc6751d5",
-      "src/render/effects/NativeCityFightFeel.ts": "db42ff13c490e7049c63327444aad0560a38dcfc672554f0dfd529e4f60f73a7",
-      "src/render/effects/CombatPresentation.ts": "e5156f31b4434370a6c03d79bd6cd3d438685dfe8f1020a5f31adf70f3e72588"
+      "src/render/effects/NativeCityFightFeel.ts": "df5a47992bf1449a0d4cfe0176d903f53163e55b0ca89f789eb9ae18d976d2c3",
+      "src/render/effects/CombatPresentation.ts": "bcb4f0e88de00b231da4572050c4be7119c8546ba11c8de3a2dbcc588d5d2f71"
     },
     "generated": true
   }
