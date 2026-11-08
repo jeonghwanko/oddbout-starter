@@ -35,15 +35,11 @@ const targets = {
   '/src/render/scenes/ArenaDuelScene.ts': [
     [
       'if (decided) duel.session.settle(); else duel.session.step(control ? [control.command(this.playerSide()), null] : undefined);',
-      'if (!decided) milestone("game_start", duel.session, { mode: this.dataIn.tournament ? "tournament" : this.dataIn.player ? "play" : "watch" });\n        if (decided) duel.session.settle(); else duel.session.step(control ? [control.command(this.playerSide()), null] : undefined);',
+      'if (!decided) milestone("game_start", duel.session, { mode: this.dataIn.player ? "play" : "watch" });\n        if (decided) duel.session.settle(); else duel.session.step(control ? [control.command(this.playerSide()), null] : undefined);',
     ],
     [
       'private finish(result: CityFightBoutResult): void {',
       'private finish(result: CityFightBoutResult): void {\n    milestone("match_complete", this.duel?.session, { result: result.how });',
-    ],
-    [
-      'if (this.live()) { this.recorded = true;',
-      'if (this.live()) { milestone("match_complete", this.duel?.session, { result: "forfeit" }); this.recorded = true;',
     ],
   ],
   '/src/render/scenes/ArenaScene.ts': [
