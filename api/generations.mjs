@@ -45,7 +45,7 @@ export const DRAFT_STATES = Object.freeze(['checking', 'retaking']);
  * (`ok`), the server refused it (`refused`), a front that is not a portrait could not be framed (`unframed`), its face square could not be
  * measured (`unmeasured`), or something else stopped it (`error`). */
 export const PROFILE_FRONT_OUTCOMES = Object.freeze(['ok', 'refused', 'unframed', 'unmeasured', 'error']);
-/** Who draws a request's pictures (2026-11-06, af_generation_jobs.image_provider): `grok` (the default) or `gpt`. */
+/** Who draws a request's pictures (2026-11-06, af_generation_jobs.image_provider): `grok` (the default) or `gpt`. host/generation-stages.mjs keeps its own copy; generation-stages.test.mjs keeps the two equal. */
 export const IMAGE_PROVIDERS = Object.freeze(['grok', 'gpt']);
 /**
  * What the PC runner (`npx oddbout-host`, 2026-11-07) says of the PC in its heartbeat, beside the logins (host/runner.mjs heartbeater, the
@@ -102,6 +102,7 @@ const STATUS = { 'generation-unavailable': 409, 'generation-quota': 409, 'genera
   // The submission path's own refusals (`af_create_submission`, `af_submit`), with the statuses the creator's routes give them.
   ...SUBMISSION_STATUS };
 /** Stats the contract takes: 1-5 each, summing to 9 (`contracts/ai-fighter/validate.mjs`). */
+// host/generation-stages.mjs keeps its own copy (host/ ships alone); generation-stages.test.mjs keeps the two equal.
 export const STAT_TOTAL = 9;
 
 /** @type {(parts: string[]) => boolean} Is this path the hosted generation's? */
