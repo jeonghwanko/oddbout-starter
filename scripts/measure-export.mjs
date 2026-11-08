@@ -41,7 +41,7 @@ const LOOKS = ['look-a', 'look-b'];
  *   review: LabelReview | null }} Label
  */
 
-/** The worker's folder name for a job (generation-stages.mjs `ogJobId`): the ledger is kept by it. @type {(job: Pick<Job, 'id' | 'createdAt'>) => string} */
+/** The worker's folder name for a job (generation-prompts.mjs `ogJobId`): the ledger is kept by it. @type {(job: Pick<Job, 'id' | 'createdAt'>) => string} */
 export const ogJobId = job => `${new Date(job.createdAt).toISOString().slice(0, 10).replaceAll('-', '')}-gen-${job.id.replaceAll('-', '')}`;
 /** @type {(a: string, b: string) => number} */
 const ms = (a, b) => Date.parse(b) - Date.parse(a);

@@ -903,7 +903,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       return { ok: true, ...beaten, job: { id: row.id, status: row.status, leaseToken: row.lease_token, owner: row.owner_id, createdAt: row.created_at, description: row.description,
         language: row.language, brief: row.brief ?? null, delegate: row.delegate === true, choice: row.choice ?? null, appearanceNote: row.appearance_note ?? null,
         decisionsReview: { mode: productionReviewer?.enabled ? 'shadow' : 'off' },
-        // Who draws its pictures (host/generation-stages.mjs imageProviderOf): grok or gpt; a row from before the column was GPT's.
+        // Who draws its pictures (host/generation-prompts.mjs imageProviderOf): grok or gpt; a row from before the column was GPT's.
         imageProvider: row.image_provider ?? 'gpt',
         appearanceRound: row.appearance_revisions, motionNote: row.motion_note ?? null, motionRound: row.motion_revisions, profile: row.profile ?? null,
         refs: (refs ?? []).map(/** @param {Upload} ref */ ref => ({ id: ref.id, contentType: ref.content_type, width: ref.width, height: ref.height, url: urls.get(ref.path) ?? null })),

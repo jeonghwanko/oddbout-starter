@@ -3,7 +3,8 @@ import test from 'node:test';
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { ASKS, GROK_LIMITED, createStages, judgesFor } from './generation-stages.mjs';
+import { createStages } from './generation-stages.mjs';
+import { ASKS, GROK_LIMITED, judgesFor } from './generation-prompts.mjs';
 import { STAGE_LIMIT_MS, canWork, imagesOf, createApi, createCooldowns, createDispatches, dispatchUnknownOutcome, generates, healthAfter, parseHealth, reportStageTokens, run,
   STAGE_STOPPED, TIMING, errorCode, projectDocsAt, readOutput, stageLimitMs, stageProviders, timedOutOutcome, unlessStopped } from './generation-worker.mjs';
 

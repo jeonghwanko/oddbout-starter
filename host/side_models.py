@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Side models (2026-11-07, prototype, opt-in): a local answer to the side judge's `side` check — "the character is seen from the side and
-faces right" (generation-stages.mjs sideJudgePrompt) — which the pixel judge (motions.py pixel_judge_side, pixels-v1) always leaves
+faces right" (generation-prompts.mjs sideJudgePrompt) — which the pixel judge (motions.py pixel_judge_side, pixels-v1) always leaves
 "unknown", so hybrid asks codex on nearly every side take.
 
 It runs in its own venv with onnxruntime (never the kit's sprite-gen venv; `setup` makes the venv and fetches the pinned weights, sha256
@@ -65,7 +65,7 @@ RULE = {
     "behind_tag": 0.5,      # from_behind from this: the back, never a pass
 }
 # The answer's model: the tier's version and a hash of what decides its answers (weights, packages, rule), short enough for the judge's
-# record (generation-stages.mjs checkedPixels keeps 40 characters of a model; with the pixel judge's name in front it stays under). Any
+# record (generation-prompts.mjs checkedPixels keeps 40 characters of a model; with the pixel judge's name in front it stays under). Any
 # change to a weight, a package or a threshold makes a new name, so a judge key built from it changes with it. The revisions are in
 # the measures (`weights`).
 MODEL_NAME = f"{SIDE_MODEL}-" + hashlib.sha256(json.dumps([WEIGHTS, PACKAGES, RULE], sort_keys=True).encode()).hexdigest()[:6]

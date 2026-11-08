@@ -8,7 +8,7 @@ import { ENTRY_CLIPS } from '../api/fighter-entry.mjs';
 import { PROFILE_SET_VALIDATOR_VERSION, PROFILE_SET_VERSION, claimFrontCheck, finishFrontCheck, profileSetKey, profileSetView } from '../api/profile-sets.mjs';
 import { frontNext } from '../mcp/cloud/common.mjs';
 import { CLOUD_ISSUER, CLOUD_RESOURCE, createCloudHandler } from '../mcp/cloud.mjs';
-import { FRONT_CHECKS, FRONT_JUDGE_SCHEMA, frontJobId, frontJudgePrompt, frontVerdict, lookJudgePrompt } from '../host/generation-stages.mjs';
+import { FRONT_CHECKS, FRONT_JUDGE_SCHEMA, frontJobId, frontJudgePrompt, frontVerdict, lookJudgePrompt } from '../host/generation-prompts.mjs';
 import { generation } from './helpers/generation-database.mjs';
 
 test('the PC takes a validated front, its verdict decides the entry, and the owner reads why (API)', async () => {

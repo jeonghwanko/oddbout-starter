@@ -7,19 +7,23 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { ALIGN_AGAIN, BEAT_LIMIT, GROK_LIMITED, BRIEF_SCHEMA, ONE_STRIDE_OF, GAIT_EVENT_BYTES, GAIT_OWN_FEATURE, gaitEvent, gaitRanges, GAIT_RETAKES, CODEX_TOOLS_OFF, EVEN_BEAT, PREVIEW_CLIPS, RUN_FROM_WALK, RUN_FROM_WALK_PACE, SCALE_ROUNDS, SCALE_WIDE, appearancePrompt, briefCommand, briefPrompt, characterPhrase, checkedBrief, checkedVerdict, createStages, lookPick, namedFeet, feetAlternate, lowMarginFeet, ENGINE_CUE_RHYTHM, ogJobId, retakeReasons,
-  submissionOutcome, withProfile, EXTRACT_REDRAWS, extractFailedRows, ENGINE_SEAM_MAX, loopTaken, HOUSE_COLOURING, LOOK_CHECKS, SIDE_CHECKS, SIDE_COLOURING, SIDE_TAKES,
-  lookJudgePrompt, sideJudgePrompt, sidePrompt, EXPRESSION_CELLS, expressionsPrompt, expressionsName, MODELS,
-  JUDGE, UNKNOWN, MODELS_EVENT_BYTES, SIDE_JUDGE_SCHEMA, codexSessionId, createModelLog, imageEntry, judgeCommand, judgeKey, judgeLabel, judgeRecord,
-  verdictKeyStatus, videoEntry, VIDEO_REQUESTED, REQUESTED_MODELS, writeWhole, JUDGE_MODES, PIXEL_JUDGE, checkedPixels, hybridJudgeKey, judgesMode,
-  pixelJudgeKey, sidePassed, IMAGE_PROFILES, GROK_IMAGE_MODEL, appearanceCommand, chromaKeyFor, expressionsCommand, gaitStillCommand, gaitStillPrompt,
-  imageFor, imageProviderOf, requestedModels, sideCommand, FRONT_TAKES, GROK_FRONT_COLOURING, GROK_FRONT_FRAMING, GROK_FRONT_TAKES,
-  GROK_ONE_FIGURE, archiveJobKey, createJudgeArchive, judgeArchiveDays, judgeImageDays, judgmentLine, numbersOnly, GROK_FRONT_MIRROR, GROK_FRONT_RETAKE,
-  GROK_FRONT_RETAKES, FRONT_CHECKS, frontCardName, frontSubject, webpSize } from './generation-stages.mjs';
+import { createStages, EXTRACT_REDRAWS, extractFailedRows, writeWhole, webpSize } from './generation-stages.mjs';
+import { ALIGN_AGAIN, BEAT_LIMIT, GROK_LIMITED, BRIEF_SCHEMA, ONE_STRIDE_OF, GAIT_EVENT_BYTES, GAIT_OWN_FEATURE, gaitEvent, gaitRanges,
+  GAIT_RETAKES, CODEX_TOOLS_OFF, EVEN_BEAT, PREVIEW_CLIPS, RUN_FROM_WALK, RUN_FROM_WALK_PACE, SCALE_ROUNDS, SCALE_WIDE, appearancePrompt,
+  briefCommand, briefPrompt, characterPhrase, checkedBrief, checkedVerdict, lookPick, namedFeet, feetAlternate, lowMarginFeet,
+  ENGINE_CUE_RHYTHM, ogJobId, retakeReasons, submissionOutcome, withProfile, ENGINE_SEAM_MAX, loopTaken, HOUSE_COLOURING, LOOK_CHECKS,
+  SIDE_CHECKS, SIDE_COLOURING, SIDE_TAKES, lookJudgePrompt, sideJudgePrompt, sidePrompt, EXPRESSION_CELLS, expressionsPrompt,
+  expressionsName, MODELS, JUDGE, UNKNOWN, MODELS_EVENT_BYTES, SIDE_JUDGE_SCHEMA, codexSessionId, createModelLog, imageEntry, judgeCommand,
+  judgeKey, judgeLabel, judgeRecord, verdictKeyStatus, videoEntry, VIDEO_REQUESTED, REQUESTED_MODELS, JUDGE_MODES, PIXEL_JUDGE,
+  checkedPixels, hybridJudgeKey, judgesMode, pixelJudgeKey, sidePassed, IMAGE_PROFILES, GROK_IMAGE_MODEL, appearanceCommand, chromaKeyFor,
+  expressionsCommand, gaitStillCommand, gaitStillPrompt, imageFor, imageProviderOf, requestedModels, sideCommand, FRONT_TAKES,
+  GROK_FRONT_COLOURING, GROK_FRONT_FRAMING, GROK_FRONT_TAKES, GROK_ONE_FIGURE, GROK_FRONT_MIRROR, GROK_FRONT_RETAKE, GROK_FRONT_RETAKES,
+  FRONT_CHECKS, frontCardName, frontSubject } from './generation-prompts.mjs';
+import { archiveJobKey, createJudgeArchive, judgeArchiveDays, judgeImageDays, judgmentLine, numbersOnly } from './judge-archive.mjs';
 import { codexSessionFacts } from './codex-usage.mjs';
 import { ENGINE_SEAM_MAX as REVIEW_SEAM_MAX, ENGINE_CUE_RHYTHM as REVIEW_CUE_RHYTHM, lowMarginFeet as reviewLowMarginFeet } from '../tools/ai-fighter/gait.mjs';
 import { parseEnv, parseHealth } from './generation-worker.mjs';
-import { ASKS } from './generation-stages.mjs';
+import { ASKS } from './generation-prompts.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 /** motions.py's face-box needs Pillow and NumPy (the kit's sprite-gen venv has them; a bare CI runner may not). */
@@ -2569,7 +2573,7 @@ test('a resume-state file is written whole or not at all, and a scanner hold on 
 test('the constants the API checks a job by are the host\'s own, value for value', async () => {
   // host/ ships alone (host/package.json) and imports nothing from api/, so each keeps its copy and this keeps them equal.
   const api = await import('../api/generations.mjs');
-  const { STAT_TOTAL, IMAGE_PROVIDERS } = await import('./generation-stages.mjs');
+  const { STAT_TOTAL, IMAGE_PROVIDERS } = await import('./generation-prompts.mjs');
   assert.equal(STAT_TOTAL, api.STAT_TOTAL);
   assert.deepEqual(IMAGE_PROVIDERS, api.IMAGE_PROVIDERS);
 });

@@ -7,7 +7,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { closeFrontFolders, createFrontCheck } from './generation-worker.mjs';
-import { ASKS, CODEX_TOOLS_OFF } from './generation-stages.mjs';
+import { ASKS, CODEX_TOOLS_OFF } from './generation-prompts.mjs';
 
 const BYTES = new Uint8Array([1, 2, 3, 4]);
 const SET = { id: '0123abcd-0000-4000-8000-0123456789ab', leaseToken: 'lease',

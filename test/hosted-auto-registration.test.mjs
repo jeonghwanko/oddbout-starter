@@ -4,7 +4,7 @@ import { generation } from './helpers/generation-database.mjs';
 import example from '../contracts/ai-fighter/v1/example.fighter.json' with { type: 'json' };
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { VALIDATOR_VERSION } from '../api/submissions.mjs';
-import { withProfile } from '../host/generation-stages.mjs';
+import { withProfile } from '../host/generation-prompts.mjs';
 import { hostedStatus } from '../mcp/cloud/hosted-tools.mjs';
 import { sha256 } from '../api/http.mjs';
 

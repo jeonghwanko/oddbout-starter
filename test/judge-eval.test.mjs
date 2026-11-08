@@ -4,7 +4,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { createJudgeArchive } from '../host/generation-stages.mjs';
+import { createJudgeArchive } from '../host/judge-archive.mjs';
 import { checkedLine, evaluate, evaluateByMode, labelQueue, main, quantile, readArchive, readLabels, rerun } from '../scripts/judge-eval.mjs';
 
 const pass5 = { whole: 'pass', side: 'pass', match: 'pass', style: 'pass', clean: 'pass' };
