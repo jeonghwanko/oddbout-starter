@@ -84,7 +84,8 @@ const fail = (code, detail) => Object.assign(new Error(detail ? `${code}: ${deta
  *   loadOg: (root: string, about: Record<string, string> | null) => Promise<Og>,
  *   npm: (args: string[], options: { cwd: string, log: string }) => Promise<number>,
  *   progress?: (label: string, received: number, total: number) => void, tail?: (file: string) => () => void, onWorker?: (og: Og) => void,
- *   pins?: any, here?: string, pid?: number, alive?: (pid: number) => boolean }} RunnerDeps
+ *   pins?: any, here?: string, pid?: number, alive?: (pid: number) => boolean,
+ *   readonly ogModule?: any }} RunnerDeps  ogModule: the loaded og.mjs, for stopping its children on exit
  * @typedef {{ command: string, root?: string, name?: string, codex?: boolean, slots?: number, join?: string, replace: boolean, provider?: string, once: boolean }} Options
  */
 
@@ -619,7 +620,7 @@ if (isMain()) {
     process.on(name, () => {
       if (stopping) process.exit(stopping);
       stopping = code;
-      /** @type {any} */ (deps).ogModule?.stopChildren?.();
+      deps.ogModule?.stopChildren?.();
       if (!worker) process.exit(code);
       process.stderr.write(`\n멈추는 중 — 실행 중인 단계 ${worker.running}개를 먼저 끝낸다(한 번 더 누르면 바로 끝낸다)\n`);
       worker.stopAll(code).then(() => process.exit(code));

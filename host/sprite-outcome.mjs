@@ -1,3 +1,4 @@
+// @ts-check
 // What a sprite-gen generation run ended with, read from its report rather than guessed from its exit code
 // (vendor/sprite-gen docs/gen.md "Outcome"). sprite-gen writes `ok`, `errors` ({state, code, retryable, message})
 // and `provider_submitted` on success, failure, the codex question and SIGTERM alike; exit 3 means it failed before
@@ -13,6 +14,7 @@ export const ASK_EXIT = 75;
 // A codex timeout (`provider-timeout`) was stopped after its request left, so it may have made a paid image.
 const UNSEEN = new Set(['outcome-unknown', 'internal-error', 'provider-timeout']);
 
+/** @param {string[]} argv @param {string} key @returns {string | undefined} */
 const option = (argv, key) => {
   const index = argv.findIndex(value => value === key || value.startsWith(`${key}=`));
   if (index < 0) return undefined;
@@ -20,7 +22,8 @@ const option = (argv, key) => {
 };
 
 /** Where a sprite-gen command leaves its outcome report, as the path its arguments give (relative paths stay relative):
- * `--report` for gen / video / video-extend / video-edit / video-resume, the set report for gen-set and video-set. */
+ * `--report` for gen / video / video-extend / video-edit / video-resume, the set report for gen-set and video-set.
+ * @param {string[]} args @returns {string | null} */
 export function outcomeReportPath(args) {
   const [verb] = args;
   if (verb === 'gen-set') { const run = option(args, '--run-dir'); return run ? path.posix.join(run, 'reports/gen-set/set.report.json') : null; }
@@ -28,7 +31,8 @@ export function outcomeReportPath(args) {
   return option(args, '--report') ?? null;
 }
 
-/** The report at `file` when this run wrote it (modified at or after `since`, ms) and it carries the outcome keys; else null. */
+/** The report at `file` when this run wrote it (modified at or after `since`, ms) and it carries the outcome keys; else null.
+ * @param {string | null | undefined} file @param {{ since?: number }} [options] @returns {Promise<any>} */
 export async function readOutcome(file, { since = 0 } = {}) {
   if (!file) return null;
   try {
@@ -44,11 +48,12 @@ export async function readOutcome(file, { since = 0 } = {}) {
  * `next` is what to do — `answer` the codex question, `resume` a video request xAI took (by `requestIds`), `inspect`
  * before anything runs again (no report, a request whose outcome cannot be told, a run stopped after its request left),
  * `retry` (every error says the same command may succeed) or `fix` the command or its input.
+ * @param {{ code: number | null, report: any }} run
  */
 export function judgeOutcome({ code, report }) {
   // sprite-gen's codes are strings. An error with any other code is one no documented writer made: it still counts, but as an outcome
   // nobody can read — its `retryable` is not trusted, so it never sends a paid request again (2026-10-30 review).
-  const errors = (Array.isArray(report?.errors) ? report.errors : []).filter(e => e && typeof e === 'object' && 'code' in e)
+  const errors = (/** @type {any[]} */ (Array.isArray(report?.errors) ? report.errors : [])).filter(e => e && typeof e === 'object' && 'code' in e)
     .map(e => typeof e.code === 'string' ? e : { ...e, code: 'outcome-unknown', retryable: false, written: String(e.code).slice(0, 40) });
   const charge = code === NOT_STARTED_EXIT || code === 2 ? 'not-charged'
     : report ? (report.provider_submitted ? 'request-sent' : 'not-charged') : 'unknown';

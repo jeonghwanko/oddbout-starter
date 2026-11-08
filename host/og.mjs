@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-check
 // ODDBOUT hosted fighter generation: `og` for a community host's PC on Windows, macOS or Linux (2026-11-05, step 1.2 of the plan for
 // subscription creators). bash `og` beside it stays the tool of ODDBOUT's own PC (the service install) and of the Linux hosts installed
 // with it; this file is bash og's user mode in Node, so a host needs no bash, flock, timeout(1) or systemd:
@@ -69,7 +70,7 @@ export class OgError extends Error {
   constructor(message, exit = 1) { super(message); this.exit = exit; }
 }
 /** @param {string} message @param {number} [exit] @returns {never} */
-const die = (message, exit = 1) => { throw new OgError(message, exit); };
+function die(message, exit = 1) { throw new OgError(message, exit); }
 
 /**
  * The signed-in account of a login file (bash og emails_of), from one known field only: codex = the id_token's `email`, grok = each
@@ -244,6 +245,7 @@ export function createSlots(total) {
   };
 }
 /** @type {Map<string, ReturnType<typeof createSlots>>} */
+/** @type {Map<string, ReturnType<typeof createSlots>>} */
 const POOLS = new Map();
 /** capture's children under way: a stop of the command line ends them too (they sit in process groups of their own). */
 const CHILDREN = new Set();
@@ -319,12 +321,12 @@ export function createOg({ root, env = process.env, memory = os.totalmem(), abou
   const UNIT_DIR = env.OG_UNIT_DIR || path.join(os.homedir(), '.config', 'systemd', 'user');
   const CONFIG = path.join(G, '.codex', 'config.toml');
   const poolKey = `${G}\0${SLOTS}`;
-  const pool = POOLS.get(poolKey) ?? POOLS.set(poolKey, createSlots(SLOTS)).get(poolKey);
+  const pool = POOLS.get(poolKey) ?? /** @type {ReturnType<typeof createSlots>} */ (POOLS.set(poolKey, createSlots(SLOTS)).get(poolKey));
   /** Runs under way: the command line's stop (Ctrl-C on a foreground worker) ends them first. */
   const active = new Map();
-  /** @param {string} text */
+  /** @param {string | Buffer} text */
   const toStdout = text => { process.stdout.write(text); };
-  /** @param {string} text */
+  /** @param {string | Buffer} text */
   const toStderr = text => { process.stderr.write(text); };
 
   const nodeExe = () => { const at = path.join(NODE_BIN, platform === 'win32' ? 'node.exe' : 'node'); return isFile(at) ? at : process.execPath; };
@@ -371,6 +373,7 @@ export function createOg({ root, env = process.env, memory = os.totalmem(), abou
    * @returns {{ command: string, args: string[], env: NodeJS.ProcessEnv }}
    */
   function commandFor(args, { jobDir = null, slice = true, note = toStderr } = {}) {
+    /** @type {NodeJS.ProcessEnv} */
     const runEnv = { ...svcEnv(), ...(jobDir ? tmpEnv(path.join(jobDir, '.tmp')) : {}) };
     let command, rest;
     if (args[0] === 'npm') {
@@ -670,6 +673,7 @@ export function createOg({ root, env = process.env, memory = os.totalmem(), abou
         try { if (olderThan((await stat(file)).mtimeMs, days)) rmSync(file, { force: true }); } catch {}
       }
     const output = path.join(KIT, 'output');
+    /** @type {string[]} */
     let names = [];
     try { names = readdirSync(output); } catch {}
     for (const name of names) {
@@ -693,6 +697,7 @@ export function createOg({ root, env = process.env, memory = os.totalmem(), abou
   function cmdCat(io, [job, rel = '']) {
     const dir = jobDir(job);
     if (!/^[A-Za-z0-9._/-]+$/.test(rel) || rel.includes('..')) die('usage: og cat <job> <path inside the job> > file');
+    /** @type {string} */
     let real;
     try { real = realpathSync(path.join(dir, rel)); } catch { die(`no ${rel} in ${job}`); }
     if (!real.startsWith(realpathSync(dir) + path.sep) || !isFile(real)) die(`${rel} is not a file inside ${job}`);
@@ -906,6 +911,7 @@ export function createOg({ root, env = process.env, memory = os.totalmem(), abou
    */
   function writeWorkerEnv(keep, lines) {
     const file = path.join(G, 'worker.env');
+    /** @type {string[]} */
     let kept = [];
     try { kept = readFileSync(file, 'utf8').split(/\r?\n/).filter(line => line && keep(line)); } catch {}
     writeFileSync(`${file}.new`, [...kept, ...lines].map(line => `${line}\n`).join(''), { mode: 0o600 });
@@ -918,7 +924,7 @@ export function createOg({ root, env = process.env, memory = os.totalmem(), abou
       case 'run':
         if (!codexFeaturesOff()) die('og harden first — the worker runs player text through codex');
         // A host whose files were updated before og harden ran again takes the project-docs line here: a restriction og owns.
-        hardenDocs({ out: io.err, err: io.err });
+        hardenDocs({ out: /** @type {Io['out']} */ (io.err), err: io.err });
         io.err(memoryNote());
         await workerMain({ once: rest.includes('--once'), root: G, og: api, python: spritePython(KIT), about });
         return 0;
@@ -945,6 +951,7 @@ export function createOg({ root, env = process.env, memory = os.totalmem(), abou
       }
       case 'log': {
         const n = Number(rest[0] ?? 40) || 40;
+        /** @type {string[]} */
         let lines = [];
         try { lines = readFileSync(path.join(G, 'worker.log'), 'utf8').replace(/\n$/, '').split('\n'); } catch {}
         io.out(lines.slice(-n).join('\n') + (lines.length ? '\n' : ''));
@@ -1030,7 +1037,7 @@ A community host's og on Windows, macOS or Linux (bash og is the official host's
   /** @param {(io: Io) => Promise<unknown> | unknown} command */
   async function said(command) {
     let text = '';
-    const io = { out: (/** @type {string} */ t) => { text += t; }, err: (/** @type {string} */ t) => { text += t; } };
+    const io = { out: (/** @type {string | Buffer} */ t) => { text += t; }, err: (/** @type {string} */ t) => { text += t; } };
     try { await command(io); } catch (/** @type {any} */ error) { if (!(error instanceof OgError)) throw error; text += `og: ${error.message}\n`; }
     return text;
   }
@@ -1070,7 +1077,7 @@ async function newerUnder(dir, sinceMs) {
   try { if ((await stat(dir)).mtimeMs > sinceMs) return true; } catch { return false; }
   for (const item of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
     const at = path.join(dir, item.name);
-    if (item.isDirectory() ? await newerUnder(at, sinceMs) : (await stat(at).catch(() => null))?.mtimeMs > sinceMs) return true;
+    if (item.isDirectory() ? await newerUnder(at, sinceMs) : ((await stat(at).catch(() => null))?.mtimeMs ?? -Infinity) > sinceMs) return true;
   }
   return false;
 }

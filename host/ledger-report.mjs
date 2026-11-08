@@ -1,3 +1,4 @@
+// @ts-check
 // P0 measurement ledger for hosted fighter generation (JSON lines, see README.md). `og run` writes a start line and,
 // from its exit path or signal trap, an end line, so a killed run still shows up as unfinished.
 // `--append <ledger> --job … --kind … [--key value …]` writes a line; `<ledger> [job]` prints the summary that sets the
@@ -10,8 +11,10 @@ const TEXT = new Set(['job', 'kind', 'phase', 'run', 'tool', 'provider', 'accoun
 const NUMBER = new Set(['ms', 'waitMs', 'exit', 'codexSessions', 'bytes']);
 const KINDS = new Set(['new', 'run', 'deliver', 'close', 'purge', 'health']);
 
+/** @param {Record<string, unknown>} fields @param {Date} [at] */
 export function entry(fields, at = new Date()) {
-  if (!fields.job || !KINDS.has(fields.kind)) throw new Error('ledger: job and a known kind are required');
+  if (!fields.job || !KINDS.has(/** @type {string} */ (fields.kind))) throw new Error('ledger: job and a known kind are required');
+  /** @type {Record<string, string | number>} */
   const line = { at: at.toISOString() };
   for (const [key, value] of Object.entries(fields)) {
     if (TEXT.has(key)) line[key] = String(value).slice(0, 80);
@@ -24,7 +27,7 @@ export function entry(fields, at = new Date()) {
   return line;
 }
 
-/** Bad lines (a crash mid-write, a full disk) are counted and skipped, not fatal. */
+/** Bad lines (a crash mid-write, a full disk) are counted and skipped, not fatal. @param {string} text @returns {{ entries: any[], skipped: number }} */
 export function parse(text) {
   const entries = []; let skipped = 0;
   for (const line of text.split('\n')) {
@@ -34,6 +37,7 @@ export function parse(text) {
   return { entries, skipped };
 }
 
+/** @param {number} exit @returns {'ok' | 'needsInput' | 'notStarted' | 'timeout' | 'interrupted' | 'failed'} */
 export function outcome(exit) {
   if (exit === 0) return 'ok';
   if (exit === 2 || exit === 75) return 'needsInput';   // sprite-gen asked a question; nothing generated
@@ -43,12 +47,21 @@ export function outcome(exit) {
   return 'failed';
 }
 
+/** @param {number[]} sorted @param {number} p */
 function percentile(sorted, p) {
   return sorted.length === 0 ? null : sorted[Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1)];
 }
 
+/** @param {any[]} entries @param {string} [onlyJob] */
 export function summarize(entries, onlyJob) {
-  const jobs = new Map(), durations = new Map(), started = new Map(), ended = new Set(), warnings = [];
+  /** @type {Map<string, any>} */
+  const jobs = new Map();
+  /** @type {Map<string, number[]>} */
+  const durations = new Map();
+  /** @type {Map<string, any>} */
+  const started = new Map();
+  const ended = new Set(), warnings = /** @type {string[]} */ ([]);
+  /** @param {string} id @returns {any} */
   const jobOf = id => jobs.get(id) ?? jobs.set(id, { job: id, first: null, last: null, state: 'open', codexSessions: 0, codexSessionsExact: null,
     activeMs: 0, waitMs: 0, unfinished: 0, personalRuns: 0, providers: {} }).get(id);
   for (const e of entries) {
@@ -70,7 +83,7 @@ export function summarize(entries, onlyJob) {
     if (e.account === 'personal') job.personalRuns += 1;   // the operator's own subscription, allowed explicitly
     job.activeMs += e.ms ?? 0; job.waitMs += e.waitMs ?? 0; job.codexSessions += e.codexSessions ?? 0;
     if (e.provider !== 'codex' && (e.codexSessions ?? 0) > 0) warnings.push(`${e.job}: '${e.tool}' (${e.provider}) started ${e.codexSessions} codex session(s)`);
-    if (e.provider !== 'local' && !['needsInput', 'notStarted'].includes(outcome(e.exit))) (durations.get(e.provider) ?? durations.set(e.provider, []).get(e.provider)).push(e.ms ?? 0);
+    if (e.provider !== 'local' && !['needsInput', 'notStarted'].includes(outcome(e.exit))) (durations.get(e.provider) ?? /** @type {number[]} */ (durations.set(e.provider, []).get(e.provider))).push(e.ms ?? 0);
   }
   for (const [run, e] of started) if (!ended.has(run) && jobs.has(e.job)) jobs.get(e.job).unfinished += 1;
   const perProvider = Object.fromEntries([...durations].map(([p, list]) => {
@@ -80,9 +93,12 @@ export function summarize(entries, onlyJob) {
   return { jobs: [...jobs.values()], providers: perProvider, warnings };
 }
 
+/** @param {number | null} ms */
 function fmt(ms) { return ms === null ? '—' : ms >= 3600000 ? `${(ms / 3600000).toFixed(1)}h` : ms >= 60000 ? `${(ms / 60000).toFixed(1)}m` : `${(ms / 1000).toFixed(1)}s`; }
+/** @type {Record<string, string>} */
 const STATE = { open: '진행 중', delivered: '전달함', closed: '등록 확인', purged: '삭제함' };
 
+/** @param {ReturnType<typeof summarize>} summary @param {number} [skipped] */
 export function render(summary, skipped = 0) {
   const lines = [];
   for (const j of summary.jobs) {
@@ -100,7 +116,8 @@ export function render(summary, skipped = 0) {
   return lines.join('\n') || '기록 없음';
 }
 
-/** One line per finished (or unfinished) run, oldest first: what failed, how, and how long it took. */
+/** One line per finished (or unfinished) run, oldest first: what failed, how, and how long it took.
+ * @param {any[]} entries @param {string} [onlyJob] */
 export function renderRuns(entries, onlyJob) {
   const ends = new Map(entries.filter(e => e.kind === 'run' && e.phase === 'end').map(e => [e.run, e]));
   const lines = entries.filter(e => e.kind === 'run' && e.phase === 'start' && (!onlyJob || e.job === onlyJob)).map(s => {
@@ -111,8 +128,10 @@ export function renderRuns(entries, onlyJob) {
   return lines.join('\n') || '기록 없음';
 }
 
+/** @param {string[]} argv */
 function main(argv) {
   if (argv[0] === '--append') {
+    /** @type {Record<string, string>} */
     const fields = {};
     for (let i = 2; i < argv.length; i += 2) {
       if (!argv[i].startsWith('--') || argv[i + 1] === undefined) throw new Error(`ledger: bad argument ${argv[i]}`);
@@ -132,5 +151,5 @@ function main(argv) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  try { process.exitCode = main(process.argv.slice(2)); } catch (error) { console.error(error.message); process.exitCode = 1; }
+  try { process.exitCode = main(process.argv.slice(2)); } catch (/** @type {any} */ error) { console.error(error.message); process.exitCode = 1; }
 }
