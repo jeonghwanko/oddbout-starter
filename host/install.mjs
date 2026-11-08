@@ -13,7 +13,9 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 /** What a host's install runs; tests and the operator's installer stay in the checkout. */
 // style-anchor-front.webp (2026-10-31): the house front the looks take their colouring from (generation-stages.mjs STYLE_ANCHOR_FILE).
 // codex-usage.mjs (2026-10-31): the subscription's meter the worker sends with its heartbeat.
-export const HOST_FILES = Object.freeze(['og', 'generation-worker.mjs', 'generation-stages.mjs', 'codex-usage.mjs', 'sprite-outcome.mjs', 'ledger-report.mjs', 'motions.py',
+// generation-prompts.mjs and judge-archive.mjs (2026-11-08): split out of generation-stages.mjs. Installed one kit ref before the stages
+// import them: bash og's self-update takes the file list of the og already installed, which must name them first.
+export const HOST_FILES = Object.freeze(['og', 'generation-worker.mjs', 'generation-stages.mjs', 'generation-prompts.mjs', 'judge-archive.mjs', 'codex-usage.mjs', 'sprite-outcome.mjs', 'ledger-report.mjs', 'motions.py',
   'style-anchor-front.webp']);
 const SYSTEM_DIRS = new Set(['/usr/local/bin', '/usr/bin', '/bin']);
 
