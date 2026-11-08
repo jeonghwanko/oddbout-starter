@@ -607,21 +607,13 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
   const post = (path, body, headers = {}) => invoke(path, 'POST', JSON.stringify(body), { 'content-type': 'application/json', ...headers });
   /**
    * What a tick sees of the job's picture events (Grok 점검 2026-11-03: the kinds api/generations.mjs shows — drafts, the side view, the
-   * faces): `seen`, its newest of these kinds, and `picture`, its newest that carries a picture (0: none). Undefined when not readable.
-   * @param {string} jobId @returns {Promise<{ seen: number, picture: number } | undefined>}
+   * faces): `seen`, its newest of these kinds, and `picture`, its newest that carries a picture (0: none).
+   * @param {JobEvent[]} events @returns {{ seen: number, picture: number }}
    */
-  const newestPicture = async jobId => {
-    const { data, error } = await db
-      .from('af_generation_events')
-      .select('id,at,kind,data')
-      .eq('job_id', jobId)
-      .in('kind', PICTURE_EVENTS)
-      .order('at', { ascending: false })
-      .limit(TICK_EVENTS_READ);
-    if (error) return undefined;
-    const events = /** @type {JobEvent[]} */ (data ?? []);
-    return { seen: Math.max(0, ...events.map(event => event.id)), picture: Math.max(0, ...events.filter(carriesPicture).map(event => event.id)) };
-  };
+  const newestPicture = events => ({
+    seen: Math.max(0, ...events.map(event => event.id)),
+    picture: Math.max(0, ...events.filter(carriesPicture).map(event => event.id)),
+  });
   /**
    * The pictures added or changed since `since` (pictureChanges), from the picture events after it and the drafts list sent before them.
    * Undefined when not readable.
@@ -912,20 +904,20 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
       let baseline = null;
       let picture = 0;
       while (Date.now() + pollMs <= deadline && !signal.aborted) {
-        // The job and its submission's state in one query (MCP 점검 2026-11-03: two per tick).
-        const { data: row, error } = await db
-          .from('af_generation_jobs')
-          .select('status,progress,submission:af_submissions!submission_id(status)')
-          .eq('id', jobId)
-          .eq('owner_id', /** @type {Identity} */ (identity).owner)
-          .maybeSingle();
-        if (error || !row) break;
-        const submission = row.status === 'submitted' ? (row.submission?.status ?? null) : null;
-        if (hostedSettled(row.status, submission)) break;
+        // The job, its submission's state and its newest picture events in one call (2026-11-08: two queries a tick, three before 2026-11-03).
         // While the motions are made, a picture the worker sends (a draft, the side view, his faces) is an event of the job; the first tick
         // also notes the newest there is, whatever the state (a request left to ODDBOUT goes from its looks to the motions in one wait).
-        const events = row.status === 'motions' || first === null ? await newestPicture(jobId) : null;
-        if (events === undefined) break;
+        const { data: row, error } = await db.rpc('af_hosted_watch_tick', {
+          p_owner: /** @type {Identity} */ (identity).owner,
+          p_job: jobId,
+          p_kinds: PICTURE_EVENTS,
+          p_limit: TICK_EVENTS_READ,
+          p_events: first === null,
+        });
+        if (error || !row) break;
+        const submission = row.status === 'submitted' ? (row.submission ?? null) : null;
+        if (hostedSettled(row.status, submission)) break;
+        const events = Array.isArray(row.events) ? newestPicture(/** @type {JobEvent[]} */ (row.events)) : null;
         picture = Math.max(picture, events?.picture ?? 0);
         /** @type {WatchTick} */
         const tick = { status: row.status, progress: row.progress, submission, picture: row.status === 'motions' ? picture : null };
