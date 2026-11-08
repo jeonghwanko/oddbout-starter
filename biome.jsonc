@@ -9,6 +9,8 @@
     // vendor/: the pinned engine; contracts/ and server/: the game's byte copies; the dated review copies of the plugin sites.
     "includes": ["**", "!vendor", "!website/**/review-*", "!contracts", "!server"]
   },
+  // Prettier formats the JavaScript (npm run format, .prettierrc.json): Biome's formatter moved the parentheses of JSDoc casts, so a
+  // cast of one value came to cast the expression around it (2026-11-08).
   "formatter": {
     "enabled": false
   },
