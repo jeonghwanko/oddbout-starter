@@ -127,6 +127,8 @@ jobs:
           ffmpeg -version >/dev/null
           ffprobe -version >/dev/null
       - run: npm ci
+      # Biome's lint (biome.json): errors fail, warnings are shown. Its formatter is off: no file has been formatted by it yet.
+      - run: npm run lint
       - run: npm run sprite:setup
       - run: npm test
       # The Edge deploy does not type-check, and Deno's TypeScript can infer less than tsc (2026-10-30): check every Edge
