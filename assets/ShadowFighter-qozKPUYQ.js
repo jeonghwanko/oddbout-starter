@@ -1,0 +1,1 @@
+function e(e){return`${e}-shadow`}function t(e){return e.length>7&&e.endsWith(`-shadow`)}function n(e){return t(e)?e.slice(0,-7):e}export{t as n,e as r,n as t};
