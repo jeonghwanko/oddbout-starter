@@ -20,6 +20,7 @@ native `get_profile`을 확인하고 의도한 계정이면 재사용한다. 앱
 이 확인은 해당 앱의 공개 배포를 뜻하지 않으며 개인 앱 링크나 ID를 공개 설치 주소로 안내하지 않는다.
 별도로 검토한 creator-kit의 소스/runtime 설치는 앱 연결과 구분한다. 버전별 확인 근거는 [통합 안내](ODDBOUT-PLUGIN.md)와 [배포 안내](https://github.com/jeonghwanko/oddbout-starter/blob/main/docs/PLUGIN-DISTRIBUTION.md)를 따른다.
 스킬이 실제로 빠진 것을 확인한 경우에만, 유지보수자가 지원되는 Plugin Creator 기능으로 같은 앱에 추가한다.
+스킬을 넣거나 갱신할 때는 `SKILL.md`와 `references/`의 모든 파일을 함께 넣는다. `SKILL.md`는 단계마다 그 파일들을 읽게 한다.
 기존 앱 ID, OAuth 설정과 앱 정보를 유지하며 새 wrapper나 앱 ID로 바꾸지 않는다. 지원되지 않으면 한계를 보고한다.
 
 각 단계는 따로 확인한다: 서버 배포, ZIP 공개, 앱 연결·플러그인 갱신, Dots 대화에서 선택, 도구 표시, 계정 응답.

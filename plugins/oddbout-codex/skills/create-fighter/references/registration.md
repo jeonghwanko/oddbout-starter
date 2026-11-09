@@ -17,12 +17,6 @@ only a motion's character or remove frames. Required file, contract and upload l
 
 Quality diagnosis in `docs/GAIT-REVIEW.md` is optional later work. Preserve selected files and actual previews;
 no same-foot stance, visual verdict or numerical pass is required for packaging or registration.
-For GPT walk/run, use the kit CLI and the pinned sprite-gen-agent motion engine. Generate diagnostic key poses first;
-review both physical legs, their hip attachments, contacts and body continuity before binding that image.
-Full sequences require the actual phase guide and reviewed key-pose reference, not only a layout guide.
-Use painted extraction with `ground_frames: false` to retain source flight height. Generation OK is not
-motion approval. Do not repair failed gait by pasting a frozen torso over separate legs, and stop after
-two consecutive failures of the same anatomy/contact requirement. Preserve unknown attempts without retrying.
 Use upstream `game-pack`, then `fighter:pack` with the default `reviewPolicy: files-only`.
 Only file/contract checks gate packaging and registration. Gait scores and visual quality verdicts are deferred;
 do not require a passing report, an explicit visual override, or regeneration. Preserve existing diagnostics unchanged.

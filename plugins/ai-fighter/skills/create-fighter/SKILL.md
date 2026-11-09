@@ -11,6 +11,8 @@ install AI Fighter Creator as a second plugin or choose between two product name
 For registered-fighter lookup or status, first check that the connected ODDBOUT tools are available here; no workspace setup is needed.
 For creation, read [workspace routing](references/workspace.md). Use the same project tools through
 `creation:tool` in the user's PC or the Dots workspace. Do not move work to a PC when the user chose Dots.
+The other files in `references/` hold step-by-step procedures; each section below says when to read one. If a named
+reference cannot be read here, stop before that step and report it rather than proceeding from the summary.
 For Dots initialization/resume, also follow the kit's `docs/DOTS-START.md`: offline doctor, recovery inventory,
 then explicit bootstrap if this is a new workspace. Keep unsupported output contracts blocked; never read
 protected Codex sessions or start a second generation because the original exec is still waiting.
@@ -145,11 +147,18 @@ For detailed schema examples and recovery semantics read `docs/LOCAL-PLUGIN.md` 
 For commands not supported by the initial managed runner, use the documented kit CLI directly and
 record their actual outputs as versions/evidence; do not claim they received managed-job guarantees.
 
+For GPT walk/run, use the kit CLI and the pinned sprite-gen-agent motion engine. Generate diagnostic key poses first;
+review both physical legs, their hip attachments, contacts and body continuity before binding that image.
+Full sequences require the actual phase guide and reviewed key-pose reference, not only a layout guide.
+Use painted extraction with `ground_frames: false` to retain source flight height. Generation OK is not
+motion approval. Do not repair failed gait by pasting a frozen torso over separate legs, and stop after
+two consecutive failures of the same anatomy/contact requirement. Preserve unknown attempts without retrying.
+
 ## Final files and registration
 
 Only file/contract checks gate packaging and registration; gait scores and visual verdicts never do. Build with upstream
 `game-pack`, then `fighter:pack` (default `reviewPolicy: files-only`); never hand-assemble sheets or invent measurements.
 Register only through the connected ODDBOUT account, and report registration only after the server confirms it. A
-registered fighter starts in production (제작 중); call `enter_fighter` only on the user's request. Read
-[references/registration.md](references/registration.md) before packaging, GPT walk/run work, packaging recovery or
-any registration call.
+registered fighter starts in production (제작 중); call `enter_fighter` only on the user's request. For a
+packaging failure, use cloud `prepare_fighter_packaging` and run the workspace calls it returns. Read
+[references/registration.md](references/registration.md) before packaging, packaging recovery or any registration call.
