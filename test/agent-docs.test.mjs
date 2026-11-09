@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -7,7 +8,8 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 // What coding agents load on their own (Codex and Grok: AGENTS.md; Claude Code: CLAUDE.md), the skill the plugin
-// hands them, and the pages that route them to the rest of docs/.
+// hands them, and the pages that route them to the rest of docs/. The checkout copies are the same workflow
+// with the plugin root fixed, and they do not name the canonical skill file again.
 const docs = [
   'AGENTS.md',
   'CLAUDE.md',
@@ -15,6 +17,8 @@ const docs = [
   'plugins/ai-fighter/skills/create-fighter/references/workspace.md',
   'docs/README.md',
   'docs/START-HERE.md',
+  '.grok/skills/create-fighter/SKILL.md',
+  '.cursor/skills/create-fighter/SKILL.md',
 ];
 // The game repository's deploy scripts, which these docs name.
 const gameScripts = ['fighter:edge', 'fighter:mcp'];
@@ -37,6 +41,16 @@ const anchors = text =>
 
 test('Claude Code imports the AGENTS.md that Codex and Grok load', async () => {
   assert.match(await readFile(path.join(root, 'CLAUDE.md'), 'utf8'), /^@AGENTS\.md$/m);
+});
+
+test('Grok and Cursor checkout skills repeat the canonical workflow', () => {
+  execFileSync(process.execPath, ['scripts/checkout-skill.mjs', '--check'], { cwd: root, stdio: 'pipe' });
+  // A same-named installed plugin stays beside this skill and both lose the bare name. Disabling that
+  // plugin in the project config leaves one create-fighter. The setting must not touch MCP or permissions.
+  return readFile(path.join(root, '.grok/config.toml'), 'utf8').then(config => {
+    assert.match(config, /^disabled = \["oddbout"\]$/m);
+    assert.doesNotMatch(config, /mcp|permission|allow/i);
+  });
 });
 
 test('AGENTS.md fits within what Codex reads', async () => {
