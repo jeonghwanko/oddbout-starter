@@ -1,0 +1,5 @@
+# An installed oddbout plugin can be older than this checkout. With the same skill name, Grok
+# qualifies both and the bare slash name belongs to neither. The project skill under .grok/skills
+# repeats plugins/ai-fighter/skills/create-fighter/SKILL.md, and its plugin root is plugins/ai-fighter.
+[plugins]
+disabled = ["oddbout"]
