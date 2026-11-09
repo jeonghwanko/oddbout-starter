@@ -1,6 +1,6 @@
 ---
 name: create-fighter
-description: Create, revise, resume, validate or register an ODDBOUT (AI Fighter) fighter, either made by ODDBOUT's hosted worker or in the user's PC or supported Dots workspace with their own generation account, and check the ODDBOUT connection or the user's registered fighters. Use for requests like "make me a fighter", "ODDBOUT이 만들어 줘", "선수/캐릭터 만들어줘", "이어서 해줘", "등록해줘" or "내 선수 보여줘". Process design, evaluation and forwarded examples do not authorize generation.
+description: Create, revise, resume, validate or register an ODDBOUT (AI Fighter) fighter, either made by ODDBOUT's hosted worker or in the user's PC or supported Dots workspace with their own generation account, and check the ODDBOUT connection or the user's registered fighters. Use for requests like "make me a fighter", "ODDBOUT이 만들어 줘", "선수/캐릭터 만들어줘", "선수 이어서 만들어줘", "선수 등록해줘" or "내 선수 보여줘". Process design, evaluation and forwarded examples do not authorize generation.
 ---
 
 # ODDBOUT
@@ -159,6 +159,8 @@ For detailed schema examples and recovery semantics read `docs/LOCAL-PLUGIN.md` 
 For commands not supported by the initial managed runner, use the documented kit CLI directly and
 record their actual outputs as versions/evidence; do not claim they received managed-job guarantees.
 
+Before locomotion generation or gait/contact work, read `docs/MOTION-RULES.md` in the returned kit root; a kit
+without that file carries the same rules in its `AGENTS.md`, so read them there and do not update the kit for it.
 For GPT walk/run, use the kit CLI and the pinned sprite-gen-agent motion engine. Generate diagnostic key poses first;
 review both physical legs, their hip attachments, contacts and body continuity before binding that image.
 Full sequences require the actual phase guide and reviewed key-pose reference, not only a layout guide.

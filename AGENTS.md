@@ -163,7 +163,7 @@ and the live AI Fighter spec before packaging.
 ### Motion quality and locomotion
 
 Read `docs/MOTION-RULES.md` before locomotion generation, any GPT walk/run route, gait or contact work, and before
-deciding what blocks packaging. The essentials:
+deciding what blocks packaging (an older kit has these rules in its own `AGENTS.md`). The essentials:
 
 - Packaging and registration use required file/contract checks only (all 11 motions, walk 12–32 and run 10–16
   distinct frames, timing, files, dimensions, hashes, crops, origins, contacts). Gait scores and visual verdicts are
