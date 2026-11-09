@@ -46,7 +46,7 @@ starter에는 이미 [API handler](../api/handler.mjs), [호스팅 MCP](../mcp/c
 중요한 기존 경계:
 
 - starter의 기존 사이트 빌드와 운영 전투 엔진 배포는 별도 게임 저장소에 의존한다. 이 저장소의 운영 duel adapter를 완성된 엔진으로 간주하지 않는다.
-- 기존 ai-fighter Edge 배포를 이 checkout에서 직접 실행하지 않는다. [AGENTS](../AGENTS.md)와 [CREATOR-HOSTING](CREATOR-HOSTING.md)의 기존 배포 경로를 유지한다.
+- 기존 ai-fighter Edge 배포를 이 checkout에서 직접 실행하지 않는다. [REPOSITORY](REPOSITORY.md#deploys)와 [CREATOR-HOSTING](CREATOR-HOSTING.md)의 기존 배포 경로를 유지한다.
 - 해커톤용 웹·API·MCP 실행 진입점은 공개 소스만으로 실행되도록 별도로 조립한다. 기존 비공개 게임 사이트 빌더를 필수 의존성으로 두지 않는다.
 - Twitch Cup에는 현재 프로젝트 라이선스가 없다. 재사용 코드·에셋에 대한 공개 라이선스 범위를 소유자가 결정하고 NOTICE를 검토하는 것이 첫 단계의 완료 조건이다. starter의 MIT가 다른 저장소의 코드·에셋에 자동 적용되지 않는다.
 - 두 저장소의 소스 SHA와 실행 계약 버전을 제출 manifest에 고정한다. 공개 저장소 두 곳의 설치 순서·의존성을 하나의 제출 README에서 설명한다.
@@ -342,5 +342,5 @@ starter에서는 관련 테스트부터 실행하고 필요한 범위로 확장�
 - [MCP URL elicitation과 클라이언트 capability](https://modelcontextprotocol.io/specification/2026-07-28/client/elicitation)
 - [Twitch 방송·인코더·RTMP](https://dev.twitch.tv/docs/video-broadcast/)
 - [Supabase 변경 이력](https://supabase.com/changelog), [RLS](https://supabase.com/docs/guides/database/postgres/row-level-security)
-- [starter 개발·배포 경계](../AGENTS.md), [서비스 구성](CREATOR-HOSTING.md), [제작 검토](CREATION-UX.md)
+- [starter 개발·배포 경계](REPOSITORY.md), [서비스 구성](CREATOR-HOSTING.md), [제작 검토](CREATION-UX.md)
 - [Twitch Cup README](https://github.com/jeonghwanko/oddbout-twitch-cup/blob/main/README.md), [구조](https://github.com/jeonghwanko/oddbout-twitch-cup/blob/main/docs/architecture.md), [테스트](https://github.com/jeonghwanko/oddbout-twitch-cup/blob/main/docs/testing.md)

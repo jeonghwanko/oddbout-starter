@@ -238,7 +238,7 @@ blocked until Twitch channel verification exists. [Try the Sandbox demo](https:/
 
 If setup, generation, sign-in, registration, or gameplay fails, [open an issue](https://github.com/jeonghwanko/oddbout-starter/issues) with the failing step, expected and actual behavior, error message, and tool version or commit. Exclude credentials and private files. For generation or upload timeouts, check existing requests and outputs before retrying.
 
-Bug reports, clearer setup instructions, and reproducible examples are welcome. Read [AGENTS.md](AGENTS.md) before using an assistant to change this repository.
+Bug reports, clearer setup instructions, and reproducible examples are welcome. Read [AGENTS.md](AGENTS.md) and [docs/REPOSITORY.md](docs/REPOSITORY.md) before using an assistant to change this repository.
 Pull requests target `main` and merge only after the `test` workflow passes; `npm test` runs the same suite locally, including the
 strict type check of `api/`, `worker/`, `mcp/` and `scripts/`.
 

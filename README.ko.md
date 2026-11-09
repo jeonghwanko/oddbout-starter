@@ -227,7 +227,7 @@ YouTube·Twitch 링크)이 나갑니다. 방송 일정은 직접 잡고 시작�
 
 설치·생성·로그인·등록·게임 이용 중 문제가 생기면 실패한 단계, 기대한 결과와 실제 결과, 오류 메시지, 도구 버전이나 커밋을 [이슈](https://github.com/jeonghwanko/oddbout-starter/issues)에 남겨주세요. 인증 정보와 비공개 파일은 제외합니다. 생성이나 업로드가 시간 초과된 경우에는 기존 요청과 결과물부터 확인한 뒤 재시도합니다.
 
-버그 제보, 설치 안내 개선, 재현 가능한 예제를 환영합니다. AI와 함께 저장소를 수정할 때는 [AGENTS.md](AGENTS.md)를 먼저 읽어주세요.
+버그 제보, 설치 안내 개선, 재현 가능한 예제를 환영합니다. AI와 함께 저장소를 수정할 때는 [AGENTS.md](AGENTS.md)와 [docs/REPOSITORY.md](docs/REPOSITORY.md)를 먼저 읽어주세요.
 PR은 `main`으로 보내며, `test` 워크플로를 통과해야 머지됩니다. `npm test`로 같은 테스트(`api/`·`worker/`·`mcp/`·`scripts/` 엄격 타입 검사 포함)를 로컬에서 돌릴 수 있습니다.
 
 | 문서 | 내용 |

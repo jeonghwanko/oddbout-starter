@@ -259,7 +259,8 @@ Read [docs/REPOSITORY.md](docs/REPOSITORY.md) first: repository map, commands, b
 deploys. The essentials, which apply even before you open it:
 
 - Stage files by name; never `git add -A`, `git add .`, `git add -u` or `git commit -a` (they can stage
-  `vendor/sprite-gen` as a rollback). Never commit to `codex/*` branches by hand; branch from `main` in a `git worktree`.
+  `vendor/sprite-gen` as a rollback). Branch from `main`; never commit to `codex/*` branches by hand. In a checkout other sessions share, work in a
+  `git worktree` and never switch its branch.
 - Run only the relevant suites (`node --test test/<name>.test.mjs`, `npm run test:fast`, `npm run typecheck`) and
   finish local checks before pushing; CI runs once per ready pull request.
 - Never put a CI skip marker in a commit message, or deploy hooks and tokens in any file, commit or pull request.
