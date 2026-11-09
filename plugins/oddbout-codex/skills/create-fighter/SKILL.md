@@ -32,32 +32,11 @@ do not require a PC or leave the user's chosen VM scope. Packaging still uses th
 
 ## Connection-only checks and missing tools
 
-A connection/status request does not authorize starting or resuming creation. Inspect this conversation's actual
-ODDBOUT tools, call native `get_profile` when available, and use `get_my_fighters` view `readiness` with `purpose: connection`
-(the cloud tool named `check_creation_readiness` until 2026-11-06; that name still answers).
-Keep server discovery, account plugin import/update, installation and selection in this conversation, tool exposure,
-and the returned account identity separate. A released ZIP, local Codex connection or successful public MCP tool listing
-does not establish any Dots-native account connection.
-
-In ChatGPT/Dots, reuse the existing available ODDBOUT cloud App with its account tools and creation skill.
-Read the skill and support document from that same App through the host's skill tools; do not substitute an old ZIP package's skill.
-An imported plugin's root `mcp.json`, even with an HTTPS server, may be desktop-only. The creator-kit ZIP is optional
-reviewed source/runtime delivery for an explicitly chosen workspace, not the cloud App connection or a second required plugin.
-Only when no existing App is available should supported first-time cloud MCP OAuth provisioning be considered.
-Only an actually missing skill calls for a maintainer to add it through Plugin Creator to the same app-backed plugin,
-preserving its binding and presentation. Do not copy the kit's root MCP declaration into that app-backed plugin.
-After an explicitly requested old-plugin removal, verify the installed list, all host skill-list pages, and native account
-lookup in the same conversation. Uninstall and permanent deletion of an owned plugin are different actions; do not turn
-a `not_installed` response into permission for permanent deletion. Preserve existing work and use the verified App package.
-
-If `get_profile` is absent, report tool exposure as unverified; do not start local login, device pairing or generation
-to replace the missing cloud connection. Resolve the current plugin through the host's supported discovery and settings.
-Use only a returned current plugin URL/ID, never a historical private link or an invented replacement. A missing ID or
-empty search does not prove deletion, replacement or a server outage. Prefer refreshing/selecting an existing verified
-plugin. Preserve OAuth grants, workspaces, pending requests and jobs. Remove an old connection only within an explicit
-user request after the replacement succeeds in this same conversation and its account matches the intended account.
-If a native call returns an authentication error, follow that error's supported connection action; missing tools alone
-are not evidence that the token expired.
+A connection/status request does not authorize starting or resuming creation. Call native `get_profile` when
+available and `get_my_fighters` view `readiness` with `purpose: connection`. If `get_profile` is absent, report tool
+exposure as unverified; never start local login, device pairing or generation to replace the cloud connection.
+Before any plugin discovery, replacement or removal, or when a tool is missing or fails, read
+[references/connection.md](references/connection.md).
 
 ## Hosted route
 
@@ -119,34 +98,11 @@ Another person's host (`browse_oddbout` view `hosts`) takes none of their tokens
 
 ## Front first
 
-The appearance group starts with the fighter's **front** (the profile set, `get_fighter_spec` → `profileSet`): one full-body front
-view, the user's approval of it, then the side view and the motions drawn from it. The front is his profile picture on the site and
-his face in the arena, and the home lists him only once his profile set is approved.
-
-1. Draw two front candidates with the user's account. Every generation of this fighter (fronts, the expression sheet, the side view,
-   later edits) carries the spec's `profileSet.style.colouring` text and attaches `profileSet.style.anchor.url` (the house style anchor)
-   as the LAST reference image: our plain cel colouring, never the user's references' rendering. His pictures give the character, not the style.
-2. Show both and take the user's pick or change.
-3. Draw his expression sheet from the approved front: one generation with `profileSet.expressions.prompt`, the colouring text, the
-   approved front as the FIRST reference and the style anchor LAST. It holds his six arena faces; the sixth is the face the KO card shows
-   when he loses. Without it the arena shows one face for every mood, his defeat included. A sheet that is not transparent goes through
-   `npm run sprite -- cutout <sheet> --out <sheet>-cutout.png` first; never generate it again only for a delivery or format problem.
-4. Build the set with `npm run fighter:profile-set -- --front <pick> --expressions <sheet> --out <new folder>`. It frames the front,
-   measures the face square, checks both pictures as the server will and writes `profile-set.json`, `front.webp`, `expressions.webp`,
-   `face-preview.png` and `ko-preview.png`. Never type sizes, hashes or the face square. Show the face as a round crop and the sheet with
-   its KO face, in the appearance group's review. Only when the user sees the measured crop miss the face (a big round head whose face
-   sits low): build again into a new folder with `--face <x>,<y>,<side>`, a square in the framed front's pixels that holds the face (its side
-   10–30 % of the figure's height), show that crop, and use it only once the user approves it; the same checks run on it.
-5. Draw the side view (facing right) from the approved front as the first reference, same colouring; check it is the same character.
-   Continue the appearance group (concept/idle) from that side view; the motions follow it.
-6. After registration, upload the set with `prepare_fighter_registration` kind `profile_set` (fighter id, its `profile-set.json`),
-   `upload_fighter_asset` kind `profile_set` for `front` and then `expressions`, and `submit_fighter_registration` kind `profile_set`, and
-   follow `get_my_fighters` view `profile_set`. The set is not part of the package.
-
-A registered fighter without a sheet (made before 2026-11-03) can get one when the user asks for it: that request is the new generation's
-authorization. Draw the sheet from his approved front, build a new set from the same front and the sheet, and upload it. His package,
-entry and record do not change; his current set stays until an operator approves the new one. A sheet that fails the server's check is
-left out (`get_my_fighters` view `profile_set` → `sheetErrors`) and the set goes on with his face square only.
+The appearance group starts with the fighter's **front** (the profile set, `get_fighter_spec` → `profileSet`): two
+full-body front candidates, the user's pick, his expression sheet, the built set (`npm run fighter:profile-set`), then
+the side view and the motions drawn from it. Every generation of this fighter carries `profileSet.style.colouring` and
+attaches `profileSet.style.anchor.url` as the LAST reference. Read [references/profile-set.md](references/profile-set.md)
+before the first front generation, before building or uploading the set, and when a registered fighter needs a sheet.
 
 ## Work in review groups
 
@@ -203,51 +159,9 @@ record their actual outputs as versions/evidence; do not claim they received man
 
 ## Final files and registration
 
-Use native cloud `prepare_fighter_packaging` for packaging failures. It returns exact invocations of the
-workspace MCP tools `inspect_fighter_packaging` and `pack_fighter_package`; execute them through the host's
-ordinary terminal tool using the returned JSON arguments, rather than asking the user to relay errors or
-hand-patch the kit. Cloud preparation does not read VM files and is not a successful package. A new reviewed
-kit can run separately against the existing workspace; keep the active runtime and selected originals.
-When the user permits resolution optimization and the live contract lists `texture-resolution-1`, use
-`fitSheets: true` with kit 0.6.10+: it fits sheet dimensions and total/per-asset byte/pixel budgets using actual
-measurements, keeps frames/timing and preserves game size with `pixelScale`. It uniformly reduces density across
-normalized motions when totals need it, preserving the chosen encoding and originals. Read `report.budget`;
-the optional `outputScale` caps post-normalization density. A bounded worker may take up to ten minutes: resume
-the same host execution after its initial 30-second wait. Never silently shrink
-only a motion's character or remove frames. Required file, contract and upload limits still apply.
-
-Quality diagnosis in `docs/GAIT-REVIEW.md` is optional later work. Preserve selected files and actual previews;
-no same-foot stance, visual verdict or numerical pass is required for packaging or registration.
-For GPT walk/run, use the kit CLI and the pinned sprite-gen-agent motion engine. Generate diagnostic key poses first;
-review both physical legs, their hip attachments, contacts and body continuity before binding that image.
-Full sequences require the actual phase guide and reviewed key-pose reference, not only a layout guide.
-Use painted extraction with `ground_frames: false` to retain source flight height. Generation OK is not
-motion approval. Do not repair failed gait by pasting a frozen torso over separate legs, and stop after
-two consecutive failures of the same anatomy/contact requirement. Preserve unknown attempts without retrying.
-Use upstream `game-pack`, then `fighter:pack` with the default `reviewPolicy: files-only`.
-Only file/contract checks gate packaging and registration. Gait scores and visual quality verdicts are deferred;
-do not require a passing report, an explicit visual override, or regeneration. Preserve existing diagnostics unchanged.
-Legacy `required`/`engine-loop` plans also use file checks only; review-group user choices still apply. Never hand-assemble sheets
-or invent measurements. A format fixture is never a generated character.
-
-Run the existing manifest and full-file validators. Record `package` with the manifest and every asset,
-and preserve the user's final preview feedback. `package-review` is an optional quality record, not a gate.
-The session requires current validated package bytes, not a quality verdict or generation authorization.
-The final `get_creation_session` must have no blockers before submission.
-
-Use the connected ODDBOUT account for registration from either workspace. Verify `get_profile` matches
-the user's intended account and call the cloud `get_my_fighters` view `readiness`; a workspace readiness result
-does not verify that login. Never copy a CLI session into the connector or request local login for this route.
-Read the cloud tools' current schemas, then call `prepare_fighter_registration` with the actual approved
-manifest, `upload_fighter_asset` for each pending file, `submit_fighter_registration`, and
-`get_my_fighters` view `submission`. Pass actual host attachments/files, not rendered previews, made-up URLs, or
-paths on another machine. Materialize supported Library files with their original bytes and verify hashes.
-Preserve the submission ID and idempotency key across identical retries; inspect status before retrying
-an unknown response. Changed package bytes need a new key. A metadata-only final edit followed by an
-explicit registration request requires fresh validation, not repeated approval of unchanged animations.
-Then upload the approved front and expression sheet as his profile set ([Front first](#front-first) step 6).
-Report registration only after the response confirms it. A registered fighter starts in production (제작 중): it stays out of
-other people's cups, ranked duels and lists. Tell the user to check each required motion on the fighter page's All motions and enter it there; call
-`enter_fighter` only on the user's request after showing every required motion and hearing each confirmed.
-If the connector or attachment route is missing,
-preserve the completed package and report that blocker; do not silently switch registration accounts.
+Only file/contract checks gate packaging and registration; gait scores and visual verdicts never do. Build with upstream
+`game-pack`, then `fighter:pack` (default `reviewPolicy: files-only`); never hand-assemble sheets or invent measurements.
+Register only through the connected ODDBOUT account, and report registration only after the server confirms it. A
+registered fighter starts in production (제작 중); call `enter_fighter` only on the user's request. Read
+[references/registration.md](references/registration.md) before packaging, GPT walk/run work, packaging recovery or
+any registration call.

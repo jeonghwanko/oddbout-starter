@@ -14,6 +14,9 @@ const docs = [
   'docs/REPOSITORY.md',
   'plugins/ai-fighter/skills/create-fighter/SKILL.md',
   'plugins/ai-fighter/skills/create-fighter/references/workspace.md',
+  'plugins/ai-fighter/skills/create-fighter/references/connection.md',
+  'plugins/ai-fighter/skills/create-fighter/references/profile-set.md',
+  'plugins/ai-fighter/skills/create-fighter/references/registration.md',
   'docs/README.md',
   'docs/START-HERE.md',
 ];

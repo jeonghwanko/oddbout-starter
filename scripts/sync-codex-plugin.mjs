@@ -1,6 +1,6 @@
 // @ts-check
 // Keep the lightweight Git-installable skill aligned with the creator kit.
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -22,6 +22,18 @@ const files = new Map([
     'skills/create-fighter/references/workspace.md',
     workspace.replace(/## Locate the kit and preserve work[\s\S]*?(?=## Call the workspace tools)/, workspaceScope),
   ],
+  // The other references load on demand from SKILL.md and need no local adapter.
+  ...(await Promise.all(
+    (await readdir(path.join(source, 'skills/create-fighter/references')))
+      .filter(name => name !== 'workspace.md')
+      .map(
+        async name =>
+          /** @type {[string, string]} */ ([
+            `skills/create-fighter/references/${name}`,
+            await readFile(path.join(source, 'skills/create-fighter/references', name), 'utf8'),
+          ]),
+      ),
+  )),
   ['skills/create-fighter/agents/openai.yaml', await readFile(path.join(source, 'skills/create-fighter/agents/openai.yaml'), 'utf8')],
   ['assets/icon.svg', await readFile(path.join(source, 'assets/icon.svg'), 'utf8')],
 ]);

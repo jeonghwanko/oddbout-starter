@@ -1,0 +1,33 @@
+# Front first: the profile set
+
+Part of the `create-fighter` skill ([SKILL.md](../SKILL.md)); its rules apply here too.
+
+The appearance group starts with the fighter's **front** (the profile set, `get_fighter_spec` → `profileSet`): one full-body front
+view, the user's approval of it, then the side view and the motions drawn from it. The front is his profile picture on the site and
+his face in the arena, and the home lists him only once his profile set is approved.
+
+1. Draw two front candidates with the user's account. Every generation of this fighter (fronts, the expression sheet, the side view,
+   later edits) carries the spec's `profileSet.style.colouring` text and attaches `profileSet.style.anchor.url` (the house style anchor)
+   as the LAST reference image: our plain cel colouring, never the user's references' rendering. His pictures give the character, not the style.
+2. Show both and take the user's pick or change.
+3. Draw his expression sheet from the approved front: one generation with `profileSet.expressions.prompt`, the colouring text, the
+   approved front as the FIRST reference and the style anchor LAST. It holds his six arena faces; the sixth is the face the KO card shows
+   when he loses. Without it the arena shows one face for every mood, his defeat included. A sheet that is not transparent goes through
+   `npm run sprite -- cutout <sheet> --out <sheet>-cutout.png` first; never generate it again only for a delivery or format problem.
+4. Build the set with `npm run fighter:profile-set -- --front <pick> --expressions <sheet> --out <new folder>`. It frames the front,
+   measures the face square, checks both pictures as the server will and writes `profile-set.json`, `front.webp`, `expressions.webp`,
+   `face-preview.png` and `ko-preview.png`. Never type sizes, hashes or the face square. Show the face as a round crop and the sheet with
+   its KO face, in the appearance group's review. Only when the user sees the measured crop miss the face (a big round head whose face
+   sits low): build again into a new folder with `--face <x>,<y>,<side>`, a square in the framed front's pixels that holds the face (its side
+   10–30 % of the figure's height), show that crop, and use it only once the user approves it; the same checks run on it.
+5. Draw the side view (facing right) from the approved front as the first reference, same colouring; check it is the same character.
+   Continue the appearance group (concept/idle) from that side view; the motions follow it.
+6. After registration, upload the set with `prepare_fighter_registration` kind `profile_set` (fighter id, its `profile-set.json`),
+   `upload_fighter_asset` kind `profile_set` for `front` and then `expressions`, and `submit_fighter_registration` kind `profile_set`, and
+   follow `get_my_fighters` view `profile_set`. The set is not part of the package.
+
+A registered fighter without a sheet (made before 2026-11-03) can get one when the user asks for it: that request is the new generation's
+authorization. Draw the sheet from his approved front, build a new set from the same front and the sheet, and upload it. His package,
+entry and record do not change; his current set stays until an operator approves the new one. A sheet that fails the server's check is
+left out (`get_my_fighters` view `profile_set` → `sheetErrors`) and the set goes on with his face square only.
+
