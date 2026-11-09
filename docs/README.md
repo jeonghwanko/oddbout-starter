@@ -36,6 +36,8 @@ creator-kit ZIP에는 제작·연결 안내와 이 문서 지도가 들어 있�
 | [DOT-CREATION](DOT-CREATION.md) | 외형을 실제로 보여 준 뒤 그 원화로 애니메이션을 만드는 흐름(sprite-gen) |
 | [AUTHORING](AUTHORING.md) | 새 선수의 애셋과 `fighter.json` 규격 |
 | [CREATION-UX](CREATION-UX.md) | 사용자와 대화하는 제작 에이전트의 행동 규격 |
+| [CREATION-EVALUATION](CREATION-EVALUATION.md) | 제작 과정 평가: 필수 통과 조건, 점수표, 회귀 시나리오 |
+| [MOTION-RULES](MOTION-RULES.md) | 동작 품질 진단과 GPT 걷기·달리기 생성 규칙(AGENTS.md에서 분리) |
 | [DELIVERY](DELIVERY.md) | 외형 생성 전, 현재 대화에 그림을 실제로 보여 줄 수 있는지 확인 |
 | [GAME-CREATION-CONTEXT](GAME-CREATION-CONTEXT.md) | 게임의 모션·프레임·조작 정의, 프록시/실행 권한 진단, 공개 규격 파일 전달과 진행 중인 작업 보존 |
 | [CONNECTION-READINESS](CONNECTION-READINESS.md) | ODDBOUT 연결과 제작 준비 상태 확인 |

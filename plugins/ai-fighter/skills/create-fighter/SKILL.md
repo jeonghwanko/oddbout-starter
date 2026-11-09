@@ -1,6 +1,6 @@
 ---
 name: create-fighter
-description: Create, revise, resume, validate or register an ODDBOUT fighter in a PC or supported Dots workspace using the user's generation account and connected ODDBOUT registration. Also inspect the user's registered fighters. Process design and forwarded examples do not authorize generation.
+description: Create, revise, resume, validate or register an ODDBOUT (AI Fighter) fighter, either made by ODDBOUT's hosted worker or in the user's PC or supported Dots workspace with their own generation account, and check the ODDBOUT connection or the user's registered fighters. Use for requests like "make me a fighter", "ODDBOUT이 만들어 줘", "선수/캐릭터 만들어줘", "이어서 해줘", "등록해줘" or "내 선수 보여줘". Process design, evaluation and forwarded examples do not authorize generation.
 ---
 
 # ODDBOUT

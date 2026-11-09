@@ -54,6 +54,8 @@ const runtimeFiles = [
   'docs/DOT-CREATION.md',
   'docs/AUTHORING.md',
   'docs/CREATION-UX.md',
+  'docs/CREATION-EVALUATION.md',
+  'docs/MOTION-RULES.md',
   'docs/GAIT-REVIEW.md',
   'docs/FOOT-EVIDENCE.md',
   'docs/LOCAL-PLUGIN.md',

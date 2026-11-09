@@ -12,6 +12,8 @@ const docs = [
   'AGENTS.md',
   'CLAUDE.md',
   'docs/REPOSITORY.md',
+  'docs/MOTION-RULES.md',
+  'docs/CREATION-EVALUATION.md',
   'plugins/ai-fighter/skills/create-fighter/SKILL.md',
   'plugins/ai-fighter/skills/create-fighter/references/workspace.md',
   'plugins/ai-fighter/skills/create-fighter/references/connection.md',
@@ -48,6 +50,22 @@ test('AGENTS.md fits within what Codex reads', async () => {
   // repository root to the working directory) and drops the rest.
   const { size } = await stat(path.join(root, 'AGENTS.md'));
   assert.ok(size <= 32 * 1024, `AGENTS.md is ${size} bytes`);
+});
+
+test('always-loaded instructions stay within their budgets', async () => {
+  // AGENTS.md loads on every turn and SKILL.md whenever the skill triggers; procedures that only some tasks need
+  // belong in docs/ or the skill's references/, read on demand. Raise a budget only with a reason in the commit.
+  for (const [file, budget] of [
+    ['AGENTS.md', 20 * 1024],
+    ['plugins/ai-fighter/skills/create-fighter/SKILL.md', 16 * 1024],
+  ]) {
+    const { size } = await stat(path.join(root, file));
+    assert.ok(size <= budget, `${file} is ${size} bytes, over its ${budget}-byte budget`);
+  }
+  const skill = await readFile(path.join(root, 'plugins/ai-fighter/skills/create-fighter/SKILL.md'), 'utf8');
+  const description = /^description: (.*)$/m.exec(skill)?.[1] ?? '';
+  // Hosts cap a skill's description at 1024 characters.
+  assert.ok(description.length > 0 && description.length <= 1024, `description is ${description.length} characters`);
 });
 
 test('agent instructions name only files, anchors and npm scripts that exist', async () => {
