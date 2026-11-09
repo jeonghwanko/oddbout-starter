@@ -2,6 +2,6 @@
 
 @AGENTS.md
 
-Claude Code: read and follow AGENTS.md before working here. If the import above did not load it (a session started
-in a subdirectory may skip it), open it first. Codex and Grok load AGENTS.md directly and need not open it again.
-Keep every shared rule in AGENTS.md, not here.
+Claude Code: AGENTS.md (imported above) holds every shared rule; keep them there, not here. Open it only if its text
+is not already in your context (a session started in a subdirectory may skip the import). Before changing this
+repository, also read `docs/REPOSITORY.md`. Codex and Grok load AGENTS.md directly.

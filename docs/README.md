@@ -16,7 +16,7 @@ creator-kit ZIP에는 제작·연결 안내와 이 문서 지도가 들어 있�
   기존 클라우드 플러그인을 선택한다. ZIP 가져오기나 VM 설치, 캐릭터 생성은 연결 확인에 필요하지 않다.
 - **선수를 만들려는 사용자·제작 에이전트**: [START-HERE](START-HERE.md) → [DOT-CREATION](DOT-CREATION.md) →
   [AUTHORING](AUTHORING.md) 순서로 읽는다.
-- **이 저장소의 코드를 고치는 사람**: 먼저 [../AGENTS.md](../AGENTS.md)(작업 규칙·저장소 지도·명령·배포 경로)를 읽고, 그다음
+- **이 저장소의 코드를 고치는 사람**: 먼저 [../AGENTS.md](../AGENTS.md)(작업 규칙)와 [REPOSITORY](REPOSITORY.md)(저장소 지도·명령·CI·배포 경로)를 읽고, 그다음
   [CREATION-UX](CREATION-UX.md)와 [GAIT-REVIEW](GAIT-REVIEW.md)를 읽는다. 고치는 영역의 문서는 아래 표에서 찾는다.
 - **코딩 에이전트(Claude Code·Codex·Grok)**: Codex는 AGENTS.md를 자동으로 읽고, Grok은 신뢰한 폴더에서 읽는다(headless는
   `--trust`). Claude Code는 CLAUDE.md의 `@AGENTS.md` 가져오기로 읽는다. 공통 규칙은 AGENTS.md 한 곳에만 쓴다.

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git worktree:*)",
+      "Bash(git submodule status:*)",
+      "Bash(node --test:*)",
+      "Bash(npm run test:fast:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(npm run spec:check:*)",
+      "Bash(npm run validate:*)",
+      "Bash(npm run mcp:smoke:*)",
+      "Bash(npx prettier --check:*)",
+      "Bash(npx biome check:*)"
+    ],
+    "deny": ["Bash(git add -A:*)", "Bash(git add .:*)", "Bash(git add -u:*)", "Bash(git commit -a:*)", "Read(./.env)", "Read(./.env.*)"]
+  }
+}

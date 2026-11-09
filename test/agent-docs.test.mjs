@@ -11,6 +11,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const docs = [
   'AGENTS.md',
   'CLAUDE.md',
+  'docs/REPOSITORY.md',
   'plugins/ai-fighter/skills/create-fighter/SKILL.md',
   'plugins/ai-fighter/skills/create-fighter/references/workspace.md',
   'docs/README.md',
