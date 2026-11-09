@@ -7,10 +7,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const destinations = [
-  '.grok/skills/create-fighter/SKILL.md',
-  '.cursor/skills/create-fighter/SKILL.md',
-];
+const destinations = ['.grok/skills/create-fighter/SKILL.md', '.cursor/skills/create-fighter/SKILL.md'];
 
 /** @param {string} canonical */
 export function checkoutSkillText(canonical) {
@@ -45,7 +42,7 @@ if (invoked) {
   for (const relative of destinations) {
     const destination = path.join(root, relative);
     if (check) {
-      if (await readFile(destination, 'utf8') !== text) {
+      if ((await readFile(destination, 'utf8')) !== text) {
         throw new Error(`Stale checkout skill: ${relative}; run node scripts/checkout-skill.mjs`);
       }
     } else {
