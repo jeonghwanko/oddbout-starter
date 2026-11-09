@@ -45,7 +45,7 @@ and the live AI Fighter spec before packaging.
 
 ### Intent and intake
 
-- Read `docs/CREATION-UX.md` for intent, text/image intake, account choices; `docs/CREATION-EVALUATION.md` only when asked to evaluate the process.
+- Read `docs/CREATION-UX.md` for intent, text/image intake and account choices; `docs/CREATION-EVALUATION.md` only when asked to evaluate the process.
 - Explicit creation requests authorize routine preparation within their scope ([hard rule 5](#hard-rules) lists what
   does not authorize generation).
 - Accept text, reference images, or both. Ask only about missing reference roles or material conflicts.
@@ -163,7 +163,7 @@ and the live AI Fighter spec before packaging.
 ### Motion quality and locomotion
 
 Read `docs/MOTION-RULES.md` before locomotion generation, any GPT walk/run route, gait or contact work, and before
-deciding what blocks packaging (an older kit has these rules in its own `AGENTS.md`). The essentials:
+deciding what blocks packaging. The essentials:
 
 - Packaging and registration use required file/contract checks only (all 11 motions, walk 12–32 and run 10–16
   distinct frames, timing, files, dimensions, hashes, crops, origins, contacts). Gait scores and visual verdicts are
