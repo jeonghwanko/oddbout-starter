@@ -1,1 +1,0 @@
-import{t as e}from"./Locale-D7-1bJTb.js";var t=new Map,n=new Map;function r(r,i){let a=Number.isFinite(r)?Math.round(r):0;if(Math.abs(a)<1e4){let n=t.get(i);return n||t.set(i,n=new Intl.NumberFormat(e[i])),n.format(a)}let o=n.get(i);return o||n.set(i,o=new Intl.NumberFormat(e[i],{notation:`compact`,maximumFractionDigits:1})),o.format(a)}export{r as t};
