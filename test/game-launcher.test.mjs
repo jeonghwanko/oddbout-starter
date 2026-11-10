@@ -88,6 +88,11 @@ test('widget launch remains unverified until a correct-origin game readiness sig
   const host = mountWidget();
   const { elements, frameMessages } = host;
   assert.equal(host.hostMessages[0].message.method, 'ui/initialize');
+  assert.deepEqual(host.hostMessages[0].message.params.appCapabilities.availableDisplayModes, ['inline', 'fullscreen']);
+  host.fireMessage({
+    source: host.parent, origin: 'https://chatgpt.com',
+    data: { jsonrpc: '2.0', id: 1, result: { hostContext: { availableDisplayModes: ['inline', 'fullscreen'] } } },
+  });
   assert.equal(elements.start.hidden, false);
   elements.start.emit('click');
   assert.equal(elements.game.src, GAME_URL);
@@ -132,6 +137,26 @@ test('widget launch remains unverified until a correct-origin game readiness sig
     data: { channel: 'oddbout-launcher-v1', type: 'game:ready', nonce },
   });
   assert.match(elements.message.textContent, /런처로 돌아왔습니다/);
+});
+
+test('fullscreen requests require explicit host capability advertisement', () => {
+  const host = mountWidget();
+  host.elements.full.emit('click');
+  assert.equal(host.fullscreenCalls.length, 0);
+  assert.match(host.elements.message.textContent, /전체화면 지원을 확인하지 않았습니다/);
+  host.fireMessage({
+    source: host.parent, origin: 'https://chatgpt.com',
+    data: { jsonrpc: '2.0', id: 1, result: { hostContext: { availableDisplayModes: ['inline'] } } },
+  });
+  host.elements.full.emit('click');
+  assert.equal(host.fullscreenCalls.length, 0);
+  host.fireMessage({
+    source: host.parent, origin: 'https://chatgpt.com',
+    data: { jsonrpc: '2.0', method: 'ui/notifications/host-context-changed',
+      params: { availableDisplayModes: ['inline', 'fullscreen'] } },
+  });
+  host.elements.full.emit('click');
+  assert.equal(host.fullscreenCalls.length, 1);
 });
 
 test('timeout does not falsely certify a loaded or blocked iframe', () => {
