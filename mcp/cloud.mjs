@@ -593,7 +593,15 @@ function publishedToolList(result) {
  * @param {(line: string) => void} [options.log]  where each MCP request's line goes (console.log)
  * @returns {(request: Request) => Promise<Response>}
  */
-export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted = null, launcherEnabled = false, budgetMs = CALL_BUDGET_MS, log = console.log }) {
+export function createCloudHandler({
+  db,
+  fetcher = fetch,
+  arena = null,
+  hosted = null,
+  launcherEnabled = false,
+  budgetMs = CALL_BUDGET_MS,
+  log = console.log,
+}) {
   const serve = mcpServing(65536);
   /**
    * One line per MCP request (MCP 최적화 2026-11-05): the address it came to, its method, tool and edition, whether the host got ChatGPT's
