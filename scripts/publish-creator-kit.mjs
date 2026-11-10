@@ -18,6 +18,17 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const repository = 'jeonghwanko/oddbout-starter';
 const branch = 'codex/creator-pages';
 const prefix = `repos/${repository}`;
+/** Accept the current workflow publisher and the earlier branch publisher, with the same site target.
+ * @param {{ cname?: string, source?: { branch?: string, path?: string }, build_type?: string }} pages */
+export function assertPublicationTarget(pages) {
+  if (
+    pages.cname !== 'oddbout.com' ||
+    pages.source?.branch !== branch ||
+    pages.source?.path !== '/' ||
+    !['legacy', 'workflow'].includes(pages.build_type ?? '')
+  )
+    throw Error('pages-target-changed');
+}
 /** @type {(bytes: Buffer) => string} */
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 /** @type {(bytes: Buffer) => string} */
@@ -197,8 +208,7 @@ export async function publishCreatorKit(directory, attemptDirectory, expectedMan
   await save();
   try {
     const pages = await api(`${prefix}/pages`);
-    if (pages.cname !== 'oddbout.com' || pages.source?.branch !== branch || pages.source?.path !== '/' || pages.build_type !== 'legacy')
-      throw Error('pages-target-changed');
+    assertPublicationTarget(pages);
     const base = await getHead(),
       commit = await api(`${prefix}/git/commits/${base}`);
     const before = await getTree(commit.tree.sha),

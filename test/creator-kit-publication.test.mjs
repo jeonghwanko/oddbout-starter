@@ -1,6 +1,20 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { auditAdditiveTree, gitBlobSha } from '../scripts/publish-creator-kit.mjs';
+import { assertPublicationTarget, auditAdditiveTree, gitBlobSha } from '../scripts/publish-creator-kit.mjs';
+
+test('workflow migration preserves publication target checks', () => {
+  const current = { cname: 'oddbout.com', source: { branch: 'codex/creator-pages', path: '/' }, build_type: 'workflow' };
+  assert.doesNotThrow(() => assertPublicationTarget(current));
+  assert.doesNotThrow(() => assertPublicationTarget({ ...current, build_type: 'legacy' }));
+  for (const changed of [
+    { cname: 'another.example' },
+    { source: { branch: 'main', path: '/' } },
+    { source: { branch: 'codex/creator-pages', path: '/docs' } },
+    { source: undefined },
+    { build_type: 'unknown' },
+  ])
+    assert.throws(() => assertPublicationTarget({ ...current, ...changed }), /pages-target-changed/);
+});
 
 const before = [
   { path: 'index.html', mode: '100644', type: 'blob', sha: 'homepage' },
