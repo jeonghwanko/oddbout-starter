@@ -27,7 +27,7 @@ export const gameLauncherMeta = {
   'openai/ui': {
     availableDisplayModes: ['inline', 'fullscreen'],
   },
-  'openai/widgetDescription': 'ODDBOUT game launcher: opens the existing Phaser game inside this ChatGPT conversation.',
+  'openai/widgetDescription': 'Launch the ODDBOUT browser game inside ChatGPT when browser embedding permits; game authentication and readiness are checked separately.',
 };
 export const gameLauncherHtml = `<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -52,62 +52,110 @@ button.secondary{background:#2b3443;color:#f5f7fa}button:disabled{opacity:.55}
 <button id="back" class="secondary" hidden>런처로 돌아가기</button>
 </div>
 <p id="message" role="status" aria-live="polite">기존 ODDBOUT 게임을 ChatGPT 안에서 실행합니다.</p>
-<section id="stage"><iframe id="game" title="ODDBOUT game" allow="autoplay; fullscreen; gamepad" referrerpolicy="no-referrer"></iframe></section>
+<section id="stage"><iframe id="game" title="ODDBOUT game" allow="fullscreen; gamepad" referrerpolicy="no-referrer"></iframe></section>
 </main>
 <script>
 (function(){
 'use strict';
 const GAME_URL = ${JSON.stringify(GAME_URL)};
+const GAME_ORIGIN = new URL(GAME_URL).origin;
+const CHANNEL = 'oddbout-launcher-v1';
 const frame = document.getElementById('game');
 const stage = document.getElementById('stage');
 const start = document.getElementById('start');
 const back = document.getElementById('back');
 const full = document.getElementById('full');
 const message = document.getElementById('message');
+let state = 'idle';
+let nonce = null;
 let watchdog = null;
-let started = false;
-function note(text){message.textContent=text}
+function note(value){message.textContent=value}
+function resetTimer(){if(watchdog!==null){clearTimeout(watchdog);watchdog=null}}
 function stop(){
-  clearTimeout(watchdog);watchdog=null;stage.style.display='none';
-  frame.removeAttribute('src');start.hidden=false;back.hidden=true;start.disabled=false;
-  started=false;note('게임을 종료했습니다. 다시 시작할 수 있습니다.');
+  state='idle';nonce=null;resetTimer();
+  stage.style.display='none';
+  frame.removeAttribute('src');
+  start.hidden=false;back.hidden=true;
+  note('런처로 돌아왔습니다. 게임 시작을 눌러 다시 실행할 수 있습니다.');
+}
+function requestFullscreen(){
+  if(typeof window.openai?.requestDisplayMode !== 'function')return;
+  try{Promise.resolve(window.openai.requestDisplayMode({mode:'fullscreen'})).catch(()=>{});}
+  catch{/* Inline mode remains usable when fullscreen is unavailable. */}
 }
 function begin(){
-  if(started)return;
-  started=true;start.hidden=true;back.hidden=false;stage.style.display='block';
-  note('게임 페이지 연결 중…');
+  if(state!=='idle')return;
+  if(typeof crypto?.getRandomValues !== 'function'){
+    note('보안 난수 생성 기능이 없어 게임 실행을 중단했습니다.');return;
+  }
+  const bytes=new Uint8Array(16);crypto.getRandomValues(bytes);
+  nonce=Array.from(bytes, n=>n.toString(16).padStart(2,'0')).join('');
+  state='loading';
+  start.hidden=true;back.hidden=false;stage.style.display='block';
+  note('게임을 불러오는 중…');
+  requestFullscreen();
   frame.src=GAME_URL;
-  watchdog=setTimeout(()=>note('로딩이 오래 걸립니다. iframe 보안 설정 및 로그인 상태를 확인하세요.'),15000);
+  watchdog=setTimeout(()=>{
+    if(state==='loading'||state==='document-loaded'){
+      state='unverified';
+      note('게임 실행을 확인하지 못했습니다. 화면이 보이지 않으면 iframe 정책, 네트워크 또는 로그인을 확인하세요.');
+    }
+  },20000);
 }
 frame.addEventListener('load',()=>{
-  clearTimeout(watchdog);watchdog=null;
-  // A load event also fires for some blocked/error pages. It is NOT gameplay success.
-  note('페이지 로드 완료. 게임 화면과 로그인을 직접 확인하세요.');
+  if(state!=='loading'&&state!=='document-loaded')return;
+  state='document-loaded';
+  note('페이지 로드 이벤트 수신. Phaser 실행은 아직 확인되지 않았습니다.');
+  try{frame.contentWindow?.postMessage({channel:CHANNEL,type:'launcher:hello',nonce},GAME_ORIGIN)}
+  catch{/* Cross-origin navigation can prevent the optional readiness handshake. */}
 });
-frame.addEventListener('error',()=>{clearTimeout(watchdog);note('페이지 로딩 실패. 프레임 차단 설정을 확인하세요.')});
-start.addEventListener('click',begin);back.addEventListener('click',stop);
-full.addEventListener('click',async()=>{
+frame.addEventListener('error',()=>{
+  if(state==='idle')return;
+  resetTimer();state='unverified';
+  note('게임 프레임에서 오류가 감지되었습니다. iframe 허용 설정을 확인하세요.');
+});
+start.addEventListener('click',begin);
+back.addEventListener('click',stop);
+full.addEventListener('click',()=>{
   if(typeof window.openai?.requestDisplayMode!=='function'){
-    note('이 ChatGPT 환경에서는 전체화면 API를 사용할 수 없습니다.');return;
+    note('이 환경에서는 ChatGPT 전체화면을 사용할 수 없습니다.');return;
   }
-  try{await window.openai.requestDisplayMode({mode:'fullscreen'});}
-  catch{note('전체화면 요청이 거부되었습니다.');}
+  requestFullscreen();
 });
-window.addEventListener('pagehide',()=>clearTimeout(watchdog));
-// MCP Apps initialization handshake, matching the host's required UI bridge.
+window.addEventListener('pagehide',resetTimer);
 const post=message=>parent.postMessage({jsonrpc:'2.0',...message},'*');
 window.addEventListener('message',event=>{
-  if(event.source!==parent || event.data?.jsonrpc!=='2.0')return;
+  if(event.source===frame.contentWindow){
+    const data=event.data;
+    if(event.origin!==GAME_ORIGIN||!data||data.channel!==CHANNEL||
+      typeof data.nonce!=='string'||data.nonce!==nonce||state==='idle')return;
+    if(data.type==='game:ready'){
+      resetTimer();state='ready';
+      note('Phaser 실행 준비 신호를 확인했습니다. 실제 조작 및 로그인 상태는 별도로 확인하세요.');
+    }else if(data.type==='game:auth-required'){
+      resetTimer();state='auth-required';
+      note('게임에서 로그인이 필요하다고 알렸습니다. ChatGPT 로그인과 게임 로그인은 자동으로 공유되지 않습니다.');
+    }else if(data.type==='game:error'){
+      resetTimer();state='unverified';
+      note('ODDBOUT 게임에서 실행 오류를 보고했습니다.');
+    }
+    return;
+  }
+  if(event.source!==parent||event.data?.jsonrpc!=='2.0')return;
   if(event.data.id===1 && event.data.result){
     const locale=event.data.result.hostContext?.locale;
-    if(locale)document.documentElement.lang=locale;
+    if(typeof locale==='string'&&locale.length<=20)document.documentElement.lang=locale;
     post({method:'ui/notifications/initialized',params:{}});
   }
 });
 if(typeof ResizeObserver==='function'){
   new ResizeObserver(()=>post({method:'ui/notifications/size-changed',params:{height:document.body.scrollHeight}})).observe(document.body);
 }
-post({id:1,method:'ui/initialize',params:{appInfo:{name:'ODDBOUT launcher',version:'1.0.0'},appCapabilities:{},protocolVersion:'2026-01-26'}});
+post({id:1,method:'ui/initialize',params:{
+  appInfo:{name:'ODDBOUT launcher',version:'1.0.1'},
+  appCapabilities:{},
+  protocolVersion:'2026-01-26'
+}});
 })();
 </script></body></html>`;
 
@@ -123,14 +171,14 @@ export function registerGameLauncherTool(register) {
   register(
     'open_game_launcher',
     'Open ODDBOUT game launcher',
-    'Display the existing ODDBOUT Phaser web game in a ChatGPT interactive widget. Use when a user asks to launch, open or play ODDBOUT inside ChatGPT. This read-only tool opens a game launcher; it does not start a match or perform account changes. The game may require its own sign-in.',
+    'Show an interactive iframe launcher for ODDBOUT in ChatGPT, when the user explicitly asks to launch or play. Rendering and game sign-in depend on browser and iframe policy. Calling this read-only tool does not start a match, spend resources or change a fighter.',
     {},
     async () => ({
       ok: true,
       game: 'ODDBOUT',
       launchMode: 'embedded-iframe',
       gameUrl: GAME_URL,
-      note: 'Launcher available. Page loading is not proof of successful game rendering or authentication.',
+      note: 'Launcher UI supplied. No game session or Phaser rendering has been verified.',
     }),
     { openWorld: false },
   );
