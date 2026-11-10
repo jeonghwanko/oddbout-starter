@@ -131,6 +131,26 @@ test('does not cache an upstream failure, redirect, oversized body, non-success 
   assert.equal(cache.entries.size, 0);
 });
 
+test('caches a public body with only the confirmed infrastructure cookie and strips all cookies', async () => {
+  const cache = memoryCache();
+  const botCookie = '__cf_bm=test; Expires=Wed, 11 Nov 2026 00:30:00 GMT; Secure; HttpOnly';
+  for (const cookies of [[botCookie, 'session=private'], [botCookie + ', session=private'], ['_cfuvid=unconfirmed']]) {
+    const headers = new Headers();
+    for (const cookie of cookies) headers.append('set-cookie', cookie);
+    const response = await call(RANKINGS, { cache, fetcher: async () => Response.json({ ok: true }, { headers }) });
+    assert.equal(response.headers.get('x-oddbout-cache'), 'BYPASS');
+    assert.equal(response.headers.get('set-cookie'), null);
+  }
+  assert.equal(cache.entries.size, 0);
+  const options = { cache, fetcher: async () => Response.json({ ok: true }, { headers: { 'set-cookie': botCookie } }) };
+  for (const status of ['MISS', 'HIT']) {
+    const response = await call(RANKINGS, options);
+    assert.equal(response.headers.get('x-oddbout-cache'), status);
+    assert.equal(response.headers.get('set-cookie'), null);
+  }
+  assert.equal([...cache.entries.values()][0].headers.get('set-cookie'), null);
+});
+
 test('a cache read/write failure or a diagnostic bypass still serves fresh public data', async () => {
   const unavailable = () => Promise.reject(new Error('cache unavailable'));
   for (const cache of [{ match: unavailable, put: unavailable }, { match: async () => undefined, put: unavailable }]) {

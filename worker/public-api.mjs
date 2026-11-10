@@ -56,6 +56,21 @@ function reply(body, status, result, age, region) {
 /** @param {number} status @param {string} code */
 const fail = (status, code) => reply(JSON.stringify({ ok: false, code }), status, 'BYPASS');
 
+/** Supabase's outer Cloudflare proxy can set its bot-management cookie on an otherwise public response. @param {Headers} headers */
+function publicCookies(headers) {
+  if (!headers.has('set-cookie')) return true;
+  try {
+    const cookies =
+      typeof headers.getSetCookie === 'function'
+        ? headers.getSetCookie()
+        : /** @type {Headers & { getAll?: (name: string) => string[] }} */ (headers).getAll?.('Set-Cookie');
+    // Fail closed on unknown cookies, including an accidentally combined Set-Cookie field. Expires may contain a comma.
+    return Boolean(cookies?.length && cookies.every(cookie => cookie.startsWith('__cf_bm=') && !/,\s*[^=;,\s]+\s*=/.test(cookie)));
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Serve allowlisted public reads. The cache stores only the verified body and its own metadata.
  * @param {Request} request
@@ -113,7 +128,7 @@ export async function publicApiFetch(request, { fetcher = fetch, cache, timeoutM
     if (data?.ok !== true) return fail(502, 'upstream-unavailable');
     const reportedRegion = result.headers.get(REGION_HEADER) ?? '';
     const region = /^[a-z]{2}(?:-[a-z]+)+-\d+$/.test(reportedRegion) ? reportedRegion : null;
-    if (writable && !result.headers.has('set-cookie')) {
+    if (writable && publicCookies(result.headers)) {
       try {
         await writable.put(
           cacheKey,

@@ -19,7 +19,12 @@ test('workerd serves the public API from the Cloudflare cache after a Singapore 
         upstream.push(request);
         if (new URL(request.url).pathname.endsWith('/roster')) return Response.redirect('https://other.test', 302);
         return new Response('{"ok":true,"rankings":[]}', {
-          headers: { 'content-type': 'application/json', 'content-encoding': 'gzip', 'x-sb-edge-region': 'ap-southeast-1' },
+          headers: {
+            'content-type': 'application/json',
+            'content-encoding': 'gzip',
+            'x-sb-edge-region': 'ap-southeast-1',
+            'set-cookie': '__cf_bm=test; Expires=Wed, 11 Nov 2026 00:30:00 GMT; Secure; HttpOnly',
+          },
         });
       },
     }),
@@ -34,6 +39,7 @@ test('workerd serves the public API from the Cloudflare cache after a Singapore 
       assert.equal(response.headers.get('x-sb-edge-region'), 'ap-southeast-1');
       assert.equal(response.headers.get('cache-control'), 'no-store');
       assert.equal(response.headers.get('content-encoding'), null);
+      assert.equal(response.headers.get('set-cookie'), null);
       assert.deepEqual(await response.json(), { ok: true, rankings: [] });
     }
     assert.equal(upstream.length, 1);
