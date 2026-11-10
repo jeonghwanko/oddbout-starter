@@ -1,0 +1,27 @@
+# Fast, isolated validation for launcher changes on draft PRs.
+# The main test workflow intentionally skips draft PRs; this job runs without npm install.
+name: ChatGPT launcher smoke
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'mcp/cloud/game-launcher-ui.mjs'
+      - 'mcp/cloud.mjs'
+      - 'scripts/check-chatgpt-iframe.mjs'
+      - 'test/game-launcher.test.mjs'
+      - '.github/workflows/chatgpt-launcher-smoke.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  launcher:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - run: node --check mcp/cloud/game-launcher-ui.mjs
+      - run: node --check scripts/check-chatgpt-iframe.mjs
+      - run: node --test test/game-launcher.test.mjs
