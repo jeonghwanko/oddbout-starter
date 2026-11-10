@@ -67,7 +67,7 @@ Do not implement this against guessed game endpoints; the Phaser frontend and ga
 
 ## Digital purchases and policy (NOT resolved)
 
-Current public ChatGPT plugin guidelines do not permit direct or indirect selling of digital credits, subscriptions, or virtual goods. A fully embedded game containing paid skins, generation credits, banners, payment buttons, purchase errors or external checkout links could fail review. **Remove or safely disable all such flows in embedded mode, on server and client**. Merely hiding a buy button in the launcher does not suffice. Existing paid entitlements can be considered under the published guidance. Obtain policy confirmation where unclear.
+Current public ChatGPT plugin guidelines do not permit direct or indirect selling of digital credits, subscriptions, or virtual goods. A fully embedded game containing paid skins, generation credits, banners, payment buttons, purchase errors or external checkout links could fail review. **Remove or safely disable all such flows in embedded mode, on server and client**. The same guidelines also prohibit advertisements in plugin UI; audit banners, rewarded ads, video ad SDKs and navigation that reveals ad placements in the embedded game. Merely hiding a buy button in the launcher does not suffice. Existing paid entitlements can be considered under the published guidance. Obtain policy confirmation where unclear.
 
 An iframe of the same registrable domain is eligible for consideration, but requires justification during app review and may still be denied. Previous ODDBOUT app approval does not guarantee approval of a new game iframe.
 
