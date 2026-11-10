@@ -438,6 +438,12 @@ test('manifest registration binds owner/idempotency and does not report queued a
   });
   assert.equal(toolJson(prepared).stage, 'uploading');
   assert.equal(toolJson(prepared).assets.length, example.assets.length);
+  const preparedBody = toolJson(prepared);
+  assert.deepEqual(preparedBody.pending, ['server-validation', 'registration']);
+  assert.ok(preparedBody.pendingStages.includes('asset-upload'));
+  assert.ok(preparedBody.missingAssets.some(asset => asset.id === example.assets[0].id));
+  assert.ok(preparedBody.missingAssets.every(asset => !preparedBody.pending.includes(asset.id)));
+  assert.match(preparedBody.next, /never asset ids/);
   assert.equal(rpcCalls.find(([n]) => n === 'af_create_submission')[1].p_owner, owner);
   assert.equal(rpcCalls.find(([n]) => n === 'af_create_submission')[1].p_key, key);
   const status = await call(handle, 'get_fighter_submission', { submissionId: id });
@@ -822,7 +828,12 @@ test('owned list excludes deleted rows and owned lookup returns only a deletion 
   };
   const db = { ...dbFor(), from: () => query };
   const handle = createCloudHandler({ db });
-  assert.deepEqual(toolJson(await call(handle, 'list_my_fighters')).fighters, []);
+  const mine = toolJson(await call(handle, 'list_my_fighters'));
+  assert.deepEqual(mine.fighters, []);
+  assert.equal(mine.account.id, owner);
+  assert.equal(mine.account.email, 'test@example.com');
+  assert.equal(mine.account.fighterCount, 0);
+  assert.equal(mine.account.fighterLimit, null);
   assert.ok(filters.some(([k, v]) => k === 'deleted_at' && v === null));
   assert.ok(filters.some(([k, v]) => k === 'owner_id' && v === owner));
   assert.deepEqual(toolJson(await call(handle, 'get_registered_fighter', { fighterId: fighter })), {
@@ -1432,13 +1443,15 @@ test('the sign-in-first address lists exactly what /mcp lists and says the same;
       assert.match(request.inputSchema.properties.description.description, /Character artwork brief only/);
       assert.match(request.inputSchema.properties.delegate.description, /does not grant app permissions/);
       // Follow-up discovery and artwork-only briefs (2026-11-08): descriptions change, not the inventory or permission hints.
-      assert.equal(hash(tools), '9f8af89f2d5d6f72ff86bc25033e83f81a623bdb2d44463fadda1458ee0c3f25');
+      // 2026-11-10: registration text names pendingStages and missingAssets, list_my_fighters carries the account limit,
+      // and revise_hosted_motion points a registered fighter at a fighterId package. Inventory unchanged.
+      assert.equal(hash(tools), 'c4a2bd5278f4bded8ab4b6d811fd2e0501dc0310c264d0bb4768a28057083525');
       // Both addresses retain the same inventory when the comparison template metadata is omitted.
       const prior = structuredClone(tools),
         meta = prior.find(t => t.name === 'get_hosted_fighter')._meta;
       delete meta.ui;
       delete meta['openai/outputTemplate'];
-      assert.equal(hash(prior), '0041b5638826dd6da1d71894488adb79aed38939d7cd228b3503551ef098972e');
+      assert.equal(hash(prior), 'ec4c7924873656d1baa14f60e5ebe447098c20faf804d716244f2ed6c1d5d9b3');
     }
     // ChatGPT's published app 1.0.3 (docs/records/CLOUD-PLUGIN-REVIEW.md): four of its twelve tools are listed with their reviewed bytes (nine
     // until 2단계 B, 16a9ae15…). prepare_fighter_registration, upload_fighter_asset and submit_fighter_registration took a `kind`, and a call

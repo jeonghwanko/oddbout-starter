@@ -154,6 +154,16 @@ export function profileSetView(row, urls) {
     face = row.derived?.face,
     sheet = row.derived?.sheet,
     expressions = row.manifest.expressions;
+  // `pending` stays the stage-name list older clients read (`upload-front`, `submit`, `server-validation`, …). It is not asset ids.
+  // `missingAssets` names the pictures still to upload (`front`, and `expressions` when the set has a sheet).
+  const pictures = PROFILE_SET_ASSETS.filter(id => id === 'front' || expressions);
+  const pending =
+    {
+      uploading: [...pictures.map(id => `upload-${id}`), 'submit'],
+      queued: ['server-validation', ...(row.based_on ? [] : ['front-check']), 'operator-review'],
+      validating: ['server-validation', ...(row.based_on ? [] : ['front-check']), 'operator-review'],
+      review: [...(frontCheckPending(row) ? ['front-check'] : []), 'operator-review'],
+    }[row.status] ?? [];
   return {
     ok: true,
     stage: row.status,
@@ -189,13 +199,9 @@ export function profileSetView(row, urls) {
     createdAt: row.created_at,
     ...(row.approved_at ? { approvedAt: row.approved_at } : {}),
     ...(urls ? { urls } : {}),
-    pending:
-      {
-        uploading: [...PROFILE_SET_ASSETS.filter(id => id === 'front' || expressions).map(id => `upload-${id}`), 'submit'],
-        queued: ['server-validation', ...(row.based_on ? [] : ['front-check']), 'operator-review'],
-        validating: ['server-validation', ...(row.based_on ? [] : ['front-check']), 'operator-review'],
-        review: [...(frontCheckPending(row) ? ['front-check'] : []), 'operator-review'],
-      }[row.status] ?? [],
+    pending,
+    pendingStages: pending,
+    missingAssets: row.status === 'uploading' && !uploadExpired(row) ? pictures.map(id => ({ id })) : [],
   };
 }
 /** @type {(row: ProfileSetRow) => boolean} */

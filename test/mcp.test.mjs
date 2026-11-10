@@ -67,12 +67,18 @@ test('initialize, tools/list and tools/call cover authoring end to end', async (
     const valid = await client.callTool({ name: 'validate_fighter_manifest', arguments: { manifestJson: JSON.stringify(example) } });
     assert.equal(valid.structuredContent.ok, true);
     assert.ok(valid.structuredContent.pending.includes('bytes-hashes-and-full-decode'));
+    assert.ok(valid.structuredContent.pendingStages.includes('bytes-hashes-and-full-decode'));
+    assert.deepEqual(valid.structuredContent.missingAssets, []);
+    assert.ok(valid.structuredContent.warnings.some(warning => warning.code === 'BORROWED_LANDMARK'));
     const malformed = await client.callTool({ name: 'validate_fighter_manifest', arguments: { manifestJson: '{"x":1,"x":2}' } });
     assert.equal(malformed.isError, true);
     assert.equal(malformed.structuredContent.errors[0].code, 'DUPLICATE_MEMBER');
     const full = await client.callTool({ name: 'validate_fighter_package', arguments: { manifestPath: 'examples/sparring-bot/fighter.json' } });
     assert.equal(full.structuredContent.ok, true, JSON.stringify(full));
     assert.ok(full.structuredContent.pending.includes('server-registration'));
+    assert.ok(full.structuredContent.pendingStages.includes('server-registration'));
+    assert.deepEqual(full.structuredContent.missingAssets, []);
+    assert.ok(full.structuredContent.warnings.some(warning => warning.code === 'BORROWED_LANDMARK'));
     const escape = await client.callTool({ name: 'validate_fighter_package', arguments: { manifestPath: '../private/fighter.json' } });
     assert.equal(escape.isError, true);
     assert.equal(escape.structuredContent.errors[0].code, 'PATH_NOT_ALLOWED');

@@ -25,16 +25,16 @@ export const STYLE_GUIDE = Object.freeze({
     'slam = one heavy blow, combo = a chained string, fast = a quick jab (counted half). At least one above 0; ' +
     'fast at most slam + combo.',
   special: 'The swing (slam, combo or fast) used to chase an opponent who opens distance and to strike back while getting up.',
-  super: 'The move used as the super: slam, combo, fast or dash.',
+  super: 'The move used as the super: slam, combo, fast or dash. There is no separate super clip.',
   distance: 'Fighting range 1-5: 1 swings up close, 5 from far.',
-  shockwave: 'true: the heavy blow sends a ground shockwave.',
+  shockwave: 'Only true, and only by including the field: the heavy blow sends a ground shockwave. Omit it to leave the shockwave off.',
   summon: 'One summon called by the heavy-blow clip: crane, bolt, sportsCar or roadster.',
-  temper: 'Temperament 1-5 each: guard (blocking), retreat (backing off), measure (keeping distance), patience (waiting).',
+  temper: 'An object of optional 1-5 grades, not one enum: guard (blocking), retreat (backing off), measure (keeping distance), patience (waiting).',
   exchanges: 'Exchange patterns 0-3 each: cross (crossing dash), pinball (rope bounces), rush (head-on clash). ' + '0 never, 1 half, 2 standard, 3 double.',
   extras: 'The skill clip, a summon and a shockwave together: at most two (STYLE_EXTRAS).',
   skill:
     'The unique skill comes from the optional skill clip (stretch, pincer, flight, feint, slide, counter, brace), ' +
-    'fixed at registration; a style edit cannot add one.',
+    'fixed at registration; a style edit cannot add one. The skill clip has no display-name field. profile.moves names combo, slam, dash and block only.',
   translate:
     "Read the fighter's concept, moves and lines. Pick only the choices the character clearly implies; leave the rest out. " +
     'Spar before and after a change and keep the version that fights like the character.',

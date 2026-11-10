@@ -13,6 +13,20 @@ ODDBOUT은 직접 만든 캐릭터로 플레이하는 대전 게임입니다. �
 
 [게임하기](https://oddbout.com/fighter.html) · [내 선수 관리](https://oddbout.com/creator.html?lang=ko) · [사이트 가이드](https://oddbout.com/docs.html?lang=ko) · [제작 시작 안내](docs/START-HERE.md) · [문제 제보](https://github.com/jeonghwanko/oddbout-starter/issues)
 
+## 에이전트를 위한 빠른 시작
+
+작업 공간이 있는 에이전트(Linux 셸, 이미지 생성, ODDBOUT 커넥터) 기준:
+
+1. `git clone --branch main --single-branch https://github.com/jeonghwanko/oddbout-starter.git`
+2. `cd oddbout-starter && npm ci --ignore-scripts`
+3. 생성을 할 때만 ffmpeg를 설치한 뒤 `npm run sprite:setup` (서브모듈, venv, RIFE 약 430MB). Node.js 22.12 이상.
+4. `npm run example && npm run validate -- output/sparring-bot/fighter.json`
+5. 프로필 세트: `npm run fighter:profile-set -- --front <알파 있는 정면> --out <새 폴더>`
+
+ChatGPT는 호스트 파일 첨부로 클라우드 도구를 쓸 수 있습니다. 파일 인자가 없는 호스트는 로컬 WebP를 커넥터로 올릴 수 없습니다. `npm run login` 뒤 `npm run fighter:register`를 쓰거나(기본은 검사만, `--submit`이 등록), 제작자 페이지에서 다 만든 패키지를 올리세요. 계정 한도는 기본 3명이며 그 계정의 `fighter_limit`을 따릅니다.
+
+이미 등록된 선수의 모션을 바꾸려면 그 선수의 id로 개정판 패키지를 올리세요. `revise_hosted_motion`은 쓰지 않습니다. 자세한 절차는 [docs/AGENT-QUICKSTART.md](docs/AGENT-QUICKSTART.md)에 있습니다.
+
 ## 코딩 에이전트 연결하기
 
 Claude Code·Codex·Gemini CLI에 이 한 줄을 붙여 넣으세요.
@@ -70,7 +84,7 @@ Codex 스킬만 손으로 설치하려면 [설치 안내](docs/LOCAL-PLUGIN.md#i
 
 ## 선수를 만드는 길
 
-어느 길로 만들든 선수는 내 Google 계정에 등록되고, 계정당 세 명까지 둘 수 있습니다. 앞의 두 길은 아무것도 설치하지 않습니다.
+어느 길로 만들든 선수는 내 Google 계정에 등록됩니다. 한도는 기본 3명이며, 계정마다 `fighter_limit`이 다를 수 있습니다. 앞의 두 길은 아무것도 설치하지 않습니다.
 세 번째는 이 저장소의 생성기를 내 PC에 설치하고, 마지막 둘은 패키지를 직접 만듭니다. 길마다 자세한 순서는 [사이트 가이드](https://oddbout.com/docs.html?lang=ko)에 있습니다.
 
 | 길 | 하는 일 | 이럴 때 |

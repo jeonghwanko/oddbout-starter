@@ -20,6 +20,35 @@ import { cleanupPublicFiles } from '../../api/profile-sets.mjs';
  * the site lists why. A failed call and a deleted fighter point nowhere.
  * @param {any} result  The API's JSON. @param {{ directory?: boolean }} [options]
  */
+/**
+ * A submission's `pending` array is remaining pipeline stage names (`server-validation`, `registration`), including while
+ * assets are still uploading. Asset ids are `missingAssets` (or `assets` on prepare, when the upload state is not confirmed).
+ * Older servers omit the split; this fills it without dropping `pending`.
+ * @param {any} result
+ */
+export function clarifySubmission(result) {
+  if (!result || typeof result !== 'object' || Array.isArray(result)) return result;
+  const pending = Array.isArray(result.pending) ? result.pending.filter((/** @type {unknown} */ item) => typeof item === 'string') : null;
+  const pendingStages = Array.isArray(result.pendingStages) ? result.pendingStages : pending;
+  const declared = Array.isArray(result.assets) ? result.assets : [];
+  let missingAssets = Array.isArray(result.missingAssets) ? result.missingAssets : [];
+  if (
+    result.stage === 'uploading' &&
+    result.code !== 'upload-expired' &&
+    result.assetUploadState !== 'confirmed' &&
+    declared.length &&
+    missingAssets.length === 0
+  )
+    missingAssets = declared;
+  if (pendingStages === null && !Array.isArray(result.missingAssets) && result.stage !== 'uploading') return result;
+  const clarified = { ...result, ...(pendingStages ? { pendingStages } : {}), missingAssets };
+  if (clarified.stage !== 'uploading' || clarified.code === 'upload-expired') return clarified;
+  const guidance = 'pending and pendingStages are pipeline stage names, never asset ids. Upload each missingAssets entry, then submit.';
+  const site = typeof clarified.next === 'string' ? clarified.next : '';
+  return site.includes('never asset ids') ? clarified : { ...clarified, next: site ? `${guidance} ${site}` : guidance };
+}
+
+/** @param {any} result  The API's JSON. @param {{ directory?: boolean }} [options] */
 export function withSiteLink(result, { directory = false } = {}) {
   if (!result?.ok || result.stage === 'deleted') return result;
   const url = siteUrl({ fighterId: result.fighter?.id ?? (result.stage === 'registered' ? result.fighterId : null), submissionId: result.submissionId });
@@ -108,7 +137,7 @@ export function registerRegistrationTools({ register, db, identity, invoke, fetc
                   ...(uploads
                     ? [
                         'prepare_fighter_registration',
-                        'upload_fighter_asset for each pending asset',
+                        'upload_fighter_asset for each missingAssets id (pending and pendingStages are stage names, not asset ids)',
                         'submit_fighter_registration',
                         'get_fighter_submission',
                         'prepare_profile_set, upload_profile_set_asset (front, then expressions), submit_profile_set with the front painting and expression sheet the user chose (overview: profileSet)',
@@ -205,17 +234,40 @@ export function registerRegistrationTools({ register, db, identity, invoke, fetc
       };
     },
   );
-  register('list_my_fighters', '내 캐릭터', 'List only the connected user’s registered fighters.', {}, async () => {
-    const { data, error } = await db
-      .from('af_fighters')
-      .select('id,profile,status,review_state,created_at,entered_at')
-      .eq('owner_id', /** @type {Identity} */ (identity).owner)
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false })
-      .limit(50);
-    if (error) throw unavailable('database-unavailable', error);
-    return { ok: true, fighters: data };
-  });
+  register(
+    'list_my_fighters',
+    '내 캐릭터',
+    "List only the connected user's registered fighters. The account block is this login: id, email, fighterCount and fighterLimit " +
+      '(null when the limit could not be read). The default limit is 3; an account may have its own fighter_limit. get_profile nickname is always ODDBOUT.',
+    {},
+    async () => {
+      const who = /** @type {Identity} */ (identity);
+      const { data, error } = await db
+        .from('af_fighters')
+        .select('id,profile,status,review_state,created_at,entered_at')
+        .eq('owner_id', who.owner)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .limit(50);
+      if (error) throw unavailable('database-unavailable', error);
+      const fighters = data ?? [];
+      let fighterLimit = null;
+      try {
+        const limit = await db.from('af_creators').select('fighter_limit').eq('owner_id', who.owner).maybeSingle();
+        if (!limit?.error && limit?.data && Object.hasOwn(limit.data, 'fighter_limit')) {
+          const value = limit.data.fighter_limit;
+          fighterLimit = Number.isInteger(value) && value > 0 ? value : 3;
+        }
+      } catch {
+        fighterLimit = null;
+      }
+      return {
+        ok: true,
+        account: { id: who.owner, ...(who.email ? { email: who.email } : {}), fighterCount: fighters.length, fighterLimit },
+        fighters,
+      };
+    },
+  );
   // The deletion functions' own refusals; anything else is the database's, a 503 to retry (it was a 400 until 2026-11-03).
   const deletionRefusals = Object.fromEntries(
     [
@@ -277,7 +329,7 @@ export function registerRegistrationTools({ register, db, identity, invoke, fetc
       'create/resume a private upload from the actual fighter.json file. ' +
       'For an explicit update to your existing fighter, provide fighterId to keep its ID and history; a new package returns it to production for review. ' +
       'Use a new UUID for changed package bytes and the same UUID for immutable retries. This does not publish. ' +
-      'Return pending asset IDs for upload_fighter_asset.',
+      'pending and pendingStages are pipeline stage names, never asset ids. Upload each missingAssets entry (or assets, when the upload state is unconfirmed).',
     { manifest: FILE, idempotencyKey: UUID_ARG(), fighterId: UUID_ARG().optional() },
     async ({ manifest, idempotencyKey, fighterId }) => {
       const bytes = await downloadHostFile(manifest, spec.limits.jsonBytes, fetcher);
@@ -286,7 +338,7 @@ export function registerRegistrationTools({ register, db, identity, invoke, fetc
         'idempotency-key': idempotencyKey,
       });
       if (result.ok) await recordAgent(result.submissionId);
-      if (!result.ok || result.stage !== 'uploading') return withSiteLink(result);
+      if (!result.ok || result.stage !== 'uploading') return clarifySubmission(withSiteLink(result));
       const { data, error } = await db
         .from('af_submissions')
         .select('manifest')
@@ -294,10 +346,12 @@ export function registerRegistrationTools({ register, db, identity, invoke, fetc
         .eq('owner_id', /** @type {Identity} */ (identity).owner)
         .single();
       if (error) throw unavailable('database-unavailable', error);
-      return withSiteLink({
-        ...result,
-        assets: data.manifest.assets.map(/** @param {ManifestAsset} asset */ ({ id, path, bytes, sha256 }) => ({ id, path, bytes, sha256 })),
-      });
+      return clarifySubmission(
+        withSiteLink({
+          ...result,
+          assets: data.manifest.assets.map(/** @param {ManifestAsset} asset */ ({ id, path, bytes, sha256 }) => ({ id, path, bytes, sha256 })),
+        }),
+      );
     },
     { write: true, openWorld: true, idempotent: true, files: ['manifest'] },
   );
@@ -333,7 +387,7 @@ export function registerRegistrationTools({ register, db, identity, invoke, fetc
       'A registered fighter starts in production; other people meet him after his owner enters him. ' +
       'Queued/validating is not registered; follow get_fighter_submission until final.',
     { submissionId: UUID_ARG() },
-    async ({ submissionId }) => withSiteLink(await invoke(`submissions/${submissionId}/submit`, 'POST')),
+    async ({ submissionId }) => clarifySubmission(withSiteLink(await invoke(`submissions/${submissionId}/submit`, 'POST'))),
     { write: true, publish: true, openWorld: true, idempotent: true },
   );
   register(
@@ -341,7 +395,7 @@ export function registerRegistrationTools({ register, db, identity, invoke, fetc
     '등록 진행 상태',
     'Read your submission. Only registered confirms registration; rejected contains the validation failure. ' + 'Do not regenerate automatically.',
     { submissionId: UUID_ARG() },
-    async ({ submissionId }) => withSiteLink(await invoke(`submissions/${submissionId}`)),
+    async ({ submissionId }) => clarifySubmission(withSiteLink(await invoke(`submissions/${submissionId}`))),
   );
   register(
     'get_registered_fighter',

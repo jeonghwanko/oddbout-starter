@@ -35,6 +35,8 @@ creator-kit ZIP에는 제작·연결 안내와 이 문서 지도가 들어 있�
 | [START-HERE](START-HERE.md) | Dot과 대화하며 내 캐릭터 만들기: 클라우드 규격, 로컬 맥락·가이드, 검토 묶음과 등록 |
 | [DOT-CREATION](DOT-CREATION.md) | 외형을 실제로 보여 준 뒤 그 원화로 애니메이션을 만드는 흐름(sprite-gen) |
 | [AUTHORING](AUTHORING.md) | 새 선수의 애셋과 `fighter.json` 규격 |
+| [AGENT-QUICKSTART](AGENT-QUICKSTART.md) | 작업 공간 에이전트의 등록·개정·스타일·`pending` 필드 |
+| [POSE-GENERATION](POSE-GENERATION.md) | 이미지 모델로 새 동작 프레임을 그릴 때의 옆모습·화풍·크기 |
 | [CREATION-UX](CREATION-UX.md) | 사용자와 대화하는 제작 에이전트의 행동 규격 |
 | [DELIVERY](DELIVERY.md) | 외형 생성 전, 현재 대화에 그림을 실제로 보여 줄 수 있는지 확인 |
 | [GAME-CREATION-CONTEXT](GAME-CREATION-CONTEXT.md) | 게임의 모션·프레임·조작 정의, 프록시/실행 권한 진단, 공개 규격 파일 전달과 진행 중인 작업 보존 |

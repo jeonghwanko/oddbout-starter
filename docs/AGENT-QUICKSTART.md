@@ -1,0 +1,78 @@
+# Agent quickstart
+
+For a workspace agent with a shell, an image generator and the ODDBOUT connector. Product rules stay in [AGENTS.md](../AGENTS.md). This page is the short path for the mistakes that show up after a package already validates.
+
+## Offline check
+
+Node.js 22.12 or newer. ffmpeg is installed separately. Generation also needs `npm run sprite:setup` (the sprite-gen submodule, its venv, img2webp and RIFE, about 430 MB). A generation host PC is Linux. Grok login and generation permission are separate from this local check.
+
+```sh
+git clone --branch main --single-branch https://github.com/jeonghwanko/oddbout-starter.git
+cd oddbout-starter && npm ci --ignore-scripts
+npm run example && npm run validate -- output/sparring-bot/fighter.json
+npm run fighter:profile-set -- --front <front.png with alpha> --out <new folder>
+```
+
+`npm run validate` can succeed and still return `pending` names such as `runtime-preview`, `visual-review` and `server-registration`. Those are later stage names. `pendingStages` is the same list. `missingAssets` is empty. Warnings do not clear `ok`.
+
+## Register local files
+
+ChatGPT can pass host file attachments to `prepare_fighter_registration` and `upload_fighter_asset`. A host without those file arguments, including a Grok bot with only a shell, cannot. Do not invent download URLs. `start_picture_upload` is for hosted reference pictures, not package WebP files.
+
+```sh
+npm run login
+npm run fighter:register -- --dir <package> [--fighter <uuid>] [--idempotency-key <uuid>]
+npm run fighter:register -- --dir <package> --fighter <uuid> --submit
+```
+
+Without `--submit` the command only checks the package and saves an idempotency key beside it (`.oddbout-registration.json`). `--submit` uploads each WebP, submits, and polls until `registered` or `rejected`. The same key is reused while the manifest bytes and fighter id stay the same. Changed bytes need a new key. This command uses the owner's `npm run login` session. It is not a substitute for `get_profile` on the connector.
+
+`pending` and `pendingStages` are pipeline stage names, never asset ids. Upload every `missingAssets` entry. When the server has not confirmed storage (`assetUploadState` is `unconfirmed` or the field is absent), upload every `assets` entry. A retry of the same bytes succeeds. Reading `pending` as asset ids and submitting early returns `409 assets-incomplete`.
+
+The profile set is still `npm run fighter:profile-set` for the files. Its `pending` values (`upload-front`, `submit`, `server-validation`) are stage names too. Picture ids are `missingAssets` (`front`, and `expressions` when the set has a sheet).
+
+## Revise a registered fighter
+
+1. Read `get_profile`, then `get_my_fighters` (view `list`). Say the account id, email, `fighterCount` and `fighterLimit` before using a remembered roster. The profile nickname is always `ODDBOUT`. The limit defaults to 3 and can differ per account (`af_creators.fighter_limit`).
+2. Build a new local package with the motions that change. `npm run validate` it.
+3. After the user has seen the motions and asked to register, submit with that fighter's id: `fighter:register --fighter <id> --submit`, or `prepare_fighter_registration` with `fighterId`. This is a new submission. The fighter id and its history stay. The previous submission is not overwritten.
+4. Do not call `revise_hosted_motion` (`request_hosted_fighter` step `revise_motion`) for a registered fighter. That step only accepts a legacy hosted job at `motion_ready`. A style-only edit with no new art is `update_fighter` kind `style`.
+
+Hard rule 6 in AGENTS.md forbids deleting a submitted immutable package or a selected version. A `fighterId` revision does not do that.
+
+## combat.style
+
+Read `browse_oddbout` view `style_guide` before filling a style. There is no super clip. `super` picks `slam`, `combo`, `fast` or `dash`.
+
+`temper` is an object of optional grades from 1 to 5, not one enum. The keys are `guard`, `retreat`, `measure` and `patience`.
+
+`shockwave`, when present, is the constant `true`. Omit it to leave the shockwave off.
+
+Skill clip kinds are `stretch`, `pincer`, `flight`, `feint`, `slide`, `counter` and `brace`. The skill clip has no display-name field. `profile.moves` names combo, slam, dash and block only.
+
+The skill clip, a summon and a shockwave share one budget of 2 (`extrasBudget`). `mix.fast` must be less than or equal to `mix.slam + mix.combo`, and at least one of slam, combo and fast is above 0.
+
+```json
+{
+  "combat": {
+    "kitId": "standard-duel",
+    "stats": { "power": 3, "toughness": 4, "speed": 2 },
+    "style": {
+      "mix": { "slam": 3, "combo": 2, "fast": 1 },
+      "special": "slam",
+      "super": "dash",
+      "distance": 2,
+      "temper": { "patience": 5 },
+      "summon": "sportsCar"
+    }
+  }
+}
+```
+
+`{ "shockwave": true }` counts as one of the two extras. Adding a skill clip and a summon beside it is over the budget.
+
+## Poses and inspect-motion
+
+New motion frames: [POSE-GENERATION.md](POSE-GENERATION.md). Right-facing side view, the style anchor last, body height 400.
+
+`inspect-motion` reporting `needs-review` because ground contact is unknown is normal for an action clip with no foot region. It does not block packaging. Show the motion and wait for the user.

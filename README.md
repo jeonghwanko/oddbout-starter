@@ -13,6 +13,20 @@ ODDBOUT is a fighting game where you play with a character you create. This repo
 
 [Play ODDBOUT](https://oddbout.com/fighter.html) · [Manage your fighters](https://oddbout.com/creator.html?lang=en) · [Site guide](https://oddbout.com/docs.html?lang=en) · [Creation guide](docs/START-HERE.md) · [Report a problem](https://github.com/jeonghwanko/oddbout-starter/issues)
 
+## Quick start for agents
+
+For a workspace agent (a Linux shell, an image generator, and the ODDBOUT connector):
+
+1. `git clone --branch main --single-branch https://github.com/jeonghwanko/oddbout-starter.git`
+2. `cd oddbout-starter && npm ci --ignore-scripts`
+3. Generation only: install ffmpeg, then `npm run sprite:setup` (submodule, venv, and RIFE, about 430 MB). Node.js 22.12 or newer.
+4. `npm run example && npm run validate -- output/sparring-bot/fighter.json`
+5. Profile set: `npm run fighter:profile-set -- --front <front with alpha> --out <new folder>`
+
+ChatGPT can register with host file attachments. A host without those file arguments cannot upload local WebP files through the connector. Run `npm run login`, then `npm run fighter:register` (dry run until `--submit`), or upload the finished package on the creator page. The account limit defaults to three fighters and follows that account's `fighter_limit`.
+
+To change motions on a fighter that is already registered, submit a new package with that fighter's id. Do not use `revise_hosted_motion` for that. Details: [docs/AGENT-QUICKSTART.md](docs/AGENT-QUICKSTART.md).
+
 ## Connect your coding agent
 
 In Claude Code, Codex or Gemini CLI, paste this one line:
@@ -81,7 +95,7 @@ In this kit, "sprite-gen" means the sprite-gen engine and CLI pinned at `vendor/
 
 ## Ways to make a fighter
 
-Every way registers the fighter to your own Google account, up to three fighters per account. The first two need nothing installed;
+Every way registers the fighter to your own Google account. The default limit is three fighters; an account can have its own `fighter_limit`. The first two need nothing installed;
 the third installs the generator from this repository on your PC; the last two make the package yourself. The [site guide](https://oddbout.com/docs.html?lang=en)
 walks through each.
 

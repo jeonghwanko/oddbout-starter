@@ -92,7 +92,7 @@ MCP 파일 경로는 `AI_FIGHTER_ROOT`를 기준으로 `output/my-fighter/fighte
 새 필드는 서버의 `/spec` `features`에 해당 기능이 있을 때만 제출한다. 없으면 서버 검증이 그 패키지를 거절한다.
 `language`·`concept`·`moves`는 `profile-extras-1`, `profile.names`는 `profile-names-1`, `profile.lines`는 `profile-lines-1`,
 `combat.stats`는 `combat-stats-1`, `combat.style`은 `combat-style-1`, 선택 동작 `skill`·`entrance`·`victory`는 `extra-clips-1`이다.
-계정당 선수는 최대 3명이다. 새 선수 등록 시 `fighterId`를 생략하고, 기존 선수를 수정할 때만 해당 ID를 지정한다. 나중에 컨셉·기술 이름·능력치·원화를 바꾸려면 다시 패키징해 같은 선수의 `fighterId`로 제출한다(`prepare_fighter_registration`의 `fighterId`). 선수 ID와 전적은 유지되고, 지난 경기는 당시 패키지 기준 기록으로 남는다.
+계정당 선수는 기본 3명이며, 계정별 `af_creators.fighter_limit`을 따른다. 새 선수 등록 시 `fighterId`를 생략하고, 기존 선수를 수정할 때만 해당 ID를 지정한다. 나중에 컨셉·기술 이름·능력치·원화를 바꾸려면 다시 패키징해 같은 선수의 `fighterId`로 제출한다(`prepare_fighter_registration`의 `fighterId`, 또는 파일 첨부가 없는 호스트에서는 `npm run fighter:register -- --fighter`). 선수 ID와 전적은 유지되고, 지난 경기는 당시 패키지 기준 기록으로 남는다. 이미 등록된 선수의 모션을 고칠 때도 이 개정이다. `revise_hosted_motion`은 예전 호스팅 작업이 `motion_ready`일 때만 쓴다.
 `standard-duel`을 선택해도 경쟁 규칙의 통합이나 서버 연결이 완료되지는 않는다.
 
 ## 좌표와 프레임
@@ -139,8 +139,9 @@ MCP 파일 경로는 `AI_FIGHTER_ROOT`를 기준으로 `output/my-fighter/fighte
   둘째·셋째 접촉 인덱스 평균의 내림값이 `spinStart`보다 커야 세 구간을 분리할 수 있다.
 - `hit.recoil`: 접촉 단계와 같다. `stagger`와 `recover`는 양끝을 포함하는 단계 쌍이다.
   `recoil ≤ stagger[0] ≤ stagger[1] < recover[0] ≤ recover[1]` 순서다.
-- `dash.windup`, `recover`: `{ clip, frame }`으로 같은 선수의 다른 전투 자세를 참조한다.
-  여기의 `frame`은 **참조 클립의 이미지 프레임 번호**다.
+- `dash.windup`, `recover`: `{ clip, frame }`으로 같은 선수의 다른 전투 자세를 참조할 수 있다.
+  여기의 `frame`은 **참조 클립의 이미지 프레임 번호**다. 그 클립을 나중에 바꾸면 프레임 번호가 범위 안인 한 검사는 통과하고 이 자세만 달라진다.
+  가능하면 그 클립 자신의 프레임(`{ "clip": "dash", "frame": n }`)을 쓴다. 다른 클립을 빌리면 `npm run validate`가 `BORROWED_LANDMARK` 경고를 낸다. 경고는 등록을 막지 않는다.
 - `fall.lieSequenceIndex`: 착지 이후 누운 단계. 마지막 단계도 그 누운 프레임으로 끝난다.
   `getUp`은 `{ clip, frame, durationMs }` 배열이다. 일어서기의 합산 시간도 10초 이하다.
 
@@ -167,7 +168,8 @@ MCP 파일 경로는 `AI_FIGHTER_ROOT`를 기준으로 `output/my-fighter/fighte
 
 ## 검사 결과 읽기
 
-`ok`, `stage`, `errors`, `pending`을 읽는다. 오류의 `path`는 JSON Pointer다.
+`ok`, `stage`, `errors`, `pending`을 읽는다. `pending`과 `pendingStages`는 이후 단계 이름이다. 자산 id가 아니다. 로컬 검사의 `missingAssets`는 빈 배열이다. `warnings`의 `BORROWED_LANDMARK`는 실패가 아니다. 오류의 `path`는 JSON Pointer다.
+새 동작 프레임을 이미지 모델로 그릴 때는 [POSE-GENERATION.md](POSE-GENERATION.md)를 따른다. 오른쪽 옆모습, 몸높이 400, 화풍 기준 그림을 마지막 참고로 붙인다. 발 영역 없이 `inspect-motion`이 `needs-review`를 내는 것은 액션 클립에서 정상이며 패키지 검사를 막지 않는다.
 전체 스키마·예제는 크다. 동작 하나를 고칠 때는 `get_fighter_spec`에 `motion`(예: `walk`)을 넘겨 그 부분만 읽는다.
 파일 검사는 한 번에 하나만 실행하고 최대 2개가 기다린다. 그보다 많으면 `VALIDATOR_BUSY`이므로 잠시 뒤 다시 요청한다.
 MCP는 오류를 최대 50개까지 돌려주며 더 많으면 `errorCount`를 포함한다.

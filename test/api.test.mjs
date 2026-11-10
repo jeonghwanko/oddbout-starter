@@ -150,6 +150,10 @@ test('rejected and expired submissions are final: nothing is pending', async () 
   const open = await read();
   assert.equal(open.code, undefined);
   assert.deepEqual(open.pending, ['server-validation', 'registration']);
+  assert.deepEqual(open.pendingStages, ['asset-upload', 'server-validation', 'registration']);
+  assert.deepEqual(open.missingAssets, []);
+  assert.equal(open.assetUploadState, 'unconfirmed');
+  assert.ok(!open.pending.includes('idle'));
 });
 test('a verifiable JWT is checked locally; the Auth server is not called', async () => {
   const owner = crypto.randomUUID(),

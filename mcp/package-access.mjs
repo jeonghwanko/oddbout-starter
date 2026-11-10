@@ -1,12 +1,14 @@
 // @ts-check
-import { realpath } from 'node:fs/promises';
+import { readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
+import { parseFighterJson } from '../contracts/ai-fighter/validate.mjs';
 import { pathWithoutLinks, relativeParts } from '../plugins/ai-fighter/local-files.mjs';
+import { annotateValidation } from '../tools/ai-fighter/landmark-lint.mjs';
 import { forkWorker, serialQueue } from './serial-worker.mjs';
 
 /**
  * A package check's verdict. The worker's (server/ai-fighter-package.mjs) carries more fields.
- * @typedef {{ ok: boolean, stage: string, errors: { code: string, path?: string }[], pending?: string[] }} PackageCheck
+ * @typedef {{ ok: boolean, stage: string, errors: { code: string, path?: string }[], pending?: string[], pendingStages?: string[], missingAssets?: unknown[], warnings?: unknown[] }} PackageCheck
  */
 /** @type {(code: string) => PackageCheck} */
 const issue = code => ({ ok: false, stage: 'local-access', errors: [{ code, path: '/manifestPath' }] });
@@ -39,10 +41,17 @@ export function makePackageValidator(root, { timeoutMs = 20000, queue = serialQu
       if (!manifest) return issue('PATH_NOT_ALLOWED');
       const run = await forkWorker(new URL('./package-worker.mjs', import.meta.url), [manifest], { timeoutMs, heapMb: 128 });
       if (!run.started) return issue('WORKER_START_FAILED');
-      return (
+      const verdict =
         /** @type {PackageCheck | undefined} */ (run.message) ??
-        issue(run.timedOut ? 'VALIDATION_TIMEOUT' : run.code === 0 ? 'WORKER_NO_RESULT' : 'WORKER_FAILED')
-      );
+        issue(run.timedOut ? 'VALIDATION_TIMEOUT' : run.code === 0 ? 'WORKER_NO_RESULT' : 'WORKER_FAILED');
+      let data = null;
+      try {
+        const parsed = parseFighterJson(await readFile(manifest, 'utf8'));
+        if (parsed.ok) data = parsed.data;
+      } catch {
+        data = null;
+      }
+      return /** @type {PackageCheck} */ (annotateValidation(verdict, data));
     } catch {
       return issue('PACKAGE_UNAVAILABLE');
     }

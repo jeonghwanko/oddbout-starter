@@ -488,7 +488,7 @@ creator-kit 소스는 계정·등록에 호스팅 ODDBOUT MCP 하나를 쓰도�
 2. 최종 패키지 승인과 등록 요청을 받은 실제 fighter.json을 `prepare_fighter_registration`에 파일로 전달한다.
    기존 소유 파이터를 교체하라는 요청이면 `fighterId`를 지정해 ID와 이력을 유지하고, 생략하면 새 파이터를 준비한다.
    변경한 그림·동작은 필요한 묶음 검토와 최종 패키지 검증을 거친다. 새 패키지는 제작 중으로 돌아가며 출전 전 동작 확인이 필요하다.
-3. 응답의 각 asset ID에 실제 WebP 파일을 `upload_fighter_asset`으로 전달한다.
+3. 응답의 `missingAssets`에 있는 각 WebP를 `upload_fighter_asset`으로 전달한다. `pending`과 `pendingStages`는 남은 단계 이름이며 자산 id가 아니다. 서버가 저장 확인 없이 `missingAssets`를 비워 두면 `assets` 전부를 올린다. 단계 이름을 자산 id로 읽고 제출하면 `409 assets-incomplete`가 난다.
 4. 업로드가 끝나면 `submit_fighter_registration`, 이후 `get_fighter_submission`으로 확인한다.
 5. `registered`만 등록 완료다. queued/validating을 완료라고 안내하지 않는다.
 6. 프로필 세트(2026-10-31): 사용자가 고른 정면 원화와 얼굴 칸을 `prepare_profile_set`(선수 id·세트 파일·UUID) →
@@ -517,6 +517,8 @@ creator-kit 소스는 계정·등록에 호스팅 ODDBOUT MCP 하나를 쓰도�
   임의 파일 ID/URL, 수기로 복사한 base64, 토큰 공유, 네트워크 정책 우회는 사용하지 않는다.
 - VM의 Supabase 직접 GET이 차단돼도 네이티브 MCP까지 실패했다고 결론 내리지 않는다.
   실제 네이티브 계정 호출과 실제 파일 인자 전달 결과를 각각 확인한다.
+
+파일 인자가 없는 호스트(Grok Bot처럼 셸과 커넥터만 있는 작업 공간)는 상자 안의 WebP를 이 도구로 넘길 수 없다. 주소를 만들지 말고 `npm run login` 뒤 `npm run fighter:register -- --dir <패키지> [--fighter <id>] [--submit]`를 쓴다. `--submit`이 없으면 검사와 멱등 키 저장만 한다.
 
 파일 인자는 OpenAI `fileParams`의 `download_url`, `file_id`를 사용한다.
 호스트가 이 인자를 파일 경로 형식으로 노출하면 실제 파일의 절대 경로를 전달한다.

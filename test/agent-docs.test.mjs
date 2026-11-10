@@ -17,6 +17,8 @@ const docs = [
   'plugins/ai-fighter/skills/create-fighter/references/workspace.md',
   'docs/README.md',
   'docs/START-HERE.md',
+  'docs/AGENT-QUICKSTART.md',
+  'docs/POSE-GENERATION.md',
   '.grok/skills/create-fighter/SKILL.md',
   '.cursor/skills/create-fighter/SKILL.md',
 ];
