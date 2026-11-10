@@ -1,0 +1,13 @@
+name = "oddbout-public-api"
+main = "index.mjs"
+compatibility_date = "2026-11-04"
+compatibility_flags = ["enable_request_signal"]
+workers_dev = false
+preview_urls = false
+routes = [{ pattern = "oddbout.com/api/*", zone_name = "oddbout.com" }]
+
+[env.staging]
+name = "oddbout-public-api-staging"
+workers_dev = true
+preview_urls = false
+routes = []
