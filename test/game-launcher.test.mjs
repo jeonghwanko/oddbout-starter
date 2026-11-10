@@ -200,5 +200,8 @@ test('read-only iframe probe refuses redirects and analyzes restrictive headers'
 test('cloud MCP binds the launcher tool to its resource without publishing to the limited directory edition', async () => {
   const source = await readFile(new URL('../mcp/cloud.mjs', import.meta.url), 'utf8');
   assert.match(source, /name === 'open_game_launcher'[\s\S]*?resourceUri: GAME_LAUNCHER_UI/);
-  assert.match(source, /if \(!directory\) \{[\s\S]*?registerGameLauncherUi\(server\);[\s\S]*?registerGameLauncherTool\(registerTool\);/);
+  assert.match(source, /if \(launcherEnabled && !directory\) \{[\s\S]*?registerGameLauncherUi\(server\);[\s\S]*?registerGameLauncherTool\(registerTool\);/);
+  assert.match(source, /launcherEnabled = false/);
+  const entry = await readFile(new URL('../supabase/functions/ai-fighter-mcp/index.ts', import.meta.url), 'utf8');
+  assert.match(entry, /Deno\.env\.get\('ODDBOUT_CHATGPT_GAME_LAUNCHER'\) === '1'/);
 });
