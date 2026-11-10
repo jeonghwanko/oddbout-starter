@@ -844,6 +844,78 @@ test('owned list excludes deleted rows and owned lookup returns only a deletion 
   });
 });
 
+test('the fighter list reports the connected account count and its limit, with default and unavailable states', async () => {
+  const other = crypto.randomUUID();
+  const live = [crypto.randomUUID(), crypto.randomUUID()];
+  const creator = { owner_id: owner, fighter_limit: 7 };
+  const tables = {
+    af_creators: [{ owner_id: other, fighter_limit: 1 }, creator],
+    af_fighters: [
+      ...Array.from({ length: 3 }, () => ({ id: crypto.randomUUID(), owner_id: other, deleted_at: null })),
+      { id: crypto.randomUUID(), owner_id: owner, deleted_at: new Date().toISOString() },
+      ...live.map(id => ({ id, owner_id: owner, deleted_at: null })),
+    ],
+  };
+  let creatorReadError = false;
+  const db = {
+    ...dbFor({ ...claims(), email: 'current-owner@example.com' }),
+    from(table) {
+      const filters = [];
+      let columns = [];
+      const rows = () =>
+        tables[table].filter(row => filters.every(filter => filter(row))).map(row => Object.fromEntries(columns.map(column => [column, row[column]])));
+      const query = {
+        select(value) {
+          columns = value.split(',');
+          return this;
+        },
+        eq(key, value) {
+          filters.push(row => row[key] === value);
+          return this;
+        },
+        is(key, value) {
+          filters.push(row => row[key] === value);
+          return this;
+        },
+        order() {
+          return this;
+        },
+        async limit(count) {
+          return { data: rows().slice(0, count) };
+        },
+        async maybeSingle() {
+          return table === 'af_creators' && creatorReadError ? { data: null, error: { message: 'creator lookup unavailable' } } : { data: rows()[0] ?? null };
+        },
+      };
+      return query;
+    },
+  };
+  const handle = createCloudHandler({ db });
+  for (const [name, args] of [
+    ['list_my_fighters', {}],
+    ['get_my_fighters', {}],
+  ]) {
+    const mine = toolJson(await call(handle, name, args));
+    assert.deepEqual(mine.account, { id: owner, email: 'current-owner@example.com', fighterCount: 2, fighterLimit: 7 });
+    assert.deepEqual(
+      mine.fighters.map(row => row.id),
+      live,
+    );
+  }
+  // The migrated policy is nullable fighter_limit (1–20 when set); null means the default of three.
+  creator.fighter_limit = null;
+  const defaulted = toolJson(await call(handle, 'get_my_fighters', { view: 'list' }));
+  assert.equal(defaulted.account.fighterLimit, 3);
+  creatorReadError = true;
+  const unavailable = toolJson(await call(handle, 'get_my_fighters', { view: 'list' }));
+  assert.equal(unavailable.ok, true);
+  assert.deepEqual(unavailable.account, { id: owner, email: 'current-owner@example.com', fighterCount: 2, fighterLimit: null });
+  assert.deepEqual(
+    unavailable.fighters.map(row => row.id),
+    live,
+  );
+});
+
 test('agent tools list only with the arena key; reads are public, spars and cups carry the verified owner and the key', async () => {
   const calls = [],
     key = 'k'.repeat(64);

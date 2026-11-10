@@ -193,13 +193,13 @@ record their actual outputs as versions/evidence; do not claim they received man
 
 `revise_hosted_motion` (`request_hosted_fighter` step `revise_motion`) only changes one motion of a legacy hosted job that is still at `motion_ready`. It does not edit a fighter that is already registered.
 
-To change motions on a registered fighter, build a new local package and submit it with that fighter's id (`prepare_fighter_registration` `fighterId`, or `npm run fighter:register -- --fighter <id> --submit` when this host cannot attach files). That is a new submission. The fighter id stays. The previous submission is left as it was. A style-only edit with no new art is `update_fighter` kind `style`.
+To change motions on a registered fighter, build a new local package and submit it with that fighter's id (`prepare_fighter_registration` `fighterId`, or `npm run fighter:register -- --dir <package> --fighter <id> --submit` when this host cannot attach files). That is a new submission. The fighter id stays. The previous submission is left as it was. A style-only edit with no new art is `update_fighter` kind `style`.
 
-Before `get_my_fighters`, read `get_profile` and say the account id, email, fighter count and fighter limit. The nickname on that profile is always `ODDBOUT`. The limit defaults to 3 and can differ per account.
+Read `get_profile`, then `get_my_fighters` view `list`. Report the account id and email returned by the profile and the count and limit returned in the list's `account` block. Missing fields (older servers) or a null limit stay unknown. The default of 3 is not a verified account limit. The profile nickname is always `ODDBOUT`.
 
 Read `browse_oddbout` view `style_guide` before filling `combat.style`. There is no super clip: `super` is `slam`, `combo`, `fast` or `dash`. `temper` is an object of optional 1–5 grades (`guard`, `retreat`, `measure`, `patience`). `shockwave`, if present, must be `true`. Skill clip kinds are `stretch`, `pincer`, `flight`, `feint`, `slide`, `counter` and `brace`. The skill clip has no display-name field. The skill clip, a summon and a shockwave together are at most 2. `mix.fast` must be at most `mix.slam` + `mix.combo`.
 
-New motion frames follow `docs/POSE-GENERATION.md`: right-facing side view, body height 400, and `https://oddbout.com/art/oddbout/style-anchor-front.webp` as the last reference. `inspect-motion` `needs-review` without a foot ROI is expected on action clips and does not block packaging. A `BORROWED_LANDMARK` warning means a landmark uses another clip's frame; prefer that clip's own frame. The warning does not fail validation.
+New motion frames follow `docs/POSE-GENERATION.md`: right-facing side view, one scale based on standing body height 400 (not each pose's extent), and `https://oddbout.com/art/oddbout/style-anchor-front.webp` as the last reference. `inspect-motion` `needs-review` without a foot ROI is expected on action clips and does not block packaging. A `BORROWED_LANDMARK` warning means a landmark uses another clip's frame; prefer that clip's own frame. The warning does not fail validation.
 
 ## Final files and registration
 

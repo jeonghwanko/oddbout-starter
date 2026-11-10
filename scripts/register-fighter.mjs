@@ -7,12 +7,14 @@
 // Without --submit the command validates, saves the idempotency key and prints the requests. It does not contact the server.
 import { createHash, randomUUID } from 'node:crypto';
 import { realpathSync } from 'node:fs';
-import { readFile, stat, writeFile } from 'node:fs/promises';
+import { readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRemoteClient, transferTimeoutMs } from '../api/client.mjs';
 import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/validate.mjs';
 import { lintBorrowedLandmarks } from '../tools/ai-fighter/landmark-lint.mjs';
+import { withFileLock } from '../mcp/file-lock.mjs';
+import { renameRetrying } from '../plugins/ai-fighter/local-files.mjs';
 import { defaultSessionPath } from './login.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -30,6 +32,46 @@ export const USAGE = [
 ].join('\n');
 
 const sha256 = (/** @type {Uint8Array} */ bytes) => createHash('sha256').update(bytes).digest('hex');
+
+/** @param {string} recordPath */
+async function readRegistrationRecord(recordPath) {
+  let text;
+  try {
+    text = await readFile(recordPath, 'utf8');
+  } catch (/** @type {any} */ error) {
+    if (error.code === 'ENOENT') return null;
+    throw new Error('registration-record-unreadable');
+  }
+  try {
+    const saved = JSON.parse(text);
+    if (
+      !saved ||
+      typeof saved.idempotencyKey !== 'string' ||
+      !UUID.test(saved.idempotencyKey) ||
+      typeof saved.manifestSha256 !== 'string' ||
+      !/^[a-f0-9]{64}$/.test(saved.manifestSha256) ||
+      !(saved.fighterId === null || (typeof saved.fighterId === 'string' && UUID.test(saved.fighterId))) ||
+      !(saved.submissionId === null || (typeof saved.submissionId === 'string' && UUID.test(saved.submissionId)))
+    )
+      throw new Error('invalid-record');
+    return saved;
+  } catch {
+    throw new Error('registration-record-invalid');
+  }
+}
+
+/** Replace the sidecar only after the complete new record is written. Call under its lock.
+ * @param {string} recordPath @param {object} record
+ */
+async function writeRegistrationRecord(recordPath, record) {
+  const temporary = `${recordPath}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporary, JSON.stringify(record, null, 2) + '\n', { mode: 0o600, flag: 'wx' });
+    await renameRetrying(temporary, recordPath);
+  } finally {
+    await rm(temporary, { force: true });
+  }
+}
 
 /** @param {string[]} argv */
 export function parseArgs(argv) {
@@ -106,37 +148,38 @@ export function assetsToUpload(state, files) {
  */
 async function idempotencyKey(directory, { manifestSha256, fighterId, explicit }) {
   const recordPath = path.join(directory, KEY_FILE);
-  /** @type {any} */
-  let saved = null;
-  try {
-    saved = JSON.parse(await readFile(recordPath, 'utf8'));
-  } catch {
-    saved = null;
-  }
-  const reusable =
-    !explicit &&
-    saved &&
-    saved.manifestSha256 === manifestSha256 &&
-    (saved.fighterId ?? null) === fighterId &&
-    typeof saved.idempotencyKey === 'string' &&
-    UUID.test(saved.idempotencyKey);
-  const key = explicit ?? (reusable ? saved.idempotencyKey.toLowerCase() : randomUUID());
-  const record = {
-    idempotencyKey: key,
-    manifestSha256,
-    fighterId,
-    submissionId: reusable ? (saved.submissionId ?? null) : null,
-  };
-  await writeFile(recordPath, JSON.stringify(record, null, 2) + '\n', { mode: 0o600 });
-  return { key, recordPath, reused: Boolean(reusable), submissionId: record.submissionId };
+  return withFileLock(
+    `${recordPath}.lock`,
+    async () => {
+      const saved = await readRegistrationRecord(recordPath);
+      const reusable = !explicit && saved && saved.manifestSha256 === manifestSha256 && saved.fighterId === fighterId;
+      const key = explicit ?? (reusable ? saved.idempotencyKey.toLowerCase() : randomUUID());
+      const record = {
+        idempotencyKey: key,
+        manifestSha256,
+        fighterId,
+        submissionId: reusable ? saved.submissionId : null,
+      };
+      await writeRegistrationRecord(recordPath, record);
+      return { key, recordPath, reused: Boolean(reusable), submissionId: record.submissionId };
+    },
+    { busy: 'registration-record-busy' },
+  );
 }
 
-/** @param {string} recordPath @param {string} submissionId */
-async function rememberSubmission(recordPath, submissionId) {
+/** @param {string} recordPath @param {string} key @param {string} submissionId */
+async function rememberSubmission(recordPath, key, submissionId) {
   try {
-    const saved = JSON.parse(await readFile(recordPath, 'utf8'));
-    saved.submissionId = submissionId;
-    await writeFile(recordPath, JSON.stringify(saved, null, 2) + '\n', { mode: 0o600 });
+    await withFileLock(
+      `${recordPath}.lock`,
+      async () => {
+        const saved = await readRegistrationRecord(recordPath);
+        if (!saved || saved.idempotencyKey !== key) return;
+        saved.submissionId = submissionId;
+        await writeRegistrationRecord(recordPath, saved);
+      },
+      { busy: 'registration-record-busy' },
+    );
   } catch {
     /* the key file is a convenience; the server still resumes from the idempotency key */
   }
@@ -217,7 +260,7 @@ export async function runRegister({
     const code = error instanceof Error ? error.message : String(error);
     return { ok: false, code, ...summary, hint: HINTS[code] };
   }
-  if (state?.submissionId) await rememberSubmission(stored.recordPath, state.submissionId);
+  if (state?.submissionId) await rememberSubmission(stored.recordPath, stored.key, state.submissionId);
   const uploaded = [];
   try {
     if (state?.stage === 'uploading' && state.code !== 'upload-expired') {
@@ -271,6 +314,10 @@ export async function runRegister({
 }
 
 const HINTS = /** @type {Record<string, string>} */ ({
+  'registration-record-invalid':
+    'The saved registration record is damaged. Recover its original idempotency key from the previous result or server before retrying; do not replace it with a new key.',
+  'registration-record-unreadable': 'The saved registration record could not be read. Restore access to it before retrying; do not replace it with a new key.',
+  'registration-record-busy': 'Another command is updating the registration record. Retry the same command after it finishes.',
   'package-invalid': 'The package failed the contract check (errors). Fix it and run npm run validate before --submit.',
   'client-sign-in-required': 'No owner session. Run npm run login (on a VM, npm run login -- --device, then --device-wait).',
   'invalid-client-config': 'The session file is missing a project URL, publishable key or token. Run npm run login.',

@@ -6,7 +6,7 @@ Use this when an image model paints new frames for a fighter. Packaging still fo
 
 Motion frames are a **right-facing side view only**. The contract fixes `appearance.sourceFacing` to `right` and `appearance.leftFacing` to `mirror`. The game flips that side for the other direction. A front-facing frame does not belong in a motion sheet.
 
-Keep the figure at the package scale: `appearance.bodyHeight` is **400**. Do not invent a new height per clip. Cell size may differ from 400; the body in the frame should stay at that height. `pixelScale` is a later fit of an oversized sheet, not a prompt to draw the figure at another size.
+Keep one body scale across clips. `appearance.bodyHeight` is **400**, measured from the standing reference, not the bounding height of every pose. Crouching, falling and extended arms change the pose's extent: never resize each pose to 400 or bottom-align frames. Cell size may differ from 400. Packaging may fit the whole sheet to a lower pixel density; `pixelScale` preserves its apparent game size.
 
 Every generation carries the spec's colouring text and attaches the house style anchor as the **last** reference:
 

@@ -155,6 +155,52 @@ test('rejected and expired submissions are final: nothing is pending', async () 
   assert.equal(open.assetUploadState, 'unconfirmed');
   assert.ok(!open.pending.includes('idle'));
 });
+test('upload recovery separates confirmed missing assets and falls back to all assets when storage cannot confirm', async () => {
+  const owner = crypto.randomUUID(),
+    id = crypto.randomUUID(),
+    assets = example.assets.slice(0, 3),
+    storageReads = [];
+  const row = {
+    id,
+    owner_id: owner,
+    status: 'uploading',
+    manifest_sha: 'a'.repeat(64),
+    expires_at: new Date(Date.now() + 60000).toISOString(),
+    manifest: { assets },
+  };
+  let listing = { data: [{ name: `${assets[0].id}.webp` }] };
+  const query = { select: () => query, eq: () => query, maybeSingle: async () => ({ data: row }) };
+  const handle = createHandler({
+    db: {
+      auth: { getUser: async () => ({ data: { user: { id: owner } } }) },
+      rpc: async () => ({ data: true }),
+      from: () => query,
+      storage: {
+        from: bucket => ({
+          list: async folder => {
+            storageReads.push({ bucket, folder });
+            return listing;
+          },
+        }),
+      },
+    },
+  });
+  const read = async () =>
+    (await handle(new Request(`https://test/ai-fighter/submissions/${id}`, { headers: { authorization: 'Bearer signed-user-token-for-test' } }))).json();
+  const declared = assets.map(({ id, path, bytes, sha256 }) => ({ id, path, bytes, sha256 }));
+  const confirmed = await read();
+  assert.equal(confirmed.assetUploadState, 'confirmed');
+  assert.deepEqual(confirmed.uploadedAssets, declared.slice(0, 1));
+  assert.deepEqual(confirmed.missingAssets, declared.slice(1));
+  assert.deepEqual(confirmed.pendingStages, ['asset-upload', 'server-validation', 'registration']);
+  assert.deepEqual(storageReads, [{ bucket: 'ai-fighter-beta', folder: `${owner}/${id}` }]);
+
+  listing = { data: null, error: { message: 'storage listing unavailable' } };
+  const unconfirmed = await read();
+  assert.equal(unconfirmed.assetUploadState, 'unconfirmed');
+  assert.deepEqual(unconfirmed.uploadedAssets, []);
+  assert.deepEqual(unconfirmed.missingAssets, declared);
+});
 test('a verifiable JWT is checked locally; the Auth server is not called', async () => {
   const owner = crypto.randomUUID(),
     calls = [];

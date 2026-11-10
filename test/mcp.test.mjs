@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import example from '../contracts/ai-fighter/v1/example.fighter.json' with { type: 'json' };
+import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { createServer } from '../mcp/server.mjs';
 import { makePackageValidator, resolveManifest } from '../mcp/package-access.mjs';
 import { creationTool } from '../scripts/creation-tool.mjs';
@@ -127,6 +128,35 @@ test('one decoder runs at a time, two calls wait, more are refused; the deadline
   );
   const short = makePackageValidator(root, { timeoutMs: 1 });
   assert.equal((await short('examples/sparring-bot/fighter.json')).errors[0].code, 'VALIDATION_TIMEOUT');
+});
+test('package manifest reads and warnings stay in the bounded worker, including rejected oversized files', async () => {
+  const temporary = await mkdtemp(path.join(tmpdir(), 'fighter-worker-bound-'));
+  const original = fsp.readFile;
+  const parentReads = [];
+  try {
+    await fsp.mkdir(path.join(temporary, 'oversized'));
+    await writeFile(path.join(temporary, 'oversized', 'fighter.json'), ' '.repeat(spec.limits.jsonBytes + 1));
+    fsp.readFile = async (file, options) => {
+      if (String(file).endsWith('fighter.json')) {
+        parentReads.push(String(file));
+        throw new Error('Manifest bytes must stay inside the bounded worker');
+      }
+      return original(file, options);
+    };
+    syncBuiltinESMExports();
+    const rejected = await makePackageValidator(temporary)('oversized/fighter.json');
+    assert.equal(rejected.errors[0].code, 'JSON_FILE_LIMIT');
+    const valid = await makePackageValidator(root)('examples/sparring-bot/fighter.json');
+    assert.equal(valid.ok, true);
+    assert.ok(valid.warnings.some(warning => warning.code === 'BORROWED_LANDMARK'));
+    assert.ok(valid.pendingStages.includes('server-registration'));
+    assert.deepEqual(valid.missingAssets, []);
+    assert.deepEqual(parentReads, []);
+  } finally {
+    fsp.readFile = original;
+    syncBuiltinESMExports();
+    await rm(temporary, { recursive: true, force: true });
+  }
 });
 test('the file tools share one serial decoder; a changed asset is reported, never accepted', async () => {
   const client = await connectInProcess();

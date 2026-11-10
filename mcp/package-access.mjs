@@ -1,9 +1,7 @@
 // @ts-check
-import { readFile, realpath } from 'node:fs/promises';
+import { realpath } from 'node:fs/promises';
 import path from 'node:path';
-import { parseFighterJson } from '../contracts/ai-fighter/validate.mjs';
 import { pathWithoutLinks, relativeParts } from '../plugins/ai-fighter/local-files.mjs';
-import { annotateValidation } from '../tools/ai-fighter/landmark-lint.mjs';
 import { forkWorker, serialQueue } from './serial-worker.mjs';
 
 /**
@@ -41,17 +39,10 @@ export function makePackageValidator(root, { timeoutMs = 20000, queue = serialQu
       if (!manifest) return issue('PATH_NOT_ALLOWED');
       const run = await forkWorker(new URL('./package-worker.mjs', import.meta.url), [manifest], { timeoutMs, heapMb: 128 });
       if (!run.started) return issue('WORKER_START_FAILED');
-      const verdict =
+      return (
         /** @type {PackageCheck | undefined} */ (run.message) ??
-        issue(run.timedOut ? 'VALIDATION_TIMEOUT' : run.code === 0 ? 'WORKER_NO_RESULT' : 'WORKER_FAILED');
-      let data = null;
-      try {
-        const parsed = parseFighterJson(await readFile(manifest, 'utf8'));
-        if (parsed.ok) data = parsed.data;
-      } catch {
-        data = null;
-      }
-      return /** @type {PackageCheck} */ (annotateValidation(verdict, data));
+        issue(run.timedOut ? 'VALIDATION_TIMEOUT' : run.code === 0 ? 'WORKER_NO_RESULT' : 'WORKER_FAILED')
+      );
     } catch {
       return issue('PACKAGE_UNAVAILABLE');
     }

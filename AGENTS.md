@@ -7,13 +7,13 @@ Keep these product rules in code and docs. The shipped kit applies only creation
 
 Workspace agents start here. Detail: [docs/AGENT-QUICKSTART.md](docs/AGENT-QUICKSTART.md), poses: [docs/POSE-GENERATION.md](docs/POSE-GENERATION.md).
 
-Offline check: `npm ci --ignore-scripts`, `npm run example`, `npm run validate`. Generation also needs ffmpeg and `npm run sprite:setup` (RIFE ~430 MB). Node 22.12+. Generation hosts are Linux.
+Offline check (Node 22.12+): `npm ci --ignore-scripts`, `npm run example`, `npm run validate -- output/sparring-bot/fighter.json`. Generation: ffmpeg and `npm run sprite:setup` (RIFE ~430 MB). Host PCs: Linux.
 
 Hosts without file attachments cannot pass local WebP files to `prepare_fighter_registration`. Do not invent URLs. `npm run login`, then `npm run fighter:register -- --dir <package> [--fighter <id>]`. The default is a dry run; `--submit` uploads, submits and polls. Reuse the saved idempotency key for the same bytes.
 
 `pending` and `pendingStages` are pipeline stage names, never asset ids. Upload each `missingAssets` entry, or every `assets` entry when storage was not confirmed. A successful local validate still lists later stage names in `pending`.
 
-Revise a registered fighter with a new package and his `fighterId`. That is a new submission and keeps the id (rule 6). `revise_hosted_motion` (`request_hosted_fighter` step `revise_motion`) only edits a legacy hosted job at `motion_ready`. Style-only edits use `update_fighter` kind `style`. Before `get_my_fighters`, read `get_profile` and state the id, email, `fighterCount` and `fighterLimit` (default 3, or that account's limit). The nickname is always `ODDBOUT`.
+Revise with a new package and `fighterId`; the id stays (rule 6). `revise_hosted_motion` (`request_hosted_fighter` step `revise_motion`) only edits legacy jobs at `motion_ready`. Style-only edits: `update_fighter` kind `style`. Read `get_profile`, then `get_my_fighters` view `list`; report their returned account id, email, `fighterCount` and `fighterLimit`. Missing fields or a null limit stay unknown; 3 is the default, not a verified account limit. Nickname: `ODDBOUT`.
 
 `combat.style` has no super clip. `super` is `slam`, `combo`, `fast` or `dash`. `temper` is an object of optional 1–5 grades: `guard`, `retreat`, `measure`, `patience`. `shockwave`, if present, is `true`. Skill kinds: `stretch`, `pincer`, `flight`, `feint`, `slide`, `counter`, `brace`. The skill clip has no display-name field (`profile.moves` names combo, slam, dash and block). The skill clip, a summon and a shockwave share `extrasBudget` 2. `mix.fast` ≤ `mix.slam` + `mix.combo`, with one of those three above 0. Read `browse_oddbout` view `style_guide` before filling a style.
 
@@ -21,7 +21,7 @@ Revise a registered fighter with a new package and his `fighterId`. That is a ne
 "style": { "mix": { "slam": 3, "combo": 2, "fast": 1 }, "special": "slam", "super": "dash", "distance": 2, "temper": { "patience": 5 }, "summon": "sportsCar" }
 ```
 
-New motion frames are a right-facing side view at body height 400. Attach `https://oddbout.com/art/oddbout/style-anchor-front.webp` as the last reference. `BORROWED_LANDMARK` warns when a landmark uses another clip's frame; validation still passes. `inspect-motion` `needs-review` without a foot ROI is expected on action clips and is not a packaging gate.
+Motion frames face right at one scale: standing body height 400, not each pose's extent. Attach `https://oddbout.com/art/oddbout/style-anchor-front.webp` as the last reference. `BORROWED_LANDMARK` warns when a landmark uses another clip's frame; validation still passes. `inspect-motion` `needs-review` without a foot ROI is expected on action clips and is not a packaging gate.
 
 ## Start here
 

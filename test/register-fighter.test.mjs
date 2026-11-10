@@ -1,9 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { execFile } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import example from '../contracts/ai-fighter/v1/example.fighter.json' with { type: 'json' };
 import { assetsToUpload, runRegister } from '../scripts/register-fighter.mjs';
 
@@ -74,6 +77,53 @@ test('a dry run checks the package, saves one idempotency key and does not call 
   const other = await runRegister({ argv: ['--dir', dir], connect, env: {} });
   assert.notEqual(other.idempotencyKey, dry.idempotencyKey);
   assert.equal(other.request.route, 'submissions');
+});
+
+test('concurrent commands save and reuse one idempotency key for identical package bytes', async () => {
+  const { dir } = await packageDir();
+  const script = fileURLToPath(new URL('../scripts/register-fighter.mjs', import.meta.url));
+  const results = await Promise.all(
+    Array.from({ length: 6 }, async () => {
+      const { stdout } = await promisify(execFile)(process.execPath, [script, '--dir', dir]);
+      return JSON.parse(stdout);
+    }),
+  );
+  assert.equal(new Set(results.map(result => result.idempotencyKey)).size, 1);
+  assert.equal(results.filter(result => !result.idempotencyKeyReused).length, 1);
+  const saved = JSON.parse(await readFile(path.join(dir, '.oddbout-registration.json'), 'utf8'));
+  assert.equal(saved.idempotencyKey, results[0].idempotencyKey);
+  const retry = await runRegister({ argv: ['--dir', dir] });
+  assert.equal(retry.idempotencyKey, saved.idempotencyKey);
+});
+
+test('a damaged existing record is preserved and never mints a replacement key or contacts the server', async () => {
+  const { dir } = await packageDir();
+  const recordPath = path.join(dir, '.oddbout-registration.json');
+  let calls = 0;
+  const connect = async () => {
+    calls++;
+    return { request: async () => ({}) };
+  };
+  for (const text of ['{"idempotencyKey":', '{}', 'null']) {
+    await writeFile(recordPath, text);
+    for (const flags of [[], ['--idempotency-key', 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee']]) {
+      await assert.rejects(runRegister({ argv: ['--dir', dir, '--submit', ...flags], connect }), /registration-record-invalid/);
+      assert.equal(await readFile(recordPath, 'utf8'), text);
+    }
+  }
+  assert.equal(calls, 0);
+});
+
+test('an unreadable existing record fails closed before connecting', async () => {
+  const { dir } = await packageDir();
+  await mkdir(path.join(dir, '.oddbout-registration.json'));
+  await assert.rejects(
+    runRegister({
+      argv: ['--dir', dir, '--submit'],
+      connect: async () => assert.fail('must not connect without the original registration record'),
+    }),
+    /registration-record-unreadable/,
+  );
 });
 
 test('--submit uploads local asset ids, ignores pending stage names, and polls until registered', async () => {

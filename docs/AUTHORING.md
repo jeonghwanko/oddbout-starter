@@ -92,7 +92,7 @@ MCP 파일 경로는 `AI_FIGHTER_ROOT`를 기준으로 `output/my-fighter/fighte
 새 필드는 서버의 `/spec` `features`에 해당 기능이 있을 때만 제출한다. 없으면 서버 검증이 그 패키지를 거절한다.
 `language`·`concept`·`moves`는 `profile-extras-1`, `profile.names`는 `profile-names-1`, `profile.lines`는 `profile-lines-1`,
 `combat.stats`는 `combat-stats-1`, `combat.style`은 `combat-style-1`, 선택 동작 `skill`·`entrance`·`victory`는 `extra-clips-1`이다.
-계정당 선수는 기본 3명이며, 계정별 `af_creators.fighter_limit`을 따른다. 새 선수 등록 시 `fighterId`를 생략하고, 기존 선수를 수정할 때만 해당 ID를 지정한다. 나중에 컨셉·기술 이름·능력치·원화를 바꾸려면 다시 패키징해 같은 선수의 `fighterId`로 제출한다(`prepare_fighter_registration`의 `fighterId`, 또는 파일 첨부가 없는 호스트에서는 `npm run fighter:register -- --fighter`). 선수 ID와 전적은 유지되고, 지난 경기는 당시 패키지 기준 기록으로 남는다. 이미 등록된 선수의 모션을 고칠 때도 이 개정이다. `revise_hosted_motion`은 예전 호스팅 작업이 `motion_ready`일 때만 쓴다.
+계정당 선수는 기본 3명이며, 계정별 `af_creators.fighter_limit`을 따른다. 새 선수 등록 시 `fighterId`를 생략하고, 기존 선수를 수정할 때만 해당 ID를 지정한다. 나중에 컨셉·기술 이름·능력치·원화를 바꾸려면 다시 패키징해 같은 선수의 `fighterId`로 제출한다(`prepare_fighter_registration`의 `fighterId`, 또는 파일 첨부가 없는 호스트에서는 `npm run fighter:register -- --dir <package> --fighter <id> --submit`). 선수 ID와 전적은 유지되고, 지난 경기는 당시 패키지 기준 기록으로 남는다. 이미 등록된 선수의 모션을 고칠 때도 이 개정이다. `revise_hosted_motion`은 예전 호스팅 작업이 `motion_ready`일 때만 쓴다.
 `standard-duel`을 선택해도 경쟁 규칙의 통합이나 서버 연결이 완료되지는 않는다.
 
 ## 좌표와 프레임
