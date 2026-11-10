@@ -2,28 +2,21 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, mkdir, readFile, rm, symlink, truncate, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import example from '../contracts/ai-fighter/v1/example.fighter.json' with { type: 'json' };
-import { assetsToUpload, runRegister } from '../scripts/register-fighter.mjs';
+import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
+import { assetsToUpload, readFighterPackage, runRegister } from '../scripts/register-fighter.mjs';
 
 const FIGHTER = 'b65cd3f2-e934-4d49-aaa1-2d2665e5ee52';
 const SUBMISSION = '11111111-1111-4111-8111-111111111111';
 
 async function packageDir() {
   const dir = await mkdtemp(path.join(tmpdir(), 'fighter-register-'));
-  const manifest = structuredClone(example);
-  await mkdir(path.join(dir, 'assets'));
-  for (const asset of manifest.assets) {
-    const bytes = Buffer.alloc(asset.bytes, 7);
-    bytes.write('RIFF', 0);
-    bytes.write('WEBP', 8);
-    asset.sha256 = createHash('sha256').update(bytes).digest('hex');
-    await writeFile(path.join(dir, asset.path), bytes);
-  }
+  await cp(fileURLToPath(new URL('../examples/sparring-bot/', import.meta.url)), dir, { recursive: true });
+  const manifest = JSON.parse(await readFile(path.join(dir, 'fighter.json'), 'utf8'));
   await writeFile(path.join(dir, 'fighter.json'), JSON.stringify(manifest));
   return { dir, manifest };
 }
@@ -94,6 +87,164 @@ test('concurrent commands save and reuse one idempotency key for identical packa
   assert.equal(saved.idempotencyKey, results[0].idempotencyKey);
   const retry = await runRegister({ argv: ['--dir', dir] });
   assert.equal(retry.idempotencyKey, saved.idempotencyKey);
+});
+
+test('an unknown submission resumes its original key after package and target changes', async () => {
+  const { dir } = await packageDir();
+  const manifestPath = path.join(dir, 'fighter.json');
+  const original = await readFile(manifestPath, 'utf8');
+  const first = await runRegister({
+    argv: ['--dir', dir, '--submit'],
+    connect: async () => ({
+      request: async route => {
+        if (route === 'submissions') return { ok: true, stage: 'uploading', submissionId: SUBMISSION };
+        if (route.endsWith('/submit')) throw new Error('api-timeout');
+        return { ok: true, stage: 'uploaded' };
+      },
+    }),
+  });
+  assert.equal(first.code, 'api-timeout');
+  await writeFile(manifestPath, original + '\n');
+  const otherPackage = await runRegister({ argv: ['--dir', dir] });
+  await writeFile(manifestPath, original);
+  const otherTarget = await runRegister({ argv: ['--dir', dir, '--fighter', FIGHTER] });
+  const resumed = await runRegister({
+    argv: ['--dir', dir, '--submit'],
+    connect: async () => ({
+      request: async (route, options) => {
+        assert.equal(route, 'submissions');
+        assert.equal(options.headers['idempotency-key'], first.idempotencyKey);
+        return { ok: true, stage: 'registered', submissionId: SUBMISSION, fighterId: FIGHTER };
+      },
+    }),
+  });
+  assert.equal(resumed.ok, true);
+  assert.equal(resumed.idempotencyKey, first.idempotencyKey);
+  const saved = JSON.parse(await readFile(first.idempotencyKeyPath, 'utf8'));
+  assert.equal(saved.version, 2);
+  assert.equal(saved.submissionId, SUBMISSION);
+  assert.deepEqual(
+    new Set(saved.attempts.map(attempt => attempt.idempotencyKey)),
+    new Set([first.idempotencyKey, otherPackage.idempotencyKey, otherTarget.idempotencyKey]),
+  );
+});
+
+test('legacy records migrate and explicit key choices retain every earlier attempt', async () => {
+  const { dir } = await packageDir();
+  const first = await runRegister({ argv: ['--dir', dir] });
+  const stored = JSON.parse(await readFile(first.idempotencyKeyPath, 'utf8'));
+  const legacy = { ...stored.attempts[0], submissionId: SUBMISSION };
+  await writeFile(first.idempotencyKeyPath, JSON.stringify(legacy));
+  const migrated = await runRegister({ argv: ['--dir', dir] });
+  assert.equal(migrated.idempotencyKey, first.idempotencyKey);
+  assert.equal(migrated.submissionId, SUBMISSION);
+  const explicit = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+  await runRegister({ argv: ['--dir', dir, '--idempotency-key', explicit] });
+  assert.equal((await runRegister({ argv: ['--dir', dir] })).idempotencyKey, explicit);
+  const restored = await runRegister({ argv: ['--dir', dir, '--idempotency-key', first.idempotencyKey] });
+  assert.equal(restored.submissionId, SUBMISSION);
+  await runRegister({ argv: ['--dir', dir, '--fighter', FIGHTER] });
+  assert.equal((await runRegister({ argv: ['--dir', dir] })).idempotencyKey, first.idempotencyKey);
+  const saved = JSON.parse(await readFile(first.idempotencyKeyPath, 'utf8'));
+  assert.equal(saved.attempts.length, 3);
+  assert.ok(saved.attempts.some(attempt => attempt.idempotencyKey === explicit));
+  const before = await readFile(first.idempotencyKeyPath, 'utf8');
+  await assert.rejects(runRegister({ argv: ['--dir', dir, '--fighter', FIGHTER, '--idempotency-key', explicit] }), /idempotency-conflict/);
+  assert.equal(await readFile(first.idempotencyKeyPath, 'utf8'), before);
+});
+
+test('confirmed upload expiration recommends an explicit new key and preserves the expired attempt', async () => {
+  const { dir } = await packageDir();
+  const expired = await runRegister({
+    argv: ['--dir', dir, '--submit'],
+    connect: async () => ({
+      request: async route => {
+        assert.equal(route, 'submissions');
+        return { ok: true, stage: 'uploading', code: 'upload-expired', submissionId: SUBMISSION };
+      },
+    }),
+  });
+  assert.equal(expired.code, 'upload-expired');
+  assert.match(expired.hint, /new --idempotency-key/);
+  assert.doesNotMatch(expired.hint, /delete|change the package/);
+  const replacement = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+  const retry = await runRegister({ argv: ['--dir', dir, '--idempotency-key', replacement] });
+  assert.equal(retry.idempotencyKey, replacement);
+  const saved = JSON.parse(await readFile(retry.idempotencyKeyPath, 'utf8'));
+  assert.equal(saved.attempts.length, 2);
+  assert.equal(saved.attempts.find(attempt => attempt.idempotencyKey === expired.idempotencyKey).submissionId, SUBMISSION);
+});
+
+test('unknown, duplicate and conflicting flags fail before reading packages or connecting', async () => {
+  const { dir } = await packageDir();
+  const before = await readFile(path.join(dir, 'fighter.json'), 'utf8');
+  const connect = async () => assert.fail('invalid flags must not connect');
+  for (const flags of [['--fighter-id', FIGHTER], ['--fighter', FIGHTER, '--fighter', FIGHTER], ['--submit'], ['another-package'], ['--dry-run']]) {
+    await assert.rejects(runRegister({ argv: ['--dir', dir, '--submit', ...flags], connect }), /invalid-(?:flag|args):/);
+    await assert.rejects(readFile(path.join(dir, '.oddbout-registration.json')), { code: 'ENOENT' });
+  }
+  await assert.rejects(runRegister({ argv: ['--dir', '/does/not/exist', '--submit', '--fighter-id', FIGHTER], connect }), /invalid-flag:--fighter-id/);
+  assert.equal(await readFile(path.join(dir, 'fighter.json'), 'utf8'), before);
+});
+
+test('symlinked asset directories, asset files and manifests are rejected', async () => {
+  const external = await packageDir();
+  const linkedDirectory = await packageDir();
+  await rm(path.join(linkedDirectory.dir, 'assets'), { recursive: true });
+  await symlink(path.join(external.dir, 'assets'), path.join(linkedDirectory.dir, 'assets'), 'dir');
+  await assert.rejects(readFighterPackage(linkedDirectory.dir), /asset-escape:/);
+
+  const linkedFile = await packageDir();
+  const asset = linkedFile.manifest.assets[0];
+  await rm(path.join(linkedFile.dir, asset.path));
+  await symlink(path.join(external.dir, asset.path), path.join(linkedFile.dir, asset.path), 'file');
+  await assert.rejects(readFighterPackage(linkedFile.dir), new RegExp(`asset-escape:${asset.id}`));
+
+  const linkedManifest = await packageDir();
+  await rm(path.join(linkedManifest.dir, 'fighter.json'));
+  await symlink(path.join(external.dir, 'fighter.json'), path.join(linkedManifest.dir, 'fighter.json'), 'file');
+  await assert.rejects(readFighterPackage(linkedManifest.dir), /package-symlink/);
+});
+
+test('oversized manifest and asset files are refused before full-file reads', async () => {
+  const oversizedManifest = await packageDir();
+  await truncate(path.join(oversizedManifest.dir, 'fighter.json'), spec.limits.jsonBytes + 1);
+  await assert.rejects(readFighterPackage(oversizedManifest.dir), /package-invalid/);
+  const oversizedAsset = await packageDir();
+  const asset = oversizedAsset.manifest.assets[0];
+  await truncate(path.join(oversizedAsset.dir, asset.path), asset.bytes + 1);
+  await assert.rejects(readFighterPackage(oversizedAsset.dir), new RegExp(`asset-mismatch:${asset.id}`));
+});
+
+test('a FIFO asset is refused without waiting for a writer or contacting the server', { skip: process.platform === 'win32', timeout: 5000 }, async () => {
+  const { dir, manifest } = await packageDir();
+  const asset = manifest.assets[0];
+  const file = path.join(dir, asset.path);
+  await rm(file);
+  await promisify(execFile)('mkfifo', [file]);
+  await assert.rejects(
+    runRegister({ argv: ['--dir', dir, '--submit'], connect: async () => assert.fail('FIFO assets must not connect') }),
+    new RegExp(`asset-mismatch:${asset.id}`),
+  );
+  await assert.rejects(readFile(path.join(dir, '.oddbout-registration.json')), { code: 'ENOENT' });
+});
+
+test('matching hashes do not let undecodable WebP files reach key creation or the server', async () => {
+  const { dir, manifest } = await packageDir();
+  const asset = manifest.assets[0];
+  const corrupt = Buffer.alloc(asset.bytes, 7);
+  corrupt.write('RIFF', 0);
+  corrupt.write('WEBP', 8);
+  asset.sha256 = createHash('sha256').update(corrupt).digest('hex');
+  await writeFile(path.join(dir, asset.path), corrupt);
+  await writeFile(path.join(dir, 'fighter.json'), JSON.stringify(manifest));
+  for (const flags of [[], ['--submit']]) {
+    await assert.rejects(
+      runRegister({ argv: ['--dir', dir, ...flags], connect: async () => assert.fail('undecodable art must not connect') }),
+      error => error.message === 'package-invalid' && error.errors.some(issue => issue.code === 'ASSET_READ_OR_DECODE'),
+    );
+    await assert.rejects(readFile(path.join(dir, '.oddbout-registration.json')), { code: 'ENOENT' });
+  }
 });
 
 test('a damaged existing record is preserved and never mints a replacement key or contacts the server', async () => {
