@@ -1,7 +1,7 @@
 # ODDBOUT creator kit: agent instructions
 
 Codex loads this file; Grok requires a trusted folder (`--trust` headlessly); Claude Code imports it via `CLAUDE.md`.
-Keep these product rules in code and docs. The shipped kit applies only creation/Dots rules and lacks repository-only docs.
+Keep these product rules in code and docs. The shipped kit lacks repository-only pages. Owner dummy flow, checkout only, never production: [docs/FLOW-TEST.md](docs/FLOW-TEST.md), `npm run flow:test`.
 
 ## Agent quickstart
 
@@ -352,7 +352,7 @@ Procedures: `docs/CREATOR-HOSTING.md`.
 
 ### sprite-gen
 
-`vendor/sprite-gen` pins [sprite-gen-agent](https://github.com/jeonghwanko/sprite-gen-agent), our fork of Alex Kim's [sprite-gen](https://github.com/aldegad/sprite-gen). Commands, paths and the Python package keep the name `sprite-gen`.
+`vendor/sprite-gen` pins [sprite-gen-agent](https://github.com/jeonghwanko/sprite-gen-agent), a fork of [sprite-gen](https://github.com/aldegad/sprite-gen). The name stays `sprite-gen`.
 
 - Keep the Apache-2.0 LICENSE and NOTICE. Do not update the pin or edit vendor code while creating a character. Commit engine changes to sprite-gen-agent first, then move the pin. Bundling and setup refuse local edits a moved pin would overwrite. CI refuses a pin that does not move forward on sprite-gen-agent main.
 - A pull does not move the submodule. Set `git config submodule.recurse true` once per clone, or run `git submodule update` after each pull. Otherwise `vendor/sprite-gen` shows as modified, and `git add -A` stages a rollback.

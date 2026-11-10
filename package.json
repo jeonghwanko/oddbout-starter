@@ -43,6 +43,8 @@
     "fighter:contact": "node scripts/contact.mjs",
     "fighter:profile-set": "node scripts/profile-set.mjs",
     "fighter:register": "node scripts/register-fighter.mjs",
+    "flow:test": "node scripts/flow-test.mjs",
+    "flow:mcp": "node scripts/flow-mcp.mjs",
     "example": "node scripts/create-example.mjs",
     "validate": "node tools/ai-fighter/validate-package.mjs",
     "test": "node --test test/*.test.mjs host/*.test.mjs",
