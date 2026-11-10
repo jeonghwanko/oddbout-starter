@@ -27,7 +27,8 @@ export const gameLauncherMeta = {
   'openai/ui': {
     availableDisplayModes: ['inline', 'fullscreen'],
   },
-  'openai/widgetDescription': 'Launch the ODDBOUT browser game inside ChatGPT when browser embedding permits; game authentication and readiness are checked separately.',
+  'openai/widgetDescription':
+    'Launch the ODDBOUT browser game inside ChatGPT when browser embedding permits; game authentication and readiness are checked separately.',
 };
 export const gameLauncherHtml = `<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
