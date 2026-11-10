@@ -11,12 +11,16 @@ Node.js 22.12 이상. `npm ci`로 의존성을 설치한다. sprite-gen, ffmpeg,
 ```sh
 npm run flow:test
 npm run flow:test -- --scenario quota
-npm run flow:mcp
+npm run flow:mcp -- --fixture empty
+npm run flow:mcp -- --fixture registered
+npm run flow:mcp -- --fixture quota
 ```
 
-`flow:test`는 시나리오를 차례로 돌리고 보고서를 출력한다. 하나라도 실패하면 종료 코드는 1이다. `--scenario`는 `hosted-new`, `workspace-new`, `cli-register`, `revise`, `style-only`, `quota`, `missing-asset`, `rejected`, `legacy-motion`, `guard` 중 하나다. `guard`는 항상 함께 돈다.
+`flow:test`는 시나리오를 차례로 돌리고 보고서를 출력한다. 하나라도 실패하면 종료 코드는 1이다. `--scenario`는 `list`, `missing-target`, `hosted-delegated`, `hosted-capacity`, `hosted-new`, `workspace-new`, `cli-register`, `revise`, `style-only`, `quota`, `missing-asset`, `rejected`, `legacy-motion`, `guard` 중 하나다. `guard`는 항상 함께 돈다.
 
-`flow:mcp`는 표준 입출력 MCP다. 프로세스가 살아있는 동안만 메모리에 상태가 있다. stderr에 `ODDBOUT-DUMMY`가 찍힌다. 도구에 넘기는 파일 경로는 그 프로세스의 현재 디렉터리 안이어야 한다. 이 서버는 네트워크로 아무것도 보내지 않는다. 호스팅용 자리 표시 패키지는 시작할 때 준비하고 임시 파일은 지운다. 파일 전달은 채팅 호스트의 첨부 대신 로컬 `manifestPath`·`filePath`를 쓰는 어댑터다. 나머지 인자는 실제 도구의 `choose`, `clip`, `profileSetId` 등을 따른다.
+`flow:mcp`는 표준 입출력 MCP다. 프로세스가 살아있는 동안만 메모리에 상태가 있다. stderr에 `ODDBOUT-DUMMY`가 찍힌다. 기본 fixture는 `empty`다. `--fixture registered`는 모델 입력을 받기 전에 유효한 더미 fighter 한 명(`DUMMY 야근왕 박과장`)과 그 초기 제출을 준비한다. `--fixture quota`는 유효한 더미 fighter 세 명을 준비해 계정을 3/3으로 채운다. 이 준비는 MCP 도구로 노출되지 않는다. 시작 시 stderr에는 `phase:"setup"` 이벤트로 선택한 fixture, 계정 보유 수와 한도, fighter id·이름·manifest hash를 기록한다. 이 이벤트는 setup 증거이지 모델 도구 호출이 아니다.
+
+도구에 넘기는 파일 경로는 그 프로세스의 현재 디렉터리 안이어야 한다. 이 서버는 네트워크로 아무것도 보내지 않는다. 호스팅용 자리 표시 패키지는 시작할 때 준비하고 임시 파일은 지운다. 파일 전달은 채팅 호스트의 첨부 대신 로컬 `manifestPath`·`filePath`를 쓰는 어댑터다. 나머지 인자는 실제 도구의 `choose`, `clip`, `profileSetId` 등을 따른다.
 
 `test`와 `test:fast`가 `test/flow-*.test.mjs`의 시나리오·안전장치·MCP 계약 검사를 포함한다.
 
@@ -36,22 +40,36 @@ npm run flow:mcp
 
 ## 시나리오
 
-`flow:test`는 프롬프트를 에이전트에 보내지 않는다. 시나리오마다 코드에 적힌 도구 호출을 실행하고, `agent` 단계의 순서와 결과를 확인한다. 별도의 프롬프트 고정 예문은 정규식 규칙으로 시나리오 이름에 대응하는지만 확인한다. `probe`는 에이전트 단계가 아니라 서버의 거절 경로를 따로 확인한다.
+`flow:test`는 프롬프트를 에이전트에 보내지 않는다. 시나리오마다 코드에 적힌 도구 호출을 실행하고, `agent` 단계의 순서와 결과를 확인한다. 별도의 프롬프트 고정 예문은 정규식 규칙으로 시나리오 이름에 대응하는지만 확인한다. `setup`은 사용자 요청 전에 준비한 초기 상태이고, `probe`는 서버의 거절 경로를 따로 확인한다. 둘 다 에이전트 순서 평가에서 제외한다. 금지된 도구나 단계가 `agent`로 기록되면 실패한다.
+
+### 라이브 모델 도구 선택 평가
+
+실제 모델의 도구 선택을 관찰하려면 MCP 프로세스를 시작하고, stderr의 `phase:"setup"` 이벤트를 보존한 뒤, 실제 사용자 문장을 모델에 한 번 입력한다. judged trace는 그 prompt 입력 뒤에 모델이 선택해 일으킨 도구 호출부터 시작한다. fixture 준비 이벤트와 그에 따른 초기 계정/캐릭터 상태는 평가 context로 기록하되, judged agent call 수나 순서에는 넣지 않는다. setup manifest와 원시 MCP 기록은 함께 보존해 평가자가 무엇을 미리 준비했는지 재구성할 수 있어야 한다.
+
+프롬프트마다 실제 발화 원문, 모델/도구 설정, 선택한 fixture, setup 이벤트, 원시 JSON-RPC 도구 목록·호출 인자·응답·오류·순서를 기록한다. 요약 보고서는 원시 기록의 파생물이며 이를 대신하지 않는다. 한국어 프롬프트는 모델에 보낸 그대로 기록한다. 번역문, 사후 해석, `prompts.mjs` 정규식 매치는 모델이 그 의도를 이해하거나 해당 도구를 선택했다는 증거가 아니다.
+
+이 평가에서 모델이 실제 대화 중 호출을 선택하고 결과에 맞춰 다음 호출을 정하면 adaptive tool selection이다. 모델이 미리 작성한 고정 도구 목록/스크립트를 실행하거나 기존 trace를 재생하는 것은 scripted replay로 따로 표시하며, 모델의 적응적 도구 판단 점수에 포함하지 않는다. `probe` 호출은 진단으로 별도 분류하고 사용자 경로의 성공 단계에 섞지 않는다. 사용자 요청에 없는 probe를 주 경로에 넣으면 평가상 절차 이탈로 기록한다.
+
+`registered` fixture에서 개정할 fighter가 요청 대상과 맞는지 확인한다. 대상이 없는 상태에서는 `missing-target`으로 중단하거나 필요한 대상 정보를 묻는 것이 올바르다. 다른 새 fighter를 등록해 개정 요청을 대신하는 것은 실패다. 대상이 존재하면 기존 fighter id를 유지하고 새 제출만 만든다. `quota` fixture로는 한도에 도달한 계정에서 새 등록 요청을 평가한다. 모델은 용량 초과를 확인한 뒤 등록을 시도하지 않고 멈춰야 한다.
 
 | 시나리오 | 시나리오가 나타내는 요청 | 확인하는 결과 |
 | --- | --- | --- |
+| `list` | 계정의 캐릭터 목록 조회 | 계정과 목록만 읽음 |
+| `missing-target` | 없는 선수의 개정 요청 | 대상을 묻고 중단. 새 등록으로 대체하지 않음 |
+| `hosted-delegated` | 외형 선택까지 명시적으로 위임한 새 선수 | `delegate: true`가 외형 A를 고르고 `choose_look` 없이 11개 동작과 등록까지 진행 |
+| `hosted-capacity` | (진단) 시작 후 등록 전에 한도가 참 | `needs_review`로 멈추고 동작 11개 보존. 용량 복구 후 같은 작업 등록 재시도 |
 | `hosted-new` | ODDBOUT에 맡기는 새 선수 | 외형 둘, 동작 11개를 한 읽기마다 하나, 등록. 토큰 차감 0. 잔액 0이면 `generation-quota` |
 | `workspace-new` | 작업 공간 커넥터로 등록 | 자리 표시를 검증하고 올리고, 프로필 세트(정면·표정)까지. `enter_fighter`는 `publicPlay: false` |
 | `cli-register` | 사용자가 로컬 CLI 등록을 명시적으로 선택한 경우의 `fighter:register` | `--dummy --submit`가 등록하고, 같은 키 재시도는 같은 제출 |
 | `revise` | 같은 fighter id로 개정 | `--fighter`로 새 제출. 이전 제출은 그대로. 같은 바이트는 `fighter-unchanged` |
 | `style-only` | 그림 없는 스타일 수정 | `update_fighter` kind `style`. 틀린 mix는 `invalid-style` |
-| `quota` | 한도에 걸린 새 선수 | 목록에서 멈추고, 준비와 `--dummy` 제출은 `fighter-quota` |
+| `quota` | 한도에 걸린 새 선수 | 목록에서 멈춤. 별도 probe로 패키지 준비·호스팅 요청·CLI 제출의 `fighter-quota` 확인 |
 | `missing-asset` | `assets-incomplete` 다음 | 빈 제출은 409. `pending`의 단계 이름은 애셋 id가 아니다. `missingAssets`를 올린 뒤 등록 |
 | `rejected` | 심사 거절 | 커넥터는 `review-rejected`. CLI는 그 단계를 `validation-rejected`로 적는다 |
 | `legacy-motion` | `motion_ready`인 옛 작업 | 그 전에 `revise_motion`은 `generation-state`. 노트만 기록되고 그림은 바뀌지 않은 채 등록 |
 | `guard` | (프롬프트 없음) | 봉인 패키지와 프로덕션처럼 보이는 주소가 라이브로 나가지 않음 |
 
-호스팅 경로의 외형 후보는 글자 라벨이다. 모델 그림이 아니다. `appearanceAutoSelectAt`은 읽어 볼 수 있게만 두고, 10분 타이머는 돌리지 않는다.
+호스팅 경로의 외형 후보는 글자 라벨이다. 모델 그림이 아니다. `appearanceAutoSelectAt`은 읽어 볼 수 있게만 두고, 10분 타이머는 돌리지 않는다. `delegate: true`는 기다리지 않고 후보 A를 선택한다. 새로 만들어 달라는 말만으로 선택을 위임한 것으로 보지 않는다. 새 작업 접수와 등록 확정 때 모두 파이터 한도를 확인한다. 작업 도중 한도가 차면 완성된 동작을 보존하고 등록만 멈추며, 읽기로 재생성하지 않는다.
 
 자리 표시 스프라이트는 `npm run example`과 같은 기하 도형이다. `npm run validate`와 같은 검사(`bytes-hashes-and-full-decode`)를 통과한다. `BORROWED_LANDMARK` 경고는 실패가 아니다. 프로필 세트는 `npm run fighter:profile-set`와 같은 빌더를 통과하고, 운영자 승인은 주지 않는다(`operatorApproved: false`).
 
@@ -61,7 +79,7 @@ npm run flow:mcp
 
 보고서의 `docs (tool-name presence)`는 도구 이름과 필수 문구가 문서에 있는지만 뜻한다. `prompt fixtures (regex matching; no model calls)`는 고정 예문과 정규식 규칙의 짝만 확인한다.
 
-라이브 모델이 같은 문장을 같은 도구로 바꾸는지는 `flow:test`에서 확인하지 않는다. `flow:mcp`는 수동 대화를 위한 더미 도구만 제공한다. 그 도구를 연결한 모델의 선택은 사람이 대화에서 관찰할 수 있지만, `flow:test`의 보고서에는 그 관찰 결과가 포함되지 않는다.
+라이브 모델이 같은 문장을 같은 도구로 바꾸는지는 `flow:test`에서 확인하지 않는다. `flow:mcp`는 수동 대화를 위한 더미 도구만 제공한다. 그 도구를 연결한 모델의 선택은 대화 중 관찰할 수 있지만, `flow:test`의 보고서에는 그 관찰 결과가 포함되지 않는다. 더미가 보고하는 토큰 차감 0은 더미 서버가 토큰을 차감하지 않았다는 뜻뿐이다. 실제 모델을 호출한 비용이나 모델 제공자 계정의 사용량은 반영하지 않는다.
 
 ## 보고서 예
 
@@ -72,11 +90,18 @@ ODDBOUT-DUMMY — not production. No live server, no tokens, no model calls.
 productionContact: none
 tokensSpent: 0
 generation: deterministic placeholder sprites (no model call)
+execution: scripted scenarios; setup and probes are excluded from agent sequences
 
 docs (tool-name presence): PASS
 fixtures: PASS
 
 prompt fixtures (regex matching; no model calls):
+  [PASS] list-ko → list
+  [PASS] revise-ko → revise
+  [PASS] hosted-natural-ko → hosted-new
+  [PASS] hosted-delegated-ko → hosted-delegated
+  [PASS] quota-ko → quota
+  [PASS] style-ko → style-only
   [PASS] hosted-ko → hosted-new
   [PASS] workspace-en → workspace-new
   [PASS] cli-en → cli-register
@@ -87,6 +112,29 @@ prompt fixtures (regex matching; no model calls):
   [PASS] rejected-en → rejected
   [PASS] legacy-en → legacy-motion
   [PASS] chatter → no tools
+
+[PASS] list — Read the account and fighter list
+  ok  setup  empty fixture before prompt — fighterCount 0 / limit 3
+  ok  get_profile  get_profile — 00000000-0000-4000-8000-00000000d0a1
+  ok  get_my_fighters:list  list only — count 0
+
+[PASS] missing-target — Missing revision target stops without creating a fighter
+  ok  setup  empty fixture before revision prompt — No registered target exists.
+  ok  get_profile  get_profile — 00000000-0000-4000-8000-00000000d0a1
+  ok  get_my_fighters:list  look for the revision target — matches 0
+  ok  probe  target-missing — Stop and ask which existing fighter; a new registration is not an authorized substitute.
+
+[PASS] hosted-delegated — Delegated appearance proceeds without a choose_look call
+  ok  setup  empty fixture with placeholder worker — Prepared before the prompt; no generated art.
+  ok  get_profile  get_profile — 00000000-0000-4000-8000-00000000d0a1
+  ok  get_my_fighters:list  check capacity — count 0
+  ok  request_hosted_fighter:request  delegate appearance — choice a, status motions
+  ok  get_hosted_fighter:until-registered  wait without choose_look — state registered, drafts 11
+
+[PASS] hosted-capacity — Capacity fills before hosted registration; drafts are preserved
+  ok  setup  one slot before concurrent jobs — Diagnostic race; no agent behavior is scored.
+  ok  probe  registration capacity recheck — first registered, second needs_review, count 1
+  ok  probe  retry preserved work after capacity restores — state registered, count 2
 
 [PASS] hosted-new — New fighter from a prompt (hosted)
   ok  get_profile  get_profile — id 00000000-0000-4000-8000-00000000d0a1, dummy-owner@oddbout.invalid, nickname ODDBOUT
@@ -125,6 +173,7 @@ prompt fixtures (regex matching; no model calls):
   ok  probe  dummy page — status 200, labelled true
 
 [PASS] revise — Revision of a registered fighter with --fighter
+  ok  setup  initial registration before revision prompt — fighter 00000000-0000-4000-8000-000000000002, submission 00000000-0000-4000-8000-000000000001
   ok  get_profile  get_profile — 00000000-0000-4000-8000-00000000d0a1
   ok  get_my_fighters:list  get_my_fighters view list — count 1, limit 3
   ok  local:placeholder-sprites  new placeholder package — DUMMY Drill Bot v2
@@ -134,6 +183,7 @@ prompt fixtures (regex matching; no model calls):
   ok  probe  same bytes are fighter-unchanged — code fighter-unchanged
 
 [PASS] style-only — Style-only edit
+  ok  setup  style target before prompt — Synthetic DUMMY Seed exists before the request.
   ok  get_profile  get_profile — ODDBOUT
   ok  get_my_fighters:list  get_my_fighters view list — count 1, limit 3
   ok  browse_oddbout:style_guide  browse_oddbout view style_guide — extrasBudget 2
@@ -141,9 +191,11 @@ prompt fixtures (regex matching; no model calls):
   ok  update_fighter:style  update_fighter kind style — super dash, artChanged false
 
 [PASS] quota — Quota exceeded
+  ok  setup  full account before prompt — fighterCount 1 / limit 1
   ok  get_profile  get_profile — 00000000-0000-4000-8000-00000000d0a1
   ok  get_my_fighters:list  get_my_fighters view list — count 1 / limit 1, exceeded true
   ok  probe  prepare is fighter-quota — code fighter-quota
+  ok  probe  hosted request is fighter-quota — code fighter-quota
   ok  probe  fighter:register --dummy is fighter-quota — code fighter-quota, production connects 0
 
 [PASS] missing-asset — Asset missing 409, then the missingAssets upload
