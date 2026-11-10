@@ -94,7 +94,20 @@ full.addEventListener('click',async()=>{
   catch{note('전체화면 요청이 거부되었습니다.');}
 });
 window.addEventListener('pagehide',()=>clearTimeout(watchdog));
-// The widget is usable through the ChatGPT window.openai bridge; the parent host owns its UI lifecycle.
+// MCP Apps initialization handshake, matching the host's required UI bridge.
+const post=message=>parent.postMessage({jsonrpc:'2.0',...message},'*');
+window.addEventListener('message',event=>{
+  if(event.source!==parent || event.data?.jsonrpc!=='2.0')return;
+  if(event.data.id===1 && event.data.result){
+    const locale=event.data.result.hostContext?.locale;
+    if(locale)document.documentElement.lang=locale;
+    post({method:'ui/notifications/initialized',params:{}});
+  }
+});
+if(typeof ResizeObserver==='function'){
+  new ResizeObserver(()=>post({method:'ui/notifications/size-changed',params:{height:document.body.scrollHeight}})).observe(document.body);
+}
+post({id:1,method:'ui/initialize',params:{appInfo:{name:'ODDBOUT launcher',version:'1.0.0'},appCapabilities:{},protocolVersion:'2026-01-26'}});
 })();
 </script></body></html>`;
 
