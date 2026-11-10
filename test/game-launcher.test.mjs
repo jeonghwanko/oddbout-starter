@@ -14,44 +14,99 @@ import { checkGameIframe, inspectFrameHeaders } from '../scripts/check-chatgpt-i
 
 function mountWidget() {
   const buttons = ['game', 'stage', 'start', 'back', 'full', 'message'];
-  const elements = Object.fromEntries(buttons.map(id => {
-    const handlers = new Map();
-    return [id, {
-      id, style: {}, hidden: id === 'back', textContent: '',
-      handlers,
-      addEventListener(name, fn) { handlers.set(name, fn); },
-      removeAttribute(name) { if (name === 'src') delete this.src; },
-      emit(name) { handlers.get(name)?.(); },
-    }];
-  }));
+  const elements = Object.fromEntries(
+    buttons.map(id => {
+      const handlers = new Map();
+      return [
+        id,
+        {
+          id,
+          style: {},
+          hidden: id === 'back',
+          textContent: '',
+          handlers,
+          addEventListener(name, fn) {
+            handlers.set(name, fn);
+          },
+          removeAttribute(name) {
+            if (name === 'src') delete this.src;
+          },
+          emit(name) {
+            handlers.get(name)?.();
+          },
+        },
+      ];
+    }),
+  );
   const frameMessages = [];
   elements.game.contentWindow = {
-    postMessage(message, origin) { frameMessages.push({ message, origin }); },
+    postMessage(message, origin) {
+      frameMessages.push({ message, origin });
+    },
   };
   const hostMessages = [];
-  const parent = { postMessage(message, origin) { hostMessages.push({ message, origin }); } };
+  const parent = {
+    postMessage(message, origin) {
+      hostMessages.push({ message, origin });
+    },
+  };
   const windowHandlers = new Map();
   const fullscreenCalls = [];
   const window = {
-    openai: { requestDisplayMode: args => { fullscreenCalls.push(args); return Promise.resolve(args); } },
-    addEventListener(name, fn) { windowHandlers.set(name, fn); },
+    openai: {
+      requestDisplayMode: args => {
+        fullscreenCalls.push(args);
+        return Promise.resolve(args);
+      },
+    },
+    addEventListener(name, fn) {
+      windowHandlers.set(name, fn);
+    },
   };
   let nextTimer = 1;
   const timers = new Map();
   const script = gameLauncherHtml.match(/<script>([\s\S]*?)<\/script>/)?.[1];
   assert.ok(script, 'MCP resource must include an inline launcher program');
-  runInNewContext(script, {
-    window, document: { body: { scrollHeight: 450 }, documentElement: { lang: 'ko' }, getElementById: id => elements[id] },
-    parent, crypto: { getRandomValues: array => array.fill(0x23) },
-    Uint8Array, URL, Promise,
-    ResizeObserver: class { observe() {} },
-    setTimeout(fn, ms) { const id = nextTimer++; timers.set(id, { fn, ms }); return id; },
-    clearTimeout(id) { timers.delete(id); },
-  }, { timeout: 1000 });
+  runInNewContext(
+    script,
+    {
+      window,
+      document: { body: { scrollHeight: 450 }, documentElement: { lang: 'ko' }, getElementById: id => elements[id] },
+      parent,
+      crypto: { getRandomValues: array => array.fill(0x23) },
+      Uint8Array,
+      URL,
+      Promise,
+      ResizeObserver: class {
+        observe() {}
+      },
+      setTimeout(fn, ms) {
+        const id = nextTimer++;
+        timers.set(id, { fn, ms });
+        return id;
+      },
+      clearTimeout(id) {
+        timers.delete(id);
+      },
+    },
+    { timeout: 1000 },
+  );
   return {
-    elements, parent, hostMessages, frameMessages, fullscreenCalls, windowHandlers,
-    fireMessage(event) { windowHandlers.get('message')?.(event); },
-    fireTimers() { for (const [id, value] of timers) { timers.delete(id); value.fn(); } },
+    elements,
+    parent,
+    hostMessages,
+    frameMessages,
+    fullscreenCalls,
+    windowHandlers,
+    fireMessage(event) {
+      windowHandlers.get('message')?.(event);
+    },
+    fireTimers() {
+      for (const [id, value] of timers) {
+        timers.delete(id);
+        value.fn();
+      }
+    },
   };
 }
 
@@ -63,7 +118,11 @@ test('metadata uses fixed first-party game origin and MCP Apps resource', async 
   assert.match(gameLauncherHtml, /<iframe\s+id="game"/);
   assert.doesNotMatch(gameLauncherHtml, /access_token=|refresh_token=|Bearer\s+\$\{/i);
   let called;
-  registerGameLauncherUi({ registerResource(...args) { called = args; } });
+  registerGameLauncherUi({
+    registerResource(...args) {
+      called = args;
+    },
+  });
   assert.equal(called[0], 'oddbout-game-launcher');
   assert.equal(called[1], GAME_LAUNCHER_UI);
   assert.equal(called[2].mimeType, 'text/html;profile=mcp-app');
@@ -74,7 +133,9 @@ test('metadata uses fixed first-party game origin and MCP Apps resource', async 
 
 test('tool only returns a launcher descriptor and does not perform game actions', async () => {
   let args;
-  registerGameLauncherTool((...received) => { args = received; });
+  registerGameLauncherTool((...received) => {
+    args = received;
+  });
   assert.equal(args[0], 'open_game_launcher');
   assert.deepEqual(args[3], {});
   const result = await args[4]();
@@ -90,7 +151,8 @@ test('widget launch remains unverified until a correct-origin game readiness sig
   assert.equal(host.hostMessages[0].message.method, 'ui/initialize');
   assert.deepEqual(Array.from(host.hostMessages[0].message.params.appCapabilities.availableDisplayModes), ['inline', 'fullscreen']);
   host.fireMessage({
-    source: host.parent, origin: 'https://chatgpt.com',
+    source: host.parent,
+    origin: 'https://chatgpt.com',
     data: { jsonrpc: '2.0', id: 1, result: { hostContext: { availableDisplayModes: ['inline', 'fullscreen'] } } },
   });
   assert.equal(elements.start.hidden, false);
@@ -145,15 +207,16 @@ test('fullscreen requests require explicit host capability advertisement', () =>
   assert.equal(host.fullscreenCalls.length, 0);
   assert.match(host.elements.message.textContent, /전체화면 지원을 확인하지 않았습니다/);
   host.fireMessage({
-    source: host.parent, origin: 'https://chatgpt.com',
+    source: host.parent,
+    origin: 'https://chatgpt.com',
     data: { jsonrpc: '2.0', id: 1, result: { hostContext: { availableDisplayModes: ['inline'] } } },
   });
   host.elements.full.emit('click');
   assert.equal(host.fullscreenCalls.length, 0);
   host.fireMessage({
-    source: host.parent, origin: 'https://chatgpt.com',
-    data: { jsonrpc: '2.0', method: 'ui/notifications/host-context-changed',
-      params: { availableDisplayModes: ['inline', 'fullscreen'] } },
+    source: host.parent,
+    origin: 'https://chatgpt.com',
+    data: { jsonrpc: '2.0', method: 'ui/notifications/host-context-changed', params: { availableDisplayModes: ['inline', 'fullscreen'] } },
   });
   host.elements.full.emit('click');
   assert.equal(host.fullscreenCalls.length, 1);
@@ -170,11 +233,13 @@ test('timeout does not falsely certify a loaded or blocked iframe', () => {
 test('MCP host initialization is limited to the parent window', () => {
   const host = mountWidget();
   const before = host.hostMessages.length;
-  host.fireMessage({ source: host.elements.game.contentWindow, origin: 'https://oddbout.com',
-    data: { jsonrpc: '2.0', id: 1, result: { hostContext: { locale: 'xx' } } } });
+  host.fireMessage({
+    source: host.elements.game.contentWindow,
+    origin: 'https://oddbout.com',
+    data: { jsonrpc: '2.0', id: 1, result: { hostContext: { locale: 'xx' } } },
+  });
   assert.equal(host.hostMessages.length, before);
-  host.fireMessage({ source: host.parent, origin: 'https://chatgpt.com',
-    data: { jsonrpc: '2.0', id: 1, result: { hostContext: { locale: 'ko-KR' } } } });
+  host.fireMessage({ source: host.parent, origin: 'https://chatgpt.com', data: { jsonrpc: '2.0', id: 1, result: { hostContext: { locale: 'ko-KR' } } } });
   assert.equal(host.hostMessages[before].message.method, 'ui/notifications/initialized');
 });
 
@@ -183,9 +248,11 @@ test('read-only iframe probe refuses redirects and analyzes restrictive headers'
   assert.equal(deny.findings.length, 1);
   const restrictive = inspectFrameHeaders(new Headers({ 'content-security-policy': "default-src 'self'; frame-ancestors 'self'" }));
   assert.equal(restrictive.findings.length, 1);
-  const mixedAllow = inspectFrameHeaders(new Headers({
-    'content-security-policy': "frame-ancestors 'self' https://chatgpt.com",
-  }));
+  const mixedAllow = inspectFrameHeaders(
+    new Headers({
+      'content-security-policy': "frame-ancestors 'self' https://chatgpt.com",
+    }),
+  );
   assert.equal(mixedAllow.findings.length, 0);
   const redirect = await checkGameIframe(async (url, options) => {
     assert.equal(url, GAME_URL);
