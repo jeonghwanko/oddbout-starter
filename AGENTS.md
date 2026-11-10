@@ -9,7 +9,7 @@ Workspace agents start here. Detail: [docs/AGENT-QUICKSTART.md](docs/AGENT-QUICK
 
 Offline check (Node 22.12+): `npm ci --ignore-scripts`, `npm run example`, `npm run validate -- output/sparring-bot/fighter.json`. Generation: ffmpeg and `npm run sprite:setup` (RIFE ~430 MB). Host PCs: Linux.
 
-Hosts without file attachments cannot pass local WebP files to `prepare_fighter_registration`. Do not invent URLs. `npm run login`, then `npm run fighter:register -- --dir <package> [--fighter <id>]`. The default is a dry run; `--submit` uploads, submits and polls. Reuse the saved idempotency key for the same bytes.
+Cloud registration stays default. Use `fighter:register` only by user choice, with their account and secure CLI login. Cloud/auth failure alone never switches routes. Dry-run needs no login: `npm run fighter:register -- --dir <package>`. Submit on request; reuse its key and record for retries.
 
 `pending` and `pendingStages` are pipeline stage names, never asset ids. Upload each `missingAssets` entry, or every `assets` entry when storage was not confirmed. A successful local validate still lists later stage names in `pending`.
 

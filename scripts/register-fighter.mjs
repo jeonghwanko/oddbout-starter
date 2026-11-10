@@ -6,15 +6,17 @@
 //   npm run fighter:register -- --dir <package> --submit
 // Without --submit the command validates, saves the idempotency key and prints the requests. It does not contact the server.
 import { createHash, randomUUID } from 'node:crypto';
-import { realpathSync } from 'node:fs';
-import { readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { constants, realpathSync } from 'node:fs';
+import { lstat, open, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRemoteClient, transferTimeoutMs } from '../api/client.mjs';
 import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/validate.mjs';
+import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
+import { validateFighterPackage } from '../server/ai-fighter-package.mjs';
 import { lintBorrowedLandmarks } from '../tools/ai-fighter/landmark-lint.mjs';
 import { withFileLock } from '../mcp/file-lock.mjs';
-import { renameRetrying } from '../plugins/ai-fighter/local-files.mjs';
+import { pathWithoutLinks, relativeParts, renameRetrying } from '../plugins/ai-fighter/local-files.mjs';
 import { defaultSessionPath } from './login.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -23,17 +25,42 @@ const POLL_LIMIT = 60;
 const POLL_MS = 10_000;
 /** @typedef {{ request: (route: string, options?: { method?: string, body?: any, headers?: Record<string, string>, timeoutMs?: number }) => Promise<any> }} Client */
 /** @typedef {{ id: string, bytes: Buffer }} PackageFile */
+/** @typedef {{ idempotencyKey: string, manifestSha256: string, fighterId: string | null, submissionId: string | null }} RegistrationAttempt */
+/** @typedef {RegistrationAttempt & { version: 2, attempts: RegistrationAttempt[] }} RegistrationRecord */
 
 export const USAGE = [
   'npm run fighter:register -- --dir <package dir or fighter.json> [--fighter <uuid>] [--idempotency-key <uuid>] [--session <file>]',
   'Add --submit to upload each asset, submit, and poll until registered or rejected. Without --submit this is a dry run.',
-  'The same idempotency key is saved beside the package and reused while the manifest bytes and fighter id stay the same.',
+  'Idempotency keys are saved beside the package and reused for the same manifest bytes and fighter id, including restored versions.',
   'pending and pendingStages are pipeline stage names, never asset ids. This command uploads package files, or missingAssets when the server confirmed them.',
 ].join('\n');
 
 const sha256 = (/** @type {Uint8Array} */ bytes) => createHash('sha256').update(bytes).digest('hex');
 
-/** @param {string} recordPath */
+/** @param {any} value @returns {boolean} */
+function validAttempt(value) {
+  return Boolean(
+    value &&
+    typeof value.idempotencyKey === 'string' &&
+    UUID.test(value.idempotencyKey) &&
+    typeof value.manifestSha256 === 'string' &&
+    /^[a-f0-9]{64}$/.test(value.manifestSha256) &&
+    (value.fighterId === null || (typeof value.fighterId === 'string' && UUID.test(value.fighterId))) &&
+    (value.submissionId === null || (typeof value.submissionId === 'string' && UUID.test(value.submissionId))),
+  );
+}
+
+/** @param {RegistrationAttempt} value @returns {RegistrationAttempt} */
+function normalizedAttempt(value) {
+  return {
+    idempotencyKey: value.idempotencyKey.toLowerCase(),
+    manifestSha256: value.manifestSha256,
+    fighterId: value.fighterId?.toLowerCase() ?? null,
+    submissionId: value.submissionId?.toLowerCase() ?? null,
+  };
+}
+
+/** @param {string} recordPath @returns {Promise<RegistrationRecord | null>} */
 async function readRegistrationRecord(recordPath) {
   let text;
   try {
@@ -44,17 +71,16 @@ async function readRegistrationRecord(recordPath) {
   }
   try {
     const saved = JSON.parse(text);
-    if (
-      !saved ||
-      typeof saved.idempotencyKey !== 'string' ||
-      !UUID.test(saved.idempotencyKey) ||
-      typeof saved.manifestSha256 !== 'string' ||
-      !/^[a-f0-9]{64}$/.test(saved.manifestSha256) ||
-      !(saved.fighterId === null || (typeof saved.fighterId === 'string' && UUID.test(saved.fighterId))) ||
-      !(saved.submissionId === null || (typeof saved.submissionId === 'string' && UUID.test(saved.submissionId)))
-    )
+    if (!validAttempt(saved)) throw new Error('invalid-record');
+    const current = normalizedAttempt(saved);
+    if (saved.version === undefined && saved.attempts === undefined) return { ...current, version: /** @type {const} */ (2), attempts: [current] };
+    if (saved.version !== 2 || !Array.isArray(saved.attempts) || !saved.attempts.length || !saved.attempts.every(validAttempt))
       throw new Error('invalid-record');
-    return saved;
+    const attempts = /** @type {RegistrationAttempt[]} */ (saved.attempts).map(normalizedAttempt);
+    if (new Set(attempts.map(attempt => attempt.idempotencyKey)).size !== attempts.length) throw new Error('invalid-record');
+    const selected = attempts.find(attempt => attempt.idempotencyKey === current.idempotencyKey);
+    if (!selected || JSON.stringify(selected) !== JSON.stringify(current)) throw new Error('invalid-record');
+    return { ...current, version: /** @type {const} */ (2), attempts };
   } catch {
     throw new Error('registration-record-invalid');
   }
@@ -86,10 +112,14 @@ export function parseArgs(argv) {
       continue;
     }
     const name = arg.slice(2);
+    if (!['submit', 'dry-run', 'help', 'dir', 'fighter', 'idempotency-key', 'session'].includes(name)) throw new Error(`invalid-flag:--${name}`);
+    if (Object.hasOwn(flags, name)) throw new Error(`invalid-args:duplicate--${name}`);
     if (['submit', 'dry-run', 'help'].includes(name)) flags[name] = true;
     else if (i + 1 < argv.length && !argv[i + 1].startsWith('--')) flags[name] = argv[++i];
     else throw new Error(`missing-value:--${name}`);
   }
+  if (flags.submit === true && flags['dry-run'] === true) throw new Error('invalid-args:--submit');
+  if (positional.length > 1 || (flags.dir !== undefined && positional.length)) throw new Error('invalid-args:--dir');
   return { positional, flags };
 }
 
@@ -100,6 +130,29 @@ function id(value, what) {
   return value.toLowerCase();
 }
 
+/** Read regular files only, retaining at most the declared limit in memory.
+ * @param {string} file @param {number} limit @param {string} code
+ */
+async function readBoundedFile(file, limit, code) {
+  const entry = await lstat(file);
+  if (!entry.isFile() || entry.size > limit) throw new Error(code);
+  const handle = await open(file, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
+  try {
+    const info = await handle.stat();
+    if (!info.isFile() || info.size > limit) throw new Error(code);
+    const chunks = [];
+    let size = 0;
+    for await (const chunk of handle.createReadStream({ autoClose: false })) {
+      size += chunk.length;
+      if (size > limit) throw new Error(code);
+      chunks.push(chunk);
+    }
+    return Buffer.concat(chunks, size);
+  } finally {
+    await handle.close();
+  }
+}
+
 /**
  * A package on disk as the contract checks it, with every asset's bytes matching the manifest.
  * Throws `package-invalid` or `asset-mismatch:<id>` or `asset-escape:<id>`.
@@ -107,23 +160,26 @@ function id(value, what) {
  */
 export async function readFighterPackage(where) {
   const manifestPath = (await stat(where)).isDirectory() ? path.join(where, 'fighter.json') : where;
-  const text = await readFile(manifestPath, 'utf8');
+  const root = await realpath(path.dirname(path.resolve(manifestPath)));
+  if (!(await pathWithoutLinks(root, [path.basename(manifestPath)], { allowMissing: false }))) throw new Error('package-symlink');
+  const text = (await readBoundedFile(manifestPath, spec.limits.jsonBytes, 'package-invalid')).toString('utf8');
   const parsed = parseFighterJson(text);
   const checked = parsed.ok ? validateFighter(parsed.data) : parsed;
   if (!parsed.ok || !checked.ok) throw Object.assign(new Error('package-invalid'), { errors: (checked.errors ?? []).slice(0, 10) });
-  const root = path.resolve(path.dirname(manifestPath));
   /** @type {{ id: string, path: string, bytes: number, sha256: string }[]} */
   const assets = parsed.data.assets;
   /** @type {PackageFile[]} */
   const files = [];
   for (const asset of assets) {
-    const file = path.resolve(root, asset.path);
-    const relative = path.relative(root, file);
-    if (relative.startsWith(`..${path.sep}`) || relative === '..' || path.isAbsolute(relative)) throw new Error(`asset-escape:${asset.id}`);
-    const bytes = await readFile(file);
+    const parts = relativeParts(asset.path, /[\\\0]/);
+    const file = parts && (await pathWithoutLinks(root, parts, { allowMissing: false }));
+    if (!file) throw new Error(`asset-escape:${asset.id}`);
+    const bytes = await readBoundedFile(file, asset.bytes, `asset-mismatch:${asset.id}`);
     if (bytes.length !== asset.bytes || sha256(bytes) !== asset.sha256) throw new Error(`asset-mismatch:${asset.id}`);
     files.push({ id: asset.id, bytes });
   }
+  const fileCheck = await validateFighterPackage(manifestPath);
+  if (!fileCheck.ok) throw Object.assign(new Error('package-invalid'), { errors: (fileCheck.errors ?? []).slice(0, 10) });
   return { text, sha: sha256(Buffer.from(text, 'utf8')), name: parsed.data.profile?.name ?? '', files, data: parsed.data, directory: root };
 }
 
@@ -152,16 +208,22 @@ async function idempotencyKey(directory, { manifestSha256, fighterId, explicit }
     `${recordPath}.lock`,
     async () => {
       const saved = await readRegistrationRecord(recordPath);
-      const reusable = !explicit && saved && saved.manifestSha256 === manifestSha256 && saved.fighterId === fighterId;
-      const key = explicit ?? (reusable ? saved.idempotencyKey.toLowerCase() : randomUUID());
-      const record = {
+      const attempts = saved?.attempts ?? [];
+      const reusable = explicit
+        ? attempts.find(attempt => attempt.idempotencyKey === explicit)
+        : attempts.findLast(attempt => attempt.manifestSha256 === manifestSha256 && attempt.fighterId === fighterId);
+      if (reusable && (reusable.manifestSha256 !== manifestSha256 || reusable.fighterId !== fighterId)) throw new Error('idempotency-conflict');
+      const key = explicit ?? reusable?.idempotencyKey ?? randomUUID();
+      const selected = {
         idempotencyKey: key,
         manifestSha256,
         fighterId,
-        submissionId: reusable ? saved.submissionId : null,
+        submissionId: reusable?.submissionId ?? null,
       };
+      // Keep every key; selection order makes an explicitly chosen older key the default for its tuple again.
+      const record = { ...selected, version: 2, attempts: [...attempts.filter(attempt => attempt.idempotencyKey !== key), selected] };
       await writeRegistrationRecord(recordPath, record);
-      return { key, recordPath, reused: Boolean(reusable), submissionId: record.submissionId };
+      return { key, recordPath, reused: Boolean(reusable), submissionId: selected.submissionId };
     },
     { busy: 'registration-record-busy' },
   );
@@ -174,8 +236,10 @@ async function rememberSubmission(recordPath, key, submissionId) {
       `${recordPath}.lock`,
       async () => {
         const saved = await readRegistrationRecord(recordPath);
-        if (!saved || saved.idempotencyKey !== key) return;
-        saved.submissionId = submissionId;
+        const attempt = saved?.attempts.find(attempt => attempt.idempotencyKey === key);
+        if (!saved || !attempt || !UUID.test(submissionId)) return;
+        attempt.submissionId = submissionId.toLowerCase();
+        if (saved.idempotencyKey === key) saved.submissionId = attempt.submissionId;
         await writeRegistrationRecord(recordPath, saved);
       },
       { busy: 'registration-record-busy' },
@@ -196,7 +260,6 @@ export async function runRegister({
 } = {}) {
   const { positional, flags } = parseArgs(argv);
   if (flags.help === true) return { ok: true, usage: USAGE };
-  if (flags.submit === true && flags['dry-run'] === true) throw new Error('invalid-args:--submit');
   const where = typeof flags.dir === 'string' ? flags.dir : positional[0];
   if (!where || positional.length > 1) throw new Error('missing-value:--dir');
   const fighterId = id(typeof flags.fighter === 'string' ? flags.fighter : undefined, 'fighter') ?? null;
@@ -302,6 +365,7 @@ export async function runRegister({
     ...state,
     ok: state?.stage === 'registered',
     ...(code ? { code } : {}),
+    ...(code && HINTS[code] ? { hint: HINTS[code] } : {}),
     uploadedAssets: uploaded,
     polls,
     idempotencyKey: stored.key,
@@ -325,7 +389,8 @@ const HINTS = /** @type {Record<string, string>} */ ({
   'idempotency-conflict': 'This key already names a different package. Pass a new --idempotency-key.',
   'validation-rejected': 'The server rejected the package (validation). Do not regenerate art that was not asked for.',
   'validation-timeout': 'Registration did not finish while polling. Read the same submission again with the same key.',
-  'upload-expired': 'The upload window closed. Save a new idempotency key (change the package, or delete the key file) and submit again.',
+  'upload-expired':
+    'The server confirmed that this upload window closed. Submit again with a new --idempotency-key UUID; preserve the registration record and its earlier keys.',
   'fighter-quota': "This account is at its fighter limit (default 3, or that account's fighter_limit). Revise with --fighter instead of registering another.",
 });
 

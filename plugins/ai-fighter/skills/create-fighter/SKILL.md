@@ -99,8 +99,9 @@ Another person's host (`browse_oddbout` view `hosts`) takes none of their tokens
    Set `purpose: connection` for sign-in checks and `purpose: registration` for an existing final package;
    only `purpose: generation` prepares the generation engine or asks about generation access.
    Its login item only points to the connected ODDBOUT tools: verify the account with native `get_profile` and the
-   connected `get_my_fighters` view `readiness`. The workspace never reads or offers a registration login; missing cloud tools
-   follow the connection-only checks above.
+   connected `get_my_fighters` view `readiness`. The workspace never silently switches to a registration login when cloud
+   tools or authentication are missing or failing. Local CLI registration is a separate route only when the user explicitly
+   chooses it, using their own account and a supported secure login handoff; never ask for callback URLs or tokens in chat.
    Keep authenticated registration API access, generation access and parent delivery separate. Environment-preparer
    actions (VM host allowlist/Republish) are initial workspace setup, not repeated creator steps; the kit cannot
    perform those settings changes. Reuse preserved sessions/jobs after recovery.
@@ -193,7 +194,7 @@ record their actual outputs as versions/evidence; do not claim they received man
 
 `revise_hosted_motion` (`request_hosted_fighter` step `revise_motion`) only changes one motion of a legacy hosted job that is still at `motion_ready`. It does not edit a fighter that is already registered.
 
-To change motions on a registered fighter, build a new local package and submit it with that fighter's id (`prepare_fighter_registration` `fighterId`, or `npm run fighter:register -- --dir <package> --fighter <id> --submit` when this host cannot attach files). That is a new submission. The fighter id stays. The previous submission is left as it was. A style-only edit with no new art is `update_fighter` kind `style`.
+To change motions on a registered fighter, build a new local package and submit it with that fighter's id using `prepare_fighter_registration` `fighterId` by default. If this host cannot attach files, use `npm run fighter:register -- --dir <package> --fighter <id> --submit` only when the user explicitly chooses local registration and has a supported secure CLI login. A cloud-tool or auth failure alone does not authorize switching. This is a new submission. The fighter id stays. The previous submission is left as it was. A style-only edit with no new art is `update_fighter` kind `style`.
 
 Read `get_profile`, then `get_my_fighters` view `list`. Report the account id and email returned by the profile and the count and limit returned in the list's `account` block. Missing fields (older servers) or a null limit stay unknown. The default of 3 is not a verified account limit. The profile nickname is always `ODDBOUT`.
 
@@ -235,13 +236,18 @@ and preserve the user's final preview feedback. `package-review` is an optional 
 The session requires current validated package bytes, not a quality verdict or generation authorization.
 The final `get_creation_session` must have no blockers before submission.
 
-Use the connected ODDBOUT account for registration from either workspace. Verify `get_profile` matches
+Use the connected ODDBOUT account for registration from either workspace by default. Verify `get_profile` matches
 the user's intended account and call the cloud `get_my_fighters` view `readiness`; a workspace readiness result
-does not verify that login. Never copy a CLI session into the connector or request local login for this route.
+does not verify that login. Never copy a CLI session into the connector. If the user explicitly chooses local CLI registration
+because this host cannot attach package files, use only the user's own account and a supported secure login handoff. A missing
+or failing cloud tool or authentication alone does not authorize that switch. Dry-run needs no login; do not ask for callback URLs
+or tokens in chat, and report an authentication blocker if no secure handoff is available.
 Read the cloud tools' current schemas, then call `prepare_fighter_registration` with the actual approved
 manifest, `upload_fighter_asset` for each `missingAssets` id (or each `assets` id when `missingAssets` is absent),
 `submit_fighter_registration`, and `get_my_fighters` view `submission`. `pending` and `pendingStages` are pipeline
-stage names, never asset ids. A host that cannot attach files uses `npm run fighter:register` instead of invented URLs.
+stage names, never asset ids. When the user explicitly chooses local registration on a host that cannot attach files, use
+`npm run fighter:register -- --dir <package>` for the login-free dry run, then the same command with `--submit` only after
+the user's registration request and secure CLI login. Never switch to it merely because cloud registration or auth failed.
 Pass actual host attachments/files, not rendered previews, made-up URLs, or
 paths on another machine. Materialize supported Library files with their original bytes and verify hashes.
 Preserve the submission ID and idempotency key across identical retries; inspect status before retrying
