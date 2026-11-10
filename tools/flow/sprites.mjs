@@ -78,3 +78,15 @@ export async function createDummyProfileSet(dir) {
   await writeFile(path.join(dir, 'expressions.png'), await sharp(Buffer.from(SHEET_SVG)).png().toBuffer());
   return buildProfileSet({ front: path.join(dir, 'front.png'), expressions: path.join(dir, 'expressions.png'), out: path.join(dir, 'set') });
 }
+
+/** Read the measured profile manifest and its actual encoded files. @param {string} dir */
+export async function readProfileSetFiles(dir) {
+  const text = await readFile(path.join(dir, 'profile-set.json'), 'utf8');
+  const data = JSON.parse(text);
+  /** @type {Map<string, Buffer>} */
+  const files = new Map();
+  for (const id of ['front', 'expressions']) {
+    if (data[id]) files.set(id, await readFile(path.join(dir, data[id].path)));
+  }
+  return { text, data, files };
+}

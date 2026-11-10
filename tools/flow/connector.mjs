@@ -3,14 +3,16 @@
 import { realpath, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
+import { buildDummyPackage } from './package-builder.mjs';
 
-const UUID = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+const UUID = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+const MOVE = z.object({ name: z.string().min(1).max(24), description: z.string().min(1).max(160) });
 
 /**
  * @param {any} store
- * @param {{ roots: string[] }} options
+ * @param {{ roots: string[], packageRoot?: string }} options
  */
-export function createConnector(store, { roots }) {
+export function createConnector(store, { roots, packageRoot }) {
   /** @param {string} file */
   async function confined(file) {
     if (typeof file !== 'string' || file.includes('\0')) return null;
@@ -38,6 +40,10 @@ export function createConnector(store, { roots }) {
      * @param {any} args
      */
     async call(name, args = {}) {
+      if (name === 'create_dummy_package') {
+        if (!packageRoot) return stampUnavailable('dummy-package-builder-unavailable');
+        return buildDummyPackage(store, packageRoot, args);
+      }
       if (name === 'get_profile') return store.profile().body;
       if (name === 'get_fighter_spec') return store.spec(args.section ?? 'overview').body;
       if (name === 'browse_oddbout') {
@@ -94,7 +100,8 @@ export function createConnector(store, { roots }) {
         if (step === 'revise_motion') return store.reviseMotion(args.jobId, args.clip, args.note).body;
         return stampUnavailable(step);
       }
-      if (name === 'get_hosted_fighter') return store.getHosted({ jobId: args.jobId, idempotencyKey: args.idempotencyKey }).body;
+      if (name === 'get_hosted_fighter')
+        return (await store.waitHosted({ jobId: args.jobId, idempotencyKey: args.idempotencyKey, waitSeconds: args.waitSeconds })).body;
       if (name === 'enter_fighter') return store.enter(args.fighterId, args).body;
       return {
         ok: false,
@@ -127,6 +134,21 @@ const banner = 'DUMMY ONLY. Not the live ODDBOUT service. No tokens, no model ca
 
 /** Tools the stdio dummy MCP lists. */
 export const DUMMY_TOOLS = [
+  {
+    name: 'create_dummy_package',
+    title: 'ODDBOUT-DUMMY package builder',
+    description:
+      banner +
+      'Create a fresh sealed geometric package for this test session. For a revision pass an existing fighterId; missing targets are refused. Does not submit or generate real art. Returned paths work with prepare/upload or fighter:register --dummy using get_profile.dummyRegistrationUrl.',
+    shape: {
+      fighterId: UUID.optional(),
+      name: z.string().min(1).max(40).optional(),
+      description: z.string().min(1).max(800).optional(),
+      language: z.enum(['ko', 'en']).optional(),
+      style: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
+      moves: z.object({ combo: MOVE.optional(), slam: MOVE.optional(), dash: MOVE.optional(), block: MOVE.optional() }).strict().optional(),
+    },
+  },
   { name: 'get_profile', title: 'ODDBOUT-DUMMY account', description: banner + 'Read the dummy account. Nickname is ODDBOUT.', shape: {} },
   {
     name: 'get_fighter_spec',
@@ -156,7 +178,7 @@ export const DUMMY_TOOLS = [
     name: 'prepare_fighter_registration',
     title: 'ODDBOUT-DUMMY prepare',
     description: banner + 'kind package or profile_set. manifestPath is an absolute path inside the dummy roots.',
-    shape: { kind: z.enum(['package', 'profile_set']).optional(), manifestPath: z.string(), idempotencyKey: UUID.optional(), fighterId: UUID.optional() },
+    shape: { kind: z.enum(['package', 'profile_set']).optional(), manifestPath: z.string(), idempotencyKey: UUID, fighterId: UUID.optional() },
   },
   {
     name: 'upload_fighter_asset',
@@ -190,7 +212,9 @@ export const DUMMY_TOOLS = [
   {
     name: 'request_hosted_fighter',
     title: 'ODDBOUT-DUMMY hosted',
-    description: banner + 'steps: request, choose_look, revise_motion. revise_motion only at motion_ready. Looks are labels, not model images.',
+    description:
+      banner +
+      'steps: request (requires description, language and idempotencyKey), choose_look, revise_motion. Reuse the original key for immutable retries. revise_motion only at motion_ready. Looks are labels, not model images.',
     shape: {
       step: z.enum(['request', 'choose_look', 'revise_motion']).optional(),
       description: z.string().optional(),
@@ -206,8 +230,10 @@ export const DUMMY_TOOLS = [
   {
     name: 'get_hosted_fighter',
     title: 'ODDBOUT-DUMMY hosted status',
-    description: banner + 'Read a hosted job. Each read adds at most one placeholder motion and does not wait.',
-    shape: { jobId: UUID.optional(), idempotencyKey: UUID.optional(), waitSeconds: z.number().optional() },
+    description:
+      banner +
+      'Read a hosted job. waitSeconds (0–30) runs bounded simulated worker ticks and returns at registration, a required user action, or the deadline; waitedMs measures actual elapsed time. Zero wait advances at most one tick.',
+    shape: { jobId: UUID.optional(), idempotencyKey: UUID.optional(), waitSeconds: z.number().int().min(0).max(30).optional() },
   },
   {
     name: 'enter_fighter',
@@ -216,3 +242,16 @@ export const DUMMY_TOOLS = [
     shape: { fighterId: UUID, expectedManifestSha256: z.string().regex(/^[a-f0-9]{64}$/), reviewedClips: z.array(z.string()) },
   },
 ];
+
+/** The request selector requires a key; choosing an existing look does not.
+ * Both advertised JSON Schema and runtime validation come from these same branches.
+ * @param {(typeof DUMMY_TOOLS)[number]} tool */
+export function dummyToolSchema(tool) {
+  const base = z.object(tool.shape);
+  if (tool.name !== 'request_hosted_fighter') return base;
+  return z.union([
+    base.extend({ step: z.literal('request').optional(), description: z.string().min(4).max(600), language: z.enum(['ko', 'en']), idempotencyKey: UUID }),
+    base.extend({ step: z.literal('choose_look'), jobId: UUID, choose: z.enum(['a', 'b']) }),
+    base.extend({ step: z.literal('revise_motion'), jobId: UUID, clip: z.string(), note: z.string().min(2).max(200) }),
+  ]);
+}

@@ -14,7 +14,8 @@ import { createConnector } from './connector.mjs';
 import { FIXTURES, SCENARIOS, checkDocs, checkFixtures } from './prompts.mjs';
 import { DUMMY_LABEL } from './seal.mjs';
 import { startDummyServer } from './server.mjs';
-import { createDummyPackage, createDummyProfileSet, readPackageFiles } from './sprites.mjs';
+import { createDummyPackage, createDummyProfileSet, readPackageFiles, readProfileSetFiles } from './sprites.mjs';
+import { prepareDummyFixture } from './fixtures.mjs';
 import { createDummyStore } from './store.mjs';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
@@ -110,7 +111,7 @@ async function cliSubmit(dir, url, extra = []) {
 }
 
 /** @param {ReturnType<typeof createDummyStore>} store @param {string[]} roots */
-const connectorFor = (store, roots) => createConnector(store, { roots });
+const connectorFor = (store, roots) => createConnector(store, { roots, packageRoot: roots[0] });
 
 /**
  * @param {any} connector
@@ -150,6 +151,8 @@ export async function runFlows({ scenario } = {}) {
     const revisedCheck = await validatePackage(revised.dir);
     const profileDir = path.join(work, 'profile');
     const profile = await createDummyProfileSet(profileDir);
+    if (!profile.ok || !('folder' in profile)) throw new Error('dummy-profile-fixture-invalid');
+    const profilePack = await readProfileSetFiles(profile.folder);
     const pack = await readPackageFiles(drill.dir);
     const roots = [work];
 
@@ -181,7 +184,7 @@ export async function runFlows({ scenario } = {}) {
       },
       async 'hosted-delegated'(state) {
         const store = createDummyStore();
-        store.setPlaceholder(pack);
+        store.setPlaceholder(pack, profilePack);
         const connector = connectorFor(store, roots);
         setup(state, 'empty fixture with placeholder worker', 'Prepared before the prompt; no generated art.');
         const profile = await connector.call('get_profile');
@@ -189,7 +192,7 @@ export async function runFlows({ scenario } = {}) {
         const list = await connector.call('get_my_fighters', { view: 'list' });
         agent(state, 'get_my_fighters', 'list', 'check capacity', `count ${list.account.fighterCount}`, list.ok && !list.quota.exceeded);
         const requested = await connector.call('request_hosted_fighter', {
-          description: '흰 고양이 복서를 만들어줘. 외형 선택도 맡길게.',
+          description: '흰 고양이 복서',
           language: 'ko',
           delegate: true,
           idempotencyKey: KEY.hosted,
@@ -202,9 +205,7 @@ export async function runFlows({ scenario } = {}) {
           `choice ${requested.job?.choice}, status ${requested.job?.status}`,
           requested.ok && requested.job.choice === 'a' && requested.statusSummary.actionRequired === 'wait',
         );
-        let current = requested;
-        for (let i = 0; i < 12 && !current.statusSummary?.completed; i++)
-          current = await connector.call('get_hosted_fighter', { jobId: requested.job.id, waitSeconds: 25 });
+        const current = await connector.call('get_hosted_fighter', { jobId: requested.job.id, waitSeconds: 5 });
         agent(
           state,
           'get_hosted_fighter',
@@ -216,7 +217,7 @@ export async function runFlows({ scenario } = {}) {
       },
       async 'hosted-capacity'(state) {
         const store = createDummyStore({ fighterLimit: 1 });
-        store.setPlaceholder(pack);
+        store.setPlaceholder(pack, profilePack);
         setup(state, 'one slot before concurrent jobs', 'Diagnostic race; no agent behavior is scored.');
         const first = store.requestHosted({ description: 'first placeholder fighter', language: 'en', delegate: true, idempotencyKey: KEY.hosted }).body;
         const second = store.requestHosted({ description: 'second placeholder fighter', language: 'en', delegate: true, idempotencyKey: KEY.mcp }).body;
@@ -247,7 +248,7 @@ export async function runFlows({ scenario } = {}) {
       },
       async 'hosted-new'(state) {
         const store = createDummyStore();
-        store.setPlaceholder(pack);
+        store.setPlaceholder(pack, profilePack);
         const connector = connectorFor(store, roots);
         const profileBody = await connector.call('get_profile');
         agent(
@@ -311,21 +312,22 @@ export async function runFlows({ scenario } = {}) {
           `choice a, status ${choice.job?.status}`,
           choice.ok && choice.job?.status === 'motions',
         );
-        /** @type {any} */
-        let watched = choice;
-        /** @type {string[]} */
-        const seen = [];
-        for (let read = 0; read < 16 && !watched.statusSummary?.terminal; read++) {
-          watched = await connector.call('get_hosted_fighter', { jobId: requested.job.id, waitSeconds: 25 });
-          if ((watched.job?.drafts?.length ?? 0) > seen.length) seen.push(watched.job.drafts.at(-1));
-        }
+        const watched = await connector.call('get_hosted_fighter', { jobId: requested.job.id, waitSeconds: 5 });
+        const seen = watched.job?.drafts ?? [];
         agent(
           state,
           'get_hosted_fighter',
           'until-registered',
           'get_hosted_fighter until registered',
           `drafts ${seen.join(', ')}; state ${watched.statusSummary?.state}; fighter ${watched.job?.submission?.fighterId}; tokensCharged ${watched.tokensCharged}; waitedMs ${watched.waitedMs}`,
-          watched.statusSummary?.completed === true && seen.length === 11 && watched.tokensCharged === false && watched.waitedMs === 0,
+          watched.statusSummary?.completed === true && seen.length === 11 && watched.tokensCharged === false && watched.waitedMs > 0,
+        );
+        const fighter = store.fighter(watched.job.submission.fighterId).body.fighter;
+        probe(
+          state,
+          'hosted profile and request label',
+          `name ${fighter.name}, front ${fighter.front?.ok}, expressions ${fighter.front?.expressions}`,
+          fighter.name.includes('고양이') && fighter.front?.ok === true && fighter.front?.expressions === true && fighter.front.operatorApproved === false,
         );
       },
       async 'workspace-new'(state) {
@@ -516,6 +518,73 @@ export async function runFlows({ scenario } = {}) {
         } finally {
           await server.close();
         }
+      },
+      async 'revise-mcp'(state) {
+        const { store } = await prepareDummyFixture('registered');
+        setup(state, 'registered target before revision prompt', 'DUMMY 야근왕 박과장 and immutable initial submission');
+        const connector = connectorFor(store, roots);
+        const profile = await connector.call('get_profile');
+        agent(state, 'get_profile', '', 'get_profile', profile.id, profile.ok);
+        const list = await connector.call('get_my_fighters', { view: 'list' });
+        const target = list.fighters[0];
+        agent(
+          state,
+          'get_my_fighters',
+          'list',
+          'identify the existing revision target',
+          target?.name ?? 'missing',
+          list.ok && target?.name === 'DUMMY 야근왕 박과장',
+        );
+        if (!target) return;
+        const before = store.getSubmission(target.submissionIds[0]).body;
+        const built = await connector.call('create_dummy_package', {
+          fighterId: target.id,
+          name: 'DUMMY 야근왕 박과장 v2',
+          description: '돌진 노래방 각성기 더미 개정',
+          language: 'ko',
+          style: { super: 'dash' },
+        });
+        agent(
+          state,
+          'create_dummy_package',
+          'revision',
+          'build a fresh sealed revision',
+          `operation ${built.operation}, validated ${built.validation?.ok}`,
+          built.ok === true && built.fighterId === target.id,
+        );
+        if (!built.ok) return;
+        const prepared = await connector.call('prepare_fighter_registration', {
+          kind: 'package',
+          fighterId: target.id,
+          manifestPath: built.manifestPath,
+          idempotencyKey: KEY.revise,
+        });
+        agent(state, 'prepare_fighter_registration', 'package', 'prepare existing fighter revision', `missing ${prepared.missingAssets?.length}`, prepared.ok);
+        if (!prepared.ok) return;
+        const uploaded = await uploadMissing(connector, prepared.submissionId, built.dir, prepared.missingAssets);
+        agent(state, 'upload_fighter_asset', 'package', 'upload each missing asset', `uploaded ${uploaded.count}`, uploaded.ok);
+        const submitted = await connector.call('submit_fighter_registration', { kind: 'package', submissionId: prepared.submissionId });
+        agent(state, 'submit_fighter_registration', 'package', 'submit revision', `stage ${submitted.stage}`, submitted.ok);
+        const current = await connector.call('get_my_fighters', { view: 'submission', submissionId: prepared.submissionId });
+        agent(
+          state,
+          'get_my_fighters',
+          'submission',
+          'confirm revision registration',
+          `stage ${current.stage}, same fighter ${current.fighterId === target.id}`,
+          current.stage === 'registered' && current.fighterId === target.id,
+        );
+        const previous = store.getSubmission(before.submissionId).body;
+        const fighter = store.fighter(target.id).body.fighter;
+        probe(
+          state,
+          'preserve original submission and requested style',
+          `submissions ${fighter.submissionIds.length}, super ${fighter.style?.super}`,
+          previous.manifestSha256 === before.manifestSha256 &&
+            previous.stage === 'registered' &&
+            fighter.submissionIds.length === 2 &&
+            fighter.style?.super === 'dash',
+        );
       },
       async revise(state) {
         const original = path.join(work, 'revise-a');
@@ -742,7 +811,7 @@ export async function runFlows({ scenario } = {}) {
       },
       async 'legacy-motion'(state) {
         const store = createDummyStore({ policy: 'legacy-motion' });
-        store.setPlaceholder(pack);
+        store.setPlaceholder(pack, profilePack);
         const connector = connectorFor(store, roots);
         const requested = await connector.call('request_hosted_fighter', {
           description: 'legacy drill bot at motion_ready',

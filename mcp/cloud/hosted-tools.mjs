@@ -646,7 +646,8 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
       'two front-view looks to choose from (the chosen one is also his profile picture), then a side view drawn from it and the eleven ' +
       'motions, then registration under his account. New pairs default to A after ten minutes without a choice or revision; ' +
       'the job reports appearanceAutoSelectAt when this applies. Explain this before waiting for his choice. delegate: ' +
-      'true when he leaves the choices to ODDBOUT ("알아서 해 줘", "just make it"): ' +
+      'true only when he explicitly delegates the appearance choice ("외형은 네가 골라 줘", "you choose the look"). ' +
+      'A creation request alone ("그냥 만들어줘", "just make it") does not delegate the choice; omit delegate or pass false and show the looks for his choice. ' +
       'ODDBOUT picks the look itself (or offers the pair if it cannot pick); registration follows file validation, and motion review happens on the site. host: ' +
       "oddbout (default, ODDBOUT's own worker), mine (his own PC as a host: " +
       "hostConsent is not required for the account owner's PC), any (any approved community host) or a host id from list_generation_hosts; " +
