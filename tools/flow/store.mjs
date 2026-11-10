@@ -1,8 +1,11 @@
 // @ts-check
 // In-memory ODDBOUT stand-in. No network, no tokens, no production roster.
 import { createHash } from 'node:crypto';
+import Ajv from 'ajv';
 import spec from '../../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
+import schema from '../../contracts/ai-fighter/v1/fighter.schema.json' with { type: 'json' };
 import { parseFighterJson, validateFighter } from '../../contracts/ai-fighter/validate.mjs';
+import { entryRequest } from '../../api/fighter-entry.mjs';
 import { parseProfileSet } from '../../api/profile-set-contract.mjs';
 import { stamp } from './seal.mjs';
 
@@ -15,6 +18,7 @@ const SUMMONS = ['crane', 'bolt', 'sportsCar', 'roadster'];
 const SUPERS = ['slam', 'combo', 'fast', 'dash'];
 const SPECIALS = ['slam', 'combo', 'fast'];
 const TEMPERS = ['guard', 'retreat', 'measure', 'patience'];
+const checkStyle = new Ajv({ allErrors: true, ownProperties: true }).compile(schema.properties.combat.properties.style);
 
 const sha256 = (/** @type {Uint8Array} */ bytes) => createHash('sha256').update(bytes).digest('hex');
 
@@ -47,6 +51,10 @@ export function createDummyStore({ fighterLimit = 3, tokenBalance = 500_000, pol
   const submissionKeys = new Map();
   /** @type {Map<string, string>} */
   const jobKeys = new Map();
+  /** @type {Map<string, { sha: string, fighterId: string, profileSetId: string }>} */
+  const setKeys = new Map();
+  /** @type {Map<string, { fighterId: string, text: string, result: any }>} */
+  const styleKeys = new Map();
   /** @type {any[]} */
   const notifications = [];
   let delivered = 0;
@@ -136,8 +144,10 @@ export function createDummyStore({ fighterLimit = 3, tokenBalance = 500_000, pol
     fighter.name = row.manifest.profile.name;
     fighter.localId = row.manifest.localId;
     fighter.manifestSha256 = sha;
+    fighter.entered = false;
+    fighter.hasSkill = Boolean(row.manifest.clips.skill);
     fighter.submissionIds = [...fighter.submissionIds, row.id];
-    if (row.manifest.combat?.style) fighter.style = row.manifest.combat.style;
+    fighter.style = row.manifest.combat?.style ?? null;
     row.fighterId = fighterId;
     row.stage = 'registered';
     row.code = undefined;
@@ -363,8 +373,9 @@ export function createDummyStore({ fighterLimit = 3, tokenBalance = 500_000, pol
       const checked = parsed.ok ? validateFighter(parsed.data) : parsed;
       if (!parsed.ok || !checked.ok) return reply(422, { code: 'invalid-manifest', errors: (checked.errors ?? []).slice(0, 10) });
       const sha = sha256(Buffer.from(input.text));
+      if (styleKeys.has(key)) return reply(409, { code: 'idempotency-conflict' });
       const prior = submissionKeys.get(key);
-      if (prior && prior.sha !== sha) return reply(409, { code: 'idempotency-conflict' });
+      if (prior && (prior.sha !== sha || submissions.get(prior.submissionId).targetFighterId !== target)) return reply(409, { code: 'idempotency-conflict' });
       if (prior) return reply(200, submissionBody(submissions.get(prior.submissionId)));
       if (target && !fighters.has(target)) return reply(404, { code: 'fighter-not-found' });
       if (!target && fighters.size >= limit) {
@@ -415,15 +426,23 @@ export function createDummyStore({ fighterLimit = 3, tokenBalance = 500_000, pol
       if (row.stage === 'uploading') row.stage = 'validating';
       return reply(200, submissionBody(row));
     },
-    /** @param {string} fighterId @param {any} style */
-    updateStyle(fighterId, style) {
+    /** @param {string} fighterId @param {any} style @param {string} idempotencyKey */
+    updateStyle(fighterId, style, idempotencyKey) {
+      if (!UUID.test(idempotencyKey)) return reply(400, { code: 'invalid-id' });
+      const key = idempotencyKey.toLowerCase();
+      const text = JSON.stringify(style);
+      const prior = styleKeys.get(key);
+      if (submissionKeys.has(key) || (prior && (prior.fighterId !== fighterId || prior.text !== text))) return reply(409, { code: 'idempotency-conflict' });
+      if (prior) return prior.result;
       const row = fighters.get(fighterId);
       if (!row) return reply(404, { code: 'fighter-not-found' });
-      const code = styleError(style);
+      const code = styleError(style, Boolean(row.hasSkill));
       if (code) return reply(422, { code });
       row.style = style;
       const event = notify('style-updated', { fighterId });
-      return reply(200, { fighterId, style, artChanged: false, event });
+      const result = reply(200, { fighterId, style, artChanged: false, event });
+      styleKeys.set(key, { fighterId, text, result });
+      return result;
     },
     /**
      * @param {{ description: string, language: string, idempotencyKey: string, delegate?: boolean }} input
@@ -497,7 +516,8 @@ export function createDummyStore({ fighterLimit = 3, tokenBalance = 500_000, pol
           next: 'revise_motion applies only to a legacy job at motion_ready. A registered fighter needs a new package and fighterId.',
         });
       }
-      if (!MOTIONS.includes(motion) || typeof note !== 'string' || note.length < 1 || note.length > 200) return reply(422, { code: 'invalid-motion' });
+      if (motion === 'idle' || !MOTIONS.includes(motion) || typeof note !== 'string' || note.length < 2 || note.length > 200)
+        return reply(422, { code: 'invalid-motion' });
       job.revisionsLeft.motion -= 1;
       job.motionNote = { motion, note };
       const event = notify('hosted-motion-note', { jobId, motion });
@@ -543,33 +563,30 @@ export function createDummyStore({ fighterLimit = 3, tokenBalance = 500_000, pol
       }
       return registerHostedJob(job);
     },
-    /** @param {string} fighterId @param {string} text */
-    prepareProfileSet(fighterId, text) {
+    /** @param {string} fighterId @param {string} text @param {string} idempotencyKey */
+    prepareProfileSet(fighterId, text, idempotencyKey) {
+      if (!UUID.test(idempotencyKey)) return reply(400, { code: 'invalid-id' });
       const fighter = fighters.get(fighterId);
       if (!fighter) return reply(404, { code: 'fighter-not-found' });
       const parsed = parseProfileSet(text);
       if (!parsed.ok) return reply(422, { code: 'invalid-profile-set', errors: parsed.errors?.slice?.(0, 10) ?? parsed.errors });
+      const key = idempotencyKey.toLowerCase();
+      const sha = sha256(Buffer.from(text));
+      const prior = setKeys.get(key);
+      if (prior && (prior.sha !== sha || prior.fighterId !== fighterId)) return reply(409, { code: 'idempotency-conflict' });
+      if (prior) return reply(200, profileSetBody(sets.get(prior.profileSetId)));
       const id = nextId();
       const files = new Map();
       sets.set(id, { id, fighterId, set: parsed.data, files, stage: 'uploading' });
-      const missingAssets = [parsed.data.front, parsed.data.expressions]
-        .filter(Boolean)
-        .map((/** @type {any} */ file) => ({ id: file.path.replace(/\.webp$/, ''), path: file.path, bytes: file.bytes, sha256: file.sha256 }));
-      return reply(200, {
-        setId: id,
-        fighterId,
-        stage: 'uploading',
-        pending: ['upload-front', 'submit'],
-        pendingStages: ['upload-front', 'submit'],
-        missingAssets,
-        next: 'pending is stage names. Upload missingAssets (front, then expressions).',
-      });
+      setKeys.set(key, { sha, fighterId, profileSetId: id });
+      return reply(200, profileSetBody(sets.get(id)));
     },
     /** @param {string} setId @param {string} assetId @param {Buffer} bytes */
     uploadProfileAsset(setId, assetId, bytes) {
       const row = sets.get(setId);
       if (!row) return reply(404, { code: 'not-found' });
-      const file = [row.set.front, row.set.expressions].filter(Boolean).find((/** @type {any} */ item) => item.path.replace(/\.webp$/, '') === assetId);
+      if (row.stage !== 'uploading') return reply(409, { code: 'upload-closed' });
+      const file = ['front', 'expressions'].includes(assetId) ? row.set[assetId] : null;
       if (!file) return reply(404, { code: 'asset-not-found' });
       if (bytes.length !== file.bytes || sha256(bytes) !== file.sha256) return reply(422, { code: 'asset-hash-or-size' });
       row.files.set(assetId, Buffer.from(bytes));
@@ -579,15 +596,16 @@ export function createDummyStore({ fighterLimit = 3, tokenBalance = 500_000, pol
     submitProfileSet(setId) {
       const row = sets.get(setId);
       if (!row) return reply(404, { code: 'not-found' });
-      const needed = [row.set.front, row.set.expressions].filter(Boolean).map((/** @type {any} */ file) => file.path.replace(/\.webp$/, ''));
+      if (row.stage === 'ready') return reply(200, { ...profileSetBody(row), front: fighters.get(row.fighterId).front });
+      const needed = ['front', 'expressions'].filter(id => row.set[id]);
       const missingAssets = needed.filter((/** @type {string} */ id) => !row.files.has(id));
       if (missingAssets.length) return reply(409, { code: 'assets-incomplete', missingAssets });
       row.stage = 'ready';
       const fighter = fighters.get(row.fighterId);
-      fighter.front = { ok: true, operatorApproved: false, dummyChecked: true, setId, expressions: Boolean(row.set.expressions) };
-      const event = notify('profile-set-ready', { fighterId: row.fighterId, setId, operatorApproved: false });
+      fighter.front = { ok: true, operatorApproved: false, dummyChecked: true, profileSetId: setId, expressions: Boolean(row.set.expressions) };
+      const event = notify('profile-set-ready', { fighterId: row.fighterId, profileSetId: setId, operatorApproved: false });
       return reply(200, {
-        setId,
+        profileSetId: setId,
         fighterId: row.fighterId,
         stage: 'ready',
         front: fighter.front,
@@ -595,17 +613,24 @@ export function createDummyStore({ fighterLimit = 3, tokenBalance = 500_000, pol
         next: 'Local file check passed. Operator approval is not granted in dummy mode.',
       });
     },
-    /** @param {string} fighterId */
-    profileSet(fighterId) {
-      const fighter = fighters.get(fighterId);
-      if (!fighter) return reply(404, { code: 'fighter-not-found' });
-      return reply(200, { fighterId, front: fighter.front, operatorApproved: false });
+    /** @param {string} profileSetId */
+    profileSet(profileSetId) {
+      const row = sets.get(profileSetId);
+      if (!row) return reply(404, { code: 'not-found' });
+      return reply(200, { ...profileSetBody(row), front: fighters.get(row.fighterId).front, operatorApproved: false });
     },
-    /** @param {string} fighterId */
-    enter(fighterId) {
+    /** @param {string} fighterId @param {any} input */
+    enter(fighterId, input) {
       const fighter = fighters.get(fighterId);
       if (!fighter) return reply(404, { code: 'fighter-not-found' });
-      if (!fighter.front?.ok) return reply(409, { code: 'front-required' });
+      let checked;
+      try {
+        checked = entryRequest({ expectedManifestSha256: input?.expectedManifestSha256, reviewedClips: input?.reviewedClips });
+      } catch {
+        return reply(422, { code: 'invalid-entry' });
+      }
+      if (checked.sha !== fighter.manifestSha256) return reply(409, { code: 'fighter-changed' });
+      if (!fighter.front?.ok) return reply(409, { code: 'profile-set-required' });
       fighter.entered = true;
       const event = notify('dummy-entered', { fighterId, publicPlay: false });
       return reply(200, {
@@ -645,24 +670,29 @@ function publicFighter(fighter) {
   };
 }
 
-/** @param {any} style */
-function styleError(style) {
-  if (!style || typeof style !== 'object' || Array.isArray(style)) return 'invalid-style';
+/** @param {any} row */
+function profileSetBody(row) {
+  const assets = ['front', 'expressions'].filter(id => row.set[id]).map(id => ({ id, ...row.set[id] }));
+  const pending = row.stage === 'uploading' ? ['upload-front', 'submit'] : [];
+  return {
+    profileSetId: row.id,
+    fighterId: row.fighterId,
+    stage: row.stage,
+    pending,
+    pendingStages: pending,
+    assets,
+    missingAssets: assets.filter(asset => !row.files.has(asset.id)),
+    next: 'pending is stage names. Upload missingAssets (front, then expressions).',
+  };
+}
+
+/** @param {any} style @param {boolean} hasSkill */
+function styleError(style, hasSkill) {
+  if (style === null) return null;
+  if (!checkStyle(style)) return 'invalid-style';
   const mix = style.mix;
-  if (!mix || [mix.slam, mix.combo, mix.fast].some(value => !Number.isInteger(value) || value < 0 || value > 4)) return 'invalid-style';
-  if (mix.fast > mix.slam + mix.combo || mix.slam + mix.combo + mix.fast < 1) return 'invalid-style';
-  if (style.super !== undefined && !SUPERS.includes(style.super)) return 'invalid-style';
-  if (style.special !== undefined && !SPECIALS.includes(style.special)) return 'invalid-style';
-  if (style.shockwave !== undefined && style.shockwave !== true) return 'invalid-style';
-  if (style.summon !== undefined && !SUMMONS.includes(style.summon)) return 'invalid-style';
-  if (style.distance !== undefined && (!Number.isInteger(style.distance) || style.distance < 1 || style.distance > 5)) return 'invalid-style';
-  if (style.temper !== undefined) {
-    if (!style.temper || typeof style.temper !== 'object' || Array.isArray(style.temper)) return 'invalid-style';
-    for (const [key, value] of Object.entries(style.temper)) {
-      if (!TEMPERS.includes(key) || !Number.isInteger(value) || value < 1 || value > 5) return 'invalid-style';
-    }
-  }
-  const extras = (style.shockwave === true ? 1 : 0) + (style.summon ? 1 : 0) + (style.skill ? 1 : 0);
+  if (mix && (mix.fast > mix.slam + mix.combo || mix.slam + mix.combo + mix.fast < 1)) return 'invalid-style';
+  const extras = (style.shockwave === true ? 1 : 0) + (style.summon ? 1 : 0) + (hasSkill ? 1 : 0);
   if (extras > 2) return 'invalid-style';
   return null;
 }

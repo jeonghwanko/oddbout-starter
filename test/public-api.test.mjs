@@ -153,7 +153,10 @@ test('caches a public body with only the confirmed infrastructure cookie and str
 
 test('a cache read/write failure or a diagnostic bypass still serves fresh public data', async () => {
   const unavailable = () => Promise.reject(new Error('cache unavailable'));
-  for (const cache of [{ match: unavailable, put: unavailable }, { match: async () => undefined, put: unavailable }]) {
+  for (const cache of [
+    { match: unavailable, put: unavailable },
+    { match: async () => undefined, put: unavailable },
+  ]) {
     const response = await call(RANKINGS, { cache, fetcher: async () => Response.json({ ok: true }) });
     assert.equal(response.headers.get('x-oddbout-cache'), 'BYPASS');
     assert.deepEqual(await response.json(), { ok: true });
@@ -176,8 +179,7 @@ test('bounds upstream fetch and does not cache a timeout', async () => {
     const response = await call(RANKINGS, {
       cache,
       timeoutMs: 5,
-      fetcher: async (_url, { signal }) =>
-        new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true })),
+      fetcher: async (_url, { signal }) => new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true })),
     });
     assert.equal(response.status, 504);
     assert.equal(cache.entries.size, 0);

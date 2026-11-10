@@ -16,9 +16,9 @@ npm run flow:mcp
 
 `flow:test`는 시나리오를 차례로 돌리고 보고서를 출력한다. 하나라도 실패하면 종료 코드는 1이다. `--scenario`는 `hosted-new`, `workspace-new`, `cli-register`, `revise`, `style-only`, `quota`, `missing-asset`, `rejected`, `legacy-motion`, `guard` 중 하나다. `guard`는 항상 함께 돈다.
 
-`flow:mcp`는 표준 입출력 MCP다. 프로세스가 살아있는 동안만 메모리에 상태가 있다. stderr에 `ODDBOUT-DUMMY`가 찍힌다. 도구에 넘기는 파일 경로는 그 프로세스의 현재 디렉터리 안이어야 한다. 이 서버는 네트워크로 아무것도 보내지 않는다.
+`flow:mcp`는 표준 입출력 MCP다. 프로세스가 살아있는 동안만 메모리에 상태가 있다. stderr에 `ODDBOUT-DUMMY`가 찍힌다. 도구에 넘기는 파일 경로는 그 프로세스의 현재 디렉터리 안이어야 한다. 이 서버는 네트워크로 아무것도 보내지 않는다. 호스팅용 자리 표시 패키지는 시작할 때 준비하고 임시 파일은 지운다. 파일 전달은 채팅 호스트의 첨부 대신 로컬 `manifestPath`·`filePath`를 쓰는 어댑터다. 나머지 인자는 실제 도구의 `choose`, `clip`, `profileSetId` 등을 따른다.
 
-`test`와 `test:fast`가 `test/flow-dummy.test.mjs`를 포함한다.
+`test`와 `test:fast`가 `test/flow-*.test.mjs`의 시나리오·안전장치·MCP 계약 검사를 포함한다.
 
 ## 더미와 프로덕션이 섞이지 않게
 
@@ -26,23 +26,23 @@ npm run flow:mcp
 
 `ODDBOUT-DUMMY — not production. No live server, no tokens, no model calls.`
 
-자리 표시 패키지는 이름 앞에 `DUMMY `, `localId` 앞에 `dummy-`, 설명에 `ODDBOUT-DUMMY`, 옆에 `.oddbout-dummy.json`을 둔다. 이 표시가 하나라도 있으면 `npm run fighter:register -- --submit`는 세션 파일을 열기 전에 `dummy-package-refused`로 끝난다. 라이브 클라이언트는 호출되지 않는다.
+자리 표시 패키지는 이름 앞에 `DUMMY `, `localId` 앞에 `dummy-`, 설명에 `ODDBOUT-DUMMY`를 둔다. 별도 파일 `.oddbout-dummy.json`의 존재도 독립된 더미 표시다. 이 표시 중 하나라도 있으면 `npm run fighter:register -- --submit`는 세션 파일을 열기 전에 `dummy-package-refused`로 끝난다. 라이브 클라이언트는 호출되지 않는다. 더미 CLI 등록 이력도 라이브 등록 이력과 별도 파일에 보관한다.
 
 `--dummy`는 `http://127.0.0.1:<port>` 또는 `http://[::1]:<port>`만 받는다. 경로, 계정, 질의 문자열은 거절한다. `oddbout.com`, `supabase`, `render.com`, `workers.dev`가 들어 있으면 요청 전에 `dummy-url-refused`다. 서버는 `127.0.0.1`에만 붙고, 소켓의 상대 주소가 루프백이 아니면 403이다. 응답에 더미 표시가 없으면 클라이언트는 그 응답을 등록 결과로 보지 않는다.
 
 더미 페이지는 `http://127.0.0.1:<port>/dummy/page/...`뿐이다. 공개 사이트 주소는 만들지 않는다.
 
-표시를 설명, 이름, `localId`, 사이드카에서 모두 지우면 이 키트는 그 패키지를 더미로 알아보지 못한다. 라이브 서버의 검증기는 이 변경으로 바뀌지 않았다. 스키마를 통과하는 패키지를 다른 클라이언트로 올리는 것까지 막지는 않는다.
+설명, 이름, `localId`의 표시를 모두 지우고 `.oddbout-dummy.json` 파일도 없애면 이 키트는 그 패키지를 더미로 알아보지 못한다. 라이브 서버의 검증기는 이 변경으로 바뀌지 않았다. 스키마를 통과하는 패키지를 다른 클라이언트로 올리는 것까지 막지는 않는다.
 
 ## 시나리오
 
-스크립트는 프롬프트를 하나의 시나리오로 고른 뒤, 그 시나리오에 적힌 도구 순서만 에이전트 단계로 실행한다. `probe`는 그 순서가 아니다. 서버가 거절하는 길을 따로 확인한다.
+`flow:test`는 프롬프트를 에이전트에 보내지 않는다. 시나리오마다 코드에 적힌 도구 호출을 실행하고, `agent` 단계의 순서와 결과를 확인한다. 별도의 프롬프트 고정 예문은 정규식 규칙으로 시나리오 이름에 대응하는지만 확인한다. `probe`는 에이전트 단계가 아니라 서버의 거절 경로를 따로 확인한다.
 
-| 시나리오 | 프롬프트가 고르는 일 | 확인하는 결과 |
+| 시나리오 | 시나리오가 나타내는 요청 | 확인하는 결과 |
 | --- | --- | --- |
 | `hosted-new` | ODDBOUT에 맡기는 새 선수 | 외형 둘, 동작 11개를 한 읽기마다 하나, 등록. 토큰 차감 0. 잔액 0이면 `generation-quota` |
 | `workspace-new` | 작업 공간 커넥터로 등록 | 자리 표시를 검증하고 올리고, 프로필 세트(정면·표정)까지. `enter_fighter`는 `publicPlay: false` |
-| `cli-register` | 파일을 붙일 수 없을 때의 `fighter:register` | `--dummy --submit`가 등록하고, 같은 키 재시도는 같은 제출 |
+| `cli-register` | 사용자가 로컬 CLI 등록을 명시적으로 선택한 경우의 `fighter:register` | `--dummy --submit`가 등록하고, 같은 키 재시도는 같은 제출 |
 | `revise` | 같은 fighter id로 개정 | `--fighter`로 새 제출. 이전 제출은 그대로. 같은 바이트는 `fighter-unchanged` |
 | `style-only` | 그림 없는 스타일 수정 | `update_fighter` kind `style`. 틀린 mix는 `invalid-style` |
 | `quota` | 한도에 걸린 새 선수 | 목록에서 멈추고, 준비와 `--dummy` 제출은 `fighter-quota` |
@@ -57,9 +57,11 @@ npm run flow:mcp
 
 ## 프롬프트 인식의 한계
 
-인식기는 프롬프트의 낱말을 시나리오에 짝짓는 규칙이다. 각 규칙의 도구 이름이 `plugins/ai-fighter/skills/create-fighter/SKILL.md`와 `AGENTS.md`에 있는지도 본다. 날씨처럼 어느 규칙에도 안 맞는 문장은 도구를 부르지 않는다.
+프롬프트 인식은 고정 예문에 붙인 정규식뿐이다. 프롬프트를 실제 에이전트에 보내거나 도구 호출을 유도하지 않는다. 문서 검사는 `AGENTS.md`와 생성 스킬에 필요한 도구 이름과 몇몇 문구가 포함됐는지만 확인한다. 이 검사들은 문서의 의미가 절차와 맞는지, 실제 모델이 어떤 도구를 고를지 검증하지 않는다.
 
-라이브 모델이 같은 문장을 같은 도구로 바꾸는지는 여기서 보지 않는다. 그 확인은 `npm run flow:mcp`에 그 모델을 연결해서 한다.
+보고서의 `docs (tool-name presence)`는 도구 이름과 필수 문구가 문서에 있는지만 뜻한다. `prompt fixtures (regex matching; no model calls)`는 고정 예문과 정규식 규칙의 짝만 확인한다.
+
+라이브 모델이 같은 문장을 같은 도구로 바꾸는지는 `flow:test`에서 확인하지 않는다. `flow:mcp`는 수동 대화를 위한 더미 도구만 제공한다. 그 도구를 연결한 모델의 선택은 사람이 대화에서 관찰할 수 있지만, `flow:test`의 보고서에는 그 관찰 결과가 포함되지 않는다.
 
 ## 보고서 예
 
@@ -71,10 +73,10 @@ productionContact: none
 tokensSpent: 0
 generation: deterministic placeholder sprites (no model call)
 
-docs: PASS
+docs (tool-name presence): PASS
 fixtures: PASS
 
-prompt recognition (scripted rules checked against the skill and AGENTS.md, not a live model):
+prompt fixtures (regex matching; no model calls):
   [PASS] hosted-ko → hosted-new
   [PASS] workspace-en → workspace-new
   [PASS] cli-en → cli-register

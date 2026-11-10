@@ -32,7 +32,10 @@ function publicQuery(url) {
   const date = new Date(timestamp);
   if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 19) !== timestamp.slice(0, 19)) return null;
   // Preserve the cursor's microseconds, which would be truncated by Date.toISOString().
-  const canonicalTimestamp = timestamp.replace(/\+00:00$/, 'Z').replace(/(\.\d*?[1-9])0+Z$/, '$1Z').replace(/\.0+Z$/, 'Z');
+  const canonicalTimestamp = timestamp
+    .replace(/\+00:00$/, 'Z')
+    .replace(/(\.\d*?[1-9])0+Z$/, '$1Z')
+    .replace(/\.0+Z$/, 'Z');
   query.set(key, `${canonicalTimestamp}|${id.toLowerCase()}`);
   return query;
 }

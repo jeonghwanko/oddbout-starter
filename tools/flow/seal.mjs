@@ -1,6 +1,6 @@
 // @ts-check
 // Marks and address checks for the dummy flow. A sealed package must not be offered to the live registration client.
-import { readFile } from 'node:fs/promises';
+import { lstat } from 'node:fs/promises';
 import path from 'node:path';
 
 export const DUMMY_MODE = 'dummy';
@@ -56,18 +56,13 @@ export function manifestSealed(data) {
 
 /** @param {string} directory */
 export async function sidecarSealed(directory) {
-  let text;
   try {
-    text = await readFile(path.join(directory, DUMMY_SIDECAR), 'utf8');
+    // Its presence is the marker. Do not follow links or read potentially unbounded/special files.
+    await lstat(path.join(directory, DUMMY_SIDECAR));
+    return true;
   } catch (/** @type {any} */ error) {
     if (error?.code === 'ENOENT') return false;
     throw error;
-  }
-  try {
-    const saved = JSON.parse(text);
-    return saved?.seal === DUMMY_SEAL && saved?.mode === DUMMY_MODE && saved?.notForProduction === true;
-  } catch {
-    return true;
   }
 }
 

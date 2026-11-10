@@ -50,7 +50,7 @@ export function createConnector(store, { roots }) {
         if (view === 'readiness') return store.readiness(args.purpose ?? 'registration').body;
         if (view === 'submission') return store.getSubmission(args.submissionId).body;
         if (view === 'fighter') return store.fighter(args.fighterId).body;
-        if (view === 'profile_set') return store.profileSet(args.fighterId).body;
+        if (view === 'profile_set') return store.profileSet(args.profileSetId).body;
         return stampUnavailable(view);
       }
       if (name === 'prepare_fighter_registration') {
@@ -65,23 +65,23 @@ export function createConnector(store, { roots }) {
             label: 'ODDBOUT-DUMMY — not production. No live server, no tokens, no model calls.',
           };
         const text = await readFile(found, 'utf8');
-        if (args.kind === 'profile_set') return store.prepareProfileSet(args.fighterId, text).body;
+        if (args.kind === 'profile_set') return store.prepareProfileSet(args.fighterId, text, args.idempotencyKey).body;
         if (args.kind === 'package' || !args.kind) return store.createSubmission({ text, fighterId: args.fighterId, idempotencyKey: args.idempotencyKey }).body;
         return stampUnavailable(args.kind);
       }
       if (name === 'upload_fighter_asset') {
         const file = await bytesOf(args.filePath);
         if (file.error) return file.error;
-        if (args.kind === 'profile_set') return store.uploadProfileAsset(args.setId, args.assetId, file.bytes).body;
+        if (args.kind === 'profile_set') return store.uploadProfileAsset(args.profileSetId, args.assetId ?? 'front', file.bytes).body;
         return store.putAsset(args.submissionId, args.assetId, file.bytes).body;
       }
       if (name === 'submit_fighter_registration') {
-        if (args.kind === 'profile_set') return store.submitProfileSet(args.setId).body;
+        if (args.kind === 'profile_set') return store.submitProfileSet(args.profileSetId).body;
         if (args.kind === 'hosted') return store.registerHosted(args.jobId).body;
         return store.submit(args.submissionId).body;
       }
       if (name === 'update_fighter') {
-        if (args.kind === 'style') return store.updateStyle(args.fighterId, args.style).body;
+        if (args.kind === 'style') return store.updateStyle(args.fighterId, args.style, args.idempotencyKey).body;
         return stampUnavailable(args.kind ?? 'profile');
       }
       if (name === 'request_hosted_fighter') {
@@ -90,12 +90,12 @@ export function createConnector(store, { roots }) {
           return store.requestHosted({ description: args.description, language: args.language, idempotencyKey: args.idempotencyKey, delegate: args.delegate })
             .body;
         }
-        if (step === 'choose_look') return store.chooseLook(args.jobId, args.choice).body;
-        if (step === 'revise_motion') return store.reviseMotion(args.jobId, args.motion, args.note).body;
+        if (step === 'choose_look') return store.chooseLook(args.jobId, args.choose).body;
+        if (step === 'revise_motion') return store.reviseMotion(args.jobId, args.clip, args.note).body;
         return stampUnavailable(step);
       }
       if (name === 'get_hosted_fighter') return store.getHosted({ jobId: args.jobId, idempotencyKey: args.idempotencyKey }).body;
-      if (name === 'enter_fighter') return store.enter(args.fighterId).body;
+      if (name === 'enter_fighter') return store.enter(args.fighterId, args).body;
       return {
         ok: false,
         code: 'unknown-tool',
@@ -143,6 +143,7 @@ export const DUMMY_TOOLS = [
       purpose: z.enum(['generation', 'connection', 'registration']).optional(),
       submissionId: UUID.optional(),
       fighterId: UUID.optional(),
+      profileSetId: UUID.optional(),
     },
   },
   {
@@ -164,8 +165,8 @@ export const DUMMY_TOOLS = [
     shape: {
       kind: z.enum(['package', 'profile_set']).optional(),
       submissionId: UUID.optional(),
-      setId: UUID.optional(),
-      assetId: z.string(),
+      profileSetId: UUID.optional(),
+      assetId: z.string().optional(),
       filePath: z.string(),
     },
   },
@@ -173,13 +174,18 @@ export const DUMMY_TOOLS = [
     name: 'submit_fighter_registration',
     title: 'ODDBOUT-DUMMY submit',
     description: banner + 'kind package, profile_set, or hosted. A dummy registration is not public.',
-    shape: { kind: z.enum(['package', 'profile_set', 'hosted']).optional(), submissionId: UUID.optional(), setId: UUID.optional(), jobId: UUID.optional() },
+    shape: {
+      kind: z.enum(['package', 'profile_set', 'hosted']).optional(),
+      submissionId: UUID.optional(),
+      profileSetId: UUID.optional(),
+      jobId: UUID.optional(),
+    },
   },
   {
     name: 'update_fighter',
     title: 'ODDBOUT-DUMMY style',
     description: banner + 'kind style stores a fighting style on the dummy fighter. It does not draw art.',
-    shape: { kind: z.enum(['style']), fighterId: UUID, style: z.record(z.string(), z.unknown()) },
+    shape: { kind: z.enum(['style']), fighterId: UUID, style: z.union([z.record(z.string(), z.unknown()), z.null()]), idempotencyKey: UUID },
   },
   {
     name: 'request_hosted_fighter',
@@ -192,8 +198,8 @@ export const DUMMY_TOOLS = [
       idempotencyKey: UUID.optional(),
       delegate: z.boolean().optional(),
       jobId: UUID.optional(),
-      choice: z.enum(['a', 'b']).optional(),
-      motion: z.string().optional(),
+      choose: z.enum(['a', 'b']).optional(),
+      clip: z.string().optional(),
       note: z.string().optional(),
     },
   },
@@ -207,6 +213,6 @@ export const DUMMY_TOOLS = [
     name: 'enter_fighter',
     title: 'ODDBOUT-DUMMY enter',
     description: banner + 'Records a local flag only. publicPlay stays false.',
-    shape: { fighterId: UUID },
+    shape: { fighterId: UUID, expectedManifestSha256: z.string().regex(/^[a-f0-9]{64}$/), reviewedClips: z.array(z.string()) },
   },
 ];

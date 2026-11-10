@@ -208,7 +208,8 @@ export function checkFixtures() {
 }
 
 /**
- * The sequences only name tools and rules the skill and AGENTS.md already state.
+ * Presence-only documentation sanity check: required phrases and tool names occur in AGENTS.md/SKILL.md.
+ * This does not verify that either document gives the correct procedure or that a model selects these tools.
  * @param {string} root
  */
 export async function checkDocs(root) {

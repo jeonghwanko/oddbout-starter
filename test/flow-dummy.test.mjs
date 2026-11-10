@@ -48,7 +48,26 @@ test('createDummyClient does not fetch a refused URL', async () => {
 });
 
 test('the dummy flow covers registration, revision, rejection and delivery', { timeout: 180_000 }, async () => {
-  const result = await runFlows();
+  const originalFetch = globalThis.fetch;
+  let loopbackRequests = 0;
+  const refused = [];
+  globalThis.fetch = (input, options) => {
+    const url = new URL(input instanceof Request ? input.url : input.toString());
+    if (url.protocol !== 'http:' || !['127.0.0.1', '[::1]'].includes(url.hostname)) {
+      refused.push(url.origin);
+      throw new Error('flow-test-network-escape');
+    }
+    loopbackRequests += 1;
+    return originalFetch(input, options);
+  };
+  let result;
+  try {
+    result = await runFlows();
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  assert.deepEqual(refused, [], 'the complete flow must never attempt an external HTTP request');
+  assert.ok(loopbackRequests > 0, 'the integration test must exercise actual loopback HTTP');
   const report = formatReport(result);
   assert.equal(result.ok, true, report);
   assert.match(report, /ODDBOUT-DUMMY/);

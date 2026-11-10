@@ -28,6 +28,9 @@ const KEY = {
   legacy: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa7',
   quota: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa8',
   rejectCli: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa9',
+  profile: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa10',
+  badStyle: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa11',
+  style: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa12',
 };
 const STYLE = { mix: { slam: 3, combo: 2, fast: 1 }, special: 'slam', super: 'dash', distance: 2, temper: { patience: 5 }, summon: 'sportsCar' };
 
@@ -199,7 +202,7 @@ export async function runFlows({ scenario } = {}) {
           `status ${requested.job?.status}, candidates ${(requested.job?.candidates ?? []).map((/** @type {any} */ item) => item.label).join(', ')}, tokensCharged ${requested.tokensCharged}`,
           requested.ok && requested.job?.status === 'appearance_ready' && requested.tokensCharged === false && requested.job?.appearanceAutoSelection === null,
         );
-        const choice = await connector.call('request_hosted_fighter', { step: 'choose_look', jobId: requested.job.id, choice: 'a' });
+        const choice = await connector.call('request_hosted_fighter', { step: 'choose_look', jobId: requested.job.id, choose: 'a' });
         agent(
           state,
           'request_hosted_fighter',
@@ -293,6 +296,7 @@ export async function runFlows({ scenario } = {}) {
         const setPrepared = await connector.call('prepare_fighter_registration', {
           kind: 'profile_set',
           fighterId: status.fighterId,
+          idempotencyKey: KEY.profile,
           manifestPath: path.join(profile.folder, 'profile-set.json'),
         });
         agent(
@@ -305,19 +309,19 @@ export async function runFlows({ scenario } = {}) {
         );
         const front = await connector.call('upload_fighter_asset', {
           kind: 'profile_set',
-          setId: setPrepared.setId,
+          profileSetId: setPrepared.profileSetId,
           assetId: 'front',
           filePath: path.join(profile.folder, 'front.webp'),
         });
         agent(state, 'upload_fighter_asset', 'profile_set:front', 'upload profile front', `bytes ${front.bytes}`, front.ok === true);
         const expressions = await connector.call('upload_fighter_asset', {
           kind: 'profile_set',
-          setId: setPrepared.setId,
+          profileSetId: setPrepared.profileSetId,
           assetId: 'expressions',
           filePath: path.join(profile.folder, 'expressions.webp'),
         });
         agent(state, 'upload_fighter_asset', 'profile_set:expressions', 'upload expression sheet', `bytes ${expressions.bytes}`, expressions.ok === true);
-        const setSubmitted = await connector.call('submit_fighter_registration', { kind: 'profile_set', setId: setPrepared.setId });
+        const setSubmitted = await connector.call('submit_fighter_registration', { kind: 'profile_set', profileSetId: setPrepared.profileSetId });
         agent(
           state,
           'submit_fighter_registration',
@@ -327,7 +331,11 @@ export async function runFlows({ scenario } = {}) {
           setSubmitted.ok && setSubmitted.front?.ok === true && setSubmitted.front?.operatorApproved === false,
         );
         const fighter = await connector.call('get_my_fighters', { view: 'fighter', fighterId: status.fighterId });
-        const entered = await connector.call('enter_fighter', { fighterId: status.fighterId });
+        const entered = await connector.call('enter_fighter', {
+          fighterId: status.fighterId,
+          expectedManifestSha256: status.manifestSha256,
+          reviewedClips: store.motions,
+        });
         agent(
           state,
           'get_my_fighters',
@@ -495,9 +503,14 @@ export async function runFlows({ scenario } = {}) {
           `extrasBudget ${guide.rules?.extrasBudget}`,
           guide.ok && guide.rules?.extrasBudget === 2,
         );
-        const bad = await connector.call('update_fighter', { kind: 'style', fighterId, style: { mix: { slam: 0, combo: 0, fast: 4 } } });
+        const bad = await connector.call('update_fighter', {
+          kind: 'style',
+          fighterId,
+          idempotencyKey: KEY.badStyle,
+          style: { mix: { slam: 0, combo: 0, fast: 4 } },
+        });
         probe(state, 'illegal mix is refused', `code ${bad.code}`, bad.ok === false && bad.code === 'invalid-style');
-        const saved = await connector.call('update_fighter', { kind: 'style', fighterId, style: STYLE });
+        const saved = await connector.call('update_fighter', { kind: 'style', fighterId, idempotencyKey: KEY.style, style: STYLE });
         agent(
           state,
           'update_fighter',
@@ -622,14 +635,14 @@ export async function runFlows({ scenario } = {}) {
           language: 'en',
           idempotencyKey: KEY.legacy,
         });
-        const tooSoon = await connector.call('request_hosted_fighter', { step: 'revise_motion', jobId: requested.job.id, motion: 'walk', note: 'slower' });
+        const tooSoon = await connector.call('request_hosted_fighter', { step: 'revise_motion', jobId: requested.job.id, clip: 'walk', note: 'slower' });
         probe(
           state,
           'revise_motion before motion_ready',
           `code ${tooSoon.code}, applied ${tooSoon.applied}`,
           tooSoon.ok === false && tooSoon.code === 'generation-state' && tooSoon.applied === false,
         );
-        const choice = await connector.call('request_hosted_fighter', { step: 'choose_look', jobId: requested.job.id, choice: 'b' });
+        const choice = await connector.call('request_hosted_fighter', { step: 'choose_look', jobId: requested.job.id, choose: 'b' });
         if (choice.job?.status !== 'motion_ready') {
           probe(state, 'setup motion_ready', `status ${choice.job?.status}`, false);
           return;
@@ -639,7 +652,7 @@ export async function runFlows({ scenario } = {}) {
         const revisedMotion = await connector.call('request_hosted_fighter', {
           step: 'revise_motion',
           jobId: requested.job.id,
-          motion: 'walk',
+          clip: 'walk',
           note: 'slower walk',
         });
         agent(
@@ -789,10 +802,10 @@ export function formatReport(result) {
     `tokensSpent: ${result.tokensSpent}`,
     'generation: deterministic placeholder sprites (no model call)',
     '',
-    `docs: ${result.docs.ok ? 'PASS' : 'FAIL'}${result.docs.problems.length ? ` — ${result.docs.problems.join('; ')}` : ''}`,
+    `docs (tool-name presence): ${result.docs.ok ? 'PASS' : 'FAIL'}${result.docs.problems.length ? ` — ${result.docs.problems.join('; ')}` : ''}`,
     `fixtures: ${result.fixtures.ok ? 'PASS' : 'FAIL'}${result.fixtures.problems.length ? ` — ${result.fixtures.problems.join('; ')}` : ''}`,
     '',
-    'prompt recognition (scripted rules checked against the skill and AGENTS.md, not a live model):',
+    'prompt fixtures (regex matching; no model calls):',
   ];
   for (const item of result.recognition) lines.push(`  [${item.ok ? 'PASS' : 'FAIL'}] ${item.id} → ${item.detail}`);
   lines.push('');

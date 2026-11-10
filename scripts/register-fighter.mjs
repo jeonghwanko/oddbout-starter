@@ -23,6 +23,7 @@ import { assertDummyBase, DUMMY_LABEL, manifestSealed, sidecarSealed } from '../
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const KEY_FILE = '.oddbout-registration.json';
+const DUMMY_KEY_FILE = '.oddbout-dummy-registration.json';
 const POLL_LIMIT = 60;
 const POLL_MS = 10_000;
 /** @typedef {{ request: (route: string, options?: { method?: string, body?: any, headers?: Record<string, string>, timeoutMs?: number }) => Promise<any> }} Client */
@@ -203,10 +204,10 @@ export function assetsToUpload(state, files) {
 
 /**
  * @param {string} directory
- * @param {{ manifestSha256: string, fighterId: string | null, explicit?: string }} identity
+ * @param {{ manifestSha256: string, fighterId: string | null, explicit?: string, dummy?: boolean }} identity
  */
-async function idempotencyKey(directory, { manifestSha256, fighterId, explicit }) {
-  const recordPath = path.join(directory, KEY_FILE);
+async function idempotencyKey(directory, { manifestSha256, fighterId, explicit, dummy = false }) {
+  const recordPath = path.join(directory, dummy ? DUMMY_KEY_FILE : KEY_FILE);
   return withFileLock(
     `${recordPath}.lock`,
     async () => {
@@ -271,7 +272,7 @@ export async function runRegister({
   const dummyBase = typeof flags.dummy === 'string' ? flags.dummy : undefined;
   /** @type {URL | undefined} */
   let dummyUrl;
-  if (dummyBase) {
+  if (dummyBase !== undefined) {
     try {
       dummyUrl = assertDummyBase(dummyBase);
     } catch (/** @type {any} */ error) {
@@ -291,7 +292,7 @@ export async function runRegister({
     };
   }
   const warnings = lintBorrowedLandmarks(pkg.data);
-  const stored = await idempotencyKey(pkg.directory, { manifestSha256: pkg.sha, fighterId, explicit: explicitKey });
+  const stored = await idempotencyKey(pkg.directory, { manifestSha256: pkg.sha, fighterId, explicit: explicitKey, dummy: Boolean(dummyUrl) });
   const route = fighterId ? `submissions?fighter=${encodeURIComponent(fighterId)}` : 'submissions';
   const request = { method: 'POST', route, idempotencyKey: stored.key };
   const summary = {
