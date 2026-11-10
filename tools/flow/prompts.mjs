@@ -10,6 +10,35 @@ import path from 'node:path';
 /** @type {Scenario[]} */
 export const SCENARIOS = [
   {
+    id: 'list',
+    title: 'Read the account and fighter list',
+    forbid: ['prepare_fighter_registration', 'request_hosted_fighter', 'update_fighter', 'enter_fighter'],
+    expect: [{ tool: 'get_profile' }, { tool: 'get_my_fighters', selector: 'list' }],
+  },
+  {
+    id: 'missing-target',
+    title: 'Missing revision target stops without creating a fighter',
+    forbid: ['prepare_fighter_registration', 'request_hosted_fighter', 'update_fighter', 'enter_fighter'],
+    expect: [{ tool: 'get_profile' }, { tool: 'get_my_fighters', selector: 'list' }],
+  },
+  {
+    id: 'hosted-delegated',
+    title: 'Delegated appearance proceeds without a choose_look call',
+    forbid: ['choose_look', 'enter_fighter', 'prepare_fighter_registration'],
+    expect: [
+      { tool: 'get_profile' },
+      { tool: 'get_my_fighters', selector: 'list' },
+      { tool: 'request_hosted_fighter', selector: 'request' },
+      { tool: 'get_hosted_fighter', selector: 'until-registered' },
+    ],
+  },
+  {
+    id: 'hosted-capacity',
+    title: 'Capacity fills before hosted registration; drafts are preserved',
+    forbid: [],
+    expect: null,
+  },
+  {
     id: 'hosted-new',
     title: 'New fighter from a prompt (hosted)',
     forbid: ['enter_fighter', 'revise_motion', 'prepare_fighter_registration'],
@@ -125,6 +154,12 @@ export const SCENARIOS = [
 
 /** @type {Fixture[]} */
 export const FIXTURES = [
+  { id: 'list-ko', scenario: 'list', prompt: '내 계정에 있는 캐릭터 리스트를 보여줘', pattern: /캐릭터 리스트를 보여줘/ },
+  { id: 'revise-ko', scenario: 'revise', prompt: '야근왕 박과장 개정판 올려줘. 돌진은 노래방 각성기로 지정해줘', pattern: /개정판 올려줘/ },
+  { id: 'hosted-natural-ko', scenario: 'hosted-new', prompt: '흰 고양이 복서를 새로 만들어줘', pattern: /^흰 고양이 복서를 새로 만들어줘$/ },
+  { id: 'hosted-delegated-ko', scenario: 'hosted-delegated', prompt: '흰 고양이 복서를 만들어줘. 외형 선택도 맡길게.', pattern: /외형 선택도 맡길게/ },
+  { id: 'quota-ko', scenario: 'quota', prompt: '파이터 한 명 더 만들어줘 (한도 초과)', pattern: /한도 초과/ },
+  { id: 'style-ko', scenario: 'style-only', prompt: '박과장 스타일만 바꿔서 인내심 5, 각성기는 내려찍기로', pattern: /스타일만 바꿔서/ },
   {
     id: 'hosted-ko',
     scenario: 'hosted-new',
@@ -225,6 +260,7 @@ export async function checkDocs(root) {
     if (!skill.includes(phrase)) problems.push(`SKILL.md missing ${phrase}`);
   }
   const names = new Set(SCENARIOS.flatMap(scenario => [...(scenario.expect ?? []), ...scenario.forbid.map(tool => ({ tool }))]).map(step => step.tool));
-  for (const name of names) if (!LOCAL_TOOLS.has(name) && !together.includes(name)) problems.push(`docs do not name ${name}`);
+  const selectors = new Set(SCENARIOS.flatMap(scenario => (scenario.expect ?? []).map(step => step.selector).filter(Boolean)));
+  for (const name of names) if (!LOCAL_TOOLS.has(name) && !selectors.has(name) && !together.includes(name)) problems.push(`docs do not name ${name}`);
   return { ok: problems.length === 0, problems };
 }

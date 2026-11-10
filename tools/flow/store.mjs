@@ -25,6 +25,7 @@ const sha256 = (/** @type {Uint8Array} */ bytes) => createHash('sha256').update(
 /**
  * @param {number} status
  * @param {Record<string, unknown>} body
+ * @returns {{ status: number, body: Record<string, any> }}
  */
 function reply(status, body) {
   return { status, body: stamp({ ok: status < 400, ...body }) };
@@ -94,7 +95,12 @@ export function createDummyStore({ fighterLimit = 3, tokenBalance = 500_000, pol
   function submissionBody(row) {
     const assets = row.manifest.assets.map((/** @type {any} */ asset) => ({ id: asset.id, path: asset.path, bytes: asset.bytes, sha256: asset.sha256 }));
     const missingAssets = assets.filter((/** @type {any} */ asset) => !row.assets.has(asset.id));
-    const pending = row.stage === 'uploading' ? ['server-validation', 'registration'] : row.stage === 'validating' ? ['server-validation'] : [];
+    const pending =
+      row.stage === 'uploading'
+        ? ['server-validation', 'registration']
+        : row.stage === 'validating'
+          ? [row.code === 'fighter-quota' ? 'registration' : 'server-validation']
+          : [];
     return {
       submissionId: row.id,
       stage: row.stage,
@@ -117,6 +123,14 @@ export function createDummyStore({ fighterLimit = 3, tokenBalance = 500_000, pol
 
   /** @param {any} row @param {string} sha */
   function finishRegistration(row, sha) {
+    // Admission does not reserve a fighter slot. Another completed job can fill it
+    // before this submission finishes; retain the uploaded package for a retry.
+    if (!row.targetFighterId && fighters.size >= limit) {
+      if (row.code !== 'fighter-quota') row.event = notify('fighter-quota', { submissionId: row.id, ...account() });
+      row.code = 'fighter-quota';
+      row.reason = 'The fighter limit is full. The dummy package is preserved for registration retry.';
+      return;
+    }
     if (policy === 'reject-review') {
       row.stage = 'rejected';
       row.code = 'review-rejected';
@@ -151,6 +165,7 @@ export function createDummyStore({ fighterLimit = 3, tokenBalance = 500_000, pol
     row.fighterId = fighterId;
     row.stage = 'registered';
     row.code = undefined;
+    row.reason = undefined;
     row.event = notify('submission-registered', { submissionId: row.id, fighterId, manifestSha256: sha });
   }
 
@@ -162,28 +177,32 @@ export function createDummyStore({ fighterLimit = 3, tokenBalance = 500_000, pol
       ? 'registered'
       : failed
         ? 'stopped'
-        : job.status === 'appearance_ready'
-          ? 'choose_look'
-          : job.status === 'motion_ready'
-            ? 'registration_pending'
-            : job.status === 'motions'
-              ? 'motions'
-              : job.status === 'submitted'
-                ? 'validating'
-                : 'unknown';
+        : job.status === 'needs_review'
+          ? 'needs_review'
+          : job.status === 'appearance_ready'
+            ? 'choose_look'
+            : job.status === 'motion_ready'
+              ? 'registration_pending'
+              : job.status === 'motions'
+                ? 'motions'
+                : job.status === 'submitted'
+                  ? 'validating'
+                  : 'unknown';
     return {
       state,
       completed: registered,
       terminal: registered || failed,
       actionRequired: registered
         ? 'enter_on_site'
-        : job.status === 'appearance_ready'
-          ? 'choose_look'
-          : job.status === 'motion_ready'
-            ? 'register_or_revise'
-            : job.status === 'motions'
-              ? 'wait'
-              : 'none',
+        : job.status === 'needs_review'
+          ? 'retry_registration'
+          : job.status === 'appearance_ready'
+            ? 'choose_look'
+            : job.status === 'motion_ready'
+              ? 'register_or_revise'
+              : job.status === 'motions'
+                ? 'wait'
+                : 'none',
       stageProgress: job.status === 'motions' ? { done: job.drafts.length, of: MOTIONS.length } : null,
       note: 'stageProgress is this stage only. completed is true only when the dummy submission is registered.',
     };
@@ -203,6 +222,8 @@ export function createDummyStore({ fighterLimit = 3, tokenBalance = 500_000, pol
         drafts: job.drafts,
         revisionsLeft: job.revisionsLeft,
         motionNote: job.motionNote,
+        errorCode: job.errorCode,
+        registrationBlocked: job.registrationBlocked,
         appearanceAutoSelectAt: job.status === 'appearance_ready' ? AUTO : null,
         appearanceAutoSelection: null,
         tokens: 0,
@@ -221,6 +242,20 @@ export function createDummyStore({ fighterLimit = 3, tokenBalance = 500_000, pol
   /** @param {any} job */
   function registerHostedJob(job) {
     if (!placeholder) return reply(409, { code: 'dummy-placeholder-missing', next: 'The dummy worker has no placeholder package.' });
+    // Match the hosted registration admission failure: completed art survives,
+    // but no submission exists until a slot is available. Retrying never draws.
+    if (fighters.size >= limit) {
+      const event = job.registrationBlocked ? null : notify('hosted-registration-blocked', { jobId: job.id, code: 'fighter-quota' });
+      job.status = 'needs_review';
+      job.errorCode = 'fighter-quota';
+      job.registrationBlocked = true;
+      return reply(409, {
+        code: 'fighter-quota',
+        account: account(),
+        ...jobBody(job, event ? { event } : {}),
+        next: 'Completed dummy motions are preserved. After capacity is restored, retry submit kind hosted with this same jobId; do not request a new generation.',
+      });
+    }
     const parsed = parseFighterJson(placeholder.text);
     if (!parsed.ok) return reply(422, { code: 'invalid-manifest' });
     const row = {
@@ -242,9 +277,14 @@ export function createDummyStore({ fighterLimit = 3, tokenBalance = 500_000, pol
     job.submissionStage = row.stage;
     job.fighterId = row.fighterId;
     job.status = 'submitted';
+    job.errorCode = null;
+    job.registrationBlocked = false;
     return reply(200, {
       ...jobBody(job, { event: row.event }),
-      next: 'Registered on the dummy server only. The owner would enter on the site; this dummy does not put the fighter in public play.',
+      next:
+        row.stage === 'registered'
+          ? 'Registered on the dummy server only. The owner would enter on the site; this dummy does not put the fighter in public play.'
+          : 'The dummy submission was rejected. No fighter was registered.',
     });
   }
 
@@ -455,6 +495,10 @@ export function createDummyStore({ fighterLimit = 3, tokenBalance = 500_000, pol
       const key = input.idempotencyKey.toLowerCase();
       const existing = jobKeys.get(key);
       if (existing) return reply(200, jobBody(jobs.get(existing)));
+      if (fighters.size >= limit) {
+        notify('fighter-quota', account());
+        return reply(409, { code: 'fighter-quota', account: account(), tokensCharged: false });
+      }
       if (tokens <= 0) {
         notify('generation-quota', { tokens });
         return reply(409, { code: 'generation-quota', tokens, tokensCharged: false });
@@ -465,7 +509,7 @@ export function createDummyStore({ fighterLimit = 3, tokenBalance = 500_000, pol
         description: input.description,
         language: input.language,
         delegate: input.delegate === true,
-        choice: null,
+        choice: input.delegate === true ? 'a' : null,
         candidates: [
           { id: 'a', label: 'DUMMY look A', media: 'placeholder', note: 'Not an image from a model.' },
           { id: 'b', label: 'DUMMY look B', media: 'placeholder', note: 'Not an image from a model.' },
@@ -473,17 +517,27 @@ export function createDummyStore({ fighterLimit = 3, tokenBalance = 500_000, pol
         drafts: /** @type {string[]} */ ([]),
         revisionsLeft: { appearance: 1, motion: 1 },
         motionNote: null,
-        status: 'appearance_ready',
+        status: input.delegate === true ? (policy === 'legacy-motion' ? 'motion_ready' : 'motions') : 'appearance_ready',
         submissionId: null,
         submissionStage: null,
         fighterId: null,
+        errorCode: null,
+        registrationBlocked: false,
       };
       jobs.set(id, job);
       jobKeys.set(key, id);
-      const event = notify('hosted-appearance-ready', { jobId: id });
+      const event =
+        input.delegate === true
+          ? notify('hosted-look-chosen', { jobId: id, choice: job.choice, delegated: true, status: job.status })
+          : notify('hosted-appearance-ready', { jobId: id });
       return reply(200, {
         ...jobBody(job, { event }),
-        next: 'Show both DUMMY looks and call request_hosted_fighter step choose_look. The dummy does not auto-select; appearanceAutoSelectAt is informational only.',
+        next:
+          input.delegate === true
+            ? job.status === 'motion_ready'
+              ? 'Delegated DUMMY look A was selected. Legacy dummy job: submit kind hosted continues registration.'
+              : 'Delegated DUMMY look A was selected. Read get_hosted_fighter to complete the placeholder motions and registration.'
+            : 'Show both DUMMY looks and call request_hosted_fighter step choose_look. appearanceAutoSelectAt is informational only in this dummy.',
       });
     },
     /** @param {string} jobId @param {string} choice */
@@ -558,7 +612,11 @@ export function createDummyStore({ fighterLimit = 3, tokenBalance = 500_000, pol
       const job = jobs.get(jobId);
       if (!job) return reply(404, { code: 'not-found' });
       if (job.status === 'submitted' && job.submissionStage === 'registered') return reply(200, jobBody(job));
-      if (job.status !== 'motion_ready' && !(job.status === 'motions' && job.drafts.length === MOTIONS.length)) {
+      if (
+        job.status !== 'motion_ready' &&
+        !(job.status === 'motions' && job.drafts.length === MOTIONS.length) &&
+        !(job.status === 'needs_review' && job.registrationBlocked)
+      ) {
         return reply(409, { code: 'generation-state', next: 'Hosted registration is not waiting for this job.' });
       }
       return registerHostedJob(job);

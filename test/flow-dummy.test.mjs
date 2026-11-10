@@ -81,4 +81,18 @@ test('the dummy flow covers registration, revision, rejection and delivery', { t
   assert.equal(report.includes('oddbout.com'), false);
   assert.equal(result.tokensSpent, 0);
   assert.equal(result.productionContact, false);
+  const missing = result.scenarios.find(item => item.id === 'missing-target');
+  assert.deepEqual(
+    missing.events.filter(event => event.kind === 'agent').map(event => event.tool),
+    ['get_profile', 'get_my_fighters'],
+  );
+  const revision = result.scenarios.find(item => item.id === 'revise');
+  assert.equal(revision.events[0].kind, 'setup');
+  assert.equal(revision.events.filter(event => event.kind === 'agent' && event.tool === 'fighter:register').length, 1);
+  const quota = result.scenarios.find(item => item.id === 'quota');
+  assert.deepEqual(
+    quota.events.filter(event => event.kind === 'agent').map(event => event.tool),
+    ['get_profile', 'get_my_fighters'],
+  );
+  assert.ok(quota.events.some(event => event.kind === 'probe' && event.title === 'hosted request is fighter-quota' && event.ok));
 });

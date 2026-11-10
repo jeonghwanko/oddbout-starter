@@ -34,14 +34,14 @@ const KEY = {
 };
 const STYLE = { mix: { slam: 3, combo: 2, fast: 1 }, special: 'slam', super: 'dash', distance: 2, temper: { patience: 5 }, summon: 'sportsCar' };
 
-/** @typedef {{ kind: 'agent' | 'probe', tool?: string, selector?: string, title: string, detail: string, ok: boolean }} Event */
-/** @typedef {{ id: string, title: string, expect: { tool: string, selector?: string }[] | null, ok: boolean, events: Event[] }} RunState */
+/** @typedef {{ kind: 'setup' | 'agent' | 'probe', tool?: string, selector?: string, title: string, detail: string, ok: boolean }} Event */
+/** @typedef {{ id: string, title: string, expect: { tool: string, selector?: string }[] | null, forbid: string[], ok: boolean, events: Event[] }} RunState */
 
 /** @param {string} id @returns {RunState} */
 function begin(id) {
   const meta = SCENARIOS.find(item => item.id === id);
   if (!meta) throw new Error(`unknown-scenario:${id}`);
-  return { id, title: meta.title, expect: meta.expect, ok: true, events: [] };
+  return { id, title: meta.title, expect: meta.expect, forbid: meta.forbid, ok: true, events: [] };
 }
 /** @param {RunState} state @param {string} tool @param {string} selector @param {string} title @param {string} detail @param {boolean} [ok] */
 function agent(state, tool, selector, title, detail, ok = true) {
@@ -53,10 +53,20 @@ function probe(state, title, detail, ok = true) {
   state.events.push({ kind: 'probe', title, detail, ok });
   if (!ok) state.ok = false;
 }
+/** Fixture construction precedes the user prompt and is never scored as an agent action.
+ * @param {RunState} state @param {string} title @param {string} detail @param {boolean} [ok] */
+function setup(state, title, detail, ok = true) {
+  state.events.push({ kind: 'setup', title, detail, ok });
+  if (!ok) state.ok = false;
+}
 /** @param {RunState} state */
 function checkSequence(state) {
-  if (!state.expect) return;
   const taken = state.events.filter(event => event.kind === 'agent');
+  for (const event of taken) {
+    if (state.forbid.includes(event.tool ?? '') || state.forbid.includes(event.selector ?? ''))
+      probe(state, 'forbidden agent action', `${event.tool}:${event.selector ?? ''}`, false);
+  }
+  if (!state.expect) return;
   const wanted = state.expect.map(step => `${step.tool}${step.selector ? `:${step.selector}` : ''}`);
   const got = taken.map(event => `${event.tool}${event.selector ? `:${event.selector}` : ''}`);
   const same = wanted.length === got.length && wanted.every((step, index) => step === got[index] && taken[index].ok);
@@ -145,6 +155,96 @@ export async function runFlows({ scenario } = {}) {
 
     /** @type {Record<string, (state: RunState) => Promise<void>>} */
     const runners = {
+      async list(state) {
+        const store = createDummyStore();
+        const connector = connectorFor(store, roots);
+        setup(state, 'empty fixture before prompt', 'fighterCount 0 / limit 3');
+        const profile = await connector.call('get_profile');
+        agent(state, 'get_profile', '', 'get_profile', profile.id, profile.ok);
+        const list = await connector.call('get_my_fighters', { view: 'list' });
+        agent(state, 'get_my_fighters', 'list', 'list only', `count ${list.account.fighterCount}`, list.ok && list.fighters.length === 0);
+      },
+      async 'missing-target'(state) {
+        const store = createDummyStore();
+        const connector = connectorFor(store, roots);
+        setup(state, 'empty fixture before revision prompt', 'No registered target exists.');
+        const profile = await connector.call('get_profile');
+        agent(state, 'get_profile', '', 'get_profile', profile.id, profile.ok);
+        const list = await connector.call('get_my_fighters', { view: 'list' });
+        agent(state, 'get_my_fighters', 'list', 'look for the revision target', `matches ${list.fighters.length}`, list.ok && list.fighters.length === 0);
+        probe(
+          state,
+          'target-missing',
+          'Stop and ask which existing fighter; a new registration is not an authorized substitute.',
+          store.listFighters().body.account.fighterCount === 0 && store.getHosted({}).body.jobs.length === 0,
+        );
+      },
+      async 'hosted-delegated'(state) {
+        const store = createDummyStore();
+        store.setPlaceholder(pack);
+        const connector = connectorFor(store, roots);
+        setup(state, 'empty fixture with placeholder worker', 'Prepared before the prompt; no generated art.');
+        const profile = await connector.call('get_profile');
+        agent(state, 'get_profile', '', 'get_profile', profile.id, profile.ok);
+        const list = await connector.call('get_my_fighters', { view: 'list' });
+        agent(state, 'get_my_fighters', 'list', 'check capacity', `count ${list.account.fighterCount}`, list.ok && !list.quota.exceeded);
+        const requested = await connector.call('request_hosted_fighter', {
+          description: '흰 고양이 복서를 만들어줘. 외형 선택도 맡길게.',
+          language: 'ko',
+          delegate: true,
+          idempotencyKey: KEY.hosted,
+        });
+        agent(
+          state,
+          'request_hosted_fighter',
+          'request',
+          'delegate appearance',
+          `choice ${requested.job?.choice}, status ${requested.job?.status}`,
+          requested.ok && requested.job.choice === 'a' && requested.statusSummary.actionRequired === 'wait',
+        );
+        let current = requested;
+        for (let i = 0; i < 12 && !current.statusSummary?.completed; i++)
+          current = await connector.call('get_hosted_fighter', { jobId: requested.job.id, waitSeconds: 25 });
+        agent(
+          state,
+          'get_hosted_fighter',
+          'until-registered',
+          'wait without choose_look',
+          `state ${current.statusSummary?.state}, drafts ${current.job?.drafts.length}`,
+          current.statusSummary?.completed === true && current.job.drafts.length === 11,
+        );
+      },
+      async 'hosted-capacity'(state) {
+        const store = createDummyStore({ fighterLimit: 1 });
+        store.setPlaceholder(pack);
+        setup(state, 'one slot before concurrent jobs', 'Diagnostic race; no agent behavior is scored.');
+        const first = store.requestHosted({ description: 'first placeholder fighter', language: 'en', delegate: true, idempotencyKey: KEY.hosted }).body;
+        const second = store.requestHosted({ description: 'second placeholder fighter', language: 'en', delegate: true, idempotencyKey: KEY.mcp }).body;
+        let finished = first,
+          blocked = second;
+        for (let i = 0; i < 12; i++) finished = store.getHosted({ jobId: first.job.id }).body;
+        for (let i = 0; i < 12; i++) blocked = store.getHosted({ jobId: second.job.id }).body;
+        probe(
+          state,
+          'registration capacity recheck',
+          `first ${finished.statusSummary?.state}, second ${blocked.job?.status}, count ${store.listFighters().body.account.fighterCount}`,
+          finished.statusSummary?.completed === true &&
+            blocked.job?.status === 'needs_review' &&
+            blocked.job.drafts.length === 11 &&
+            store.listFighters().body.account.fighterCount === 1,
+        );
+        store.setFighterLimit(2);
+        const retried = store.registerHosted(second.job.id).body;
+        const repeated = store.registerHosted(second.job.id).body;
+        probe(
+          state,
+          'retry preserved work after capacity restores',
+          `state ${retried.statusSummary?.state}, count ${store.listFighters().body.account.fighterCount}`,
+          retried.statusSummary?.completed === true &&
+            repeated.job?.submission?.id === retried.job?.submission?.id &&
+            store.listFighters().body.account.fighterCount === 2,
+        );
+      },
       async 'hosted-new'(state) {
         const store = createDummyStore();
         store.setPlaceholder(pack);
@@ -427,6 +527,12 @@ export async function runFlows({ scenario } = {}) {
         try {
           const connector = connectorFor(store, roots);
           const created = await cliSubmit(original, server.url, ['--idempotency-key', KEY.cli]);
+          setup(
+            state,
+            'initial registration before revision prompt',
+            `fighter ${created.result.fighterId}, submission ${created.result.submissionId}`,
+            created.result.ok === true,
+          );
           if (created.result.ok !== true) {
             probe(state, 'setup registration', `code ${created.result.code}`, false);
             return;
@@ -481,6 +587,7 @@ export async function runFlows({ scenario } = {}) {
       },
       async 'style-only'(state) {
         const store = createDummyStore({ seed: true });
+        setup(state, 'style target before prompt', 'Synthetic DUMMY Seed exists before the request.');
         const connector = connectorFor(store, roots);
         const profileBody = await connector.call('get_profile');
         agent(state, 'get_profile', '', 'get_profile', profileBody.nickname, profileBody.nickname === 'ODDBOUT');
@@ -522,6 +629,7 @@ export async function runFlows({ scenario } = {}) {
       },
       async quota(state) {
         const store = createDummyStore({ seed: true, fighterLimit: 1 });
+        setup(state, 'full account before prompt', 'fighterCount 1 / limit 1');
         const server = await startDummyServer(store);
         try {
           const connector = connectorFor(store, roots);
@@ -544,6 +652,12 @@ export async function runFlows({ scenario } = {}) {
             idempotencyKey: KEY.quota,
           });
           probe(state, 'prepare is fighter-quota', `code ${attempted.code}`, attempted.ok === false && attempted.code === 'fighter-quota');
+          const hosted = await connector.call('request_hosted_fighter', {
+            description: 'A fourth placeholder fighter',
+            language: 'en',
+            idempotencyKey: KEY.hosted,
+          });
+          probe(state, 'hosted request is fighter-quota', `code ${hosted.code}`, hosted.ok === false && hosted.code === 'fighter-quota');
           const viaCli = await cliSubmit(dir, server.url, ['--idempotency-key', KEY.quota]);
           probe(
             state,
@@ -801,6 +915,7 @@ export function formatReport(result) {
     'productionContact: none',
     `tokensSpent: ${result.tokensSpent}`,
     'generation: deterministic placeholder sprites (no model call)',
+    'execution: scripted scenarios; setup and probes are excluded from agent sequences',
     '',
     `docs (tool-name presence): ${result.docs.ok ? 'PASS' : 'FAIL'}${result.docs.problems.length ? ` — ${result.docs.problems.join('; ')}` : ''}`,
     `fixtures: ${result.fixtures.ok ? 'PASS' : 'FAIL'}${result.fixtures.problems.length ? ` — ${result.fixtures.problems.join('; ')}` : ''}`,
@@ -812,7 +927,7 @@ export function formatReport(result) {
   for (const scenario of result.scenarios) {
     lines.push(`[${scenario.ok ? 'PASS' : 'FAIL'}] ${scenario.id} — ${scenario.title}`);
     for (const event of scenario.events) {
-      const name = event.kind === 'agent' ? `${event.tool}${event.selector ? `:${event.selector}` : ''}` : 'probe';
+      const name = event.kind === 'agent' ? `${event.tool}${event.selector ? `:${event.selector}` : ''}` : event.kind;
       lines.push(`  ${event.ok ? 'ok' : 'FAIL'}  ${name}  ${event.title}${event.detail ? ` — ${event.detail}` : ''}`);
     }
     lines.push('');
