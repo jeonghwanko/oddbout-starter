@@ -959,6 +959,7 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
     '동작 하나 고치기',
     "Ask ODDBOUT to make one motion of the connected user's hosted fighter again with his sentence; the other motions stay. " +
       'Available only for a legacy job currently at motion_ready. Newly completed motions register automatically; this tool cannot edit a submitted package. ' +
+      'To change motions on an already registered fighter, submit a new local package with fighterId (npm run fighter:register -- --fighter, or prepare_fighter_registration). ' +
       "Not idle: the standing pose is the look itself. Requires the user's request. Replaces the working motion; ODDBOUT-worker generation spends tokens that are not refunded. Not idempotent: " +
       'after an unknown outcome, read get_hosted_fighter instead of repeating this call.',
     // Not idle: it is the look itself (choose_hosted_look changes the look, before the motions).

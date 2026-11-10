@@ -6,7 +6,7 @@ import { forkWorker, serialQueue } from './serial-worker.mjs';
 
 /**
  * A package check's verdict. The worker's (server/ai-fighter-package.mjs) carries more fields.
- * @typedef {{ ok: boolean, stage: string, errors: { code: string, path?: string }[], pending?: string[] }} PackageCheck
+ * @typedef {{ ok: boolean, stage: string, errors: { code: string, path?: string }[], pending?: string[], pendingStages?: string[], missingAssets?: unknown[], warnings?: unknown[] }} PackageCheck
  */
 /** @type {(code: string) => PackageCheck} */
 const issue = code => ({ ok: false, stage: 'local-access', errors: [{ code, path: '/manifestPath' }] });

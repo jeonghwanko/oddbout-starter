@@ -6,6 +6,7 @@ import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import schema from '../contracts/ai-fighter/v1/fighter.schema.json' with { type: 'json' };
 import example from '../contracts/ai-fighter/v1/example.fighter.json' with { type: 'json' };
 import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/validate.mjs';
+import { annotateValidation } from '../tools/ai-fighter/landmark-lint.mjs';
 import { makePackageValidator } from './package-access.mjs';
 import { GROUP_IDS, fetchCreationContext, reviewCreationProgress } from './creation-context.mjs';
 import { spriteStatus } from '../scripts/sprite-gen.mjs';
@@ -30,6 +31,9 @@ const outputSchema = z.object({
   data: z.unknown().optional(),
   errors: z.array(z.unknown()).optional(),
   pending: z.array(z.string()).optional(),
+  pendingStages: z.array(z.string()).optional(),
+  missingAssets: z.array(z.unknown()).optional(),
+  warnings: z.array(z.unknown()).optional(),
   assetBytes: z.number().optional(),
   decodedPixels: z.number().optional(),
   errorCount: z.number().optional(),
@@ -199,7 +203,8 @@ export function createServer({ root, contextRequest } = {}) {
     async ({ manifestJson }) => {
       try {
         const parsed = parseFighterJson(manifestJson);
-        return respond(parsed.ok ? validateFighter(parsed.data) : { ...parsed, stage: 'json' });
+        const checked = parsed.ok ? validateFighter(parsed.data) : { ...parsed, stage: 'json' };
+        return respond(annotateValidation(checked, parsed.ok ? parsed.data : null));
       } catch (error) {
         return respond({ ok: false, stage: 'json', code: errorCode(error, 'manifest-check-failed') });
       }

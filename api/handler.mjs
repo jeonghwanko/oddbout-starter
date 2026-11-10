@@ -43,8 +43,17 @@ const requireId = value => {
   return value.toLowerCase();
 };
 // rejected and expired uploads are final: nothing remains to wait for, so pending is empty.
+// `pending` is remaining pipeline stage names, kept for older clients. It is never a list of asset ids.
+// `pendingStages` is that list, and includes asset-upload while files can still be sent. `missingAssets` names the files.
 /** @type {(row: { status: string, expires_at: string }) => boolean} */
 const uploadExpired = row => row.status === 'uploading' && Date.parse(row.expires_at) <= Date.now();
+const STAGE_PENDING = ['server-validation', 'registration'];
+const UPLOAD_PENDING = ['asset-upload', 'server-validation', 'registration'];
+/** @type {(row: { status: string, expires_at: string }) => { pending: string[], pendingStages: string[] }} */
+const submissionStages = row => {
+  const done = row.status === 'registered' || row.status === 'rejected' || uploadExpired(row);
+  return { pending: done ? [] : STAGE_PENDING, pendingStages: done ? [] : row.status === 'uploading' ? UPLOAD_PENDING : STAGE_PENDING };
+};
 /**
  * A registered submission the fighter has moved on from (a later edit or update) is `superseded`, naming the fighter's current one;
  * only the current one carries the fighter's admission.
@@ -68,7 +77,7 @@ const view = (row, fighter) => {
       : superseded
         ? { availability: 'superseded', currentSubmissionId: fighter?.submission_id }
         : { availability: admission?.runtime_approved ? 'active' : 'removed', moderationReason: admission?.moderation_reason ?? '' }),
-    pending: row.status === 'registered' ? [] : row.status === 'rejected' || uploadExpired(row) ? [] : ['server-validation', 'registration'],
+    ...submissionStages(row),
   };
 };
 /** @param {{ message: string } | null} error  A database call's error, if any. */
@@ -110,9 +119,43 @@ export function createHandler({
     check(error);
     return data;
   }
+  /**
+   * Files still to PUT, when this row is an open upload. Storage confirms which objects exist; if it cannot, every declared
+   * asset is listed as missing and `assetUploadState` is `unconfirmed` (a retry of the same bytes succeeds).
+   * @param {Submission} row
+   */
+  async function assetLedger(row) {
+    const declared = Array.isArray(row.manifest?.assets)
+      ? row.manifest.assets
+          .filter(asset => asset && typeof asset.id === 'string')
+          .map(asset => {
+            const item = /** @type {{ id: string, path?: string, bytes?: number, sha256?: string }} */ (asset);
+            return { id: item.id, path: item.path, bytes: item.bytes, sha256: item.sha256 };
+          })
+      : [];
+    if (row.status !== 'uploading' || uploadExpired(row)) return { missingAssets: [] };
+    /** @type {Set<string> | null} */
+    let present = null;
+    try {
+      const folder = `${row.owner_id}/${row.asset_source_submission ?? row.id}`;
+      const listed = await db.storage?.from(BUCKET).list(folder);
+      if (listed && !listed.error && Array.isArray(listed.data))
+        present = new Set(listed.data.map((/** @type {any} */ item) => String(item?.name ?? '').replace(/\.webp$/, '')).filter(Boolean));
+    } catch {
+      present = null;
+    }
+    if (!present) return { missingAssets: declared, uploadedAssets: [], assetUploadState: 'unconfirmed' };
+    const found = present;
+    return {
+      missingAssets: declared.filter(asset => !found.has(asset.id)),
+      uploadedAssets: declared.filter(asset => found.has(asset.id)),
+      assetUploadState: 'confirmed',
+    };
+  }
   /** @param {Submission} row */
   async function present(row) {
-    if (row.status !== 'registered') return view(row);
+    const ledger = await assetLedger(row);
+    if (row.status !== 'registered') return { ...view(row), ...ledger };
     // By the fighter, not by this submission: an older submission of an edited fighter found none and read as removed (API 점검 2026-10-29).
     const { data, error } = await db
       .from('af_fighters')
@@ -120,7 +163,7 @@ export function createHandler({
       .eq('id', row.fighter_id)
       .maybeSingle();
     check(error);
-    return view(row, data);
+    return { ...view(row, data), ...ledger };
   }
   /** One Storage call signs every asset of a submission, in manifest order. @param {Submission} row @param {number} seconds @returns {Promise<string[]>} */
   async function signedUrls(row, seconds) {

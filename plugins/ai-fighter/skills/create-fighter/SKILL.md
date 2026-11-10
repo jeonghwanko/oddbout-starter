@@ -189,6 +189,18 @@ For detailed schema examples and recovery semantics read `docs/LOCAL-PLUGIN.md` 
 For commands not supported by the initial managed runner, use the documented kit CLI directly and
 record their actual outputs as versions/evidence; do not claim they received managed-job guarantees.
 
+## Revise a registered fighter
+
+`revise_hosted_motion` (`request_hosted_fighter` step `revise_motion`) only changes one motion of a legacy hosted job that is still at `motion_ready`. It does not edit a fighter that is already registered.
+
+To change motions on a registered fighter, build a new local package and submit it with that fighter's id (`prepare_fighter_registration` `fighterId`, or `npm run fighter:register -- --dir <package> --fighter <id> --submit` when this host cannot attach files). That is a new submission. The fighter id stays. The previous submission is left as it was. A style-only edit with no new art is `update_fighter` kind `style`.
+
+Read `get_profile`, then `get_my_fighters` view `list`. Report the account id and email returned by the profile and the count and limit returned in the list's `account` block. Missing fields (older servers) or a null limit stay unknown. The default of 3 is not a verified account limit. The profile nickname is always `ODDBOUT`.
+
+Read `browse_oddbout` view `style_guide` before filling `combat.style`. There is no super clip: `super` is `slam`, `combo`, `fast` or `dash`. `temper` is an object of optional 1–5 grades (`guard`, `retreat`, `measure`, `patience`). `shockwave`, if present, must be `true`. Skill clip kinds are `stretch`, `pincer`, `flight`, `feint`, `slide`, `counter` and `brace`. The skill clip has no display-name field. The skill clip, a summon and a shockwave together are at most 2. `mix.fast` must be at most `mix.slam` + `mix.combo`.
+
+New motion frames follow `docs/POSE-GENERATION.md`: right-facing side view, one scale based on standing body height 400 (not each pose's extent), and `https://oddbout.com/art/oddbout/style-anchor-front.webp` as the last reference. `inspect-motion` `needs-review` without a foot ROI is expected on action clips and does not block packaging. A `BORROWED_LANDMARK` warning means a landmark uses another clip's frame; prefer that clip's own frame. The warning does not fail validation.
+
 ## Final files and registration
 
 Use native cloud `prepare_fighter_packaging` for packaging failures. It returns exact invocations of the
@@ -227,8 +239,10 @@ Use the connected ODDBOUT account for registration from either workspace. Verify
 the user's intended account and call the cloud `get_my_fighters` view `readiness`; a workspace readiness result
 does not verify that login. Never copy a CLI session into the connector or request local login for this route.
 Read the cloud tools' current schemas, then call `prepare_fighter_registration` with the actual approved
-manifest, `upload_fighter_asset` for each pending file, `submit_fighter_registration`, and
-`get_my_fighters` view `submission`. Pass actual host attachments/files, not rendered previews, made-up URLs, or
+manifest, `upload_fighter_asset` for each `missingAssets` id (or each `assets` id when `missingAssets` is absent),
+`submit_fighter_registration`, and `get_my_fighters` view `submission`. `pending` and `pendingStages` are pipeline
+stage names, never asset ids. A host that cannot attach files uses `npm run fighter:register` instead of invented URLs.
+Pass actual host attachments/files, not rendered previews, made-up URLs, or
 paths on another machine. Materialize supported Library files with their original bytes and verify hashes.
 Preserve the submission ID and idempotency key across identical retries; inspect status before retrying
 an unknown response. Changed package bytes need a new key. A metadata-only final edit followed by an

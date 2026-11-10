@@ -3,6 +3,26 @@
 Codex loads this file; Grok requires a trusted folder (`--trust` headlessly); Claude Code imports it via `CLAUDE.md`.
 Keep these product rules in code and docs. The shipped kit applies only creation/Dots rules and lacks repository-only docs.
 
+## Agent quickstart
+
+Workspace agents start here. Detail: [docs/AGENT-QUICKSTART.md](docs/AGENT-QUICKSTART.md), poses: [docs/POSE-GENERATION.md](docs/POSE-GENERATION.md).
+
+Offline check (Node 22.12+): `npm ci --ignore-scripts`, `npm run example`, `npm run validate -- output/sparring-bot/fighter.json`. Generation: ffmpeg and `npm run sprite:setup` (RIFE ~430 MB). Host PCs: Linux.
+
+Hosts without file attachments cannot pass local WebP files to `prepare_fighter_registration`. Do not invent URLs. `npm run login`, then `npm run fighter:register -- --dir <package> [--fighter <id>]`. The default is a dry run; `--submit` uploads, submits and polls. Reuse the saved idempotency key for the same bytes.
+
+`pending` and `pendingStages` are pipeline stage names, never asset ids. Upload each `missingAssets` entry, or every `assets` entry when storage was not confirmed. A successful local validate still lists later stage names in `pending`.
+
+Revise with a new package and `fighterId`; the id stays (rule 6). `revise_hosted_motion` (`request_hosted_fighter` step `revise_motion`) only edits legacy jobs at `motion_ready`. Style-only edits: `update_fighter` kind `style`. Read `get_profile`, then `get_my_fighters` view `list`; report their returned account id, email, `fighterCount` and `fighterLimit`. Missing fields or a null limit stay unknown; 3 is the default, not a verified account limit. Nickname: `ODDBOUT`.
+
+`combat.style` has no super clip. `super` is `slam`, `combo`, `fast` or `dash`. `temper` is an object of optional 1–5 grades: `guard`, `retreat`, `measure`, `patience`. `shockwave`, if present, is `true`. Skill kinds: `stretch`, `pincer`, `flight`, `feint`, `slide`, `counter`, `brace`. The skill clip has no display-name field (`profile.moves` names combo, slam, dash and block). The skill clip, a summon and a shockwave share `extrasBudget` 2. `mix.fast` ≤ `mix.slam` + `mix.combo`, with one of those three above 0. Read `browse_oddbout` view `style_guide` before filling a style.
+
+```json
+"style": { "mix": { "slam": 3, "combo": 2, "fast": 1 }, "special": "slam", "super": "dash", "distance": 2, "temper": { "patience": 5 }, "summon": "sportsCar" }
+```
+
+Motion frames face right at one scale: standing body height 400, not each pose's extent. Attach `https://oddbout.com/art/oddbout/style-anchor-front.webp` as the last reference. `BORROWED_LANDMARK` warns when a landmark uses another clip's frame; validation still passes. `inspect-motion` `needs-review` without a foot ROI is expected on action clips and is not a packaging gate.
+
 ## Start here
 
 | Your task | Read first | Then |
@@ -35,7 +55,7 @@ These apply to every task; later sections cannot relax them.
 5. A Git URL or research request alone does not authorize generation, and process design/review requests and
    forwarded example characters do not authorize generating a character. Follow the latest direct user intent; stop
    dependent generation when it changes.
-6. Never overwrite a registered immutable package or a selected version.
+6. Never delete or overwrite a submitted immutable package or a selected version. A revision of a registered fighter is a new submission with that fighter's id (`fighterId`). It keeps the id and leaves the previous submission immutable.
 7. Preserve unrelated working-tree changes.
 
 ## Creating a fighter
@@ -259,21 +279,21 @@ Both routes:
 
 | Path | What it is |
 | --- | --- |
-| `api/` | Server API (registration, accounts, generations) for the Edge functions and the Render worker, plus the client modules the kit ships |
-| `supabase/functions/` | Edge functions `ai-fighter` (API), `ai-fighter-mcp` (hosted MCP) and the temporary `client-ip-probe`; `supabase/migrations/` is the database |
-| `mcp/` | MCP tools: `server.mjs` holds the workspace tools, which `scripts/creation-tool.mjs` runs in process; `cloud.mjs`, `cloud/` and the other `edgeOnlyFiles` in `scripts/build-plugin-bundle.mjs` run only in the hosted MCP; the Render worker imports a few |
-| `worker/` | Render validator worker and the `mcp.oddbout.com` gateway |
-| `scripts/` | The CLIs behind `npm run`: creation tools, packing, gait, Dots, plugin build and release, deploy helpers |
-| `host/` | Generation-host tools that make hosted fighters on a generation PC ([host/README.md](host/README.md)) |
-| `contracts/ai-fighter/` | The v1 package contract. The files its `SOURCE.json` lists, and `server/`, are byte copies of the game's ([Type checking](#type-checking)) |
-| `deploy/` | Service and creation-environment settings (JSON); several ship in the kit |
+| `api/` | Registration, accounts, generations. Edge functions, the Render worker, and kit client modules |
+| `supabase/functions/` | Edge functions `ai-fighter`, `ai-fighter-mcp`, temporary `client-ip-probe`. `supabase/migrations/` is the database |
+| `mcp/` | Workspace tools in `server.mjs` (`scripts/creation-tool.mjs` runs them). `cloud.mjs`, `cloud/` and other `edgeOnlyFiles` in `scripts/build-plugin-bundle.mjs` are hosted MCP only |
+| `worker/` | Render validator and the `mcp.oddbout.com` gateway |
+| `scripts/` | CLIs behind `npm run` |
+| `host/` | Generation-host tools ([host/README.md](host/README.md)) |
+| `contracts/ai-fighter/` | v1 contract. `SOURCE.json` files and `server/` are byte copies of the game ([Type checking](#type-checking)) |
+| `deploy/` | Service and creation-environment JSON; several ship in the kit |
 | `tools/ai-fighter/` | Package validator, contract builder, gait and contact evidence |
-| `plugins/` | Plugin sources: `ai-fighter` (skill `create-fighter`) and `oddbout-cloud` (hosted-MCP plugin). `ai-fighter/local-files.mjs` holds the shared path confinement, rename retry and file hashing, beside the launcher that imports it |
-| `packages/oddbout` | The npm package behind `npx -y oddbout@latest connect`, which connects a terminal agent to the hosted MCP (`docs/CLOUD-MCP.md`) |
-| `vendor/sprite-gen` | The pinned generation engine, a Git submodule ([sprite-gen](#sprite-gen)) |
-| `website/`, `web/` | Pages `npm run site:build` builds into the creator site (plugin review sites, cloud connect) |
-| `examples/sparring-bot` | A geometric test fixture, never a generated character |
-| `docs/` | Guides and records; the map is [docs/README.md](docs/README.md) |
+| `plugins/` | `ai-fighter` (skill `create-fighter`) and `oddbout-cloud`. `ai-fighter/local-files.mjs` is path confinement, rename retry and hashing |
+| `packages/oddbout` | `npx -y oddbout@latest connect` (`docs/CLOUD-MCP.md`) |
+| `vendor/sprite-gen` | Pinned generation engine, a Git submodule ([sprite-gen](#sprite-gen)) |
+| `website/`, `web/` | Creator site sources (`npm run site:build`) |
+| `examples/sparring-bot` | Geometric test fixture, never a generated character |
+| `docs/` | Guides and records ([docs/README.md](docs/README.md)) |
 
 ### Commands
 
@@ -293,45 +313,20 @@ npm run spec:check && npm run validate -- examples/sparring-bot/fighter.json && 
 
 ### Branches, tests and CI
 
-- `main` is the working branch: branch from it and open pull requests against it. `codex/creator-hosting` was the kit
-  and service branch until 2026-10-29 and is frozen at the commit that moved everything to `main`; never push to it.
-  `codex/creator-pages` (the published site) and `codex/game-context` (the game's published creation context) are
-  written by publishing tools; never commit to them by hand.
-- Other sessions may be working in a shared checkout of this repository or the game's: do branch work in a
-  `git worktree`, never switch a shared checkout's branch, and leave pulling it to the session working there.
-- Run only the relevant tests locally ([Commands](#commands)). Pull requests to `main` run the `test` workflow, and a
-  pull request merges only when it passes. Merges to `main` run nothing; `main`'s head runs it at most once every three
-  hours, for everything merged since, and not at all when that tree already passed. Do not dispatch extra runs unless asked.
-- One change, one run (about 11 minutes). Put a change and what it brings along in one pull request: an engine pin with
-  its kit version, `host/pins.json` and records. Finish local checks before pushing. Open the pull request as a draft
-  while it still changes (a draft runs no tests), then `gh pr ready` runs `test` once. A push after that waits four
-  minutes before running, and a further push in that time replaces it: push a fix's commits together, not one by one.
-  Fetch `main` first: a head that already contains `main` merges into the tree it was tested with, so the three-hourly run
-  on `main` has nothing new to test.
-- Never put `[skip ci]` or another GitHub skip marker (`[ci skip]`, `[no ci]`, `[skip actions]`, `[actions skip]`, a
-  `skip-checks: true` trailer) anywhere in a pull request's last commit message, body included, even quoted: the
-  required check then never reports.
-- Stage files by name. `git add -A`, `git add .`, `git add -u` and `git commit -a` can stage `vendor/sprite-gen` as a
-  rollback ([sprite-gen](#sprite-gen)).
-- `AGENTS.md` and the docs and scripts listed in `scripts/build-plugin-bundle.mjs` ship in the creator kit, where
-  creation agents read them. A rule removed there leaves users who pull `main` at once, and kit users at the next release.
+- Branch from `main` and open pull requests against it. Never push `codex/creator-hosting` (frozen 2026-10-29). Never hand-commit `codex/creator-pages` or `codex/game-context`; publishing tools write them.
+- In a shared checkout, use a `git worktree`. Do not switch that checkout's branch or pull it.
+- Run the relevant tests locally ([Commands](#commands)). A pull request merges only when `test` passes. Merges to `main` start nothing; `main` runs `test` at most once every three hours, and skips a tree that already passed. Do not dispatch extra runs unless asked.
+- One change, one run. Ship an engine pin with its kit version, `host/pins.json` and records in one pull request. Open as a draft while it still changes (a draft runs no tests); `gh pr ready` runs `test` once. A push after that waits four minutes, and a further push in that window replaces it. Fetch `main` first so the head contains the tree it was tested with.
+- Never put `[skip ci]`, `[ci skip]`, `[no ci]`, `[skip actions]`, `[actions skip]` or a `skip-checks: true` trailer in the last commit message or body, even quoted.
+- Stage files by name. `git add -A`, `git add .`, `git add -u` and `git commit -a` can stage `vendor/sprite-gen` as a rollback ([sprite-gen](#sprite-gen)).
+- `AGENTS.md` and the files in `scripts/build-plugin-bundle.mjs` ship in the kit. A rule removed there leaves `main` users at once and kit users at the next release.
 
 ### Type checking
 
-- Every `api/`, `worker/`, `mcp/` and `scripts/` module starts with `// @ts-check` (after a `#!` line, if any);
-  `npm run typecheck` (also in `npm test`) runs tsc over them under `strict`. Satisfy it with JSDoc types or casts, not
-  runtime changes; a caught value is `catch (/** @type {any} */ error)`.
-- Every Edge function's deno.json has the same `strict: true`, so `deno check supabase/functions/<name>/index.ts`
-  agrees; the Edge deploy itself does not type-check. Deno's TypeScript is older than this kit's tsc and can infer less
-  (an SDK callback's arguments, 2026-10-30), so the `test` workflow also runs `deno check --frozen` on every Edge
-  function that has a deno.json; after typing a file an Edge function bundles, run it locally too.
-- `scripts/edge-bundle.mjs` reads a JSDoc `import('…')` type as an import: in those files, name only modules the
-  bundle already ships or its deno.json maps (an unmapped one makes the `fighter:edge` or `fighter:mcp` plan fail).
-  The kit bundle reads imports the same way, so a kit file that names an Edge-only module makes `npm run plugin:bundle` fail.
-- `contracts/` and `server/` carry no `// @ts-check` marker; `tsconfig.vendored.json` turns `checkJs` on for them and
-  `npm run typecheck` runs it too. For a type error in a byte copy (the files `contracts/ai-fighter/SOURCE.json` lists),
-  fix the game repository (`kaito_web/tsconfig.server.json` checks the same files), then copy the files here and run
-  `npm run contract:vendored -- --pin`.
+- Every `api/`, `worker/`, `mcp/` and `scripts/` module starts with `// @ts-check` (after a `#!` line, if any). `npm run typecheck` runs tsc under `strict`. Use JSDoc, not runtime changes. A caught value is `catch (/** @type {any} */ error)`.
+- Each Edge `deno.json` is `strict: true`. `deno check` agrees; the Edge deploy does not type-check. Deno infers less than this tsc, so `test` also runs `deno check --frozen` on every Edge function with a deno.json. Run it locally after typing a file the function bundles.
+- `scripts/edge-bundle.mjs` treats a JSDoc `import('…')` type as an import. Name only modules the bundle ships or its deno.json maps. A kit file that names an Edge-only module makes `npm run plugin:bundle` fail.
+- `contracts/` and `server/` have no `// @ts-check`; `tsconfig.vendored.json` checks them. For a byte copy (`contracts/ai-fighter/SOURCE.json`), fix the game (`kaito_web/tsconfig.server.json`), copy the files, then `npm run contract:vendored -- --pin`.
 
 ### Deploys
 
@@ -345,35 +340,20 @@ Procedures: `docs/CREATOR-HOSTING.md`.
 | `ai-fighter` Edge function | `supabase/functions/ai-fighter/` and its imports | the game repository's `npm run fighter:edge` |
 | `ai-fighter-mcp` Edge function | `supabase/functions/ai-fighter-mcp/` and its imports, with its own copy of `api/` | the game repository's `npm run fighter:mcp` |
 | Database | `supabase/migrations/` | a migration applied on its own, never by a merge |
-| Render validator and `mcp.oddbout.com` gateway | `worker/` and its imports (`api/http.mjs`, `client.mjs`, `submissions.mjs`, `profile-sets.mjs` and the modules under them, the package checks in `mcp/`, `contracts/`, `server/`; not `api/handler.mjs`), and `package.json` `dependencies` only (`npm ci --omit=dev`) | `npm run worker:deploy -- <full commit sha>` with the deploy hook from the user |
+| Render validator and `mcp.oddbout.com` gateway | `worker/` and its imports (not `api/handler.mjs`); production `dependencies` only | `npm run worker:deploy -- <full commit sha>` with the user's hook |
 | Creator site | the game's private source, `website/`, `web/` and what `scripts/build-creator-site.mjs` imports | `npm run site:build`, then `npm run site:publish` |
 | Creator kit and plugin | `plugins/ai-fighter/`, the runtime list and import graph in `scripts/build-plugin-bundle.mjs`, `vendor/sprite-gen` | the next kit release (`docs/PLUGIN-DISTRIBUTION.md`) |
-| Generation PCs | the host files (`HOST_FILES` in `scripts/host.mjs`) and this repository at `KIT_REF` in `host/og` | a pull request moving `KIT_REF`; then the operator's `og self-update` and `og setup` on the official PC, and `npm run host:setup` after a pull on community hosts |
+| Generation PCs | `HOST_FILES` in `scripts/host.mjs`, and this repo at `KIT_REF` in `host/og` | a pull request moving `KIT_REF`, then `og self-update` and `og setup` on the official PC, and `npm run host:setup` on community hosts |
 
-- Deploy the production `ai-fighter` Edge function only from the game repository with `npm run fighter:edge -- plan`,
-  review its source/engine/live-version changes, then use `deploy --plan <id>` with the same options.
-- Never upload this checkout directly through Supabase CLI/MCP or a hand-built payload: its duel engine is a null
-  adapter. `scripts/edge-bundle.mjs --list` is inspection only; the game planner imports `edgeFiles` and supplies the
-  real and retained engines.
-- Deploy a `main` commit that passed `test`. Merges are tested only every three hours: when the commit has no passing
-  `test`, run `gh workflow run test --ref main` and wait for it first.
-- Verify the deployed release and served engines afterward. Do not overwrite a newer deployment from another session.
-- Batch production changes: merge the pull requests that touch any part above together, right before their deploy,
-  and deploy each affected part once. Work that reaches no part can merge when it is ready.
-- Never write deploy hooks, tokens or their values into this public repository's files, commits or pull requests.
+- Deploy production `ai-fighter` only from the game repository: `npm run fighter:edge -- plan`, review the plan, then `deploy --plan <id>` with the same options.
+- Never upload this checkout through Supabase CLI/MCP or a hand-built payload: its duel engine is a null adapter. `scripts/edge-bundle.mjs --list` is inspection only; the game planner supplies the real engines.
+- Deploy a `main` commit that passed `test`. If it has not, run `gh workflow run test --ref main` and wait. Verify the deployed release. Do not overwrite a newer deployment from another session.
+- Batch production changes: merge the pull requests that touch a part above together, then deploy that part once. Never write deploy hooks or tokens into this repository.
 
 ### sprite-gen
 
-`vendor/sprite-gen` pins a commit of [sprite-gen-agent](https://github.com/jeonghwanko/sprite-gen-agent), our fork of
-Alex Kim's [sprite-gen](https://github.com/aldegad/sprite-gen) that carries the motion engine. Commands, paths and
-the Python package keep the name `sprite-gen`.
+`vendor/sprite-gen` pins [sprite-gen-agent](https://github.com/jeonghwanko/sprite-gen-agent), our fork of Alex Kim's [sprite-gen](https://github.com/aldegad/sprite-gen). Commands, paths and the Python package keep the name `sprite-gen`.
 
-- Keep its Apache-2.0 LICENSE and NOTICE. Do not update the pin or modify vendor code as part of ordinary character
-  creation. Engine changes are committed to sprite-gen-agent first; then move the pin. Bundling refuses local vendor
-  edits, and setup refuses those a moved pin would overwrite. CI refuses a pin that does not move forward along
-  sprite-gen-agent main.
-- A pull does not move the submodule: set `git config submodule.recurse true` once per clone, or run
-  `git submodule update` after each pull. Otherwise the old checkout shows as `M vendor/sprite-gen`, and `git add -A`
-  stages it as a rollback.
-- The venv holds an editable install of this checkout's path: after moving the checkout, rerun `npm run sprite:setup`,
-  or the Python engine suites fail.
+- Keep the Apache-2.0 LICENSE and NOTICE. Do not update the pin or edit vendor code while creating a character. Commit engine changes to sprite-gen-agent first, then move the pin. Bundling and setup refuse local edits a moved pin would overwrite. CI refuses a pin that does not move forward on sprite-gen-agent main.
+- A pull does not move the submodule. Set `git config submodule.recurse true` once per clone, or run `git submodule update` after each pull. Otherwise `vendor/sprite-gen` shows as modified, and `git add -A` stages a rollback.
+- The venv is an editable install of this checkout. After moving the checkout, rerun `npm run sprite:setup` or the Python engine suites fail.

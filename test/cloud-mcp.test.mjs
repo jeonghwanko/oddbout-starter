@@ -438,6 +438,12 @@ test('manifest registration binds owner/idempotency and does not report queued a
   });
   assert.equal(toolJson(prepared).stage, 'uploading');
   assert.equal(toolJson(prepared).assets.length, example.assets.length);
+  const preparedBody = toolJson(prepared);
+  assert.deepEqual(preparedBody.pending, ['server-validation', 'registration']);
+  assert.ok(preparedBody.pendingStages.includes('asset-upload'));
+  assert.ok(preparedBody.missingAssets.some(asset => asset.id === example.assets[0].id));
+  assert.ok(preparedBody.missingAssets.every(asset => !preparedBody.pending.includes(asset.id)));
+  assert.match(preparedBody.next, /never asset ids/);
   assert.equal(rpcCalls.find(([n]) => n === 'af_create_submission')[1].p_owner, owner);
   assert.equal(rpcCalls.find(([n]) => n === 'af_create_submission')[1].p_key, key);
   const status = await call(handle, 'get_fighter_submission', { submissionId: id });
@@ -822,7 +828,12 @@ test('owned list excludes deleted rows and owned lookup returns only a deletion 
   };
   const db = { ...dbFor(), from: () => query };
   const handle = createCloudHandler({ db });
-  assert.deepEqual(toolJson(await call(handle, 'list_my_fighters')).fighters, []);
+  const mine = toolJson(await call(handle, 'list_my_fighters'));
+  assert.deepEqual(mine.fighters, []);
+  assert.equal(mine.account.id, owner);
+  assert.equal(mine.account.email, 'test@example.com');
+  assert.equal(mine.account.fighterCount, 0);
+  assert.equal(mine.account.fighterLimit, null);
   assert.ok(filters.some(([k, v]) => k === 'deleted_at' && v === null));
   assert.ok(filters.some(([k, v]) => k === 'owner_id' && v === owner));
   assert.deepEqual(toolJson(await call(handle, 'get_registered_fighter', { fighterId: fighter })), {
@@ -831,6 +842,78 @@ test('owned list excludes deleted rows and owned lookup returns only a deletion 
     fighterId: fighter,
     deletedAt,
   });
+});
+
+test('the fighter list reports the connected account count and its limit, with default and unavailable states', async () => {
+  const other = crypto.randomUUID();
+  const live = [crypto.randomUUID(), crypto.randomUUID()];
+  const creator = { owner_id: owner, fighter_limit: 7 };
+  const tables = {
+    af_creators: [{ owner_id: other, fighter_limit: 1 }, creator],
+    af_fighters: [
+      ...Array.from({ length: 3 }, () => ({ id: crypto.randomUUID(), owner_id: other, deleted_at: null })),
+      { id: crypto.randomUUID(), owner_id: owner, deleted_at: new Date().toISOString() },
+      ...live.map(id => ({ id, owner_id: owner, deleted_at: null })),
+    ],
+  };
+  let creatorReadError = false;
+  const db = {
+    ...dbFor({ ...claims(), email: 'current-owner@example.com' }),
+    from(table) {
+      const filters = [];
+      let columns = [];
+      const rows = () =>
+        tables[table].filter(row => filters.every(filter => filter(row))).map(row => Object.fromEntries(columns.map(column => [column, row[column]])));
+      const query = {
+        select(value) {
+          columns = value.split(',');
+          return this;
+        },
+        eq(key, value) {
+          filters.push(row => row[key] === value);
+          return this;
+        },
+        is(key, value) {
+          filters.push(row => row[key] === value);
+          return this;
+        },
+        order() {
+          return this;
+        },
+        async limit(count) {
+          return { data: rows().slice(0, count) };
+        },
+        async maybeSingle() {
+          return table === 'af_creators' && creatorReadError ? { data: null, error: { message: 'creator lookup unavailable' } } : { data: rows()[0] ?? null };
+        },
+      };
+      return query;
+    },
+  };
+  const handle = createCloudHandler({ db });
+  for (const [name, args] of [
+    ['list_my_fighters', {}],
+    ['get_my_fighters', {}],
+  ]) {
+    const mine = toolJson(await call(handle, name, args));
+    assert.deepEqual(mine.account, { id: owner, email: 'current-owner@example.com', fighterCount: 2, fighterLimit: 7 });
+    assert.deepEqual(
+      mine.fighters.map(row => row.id),
+      live,
+    );
+  }
+  // The migrated policy is nullable fighter_limit (1–20 when set); null means the default of three.
+  creator.fighter_limit = null;
+  const defaulted = toolJson(await call(handle, 'get_my_fighters', { view: 'list' }));
+  assert.equal(defaulted.account.fighterLimit, 3);
+  creatorReadError = true;
+  const unavailable = toolJson(await call(handle, 'get_my_fighters', { view: 'list' }));
+  assert.equal(unavailable.ok, true);
+  assert.deepEqual(unavailable.account, { id: owner, email: 'current-owner@example.com', fighterCount: 2, fighterLimit: null });
+  assert.deepEqual(
+    unavailable.fighters.map(row => row.id),
+    live,
+  );
 });
 
 test('agent tools list only with the arena key; reads are public, spars and cups carry the verified owner and the key', async () => {
@@ -1432,13 +1515,15 @@ test('the sign-in-first address lists exactly what /mcp lists and says the same;
       assert.match(request.inputSchema.properties.description.description, /Character artwork brief only/);
       assert.match(request.inputSchema.properties.delegate.description, /does not grant app permissions/);
       // Follow-up discovery and artwork-only briefs (2026-11-08): descriptions change, not the inventory or permission hints.
-      assert.equal(hash(tools), '9f8af89f2d5d6f72ff86bc25033e83f81a623bdb2d44463fadda1458ee0c3f25');
+      // 2026-11-10: registration text names pendingStages and missingAssets, list_my_fighters carries the account limit,
+      // and revise_hosted_motion points a registered fighter at a fighterId package. Inventory unchanged.
+      assert.equal(hash(tools), 'c4a2bd5278f4bded8ab4b6d811fd2e0501dc0310c264d0bb4768a28057083525');
       // Both addresses retain the same inventory when the comparison template metadata is omitted.
       const prior = structuredClone(tools),
         meta = prior.find(t => t.name === 'get_hosted_fighter')._meta;
       delete meta.ui;
       delete meta['openai/outputTemplate'];
-      assert.equal(hash(prior), '0041b5638826dd6da1d71894488adb79aed38939d7cd228b3503551ef098972e');
+      assert.equal(hash(prior), 'ec4c7924873656d1baa14f60e5ebe447098c20faf804d716244f2ed6c1d5d9b3');
     }
     // ChatGPT's published app 1.0.3 (docs/records/CLOUD-PLUGIN-REVIEW.md): four of its twelve tools are listed with their reviewed bytes (nine
     // until 2단계 B, 16a9ae15…). prepare_fighter_registration, upload_fighter_asset and submit_fighter_registration took a `kind`, and a call
