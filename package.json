@@ -25,6 +25,7 @@
     "broadcast:release": "node scripts/broadcast-release.mjs",
     "site:build": "node scripts/build-creator-site.mjs",
     "site:publish": "node scripts/publish-creator-site.mjs",
+    "site:republish": "node scripts/republish-site.mjs",
     "worker:deploy": "node scripts/deploy-render.mjs",
     "gateway:deploy": "wrangler deploy -c cloudflare/mcp-gateway/wrangler.toml",
     "gateway:dev": "wrangler dev -c cloudflare/mcp-gateway/wrangler.toml",
