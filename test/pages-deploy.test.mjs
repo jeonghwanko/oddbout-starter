@@ -4,22 +4,32 @@ import { deployPages } from '../scripts/pages-deploy.mjs';
 
 const sha = 'a'.repeat(40);
 function fixture(statuses, current = sha) {
-  const calls = [], logs = [];
+  const calls = [],
+    logs = [];
   let clock = 0;
   return {
-    calls, logs,
+    calls,
+    logs,
     action: {
       context: { repo: { owner: 'test', repo: 'site' }, sha: 'c'.repeat(40) },
       core: { getIDToken: async () => 'private-token', info: value => logs.push(value), warning: value => logs.push(value), setOutput() {} },
-      github: { async request(route, args) {
-        calls.push({ route, args });
-        if (route.includes('/git/ref/')) return { data: { object: { sha: current } } };
-        if (route.endsWith('/cancel')) return {};
-        if (route.startsWith('POST')) return { data: { id: 'deployment-1', page_url: 'https://example.com' } };
-        return { data: { status: statuses.shift() ?? 'syncing_files' } };
-      } },
+      github: {
+        async request(route, args) {
+          calls.push({ route, args });
+          if (route.includes('/git/ref/')) return { data: { object: { sha: current } } };
+          if (route.endsWith('/cancel')) return {};
+          if (route.startsWith('POST')) return { data: { id: 'deployment-1', page_url: 'https://example.com' } };
+          return { data: { status: statuses.shift() ?? 'syncing_files' } };
+        },
+      },
     },
-    options: { now: () => clock, sleep: async ms => { clock += ms; }, timeoutMs: 30_000 },
+    options: {
+      now: () => clock,
+      sleep: async ms => {
+        clock += ms;
+      },
+      timeoutMs: 30_000,
+    },
   };
 }
 test('publishes the supplied artifact and recognizes success without logging credentials', async () => {
@@ -28,7 +38,10 @@ test('publishes the supplied artifact and recognizes success without logging cre
   assert.equal(f.calls[1].args.artifact_id, 123);
   assert.equal(f.calls[1].args.pages_build_version, f.action.context.sha);
   assert.equal(f.calls[1].args.oidc_token, 'private-token');
-  assert.equal(f.calls.some(call => call.route.endsWith('/cancel')), false);
+  assert.equal(
+    f.calls.some(call => call.route.endsWith('/cancel')),
+    false,
+  );
   assert.equal(f.logs.join('').includes('private-token'), false);
 });
 test('refuses a stale branch before requesting an OIDC token or deployment', async () => {

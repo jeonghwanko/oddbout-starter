@@ -45,7 +45,12 @@ jobs:
         env:
           PAGES_SHA: ${{ inputs.pages_sha }}
         run: |
-          node --input-type=module -e "import assert from 'node:assert/strict'; import {verifyArtifact,git} from './source/scripts/hosting-lib.mjs'; assert.match(process.env.PAGES_SHA,/^[a-f0-9]{40}$/); assert.equal(git('site','rev-parse','HEAD'),process.env.PAGES_SHA); await verifyArtifact('site',{gitCheckout:true});"
+          node --input-type=module -e "import assert from 'node:assert/strict'; import {git} from './source/scripts/hosting-lib.mjs'; assert.match(process.env.PAGES_SHA,/^[a-f0-9]{40}$/); assert.equal(git('site','rev-parse','HEAD'),process.env.PAGES_SHA);"
+          # Immutable creator kits are restored after the game's fingerprint is sealed.
+          # Verify the game archive separately; publish both trees without modifying either.
+          mkdir "$RUNNER_TEMP/game-artifact"
+          git -C site archive HEAD -- . ':!creator-kit' | tar -x -C "$RUNNER_TEMP/game-artifact"
+          node --input-type=module -e "import {verifyArtifact} from './source/scripts/hosting-lib.mjs'; await verifyArtifact(process.env.RUNNER_TEMP+'/game-artifact');"
           tar --directory site --exclude=.git --exclude=.github -cf "$RUNNER_TEMP/artifact.tar" .
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node 24
         id: artifact

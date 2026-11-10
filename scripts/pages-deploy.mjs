@@ -11,7 +11,10 @@ export async function deployPages({ github, core, context }, artifactId, sha, op
   const head = await github.request('GET /repos/{owner}/{repo}/git/ref/{ref}', { ...repo, ref: 'heads/codex/creator-pages' });
   if (head.data.object.sha !== sha) throw Error('Pages branch changed; refusing a stale deployment');
   const created = await github.request('POST /repos/{owner}/{repo}/pages/deployments', {
-    ...repo, artifact_id: Number(artifactId), pages_build_version: context.sha, oidc_token: await core.getIDToken(),
+    ...repo,
+    artifact_id: Number(artifactId),
+    pages_build_version: context.sha,
+    oidc_token: await core.getIDToken(),
   });
   const deployment_id = created.data.id;
   core.setOutput('page_url', created.data.page_url);
@@ -22,7 +25,9 @@ export async function deployPages({ github, core, context }, artifactId, sha, op
   try {
     while (now() < deadline) {
       const response = await github.request('GET /repos/{owner}/{repo}/pages/deployments/{deployment_id}', {
-        ...repo, deployment_id, request: { timeout: 30_000 },
+        ...repo,
+        deployment_id,
+        request: { timeout: 30_000 },
       });
       status = response.data.status || 'unknown';
       core.info(`Pages deployment ${deployment_id}: ${status}`);
@@ -34,7 +39,8 @@ export async function deployPages({ github, core, context }, artifactId, sha, op
     }
     throw Error(`Pages timed out in ${status}; inspect this deployment before retrying`);
   } catch (error) {
-    await github.request('POST /repos/{owner}/{repo}/pages/deployments/{deployment_id}/cancel', { ...repo, deployment_id })
+    await github
+      .request('POST /repos/{owner}/{repo}/pages/deployments/{deployment_id}/cancel', { ...repo, deployment_id })
       .catch(() => core.warning('Pages cancellation could not be confirmed; inspect the deployment status'));
     throw error;
   }

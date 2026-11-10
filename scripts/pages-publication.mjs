@@ -11,7 +11,9 @@ export function requestPagesPublication(/** @type {string} */ sha) {
   if (site.build_type === 'legacy') return;
   if (site.build_type !== 'workflow') throw Error('Unknown Pages publication mode');
   execFileSync('gh', ['api', '--method', 'POST', `repos/${repository}/actions/workflows/pages.yml/dispatches`, '--input', '-'], {
-    input: JSON.stringify({ ref: 'main', inputs: { pages_sha: sha } }), encoding: 'utf8', env,
+    input: JSON.stringify({ ref: 'main', inputs: { pages_sha: sha } }),
+    encoding: 'utf8',
+    env,
   });
   console.log(`Requested Pages publication: ${sha}`);
 }
