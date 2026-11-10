@@ -30,6 +30,7 @@
     "gateway:deploy": "wrangler deploy -c cloudflare/mcp-gateway/wrangler.toml",
     "gateway:dev": "wrangler dev -c cloudflare/mcp-gateway/wrangler.toml",
     "gateway:smoke": "node scripts/gateway-smoke.mjs",
+    "public-api:deploy": "wrangler deploy -c cloudflare/public-api/wrangler.toml",
     "connect": "node packages/oddbout/bin/oddbout.mjs connect",
     "login": "node scripts/login.mjs",
     "logout": "node scripts/login.mjs logout",
