@@ -1,17 +1,17 @@
 {
   "schemaVersion": 1,
-  "about": "Everything npx oddbout-host downloads, exactly: each file's size and SHA-256 (the CLIs: their npm lockfiles in cli/). host/runner.test.mjs keeps it equal to og.mjs's versions and the kit's site. Measured 2026-11-07.",
+  "about": "Everything npx oddbout-host downloads, exactly: each file's size and SHA-256 (the CLIs: their npm lockfiles in cli/). host/runner.test.mjs keeps it equal to og.mjs's versions and the kit's site. Kit measured 2026-11-11; other downloads unchanged.",
   "service": {
     "apiBase": "https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter",
     "publishableKey": "sb_publishable_6UkV7tRAQ1P4qss5cTYSwQ_kVxSIv_V"
   },
   "kit": {
-    "version": "0.6.19",
-    "url": "https://oddbout.com/creator-kit/0.6.19/34cc24fe426b7ba0a64bf6a970b43f238b39a330c79460576d594965bc3542f7/oddbout-0.6.19.zip",
-    "bytes": 4281385,
-    "sha256": "e576e638c6ae5e456021f5e79eeeeb911c77f295cdc20924b2dabce84ab092c9",
+    "version": "0.6.20",
+    "url": "https://oddbout.com/creator-kit/0.6.20/faf1a3963656145d7b41b5de057b8bb9441bfbb04619ed684ef499da847d9cee/oddbout-0.6.20.zip",
+    "bytes": 4306692,
+    "sha256": "81319559a852d2bb2635f1555ac84403a68e9d470fcd92ac5f2c934ce134393e",
     "runtime": "runtime/",
-    "runtimeManifestSha256": "7f47f748c6a5e03d2035acdaad1a6be96de7251d248bc5ab142922fefc96b4fe",
+    "runtimeManifestSha256": "b97ba0273896c7aa0c99189bfc7201164967ba10fc07ed54e7280fe3ada4fb4a",
     "spriteGenCommit": "767f3ec7c62f6502eaede4c4bb86e6a1b289d78c"
   },
   "cli": {
