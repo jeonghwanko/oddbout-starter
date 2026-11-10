@@ -10,4 +10,7 @@ const db = createClient(url, secret, { auth: { persistSession: false, autoRefres
 const arenaKey = Deno.env.get('ODDBOUT_ARENA_AGENT_KEY');
 // The hosted generation tools (2026-10-28) list only while this secret is '1'; the service switch still decides whether a request is taken.
 const hosted = Deno.env.get('ODDBOUT_HOSTED_GENERATION_TOOLS') === '1' ? {} : null;
-Deno.serve(createCloudHandler({ db, arena: arenaKey ? { url: ARENA_URL, key: arenaKey } : null, hosted }));
+// Off by default. Enable only in an isolated staging deployment while iframe,
+// login/session and digital-goods UI policy checks are incomplete.
+const launcherEnabled = Deno.env.get('ODDBOUT_CHATGPT_GAME_LAUNCHER') === '1';
+Deno.serve(createCloudHandler({ db, arena: arenaKey ? { url: ARENA_URL, key: arenaKey } : null, hosted, launcherEnabled }));
