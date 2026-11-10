@@ -67,6 +67,7 @@ const back = document.getElementById('back');
 const full = document.getElementById('full');
 const message = document.getElementById('message');
 let state = 'idle';
+let hostModes = null;
 let nonce = null;
 let watchdog = null;
 function note(value){message.textContent=value}
@@ -82,10 +83,16 @@ function stop(){
   start.hidden=false;back.hidden=true;
   note('런처로 돌아왔습니다. 게임 시작을 눌러 다시 실행할 수 있습니다.');
 }
-function requestFullscreen(){
-  if(typeof window.openai?.requestDisplayMode !== 'function')return;
-  try{Promise.resolve(window.openai.requestDisplayMode({mode:'fullscreen'})).catch(()=>{});}
-  catch{/* Inline mode remains usable when fullscreen is unavailable. */}
+function requestFullscreen(showError=false){
+  if(!hostModes?.has('fullscreen')||typeof window.openai?.requestDisplayMode!=='function'){
+    if(showError)note('ChatGPT 호스트가 전체화면 지원을 확인하지 않았습니다.');return;
+  }
+  try{
+    Promise.resolve(window.openai.requestDisplayMode({mode:'fullscreen'}))
+      .then(result=>{
+        if(showError&&result?.mode&&result.mode!=='fullscreen')note('호스트가 전체화면 대신 다른 표시 모드를 선택했습니다.');
+      },()=>{if(showError)note('전체화면 요청이 거부되었습니다.');});
+  }catch{if(showError)note('전체화면 요청이 거부되었습니다.');}
 }
 function begin(){
   if(state!=='idle')return;
@@ -121,12 +128,7 @@ frame.addEventListener('error',()=>{
 });
 start.addEventListener('click',begin);
 back.addEventListener('click',stop);
-full.addEventListener('click',()=>{
-  if(typeof window.openai?.requestDisplayMode!=='function'){
-    note('이 환경에서는 ChatGPT 전체화면을 사용할 수 없습니다.');return;
-  }
-  requestFullscreen();
-});
+full.addEventListener('click',()=>requestFullscreen(true));
 window.addEventListener('pagehide',resetTimer);
 const post=message=>parent.postMessage({jsonrpc:'2.0',...message},'*');
 window.addEventListener('message',event=>{
@@ -147,7 +149,13 @@ window.addEventListener('message',event=>{
     return;
   }
   if(event.source!==parent||event.data?.jsonrpc!=='2.0')return;
+  if(event.data.method==='ui/notifications/host-context-changed'){
+    const modes=event.data.params?.availableDisplayModes;
+    if(Array.isArray(modes))hostModes=new Set(modes.filter(m=>m==='inline'||m==='fullscreen'));
+  }
   if(event.data.id===1 && event.data.result){
+    const modes=event.data.result.hostContext?.availableDisplayModes;
+    if(Array.isArray(modes))hostModes=new Set(modes.filter(m=>m==='inline'||m==='fullscreen'));
     const locale=event.data.result.hostContext?.locale;
     if(typeof locale==='string'&&locale.length<=20)document.documentElement.lang=locale;
     post({method:'ui/notifications/initialized',params:{}});
@@ -158,7 +166,7 @@ if(typeof ResizeObserver==='function'){
 }
 post({id:1,method:'ui/initialize',params:{
   appInfo:{name:'ODDBOUT launcher',version:'1.0.1'},
-  appCapabilities:{},
+  appCapabilities:{availableDisplayModes:['inline','fullscreen']},
   protocolVersion:'2026-01-26'
 }});
 })();
