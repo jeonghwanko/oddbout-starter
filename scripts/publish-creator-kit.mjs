@@ -11,6 +11,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { localPath } from '../mcp/creation-store.mjs';
 import { kitOrigin, releaseMetadata } from './prepare-creator-release.mjs';
 import { bootstrapPython } from './bootstrap-python.mjs';
+import { requestPagesPublication } from './pages-publication.mjs';
 
 const execute = promisify(execFile);
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -248,6 +249,7 @@ export async function publishCreatorKit(directory, attemptDirectory, expectedMan
       head = created.sha;
     } else summary.preservation = auditAdditiveTree(before, before, files);
     summary.commit = head;
+    if (publish) requestPagesPublication(head);
     summary.status = 'published-awaiting-https';
     await save();
     console.log(json({ status: summary.status, commit: head, preservation: summary.preservation }));

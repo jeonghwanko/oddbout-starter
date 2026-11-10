@@ -13,6 +13,27 @@ anchors (`#main`, `#fighters`, `#match`, `#join`) and campaign tags remain on th
 replaces the game's public `404.html` with an AI Fighter page that links home.
 Validator health: https://ai-fighter-validator.onrender.com/health
 
+GitHub Pages serves the verified files in `codex/creator-pages` through the manual
+`Publish verified Pages` workflow (`.github/workflows/pages.yml`). The Pages setting
+uses `build_type: workflow`; the `github-pages` environment permits `main`.
+The publisher dispatches the full pushed SHA after checking the artifact. A local
+operator uses their authenticated `gh`; an unattended publisher needs an
+`AI_FIGHTER_PAGES_TOKEN` with Actions write and Pages read access to this repository.
+The token is an environment variable or Actions secret, never a repository file.
+`scripts/pages-publication.mjs` is shared by whole-site and additive kit publication.
+
+The workflow uses Node 24 Actions and uploads one tar artifact with upload-artifact
+v7. It calls the supported Pages REST API through github-script v9. The deployment
+client checks the current branch SHA, uses an OIDC token, bounds status polling to
+10 minutes, cancels its own failed request, and verifies the live files afterward.
+This avoids the Node 20 upload action in GitHub's generated legacy workflow and
+the deprecated built-in `punycode` dependency still bundled in deploy-pages v5.0.1.
+Do not suppress deprecation warnings or use a longer timeout to hide stalled sync.
+
+Recovery of an already verified publication does not need a new game build: dispatch
+`pages.yml` on `main` with `pages_sha` set to the full current publication commit.
+The workflow refuses a SHA that is no longer the publication branch head.
+
 GitHub Pages serves the `codex/creator-pages` branch of this public repository.
 The branch contains both built pages, the original public assets and license
 notices, and `.nojekyll`. GitHub performs its Pages publication; source tests

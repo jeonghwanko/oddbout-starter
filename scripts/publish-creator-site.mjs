@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { resolve, join, dirname } from 'node:path';
 import assert from 'node:assert/strict';
 import { hosting, git, verifyArtifact, verifyLiveSite, waitForJson, restoreCreatorKitReleases, assertCreatorKitsUnchanged } from './hosting-lib.mjs';
+import { requestPagesPublication } from './pages-publication.mjs';
 
 const [output, option, ...extra] = process.argv.slice(2);
 if (!output || extra.length || (option && option !== '--dry-run')) {
@@ -68,6 +69,7 @@ if (option === '--dry-run') {
     // No force: concurrent deploys must fail instead of replacing newer work.
     git(checkout, 'push', 'origin', `HEAD:refs/heads/${hosting.branch}`);
     console.log(JSON.stringify({ status: 'pushed', commit: git(checkout, 'rev-parse', 'HEAD') }));
+    requestPagesPublication(git(checkout, 'rev-parse', 'HEAD'));
     const marker = new URL('deployment.json', hosting.siteUrl);
     marker.searchParams.set('build', release.buildId);
     await waitForJson(marker, body => body.buildId === release.buildId && body.digest === release.digest);
