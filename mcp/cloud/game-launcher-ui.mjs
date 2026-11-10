@@ -71,6 +71,10 @@ let nonce = null;
 let watchdog = null;
 function note(value){message.textContent=value}
 function resetTimer(){if(watchdog!==null){clearTimeout(watchdog);watchdog=null}}
+function armWatchdog(){
+  resetTimer();
+  armWatchdog();
+}
 function stop(){
   state='idle';nonce=null;resetTimer();
   stage.style.display='none';
@@ -85,7 +89,7 @@ function requestFullscreen(){
 }
 function begin(){
   if(state!=='idle')return;
-  if(typeof crypto?.getRandomValues !== 'function'){
+  if(typeof crypto==='undefined'||typeof crypto.getRandomValues!=='function'){
     note('보안 난수 생성 기능이 없어 게임 실행을 중단했습니다.');return;
   }
   const bytes=new Uint8Array(16);crypto.getRandomValues(bytes);
@@ -103,8 +107,9 @@ function begin(){
   },20000);
 }
 frame.addEventListener('load',()=>{
-  if(state!=='loading'&&state!=='document-loaded')return;
+  if(state==='idle')return;
   state='document-loaded';
+  if(watchdog===null)armWatchdog();
   note('페이지 로드 이벤트 수신. Phaser 실행은 아직 확인되지 않았습니다.');
   try{frame.contentWindow?.postMessage({channel:CHANNEL,type:'launcher:hello',nonce},GAME_ORIGIN)}
   catch{/* Cross-origin navigation can prevent the optional readiness handshake. */}
