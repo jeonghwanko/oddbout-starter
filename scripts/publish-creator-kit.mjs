@@ -11,7 +11,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { localPath } from '../mcp/creation-store.mjs';
 import { kitOrigin, releaseMetadata } from './prepare-creator-release.mjs';
 import { bootstrapPython } from './bootstrap-python.mjs';
-import { requestPagesPublication } from './pages-publication.mjs';
+import { loadPublicationEnvironment, publicationConfig, publicationFetch, requestSitePublication } from './site-publication.mjs';
 
 const execute = promisify(execFile);
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -133,7 +133,7 @@ export async function validateCandidate(directory, expectedManifestHash) {
 
 /** @param {string} relative @param {number} [limit] */
 async function readPublic(relative, limit = 4_000_000) {
-  const response = await fetch(`${kitOrigin}/${relative}`, { redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(30_000) });
+  const response = await publicationFetch()(`${kitOrigin}/${relative}`, { redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(30_000) });
   if (response.status !== 200) throw Error(`public-http-${response.status}: ${relative}`);
   const chunks = [];
   let length = 0;
@@ -158,6 +158,8 @@ async function readPublic(relative, limit = 4_000_000) {
 
 /** @param {string} directory @param {string} attemptDirectory @param {string} expectedManifestHash @param {{ publish?: boolean }} [options] */
 export async function publishCreatorKit(directory, attemptDirectory, expectedManifestHash, { publish = false } = {}) {
+  await loadPublicationEnvironment();
+  publicationConfig();
   if (!attemptDirectory.startsWith('output/')) throw Error('attempt-must-be-under-output');
   const attempt = await localPath(root, attemptDirectory);
   const { manifest, manifestUrl, files } = await validateCandidate(directory, expectedManifestHash);
@@ -249,7 +251,7 @@ export async function publishCreatorKit(directory, attemptDirectory, expectedMan
       head = created.sha;
     } else summary.preservation = auditAdditiveTree(before, before, files);
     summary.commit = head;
-    if (publish) requestPagesPublication(head);
+    if (publish) await requestSitePublication(head);
     summary.status = 'published-awaiting-https';
     await save();
     console.log(json({ status: summary.status, commit: head, preservation: summary.preservation }));

@@ -4,13 +4,15 @@ import { tmpdir } from 'node:os';
 import { resolve, join, dirname } from 'node:path';
 import assert from 'node:assert/strict';
 import { hosting, git, verifyArtifact, verifyLiveSite, waitForJson, restoreCreatorKitReleases, assertCreatorKitsUnchanged } from './hosting-lib.mjs';
-import { requestPagesPublication } from './pages-publication.mjs';
+import { loadPublicationEnvironment, publicationConfig, publicationFetch, requestSitePublication } from './site-publication.mjs';
 
 const [output, option, ...extra] = process.argv.slice(2);
 if (!output || extra.length || (option && option !== '--dry-run')) {
   throw new Error('Usage: node scripts/publish-creator-site.mjs <built-directory> [--dry-run]');
 }
 const source = resolve(output);
+await loadPublicationEnvironment();
+publicationConfig();
 const release = await verifyArtifact(source);
 if ((await readdir(source)).includes('creator-kit')) throw Error('Publish immutable creator-kit files separately with publish-creator-kit.mjs');
 if (option === '--dry-run') {
@@ -69,11 +71,11 @@ if (option === '--dry-run') {
     // No force: concurrent deploys must fail instead of replacing newer work.
     git(checkout, 'push', 'origin', `HEAD:refs/heads/${hosting.branch}`);
     console.log(JSON.stringify({ status: 'pushed', commit: git(checkout, 'rev-parse', 'HEAD') }));
-    requestPagesPublication(git(checkout, 'rev-parse', 'HEAD'));
+    await requestSitePublication(git(checkout, 'rev-parse', 'HEAD'));
     const marker = new URL('deployment.json', hosting.siteUrl);
     marker.searchParams.set('build', release.buildId);
     await waitForJson(marker, body => body.buildId === release.buildId && body.digest === release.digest);
-    await verifyLiveSite(checkout);
+    await verifyLiveSite(checkout, { request: publicationFetch() });
     console.log(JSON.stringify({ status: 'live', siteUrl: hosting.siteUrl, buildId: release.buildId }));
   } finally {
     if (previousSsh === undefined) delete process.env.GIT_SSH_COMMAND;

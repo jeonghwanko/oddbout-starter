@@ -13,6 +13,55 @@ anchors (`#main`, `#fighters`, `#match`, `#join`) and campaign tags remain on th
 replaces the game's public `404.html` with an AI Fighter page that links home.
 Validator health: https://ai-fighter-validator.onrender.com/health
 
+## Select the static host
+
+`scripts/site-publication.mjs` owns the deployment provider for the site and immutable
+creator kits. `ODDBOUT_SITE_PROVIDER` selects `github-pages` (default) or
+`cloudflare-pages`. Both publish the same verified `codex/creator-pages` Git tree.
+The game build, full-gate requirement, engine checks and canonical `oddbout.com`
+addresses remain unchanged. Backend services are independent of this selection.
+
+The publisher reads only deployment keys from this repository's ignored `.env`.
+Set `ODDBOUT_DEPLOY_ENV_FILE` to load a different private file. Shell/CI settings
+take precedence. These settings and credentials never enter the frontend build.
+
+```dotenv
+ODDBOUT_SITE_PROVIDER=cloudflare-pages
+CLOUDFLARE_ACCOUNT_ID=<account ID>
+ODDBOUT_CLOUDFLARE_PROJECT=oddbout
+ODDBOUT_CLOUDFLARE_BRANCH=main
+```
+
+Create a Cloudflare Pages Direct Upload project with production branch `main`.
+Use the repository's pinned Wrangler with `wrangler login --scopes account:read
+user:read pages:write`, or provide a scoped `CLOUDFLARE_API_TOKEN` in the private
+environment for CI. Do not include any deployment credentials in `VITE_` variables.
+
+Before changing DNS, run `npm run site:republish -- <current-publication-sha> --preview`.
+The publisher extracts Git bytes without newline conversion, verifies the sealed game,
+restores immutable kits, checks the 20,000-file and 25-MiB-per-file limits, and uploads
+to the separate `hosting-migration` branch. It verifies the returned deployment's
+commit, project and environment, then compares the live entry/asset/kit bytes.
+Only Cloudflare's same-origin `.html` canonical redirects are allowed.
+The default branch named by `ODDBOUT_CLOUDFLARE_BRANCH` must match the project's
+production branch; deployment metadata validation rejects a mismatch.
+
+Associate `oddbout.com` in the Pages custom-domain settings and switch the site's DNS
+only after preview validation. Keep existing mail, MCP, broadcast and verification
+records. Apex domains require an active Cloudflare DNS zone; follow the DNSSEC
+sequence in [MCP-GATEWAY](MCP-GATEWAY.md) if nameservers have not migrated.
+An environment change selects the upload target; **it does not switch DNS**.
+After DNS migration, `npm run site:republish -- <current-publication-sha>` publishes
+production and additionally verifies `oddbout.com`. Normal future deployments still
+use the game's `npm run publish:fighter`; additive kits use their existing publisher.
+Recovery never rebuilds or bypasses validation. No provider fallback is automatic.
+
+To roll back, select `github-pages`, republish the reviewed tree, verify it on GitHub,
+and restore the recorded site DNS targets. Keep the other provider available until
+production checks pass. Never claim production migration from preview success alone.
+
+## GitHub Pages publication
+
 GitHub Pages serves the verified files in `codex/creator-pages` through the manual
 `Publish verified Pages` workflow (`.github/workflows/pages.yml`). The Pages setting
 uses `build_type: workflow`; the `github-pages` environment permits `main`.
@@ -291,7 +340,6 @@ assets returned HTTP 200, and Render `/health` returned the exact hosting
 commit above. This was one manually dispatched verification deployment;
 push-triggered source CI and Render auto-deploy remain off.
 
-
 ## Application administration
 
 Open `admin.html` on the same published site and sign in with a pre-provisioned
@@ -376,13 +424,13 @@ the owner explicitly approves a later change. No existing ads-coffee property is
 Use these links in the corresponding social profiles. The landing page selects a
 language while preserving the campaign query values:
 
-| Profile | URL |
-| --- | --- |
-| YouTube | https://oddbout.com/updates.html?utm_source=youtube&utm_medium=social&utm_campaign=profile |
-| X | https://oddbout.com/updates.html?utm_source=x&utm_medium=social&utm_campaign=profile |
-| Threads | https://oddbout.com/updates.html?utm_source=threads&utm_medium=social&utm_campaign=profile |
+| Profile   | URL                                                                                          |
+| --------- | -------------------------------------------------------------------------------------------- |
+| YouTube   | https://oddbout.com/updates.html?utm_source=youtube&utm_medium=social&utm_campaign=profile   |
+| X         | https://oddbout.com/updates.html?utm_source=x&utm_medium=social&utm_campaign=profile         |
+| Threads   | https://oddbout.com/updates.html?utm_source=threads&utm_medium=social&utm_campaign=profile   |
 | Instagram | https://oddbout.com/updates.html?utm_source=instagram&utm_medium=social&utm_campaign=profile |
-| TikTok | https://oddbout.com/updates.html?utm_source=tiktok&utm_medium=social&utm_campaign=profile |
+| TikTok    | https://oddbout.com/updates.html?utm_source=tiktok&utm_medium=social&utm_campaign=profile    |
 
 In GA4 Reports → Acquisition → Traffic acquisition, use Session source / medium
 to compare each platform's `social` visits and Session campaign to filter `profile`.
@@ -400,12 +448,12 @@ not itself create custom dimensions. Standard reports may lag Realtime.
 
 The four key events use once-per-event counting and no default monetary value:
 
-| Event | Trigger |
-| --- | --- |
-| game_start | First actual simulation step of a bout, or accepted legacy challenge; mode distinguishes play/watch/tournament. |
-| match_complete | Actual bout result or forfeit after a tracked start, once per bout object. |
-| creation_start | Successful clipboard copy of the website's creation request, as selected by the owner. |
-| character_registered | A new server-validated fighter registration, with an eligible prior browser Analytics context. |
+| Event                | Trigger                                                                                                         |
+| -------------------- | --------------------------------------------------------------------------------------------------------------- |
+| game_start           | First actual simulation step of a bout, or accepted legacy challenge; mode distinguishes play/watch/tournament. |
+| match_complete       | Actual bout result or forfeit after a tracked start, once per bout object.                                      |
+| creation_start       | Successful clipboard copy of the website's creation request, as selected by the owner.                          |
+| character_registered | A new server-validated fighter registration, with an eligible prior browser Analytics context.                  |
 
 scripts/site-milestones.mjs adds exact, fail-fast source hooks at build time.
 The game simulation itself is unchanged. Browser events allow only the event
