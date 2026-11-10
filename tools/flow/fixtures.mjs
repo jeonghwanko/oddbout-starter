@@ -5,7 +5,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { stamp } from './seal.mjs';
-import { createDummyPackage, readPackageFiles } from './sprites.mjs';
+import { createDummyPackage, createDummyProfileSet, readPackageFiles, readProfileSetFiles } from './sprites.mjs';
 import { createDummyStore } from './store.mjs';
 
 export const FIXTURE_NAMES = ['empty', 'registered', 'quota'];
@@ -22,7 +22,9 @@ export async function prepareDummyFixture(fixture = 'empty') {
       prompt: 'teal geometric hosted placeholder',
     });
     const pack = await readPackageFiles(made.dir);
-    store.setPlaceholder(pack);
+    const profile = await createDummyProfileSet(path.join(work, 'hosted-profile'));
+    if (!profile.ok || !('folder' in profile)) throw new Error('dummy-fixture-profile-set');
+    store.setPlaceholder(pack, await readProfileSetFiles(profile.folder));
     const count = fixture === 'quota' ? 3 : fixture === 'registered' ? 1 : 0;
     for (let index = 0; index < count; index++) {
       const data = JSON.parse(pack.text);

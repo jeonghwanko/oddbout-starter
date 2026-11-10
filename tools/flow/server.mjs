@@ -125,6 +125,9 @@ export function startDummyServer(store) {
         close: () =>
           new Promise(done => {
             server.close(() => done(undefined));
+            // A disconnected CLI may leave a partial upload. Session teardown
+            // must not wait indefinitely for its request body before cleanup.
+            server.closeAllConnections();
           }),
       });
     });

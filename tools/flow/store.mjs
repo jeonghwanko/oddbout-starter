@@ -1,6 +1,8 @@
 // @ts-check
 // In-memory ODDBOUT stand-in. No network, no tokens, no production roster.
 import { createHash } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
+import { setTimeout as delay } from 'node:timers/promises';
 import Ajv from 'ajv';
 import spec from '../../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import schema from '../../contracts/ai-fighter/v1/fighter.schema.json' with { type: 'json' };
@@ -40,6 +42,8 @@ export function createDummyStore({ fighterLimit = 3, tokenBalance = 500_000, pol
   let pageBase = null;
   /** @type {{ text: string, sha: string, files: Map<string, Buffer> } | null} */
   let placeholder = null;
+  /** @type {{ text: string, files: Map<string, Buffer> } | null} */
+  let placeholderProfile = null;
   /** @type {Map<string, any>} */
   const submissions = new Map();
   /** @type {Map<string, any>} */
@@ -256,29 +260,58 @@ export function createDummyStore({ fighterLimit = 3, tokenBalance = 500_000, pol
         next: 'Completed dummy motions are preserved. After capacity is restored, retry submit kind hosted with this same jobId; do not request a new generation.',
       });
     }
+    // Only a bounded description label is derived here; the fixture does not
+    // interpret a character or draw any request-specific artwork.
     const parsed = parseFighterJson(placeholder.text);
     if (!parsed.ok) return reply(422, { code: 'invalid-manifest' });
-    const row = {
-      id: nextId(),
-      targetFighterId: null,
-      fighterId: null,
-      sha: placeholder.sha,
-      manifest: parsed.data,
-      assets: new Map(placeholder.files),
-      stage: 'validating',
-      code: undefined,
-      reason: undefined,
-      rejection: undefined,
-      event: null,
-    };
-    submissions.set(row.id, row);
-    finishRegistration(row, placeholder.sha);
+    const manifest = parsed.data;
+    const label =
+      job.description
+        .replace(/[\u0000-\u001f\u007f]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim() || 'Hosted';
+    let name = 'DUMMY ';
+    for (const character of label.replace(/^DUMMY\s+/i, '')) {
+      if (name.length + character.length > 40) break;
+      name += character;
+    }
+    manifest.localId = `dummy-hosted-${job.id.replaceAll('-', '')}`;
+    manifest.profile.name = name.trimEnd();
+    manifest.profile.language = job.language;
+    const prefix = 'ODDBOUT-DUMMY. Deterministic geometric fixture; description label only, no model parsing. ';
+    manifest.profile.description = prefix + label.slice(0, 600 - prefix.length);
+    manifest.profile.concept = `DUMMY description label: ${label}`.slice(0, 800);
+    const prepared = store.createSubmission({ text: JSON.stringify(manifest), idempotencyKey: job.id });
+    if (!prepared.body.ok) return prepared;
+    const submissionId = prepared.body.submissionId;
+    for (const asset of prepared.body.missingAssets) {
+      const bytes = placeholder.files.get(asset.id);
+      if (!bytes) return reply(409, { code: 'dummy-placeholder-missing' });
+      const uploaded = store.putAsset(submissionId, asset.id, bytes);
+      if (!uploaded.body.ok) return uploaded;
+    }
+    const submitted = store.submit(submissionId);
+    if (!submitted.body.ok) return submitted;
+    const row = submissions.get(submissionId);
+    if (row.stage === 'validating') finishRegistration(row, row.sha);
     job.submissionId = row.id;
     job.submissionStage = row.stage;
     job.fighterId = row.fighterId;
     job.status = 'submitted';
     job.errorCode = null;
     job.registrationBlocked = false;
+    if (row.stage === 'registered' && placeholderProfile) {
+      const preparedSet = store.prepareProfileSet(row.fighterId, placeholderProfile.text, job.id);
+      if (!preparedSet.body.ok) return preparedSet;
+      for (const asset of preparedSet.body.missingAssets) {
+        const bytes = placeholderProfile.files.get(asset.id);
+        if (!bytes) return reply(409, { code: 'dummy-profile-placeholder-missing' });
+        const uploaded = store.uploadProfileAsset(preparedSet.body.profileSetId, asset.id, bytes);
+        if (!uploaded.body.ok) return uploaded;
+      }
+      const submittedSet = store.submitProfileSet(preparedSet.body.profileSetId);
+      if (!submittedSet.body.ok) return submittedSet;
+    }
     return reply(200, {
       ...jobBody(job, { event: row.event }),
       next:
@@ -288,7 +321,7 @@ export function createDummyStore({ fighterLimit = 3, tokenBalance = 500_000, pol
     });
   }
 
-  return {
+  const store = {
     motions: MOTIONS,
     setPageBase(/** @type {string} */ base) {
       pageBase = base;
@@ -301,21 +334,32 @@ export function createDummyStore({ fighterLimit = 3, tokenBalance = 500_000, pol
     },
     /**
      * @param {{ text: string, files: Map<string, Buffer> }} pack
+     * @param {{ text: string, files: Map<string, Buffer> }} [profilePack]
      */
-    setPlaceholder(pack) {
+    setPlaceholder(pack, profilePack) {
       const parsed = parseFighterJson(pack.text);
       if (!parsed.ok) throw new Error('dummy-placeholder-invalid');
       for (const asset of parsed.data.assets) {
         const bytes = pack.files.get(asset.id);
         if (!bytes || bytes.length !== asset.bytes || sha256(bytes) !== asset.sha256) throw new Error(`dummy-placeholder-asset:${asset.id}`);
       }
+      if (profilePack) {
+        const profile = parseProfileSet(profilePack.text);
+        if (!profile.ok || !profile.data.expressions) throw new Error('dummy-profile-placeholder-invalid');
+        for (const id of /** @type {const} */ (['front', 'expressions'])) {
+          const file = profile.data[id];
+          const bytes = profilePack.files.get(id);
+          if (!file || !bytes || bytes.length !== file.bytes || sha256(bytes) !== file.sha256) throw new Error(`dummy-profile-placeholder-asset:${id}`);
+        }
+      }
       placeholder = { text: pack.text, sha: sha256(Buffer.from(pack.text)), files: pack.files };
+      placeholderProfile = profilePack ?? null;
     },
     health() {
       return reply(200, { ok: true, ready: true, acceptsLiveSubmission: false });
     },
     profile() {
-      return reply(200, { id: ACCOUNT.id, email: ACCOUNT.email, nickname: ACCOUNT.nickname });
+      return reply(200, { id: ACCOUNT.id, email: ACCOUNT.email, nickname: ACCOUNT.nickname, dummyRegistrationUrl: pageBase });
     },
     /** @param {string} purpose */
     readiness(purpose) {
@@ -347,7 +391,8 @@ export function createDummyStore({ fighterLimit = 3, tokenBalance = 500_000, pol
             'get_my_fighters view submission',
             'profile set after registration',
           ],
-          hosted: 'request_hosted_fighter then follow statusSummary. One motion is added per get_hosted_fighter. Tokens are not spent.',
+          hosted:
+            'request_hosted_fighter then follow statusSummary. A positive waitSeconds advances placeholder motions on timed ticks until registration or required action. Tokens are not spent.',
           files: 'Pass absolute paths inside this connector’s roots. URLs are refused.',
         });
       }
@@ -607,6 +652,38 @@ export function createDummyStore({ fighterLimit = 3, tokenBalance = 500_000, pol
       }
       return reply(200, { ...jobBody(job, { waitedMs: 0 }) });
     },
+    /**
+     * Positive waits simulate a worker with 100-ms ticks, using real elapsed time.
+     * Zero waits retain the synchronous single-step read used by older fixtures.
+     * @param {{ jobId?: string, idempotencyKey?: string, waitSeconds?: number }} input
+     */
+    async waitHosted(input) {
+      const waitSeconds = input.waitSeconds ?? 0;
+      if (!Number.isInteger(waitSeconds) || waitSeconds < 0 || waitSeconds > 30) return reply(400, { code: 'invalid-wait-seconds' });
+      if (waitSeconds === 0) return store.getHosted(input);
+      const started = performance.now();
+      const deadline = started + waitSeconds * 1000;
+      const measured = (/** @type {{ status: number, body: Record<string, any> }} */ result) => ({
+        status: result.status,
+        body: { ...result.body, waitedMs: Math.round(performance.now() - started) },
+      });
+      if (!input.jobId && !input.idempotencyKey) return measured(store.getHosted(input));
+      const job = input.jobId ? jobs.get(input.jobId) : jobs.get(jobKeys.get(input.idempotencyKey?.toLowerCase() ?? '') ?? '');
+      if (!job) return measured(reply(404, { code: 'not-found' }));
+      let result = reply(200, jobBody(job));
+      while (job.status === 'motions') {
+        const remaining = deadline - performance.now();
+        if (remaining < 100) {
+          if (remaining > 0) await delay(remaining);
+          break;
+        }
+        await delay(100);
+        if (performance.now() > deadline) break;
+        result = store.getHosted({ jobId: job.id });
+        if (!result.body.ok) break;
+      }
+      return measured(result);
+    },
     /** @param {string} jobId */
     registerHosted(jobId) {
       const job = jobs.get(jobId);
@@ -708,6 +785,7 @@ export function createDummyStore({ fighterLimit = 3, tokenBalance = 500_000, pol
       return null;
     },
   };
+  return store;
 }
 
 /** @param {any} fighter */

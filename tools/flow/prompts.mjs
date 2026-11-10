@@ -100,6 +100,20 @@ export const SCENARIOS = [
     ],
   },
   {
+    id: 'revise-mcp',
+    title: 'Revision of a registered fighter through the cloud connector',
+    forbid: ['request_hosted_fighter', 'revise_motion', 'enter_fighter', 'fighter:register'],
+    expect: [
+      { tool: 'get_profile' },
+      { tool: 'get_my_fighters', selector: 'list' },
+      { tool: 'create_dummy_package', selector: 'revision' },
+      { tool: 'prepare_fighter_registration', selector: 'package' },
+      { tool: 'upload_fighter_asset', selector: 'package' },
+      { tool: 'submit_fighter_registration', selector: 'package' },
+      { tool: 'get_my_fighters', selector: 'submission' },
+    ],
+  },
+  {
     id: 'style-only',
     title: 'Style-only edit',
     forbid: ['prepare_fighter_registration', 'request_hosted_fighter'],
@@ -112,7 +126,7 @@ export const SCENARIOS = [
   },
   {
     id: 'quota',
-    title: 'Quota exceeded',
+    title: 'Another fighter request; quota depends on account state',
     forbid: ['prepare_fighter_registration', 'request_hosted_fighter'],
     expect: [{ tool: 'get_profile' }, { tool: 'get_my_fighters', selector: 'list' }],
   },
@@ -155,10 +169,10 @@ export const SCENARIOS = [
 /** @type {Fixture[]} */
 export const FIXTURES = [
   { id: 'list-ko', scenario: 'list', prompt: '내 계정에 있는 캐릭터 리스트를 보여줘', pattern: /캐릭터 리스트를 보여줘/ },
-  { id: 'revise-ko', scenario: 'revise', prompt: '야근왕 박과장 개정판 올려줘. 돌진은 노래방 각성기로 지정해줘', pattern: /개정판 올려줘/ },
+  { id: 'revise-ko', scenario: 'revise-mcp', prompt: '야근왕 박과장 개정판 올려줘. 돌진은 노래방 각성기로 지정해줘', pattern: /개정판 올려줘/ },
   { id: 'hosted-natural-ko', scenario: 'hosted-new', prompt: '흰 고양이 복서를 새로 만들어줘', pattern: /^흰 고양이 복서를 새로 만들어줘$/ },
   { id: 'hosted-delegated-ko', scenario: 'hosted-delegated', prompt: '흰 고양이 복서를 만들어줘. 외형 선택도 맡길게.', pattern: /외형 선택도 맡길게/ },
-  { id: 'quota-ko', scenario: 'quota', prompt: '파이터 한 명 더 만들어줘 (한도 초과)', pattern: /한도 초과/ },
+  { id: 'quota-ko', scenario: 'quota', prompt: '파이터 한 명 더 만들어줘', pattern: /^파이터 한 명 더 만들어줘$/ },
   { id: 'style-ko', scenario: 'style-only', prompt: '박과장 스타일만 바꿔서 인내심 5, 각성기는 내려찍기로', pattern: /스타일만 바꿔서/ },
   {
     id: 'hosted-ko',
@@ -217,7 +231,7 @@ export const FIXTURES = [
   { id: 'chatter', scenario: null, prompt: 'What is the weather like today?', pattern: null },
 ];
 
-const LOCAL_TOOLS = new Set(['local', 'fighter:register']);
+const LOCAL_TOOLS = new Set(['local', 'fighter:register', 'create_dummy_package']);
 
 /** @returns {{ ok: boolean, problems: string[] }} */
 export function checkFixtures() {

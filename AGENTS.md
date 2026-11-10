@@ -13,12 +13,12 @@ Cloud registration stays default. Use `fighter:register` only by user choice, wi
 
 `pending` and `pendingStages` are pipeline stage names, never asset ids. Upload each `missingAssets` entry, or every `assets` entry when storage was not confirmed. A successful local validate still lists later stage names in `pending`.
 
-Revise with a new package and `fighterId`; the id stays (rule 6). `revise_hosted_motion` (`request_hosted_fighter` step `revise_motion`) only edits legacy jobs at `motion_ready`. Style-only edits: `update_fighter` kind `style`. Read `get_profile`, then `get_my_fighters` view `list`; report their returned account id, email, `fighterCount` and `fighterLimit`. Missing fields or a null limit stay unknown; 3 is the default, not a verified account limit. Nickname: `ODDBOUT`.
+Revision: new package, same `fighterId`; prior submission immutable. `revise_hosted_motion` only edits legacy jobs at `motion_ready`; style-only uses `update_fighter` kind `style`. Before revising, read `get_profile`, then `get_my_fighters` view `list`; report returned account id, email, `fighterCount` and `fighterLimit` (missing/null unknown; default 3 unverified). Nickname: `ODDBOUT`.
 
-`combat.style` has no super clip. `super` is `slam`, `combo`, `fast` or `dash`. `temper` is an object of optional 1–5 grades: `guard`, `retreat`, `measure`, `patience`. `shockwave`, if present, is `true`. Skill kinds: `stretch`, `pincer`, `flight`, `feint`, `slide`, `counter`, `brace`. The skill clip has no display-name field (`profile.moves` names combo, slam, dash and block). The skill clip, a summon and a shockwave share `extrasBudget` 2. `mix.fast` ≤ `mix.slam` + `mix.combo`, with one of those three above 0. Read `browse_oddbout` view `style_guide` before filling a style.
+`combat.style` has no super clip. `super` is `slam`, `combo`, `fast` or `dash`. `temper` is an object of optional 1–5 grades: `guard`, `retreat`, `measure`, `patience`. `shockwave`, if present, is `true`. Skill kinds: `stretch`, `pincer`, `flight`, `feint`, `slide`, `counter`, `brace`. Skill clips lack display names; `profile.moves` names combo, slam, dash and block. Skill, summon and shockwave share `extrasBudget: 2`. `mix.fast` ≤ `mix.slam` + `mix.combo`, with one of those three above 0. Read `browse_oddbout` view `style_guide` before filling a style.
 
 ```json
-"style": { "mix": { "slam": 3, "combo": 2, "fast": 1 }, "special": "slam", "super": "dash", "distance": 2, "temper": { "patience": 5 }, "summon": "sportsCar" }
+"style":{"mix":{"slam":1,"combo":0,"fast":1},"super":"dash"}
 ```
 
 Motion frames face right at one scale: standing body height 400, not each pose's extent. Attach `https://oddbout.com/art/oddbout/style-anchor-front.webp` as the last reference. `BORROWED_LANDMARK` warns when a landmark uses another clip's frame; validation still passes. `inspect-motion` `needs-review` without a foot ROI is expected on action clips and is not a packaging gate.
@@ -55,7 +55,7 @@ These apply to every task; later sections cannot relax them.
 5. A Git URL or research request alone does not authorize generation, and process design/review requests and
    forwarded example characters do not authorize generating a character. Follow the latest direct user intent; stop
    dependent generation when it changes.
-6. Never delete or overwrite a submitted immutable package or a selected version. A revision of a registered fighter is a new submission with that fighter's id (`fighterId`). It keeps the id and leaves the previous submission immutable.
+6. Never delete or overwrite a submitted immutable package or selected version. A registered-fighter revision submits a new package with the same `fighterId`; the prior submission stays immutable. Confirm the target in the returned roster; if absent, stop and ask. Never create a substitute. Set `delegate: true` only for explicit appearance-choice delegation; “make it” alone, including “그냥 만들어줘”, does not delegate.
 7. Preserve unrelated working-tree changes.
 
 ## Creating a fighter

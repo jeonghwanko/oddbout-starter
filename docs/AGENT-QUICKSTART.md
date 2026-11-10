@@ -34,6 +34,7 @@ The profile set is still `npm run fighter:profile-set` for the files. Its `pendi
 ## Revise a registered fighter
 
 1. Read `get_profile`, then `get_my_fighters` (view `list`). Say the account id, email, `fighterCount` and `fighterLimit` before using a remembered roster. Use the returned profile and list `account` fields; missing fields on older servers or a null limit stay unknown. The profile nickname is always `ODDBOUT`. The default limit is 3; only the returned value verifies this account's limit (`af_creators.fighter_limit`).
+   Confirm the requested revision target appears in the returned roster. If it is missing or ambiguous, stop and ask; never create a substitute.
 2. Build a new local package with the motions that change. `npm run validate` it.
 3. After the user has seen the motions and asked to register, use the connected cloud route by default: `prepare_fighter_registration` with `fighterId`. If the user explicitly chooses local registration and this host cannot attach files, submit with `npm run fighter:register -- --dir <package> --fighter <id> --submit` after secure login. This is a new submission. The fighter id and its history stay. The previous submission is not overwritten. A cloud-tool or auth failure alone does not authorize a route switch.
 4. Do not call `revise_hosted_motion` (`request_hosted_fighter` step `revise_motion`) for a registered fighter. That step only accepts a legacy hosted job at `motion_ready`. A style-only edit with no new art is `update_fighter` kind `style`.

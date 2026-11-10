@@ -1512,18 +1512,21 @@ test('the sign-in-first address lists exactly what /mcp lists and says the same;
       const request = tools.find(t => t.name === 'request_hosted_fighter');
       assert.match(request.description, /default to A after ten minutes/);
       assert.match(request.description, /registration follows file validation/);
+      assert.match(request.description, /only when he explicitly delegates the appearance choice/);
+      assert.match(request.description, /creation request alone.*does not delegate/);
       assert.match(request.inputSchema.properties.description.description, /Character artwork brief only/);
       assert.match(request.inputSchema.properties.delegate.description, /does not grant app permissions/);
       // Follow-up discovery and artwork-only briefs (2026-11-08): descriptions change, not the inventory or permission hints.
       // 2026-11-10: registration text names pendingStages and missingAssets, list_my_fighters carries the account limit,
       // and revise_hosted_motion points a registered fighter at a fighterId package. Inventory unchanged.
-      assert.equal(hash(tools), 'c4a2bd5278f4bded8ab4b6d811fd2e0501dc0310c264d0bb4768a28057083525');
+      // 2026-11-11: ordinary creation requests do not imply appearance-choice delegation.
+      assert.equal(hash(tools), 'ea138d849edaa1c579eeda590bdbe4e5266915ead38bcacd803e405a55de7056');
       // Both addresses retain the same inventory when the comparison template metadata is omitted.
       const prior = structuredClone(tools),
         meta = prior.find(t => t.name === 'get_hosted_fighter')._meta;
       delete meta.ui;
       delete meta['openai/outputTemplate'];
-      assert.equal(hash(prior), 'ec4c7924873656d1baa14f60e5ebe447098c20faf804d716244f2ed6c1d5d9b3');
+      assert.equal(hash(prior), 'e32c1d2eb33329086549ce4c27b4789b9ba822cca1a286ddd06295352325070f');
     }
     // ChatGPT's published app 1.0.3 (docs/records/CLOUD-PLUGIN-REVIEW.md): four of its twelve tools are listed with their reviewed bytes (nine
     // until 2단계 B, 16a9ae15…). prepare_fighter_registration, upload_fighter_asset and submit_fighter_registration took a `kind`, and a call

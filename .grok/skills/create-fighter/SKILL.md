@@ -64,7 +64,7 @@ ODDBOUT draws from the pick). Hosted creation includes registration into product
 The server continues to packaging and registration; for an older job at `motion_ready`, call `submit_fighter_registration`
 with `kind: hosted` to continue the requested creation. Honor an explicit hold or revision request.
 Only the owner reviews and enters the registered fighter on the website; never enter it automatically.
-If the user leaves the choices to ODDBOUT ("just make it"), pass `delegate: true`: ODDBOUT picks the look and continues through registration without a motion-approval boundary.
+Set `delegate: true` only when the user explicitly delegates the appearance choice (for example, “you choose the look”). “Make it”, “just make it” and “그냥 만들어줘” request creation but do not delegate appearance; ask the user to choose the look and do not pass `delegate: true`.
 Use `statusSummary` to report the stage, required action and last check. Stage progress 100% is not registration completion.
 Wait with `get_hosted_fighter` `waitSeconds` rather than repeated reads. If the chat stops, provide `siteUrl`;
 do not promise background chat notifications. Do not generate locally for a hosted job.
@@ -199,6 +199,8 @@ record their actual outputs as versions/evidence; do not claim they received man
 `revise_hosted_motion` (`request_hosted_fighter` step `revise_motion`) only changes one motion of a legacy hosted job that is still at `motion_ready`. It does not edit a fighter that is already registered.
 
 To change motions on a registered fighter, build a new local package and submit it with that fighter's id using `prepare_fighter_registration` `fighterId` by default. If this host cannot attach files, use `npm run fighter:register -- --dir <package> --fighter <id> --submit` only when the user explicitly chooses local registration and has a supported secure CLI login. A cloud-tool or auth failure alone does not authorize switching. This is a new submission. The fighter id stays. The previous submission is left as it was. A style-only edit with no new art is `update_fighter` kind `style`.
+
+First read the returned fighter roster and confirm the requested target is present. If it is absent or ambiguous, stop and ask which fighter the user means. Never create or register a new fighter as a substitute for a missing revision target.
 
 Read `get_profile`, then `get_my_fighters` view `list`. Report the account id and email returned by the profile and the count and limit returned in the list's `account` block. Missing fields (older servers) or a null limit stay unknown. The default of 3 is not a verified account limit. The profile nickname is always `ODDBOUT`.
 
