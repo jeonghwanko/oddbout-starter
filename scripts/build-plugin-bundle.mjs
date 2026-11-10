@@ -55,6 +55,7 @@ const runtimeFiles = [
   'docs/DOT-CREATION.md',
   'docs/AUTHORING.md',
   'docs/AGENT-QUICKSTART.md',
+  'docs/FLOW-TEST.md',
   'docs/POSE-GENERATION.md',
   'docs/CREATION-UX.md',
   'docs/GAIT-REVIEW.md',

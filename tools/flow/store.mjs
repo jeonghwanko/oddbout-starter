@@ -1,0 +1,668 @@
+// @ts-check
+// In-memory ODDBOUT stand-in. No network, no tokens, no production roster.
+import { createHash } from 'node:crypto';
+import spec from '../../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
+import { parseFighterJson, validateFighter } from '../../contracts/ai-fighter/validate.mjs';
+import { parseProfileSet } from '../../api/profile-set-contract.mjs';
+import { stamp } from './seal.mjs';
+
+const MOTIONS = Object.keys(spec.motions);
+const NOW = '2026-11-10T00:00:00.000Z';
+const AUTO = '2026-11-10T00:10:00.000Z';
+const ACCOUNT = { id: '00000000-0000-4000-8000-00000000d0a1', email: 'dummy-owner@oddbout.invalid', nickname: 'ODDBOUT' };
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[4][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const SUMMONS = ['crane', 'bolt', 'sportsCar', 'roadster'];
+const SUPERS = ['slam', 'combo', 'fast', 'dash'];
+const SPECIALS = ['slam', 'combo', 'fast'];
+const TEMPERS = ['guard', 'retreat', 'measure', 'patience'];
+
+const sha256 = (/** @type {Uint8Array} */ bytes) => createHash('sha256').update(bytes).digest('hex');
+
+/**
+ * @param {number} status
+ * @param {Record<string, unknown>} body
+ */
+function reply(status, body) {
+  return { status, body: stamp({ ok: status < 400, ...body }) };
+}
+
+/** @param {{ fighterLimit?: number, tokenBalance?: number, policy?: 'happy' | 'reject-review' | 'legacy-motion', seed?: boolean }} [options] */
+export function createDummyStore({ fighterLimit = 3, tokenBalance = 500_000, policy = 'happy', seed = false } = {}) {
+  let limit = fighterLimit;
+  let tokens = tokenBalance;
+  let sequence = 1;
+  /** @type {string | null} */
+  let pageBase = null;
+  /** @type {{ text: string, sha: string, files: Map<string, Buffer> } | null} */
+  let placeholder = null;
+  /** @type {Map<string, any>} */
+  const submissions = new Map();
+  /** @type {Map<string, any>} */
+  const fighters = new Map();
+  /** @type {Map<string, any>} */
+  const jobs = new Map();
+  /** @type {Map<string, any>} */
+  const sets = new Map();
+  /** @type {Map<string, { sha: string, submissionId: string }>} */
+  const submissionKeys = new Map();
+  /** @type {Map<string, string>} */
+  const jobKeys = new Map();
+  /** @type {any[]} */
+  const notifications = [];
+  let delivered = 0;
+
+  const nextId = () => `00000000-0000-4000-8000-${String(sequence++).padStart(12, '0')}`;
+  const page = (/** @type {string} */ kind, /** @type {string} */ id) => (pageBase ? `${pageBase}/dummy/page/${kind}/${id}` : null);
+  /** @param {string} kind @param {Record<string, unknown>} detail */
+  const notify = (kind, detail) => {
+    const item = stamp({ id: nextId(), at: NOW, kind, ...detail });
+    notifications.push(item);
+    return item;
+  };
+
+  if (seed) {
+    const id = nextId();
+    fighters.set(id, {
+      id,
+      name: 'DUMMY Seed',
+      localId: 'dummy-seed',
+      manifestSha256: null,
+      submissionIds: [],
+      entered: false,
+      front: null,
+      style: null,
+      createdAt: NOW,
+    });
+  }
+
+  const account = () => ({
+    id: ACCOUNT.id,
+    email: ACCOUNT.email,
+    fighterCount: fighters.size,
+    fighterLimit: limit,
+  });
+
+  /** @param {any} row */
+  function submissionBody(row) {
+    const assets = row.manifest.assets.map((/** @type {any} */ asset) => ({ id: asset.id, path: asset.path, bytes: asset.bytes, sha256: asset.sha256 }));
+    const missingAssets = assets.filter((/** @type {any} */ asset) => !row.assets.has(asset.id));
+    const pending = row.stage === 'uploading' ? ['server-validation', 'registration'] : row.stage === 'validating' ? ['server-validation'] : [];
+    return {
+      submissionId: row.id,
+      stage: row.stage,
+      fighterId: row.stage === 'registered' ? row.fighterId : row.targetFighterId,
+      manifestSha256: row.sha,
+      pending,
+      pendingStages: pending,
+      assetUploadState: 'confirmed',
+      missingAssets,
+      assets,
+      ...(row.code ? { code: row.code } : {}),
+      ...(row.reason ? { reason: row.reason } : {}),
+      ...(row.rejection ? { rejection: row.rejection } : {}),
+      dummyPage: page('submission', row.id),
+      ...(row.stage === 'uploading'
+        ? { next: 'pending and pendingStages are pipeline stage names, never asset ids. Upload each missingAssets entry, then submit.' }
+        : {}),
+    };
+  }
+
+  /** @param {any} row @param {string} sha */
+  function finishRegistration(row, sha) {
+    if (policy === 'reject-review') {
+      row.stage = 'rejected';
+      row.code = 'review-rejected';
+      row.rejection = 'review';
+      row.reason = 'Dummy operator rejected this labelled package. No live review happened.';
+      row.event = notify('submission-rejected', { submissionId: row.id, code: row.code, reason: row.reason });
+      return;
+    }
+    let fighterId = row.targetFighterId;
+    if (!fighterId) {
+      fighterId = nextId();
+      fighters.set(fighterId, {
+        id: fighterId,
+        name: row.manifest.profile.name,
+        localId: row.manifest.localId,
+        manifestSha256: sha,
+        submissionIds: [],
+        entered: false,
+        front: null,
+        style: row.manifest.combat?.style ?? null,
+        createdAt: NOW,
+      });
+    }
+    const fighter = fighters.get(fighterId);
+    fighter.name = row.manifest.profile.name;
+    fighter.localId = row.manifest.localId;
+    fighter.manifestSha256 = sha;
+    fighter.submissionIds = [...fighter.submissionIds, row.id];
+    if (row.manifest.combat?.style) fighter.style = row.manifest.combat.style;
+    row.fighterId = fighterId;
+    row.stage = 'registered';
+    row.code = undefined;
+    row.event = notify('submission-registered', { submissionId: row.id, fighterId, manifestSha256: sha });
+  }
+
+  /** @param {any} job */
+  function statusSummary(job) {
+    const registered = job.status === 'submitted' && job.submissionStage === 'registered';
+    const failed = job.status === 'rejected' || job.submissionStage === 'rejected';
+    const state = registered
+      ? 'registered'
+      : failed
+        ? 'stopped'
+        : job.status === 'appearance_ready'
+          ? 'choose_look'
+          : job.status === 'motion_ready'
+            ? 'registration_pending'
+            : job.status === 'motions'
+              ? 'motions'
+              : job.status === 'submitted'
+                ? 'validating'
+                : 'unknown';
+    return {
+      state,
+      completed: registered,
+      terminal: registered || failed,
+      actionRequired: registered
+        ? 'enter_on_site'
+        : job.status === 'appearance_ready'
+          ? 'choose_look'
+          : job.status === 'motion_ready'
+            ? 'register_or_revise'
+            : job.status === 'motions'
+              ? 'wait'
+              : 'none',
+      stageProgress: job.status === 'motions' ? { done: job.drafts.length, of: MOTIONS.length } : null,
+      note: 'stageProgress is this stage only. completed is true only when the dummy submission is registered.',
+    };
+  }
+
+  /** @param {any} job */
+  function jobBody(job, extra = {}) {
+    return {
+      job: {
+        id: job.id,
+        status: job.status,
+        description: job.description,
+        language: job.language,
+        delegate: job.delegate,
+        choice: job.choice,
+        candidates: job.candidates,
+        drafts: job.drafts,
+        revisionsLeft: job.revisionsLeft,
+        motionNote: job.motionNote,
+        appearanceAutoSelectAt: job.status === 'appearance_ready' ? AUTO : null,
+        appearanceAutoSelection: null,
+        tokens: 0,
+        tokensCharged: false,
+        submission: job.submissionId ? { id: job.submissionId, stage: job.submissionStage, fighterId: job.fighterId } : null,
+        artChanged: false,
+        dummyPage: page('job', job.id),
+      },
+      statusSummary: statusSummary(job),
+      tokens,
+      tokensCharged: false,
+      ...extra,
+    };
+  }
+
+  /** @param {any} job */
+  function registerHostedJob(job) {
+    if (!placeholder) return reply(409, { code: 'dummy-placeholder-missing', next: 'The dummy worker has no placeholder package.' });
+    const parsed = parseFighterJson(placeholder.text);
+    if (!parsed.ok) return reply(422, { code: 'invalid-manifest' });
+    const row = {
+      id: nextId(),
+      targetFighterId: null,
+      fighterId: null,
+      sha: placeholder.sha,
+      manifest: parsed.data,
+      assets: new Map(placeholder.files),
+      stage: 'validating',
+      code: undefined,
+      reason: undefined,
+      rejection: undefined,
+      event: null,
+    };
+    submissions.set(row.id, row);
+    finishRegistration(row, placeholder.sha);
+    job.submissionId = row.id;
+    job.submissionStage = row.stage;
+    job.fighterId = row.fighterId;
+    job.status = 'submitted';
+    return reply(200, {
+      ...jobBody(job, { event: row.event }),
+      next: 'Registered on the dummy server only. The owner would enter on the site; this dummy does not put the fighter in public play.',
+    });
+  }
+
+  return {
+    motions: MOTIONS,
+    setPageBase(/** @type {string} */ base) {
+      pageBase = base;
+    },
+    setFighterLimit(/** @type {number} */ value) {
+      limit = value;
+    },
+    setTokenBalance(/** @type {number} */ value) {
+      tokens = value;
+    },
+    /**
+     * @param {{ text: string, files: Map<string, Buffer> }} pack
+     */
+    setPlaceholder(pack) {
+      const parsed = parseFighterJson(pack.text);
+      if (!parsed.ok) throw new Error('dummy-placeholder-invalid');
+      for (const asset of parsed.data.assets) {
+        const bytes = pack.files.get(asset.id);
+        if (!bytes || bytes.length !== asset.bytes || sha256(bytes) !== asset.sha256) throw new Error(`dummy-placeholder-asset:${asset.id}`);
+      }
+      placeholder = { text: pack.text, sha: sha256(Buffer.from(pack.text)), files: pack.files };
+    },
+    health() {
+      return reply(200, { ok: true, ready: true, acceptsLiveSubmission: false });
+    },
+    profile() {
+      return reply(200, { id: ACCOUNT.id, email: ACCOUNT.email, nickname: ACCOUNT.nickname });
+    },
+    /** @param {string} purpose */
+    readiness(purpose) {
+      return reply(200, {
+        purpose,
+        scope: 'dummy-registration',
+        account: { ...account(), nickname: ACCOUNT.nickname },
+        registration: { status: 'ready', requiresPc: false, auth: 'dummy-no-oauth' },
+        generation: { status: 'dummy-placeholder', reason: 'no-model-called' },
+        hosted: { tool: 'request_hosted_fighter', tokensCharged: false, note: 'Dummy worker. Requests are not charged.' },
+        delivery: { status: 'dummy-local', reason: 'results are returned on the tool result and the notification list' },
+        nextCommands: [],
+      });
+    },
+    /** @param {string} section */
+    spec(section) {
+      if (section === 'schema')
+        return reply(200, { section, note: 'Read contracts/ai-fighter/v1/fighter.schema.json in the repository. This dummy does not echo the live schema.' });
+      if (section === 'creation') {
+        return reply(200, {
+          section,
+          steps: [
+            'get_profile',
+            'get_my_fighters view readiness',
+            'placeholder sprites and local validate',
+            'prepare_fighter_registration kind package',
+            'upload_fighter_asset for each missingAssets id (pending is not an asset id)',
+            'submit_fighter_registration kind package',
+            'get_my_fighters view submission',
+            'profile set after registration',
+          ],
+          hosted: 'request_hosted_fighter then follow statusSummary. One motion is added per get_hosted_fighter. Tokens are not spent.',
+          files: 'Pass absolute paths inside this connector’s roots. URLs are refused.',
+        });
+      }
+      return reply(200, {
+        section: 'overview',
+        data: {
+          specVersion: spec.specVersion,
+          motions: MOTIONS,
+          registration: { auth: 'dummy-no-oauth', assetUpload: 'dummy-local-path', requiresPc: false },
+          note: 'Dummy summary of the repository contract. Not a live spec response.',
+        },
+      });
+    },
+    styleGuide() {
+      return reply(200, {
+        view: 'style_guide',
+        source: 'repository-summary',
+        rules: {
+          super: SUPERS,
+          special: SPECIALS,
+          temper: TEMPERS,
+          summon: SUMMONS,
+          extrasBudget: 2,
+          mix: 'fast ≤ slam + combo, and one of slam, combo, fast is above 0',
+          skillKinds: ['stretch', 'pincer', 'flight', 'feint', 'slide', 'counter', 'brace'],
+        },
+      });
+    },
+    listFighters() {
+      const quota = { exceeded: fighters.size >= limit, fighterCount: fighters.size, fighterLimit: limit };
+      const fresh = notifications.slice(delivered);
+      delivered = notifications.length;
+      return reply(200, {
+        account: account(),
+        quota,
+        fighters: [...fighters.values()].map(publicFighter),
+        notifications: fresh,
+        notificationsDelivered: fresh.length,
+      });
+    },
+    /** @param {string} fighterId */
+    fighter(fighterId) {
+      const row = fighters.get(fighterId);
+      if (!row) return reply(404, { code: 'fighter-not-found' });
+      return reply(200, { fighter: publicFighter(row), dummyPage: page('fighter', fighterId) });
+    },
+    /** @param {string} submissionId */
+    getSubmission(submissionId) {
+      const row = submissions.get(submissionId);
+      if (!row) return reply(404, { code: 'not-found' });
+      if (row.stage === 'validating') finishRegistration(row, row.sha);
+      return reply(200, { ...submissionBody(row), ...(row.event ? { event: row.event } : {}) });
+    },
+    /**
+     * @param {{ text: string, fighterId?: string | null, idempotencyKey: string }} input
+     */
+    createSubmission(input) {
+      if (!UUID.test(input.idempotencyKey)) return reply(400, { code: 'invalid-id' });
+      const key = input.idempotencyKey.toLowerCase();
+      const target = input.fighterId ? input.fighterId.toLowerCase() : null;
+      if (target && !UUID.test(target)) return reply(400, { code: 'invalid-id' });
+      const parsed = parseFighterJson(input.text);
+      const checked = parsed.ok ? validateFighter(parsed.data) : parsed;
+      if (!parsed.ok || !checked.ok) return reply(422, { code: 'invalid-manifest', errors: (checked.errors ?? []).slice(0, 10) });
+      const sha = sha256(Buffer.from(input.text));
+      const prior = submissionKeys.get(key);
+      if (prior && prior.sha !== sha) return reply(409, { code: 'idempotency-conflict' });
+      if (prior) return reply(200, submissionBody(submissions.get(prior.submissionId)));
+      if (target && !fighters.has(target)) return reply(404, { code: 'fighter-not-found' });
+      if (!target && fighters.size >= limit) {
+        notify('fighter-quota', { fighterCount: fighters.size, fighterLimit: limit });
+        return reply(409, { code: 'fighter-quota', account: account() });
+      }
+      if (target && fighters.get(target).manifestSha256 === sha) return reply(409, { code: 'fighter-unchanged' });
+      const row = {
+        id: nextId(),
+        targetFighterId: target,
+        fighterId: null,
+        sha,
+        manifest: parsed.data,
+        assets: new Map(),
+        stage: 'uploading',
+        code: undefined,
+        reason: undefined,
+        rejection: undefined,
+        event: null,
+      };
+      submissions.set(row.id, row);
+      submissionKeys.set(key, { sha, submissionId: row.id });
+      return reply(200, submissionBody(row));
+    },
+    /** @param {string} submissionId @param {string} assetId @param {Buffer} bytes */
+    putAsset(submissionId, assetId, bytes) {
+      const row = submissions.get(submissionId);
+      if (!row) return reply(404, { code: 'not-found' });
+      if (row.stage !== 'uploading') return reply(409, { code: 'upload-closed' });
+      const asset = row.manifest.assets.find((/** @type {any} */ item) => item.id === assetId);
+      if (!asset) return reply(404, { code: 'asset-not-found' });
+      if (bytes.length < 12 || bytes.toString('ascii', 0, 4) !== 'RIFF' || bytes.toString('ascii', 8, 12) !== 'WEBP')
+        return reply(422, { code: 'webp-required' });
+      if (bytes.length !== asset.bytes || sha256(bytes) !== asset.sha256) return reply(422, { code: 'asset-hash-or-size' });
+      row.assets.set(assetId, Buffer.from(bytes));
+      return reply(200, { stage: 'uploaded', assetId, bytes: bytes.length });
+    },
+    /** @param {string} submissionId */
+    submit(submissionId) {
+      const row = submissions.get(submissionId);
+      if (!row) return reply(404, { code: 'not-found' });
+      if (row.stage === 'registered' || row.stage === 'rejected') return reply(200, submissionBody(row));
+      const missing = row.manifest.assets.filter((/** @type {any} */ asset) => !row.assets.has(asset.id));
+      if (missing.length) {
+        notify('assets-incomplete', { submissionId, missingAssets: missing.map((/** @type {any} */ asset) => asset.id) });
+        return reply(409, { code: 'assets-incomplete', ...submissionBody(row) });
+      }
+      if (row.stage === 'uploading') row.stage = 'validating';
+      return reply(200, submissionBody(row));
+    },
+    /** @param {string} fighterId @param {any} style */
+    updateStyle(fighterId, style) {
+      const row = fighters.get(fighterId);
+      if (!row) return reply(404, { code: 'fighter-not-found' });
+      const code = styleError(style);
+      if (code) return reply(422, { code });
+      row.style = style;
+      const event = notify('style-updated', { fighterId });
+      return reply(200, { fighterId, style, artChanged: false, event });
+    },
+    /**
+     * @param {{ description: string, language: string, idempotencyKey: string, delegate?: boolean }} input
+     */
+    requestHosted(input) {
+      if (!UUID.test(input.idempotencyKey)) return reply(400, { code: 'invalid-id' });
+      if (typeof input.description !== 'string' || input.description.length < 4 || input.description.length > 600)
+        return reply(422, { code: 'invalid-description' });
+      if (input.language !== 'ko' && input.language !== 'en') return reply(422, { code: 'invalid-language' });
+      const key = input.idempotencyKey.toLowerCase();
+      const existing = jobKeys.get(key);
+      if (existing) return reply(200, jobBody(jobs.get(existing)));
+      if (tokens <= 0) {
+        notify('generation-quota', { tokens });
+        return reply(409, { code: 'generation-quota', tokens, tokensCharged: false });
+      }
+      const id = nextId();
+      const job = {
+        id,
+        description: input.description,
+        language: input.language,
+        delegate: input.delegate === true,
+        choice: null,
+        candidates: [
+          { id: 'a', label: 'DUMMY look A', media: 'placeholder', note: 'Not an image from a model.' },
+          { id: 'b', label: 'DUMMY look B', media: 'placeholder', note: 'Not an image from a model.' },
+        ],
+        drafts: /** @type {string[]} */ ([]),
+        revisionsLeft: { appearance: 1, motion: 1 },
+        motionNote: null,
+        status: 'appearance_ready',
+        submissionId: null,
+        submissionStage: null,
+        fighterId: null,
+      };
+      jobs.set(id, job);
+      jobKeys.set(key, id);
+      const event = notify('hosted-appearance-ready', { jobId: id });
+      return reply(200, {
+        ...jobBody(job, { event }),
+        next: 'Show both DUMMY looks and call request_hosted_fighter step choose_look. The dummy does not auto-select; appearanceAutoSelectAt is informational only.',
+      });
+    },
+    /** @param {string} jobId @param {string} choice */
+    chooseLook(jobId, choice) {
+      const job = jobs.get(jobId);
+      if (!job) return reply(404, { code: 'not-found' });
+      if (job.status !== 'appearance_ready')
+        return reply(409, { code: 'generation-state', job: jobBody(job).job, next: 'The choice was not applied. Read get_hosted_fighter.' });
+      if (choice !== 'a' && choice !== 'b') return reply(422, { code: 'invalid-choice' });
+      job.choice = choice;
+      job.status = policy === 'legacy-motion' ? 'motion_ready' : 'motions';
+      const event = notify('hosted-look-chosen', { jobId, choice, status: job.status });
+      return reply(200, {
+        ...jobBody(job, { event }),
+        next:
+          job.status === 'motion_ready'
+            ? 'Legacy dummy job. revise_motion is accepted, then submit kind hosted.'
+            : 'Read get_hosted_fighter. Each read adds one placeholder motion. No pixels are drawn.',
+      });
+    },
+    /** @param {string} jobId @param {string} motion @param {string} note */
+    reviseMotion(jobId, motion, note) {
+      const job = jobs.get(jobId);
+      if (!job) return reply(404, { code: 'not-found' });
+      if (job.status !== 'motion_ready' || job.revisionsLeft.motion < 1) {
+        return reply(409, {
+          code: 'generation-state',
+          applied: false,
+          artChanged: false,
+          next: 'revise_motion applies only to a legacy job at motion_ready. A registered fighter needs a new package and fighterId.',
+        });
+      }
+      if (!MOTIONS.includes(motion) || typeof note !== 'string' || note.length < 1 || note.length > 200) return reply(422, { code: 'invalid-motion' });
+      job.revisionsLeft.motion -= 1;
+      job.motionNote = { motion, note };
+      const event = notify('hosted-motion-note', { jobId, motion });
+      return reply(200, {
+        ...jobBody(job, { event }),
+        applied: true,
+        artChanged: false,
+        next: 'The note is recorded. Placeholder art did not change. submit kind hosted continues registration.',
+      });
+    },
+    /** @param {{ jobId?: string, idempotencyKey?: string }} input */
+    getHosted(input) {
+      if (!input.jobId && !input.idempotencyKey) {
+        return reply(200, {
+          tokens,
+          tokensCharged: false,
+          jobs: [...jobs.values()].map(job => ({ id: job.id, status: job.status, statusSummary: statusSummary(job) })),
+        });
+      }
+      const job = input.jobId ? jobs.get(input.jobId) : jobs.get(jobKeys.get(input.idempotencyKey?.toLowerCase() ?? '') ?? '');
+      if (!job) return reply(404, { code: 'not-found' });
+      if (job.status === 'motions' && job.drafts.length < MOTIONS.length) {
+        job.drafts = [...job.drafts, MOTIONS[job.drafts.length]];
+        const event = notify('hosted-motion-draft', { jobId: job.id, motion: job.drafts.at(-1), done: job.drafts.length, of: MOTIONS.length });
+        return reply(200, {
+          ...jobBody(job, { event, waitedMs: 0 }),
+          next: 'Dummy advanced one motion for this read and did not sleep. Stage progress is not registration.',
+        });
+      }
+      if (job.status === 'motions' && job.drafts.length === MOTIONS.length) {
+        const registered = registerHostedJob(job);
+        return { status: registered.status, body: { ...registered.body, waitedMs: 0 } };
+      }
+      return reply(200, { ...jobBody(job, { waitedMs: 0 }) });
+    },
+    /** @param {string} jobId */
+    registerHosted(jobId) {
+      const job = jobs.get(jobId);
+      if (!job) return reply(404, { code: 'not-found' });
+      if (job.status === 'submitted' && job.submissionStage === 'registered') return reply(200, jobBody(job));
+      if (job.status !== 'motion_ready' && !(job.status === 'motions' && job.drafts.length === MOTIONS.length)) {
+        return reply(409, { code: 'generation-state', next: 'Hosted registration is not waiting for this job.' });
+      }
+      return registerHostedJob(job);
+    },
+    /** @param {string} fighterId @param {string} text */
+    prepareProfileSet(fighterId, text) {
+      const fighter = fighters.get(fighterId);
+      if (!fighter) return reply(404, { code: 'fighter-not-found' });
+      const parsed = parseProfileSet(text);
+      if (!parsed.ok) return reply(422, { code: 'invalid-profile-set', errors: parsed.errors?.slice?.(0, 10) ?? parsed.errors });
+      const id = nextId();
+      const files = new Map();
+      sets.set(id, { id, fighterId, set: parsed.data, files, stage: 'uploading' });
+      const missingAssets = [parsed.data.front, parsed.data.expressions]
+        .filter(Boolean)
+        .map((/** @type {any} */ file) => ({ id: file.path.replace(/\.webp$/, ''), path: file.path, bytes: file.bytes, sha256: file.sha256 }));
+      return reply(200, {
+        setId: id,
+        fighterId,
+        stage: 'uploading',
+        pending: ['upload-front', 'submit'],
+        pendingStages: ['upload-front', 'submit'],
+        missingAssets,
+        next: 'pending is stage names. Upload missingAssets (front, then expressions).',
+      });
+    },
+    /** @param {string} setId @param {string} assetId @param {Buffer} bytes */
+    uploadProfileAsset(setId, assetId, bytes) {
+      const row = sets.get(setId);
+      if (!row) return reply(404, { code: 'not-found' });
+      const file = [row.set.front, row.set.expressions].filter(Boolean).find((/** @type {any} */ item) => item.path.replace(/\.webp$/, '') === assetId);
+      if (!file) return reply(404, { code: 'asset-not-found' });
+      if (bytes.length !== file.bytes || sha256(bytes) !== file.sha256) return reply(422, { code: 'asset-hash-or-size' });
+      row.files.set(assetId, Buffer.from(bytes));
+      return reply(200, { stage: 'uploaded', assetId, bytes: bytes.length });
+    },
+    /** @param {string} setId */
+    submitProfileSet(setId) {
+      const row = sets.get(setId);
+      if (!row) return reply(404, { code: 'not-found' });
+      const needed = [row.set.front, row.set.expressions].filter(Boolean).map((/** @type {any} */ file) => file.path.replace(/\.webp$/, ''));
+      const missingAssets = needed.filter((/** @type {string} */ id) => !row.files.has(id));
+      if (missingAssets.length) return reply(409, { code: 'assets-incomplete', missingAssets });
+      row.stage = 'ready';
+      const fighter = fighters.get(row.fighterId);
+      fighter.front = { ok: true, operatorApproved: false, dummyChecked: true, setId, expressions: Boolean(row.set.expressions) };
+      const event = notify('profile-set-ready', { fighterId: row.fighterId, setId, operatorApproved: false });
+      return reply(200, {
+        setId,
+        fighterId: row.fighterId,
+        stage: 'ready',
+        front: fighter.front,
+        event,
+        next: 'Local file check passed. Operator approval is not granted in dummy mode.',
+      });
+    },
+    /** @param {string} fighterId */
+    profileSet(fighterId) {
+      const fighter = fighters.get(fighterId);
+      if (!fighter) return reply(404, { code: 'fighter-not-found' });
+      return reply(200, { fighterId, front: fighter.front, operatorApproved: false });
+    },
+    /** @param {string} fighterId */
+    enter(fighterId) {
+      const fighter = fighters.get(fighterId);
+      if (!fighter) return reply(404, { code: 'fighter-not-found' });
+      if (!fighter.front?.ok) return reply(409, { code: 'front-required' });
+      fighter.entered = true;
+      const event = notify('dummy-entered', { fighterId, publicPlay: false });
+      return reply(200, {
+        fighterId,
+        entered: true,
+        publicPlay: false,
+        productionRoster: false,
+        event,
+        next: 'Recorded only in this dummy store. Nobody else can meet this fighter.',
+      });
+    },
+    /** @param {string} kind @param {string} id */
+    page(kind, id) {
+      if (kind === 'fighter' && fighters.has(id)) return publicFighter(fighters.get(id));
+      if (kind === 'submission' && submissions.has(id)) return submissionBody(submissions.get(id));
+      if (kind === 'job' && jobs.has(id)) return jobBody(jobs.get(id)).job;
+      return null;
+    },
+  };
+}
+
+/** @param {any} fighter */
+function publicFighter(fighter) {
+  return {
+    id: fighter.id,
+    name: fighter.name,
+    localId: fighter.localId,
+    status: 'dummy-held',
+    availability: 'dummy-not-public',
+    entered: fighter.entered,
+    publicPlay: false,
+    manifestSha256: fighter.manifestSha256,
+    submissionIds: fighter.submissionIds,
+    front: fighter.front,
+    style: fighter.style,
+    createdAt: fighter.createdAt,
+  };
+}
+
+/** @param {any} style */
+function styleError(style) {
+  if (!style || typeof style !== 'object' || Array.isArray(style)) return 'invalid-style';
+  const mix = style.mix;
+  if (!mix || [mix.slam, mix.combo, mix.fast].some(value => !Number.isInteger(value) || value < 0 || value > 4)) return 'invalid-style';
+  if (mix.fast > mix.slam + mix.combo || mix.slam + mix.combo + mix.fast < 1) return 'invalid-style';
+  if (style.super !== undefined && !SUPERS.includes(style.super)) return 'invalid-style';
+  if (style.special !== undefined && !SPECIALS.includes(style.special)) return 'invalid-style';
+  if (style.shockwave !== undefined && style.shockwave !== true) return 'invalid-style';
+  if (style.summon !== undefined && !SUMMONS.includes(style.summon)) return 'invalid-style';
+  if (style.distance !== undefined && (!Number.isInteger(style.distance) || style.distance < 1 || style.distance > 5)) return 'invalid-style';
+  if (style.temper !== undefined) {
+    if (!style.temper || typeof style.temper !== 'object' || Array.isArray(style.temper)) return 'invalid-style';
+    for (const [key, value] of Object.entries(style.temper)) {
+      if (!TEMPERS.includes(key) || !Number.isInteger(value) || value < 1 || value > 5) return 'invalid-style';
+    }
+  }
+  const extras = (style.shockwave === true ? 1 : 0) + (style.summon ? 1 : 0) + (style.skill ? 1 : 0);
+  if (extras > 2) return 'invalid-style';
+  return null;
+}

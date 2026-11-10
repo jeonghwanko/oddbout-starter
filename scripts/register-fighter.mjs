@@ -18,6 +18,8 @@ import { lintBorrowedLandmarks } from '../tools/ai-fighter/landmark-lint.mjs';
 import { withFileLock } from '../mcp/file-lock.mjs';
 import { pathWithoutLinks, relativeParts, renameRetrying } from '../plugins/ai-fighter/local-files.mjs';
 import { defaultSessionPath } from './login.mjs';
+import { createDummyClient } from '../tools/flow/client.mjs';
+import { assertDummyBase, DUMMY_LABEL, manifestSealed, sidecarSealed } from '../tools/flow/seal.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const KEY_FILE = '.oddbout-registration.json';
@@ -33,6 +35,7 @@ export const USAGE = [
   'Add --submit to upload each asset, submit, and poll until registered or rejected. Without --submit this is a dry run.',
   'Idempotency keys are saved beside the package and reused for the same manifest bytes and fighter id, including restored versions.',
   'pending and pendingStages are pipeline stage names, never asset ids. This command uploads package files, or missingAssets when the server confirmed them.',
+  '--dummy http://127.0.0.1:<port> submits only to a loopback ODDBOUT-DUMMY server. A package marked ODDBOUT-DUMMY is refused without it.',
 ].join('\n');
 
 const sha256 = (/** @type {Uint8Array} */ bytes) => createHash('sha256').update(bytes).digest('hex');
@@ -112,7 +115,7 @@ export function parseArgs(argv) {
       continue;
     }
     const name = arg.slice(2);
-    if (!['submit', 'dry-run', 'help', 'dir', 'fighter', 'idempotency-key', 'session'].includes(name)) throw new Error(`invalid-flag:--${name}`);
+    if (!['submit', 'dry-run', 'help', 'dir', 'fighter', 'idempotency-key', 'session', 'dummy'].includes(name)) throw new Error(`invalid-flag:--${name}`);
     if (Object.hasOwn(flags, name)) throw new Error(`invalid-args:duplicate--${name}`);
     if (['submit', 'dry-run', 'help'].includes(name)) flags[name] = true;
     else if (i + 1 < argv.length && !argv[i + 1].startsWith('--')) flags[name] = argv[++i];
@@ -265,6 +268,28 @@ export async function runRegister({
   const fighterId = id(typeof flags.fighter === 'string' ? flags.fighter : undefined, 'fighter') ?? null;
   const explicitKey = id(typeof flags['idempotency-key'] === 'string' ? flags['idempotency-key'] : undefined, 'idempotency-key');
   const pkg = await readFighterPackage(where);
+  const dummyBase = typeof flags.dummy === 'string' ? flags.dummy : undefined;
+  /** @type {URL | undefined} */
+  let dummyUrl;
+  if (dummyBase) {
+    try {
+      dummyUrl = assertDummyBase(dummyBase);
+    } catch (/** @type {any} */ error) {
+      const code = error instanceof Error ? error.message : String(error);
+      return { ok: false, code, name: pkg.name, manifestSha256: pkg.sha, production: false, hint: HINTS[code] ?? HINTS['dummy-url-not-loopback'] };
+    }
+  }
+  if ((manifestSealed(pkg.data) || (await sidecarSealed(pkg.directory))) && !dummyUrl) {
+    return {
+      ok: false,
+      code: 'dummy-package-refused',
+      name: pkg.name,
+      manifestSha256: pkg.sha,
+      production: false,
+      label: DUMMY_LABEL,
+      hint: HINTS['dummy-package-refused'],
+    };
+  }
   const warnings = lintBorrowedLandmarks(pkg.data);
   const stored = await idempotencyKey(pkg.directory, { manifestSha256: pkg.sha, fighterId, explicit: explicitKey });
   const route = fighterId ? `submissions?fighter=${encodeURIComponent(fighterId)}` : 'submissions';
@@ -286,13 +311,16 @@ export async function runRegister({
       ok: true,
       dryRun: true,
       ...summary,
-      next: 'Dry run only: the package was checked locally and the server was not contacted. Re-run with --submit after the user asks to register.',
+      ...(dummyUrl ? { mode: 'dummy', production: false, label: DUMMY_LABEL, dummyBase: dummyUrl.origin } : {}),
+      next: dummyUrl
+        ? 'Dry run only: the package was checked locally and the server was not contacted. --submit with this --dummy URL talks only to that loopback ODDBOUT-DUMMY server.'
+        : 'Dry run only: the package was checked locally and the server was not contacted. Re-run with --submit after the user asks to register.',
     };
   }
   const sessionPath = typeof flags.session === 'string' ? flags.session : env.AI_FIGHTER_CLIENT_CONFIG || defaultSessionPath();
   let client;
   try {
-    client = await connect(sessionPath);
+    client = dummyUrl ? await createDummyClient(dummyUrl) : await connect(sessionPath);
   } catch (/** @type {any} */ error) {
     const code = error instanceof Error ? error.message : String(error);
     return {
@@ -369,6 +397,7 @@ export async function runRegister({
     uploadedAssets: uploaded,
     polls,
     idempotencyKey: stored.key,
+    idempotencyKeyReused: stored.reused,
     idempotencyKeyPath: stored.recordPath,
     ...(warnings.length ? { warnings } : {}),
     ...(finished
@@ -392,6 +421,13 @@ const HINTS = /** @type {Record<string, string>} */ ({
   'upload-expired':
     'The server confirmed that this upload window closed. Submit again with a new --idempotency-key UUID; preserve the registration record and its earlier keys.',
   'fighter-quota': "This account is at its fighter limit (default 3, or that account's fighter_limit). Revise with --fighter instead of registering another.",
+  'dummy-package-refused':
+    'This package is marked ODDBOUT-DUMMY. fighter:register will not send it to the live server. Use --dummy http://127.0.0.1:<port> for the loopback dummy server.',
+  'dummy-url-not-loopback': 'Pass --dummy as http://127.0.0.1:<port> with no path. Other hosts are refused before any request.',
+  'dummy-url-refused': 'That URL looks like a live service. --dummy only accepts a loopback ODDBOUT-DUMMY server.',
+  'dummy-handshake-failed': 'The loopback server did not identify itself as ODDBOUT-DUMMY. Nothing was submitted.',
+  'dummy-response-unlabelled': 'A response was missing the dummy label. The client stopped before treating it as ODDBOUT.',
+  'dummy-unreachable': 'The loopback dummy server did not answer. No other host was tried.',
 });
 
 function isEntry() {
