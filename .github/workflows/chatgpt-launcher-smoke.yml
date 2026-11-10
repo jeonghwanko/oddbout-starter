@@ -25,3 +25,34 @@ jobs:
       - run: node --check mcp/cloud/game-launcher-ui.mjs
       - run: node --check scripts/check-chatgpt-iframe.mjs
       - run: node --test test/game-launcher.test.mjs
+      - name: Install pinned dev tools (no scripts)
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Check formatting and report exact Prettier output
+        run: |
+          node --input-type=module <<'JS'
+          import { readFile } from 'node:fs/promises';
+          import prettier from 'prettier';
+          const files = [
+            'mcp/cloud.mjs',
+            'mcp/cloud/game-launcher-ui.mjs',
+            'scripts/check-chatgpt-iframe.mjs',
+            'supabase/functions/ai-fighter-mcp/index.ts',
+            'test/game-launcher.test.mjs',
+          ];
+          let count = 0;
+          for (const file of files) {
+            const before = await readFile(file, 'utf8');
+            const options = (await prettier.resolveConfig(file)) || {};
+            const after = await prettier.format(before, { ...options, filepath: file });
+            if (before === after) continue;
+            count++;
+            console.log('FORMAT_BEGIN ' + file);
+            console.log(Buffer.from(after, 'utf8').toString('base64'));
+            console.log('FORMAT_END');
+          }
+          if (count) {
+            console.error('Formatting differs in ' + count + ' files');
+            process.exitCode = 1;
+          }
+          JS
+
