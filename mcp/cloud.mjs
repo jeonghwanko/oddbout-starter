@@ -288,9 +288,9 @@ const LIST_CACHE = { ttlMs: 300_000, cacheScope: 'private' };
  * The full edition serves /mcp and /signin alike: the same tools, metadata and texts (MCP 리뷰 2026-11-05). Codex connects at /signin
  * (docs/CLOUD-MCP.md) and its native file input reaches the upload tools through OpenAI's file hosts, so /signin keeps them.
  * @param {{ db: any, identity: Identity | null, fetcher?: typeof fetch, arena?: Arena | null, hosted?: Hosted | null,
- *   host?: { compact?: boolean, caller?: string | null }, edition?: 'full' | 'directory', call?: Call }} options
+ *   host?: { compact?: boolean, caller?: string | null }, edition?: 'full' | 'directory', launcherEnabled?: boolean, call?: Call }} options
  */
-export function cloudServer({ db, identity, fetcher = fetch, arena = null, hosted = null, host = {}, edition = 'full', call = {} }) {
+export function cloudServer({ db, identity, fetcher = fetch, arena = null, hosted = null, host = {}, edition = 'full', launcherEnabled = false, call = {} }) {
   const directory = edition === 'directory';
   // Hosts with OpenAI's file host (ChatGPT, Codex) attach the files the upload tools take, and read OpenAI's tool metadata (securitySchemes,
   // openai/fileParams, openai/profile). The directory edition lists neither, and its texts name no upload tool (`uploads`).
@@ -489,7 +489,9 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
     registerLookUi(server);
     registerHostedTools({ register, db, identity, invoke, fetcher, hosted, uploads: fileHost });
   }
-  if (!directory) {
+  // Disabled in all environments unless explicitly enabled for isolated staging.
+  // This is essential while game framing, auth and digital-commerce restrictions remain unresolved.
+  if (launcherEnabled && !directory) {
     registerGameLauncherUi(server);
     registerGameLauncherTool(registerTool);
   }
@@ -586,11 +588,12 @@ function publishedToolList(result) {
  * @param {typeof fetch} [options.fetcher]
  * @param {{url: string, key: string, fetcher?: typeof fetch, cupWaitMs?: number, pollMs?: number, pollTries?: number} | null} [options.arena]
  * @param {{pollMs?: number} | null} [options.hosted]
+ * @param {boolean} [options.launcherEnabled]  staging-only feature gate; defaults off
  * @param {number} [options.budgetMs]  one call's budget from its arrival (CALL_BUDGET_MS; shorter in tests)
  * @param {(line: string) => void} [options.log]  where each MCP request's line goes (console.log)
  * @returns {(request: Request) => Promise<Response>}
  */
-export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted = null, budgetMs = CALL_BUDGET_MS, log = console.log }) {
+export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted = null, launcherEnabled = false, budgetMs = CALL_BUDGET_MS, log = console.log }) {
   const serve = mcpServing(65536);
   /**
    * One line per MCP request (MCP 최적화 2026-11-05): the address it came to, its method, tool and edition, whether the host got ChatGPT's
@@ -708,7 +711,7 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted =
       ...(legacy ? { legacy } : {}),
     };
     /** @type {Parameters<typeof cloudServer>[0]} */
-    const options = { db, identity, fetcher, arena, hosted, host, edition, call };
+    const options = { db, identity, fetcher, arena, hosted, host, edition, launcherEnabled, call };
     try {
       const response = await serve(cloudServer(options), request, body);
       if (body.method === 'tools/list' && response.status === 200) return json(publishedToolList(await response.json()));
