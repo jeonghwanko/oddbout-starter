@@ -13,6 +13,7 @@ import { registerProfileSetTools } from './cloud/profile-set-tools.mjs';
 import { registerWorkshopTools } from './cloud/workshop-tools.mjs';
 import { HOSTED_INSTRUCTIONS, hostedCandidateImages, registerHostedTools } from './cloud/hosted-tools.mjs';
 import { LOOK_UI, registerLookUi } from './cloud/hosted-look-ui.mjs';
+import { GAME_LAUNCHER_UI, registerGameLauncherTool, registerGameLauncherUi } from './cloud/game-launcher-ui.mjs';
 import { DIRECTORY_DESCRIPTIONS, DIRECTORY_INSTRUCTIONS, DIRECTORY_TITLES } from './cloud/directory-edition.mjs';
 import { aliasCall, memberOf, mergingRegister, renameTools } from './cloud/merged-tools.mjs';
 import { mcpServing } from './cloud/serve.mjs';
@@ -399,6 +400,7 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
               _meta: {
                 securitySchemes: publicTool ? [{ type: 'noauth' }] : AUTH,
                 ...(name === 'get_hosted_fighter' && hosted ? { ui: { resourceUri: LOOK_UI }, 'openai/outputTemplate': LOOK_UI } : {}),
+                ...(name === 'open_game_launcher' ? { ui: { resourceUri: GAME_LAUNCHER_UI }, 'openai/outputTemplate': GAME_LAUNCHER_UI } : {}),
                 ...(files.length ? { 'openai/fileParams': files } : {}),
                 ...(profile ? { 'openai/profile': true } : {}),
               },
@@ -486,6 +488,10 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
   if (hosted && !directory) {
     registerLookUi(server);
     registerHostedTools({ register, db, identity, invoke, fetcher, hosted, uploads: fileHost });
+  }
+  if (!directory) {
+    registerGameLauncherUi(server);
+    registerGameLauncherTool(registerTool);
   }
   registerFileInputProbe({ register, fileSchema: FILE, identity, downloadFile: downloadHostFile, fetcher });
   registerCreatorSources({ register, fileSchema: FILE, identity, db, downloadFile: downloadHostFile, fetcher });
