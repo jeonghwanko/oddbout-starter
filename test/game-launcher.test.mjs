@@ -41,7 +41,7 @@ function mountWidget() {
   const script = gameLauncherHtml.match(/<script>([\s\S]*?)<\/script>/)?.[1];
   assert.ok(script, 'MCP resource must include an inline launcher program');
   runInNewContext(script, {
-    window, document: { body: { scrollHeight: 450 }, getElementById: id => elements[id] },
+    window, document: { body: { scrollHeight: 450 }, documentElement: { lang: 'ko' }, getElementById: id => elements[id] },
     parent, crypto: { getRandomValues: array => array.fill(0x23) },
     Uint8Array, URL, Promise,
     ResizeObserver: class { observe() {} },
@@ -88,7 +88,7 @@ test('widget launch remains unverified until a correct-origin game readiness sig
   const host = mountWidget();
   const { elements, frameMessages } = host;
   assert.equal(host.hostMessages[0].message.method, 'ui/initialize');
-  assert.deepEqual(host.hostMessages[0].message.params.appCapabilities.availableDisplayModes, ['inline', 'fullscreen']);
+  assert.deepEqual(Array.from(host.hostMessages[0].message.params.appCapabilities.availableDisplayModes), ['inline', 'fullscreen']);
   host.fireMessage({
     source: host.parent, origin: 'https://chatgpt.com',
     data: { jsonrpc: '2.0', id: 1, result: { hostContext: { availableDisplayModes: ['inline', 'fullscreen'] } } },
