@@ -1,12 +1,32 @@
 // @ts-check
 // The export's ODDBOUT marks: a small corner mark on every frame and the end card a showcase closes on (the front painting, the fighter's
 // name, his faces and oddbout.com). Drawn as SVG through sharp with the system's fonts; the name is the package's own.
+import { spawnSync } from 'node:child_process';
 import sharp from 'sharp';
 
 const FONTS = "'Pretendard', 'Noto Sans KR', 'Noto Sans CJK KR', 'Malgun Gothic', 'Apple SD Gothic Neo', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
 
 /** @param {string} text */
 const xml = text => text.replace(/[<>&'"]/g, c => /** @type {Record<string, string>} */ ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' })[c]);
+
+/**
+ * Whether this host's fonts can draw the name. Windows and macOS ship Korean, Japanese and Chinese fonts; a Linux host (a Dots VM) often
+ * has none, and the card would show empty boxes. Asks fontconfig for each character outside ASCII; null when the name draws or when there
+ * is nothing to ask, else the warning to report.
+ * @param {string} name @param {NodeJS.Platform} [platform]
+ */
+export function nameFontWarning(name, platform = process.platform) {
+  if (platform === 'win32' || platform === 'darwin') return null;
+  const wide = [...new Set([...name].filter(c => (c.codePointAt(0) ?? 0) > 0x7f && /\p{L}/u.test(c)))];
+  if (!wide.length) return null;
+  const missing = wide.filter(c => {
+    const found = spawnSync('fc-list', [`:charset=${(c.codePointAt(0) ?? 0).toString(16)}`, 'family'], { encoding: 'utf8' });
+    return found.status !== 0 || !found.stdout.trim();
+  });
+  return missing.length
+    ? { code: 'NAME_FONT_MISSING', detail: `No font here draws ${missing.join('')}: the end card's name shows as boxes. Install fonts-noto-cjk, or export with --no-endcard.` }
+    : null;
+}
 
 /** Whether a background colour is dark, for the text on it. @param {{ r: number, g: number, b: number }} colour */
 export const isDark = ({ r, g, b }) => 0.2126 * r + 0.7152 * g + 0.0722 * b < 128;

@@ -121,3 +121,10 @@ test('backgrounds: the named ones and #rrggbb', () => {
   assert.deepEqual(parseBackground('#ff0080'), { r: 255, g: 0, b: 128 });
   assert.equal(parseBackground('blue'), null);
 });
+
+test('the end card warns when a Linux host has no font for the name, and never on Windows or macOS', async () => {
+  const { nameFontWarning } = await import('../scripts/social/endcard.mjs');
+  assert.equal(nameFontWarning('Sparring Bot', 'linux'), null);
+  assert.equal(nameFontWarning('네라', 'win32'), null);
+  assert.equal(nameFontWarning('네라', 'darwin'), null);
+});

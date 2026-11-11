@@ -5,6 +5,7 @@
 
 export const X_LIMITS = Object.freeze({
   gif: { bytes: 15 * 1024 * 1024, width: 1280, height: 1080, frames: 350, pixels: 300_000_000 },
+  // maxSeconds is this export's own cap (its longest file is about 10 s), not X's limit: X allows far longer videos.
   video: { width: 1280, height: 1024, minSeconds: 0.5, maxSeconds: 140, maxFps: 60 },
   image: { bytes: 5 * 1024 * 1024 },
   imagesPerPost: 4,

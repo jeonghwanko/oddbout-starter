@@ -13,7 +13,7 @@ import sharp from 'sharp';
 import { PROFILE_SET_LIMITS } from '../api/profile-set-contract.mjs';
 import { REPLY_LINK, X_LIMITS, canvasSize, checkX, intentUrl } from './social/budget.mjs';
 import { EncodeFailure, encodeMp4, fitVideo, mp4ToGif, probe, toolsReady } from './social/encode.mjs';
-import { cornerMark, endCard } from './social/endcard.mjs';
+import { cornerMark, endCard, nameFontWarning } from './social/endcard.mjs';
 import { POSTABLE, SHOWCASE, clipSteps, cellRect, frameExtent, placeFrame, repeatsFor, resample, stageFor } from './social/frames.mjs';
 import { EXPRESSIONS, PRESETS, presetPose } from './social/presets.mjs';
 
@@ -460,6 +460,8 @@ export async function exportSocial({
       }
     }
 
+    const fontWarning = endcard ? nameFontWarning(name) : null;
+    const warnings = fontWarning ? [fontWarning] : [];
     // The record, with each file's path inside the folder it ends in.
     const final = files.map(f => ({ ...f, path: path.relative(temporary, f.path).replaceAll('\\', '/') }));
     const record = {
@@ -470,6 +472,7 @@ export async function exportSocial({
       generated: false,
       files: final,
       xLimitsChecked: final.every(f => f.x.ok),
+      warnings,
       note: "X's limits were checked on the files; only an upload shows X accepted them.",
     };
     await writeFile(path.join(temporary, 'social.json'), JSON.stringify(record, null, 2) + '\n');
@@ -486,6 +489,7 @@ export async function exportSocial({
       faces: faces?.source ?? null,
       files: final.map(f => ({ path: f.path, kind: f.kind, bytes: f.bytes, ...(f.seconds ? { seconds: f.seconds } : {}), xOk: f.x.ok })),
       xLimitsChecked: record.xLimitsChecked,
+      ...(warnings.length ? { warnings } : {}),
       show: ['showcase.mp4', ...(faces ? ['reactions/sideeye.gif', 'reactions/ko.gif'] : []), 'post-set/1.png'].map(f => path.join(out, f)),
       next: 'Show the showcase and two reactions to the user, then point them at POST.md. The user posts from their own X account.',
     };

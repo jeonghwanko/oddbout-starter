@@ -28,11 +28,21 @@ export async function encodeMp4(frames, { width, height, fps, out, silentAudio =
   if (silentAudio) args.push('-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100', '-shortest', '-c:a', 'aac', '-b:a', '64k');
   args.push('-c:v', 'libx264', '-profile:v', 'high', '-preset', 'medium', '-crf', String(crf), '-pix_fmt', 'yuv420p', '-movflags', '+faststart', out);
   const child = spawn('ffmpeg', args, { stdio: ['pipe', 'ignore', 'pipe'] });
+  // ffmpeg quits on a bad encoder before reading its input: the close below reports why, not the broken pipe.
+  child.stdin.on('error', () => {});
   let errors = '';
   child.stderr.on('data', chunk => (errors += chunk));
   const done = new Promise((resolve, reject) => {
     child.on('error', reject);
-    child.on('close', code => (code === 0 ? resolve(undefined) : reject(new EncodeFailure('ENCODE_FAILED', errors.trim().slice(-800)))));
+    child.on('close', code =>
+      code === 0
+        ? resolve(undefined)
+        : reject(
+            /Unknown encoder 'libx264'|Encoder libx264 not found/i.test(errors)
+              ? new EncodeFailure('H264_ENCODER_MISSING', 'This ffmpeg has no libx264; install a GPL build (npm run sprite:status names one)')
+              : new EncodeFailure('ENCODE_FAILED', errors.trim().slice(-800)),
+          ),
+    );
   });
   for await (const frame of frames)
     if (!child.stdin.write(frame)) await new Promise(resolve => child.stdin.once('drain', resolve));
