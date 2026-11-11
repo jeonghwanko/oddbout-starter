@@ -59,6 +59,8 @@ test('stdio quota preset is ready before the first tool call and cannot be chang
       language: 'en',
       delegate: true,
       idempotencyKey: randomUUID(),
+      confirmed: true,
+      confirmationText: 'user confirmed this call',
     },
   });
   assert.equal(denied.isError, true);

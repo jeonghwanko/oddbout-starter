@@ -40,9 +40,9 @@ CLI의 제출도 곧바로 이 MCP의 조회에 나타난다. stdin 종료나 SI
 
 ### 호스팅 대기와 결과
 
-`get_hosted_fighter`의 `waitSeconds`는 0–30의 정수다. 양수이면 100ms마다 더미 작업을 진행하며 등록·반려·사용자 선택·한도 차단 또는 시간 제한에서 반환한다. 정상적인 위임 작업은 `waitSeconds: 5` 한 호출로 등록까지 진행할 수 있다. 시간 제한 안에 끝난다는 보장은 없으며, `waitedMs`는 실제 측정한 경과 시간이다. 0 또는 생략은 즉시 한 단계만 진행한다. 이 방식은 빠른 흐름 시험용이며, 실제 서버가 상태 변화마다 일찍 반환하는 대기 동작과 소요 시간을 재현하지 않는다.
+`get_hosted_fighter`는 읽기입니다. `waitSeconds`를 붙여도 동작을 진행하거나 등록하지 않습니다. 더미 워커를 진행하는 호출은 `advance_hosted_fighter`이며, 그 호출마다 `confirmed: true`와 확인 문장이 있어야 합니다. 양수 `waitSeconds`는 그 변경 도구에서만 100ms마다 더미 작업을 진행하며 등록·반려·사용자 선택·한도 차단 또는 시간 제한에서 반환합니다. 정상적인 위임 작업은 `waitSeconds: 5` 한 호출로 등록까지 진행할 수 있습니다. 시간 제한 안에 끝난다는 보장은 없으며, `waitedMs`는 실제 측정한 경과 시간입니다. 이 방식은 빠른 흐름 시험용이며, 실제 서버가 상태 변화마다 일찍 반환하는 대기 동작과 소요 시간을 재현하지 않습니다.
 
-호스팅 등록 이름은 요청의 `description`에서 간단한 규칙으로 라벨을 뽑아 `DUMMY ` 뒤에 붙인다. 문장 앞뒤의 명시적인 위임 구절(예: `외형 선택까지 맡길게.`, `You choose the appearance.`)과 제작 요청 표현(예: `만들어줘`, `Please create a`)만 제거하며, 자유로운 문장을 해석하거나 모델로 이름을 짓지는 않는다. `외형 선택까지 맡길게. 흰 고양이 복서를 만들어줘`의 표시 이름은 `DUMMY 흰 고양이 복서`다. 요청 원문은 작업의 `description`에 그대로 남고, 등록 설명과 concept도 기존 길이 제한 안에서 원래 설명을 사용한다. 라벨이 비면 `DUMMY Hosted`를 쓰며, 이름은 서로게이트 쌍을 자르지 않고 UTF-16 40자 이내로 제한한다. 이 처리는 더미 호스팅 등록에만 적용한다. 등록에는 실제 파일 검사와 해시 확인을 거친 기하 도형 정면·표정 세트도 붙는다. `front.ok`는 더미 파일 검사 결과이고 `operatorApproved: false`, `publicPlay: false`는 유지된다.
+호스팅 등록 이름은 요청의 `description`에서 간단한 규칙으로 라벨을 뽑아 `DUMMY ` 뒤에 붙인다. 문장 앞뒤의 명시적인 위임 구절(예: `외형 선택까지 맡길게.`, `You choose the appearance.`)과 제작 요청 표현(예: `만들어줘`, `Please create a`, 앞쪽의 `알아서 만들어줘`, `그냥 만들어줘`, `just make it:`)만 제거하며, 자유로운 문장을 해석하거나 모델로 이름을 짓지는 않는다. `알아서`만 있는 이름(`알아서 빠른 복서`)은 그대로 둔다. `외형 선택까지 맡길게. 흰 고양이 복서를 만들어줘`와 `알아서 만들어줘 흰 고양이 복서`의 표시 이름은 `DUMMY 흰 고양이 복서`다. `just make it: white cat boxer`는 `DUMMY white cat boxer`다. 요청 원문은 작업의 `description`에 그대로 남고, 등록 설명과 concept도 기존 길이 제한 안에서 원래 설명을 사용한다. 라벨이 비면 `DUMMY Hosted`를 쓰며, 이름은 서로게이트 쌍을 자르지 않고 UTF-16 40자 이내로 제한한다. 이 처리는 더미 호스팅 등록에만 적용한다. 등록에는 실제 파일 검사와 해시 확인을 거친 기하 도형 정면·표정 세트도 붙는다. `front.ok`는 더미 파일 검사 결과이고 `operatorApproved: false`, `publicPlay: false`는 유지된다.
 
 `test`와 `test:fast`가 `test/flow-*.test.mjs`의 시나리오·안전장치·MCP 계약 검사를 포함한다.
 
@@ -52,7 +52,7 @@ CLI의 제출도 곧바로 이 MCP의 조회에 나타난다. stdin 종료나 SI
 
 `ODDBOUT-DUMMY — not production. No live server, no tokens, no model calls.`
 
-입력 스키마를 어긴 요청은 실행 전에 MCP 표준 검증 오류로 반환하며, 그 오류에는 업무 응답의 표시 필드가 없을 수 있다.
+입력 스키마를 어긴 요청은 실행 전에 MCP 표준 검증 오류로 반환한다. `idempotencyKey`가 빠진 준비·스타일·호스팅 요청의 오류 문구에는 `ODDBOUT-DUMMY`, `production: false`, `idempotency-key-required`가 있다. 그 오류는 업무 응답의 structured 필드 전체가 아닐 수 있다.
 
 자리 표시 패키지는 이름 앞에 `DUMMY `, `localId` 앞에 `dummy-`, 설명에 `ODDBOUT-DUMMY`를 둔다. 별도 파일 `.oddbout-dummy.json`의 존재도 독립된 더미 표시다. 이 표시 중 하나라도 있으면 `npm run fighter:register -- --submit`는 세션 파일을 열기 전에 `dummy-package-refused`로 끝난다. 라이브 클라이언트는 호출되지 않는다. 더미 CLI 등록 이력도 라이브 등록 이력과 별도 파일에 보관한다.
 
@@ -95,7 +95,7 @@ JSONL에는 `metadata`, `setup`, `receive`, `send`, `end` 이벤트가 순서 �
 | `hosted-delegated` | 외형 선택까지 명시적으로 위임한 새 선수 | `delegate: true`가 외형 A를 고르고 `choose_look` 없이 11개 동작과 등록까지 진행 |
 | `hosted-capacity` | (진단) 시작 후 등록 전에 한도가 참 | `needs_review`로 멈추고 동작 11개 보존. 용량 복구 후 같은 작업 등록 재시도 |
 | `hosted-new` | ODDBOUT에 맡기는 새 선수 | 외형 둘, 동작 11개와 정면·표정 세트 등록. 양수 wait로 한 호출 안에서 진행. 더미 토큰 차감 0. 잔액 0이면 `generation-quota` |
-| `workspace-new` | 작업 공간 커넥터로 등록 | 자리 표시를 검증하고 올리고, 프로필 세트(정면·표정)까지. `enter_fighter`는 `publicPlay: false` |
+| `workspace-new` | 작업 공간 커넥터로 등록 | 자리 표시를 검증하고 올리고, 프로필 세트(정면·표정)까지. `enter_fighter`는 `permission-forbidden`이며 `publicPlay`는 false |
 | `cli-register` | 사용자가 로컬 CLI 등록을 명시적으로 선택한 경우의 `fighter:register` | `--dummy --submit`가 등록하고, 같은 키 재시도는 같은 제출 |
 | `revise` | 같은 fighter id로 개정 | `--fighter`로 새 제출. 이전 제출은 그대로. 같은 바이트는 `fighter-unchanged` |
 | `revise-mcp` | 커넥터에서 패키지 생성·개정 | `create_dummy_package` → 준비·업로드·제출. 기존 id와 이전 제출 보존, `super: dash` 반영 |

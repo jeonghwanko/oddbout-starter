@@ -62,7 +62,7 @@ export function registerCreatorTools(server, { root, contextRequest, respond, ou
   );
   register(
     'prepare_creation_job',
-    'Reserve an immutable engine command and expected files, without executing. Reuse jobId for identical retries. Unknown/running work blocks new work on the same motion. The returned CLI must be run through the local host after reading the sprite-gen workflow and confirming current user access.',
+    'Reserve an immutable engine command and expected files, without executing. Reuse jobId for identical retries. Unknown/running work blocks new work on the same motion. An item listed in the session reuse record is refused unless regenerate names it. The returned CLI must be run through the local host after reading the sprite-gen workflow and confirming current user access.',
     { ...job, expectedRevision: revision, plan: jobPlanSchema },
     { ...write, idempotentHint: true },
     async ({ sessionId, jobId, expectedRevision, plan }) => {
@@ -80,7 +80,7 @@ export function registerCreatorTools(server, { root, contextRequest, respond, ou
   );
   register(
     'get_creation_job',
-    'Inspect an existing job or list jobs. Never retries generation. succeeded is process/output evidence only; visual review remains separate. An unreadable record is listed as such and blocks new jobs until inspected.',
+    'Observe an existing job or list jobs. executedByThisCall and cancelledByThisCall are false: reading does not run or cancel, and closing this call leaves a running job running. Never retries generation. succeeded is process/output evidence only; visual review remains separate. An unreadable record is listed as such and blocks new jobs until inspected.',
     { ...session, jobId: z.string().uuid().optional() },
     localRead,
     async ({ sessionId, jobId }) =>

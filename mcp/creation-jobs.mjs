@@ -59,6 +59,13 @@ export const jobPlanSchema = z
     workflowArgs: args.optional(),
     // How long the runner lets the engine work before stopping it (default DEFAULT_TIMEOUT_MINUTES).
     timeoutMinutes: z.number().int().min(1).max(720).optional(),
+    // Opt-in. Names targets the user asked to generate again even though a reuse record exists. Absent means those items stay blocked.
+    regenerate: z.array(z.string().min(1).max(64)).max(12).optional(),
+    // The registration key for this attempt. Resume returns it and does not mint another.
+    registrationKey: z
+      .string()
+      .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[4][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)
+      .optional(),
   })
   .strict();
 // Generous so a long video run finishes; a hung provider no longer leaves a job running forever.
@@ -79,7 +86,8 @@ const terminal = new Set(['succeeded', 'failed', 'needs-input', 'resolved', 'can
  *   createdAt: string, updatedAt?: string, status: JobStatus, attempt: number, runnerPid?: number, runToken?: string, startedAt?: string,
  *   finishedAt?: string, stage?: string, exitCode?: number | null, signal?: string | null, reason?: string, outputs?: FileRecord[],
  *   outcome?: ReturnType<typeof judgeOutcome>,
- *   resolution?: { outcome: 'recovered' | 'not-started' | 'duplicate-risk-accepted', note: string, evidence: FileRecord[], source: string, at: string } }} Job
+ *   resolution?: { outcome: 'recovered' | 'not-started' | 'duplicate-risk-accepted', note: string, evidence: FileRecord[], source: string, at: string },
+ *   registrationKey?: string | null }} Job
  * @typedef {{ code: number | null, signal?: NodeJS.Signals | null, notStarted?: boolean, stopped?: string }} EngineResult
  */
 
@@ -98,6 +106,19 @@ export function createJobStore(store) {
   async function write(id, job) {
     job.updatedAt = new Date().toISOString();
     await atomicJson(await jobFile(id, job.jobId), job);
+    // The job record is saved and is the authority. A checkpoint that failed to write stays stale, and resume refuses it
+    // (checkpoint-mismatch) instead of this write failing after the job already moved.
+    await atomicJson(await store.fileFor(id, `jobs/${job.jobId}.checkpoint.json`), {
+      schema: 'oddbout.checkpoint/1',
+      sessionId: job.sessionId,
+      jobId: job.jobId,
+      status: job.status,
+      stage: job.stage ?? null,
+      updatedAt: job.updatedAt,
+      registrationKey: job.registrationKey ?? job.plan?.registrationKey ?? null,
+      executedByThisCall: false,
+      cancelledByThisCall: false,
+    }).catch(() => {});
     return job;
   }
   /** Every job record. One that cannot be read is listed as unreadable instead of failing the list, so inspection still works.
@@ -231,8 +252,11 @@ export function createJobStore(store) {
       if (jobs.some(j => 'unreadable' in j)) fail('unreadable-job-needs-inspection');
       if (jobs.some(j => !('unreadable' in j) && !terminal.has(j.status) && plan.targets.some(t => j.plan.targets.some(x => x.item === t.item))))
         fail('existing-job-needs-inspection');
-      for (const target of plan.targets)
+      for (const item of plan.regenerate ?? []) if (!plan.targets.some(target => target.item === item)) fail('regenerate-not-a-target');
+      for (const target of plan.targets) {
+        if (state.reuse?.[target.item] && !(plan.regenerate ?? []).includes(target.item)) fail('reuse-recorded');
         if (state.items[target.item]?.versions[target.version] && plan.engine !== 'fighter-pack') fail('target-version-already-exists');
+      }
       for (const output of plan.outputs) {
         if (!output.startsWith(`${store.prefix(id)}/artifacts/`)) fail('output-outside-session-artifacts');
         const destination = await localPath(store.root, output);
@@ -259,6 +283,7 @@ export function createJobStore(store) {
         createdAt: new Date().toISOString(),
         status: 'prepared',
         attempt: 0,
+        registrationKey: plan.registrationKey ?? null,
       });
     });
   }
@@ -275,7 +300,14 @@ export function createJobStore(store) {
       }
     }
     if (job.status === 'succeeded' && !(await unchanged(store.root, job.outputs))) observedStatus = 'outputs-changed';
-    return { ...job, observedStatus, canExecute: job.status === 'prepared', nextAction: nextAction(job, observedStatus) };
+    return {
+      ...job,
+      observedStatus,
+      canExecute: job.status === 'prepared',
+      executedByThisCall: false,
+      cancelledByThisCall: false,
+      nextAction: nextAction(job, observedStatus),
+    };
   }
   /**
    * @param {string} id @param {string} jobId
@@ -330,9 +362,64 @@ export function createJobStore(store) {
     jobIdSchema.parse(jobId);
     return store.fileFor(id, `jobs/${jobId}.stop`);
   };
-  return { read, list, prepare, inspect, resolve, cancel, gate, write, stopFile };
+  /** Read the checkpoint file only. @param {string} id @param {string} jobId */
+  async function readCheckpoint(id, jobId) {
+    jobIdSchema.parse(jobId);
+    const job = await read(id, jobId);
+    const file = await readJson(await store.fileFor(id, `jobs/${jobId}.checkpoint.json`));
+    return acceptedCheckpoint(file, job);
+  }
+  /**
+   * Return the job's registration key. A checkpoint file that disagrees is refused and its key is not used.
+   * Does not run the engine or create a submission.
+   * @param {string} id @param {string} jobId
+   */
+  async function resume(id, jobId) {
+    const checkpoint = await readCheckpoint(id, jobId);
+    const job = await read(id, jobId);
+    const key = job.registrationKey ?? job.plan?.registrationKey ?? null;
+    if (key !== checkpoint.registrationKey || job.status !== checkpoint.status) fail('checkpoint-mismatch');
+    return {
+      resumed: true,
+      executed: false,
+      status: job.status,
+      idempotencyKey: key,
+      idempotencyKeyReused: Boolean(key),
+      checkpoint,
+      next: 'Resume this checkpoint. Reuse idempotencyKey for the same registration. Do not start another one.',
+    };
+  }
+  return { read, list, prepare, inspect, resolve, cancel, gate, write, stopFile, readCheckpoint, resume };
 }
 /** @typedef {ReturnType<typeof createJobStore>} JobStore */
+
+const CHECKPOINT_KEY = /^[0-9a-f]{8}-[0-9a-f]{4}-[4][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** The job record wins. A file that disagrees, or that carries extra instructions, is refused. @param {any} file @param {Job} job */
+function acceptedCheckpoint(file, job) {
+  const key = job.registrationKey ?? job.plan?.registrationKey ?? null;
+  const fileKey = file?.registrationKey ?? null;
+  if (
+    file?.schema !== 'oddbout.checkpoint/1' ||
+    file?.jobId !== job.jobId ||
+    file?.sessionId !== job.sessionId ||
+    file?.status !== job.status ||
+    fileKey !== key ||
+    (fileKey !== null && !CHECKPOINT_KEY.test(String(fileKey)))
+  )
+    fail('checkpoint-mismatch');
+  return {
+    schema: 'oddbout.checkpoint/1',
+    sessionId: job.sessionId,
+    jobId: job.jobId,
+    status: job.status,
+    stage: job.stage ?? null,
+    updatedAt: job.updatedAt,
+    registrationKey: key,
+    executedByThisCall: false,
+    cancelledByThisCall: false,
+  };
+}
 
 /** A workspace-relative engine path as a file under `root`, or null when it is not one the store allows. @param {string} root @param {string | null} relative */
 async function engineFile(root, relative) {

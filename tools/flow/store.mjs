@@ -29,10 +29,24 @@ const DELEGATION = String.raw`(?:(?:외형|외모)\s*(?:선택)?(?:까지|은|�
 const DELEGATION_PREFIX = new RegExp(`^${DELEGATION}(?:\\s*[,.;:!?。！？]\\s*|$)`, 'i');
 const DELEGATION_SUFFIX = new RegExp(`(?:^|\\s*[,.;:!?。！？]\\s*)${DELEGATION}$`, 'i');
 const trimLabel = (/** @type {string} */ text) => text.replace(/^[\s,.;:!?。！？]+|[\s,.;:!?。！？]+$/g, '');
+// Leading request wrappers only. A word that is part of the character stays, including "알아서" without "만들어줘".
+const LEADING_JUST = /^just\s+make\s+it\s*:\s+/i;
+const LEADING_KO = /^(?:(?:그냥|알아서)\s+)?만들어\s*줘(?:요)?\s*[:.!]?\s+/u;
+const ONLY_JUST = /^just\s+make\s+it\s*:?\s*$/i;
+const ONLY_KO = /^(?:(?:그냥|알아서)\s+)?만들어\s*줘(?:요)?\s*[:.!]?\s*$/u;
 
 /** @param {string} description */
 function hostedNameLabel(description) {
-  const subject = trimLabel(description).replace(DELEGATION_PREFIX, '').replace(DELEGATION_SUFFIX, '');
+  let subject = trimLabel(trimLabel(description).replace(DELEGATION_PREFIX, '').replace(DELEGATION_SUFFIX, ''));
+  for (let i = 0; i < 3; i++) {
+    if (ONLY_JUST.test(subject) || ONLY_KO.test(subject)) {
+      subject = '';
+      break;
+    }
+    const next = trimLabel(subject.replace(LEADING_JUST, '').replace(LEADING_KO, ''));
+    if (next === subject) break;
+    subject = next;
+  }
   return (
     trimLabel(
       trimLabel(subject)
@@ -560,7 +574,10 @@ export function createDummyStore({ fighterLimit = 3, tokenBalance = 500_000, pol
       if (input.language !== 'ko' && input.language !== 'en') return reply(422, { code: 'invalid-language' });
       const key = input.idempotencyKey.toLowerCase();
       const existing = jobKeys.get(key);
-      if (existing) return reply(200, jobBody(jobs.get(existing)));
+      if (existing) {
+        const job = jobs.get(existing);
+        return reply(200, { ...jobBody(job), idempotencyKey: job.idempotencyKey, idempotencyKeyReused: true, executed: false });
+      }
       if (fighters.size >= limit) {
         notify('fighter-quota', account());
         return reply(409, { code: 'fighter-quota', account: account(), tokensCharged: false });
@@ -575,6 +592,7 @@ export function createDummyStore({ fighterLimit = 3, tokenBalance = 500_000, pol
         description: input.description,
         language: input.language,
         delegate: input.delegate === true,
+        idempotencyKey: key,
         choice: input.delegate === true ? 'a' : null,
         candidates: [
           { id: 'a', label: 'DUMMY look A', media: 'placeholder', note: 'Not an image from a model.' },
@@ -648,7 +666,7 @@ export function createDummyStore({ fighterLimit = 3, tokenBalance = 500_000, pol
         next: 'The note is recorded. Placeholder art did not change. submit kind hosted continues registration.',
       });
     },
-    /** @param {{ jobId?: string, idempotencyKey?: string }} input */
+    /** @param {{ jobId?: string, idempotencyKey?: string, observe?: boolean }} input */
     getHosted(input) {
       if (!input.jobId && !input.idempotencyKey) {
         return reply(200, {
@@ -659,6 +677,21 @@ export function createDummyStore({ fighterLimit = 3, tokenBalance = 500_000, pol
       }
       const job = input.jobId ? jobs.get(input.jobId) : jobs.get(jobKeys.get(input.idempotencyKey?.toLowerCase() ?? '') ?? '');
       if (!job) return reply(404, { code: 'not-found' });
+      if (input.observe === true) {
+        return reply(200, {
+          ...jobBody(job, { waitedMs: 0 }),
+          executed: false,
+          idempotencyKey: job.idempotencyKey,
+          idempotencyKeyReused: true,
+          checkpoint: {
+            schema: 'oddbout.checkpoint/1',
+            jobId: job.id,
+            status: job.status,
+            idempotencyKey: job.idempotencyKey,
+            drafts: job.drafts.length,
+          },
+        });
+      }
       if (job.status === 'motions' && job.drafts.length < MOTIONS.length) {
         job.drafts = [...job.drafts, MOTIONS[job.drafts.length]];
         const event = notify('hosted-motion-draft', { jobId: job.id, motion: job.drafts.at(-1), done: job.drafts.length, of: MOTIONS.length });
@@ -676,12 +709,13 @@ export function createDummyStore({ fighterLimit = 3, tokenBalance = 500_000, pol
     /**
      * Positive waits simulate a worker with 100-ms ticks, using real elapsed time.
      * Zero waits retain the synchronous single-step read used by older fixtures.
-     * @param {{ jobId?: string, idempotencyKey?: string, waitSeconds?: number }} input
+     * @param {{ jobId?: string, idempotencyKey?: string, waitSeconds?: number, observe?: boolean }} input
      */
     async waitHosted(input) {
       const waitSeconds = input.waitSeconds ?? 0;
       if (!Number.isInteger(waitSeconds) || waitSeconds < 0 || waitSeconds > 30) return reply(400, { code: 'invalid-wait-seconds' });
       if (waitSeconds === 0) return store.getHosted(input);
+      if (input.observe === true) return store.getHosted({ ...input, observe: true });
       const started = performance.now();
       const deadline = started + waitSeconds * 1000;
       const measured = (/** @type {{ status: number, body: Record<string, any> }} */ result) => ({

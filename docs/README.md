@@ -36,6 +36,8 @@ creator-kit ZIP에는 제작·연결 안내와 이 문서 지도가 들어 있�
 | [DOT-CREATION](DOT-CREATION.md) | 외형을 실제로 보여 준 뒤 그 원화로 애니메이션을 만드는 흐름(sprite-gen) |
 | [AUTHORING](AUTHORING.md) | 새 선수의 애셋과 `fighter.json` 규격 |
 | [AGENT-QUICKSTART](AGENT-QUICKSTART.md) | 작업 공간 에이전트의 등록·개정·스타일·`pending` 필드 |
+| [LIFECYCLE](LIFECYCLE.md) | 생성 스킬, 작업 공간 킷, 파이터 프로젝트는 따로 갱신된다 |
+| [TOOL-PERMISSIONS](TOOL-PERMISSIONS.md) | MCP 도구의 읽기·변경·금지 계층 |
 | [FLOW-TEST](FLOW-TEST.md) | 제작 흐름을 더미로 끝까지 시험. 프로덕션에 접속하지 않음 |
 | [POSE-GENERATION](POSE-GENERATION.md) | 이미지 모델로 새 동작 프레임을 그릴 때의 옆모습·화풍·크기 |
 | [CREATION-UX](CREATION-UX.md) | 사용자와 대화하는 제작 에이전트의 행동 규격 |

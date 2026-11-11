@@ -1,5 +1,7 @@
 # One ODDBOUT workflow, two execution environments
 
+Read this page when the work is in a PC or Dots workspace. Hosted creation and a connection check do not start here and do not install this kit. The skill body's hard rules win if this page disagrees. Lifetimes of the skill, the kit and the project: `docs/LIFECYCLE.md`.
+
 Use the current user's chosen PC or hosted Dots workspace. A cloud connector is registration access,
 not a generator, filesystem, or proof that a hosted execution environment exists. Check the current
 host's execution, durable file storage and preview/file delivery capabilities separately. If those are
@@ -10,10 +12,12 @@ Direct supported appearance previews can precede kit setup under `docs/DELIVERY.
 
 This Git-installed Codex plugin contains skills only, without launcher.mjs or a bundled runtime.
 For account lookup and hosted creation, use the existing connected MCP; no kit is needed.
+Connection checks and hosted creation do not install the kit. Lifetimes: docs/LIFECYCLE.md.
 For explicitly requested workspace creation, prefer the user's existing creator-kit checkout
-and workspace. Read its AGENTS.md, docs/CREATION-UX.md, docs/DOT-CREATION.md,
-docs/AUTHORING.md, docs/EXECUTION-HOST.md, docs/DELIVERY.md and vendor/sprite-gen/SKILL.md
-before generation. Inspect existing notes, selected versions, jobs and sessions first.
+and workspace. Before generation there, read its AGENTS.md, docs/CREATION-UX.md, docs/DOT-CREATION.md,
+docs/AUTHORING.md, docs/EXECUTION-HOST.md, docs/DELIVERY.md and vendor/sprite-gen/SKILL.md,
+and run npm run creation:preflight -- --purpose generation. Inspect existing notes, selected versions,
+jobs and sessions first, including BRIEF.md and PROGRESS.md when the session wrote them.
 Never pull or update an in-progress checkout, switch providers or copy credentials.
 If there is no checkout, obtain the creator kit from the public oddbout-starter repository
 using its docs/START-HERE.md and reviewed installation procedure, only within the user's

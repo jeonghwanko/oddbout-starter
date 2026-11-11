@@ -30,6 +30,12 @@ ChatGPT/Dots에서 가져온 플러그인의 `mcp.json`은 클라우드 앱 연�
 기존 플러그인/연결 제거는 사용자의 명시 요청이 있고, 같은 Dots 대화의 대체 연결에서 `get_profile`이 성공해
 동일한 의도된 계정을 확인한 뒤에만 한다. 기본 동작은 제거하지 않는 것이다.
 
+## 읽기 전용 preflight
+
+`npm run creation:preflight`는 같은 readiness 검사를 한 장의 JSON으로 모은다. `--purpose connection`(기본), `generation`, `registration` 중 하나다. 원격 fetch, fast-forward, 설치, 계정 질문, 생성, 등록은 하지 않는다. `connection`과 `registration`은 생성 구독과 엔진 설치를 묻지 않는다. `startedGeneration`은 항상 false다. `nextCommands`는 실행되지 않은 다음 명령이다. 워크스페이스 MCP의 `preflight_creation`이 같은 요약이다.
+
+`npm run creation:plan -- --workspace <절대 경로> --session <id>`는 현재 묶음에서 유지할 버전과 아직 열린 항목을 읽기만 한다. 생성을 시작하지 않고, 가격 합계를 만들지 않는다(`cost.known`은 false).
+
 ## 작업 공간 도구의 연결 확인
 
 1. 에이전트는 작업 공간 `check_creation_readiness`를 캐릭터의 첫 생성 전, 작업 공간 재시작 뒤, 등록 전에 부른다.

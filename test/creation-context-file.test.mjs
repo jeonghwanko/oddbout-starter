@@ -196,7 +196,13 @@ test('actual CLIs preserve large Unicode JSON and sanitized failure/blocked exit
     await assert.rejects(exec(process.execPath, [cli(name), ...args, ...f.flags], options), error => {
       assert.equal(error.code, 1);
       assert.equal(error.stdout, '');
-      assert.deepEqual(JSON.parse(error.stderr), { ok: false, code: 'creation-context-file-integrity' });
+      assert.deepEqual(JSON.parse(error.stderr), {
+        ok: false,
+        code: 'creation-context-file-integrity',
+        hint: 'Read the code and correct the input. Do not start a generation or registration from this error.',
+        say: 'Command failed (creation-context-file-integrity).',
+        next: 'Read the code and correct the input. Do not start a generation or registration from this error.',
+      });
       assert.ok(!error.stderr.includes(f.root));
       assert.ok(!error.stderr.includes('secret-test-string'));
       return true;

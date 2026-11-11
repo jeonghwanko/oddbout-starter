@@ -1,6 +1,6 @@
 // @ts-check
 import { createHash, randomUUID } from 'node:crypto';
-import { appendFile, copyFile, lstat, mkdir, open, readdir, realpath, rm } from 'node:fs/promises';
+import { appendFile, copyFile, lstat, mkdir, open, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
@@ -11,6 +11,7 @@ import { withFileLock } from './file-lock.mjs';
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { errorCode } from './error-code.mjs';
 import { profileLimits } from '../contracts/ai-fighter/profile-limits.mjs';
+import { briefDocument, containsSecret, progressDocument } from './working-memory.mjs';
 
 /**
  * The session record. Each item's `review` and `packageReview` exist on the effective view only; save() sets updatedAt.
@@ -21,9 +22,12 @@ import { profileLimits } from '../contracts/ai-fighter/profile-limits.mjs';
  * @typedef {{ version: string, selectedVersion: string | null, versions: Record<string, ItemVersion>, review?: string, filesValid?: boolean }} SessionItem
  * @typedef {{ files: FileRecord[], basisHash: string, contextRevision: string, fileValidation: { stage: string, pending?: string[] },
  *   review?: { verdict: 'passed' | 'failed', evidence: FileRecord[], feedback: string, source: string } }} PackageRecord
+ * @typedef {{ route: 'hosted' | 'workspace' | null, accountId: string | null, accountEmail: string | null, hostedJobId: string | null, next: string }} SessionMemory
+ * @typedef {{ files: FileRecord[], note: string, at: string }} ReuseRecord
  * @typedef {{ storeVersion: 1, sessionId: string, revision: number, brief: string, mode: 'creation' | 'dialogue-only', contextRevision: string,
  *   context: CreationContext, groupId: string, items: Record<string, SessionItem>, pendingEdits: string[], delegatedGroups: string[],
- *   profile: { selected?: boolean, [key: string]: unknown }, package?: PackageRecord, history: object[], updatedAt?: string, packageReview?: string, packageFilesValid?: boolean }} Session
+ *   profile: { selected?: boolean, [key: string]: unknown }, package?: PackageRecord, history: object[], updatedAt?: string, packageReview?: string, packageFilesValid?: boolean,
+ *   memory?: SessionMemory, reuse?: Record<string, ReuseRecord> }} Session
  */
 
 export const identifier = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/);
@@ -130,6 +134,31 @@ export const changeSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('package-review'), verdict: z.enum(['passed', 'failed']), evidence: files, feedback: note }).strict(),
   z.object({ type: z.literal('advance') }).strict(),
   z.object({ type: z.literal('refresh-context'), note }).strict(),
+  z
+    .object({
+      type: z.literal('memory'),
+      route: z.enum(['hosted', 'workspace']).nullable(),
+      accountId: z
+        .string()
+        .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[4][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)
+        .nullable()
+        .optional(),
+      accountEmail: z
+        .string()
+        .regex(/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/)
+        .max(200)
+        .nullable()
+        .optional(),
+      hostedJobId: z
+        .string()
+        .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[4][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)
+        .nullable()
+        .optional(),
+      next: note,
+    })
+    .strict(),
+  z.object({ type: z.literal('reuse'), item: versionId, files, note }).strict(),
+  z.object({ type: z.literal('reuse-clear'), item: versionId, note }).strict(),
 ]);
 /** @typedef {z.infer<typeof changeSchema>} ChangeEvent */
 
@@ -267,6 +296,13 @@ export function createCreationStore(root, { contextRequest, validatePackage = ma
   async function save(id, state) {
     state.updatedAt = new Date().toISOString();
     await atomicJson(await fileFor(id, 'creation-session.json'), state);
+    // The markdown is a resume summary. A failed write leaves the session record, which is the authority.
+    try {
+      await writeFile(await fileFor(id, 'BRIEF.md'), briefDocument(state), { mode: 0o600 });
+      await writeFile(await fileFor(id, 'PROGRESS.md'), progressDocument(state), { mode: 0o600 });
+    } catch {
+      // The change is already saved; a caller that saw an error here would retry it against a moved revision.
+    }
   }
   /** @param {Session} state @param {string} item */
   function itemGroup(state, item) {
@@ -542,6 +578,29 @@ export function createCreationStore(root, { contextRequest, validatePackage = ma
         'refresh-context': async () => {
           state.context = context;
           state.contextRevision = context.revision;
+        },
+        memory: async event => {
+          if (containsSecret(event.next)) fail('memory-secret-refused');
+          state.memory = {
+            route: event.route,
+            accountId: event.accountId ?? null,
+            accountEmail: event.accountEmail ?? null,
+            hostedJobId: event.hostedJobId ?? null,
+            next: event.next,
+          };
+        },
+        reuse: async event => {
+          if (containsSecret(event.note)) fail('memory-secret-refused');
+          itemGroup(state, event.item);
+          const rootPrefix = `${prefix(id)}/`;
+          if (event.files.some(file => !file.startsWith(rootPrefix))) fail('reuse-outside-session');
+          state.reuse = { ...state.reuse, [event.item]: { files: await snapshots(event.files), note: event.note, at: new Date().toISOString() } };
+        },
+        'reuse-clear': async event => {
+          if (!state.reuse?.[event.item]) fail('reuse-not-recorded');
+          const next = { ...state.reuse };
+          delete next[event.item];
+          state.reuse = Object.keys(next).length ? next : undefined;
         },
       };
       await /** @type {(event: ChangeEvent) => Promise<void>} */ (apply[event.type])(event);

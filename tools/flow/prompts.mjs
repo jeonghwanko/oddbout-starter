@@ -29,7 +29,7 @@ export const SCENARIOS = [
       { tool: 'get_profile' },
       { tool: 'get_my_fighters', selector: 'list' },
       { tool: 'request_hosted_fighter', selector: 'request' },
-      { tool: 'get_hosted_fighter', selector: 'until-registered' },
+      { tool: 'advance_hosted_fighter', selector: 'until-registered' },
     ],
   },
   {
@@ -48,7 +48,7 @@ export const SCENARIOS = [
       { tool: 'get_fighter_spec', selector: 'overview' },
       { tool: 'request_hosted_fighter', selector: 'request' },
       { tool: 'request_hosted_fighter', selector: 'choose_look' },
-      { tool: 'get_hosted_fighter', selector: 'until-registered' },
+      { tool: 'advance_hosted_fighter', selector: 'until-registered' },
     ],
   },
   {
@@ -270,7 +270,37 @@ export async function checkDocs(root) {
   for (const phrase of ['pendingStages', 'missingAssets', 'motion_ready', 'update_fighter', 'npm run flow:test', 'docs/FLOW-TEST.md', 'fighter:register']) {
     if (!agents.includes(phrase)) problems.push(`AGENTS.md missing ${phrase}`);
   }
-  for (const phrase of ['request_hosted_fighter', 'fighterId', 'pendingStages', 'update_fighter']) {
+  for (const phrase of [
+    'request_hosted_fighter',
+    'fighterId',
+    'pendingStages',
+    'update_fighter',
+    'delegate: true',
+    '그냥 만들어줘',
+    'just make it',
+    'idempotencyKey',
+    'enter_fighter',
+    'fighter-quota',
+    'stop and ask',
+    'not displayed previews',
+    'does not authorize starting or resuming creation',
+    'confirmed: true',
+    'permission-forbidden',
+    'delete_fighter',
+    'observe: true',
+    'advance_hosted_fighter',
+  ]) {
+    if (!skill.includes(phrase)) problems.push(`SKILL.md missing ${phrase}`);
+  }
+  for (const phrase of [
+    'references/connection.md',
+    'references/hosted.md',
+    'references/front.md',
+    'references/groups.md',
+    'references/jobs.md',
+    'references/registration.md',
+    'references/workspace.md',
+  ]) {
     if (!skill.includes(phrase)) problems.push(`SKILL.md missing ${phrase}`);
   }
   const names = new Set(SCENARIOS.flatMap(scenario => [...(scenario.expect ?? []), ...scenario.forbid.map(tool => ({ tool }))]).map(step => step.tool));

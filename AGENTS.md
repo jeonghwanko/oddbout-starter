@@ -5,9 +5,9 @@ Keep these product rules in code and docs. The shipped kit lacks repository-only
 
 ## Agent quickstart
 
-Workspace agents start here. Detail: [docs/AGENT-QUICKSTART.md](docs/AGENT-QUICKSTART.md), poses: [docs/POSE-GENERATION.md](docs/POSE-GENERATION.md).
+Detail: [docs/AGENT-QUICKSTART.md](docs/AGENT-QUICKSTART.md), poses: [docs/POSE-GENERATION.md](docs/POSE-GENERATION.md), lifetimes: [docs/LIFECYCLE.md](docs/LIFECYCLE.md).
 
-Offline check (Node 22.12+): `npm ci --ignore-scripts`, `npm run example`, `npm run validate -- output/sparring-bot/fighter.json`. Generation: ffmpeg and `npm run sprite:setup` (RIFE ~430 MB). Host PCs: Linux.
+Offline check (Node 22.12+): `npm ci --ignore-scripts`, `npm run example`, `npm run validate -- output/sparring-bot/fighter.json`. Generation: ffmpeg and `npm run sprite:setup`. Host PCs: Linux.
 
 Cloud registration stays default. Use `fighter:register` only by user choice, with their account and secure CLI login. Cloud/auth failure alone never switches routes. Dry-run needs no login: `npm run fighter:register -- --dir <package>`. Submit on request; reuse its key and record for retries.
 
@@ -28,12 +28,12 @@ Motion frames face right at one scale: standing body height 400, not each pose's
 | Your task | Read first | Then |
 | --- | --- | --- |
 | The user sent only a repository link | `docs/START-HERE.md` | Its steps, then the row below |
-| Create, revise, resume or register a fighter with a user | [Hard rules](#hard-rules), [Creating a fighter](#creating-a-fighter) | `docs/CREATION-UX.md`; `docs/DOT-CREATION.md` and `docs/AUTHORING.md` before the first generation; the live AI Fighter spec before creating a package |
+| Create, revise, resume or register a fighter with a user | [Hard rules](#hard-rules), [Creating a fighter](#creating-a-fighter) | `docs/CREATION-UX.md`; `docs/DOT-CREATION.md` and `docs/AUTHORING.md` before generation; the live spec before a package |
 | Set up or resume a Dots workspace | `docs/DOTS-QUICKSTART.md`, `docs/DOTS-START.md` | [Hard rules](#hard-rules), [Dots workspaces](#dots-workspaces), [Workspace, connection and sign-in](#workspace-connection-and-sign-in); to create, the row above |
 | Change code, tests or docs here | [Hard rules](#hard-rules), [Changing this repository](#changing-this-repository) | The doc that owns the area ([docs/README.md](docs/README.md)). [Creating a fighter](#creating-a-fighter) states product requirements the code implements: read the part your change touches |
 | Deploy or operate the service | [Hard rules](#hard-rules), [Deploys](#deploys) | `docs/CREATOR-HOSTING.md`, `docs/CLOUD-MCP.md`, `docs/GENERATION-HOST.md` |
 
-`docs/records/` and `docs/research/` are history, not procedure, unless a rule below directs you there.
+`docs/records/` and `docs/research/` are history, not procedure, unless a rule below directs you there. `docs/TOOL-PERMISSIONS.md`.
 
 ## Hard rules
 

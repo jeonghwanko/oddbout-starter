@@ -2,6 +2,12 @@
 
 For a workspace agent with a shell, an image generator and the ODDBOUT connector. Product rules stay in [AGENTS.md](../AGENTS.md). This page is the short path for the mistakes that show up after a package already validates.
 
+Hosted creation and account checks do not clone this repository. The clone below is the workspace kit, used only when the user is generating in a workspace. The skill, the kit and the project are separate: [LIFECYCLE.md](LIFECYCLE.md).
+
+Set `delegate: true` only when the user explicitly delegates the appearance choice. "Make it", "just make it" and "그냥 만들어줘" do not delegate. At the fighter limit, stop; the error is `fighter-quota`. Do not call `enter_fighter` unless the user asks after seeing every required motion. `idempotencyKey` is required for package preparation, profile-set preparation, style changes and a new hosted request. Reuse the original key for the same bytes.
+
+`npm run creation:preflight` is a read-only summary. `npm run creation:plan -- --workspace <absolute dir> --session <id>` lists open items and does not generate. Neither command invents a price. `npm run flow:eval` scores the dummy scenarios. Tool tiers are in [TOOL-PERMISSIONS.md](TOOL-PERMISSIONS.md).
+
 ## Offline check
 
 Node.js 22.12 or newer. ffmpeg is installed separately. Generation also needs `npm run sprite:setup` (the sprite-gen submodule, its venv, img2webp and RIFE, about 430 MB). A generation host PC is Linux. Grok login and generation permission are separate from this local check.

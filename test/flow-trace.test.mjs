@@ -286,14 +286,19 @@ for (const mode of WINDOWS ? ['EOF'] : ['SIGTERM', 'EOF']) {
     t.after(() => rm(setup.packageRoot, { recursive: true, force: true }));
     let finished = 0;
     const calls = Array.from({ length: 8 }, () =>
-      client.callTool({ name: 'create_dummy_package', arguments: {} }).then(
-        () => {
-          finished++;
-        },
-        () => {
-          finished++;
-        },
-      ),
+      client
+        .callTool({
+          name: 'create_dummy_package',
+          arguments: { confirmed: true, confirmationText: 'user confirmed this package write' },
+        })
+        .then(
+          () => {
+            finished++;
+          },
+          () => {
+            finished++;
+          },
+        ),
     );
     const deadline = Date.now() + 10_000;
     while (!(await readdir(setup.packageRoot)).length) {

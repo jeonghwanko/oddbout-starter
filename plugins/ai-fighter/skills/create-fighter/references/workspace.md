@@ -1,5 +1,7 @@
 # One ODDBOUT workflow, two execution environments
 
+Read this page when the work is in a PC or Dots workspace. Hosted creation and a connection check do not start here and do not install this kit. The skill body's hard rules win if this page disagrees. Lifetimes of the skill, the kit and the project: `docs/LIFECYCLE.md`.
+
 Use the current user's chosen PC or hosted Dots workspace. A cloud connector is registration access,
 not a generator, filesystem, or proof that a hosted execution environment exists. Check the current
 host's execution, durable file storage and preview/file delivery capabilities separately. If those are
@@ -27,9 +29,9 @@ An older bundle has its own launcher contract; never update an active project ju
 Dots generation requiring protected session output is blocked before dispatch. No version string or login
 proves an official image bridge; use an actually supported host route or report the blocker.
 
-In the returned runtime, use Node 22.12+ and run `npm ci --ignore-scripts` if dependencies are missing;
-read `AGENTS.md`, `docs/DOT-CREATION.md`, `docs/AUTHORING.md`, `docs/EXECUTION-HOST.md`,
-`docs/DELIVERY.md` and `vendor/sprite-gen/SKILL.md`. Run sprite setup only when needed, in that runtime.
+In the returned runtime, use Node 22.12+ and run `npm ci --ignore-scripts` if dependencies are missing.
+When generation in this workspace is the agreed route, and only then, read `AGENTS.md`, `docs/DOT-CREATION.md`, `docs/AUTHORING.md`, `docs/EXECUTION-HOST.md`,
+`docs/DELIVERY.md` and `vendor/sprite-gen/SKILL.md`. Run `npm run creation:preflight -- --purpose generation` before that setup, and run sprite setup only when the preflight names it and the user is generating here.
 If the host cannot expose the bundled files, preserve the task and report that limitation. Do not claim
 another chat's files or an arbitrary PC path exist in this workspace.
 

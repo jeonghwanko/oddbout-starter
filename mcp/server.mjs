@@ -12,6 +12,8 @@ import { GROUP_IDS, fetchCreationContext, reviewCreationProgress } from './creat
 import { spriteStatus } from '../scripts/sprite-gen.mjs';
 import { registerCreatorTools } from './creator-tools.mjs';
 import { checkReadiness } from './creation-readiness.mjs';
+import { planCreation } from './creation-plan.mjs';
+import { preflightCreation } from './creation-preflight.mjs';
 import { identifier } from './creation-store.mjs';
 import { accountChoice, registerEnvironmentTools } from './creation-environment.mjs';
 import { errorCode } from './error-code.mjs';
@@ -214,7 +216,60 @@ export function createServer({ root, contextRequest } = {}) {
   const queue = serialQueue();
   const validatePackage = root ? makePackageValidator(root, { queue }) : undefined;
   if (root) registerPackagingTools(server, { root, respond, queue });
-  const records = root ? registerCreatorTools(server, { root, contextRequest, respond, outputSchema, validatePackage }) : {};
+  const records = root ? registerCreatorTools(server, { root, contextRequest, respond, outputSchema, validatePackage }) : null;
+  if (records) {
+    server.registerTool(
+      'plan_creation',
+      {
+        description:
+          'Read-only preview of the current group: kept selections, items still open, recorded reuse files, and known jobs. startedGeneration is false. cost.known is false unless a priced total was actually supplied, which this tool never invents. Does not prepare a job or call a provider.',
+        inputSchema: z.object({ sessionId: identifier }),
+        outputSchema,
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      },
+      async ({ sessionId }) => {
+        try {
+          return respond({ ok: true, stage: 'creation-plan', data: await planCreation(records.store, records.jobs, sessionId) });
+        } catch (error) {
+          return respond({ ok: false, stage: 'creation-plan', code: errorCode(error, 'plan-failed', { missing: 'record-or-file-not-found' }) });
+        }
+      },
+    );
+    server.registerTool(
+      'read_creation_checkpoint',
+      {
+        description: 'Read one job checkpoint. executedByThisCall is false. Does not run the engine, cancel the job, or register.',
+        inputSchema: z.object({ sessionId: identifier, jobId: z.string().uuid() }),
+        outputSchema,
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+        _meta: { oddbout: { permission: 'read' } },
+      },
+      async ({ sessionId, jobId }) => {
+        try {
+          return respond({ ok: true, stage: 'creation-checkpoint', data: await records.jobs.readCheckpoint(sessionId, jobId) });
+        } catch (error) {
+          return respond({ ok: false, stage: 'creation-checkpoint', code: errorCode(error, 'checkpoint-unreadable', { missing: 'record-or-file-not-found' }) });
+        }
+      },
+    );
+    server.registerTool(
+      'resume_creation_job',
+      {
+        description: 'Return the checkpoint and its registration idempotencyKey. Does not execute the job, mint a key, or submit a second registration.',
+        inputSchema: z.object({ sessionId: identifier, jobId: z.string().uuid() }),
+        outputSchema,
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+        _meta: { oddbout: { permission: 'read' } },
+      },
+      async ({ sessionId, jobId }) => {
+        try {
+          return respond({ ok: true, stage: 'creation-resume', data: await records.jobs.resume(sessionId, jobId) });
+        } catch (error) {
+          return respond({ ok: false, stage: 'creation-resume', code: errorCode(error, 'checkpoint-unreadable', { missing: 'record-or-file-not-found' }) });
+        }
+      },
+    );
+  }
   const environment = root ? registerEnvironmentTools(server, { root, respond, outputSchema }) : undefined;
   server.registerTool(
     'check_creation_readiness',
@@ -256,6 +311,31 @@ export function createServer({ root, contextRequest } = {}) {
         });
       } catch (error) {
         return respond({ ok: false, stage: 'creation-readiness', code: errorCode(error, 'readiness-check-failed', { missing: 'record-or-file-not-found' }) });
+      }
+    },
+  );
+  server.registerTool(
+    'preflight_creation',
+    {
+      description:
+        'Read-only summary of check_creation_readiness for one purpose. Does not fetch, fast-forward, install, elicit, generate or register. startedGeneration is false. purpose connection and registration do not ask for a generation subscription or the engine. Run nextCommands yourself only when the user wants that step; this tool does not run them.',
+      inputSchema: z.object({
+        sessionId: identifier.optional(),
+        purpose: z.enum(['generation', 'connection', 'registration']).default('connection'),
+        account: accountChoice.optional(),
+      }),
+      outputSchema,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    async ({ sessionId, purpose, account }) => {
+      try {
+        return respond({
+          ok: true,
+          stage: 'preflight',
+          data: await preflightCreation({ ...(records ?? {}), sessionId, purpose, account, environment }),
+        });
+      } catch (error) {
+        return respond({ ok: false, stage: 'preflight', code: errorCode(error, 'preflight-failed', { missing: 'record-or-file-not-found' }) });
       }
     },
   );

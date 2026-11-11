@@ -57,7 +57,10 @@ test('one stdio session builds revisions and shares their immutable history with
   const initial = await call('get_my_fighters', { view: 'list' });
   const fighter = initial.fighters[0];
   const original = await call('get_my_fighters', { view: 'submission', submissionId: fighter.submissionIds[0] });
-  const missing = await client.callTool({ name: 'create_dummy_package', arguments: { fighterId: randomUUID() } });
+  const missing = await client.callTool({
+    name: 'create_dummy_package',
+    arguments: { fighterId: randomUUID(), confirmed: true, confirmationText: 'user confirmed this call' },
+  });
   assert.equal(missing.isError, true);
   assert.equal(missing.structuredContent.code, 'fighter-not-found');
   assert.equal((await call('get_my_fighters', { view: 'list' })).fighters.length, 1);
@@ -67,6 +70,8 @@ test('one stdio session builds revisions and shares their immutable history with
     language: 'ko',
     style: { super: 'dash' },
     moves: { dash: { name: '노래방 각성', description: '노래방 각성기로 지정한 돌진' } },
+    confirmed: true,
+    confirmationText: 'user confirmed this call',
   });
   assert.equal(built.operation, 'revision');
   assert.equal(built.submissionCreated, false);
@@ -76,11 +81,25 @@ test('one stdio session builds revisions and shares their immutable history with
     fighterId: fighter.id,
     manifestPath: built.manifestPath,
     idempotencyKey: randomUUID(),
+    confirmed: true,
+    confirmationText: 'user confirmed this call',
   });
   for (const asset of prepared.missingAssets) {
-    await call('upload_fighter_asset', { kind: 'package', submissionId: prepared.submissionId, assetId: asset.id, filePath: path.join(built.dir, asset.path) });
+    await call('upload_fighter_asset', {
+      kind: 'package',
+      submissionId: prepared.submissionId,
+      assetId: asset.id,
+      filePath: path.join(built.dir, asset.path),
+      confirmed: true,
+      confirmationText: 'user confirmed this call',
+    });
   }
-  await call('submit_fighter_registration', { kind: 'package', submissionId: prepared.submissionId });
+  await call('submit_fighter_registration', {
+    kind: 'package',
+    submissionId: prepared.submissionId,
+    confirmed: true,
+    confirmationText: 'user confirmed this call',
+  });
   const second = await call('get_my_fighters', { view: 'submission', submissionId: prepared.submissionId });
   assert.equal(second.stage, 'registered');
   assert.equal(second.fighterId, fighter.id);
@@ -113,6 +132,8 @@ test('one stdio session builds revisions and shares their immutable history with
     name: '야근왕 박과장 v3',
     language: 'ko',
     style: { super: 'slam', temper: { patience: 5 } },
+    confirmed: true,
+    confirmationText: 'user confirmed this call',
   });
   assert.notEqual(thirdPack.dir, built.dir);
   let liveCalls = 0;
@@ -160,12 +181,33 @@ test('advertised schemas and runtime both require creation keys, but not existin
     ['prepare_fighter_registration', { manifestPath: '/unused' }],
     ['request_hosted_fighter', request],
   ]) {
-    assert.equal((await client.callTool({ name, arguments: args })).isError, true);
+    const refused = await client.callTool({ name, arguments: args });
+    assert.equal(refused.isError, true);
+    const text = JSON.stringify(refused);
+    assert.match(text, /ODDBOUT-DUMMY/);
+    assert.match(text, /idempotency-key-required/);
+    assert.match(text, /production: false/);
   }
   assert.equal((await call('get_hosted_fighter')).jobs.length, 0);
-  const created = await call('request_hosted_fighter', { ...request, idempotencyKey: randomUUID() });
-  await call('request_hosted_fighter', { step: 'choose_look', jobId: created.job.id, choose: 'a' });
-  const finished = await call('get_hosted_fighter', { jobId: created.job.id, waitSeconds: 5 });
+  const created = await call('request_hosted_fighter', {
+    ...request,
+    idempotencyKey: randomUUID(),
+    confirmed: true,
+    confirmationText: 'user confirmed this call',
+  });
+  await call('request_hosted_fighter', {
+    step: 'choose_look',
+    jobId: created.job.id,
+    choose: 'a',
+    confirmed: true,
+    confirmationText: 'user confirmed this call',
+  });
+  const finished = await call('advance_hosted_fighter', {
+    jobId: created.job.id,
+    waitSeconds: 5,
+    confirmed: true,
+    confirmationText: 'user confirmed this call',
+  });
   assert.equal(finished.statusSummary.completed, true);
   assert.ok(finished.waitedMs > 0);
   const fighter = (await call('get_my_fighters', { view: 'fighter', fighterId: finished.job.submission.fighterId })).fighter;

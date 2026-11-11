@@ -16,11 +16,12 @@ export function checkoutSkillText(canonical) {
   const body = canonical.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '');
   if (!body.startsWith('\n# ODDBOUT\n')) throw new Error('Canonical skill frontmatter did not split');
   // A markdown link is resolved from this file's directory. Name the canonical page from the repo root instead.
-  const from = '[workspace routing](references/workspace.md)';
-  const to = '`plugins/ai-fighter/skills/create-fighter/references/workspace.md`';
-  if (!body.includes(from)) throw new Error('Canonical skill workspace link was not found');
-  const rewritten = body.replaceAll(from, to);
-  if (rewritten.includes('(references/workspace.md)')) throw new Error('A relative workspace link remains');
+  if (!body.includes('[workspace routing](references/workspace.md)')) throw new Error('Canonical skill workspace link was not found');
+  const rewritten = body.replaceAll(/\[([^\]]+)\]\(references\/([a-z0-9-]+\.md)\)/g, (_, label, file) => {
+    return `\`${label}\` (\`plugins/ai-fighter/skills/create-fighter/references/${file}\`)`;
+  });
+  if (rewritten.includes('(references/')) throw new Error('A relative reference link remains');
+  if (!rewritten.includes('plugins/ai-fighter/skills/create-fighter/references/workspace.md')) throw new Error('Canonical skill workspace link was not found');
   const text = `---
 name: create-fighter
 description: ${description}
