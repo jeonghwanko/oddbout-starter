@@ -1,0 +1,1 @@
+import"./_oddbout-analytics-CiIVnasc.js";import{r as e}from"./siteChrome-CsaEcIar.js";import{t}from"./localePreference-CV7HdNsy.js";e(`en`,`privacy`,{linkLocale:t()});
