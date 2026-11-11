@@ -31,7 +31,7 @@ proves an official image bridge; use an actually supported host route or report 
 
 In the returned runtime, use Node 22.12+ and run `npm ci --ignore-scripts` if dependencies are missing.
 When generation in this workspace is the agreed route, and only then, read `AGENTS.md`, `docs/DOT-CREATION.md`, `docs/AUTHORING.md`, `docs/EXECUTION-HOST.md`,
-`docs/DELIVERY.md` and `vendor/sprite-gen/SKILL.md`. Run `npm run creation:preflight -- --purpose generation` before that setup, and run sprite setup only when the preflight names it and the user is generating here.
+`docs/DELIVERY.md` and `vendor/sprite-gen/SKILL.md`. Run `npm run creation:preflight -- --purpose generation` before that setup, and run sprite setup only when the preflight names it and the user is generating here. A kit older than 0.6.21 has no preflight: use workspace `check_creation_readiness` there.
 If the host cannot expose the bundled files, preserve the task and report that limitation. Do not claim
 another chat's files or an arbitrary PC path exist in this workspace.
 

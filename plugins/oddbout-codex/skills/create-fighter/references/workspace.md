@@ -16,7 +16,8 @@ Connection checks and hosted creation do not install the kit. Lifetimes: docs/LI
 For explicitly requested workspace creation, prefer the user's existing creator-kit checkout
 and workspace. Before generation there, read its AGENTS.md, docs/CREATION-UX.md, docs/DOT-CREATION.md,
 docs/AUTHORING.md, docs/EXECUTION-HOST.md, docs/DELIVERY.md and vendor/sprite-gen/SKILL.md,
-and run npm run creation:preflight -- --purpose generation. Inspect existing notes, selected versions,
+and run npm run creation:preflight -- --purpose generation (a kit older than 0.6.21 has no preflight:
+use its check_creation_readiness). Inspect existing notes, selected versions,
 jobs and sessions first, including BRIEF.md and PROGRESS.md when the session wrote them.
 Never pull or update an in-progress checkout, switch providers or copy credentials.
 If there is no checkout, obtain the creator kit from the public oddbout-starter repository
