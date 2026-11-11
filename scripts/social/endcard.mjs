@@ -28,6 +28,19 @@ export function nameFontWarning(name, platform = process.platform) {
     : null;
 }
 
+/**
+ * How many em a name takes in a bold sans: Hangul, kana and CJK about one em each, a space a third, Latin and digits about 0.62.
+ * @param {string} name
+ */
+export function nameEms(name) {
+  let ems = 0;
+  for (const c of name) {
+    const code = c.codePointAt(0) ?? 0;
+    ems += c === ' ' ? 0.33 : code >= 0x1100 ? 1.02 : 0.62;
+  }
+  return Math.max(2, ems);
+}
+
 /** Whether a background colour is dark, for the text on it. @param {{ r: number, g: number, b: number }} colour */
 export const isDark = ({ r, g, b }) => 0.2126 * r + 0.7152 * g + 0.0722 * b < 128;
 
@@ -60,7 +73,7 @@ export async function endCard({ width, height, background, name, front = null, f
     textLeft = pad + (meta.width ?? 0) + pad;
   }
   const textWidth = width - textLeft - pad;
-  const nameSize = Math.max(18, Math.min(Math.round(height * 0.11), Math.round((textWidth / Math.max(2, [...name].length)) * 1.6)));
+  const nameSize = Math.max(14, Math.min(Math.round(height * 0.11), Math.floor(textWidth / nameEms(name))));
   const faceSide = Math.max(16, Math.min(Math.round(height * 0.14), Math.floor((textWidth - pad * 0.2 * 5) / 3)));
   const shown = faces.slice(0, 6);
   const rows = shown.length > 3 ? 2 : shown.length ? 1 : 0;

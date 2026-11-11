@@ -268,6 +268,19 @@ async function describe(file, kind, facts) {
   };
 }
 
+/**
+ * The package's own full-body picture (`profile.preview`, a crop of one of its sheets) for a card without a profile set; null when it
+ * names no sheet the package has.
+ * @param {any} fighter @param {Map<string, Buffer>} sheets
+ */
+async function packagePicture(fighter, sheets) {
+  const preview = fighter.profile?.preview;
+  const sheet = preview && sheets.get(preview.assetId);
+  if (!sheet || !preview.crop) return null;
+  const { x, y, width, height } = preview.crop;
+  return sharp(sheet).extract({ left: x, top: y, width, height }).png().toBuffer().catch(() => null);
+}
+
 /** The suggested post text, in the fighter's language and English. @param {string} name @param {string} language */
 export function captions(name, language) {
   const ko = `${name}, 내가 만든 캐릭터가 싸운다 🥊 ODDBOUT에서 내 선수로 데뷔`;
@@ -411,7 +424,7 @@ export async function exportSocial({
       for (const i of resample(steps, FPS, repeats)) reel.push(/** @type {Buffer} */ (frames.get(steps[i].frame)));
     }
     if (endcard && reel.length) {
-      const card = await endCard({ width, height, background, name, front: profile?.front ?? null, faces: faces ? [...new Set(faces.faces.values())] : [] });
+      const card = await endCard({ width, height, background, name, front: profile?.front ?? (await packagePicture(fighter, sheets)), faces: faces ? [...new Set(faces.faces.values())] : [] });
       for (let i = 0; i < Math.round((END_CARD_MS / 1000) * FPS); i++) reel.push(card);
     }
     if (reel.length) files.push(...(await writeMotion(reel, { width, height, folder: temporary, name: 'showcase', gif: false, silentAudio })));

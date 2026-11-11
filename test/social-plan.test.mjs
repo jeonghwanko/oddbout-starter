@@ -128,3 +128,9 @@ test('the end card warns when a Linux host has no font for the name, and never o
   assert.equal(nameFontWarning('네라', 'win32'), null);
   assert.equal(nameFontWarning('네라', 'darwin'), null);
 });
+
+test("the card's name size counts Hangul as full width, so a Korean name fits its column", async () => {
+  const { nameEms } = await import('../scripts/social/endcard.mjs');
+  assert.ok(Math.abs(nameEms('야근왕 박과장') - (6 * 1.02 + 0.33)) < 1e-9);
+  assert.ok(nameEms('Sparring Bot') < nameEms('야근왕 박과장 김대리'));
+});
