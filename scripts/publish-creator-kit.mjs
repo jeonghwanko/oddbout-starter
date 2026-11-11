@@ -11,7 +11,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { localPath } from '../mcp/creation-store.mjs';
 import { kitOrigin, releaseMetadata } from './prepare-creator-release.mjs';
 import { bootstrapPython } from './bootstrap-python.mjs';
-import { loadPublicationEnvironment, publicationConfig, publicationFetch, requestSitePublication } from './site-publication.mjs';
+import { assertProviderServesSite, loadPublicationEnvironment, publicationConfig, publicationFetch, requestSitePublication } from './site-publication.mjs';
 
 const execute = promisify(execFile);
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -170,7 +170,7 @@ async function readPublic(relative, limit = 4_000_000) {
 /** @param {string} directory @param {string} attemptDirectory @param {string} expectedManifestHash @param {{ publish?: boolean }} [options] */
 export async function publishCreatorKit(directory, attemptDirectory, expectedManifestHash, { publish = false } = {}) {
   await loadPublicationEnvironment();
-  publicationConfig();
+  await assertProviderServesSite(publicationConfig(), kitOrigin);
   if (!attemptDirectory.startsWith('output/')) throw Error('attempt-must-be-under-output');
   const attempt = await localPath(root, attemptDirectory);
   const { manifest, manifestUrl, files } = await validateCandidate(directory, expectedManifestHash);

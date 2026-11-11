@@ -41,6 +41,9 @@ export async function publishCloudflare(sha, config, { preview = false } = {}) {
   const wrangler = fileURLToPath(new URL('../node_modules/wrangler/bin/wrangler.js', import.meta.url));
   const output = join(temporary, 'wrangler-output.jsonl');
   const env = { ...process.env, CLOUDFLARE_ACCOUNT_ID: config.account, CI: 'true', WRANGLER_SEND_METRICS: 'false', WRANGLER_OUTPUT_FILE_PATH: output };
+  // Relative names from the temporary directory: GNU tar (Git Bash puts it first on Windows) reads `C:` in an absolute path as a
+  // remote host and stops after the branch commit, while Windows' bsdtar accepts either.
+  const extract = () => execFileSync('tar', ['-xf', 'site.tar', '-C', 'site'], { cwd: temporary });
   try {
     git(
       parent,
@@ -62,11 +65,11 @@ export async function publishCloudflare(sha, config, { preview = false } = {}) {
       throw Error('Publication contains non-regular Git objects');
     await mkdir(site);
     git(checkout, '-c', 'core.autocrlf=false', 'archive', `--output=${archive}`, 'HEAD', '--', '.', ':!creator-kit');
-    execFileSync('tar', ['-xf', archive, '-C', site]);
+    extract();
     const release = await verifyArtifact(site);
     if (git(checkout, 'ls-tree', 'HEAD', '--', 'creator-kit')) {
       git(checkout, '-c', 'core.autocrlf=false', 'archive', `--output=${archive}`, 'HEAD', '--', 'creator-kit');
-      execFileSync('tar', ['-xf', archive, '-C', site]);
+      extract();
     }
     await validateCloudflareFiles(site);
     const current = git(checkout, 'ls-remote', 'origin', `refs/heads/${hosting.branch}`).split(/\s/)[0];

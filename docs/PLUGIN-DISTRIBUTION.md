@@ -30,9 +30,9 @@ gave byte-identical release files. The trusted helper verified and extracted the
 launcher's `--status` reported the runtime manifest above with nothing installed. No dependency install, generation login, generation or
 registration ran. Publication added only the three release files to `codex/creator-pages` (7,845 existing files preserved, none changed
 or deleted). The site is served by Cloudflare Pages, so the publisher ran with `ODDBOUT_SITE_PROVIDER=cloudflare-pages` and the shared
-settings in the game's `kaito_web/deploy/oddbout-site-publication.json`. On Windows, run the publisher from PowerShell: from Git Bash its
-upload step picked GNU `tar`, which read `C:` as a remote host and stopped after the branch commit; `npm run site:republish` of that same
-commit from PowerShell completed it. The three files then served HTTP 200 with the hashes above at 2026-11-11T09:53Z.
+settings in the game's `kaito_web/deploy/oddbout-site-publication.json`. From Git Bash the upload step first picked GNU `tar`,
+which read `C:` as a remote host and stopped after the branch commit; `npm run site:republish` of that same commit from PowerShell
+completed it. The upload now extracts with relative paths, which both tars accept. The three files then served HTTP 200 with the hashes above at 2026-11-11T09:53Z.
 `host/pins.json` selects this archive for the next host package release; it does not update an already installed host.
 
 Earlier releases (0.6.20 back to 0.4.0) and their verification records are in [records/KIT-RELEASES.md](records/KIT-RELEASES.md).
