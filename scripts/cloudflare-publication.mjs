@@ -7,9 +7,14 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { git, hosting, verifyArtifact, verifyLiveSite, waitForJson } from './hosting-lib.mjs';
 import { cloudflareFetch } from './site-publication.mjs';
+import { chatGptEmbedBuild } from './chatgpt-embed-site.mjs';
 
-/** @param {string} root */
-export async function validateCloudflareFiles(root) {
+/**
+ * `_headers` is accepted only when it is byte for byte the route rules this repository generates for the ChatGPT game entry
+ * (`chatGptEmbedBuild` — the build writes them, `publishedFiles` requires them). Any other rule still needs a code change and review.
+ * @param {string} root @param {{ headers?: string }} [reviewed]
+ */
+export async function validateCloudflareFiles(root, { headers } = {}) {
   let files = 0;
   /** @param {string} dir */
   async function walk(dir) {
@@ -25,8 +30,13 @@ export async function validateCloudflareFiles(root) {
   await walk(root);
   if (files > 20_000) throw Error('Cloudflare publication exceeds 20000 files');
   // Do not accidentally execute a Worker or apply unreviewed routing configuration.
-  for (const name of ['_worker.js', 'functions', '_redirects', '_headers', '_routes.json']) {
-    if ((await readdir(root)).includes(name)) throw Error(`Cloudflare control file requires explicit review: ${name}`);
+  const names = await readdir(root);
+  for (const name of ['_worker.js', 'functions', '_redirects', '_routes.json']) {
+    if (names.includes(name)) throw Error(`Cloudflare control file requires explicit review: ${name}`);
+  }
+  if (names.includes('_headers')) {
+    const shipped = await readFile(join(root, '_headers'), 'utf8');
+    if (!headers || shipped.trim() !== headers.trim()) throw Error('Cloudflare control file requires explicit review: _headers');
   }
   return files;
 }
@@ -71,7 +81,7 @@ export async function publishCloudflare(sha, config, { preview = false } = {}) {
       git(checkout, '-c', 'core.autocrlf=false', 'archive', `--output=${archive}`, 'HEAD', '--', 'creator-kit');
       extract();
     }
-    await validateCloudflareFiles(site);
+    await validateCloudflareFiles(site, { headers: chatGptEmbedBuild(hosting.chatgptEmbed).headers });
     const current = git(checkout, 'ls-remote', 'origin', `refs/heads/${hosting.branch}`).split(/\s/)[0];
     if (current !== sha) throw Error('Publication branch changed before Cloudflare upload');
     const branch = preview ? 'hosting-migration' : config.branch;
