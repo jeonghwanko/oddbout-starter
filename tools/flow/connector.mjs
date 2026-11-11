@@ -4,8 +4,13 @@ import { realpath, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import { buildDummyPackage } from './package-builder.mjs';
+import { DUMMY_LABEL } from './seal.mjs';
 
-const UUID = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+/** @param {string} code */
+const dummyError = code => `${DUMMY_LABEL} production: false. mode: dummy. service: oddbout-dummy. code: ${code}`;
+const UUID = z.string({ error: dummyError('invalid-id') }).regex(UUID_PATTERN, { error: dummyError('invalid-id') });
+const REQUIRED_KEY = z.string({ error: dummyError('idempotency-key-required') }).regex(UUID_PATTERN, { error: dummyError('invalid-id') });
 const MOVE = z.object({ name: z.string().min(1).max(24), description: z.string().min(1).max(160) });
 
 /**
@@ -178,7 +183,7 @@ export const DUMMY_TOOLS = [
     name: 'prepare_fighter_registration',
     title: 'ODDBOUT-DUMMY prepare',
     description: banner + 'kind package or profile_set. manifestPath is an absolute path inside the dummy roots.',
-    shape: { kind: z.enum(['package', 'profile_set']).optional(), manifestPath: z.string(), idempotencyKey: UUID, fighterId: UUID.optional() },
+    shape: { kind: z.enum(['package', 'profile_set']).optional(), manifestPath: z.string(), idempotencyKey: REQUIRED_KEY, fighterId: UUID.optional() },
   },
   {
     name: 'upload_fighter_asset',
@@ -207,7 +212,7 @@ export const DUMMY_TOOLS = [
     name: 'update_fighter',
     title: 'ODDBOUT-DUMMY style',
     description: banner + 'kind style stores a fighting style on the dummy fighter. It does not draw art.',
-    shape: { kind: z.enum(['style']), fighterId: UUID, style: z.union([z.record(z.string(), z.unknown()), z.null()]), idempotencyKey: UUID },
+    shape: { kind: z.enum(['style']), fighterId: UUID, style: z.union([z.record(z.string(), z.unknown()), z.null()]), idempotencyKey: REQUIRED_KEY },
   },
   {
     name: 'request_hosted_fighter',
@@ -249,9 +254,31 @@ export const DUMMY_TOOLS = [
 export function dummyToolSchema(tool) {
   const base = z.object(tool.shape);
   if (tool.name !== 'request_hosted_fighter') return base;
-  return z.union([
-    base.extend({ step: z.literal('request').optional(), description: z.string().min(4).max(600), language: z.enum(['ko', 'en']), idempotencyKey: UUID }),
-    base.extend({ step: z.literal('choose_look'), jobId: UUID, choose: z.enum(['a', 'b']) }),
-    base.extend({ step: z.literal('revise_motion'), jobId: UUID, clip: z.string(), note: z.string().min(2).max(200) }),
-  ]);
+  return z.union(
+    [
+      base.extend({
+        step: z.literal('request').optional(),
+        description: z.string().min(4).max(600),
+        language: z.enum(['ko', 'en']),
+        idempotencyKey: REQUIRED_KEY,
+      }),
+      base.extend({ step: z.literal('choose_look'), jobId: UUID, choose: z.enum(['a', 'b']) }),
+      base.extend({ step: z.literal('revise_motion'), jobId: UUID, clip: z.string(), note: z.string().min(2).max(200) }),
+    ],
+    {
+      error: issue => {
+        const input = issue.input;
+        if (input && typeof input === 'object' && !Array.isArray(input)) {
+          const record = /** @type {{ step?: string, idempotencyKey?: unknown }} */ (input);
+          if (
+            record.step !== 'choose_look' &&
+            record.step !== 'revise_motion' &&
+            (typeof record.idempotencyKey !== 'string' || record.idempotencyKey.length === 0)
+          )
+            return dummyError('idempotency-key-required');
+        }
+        return dummyError('invalid-input');
+      },
+    },
+  );
 }

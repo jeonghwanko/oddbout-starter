@@ -178,6 +178,13 @@ test('hosted display labels omit explicit request wrappers and boundary delegati
     ['You pick the look.', 'Hosted'],
     ['DUMMY', 'Hosted'],
     ['DUMMY 흰 고양이 복서', '흰 고양이 복서'],
+    ['알아서 만들어줘 흰 고양이 복서', '흰 고양이 복서'],
+    ['그냥 만들어줘 흰 고양이 복서', '흰 고양이 복서'],
+    ['just make it: white cat boxer', 'white cat boxer'],
+    ['Just make it: white cat boxer', 'white cat boxer'],
+    ['알아서 빠른 복서', '알아서 빠른 복서'],
+    ['그냥 만들어줘', 'Hosted'],
+    ['just make it', 'Hosted'],
   ];
   const placeholderText = pack.text;
   for (const [description, label] of cases) {

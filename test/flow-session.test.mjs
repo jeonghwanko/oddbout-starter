@@ -160,7 +160,12 @@ test('advertised schemas and runtime both require creation keys, but not existin
     ['prepare_fighter_registration', { manifestPath: '/unused' }],
     ['request_hosted_fighter', request],
   ]) {
-    assert.equal((await client.callTool({ name, arguments: args })).isError, true);
+    const refused = await client.callTool({ name, arguments: args });
+    assert.equal(refused.isError, true);
+    const text = JSON.stringify(refused);
+    assert.match(text, /ODDBOUT-DUMMY/);
+    assert.match(text, /idempotency-key-required/);
+    assert.match(text, /production: false/);
   }
   assert.equal((await call('get_hosted_fighter')).jobs.length, 0);
   const created = await call('request_hosted_fighter', { ...request, idempotencyKey: randomUUID() });

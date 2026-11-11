@@ -20,6 +20,7 @@ import { pathWithoutLinks, relativeParts, renameRetrying } from '../plugins/ai-f
 import { defaultSessionPath } from './login.mjs';
 import { createDummyClient } from '../tools/flow/client.mjs';
 import { assertDummyBase, DUMMY_LABEL, manifestSealed, sidecarSealed, stamp } from '../tools/flow/seal.mjs';
+import { agentReply } from './cli-reply.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const KEY_FILE = '.oddbout-registration.json';
@@ -253,10 +254,30 @@ async function rememberSubmission(recordPath, key, submissionId) {
   }
 }
 
+/** @param {string[]} argv */
+function loopbackOrigin(argv) {
+  const index = argv.indexOf('--dummy');
+  if (index < 0) return undefined;
+  const value = argv[index + 1];
+  if (typeof value !== 'string' || value.startsWith('--')) return undefined;
+  try {
+    return assertDummyBase(value).origin;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * @param {Parameters<typeof runRegisterBody>[0]} [options]
+ */
+export async function runRegister(options = {}) {
+  return agentReply(await runRegisterBody(options), { dummyOrigin: loopbackOrigin(options.argv ?? process.argv.slice(2)) });
+}
+
 /**
  * @param {{ argv?: string[], env?: NodeJS.ProcessEnv, connect?: (sessionPath: string) => Promise<Client>, wait?: (ms: number) => Promise<unknown> }} [options]
  */
-export async function runRegister({
+async function runRegisterBody({
   argv = process.argv.slice(2),
   env = process.env,
   connect = createRemoteClient,
@@ -314,8 +335,8 @@ export async function runRegister({
       dryRun: true,
       ...summary,
       next: dummyUrl
-        ? 'Dry run only: the package was checked locally and the server was not contacted. --submit with this --dummy URL talks only to that loopback ODDBOUT-DUMMY server.'
-        : 'Dry run only: the package was checked locally and the server was not contacted. Re-run with --submit after the user asks to register.',
+        ? `Dry run only. Nothing was submitted. Submit only to this loopback dummy: npm run fighter:register -- --dir <package> --dummy ${dummyUrl.origin} --submit`
+        : 'Dry run only. Nothing was submitted. Add --submit after the user asks to register, reusing this idempotency key.',
     };
   }
   const sessionPath = typeof flags.session === 'string' ? flags.session : env.AI_FIGHTER_CLIENT_CONFIG || defaultSessionPath();
@@ -402,7 +423,11 @@ export async function runRegister({
     idempotencyKeyPath: stored.recordPath,
     ...(warnings.length ? { warnings } : {}),
     ...(finished
-      ? {}
+      ? {
+          next: dummyUrl
+            ? `Submission finished on the loopback dummy. Retry the same bytes with this idempotency key: npm run fighter:register -- --dir <package> --dummy ${dummyUrl.origin} --submit`
+            : 'Submission finished. Retry the same bytes with this idempotency key.',
+        }
       : { next: 'Validation did not finish in time. Poll the same submission again. Reuse this idempotency key; do not mint a new one for the same bytes.' }),
   };
 }
@@ -449,7 +474,7 @@ if (isEntry()) {
       const code = error instanceof Error ? error.message : String(error);
       const errors = /** @type {any} */ (error)?.errors;
       const hint = HINTS[code] ?? HINTS[code.split(':')[0]] ?? (code.startsWith('missing-value') || code.startsWith('invalid-') ? USAGE : undefined);
-      console.log(JSON.stringify({ ok: false, code, ...(errors ? { errors } : {}), ...(hint ? { hint } : {}) }, null, 2));
+      console.log(JSON.stringify(agentReply({ ok: false, code, ...(errors ? { errors } : {}), ...(hint ? { hint } : {}) }), null, 2));
       process.exitCode = 1;
     },
   );

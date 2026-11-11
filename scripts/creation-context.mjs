@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { writeCliJson } from '../dots.mjs';
 import { fetchCreationContext, reviewCreationProgress } from '../mcp/creation-context.mjs';
 import { fileContextRequest, parseContextFileArgs } from './creation-context-file.mjs';
+import { agentReply } from './cli-reply.mjs';
 
 /** @param {string[]} argv */
 export async function main(argv) {
@@ -22,7 +23,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   } catch (/** @type {any} */ error) {
     process.exitCode = 1;
     try {
-      await writeCliJson(2, { ok: false, code: /^[a-z][a-z-]+$/.test(error.message) ? error.message : 'creation-context-command-failed' });
+      const code = /^[a-z][a-z-]+$/.test(error.message) ? error.message : 'creation-context-command-failed';
+      await writeCliJson(
+        2,
+        agentReply({ ok: false, code, hint: 'Read the code and correct the input. Do not start a generation or registration from this error.' }),
+      );
     } catch {
       /* Preserve failure when stderr cannot deliver an error. */
     }

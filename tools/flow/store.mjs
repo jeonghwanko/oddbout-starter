@@ -29,10 +29,24 @@ const DELEGATION = String.raw`(?:(?:외형|외모)\s*(?:선택)?(?:까지|은|�
 const DELEGATION_PREFIX = new RegExp(`^${DELEGATION}(?:\\s*[,.;:!?。！？]\\s*|$)`, 'i');
 const DELEGATION_SUFFIX = new RegExp(`(?:^|\\s*[,.;:!?。！？]\\s*)${DELEGATION}$`, 'i');
 const trimLabel = (/** @type {string} */ text) => text.replace(/^[\s,.;:!?。！？]+|[\s,.;:!?。！？]+$/g, '');
+// Leading request wrappers only. A word that is part of the character stays, including "알아서" without "만들어줘".
+const LEADING_JUST = /^just\s+make\s+it\s*:\s+/i;
+const LEADING_KO = /^(?:(?:그냥|알아서)\s+)?만들어\s*줘(?:요)?\s*[:.!]?\s+/u;
+const ONLY_JUST = /^just\s+make\s+it\s*:?\s*$/i;
+const ONLY_KO = /^(?:(?:그냥|알아서)\s+)?만들어\s*줘(?:요)?\s*[:.!]?\s*$/u;
 
 /** @param {string} description */
 function hostedNameLabel(description) {
-  const subject = trimLabel(description).replace(DELEGATION_PREFIX, '').replace(DELEGATION_SUFFIX, '');
+  let subject = trimLabel(trimLabel(description).replace(DELEGATION_PREFIX, '').replace(DELEGATION_SUFFIX, ''));
+  for (let i = 0; i < 3; i++) {
+    if (ONLY_JUST.test(subject) || ONLY_KO.test(subject)) {
+      subject = '';
+      break;
+    }
+    const next = trimLabel(subject.replace(LEADING_JUST, '').replace(LEADING_KO, ''));
+    if (next === subject) break;
+    subject = next;
+  }
   return (
     trimLabel(
       trimLabel(subject)
