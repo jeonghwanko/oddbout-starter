@@ -297,8 +297,12 @@ export function createCreationStore(root, { contextRequest, validatePackage = ma
     state.updatedAt = new Date().toISOString();
     await atomicJson(await fileFor(id, 'creation-session.json'), state);
     // The markdown is a resume summary. A failed write leaves the session record, which is the authority.
-    await writeFile(await fileFor(id, 'BRIEF.md'), briefDocument(state), { mode: 0o600 });
-    await writeFile(await fileFor(id, 'PROGRESS.md'), progressDocument(state), { mode: 0o600 });
+    try {
+      await writeFile(await fileFor(id, 'BRIEF.md'), briefDocument(state), { mode: 0o600 });
+      await writeFile(await fileFor(id, 'PROGRESS.md'), progressDocument(state), { mode: 0o600 });
+    } catch {
+      // The change is already saved; a caller that saw an error here would retry it against a moved revision.
+    }
   }
   /** @param {Session} state @param {string} item */
   function itemGroup(state, item) {

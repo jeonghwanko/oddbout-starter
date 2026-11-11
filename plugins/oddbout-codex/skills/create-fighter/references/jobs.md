@@ -4,7 +4,7 @@ The skill body's hard rules win if this page disagrees. An unknown generation ou
 
 ## Say the stage, decide from the pictures
 
-While a long job runs, say the stage, what is left, and what is blocked, in a sentence or two. That narration is not the preview. Appearance and motion approval still require the actual images. `get_creation_job` is observation: `executedByThisCall` and `cancelledByThisCall` are false. Stopping the reader does not cancel the runner. Cancel only with `cancel_creation_job`, and only for the reason that tool allows. Read a hosted job with `get_hosted_fighter`. That read does not start a job, advance a motion, or register. `advance_hosted_fighter` is the separate confirmed step.
+While a long job runs, say the stage, what is left, and what is blocked, in a sentence or two. That narration is not the preview. Appearance and motion approval still require the actual images. `get_creation_job` is observation: `executedByThisCall` and `cancelledByThisCall` are false. Stopping the reader does not cancel the runner. Cancel only with `cancel_creation_job`, and only for the reason that tool allows. Read a hosted job with `get_hosted_fighter`. That read does not start a job, advance a motion, or register; ODDBOUT's worker does that on its own.
 
 ## Plan before generation
 
@@ -36,5 +36,5 @@ Do not reuse by sending the same registration `idempotencyKey` as a new package,
 
 A long job writes `output/<sessionId>-work/jobs/<jobId>.checkpoint.json` whenever its record is saved. `read_creation_checkpoint` and `resume_creation_job` only read. `executed` stays false. The job record is the authority: a checkpoint whose schema, job id, session, status or `registrationKey` disagrees is refused with `checkpoint-mismatch`, and the file's key is not used. Resume does not mint a key and does not submit again.
 
-For a hosted job, `get_hosted_fighter` only reads, including when `observe: true` or `waitSeconds` is set. It does not advance a motion or register. `advance_hosted_fighter` is the mutating step. The same `idempotencyKey` returns the same job.
+For a hosted job, `get_hosted_fighter` only reads, including when `waitSeconds` is set. It does not advance a motion or register; ODDBOUT's worker does. In the dummy harness the read carries `observe: true` and `advance_hosted_fighter` is the confirmed mutating step; the live tools have no advance tool. The same `idempotencyKey` returns the same job.
 

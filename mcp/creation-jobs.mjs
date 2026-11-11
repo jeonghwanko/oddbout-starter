@@ -106,6 +106,8 @@ export function createJobStore(store) {
   async function write(id, job) {
     job.updatedAt = new Date().toISOString();
     await atomicJson(await jobFile(id, job.jobId), job);
+    // The job record is saved and is the authority. A checkpoint that failed to write stays stale, and resume refuses it
+    // (checkpoint-mismatch) instead of this write failing after the job already moved.
     await atomicJson(await store.fileFor(id, `jobs/${job.jobId}.checkpoint.json`), {
       schema: 'oddbout.checkpoint/1',
       sessionId: job.sessionId,
@@ -116,7 +118,7 @@ export function createJobStore(store) {
       registrationKey: job.registrationKey ?? job.plan?.registrationKey ?? null,
       executedByThisCall: false,
       cancelledByThisCall: false,
-    });
+    }).catch(() => {});
     return job;
   }
   /** Every job record. One that cannot be read is listed as unreadable instead of failing the list, so inspection still works.
