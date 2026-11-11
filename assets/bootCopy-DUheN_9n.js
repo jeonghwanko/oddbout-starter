@@ -1,0 +1,1 @@
+var e={en:{home:`Homepage`,loading:`Preparing the game`,slow:`This is taking longer than usual. You can try opening the game again.`,retry:`Open again`},ko:{home:`홈페이지`,loading:`게임을 준비 중입니다`,slow:`평소보다 오래 걸리고 있어요. 게임을 다시 열 수 있어요.`,retry:`다시 열기`},ja:{home:`ホームページ`,loading:`ゲームを準備しています`,slow:`いつもより時間がかかっています。ゲームをもう一度開くことができます。`,retry:`もう一度開く`}};export{e as t};
