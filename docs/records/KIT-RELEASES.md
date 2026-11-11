@@ -4,6 +4,34 @@ Earlier source-kit releases, moved here from [PLUGIN-DISTRIBUTION.md](../PLUGIN-
 release and the distribution procedures. Each entry records that release as published and verified at the time; it is not
 current procedure. Published release paths stay immutable.
 
+**Previous source-kit release: 0.6.20** (2026-11-11 KST: local registration and retry recovery).
+
+The local registration CLI defaults to an offline dry run. Explicit `--submit` uploads only after full file/contract checks.
+Saved attempt history preserves keys across restored package versions and fighter targets; malformed options, symlinked assets and
+non-regular files are refused. Local CLI registration is a user-selected route, not an automatic response to a failed cloud connection.
+Landmark warnings stay optional and their file reads stay bounded. The engine pin is unchanged.
+
+- [Download the 0.6.20 ZIP](https://oddbout.com/creator-kit/0.6.20/faf1a3963656145d7b41b5de057b8bb9441bfbb04619ed684ef499da847d9cee/oddbout-0.6.20.zip)
+- [Release manifest](https://oddbout.com/creator-kit/0.6.20/faf1a3963656145d7b41b5de057b8bb9441bfbb04619ed684ef499da847d9cee/release.json)
+- [Download helper](https://oddbout.com/creator-kit/0.6.20/faf1a3963656145d7b41b5de057b8bb9441bfbb04619ed684ef499da847d9cee/fetch-creator-kit.py)
+
+| Measured artifact | Value |
+| --- | --- |
+| ZIP size | 4,306,692 bytes |
+| ZIP SHA-256 | `81319559a852d2bb2635f1555ac84403a68e9d470fcd92ac5f2c934ce134393e` |
+| Release manifest SHA-256 | `48f1f7eeb5cfd722434f51c9afa92dd85eb1118fd041cf75e9eb2556dcf708d9` |
+| Runtime manifest SHA-256 | `b97ba0273896c7aa0c99189bfc7201164967ba10fc07ed54e7280fe3ada4fb4a` |
+| Helper SHA-256 | `b66c31ff833816dfa74c90d9155359d3fdd484dff8c12759e48addde01707592` |
+| Archive build source | `c71565ac1a520c5a70ea47a20bf56905d0b31829` |
+| sprite-gen pin | `767f3ec7c62f6502eaede4c4bb86e6a1b289d78c` |
+
+The source ZIP was built from committed files and inspected by the trusted helper. Related CLI, worker, documentation and release
+checks passed locally. Publication must use the additive publisher below and verify the three remote files against these hashes;
+a local build alone does not establish URL availability. Existing immutable releases and site files must remain intact.
+New Windows/Dots installation, generation login, generation and fighter submission were not exercised for this release.
+`host/pins.json` selects this measured archive for the next host package release; it does not update an already installed host.
+
+
 **Previous source-kit release: 0.6.19** (2026-11-07 KST: sprite-gen 767f3ec — the resident RIFE binary).
 
 The sprite-gen pin moves from `e44065a` to `767f3ec`: `rife install` puts RIFE's resident binary (`rife-ncnn-vulkan-serve`, release
