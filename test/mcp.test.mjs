@@ -41,6 +41,8 @@ test('initialize, tools/list and tools/call cover authoring end to end', async (
         'cancel_creation_job',
         'resolve_creation_job',
         'check_creation_readiness',
+        'preflight_creation',
+        'plan_creation',
         'inspect_fighter_packaging',
         'pack_fighter_package',
         'get_creation_environment',
@@ -99,6 +101,7 @@ test('no configured root means no filesystem tool', async () => {
     assert.deepEqual((await client.listTools()).tools.map(t => t.name).sort(), [
       'check_creation_readiness',
       'get_fighter_spec',
+      'preflight_creation',
       'review_creation_progress',
       'validate_fighter_manifest',
     ]);

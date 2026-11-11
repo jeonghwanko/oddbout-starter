@@ -61,6 +61,8 @@
     "creation:delivery": "node scripts/check-creation-delivery.mjs",
     "creation:run": "node scripts/run-creation-job.mjs",
     "creation:tool": "node scripts/creation-tool.mjs",
+    "creation:preflight": "node scripts/creation-preflight.mjs",
+    "creation:plan": "node scripts/creation-plan.mjs",
     "dots:doctor": "node scripts/dots-workspace.mjs doctor",
     "dots:bootstrap": "node scripts/dots-workspace.mjs bootstrap",
     "dots:resume": "node scripts/dots-workspace.mjs resume",
