@@ -43,6 +43,8 @@ test('initialize, tools/list and tools/call cover authoring end to end', async (
         'check_creation_readiness',
         'preflight_creation',
         'plan_creation',
+        'read_creation_checkpoint',
+        'resume_creation_job',
         'inspect_fighter_packaging',
         'pack_fighter_package',
         'get_creation_environment',

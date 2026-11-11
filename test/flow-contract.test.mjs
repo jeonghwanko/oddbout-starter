@@ -77,8 +77,9 @@ test('the shipped stdio MCP completes hosted creation using real choose_look arg
     description: 'a teal geometric boxer',
     language: 'en',
     idempotencyKey: randomUUID(),
+    confirmed: true,
   });
-  await call('request_hosted_fighter', { step: 'choose_look', jobId: requested.job.id, choose: 'a' });
+  await call('request_hosted_fighter', { step: 'choose_look', jobId: requested.job.id, choose: 'a', confirmed: true });
   let current;
   for (let i = 0; i < 12; i++) current = await call('get_hosted_fighter', { jobId: requested.job.id });
   assert.equal(current.statusSummary.completed, true);

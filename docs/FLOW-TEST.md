@@ -83,7 +83,7 @@ CLI의 제출도 곧바로 이 MCP의 조회에 나타난다. stdin 종료나 SI
 | `hosted-delegated` | 외형 선택까지 명시적으로 위임한 새 선수 | `delegate: true`가 외형 A를 고르고 `choose_look` 없이 11개 동작과 등록까지 진행 |
 | `hosted-capacity` | (진단) 시작 후 등록 전에 한도가 참 | `needs_review`로 멈추고 동작 11개 보존. 용량 복구 후 같은 작업 등록 재시도 |
 | `hosted-new` | ODDBOUT에 맡기는 새 선수 | 외형 둘, 동작 11개와 정면·표정 세트 등록. 양수 wait로 한 호출 안에서 진행. 더미 토큰 차감 0. 잔액 0이면 `generation-quota` |
-| `workspace-new` | 작업 공간 커넥터로 등록 | 자리 표시를 검증하고 올리고, 프로필 세트(정면·표정)까지. `enter_fighter`는 `publicPlay: false` |
+| `workspace-new` | 작업 공간 커넥터로 등록 | 자리 표시를 검증하고 올리고, 프로필 세트(정면·표정)까지. `enter_fighter`는 `permission-forbidden`이며 `publicPlay`는 false |
 | `cli-register` | 사용자가 로컬 CLI 등록을 명시적으로 선택한 경우의 `fighter:register` | `--dummy --submit`가 등록하고, 같은 키 재시도는 같은 제출 |
 | `revise` | 같은 fighter id로 개정 | `--fighter`로 새 제출. 이전 제출은 그대로. 같은 바이트는 `fighter-unchanged` |
 | `revise-mcp` | 커넥터에서 패키지 생성·개정 | `create_dummy_package` → 준비·업로드·제출. 기존 id와 이전 제출 보존, `super: dash` 반영 |

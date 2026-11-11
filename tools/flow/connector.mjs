@@ -4,7 +4,8 @@ import { realpath, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import { buildDummyPackage } from './package-builder.mjs';
-import { DUMMY_LABEL } from './seal.mjs';
+import { DUMMY_LABEL, stamp } from './seal.mjs';
+import { decidePermission } from '../../mcp/tool-permissions.mjs';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 /** @param {string} code */
@@ -45,6 +46,17 @@ export function createConnector(store, { roots, packageRoot }) {
      * @param {any} args
      */
     async call(name, args = {}) {
+      const decision = decidePermission(name, args);
+      if (!decision.allow) {
+        return stamp({
+          ok: false,
+          code: decision.code,
+          permission: decision.tier,
+          executed: false,
+          tool: name,
+          bypassIgnored: decision.bypassIgnored,
+        });
+      }
       if (name === 'create_dummy_package') {
         if (!packageRoot) return stampUnavailable('dummy-package-builder-unavailable');
         return buildDummyPackage(store, packageRoot, args);
@@ -106,7 +118,7 @@ export function createConnector(store, { roots, packageRoot }) {
         return stampUnavailable(step);
       }
       if (name === 'get_hosted_fighter')
-        return (await store.waitHosted({ jobId: args.jobId, idempotencyKey: args.idempotencyKey, waitSeconds: args.waitSeconds })).body;
+        return (await store.waitHosted({ jobId: args.jobId, idempotencyKey: args.idempotencyKey, waitSeconds: args.waitSeconds, observe: args.observe })).body;
       if (name === 'enter_fighter') return store.enter(args.fighterId, args).body;
       return {
         ok: false,
@@ -152,6 +164,7 @@ export const DUMMY_TOOLS = [
       language: z.enum(['ko', 'en']).optional(),
       style: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
       moves: z.object({ combo: MOVE.optional(), slam: MOVE.optional(), dash: MOVE.optional(), block: MOVE.optional() }).strict().optional(),
+      confirmed: z.boolean().optional(),
     },
   },
   { name: 'get_profile', title: 'ODDBOUT-DUMMY account', description: banner + 'Read the dummy account. Nickname is ODDBOUT.', shape: {} },
@@ -183,7 +196,13 @@ export const DUMMY_TOOLS = [
     name: 'prepare_fighter_registration',
     title: 'ODDBOUT-DUMMY prepare',
     description: banner + 'kind package or profile_set. manifestPath is an absolute path inside the dummy roots.',
-    shape: { kind: z.enum(['package', 'profile_set']).optional(), manifestPath: z.string(), idempotencyKey: REQUIRED_KEY, fighterId: UUID.optional() },
+    shape: {
+      kind: z.enum(['package', 'profile_set']).optional(),
+      manifestPath: z.string(),
+      idempotencyKey: REQUIRED_KEY,
+      fighterId: UUID.optional(),
+      confirmed: z.boolean().optional(),
+    },
   },
   {
     name: 'upload_fighter_asset',
@@ -195,6 +214,7 @@ export const DUMMY_TOOLS = [
       profileSetId: UUID.optional(),
       assetId: z.string().optional(),
       filePath: z.string(),
+      confirmed: z.boolean().optional(),
     },
   },
   {
@@ -206,13 +226,20 @@ export const DUMMY_TOOLS = [
       submissionId: UUID.optional(),
       profileSetId: UUID.optional(),
       jobId: UUID.optional(),
+      confirmed: z.boolean().optional(),
     },
   },
   {
     name: 'update_fighter',
     title: 'ODDBOUT-DUMMY style',
     description: banner + 'kind style stores a fighting style on the dummy fighter. It does not draw art.',
-    shape: { kind: z.enum(['style']), fighterId: UUID, style: z.union([z.record(z.string(), z.unknown()), z.null()]), idempotencyKey: REQUIRED_KEY },
+    shape: {
+      kind: z.enum(['style']),
+      fighterId: UUID,
+      style: z.union([z.record(z.string(), z.unknown()), z.null()]),
+      idempotencyKey: REQUIRED_KEY,
+      confirmed: z.boolean().optional(),
+    },
   },
   {
     name: 'request_hosted_fighter',
@@ -230,6 +257,7 @@ export const DUMMY_TOOLS = [
       choose: z.enum(['a', 'b']).optional(),
       clip: z.string().optional(),
       note: z.string().optional(),
+      confirmed: z.boolean().optional(),
     },
   },
   {
@@ -237,14 +265,30 @@ export const DUMMY_TOOLS = [
     title: 'ODDBOUT-DUMMY hosted status',
     description:
       banner +
-      'Read a hosted job. waitSeconds (0–30) runs bounded simulated worker ticks and returns at registration, a required user action, or the deadline; waitedMs measures actual elapsed time. Zero wait advances at most one tick.',
-    shape: { jobId: UUID.optional(), idempotencyKey: UUID.optional(), waitSeconds: z.number().int().min(0).max(30).optional() },
+      'Read a hosted job. observe true returns the checkpoint and does not advance or register. waitSeconds (0–30) without observe runs bounded simulated worker ticks. waitedMs measures actual elapsed time.',
+    shape: {
+      jobId: UUID.optional(),
+      idempotencyKey: UUID.optional(),
+      waitSeconds: z.number().int().min(0).max(30).optional(),
+      observe: z.boolean().optional(),
+    },
   },
   {
     name: 'enter_fighter',
     title: 'ODDBOUT-DUMMY enter',
-    description: banner + 'Records a local flag only. publicPlay stays false.',
-    shape: { fighterId: UUID, expectedManifestSha256: z.string().regex(/^[a-f0-9]{64}$/), reviewedClips: z.array(z.string()) },
+    description: banner + 'Forbidden by the tool permission tier. Entry is not performed.',
+    shape: {
+      fighterId: UUID,
+      expectedManifestSha256: z.string().regex(/^[a-f0-9]{64}$/),
+      reviewedClips: z.array(z.string()),
+      confirmed: z.boolean().optional(),
+    },
+  },
+  {
+    name: 'delete_fighter',
+    title: 'ODDBOUT-DUMMY delete',
+    description: banner + 'Forbidden. This dummy does not delete a fighter.',
+    shape: { fighterId: UUID.optional(), confirmed: z.boolean().optional(), yolo: z.boolean().optional() },
   },
 ];
 

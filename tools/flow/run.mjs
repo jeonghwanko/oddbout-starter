@@ -111,7 +111,14 @@ async function cliSubmit(dir, url, extra = []) {
 }
 
 /** @param {ReturnType<typeof createDummyStore>} store @param {string[]} roots */
-const connectorFor = (store, roots) => createConnector(store, { roots, packageRoot: roots[0] });
+const connectorFor = (store, roots) => {
+  const raw = createConnector(store, { roots, packageRoot: roots[0] });
+  // The scripted step already stands for the user's confirmation of that step. Forbidden tools still refuse.
+  return {
+    /** @param {string} name @param {Record<string, unknown>} [args] */
+    call: (name, args) => raw.call(name, { ...(args ?? {}), confirmed: true }),
+  };
+};
 
 /**
  * @param {any} connector
@@ -448,9 +455,9 @@ export async function runFlows({ scenario } = {}) {
         );
         probe(
           state,
-          'enter_fighter stays off the public roster',
-          `publicPlay ${entered.publicPlay}, productionRoster ${entered.productionRoster}`,
-          entered.ok && entered.publicPlay === false && entered.productionRoster === false,
+          'enter_fighter is forbidden',
+          `code ${entered.code}, executed ${entered.executed}, publicPlay ${fighter.fighter?.publicPlay}`,
+          entered.ok === false && entered.code === 'permission-forbidden' && entered.executed === false && fighter.fighter?.publicPlay === false,
         );
       },
       async 'cli-register'(state) {
@@ -921,6 +928,61 @@ export async function runFlows({ scenario } = {}) {
           'dry run against a loopback URL does not connect',
           `dryRun ${dry.dryRun}, mode ${dry.mode}, connects ${calls}`,
           dry.ok === true && dry.dryRun === true && dry.mode === 'dummy' && calls === 0,
+        );
+        const rawStore = createDummyStore();
+        const raw = createConnector(rawStore, { roots: [work], packageRoot: work });
+        const unconfirmed = await raw.call('prepare_fighter_registration', {
+          manifestPath: drill.manifestPath,
+          idempotencyKey: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa13',
+        });
+        probe(
+          state,
+          'mutate tool without confirmation',
+          `code ${unconfirmed.code}, executed ${unconfirmed.executed}`,
+          unconfirmed.ok === false && unconfirmed.code === 'permission-required' && unconfirmed.executed === false,
+        );
+        const blockedEntry = await raw.call('enter_fighter', {
+          fighterId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa14',
+          expectedManifestSha256: 'a'.repeat(64),
+          reviewedClips: rawStore.motions,
+          confirmed: true,
+          yolo: true,
+        });
+        const blockedDelete = await raw.call('delete_fighter', { confirmed: true, yolo: true });
+        probe(
+          state,
+          'forbidden tools stay blocked',
+          `enter ${blockedEntry.code}, delete ${blockedDelete.code}`,
+          blockedEntry.code === 'permission-forbidden' &&
+            blockedEntry.executed === false &&
+            blockedDelete.code === 'permission-forbidden' &&
+            blockedDelete.executed === false &&
+            blockedEntry.bypassIgnored === true,
+        );
+        const hostedKey = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa15';
+        const created = await raw.call('request_hosted_fighter', {
+          description: '흰 고양이 복서',
+          language: 'ko',
+          idempotencyKey: hostedKey,
+          confirmed: true,
+        });
+        const seen = await raw.call('get_hosted_fighter', { jobId: created.job.id, observe: true });
+        const replay = await raw.call('request_hosted_fighter', {
+          description: '흰 고양이 복서',
+          language: 'ko',
+          idempotencyKey: hostedKey,
+          confirmed: true,
+        });
+        probe(
+          state,
+          'observe does not advance and the key is reused',
+          `drafts ${seen.job?.drafts?.length}, replay ${replay.job?.id === created.job?.id}, executed ${seen.executed}`,
+          created.ok === true &&
+            seen.executed === false &&
+            seen.job.drafts.length === created.job.drafts.length &&
+            replay.job.id === created.job.id &&
+            replay.idempotencyKeyReused === true &&
+            replay.executed === false,
         );
       },
     };

@@ -3,6 +3,7 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { createConnector, DUMMY_TOOLS, dummyToolSchema } from './connector.mjs';
 import { DUMMY_LABEL } from './seal.mjs';
+import { permissionFor } from '../../mcp/tool-permissions.mjs';
 
 /**
  * @param {any} store
@@ -19,7 +20,12 @@ export function createDummyMcp(store, options) {
   for (const tool of DUMMY_TOOLS) {
     server.registerTool(
       tool.name,
-      { title: tool.title, description: tool.description, inputSchema: /** @type {any} */ (dummyToolSchema(tool)) },
+      {
+        title: tool.title,
+        description: tool.description,
+        inputSchema: /** @type {any} */ (dummyToolSchema(tool)),
+        _meta: { oddbout: { permission: permissionFor(tool.name) } },
+      },
       async (/** @type {any} */ args) => {
         const body = await connector.call(tool.name, args);
         return {
