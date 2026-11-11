@@ -207,6 +207,8 @@ and the live AI Fighter spec (`get_fighter_spec`) before packaging.
   an optional post-normalization density cap. Preserve original files, frame identities,
   timing and marks; `pixelScale` preserves its apparent game size. File/byte limits stay required. Never regenerate.
 
+- `examples/overtime-king` is a registered fighter kept as a format example (artwork CC BY 4.0, credit ODDBOUT). Never submit,
+  rename or restyle it as a user's character, and never offer it in place of a requested generation.
 - `examples/sparring-bot` and `npm run example` are geometric test fixtures. They do not satisfy a request for a
   generated character; do not rename or restyle that fixture and call it sprite-gen output.
 - Build the package with `npm run sprite -- game-pack`, then `npm run fighter:pack -- <plan.json>` (see
@@ -245,6 +247,7 @@ and the live AI Fighter spec (`get_fighter_spec`) before packaging.
 | `vendor/sprite-gen` | Pinned generation engine, a Git submodule ([sprite-gen](#sprite-gen)) |
 | `website/`, `web/` | Creator site sources (`npm run site:build`) |
 | `examples/sparring-bot` | Geometric test fixture, never a generated character |
+| `examples/overtime-king` | A real registered package to read, with the format explained. Its artwork has its own licence |
 | `docs/` | Guides and records ([docs/README.md](docs/README.md)) |
 
 ### Commands
