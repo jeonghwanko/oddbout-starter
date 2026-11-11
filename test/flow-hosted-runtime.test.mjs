@@ -163,6 +163,55 @@ test('appearance, legacy review and registration capacity return promptly withou
   assert.equal(store.registerHosted(second).body.job.submission.id, recovered.job.submission.id);
 });
 
+test('hosted display labels omit explicit request wrappers and boundary delegation while preserving the prompt', () => {
+  const cases = [
+    ['외형 선택까지 맡길게. 흰 고양이 복서를 만들어줘', '흰 고양이 복서'],
+    ['흰 고양이 복서를 만들어줘. 외형 선택까지 맡길게.', '흰 고양이 복서'],
+    ['외모는 네가 골라줘, 흰 고양이 복서를 만들어주세요!', '흰 고양이 복서'],
+    ['You choose the appearance. Please create a white cat boxer.', 'white cat boxer'],
+    ["Make me a white cat boxer; I'll leave the look choice to you.", 'white cat boxer'],
+    ['Generate a white cat boxer, please!', 'white cat boxer'],
+    ['흰 고양이 복서', '흰 고양이 복서'],
+    ['Createbot boxer', 'Createbot boxer'],
+    ['외형 선택까지 맡길게 고양이', '외형 선택까지 맡길게 고양이'],
+    ['외형 선택까지 맡길게. 만들어줘', 'Hosted'],
+    ['You pick the look.', 'Hosted'],
+    ['DUMMY', 'Hosted'],
+    ['DUMMY 흰 고양이 복서', '흰 고양이 복서'],
+  ];
+  const placeholderText = pack.text;
+  for (const [description, label] of cases) {
+    const store = createStore();
+    const created = request(store, { description });
+    assert.equal(created.status, 200, description);
+    for (let i = 0; i <= store.motions.length; i++) store.getHosted({ jobId: created.body.job.id });
+    const completed = store.getHosted({ jobId: created.body.job.id }).body;
+    assert.equal(completed.statusSummary.completed, true, description);
+    assert.equal(completed.job.description, description);
+    assert.equal(store.fighter(completed.job.submission.fighterId).body.fighter.name, `DUMMY ${label}`, description);
+  }
+  assert.equal(pack.text, placeholderText);
+});
+
+test('hosted display labels respect UTF-16 bounds without splitting a surrogate pair', () => {
+  for (const [description, expected] of [
+    ['x'.repeat(33) + '🐱 tail', 'DUMMY ' + 'x'.repeat(33)],
+    ['🐱'.repeat(20), 'DUMMY ' + '🐱'.repeat(17)],
+    ['  \n\t ', 'DUMMY Hosted'],
+  ]) {
+    const store = createStore();
+    const created = request(store, { description });
+    assert.equal(created.status, 200);
+    for (let i = 0; i <= store.motions.length; i++) store.getHosted({ jobId: created.body.job.id });
+    const completed = store.getHosted({ jobId: created.body.job.id }).body;
+    assert.equal(completed.statusSummary.completed, true);
+    const name = store.fighter(completed.job.submission.fighterId).body.fighter.name;
+    assert.equal(name, expected);
+    assert.ok(name.length <= 40);
+    assert.equal(name.isWellFormed(), true);
+  }
+});
+
 test('description labels are bounded and the empty MCP fixture includes a real profile set', async () => {
   const { store } = await prepareDummyFixture('empty');
   const created = request(store, { description: '  긴 이름 🐱 '.repeat(35) });
