@@ -284,3 +284,186 @@ test('private admission limits concurrent unfinished requests and UTC daily spen
     await f.sql.close();
   }
 });
+
+test('official practice works with no registered fighters, trusts only the adapter and keeps private history', async () => {
+  const f = await fixture({ official: true, includeRegistered: false });
+  try {
+    const { token } = await f.exchange();
+    const roster = await (await f.request('fighters', { token })).json();
+    assert.equal(roster.officialEngine, 'official-test-v1');
+    assert.deepEqual(
+      roster.fighters,
+      f.officialPractice.fighters.map(fighter => ({ ...fighter, mode: 'official', owned: false })),
+    );
+    const body = f.officialBody();
+    for (const edit of [
+      { mode: 'mixed' },
+      { mode: null },
+      { mode: 'registered' },
+      { a: crypto.randomUUID() },
+      { b: body.a },
+      { a: '../academy-one' },
+      { fighters: f.officialPractice.fighters },
+      { name: 'forged' },
+      { manifest: {} },
+      { result: RESULT },
+      { seed: 1 },
+    ])
+      assert.equal((await f.request('matches', { token, body: { ...body, ...edit } })).status, 422);
+    for (const edit of [{ a: 'missing-official' }, { hashes: ['0'.repeat(64), body.hashes[1]] }, { engine: 'test-v1' }])
+      assert.equal((await f.request('matches', { token, body: { ...body, ...edit } })).status, 409);
+    assert.equal(f.officialCalls(), 0);
+    const response = await f.request('matches', { token, body });
+    assert.equal(response.status, 200);
+    const { match } = await response.json();
+    assert.equal(match.mode, 'official');
+    assert.deepEqual(match.result, RESULT);
+    assert.equal(f.officialCalls(), 1);
+    assert.equal(f.calls(), 0);
+    assert.equal((await f.request('matches', { token, body })).status, 200);
+    assert.equal(f.officialCalls(), 1);
+    const history = await (await f.request('matches', { token })).json();
+    assert.deepEqual(history.matches, [match]);
+    const other = await f.exchange(await f.launch(f.identities[1]));
+    assert.equal((await f.request(`matches/${match.id}`, { token: other.token })).status, 404);
+    assert.deepEqual((await (await f.request('matches', { token: other.token })).json()).matches, []);
+    assert.equal((await f.request('matches', { token: other.token, body })).status, 200);
+    assert.equal((await f.sql.query('select count(*)::int as n from af_duels')).rows[0].n, 0);
+    for (const role of ['anon', 'authenticated', 'service_role']) {
+      await f.sql.exec(`set role ${role}`);
+      await assert.rejects(
+        f.sql.query('select af_embed_official_admitted($1,$2,$3,$4,$5,$6)', [body.a, body.b, ...body.hashes, body.engine, f.officialAdmission()]),
+        /permission denied/,
+      );
+      await f.sql.exec('reset role');
+    }
+  } finally {
+    await f.sql.close();
+  }
+});
+
+test('official and registered inputs share keys, concurrent reservations and daily budgets', async () => {
+  const f = await fixture({ official: true });
+  try {
+    const { token } = await f.exchange();
+    const tokenHash = await sha256(new TextEncoder().encode(token));
+    const reserve = body =>
+      f.db.rpc('af_embed_reserve_match', {
+        p_token_hash: tokenHash,
+        p_origin: ORIGIN,
+        p_key: body.idempotencyKey,
+        p_a: body.a,
+        p_b: body.b,
+        p_hash_a: body.hashes[0],
+        p_hash_b: body.hashes[1],
+        p_engine: body.engine,
+        p_mode: body.mode ?? 'registered',
+        p_official: body.mode === 'official' ? f.officialAdmission() : null,
+      });
+    const registered = f.matchBody();
+    assert.equal((await f.request('matches', { token, body: registered })).status, 200); // Omitted mode stays registered.
+    const registeredMatch = (await (await f.request('matches', { token })).json()).matches[0];
+    assert.equal(registeredMatch.mode, 'registered');
+    assert.equal((await f.request('matches', { token, body: { ...f.officialBody(), idempotencyKey: registered.idempotencyKey } })).status, 409);
+    const bodies = [f.officialBody(), f.matchBody(), f.officialBody()];
+    const pending = await Promise.all(bodies.map(reserve));
+    assert.ok(pending.every(r => r.data?.id));
+    assert.equal((await reserve(f.officialBody())).error.message, 'embed-budget');
+    assert.equal((await reserve(f.matchBody())).error.message, 'embed-budget');
+    const list = await (await f.request('matches', { token })).json();
+    assert.deepEqual(list.pending.map(p => p.mode).sort(), ['official', 'official', 'registered']);
+    assert.equal((await reserve(bodies[0])).error.message, 'match-busy');
+    const wrongMode = await reserve({ ...f.matchBody(), idempotencyKey: bodies[0].idempotencyKey });
+    assert.equal(wrongMode.error.message, 'idempotency-conflict');
+    for (let attempt = 2; attempt <= 5; attempt++) {
+      await f.sql.query("update af_embed_matches set last_run_at=now()-interval '31 seconds' where id=$1", [pending[0].data.id]);
+      assert.equal((await reserve(bodies[0])).data.run_attempts, attempt);
+    }
+    await f.sql.query("update af_embed_matches set last_run_at=now()-interval '31 seconds' where id=$1", [pending[0].data.id]);
+    assert.equal((await reserve(bodies[0])).error.message, 'embed-budget');
+    // Sixteen official records plus the four prior rows spend the same account day budget.
+    await f.sql.query(
+      `insert into af_embed_matches(owner_id,request_key,a,b,hash_a,hash_b,engine,seed,mode,result,completed_at)
+      select $1,gen_random_uuid(),'academy-one','academy-two',$2,$3,'official-test-v1',1,'official',$4,now() from generate_series(1,16)`,
+      [f.identities[0].owner, ...bodies[0].hashes, RESULT],
+    );
+    await f.sql.query('update af_embed_matches set result=$1,completed_at=now()', [RESULT]);
+    assert.equal((await f.request('matches', { token, body: f.officialBody() })).status, 429);
+    assert.equal((await f.request('matches', { token, body: f.matchBody() })).status, 429);
+    assert.equal((await f.request('matches', { token, body: registered })).status, 200);
+    const other = await f.exchange(await f.launch(f.identities[2]));
+    assert.equal((await f.request('matches', { token: other.token, body: f.officialBody() })).status, 200);
+  } finally {
+    await f.sql.close();
+  }
+});
+
+test('official pending attempts recover with the same seed and completion rechecks consent and trusted hashes', async () => {
+  let fail = true;
+  const f = await fixture({
+    official: true,
+    beforeOfficialRun: () => {
+      if (fail) throw new Error('worker stopped');
+    },
+  });
+  try {
+    const { token } = await f.exchange();
+    const body = f.officialBody();
+    assert.equal((await f.request('matches', { token, body })).status, 503);
+    const pending = (await (await f.request('matches', { token })).json()).pending[0];
+    assert.equal(pending.mode, 'official');
+    assert.equal((await f.request(`matches/${pending.id}`, { token })).status, 202);
+    assert.equal((await f.request('matches', { token, body })).status, 409);
+    const seed = (await f.sql.query('select seed from af_embed_matches where id=$1', [pending.id])).rows[0].seed;
+    const auth = { p_token_hash: await sha256(new TextEncoder().encode(token)), p_origin: ORIGIN };
+    const complete = p_official => f.db.rpc('af_embed_complete_match', { ...auth, p_id: pending.id, p_engine: body.engine, p_result: RESULT, p_official });
+    assert.equal((await complete(null)).error.message, 'engine-mismatch');
+    assert.equal((await complete({ ...f.officialAdmission(), engine: 'forged-v1' })).error.message, 'engine-mismatch');
+    assert.equal((await complete({ engine: body.engine, fighters: [{ id: body.a, manifestSha256: body.hashes[0] }] })).error.message, 'duel-not-approved');
+    await f.sql.query('update auth.oauth_consents set revoked_at=now() where user_id=$1', [f.identities[0].owner]);
+    assert.equal((await complete(f.officialAdmission())).error.message, 'authentication-required');
+    assert.equal((await f.request('matches', { token })).status, 401);
+    await f.sql.query('update auth.oauth_consents set revoked_at=null where user_id=$1', [f.identities[0].owner]);
+    fail = false;
+    await f.sql.query("update af_embed_matches set last_run_at=now()-interval '31 seconds' where id=$1", [pending.id]);
+    const response = await f.request('matches', { token, body });
+    assert.equal(response.status, 200);
+    const { match } = await response.json();
+    assert.equal(match.id, pending.id);
+    assert.equal(match.seed, seed);
+    assert.equal(f.officialCalls(), 2);
+    await f.request('session', { token, method: 'DELETE' });
+    assert.equal((await f.request(`matches/${match.id}`, { token })).status, 401);
+  } finally {
+    await f.sql.close();
+  }
+});
+
+test('combined roster caps at 200, awaits the official adapter and exposes only public official descriptors', async () => {
+  const official = {
+    engine: 'official-test-v1',
+    fighters: ['academy-one', 'academy-two'].map(id => ({ id, name: id, manifestSha256: 'a'.repeat(64), internalPack: 'private-adapter-data' })),
+    simulate: () => RESULT,
+  };
+  const registered = Array.from({ length: 200 }, () => ({ id: crypto.randomUUID(), name: 'Registered', manifestSha256: 'b'.repeat(64), owned: true }));
+  const db = {
+    rpc: async name => {
+      assert.equal(name, 'af_embed_fighters');
+      return { data: registered };
+    },
+  };
+  const handle = createHandler({ db, embed: { enabled: true, gameOrigin: ORIGIN }, officialPractice: Promise.resolve(official) });
+  const response = await handle(
+    new Request('https://api.example/ai-fighter/embed/fighters', {
+      headers: { origin: ORIGIN, authorization: `Bearer afe_${'0'.repeat(64)}` },
+    }),
+  );
+  assert.equal(response.status, 200);
+  const roster = await response.json();
+  assert.equal(roster.fighters.length, 200);
+  assert.equal(roster.fighters.filter(f => f.mode === 'registered').length, 198);
+  assert.deepEqual(
+    roster.fighters.filter(f => f.mode === 'official'),
+    official.fighters.map(({ id, name, manifestSha256 }) => ({ id, name, manifestSha256, mode: 'official', owned: false })),
+  );
+});

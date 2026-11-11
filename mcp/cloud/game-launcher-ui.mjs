@@ -151,8 +151,13 @@ window.addEventListener('message',event=>{
   if(frame&&event.source===frame.contentWindow){const data=event.data;
     if(event.origin!==GAME_ORIGIN||!validGameMessage(data)||state==='idle')return;
     if(['game:ready','game:auth-required','game:authenticated','game:error','game:close'].includes(data.type))resetHello();
-    if(data.type==='game:auth-required'&&validBase64url43(data.challenge)&&['handshake','ready','authenticated','unverified'].includes(state)){
-      resetTimer();gameAuthenticated=false;state='auth-required';note('Checking your ODDBOUT sign-in…','ODDBOUT 로그인을 확인하는 중…');void grantGame(data);
+    if(data.type==='game:auth-required'&&['handshake','ready','authenticated','unverified'].includes(state)){
+      resetTimer();gameAuthenticated=false;
+      if(!validBase64url43(data.challenge)){
+        failAttempt(['The game sent an invalid sign-in challenge. Restart the game.','게임 로그인 요청이 올바르지 않습니다. 게임을 다시 시작해 주세요.']);
+      }else{
+        state='auth-required';note('Checking your ODDBOUT sign-in…','ODDBOUT 로그인을 확인하는 중…');void grantGame(data);
+      }
     }else if(data.type==='game:ready'&&['handshake','granting','grant-sent','ready','authenticated'].includes(state)){
       const firstReady=!gameReady;gameReady=true;
       if(state==='handshake')state='ready';

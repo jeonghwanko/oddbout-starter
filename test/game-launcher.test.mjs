@@ -45,6 +45,7 @@ test('component uses exact origin CSP and v2 challenge protocol without a URL cr
   assert.match(html, /game:authenticated/);
   assert.match(html, /game:ready/);
   assert.match(html, /game:error/);
+  assert.match(html, /if\(!validBase64url43\(data\.challenge\)\)\{\s*failAttempt\(/);
   assert.match(html, /game:close/);
   assert.match(html, /function repeatHello\(expectedAttempt\)/);
   assert.match(html, /setTimeout\(\(\)=>repeatHello\(expectedAttempt\),500\)/);
@@ -106,20 +107,88 @@ test('grant tool is component-only and keeps the grant in private metadata', asy
   assert.doesNotMatch(JSON.stringify({ ok: result.ok, attemptId: result.attemptId }), /afg_[0-9a-f]{64}/);
 });
 
-test('iframe diagnostics refuse redirects and report enforced frame blockers', async () => {
-  const deny = inspectFrameHeaders(new Headers({ 'x-frame-options': 'DENY' }));
-  assert.equal(deny.findings.length, 1);
-  const selfOnly = inspectFrameHeaders(new Headers({ 'content-security-policy': "default-src 'self'; frame-ancestors 'self'" }));
-  assert.equal(selfOnly.findings.length, 1);
+test('iframe diagnostics require the configured exact ancestor chain in every enforced CSP policy', async () => {
+  const expected = ['https://chat.example', 'https://widget.example'];
+  const valid = inspectFrameHeaders(new Headers({ 'content-security-policy': `default-src 'self'; frame-ancestors ${expected.join(' ')}` }), expected);
+  assert.deepEqual(valid.findings, []);
+
+  const absent = inspectFrameHeaders(new Headers(), expected);
+  assert.ok(absent.findings.some(finding => /Content-Security-Policy is missing/.test(finding)));
+
+  const selfOnly = inspectFrameHeaders(new Headers({ 'content-security-policy': "default-src 'self'; frame-ancestors 'self'" }), expected);
+  assert.ok(selfOnly.findings.some(finding => /exact HTTPS origins/.test(finding)));
+
+  for (const unsafe of ['*', 'https://*.example', 'null', "'none'", "'self'"]) {
+    const result = inspectFrameHeaders(new Headers({ 'content-security-policy': `frame-ancestors ${unsafe}` }), expected);
+    assert.ok(
+      result.findings.some(finding => /exact HTTPS origins/.test(finding)),
+      unsafe,
+    );
+  }
+
+  const duplicate = inspectFrameHeaders(
+    new Headers({ 'content-security-policy': `frame-ancestors ${expected.join(' ')}; frame-ancestors ${expected.join(' ')}` }),
+    expected,
+  );
+  assert.ok(duplicate.findings.some(finding => /exactly one frame-ancestors/.test(finding)));
+
+  const intersected = inspectFrameHeaders(
+    new Headers([
+      ['content-security-policy', `frame-ancestors ${expected.join(' ')}`],
+      ['content-security-policy', `frame-ancestors ${expected[0]}`],
+    ]),
+    expected,
+  );
+  assert.ok(intersected.findings.some(finding => /does not exactly match/.test(finding)));
+
+  for (const invalid of ['*', 'https://*.example']) {
+    const invalidInput = inspectFrameHeaders(new Headers(), [invalid]);
+    assert.ok(
+      invalidInput.findings.some(finding => /exact HTTPS origins/.test(finding)),
+      invalid,
+    );
+    await assert.rejects(
+      checkGameIframe(async () => assert.fail('fetch must not run'), gameUrl, [invalid]),
+      /exact HTTPS origins/,
+    );
+  }
+  const emptyInput = inspectFrameHeaders(new Headers(), []);
+  assert.ok(emptyInput.findings.some(finding => /JSON array/.test(finding)));
+  await assert.rejects(
+    checkGameIframe(async () => assert.fail('fetch must not run'), gameUrl, []),
+    /JSON array/,
+  );
+});
+
+test('iframe diagnostics flag redirects and non-HTML routes', async () => {
   let responseUrl;
-  const result = await checkGameIframe(async (url, options) => {
-    responseUrl = url;
-    assert.equal(options.redirect, 'manual');
-    assert.equal(options.credentials, 'omit');
-    return new Response('', { status: 302, headers: { location: 'https://oddbout.com/login' } });
-  }, gameUrl);
+  const redirect = await checkGameIframe(
+    async (url, options) => {
+      responseUrl = url;
+      assert.equal(options.redirect, 'manual');
+      assert.equal(options.credentials, 'omit');
+      return new Response('<html>redirect</html>', {
+        status: 302,
+        headers: { location: 'https://oddbout.com/login', 'content-type': 'text/html' },
+      });
+    },
+    gameUrl,
+    ['https://chat.example'],
+  );
   assert.equal(responseUrl, gameUrl);
-  assert.equal(result.redirected, true);
+  assert.equal(redirect.redirected, true);
+  assert.ok(redirect.findings.some(finding => /redirected/.test(finding)));
+
+  const nonHtml = await checkGameIframe(
+    async () =>
+      new Response('{}', {
+        status: 200,
+        headers: { 'content-type': 'application/json', 'content-security-policy': 'frame-ancestors https://chat.example' },
+      }),
+    gameUrl,
+    ['https://chat.example'],
+  );
+  assert.ok(nonHtml.findings.some(finding => /text\/html/.test(finding)));
 });
 
 test('Cloud exposes the grant only to the app and only in result metadata', async () => {

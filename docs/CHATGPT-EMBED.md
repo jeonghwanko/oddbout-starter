@@ -14,6 +14,7 @@
 | grant 발급과 전용 API | [`api/embed.mjs`](../api/embed.mjs), [`api/handler.mjs`](../api/handler.mjs) |
 | 기존 엔진용 패키지 검증과 경기 표현 | [`api/duels.mjs`](../api/duels.mjs)의 공유 함수 |
 | 저장·철회·예산 | [`마이그레이션`](../supabase/migrations/20261111041038_chatgpt_embed_sessions_and_matches.sql) |
+| 공식 체험과 모드별 기록 | [`공식 경기 마이그레이션`](../supabase/migrations/20261111062000_chatgpt_embed_official_practice.sql), [`Edge 어댑터 자리`](../supabase/functions/ai-fighter/official-practice.mjs) |
 | 공개 빌드 설정과 응답 헤더 산출 | [`chatgpt-embed-site.mjs`](../scripts/chatgpt-embed-site.mjs), [`build-creator-site.mjs`](../scripts/build-creator-site.mjs) |
 
 ## 활성화 설정
@@ -66,20 +67,27 @@ grant는 60초 동안 한 번 쓸 수 있고 attemptId·게임 origin·PKCE chal
 | 메서드·경로 | 입력 | 성공 응답 |
 | --- | --- | --- |
 | `POST /embed/exchange` | `{grant,verifier,attemptId}` | `{ok,token,expiresAt,account:{id,name}}` |
-| `GET /embed/fighters` | 없음 | `{ok,fighters:[{id,name,manifestSha256,owned}],engine,engines}` |
-| `POST /embed/matches` | `{a,b,hashes:[hashA,hashB],engine,idempotencyKey}` | `{ok,match}` |
+| `GET /embed/fighters` | 없음 | `{ok,fighters:[{id,name,manifestSha256,owned,mode}],engine,engines,officialEngine}` |
+| `POST /embed/matches` | `{a,b,hashes:[hashA,hashB],engine,idempotencyKey,mode?}` | `{ok,match}` |
 | `GET /embed/matches` | 없음 | `{ok,matches,pending}`: 두 목록 합계 최신 20건 |
 | `GET /embed/matches/<id>` | 없음 | 완료는 200 `{ok,match}`, 미완료는 202 `{ok,pending}` |
 | `DELETE /embed/session` | 없음 | `{ok:true}` |
 
-선수 목록은 승인·출전·패키지 해시 조건을 통과한 등록선수 최대 200명이다. 내 선수를 먼저 정렬한다.
+선수 목록은 등록선수와 공식 선수를 합쳐 최대 200명이다. 공식 목록 공간을 확보한 뒤 등록선수를 채우며 내 선수를 먼저 정렬한다.
 `owned`는 연결 계정과 실제 소유자가 같은지 나타낸다. 내 선수가 없어도 공개 등록선수로 연습할 수 있다.
 양쪽 선수의 현재 패키지를 기존 `loadDuelManifest`로 검증하고 주입된 기존 엔진으로 계산한다. 엔진을 복제하지 않는다.
-지원하지 않는 엔진과 변경된 해시는 409로 거절한다. 내장 공식 선수는 현재 지원하지 않는다.
+지원하지 않는 엔진과 변경된 해시는 409로 거절한다.
 
-완료 `match`는 기존 경기 필드와 비공개 `idempotencyKey`를 담는다.
-`pending`은 `{id,a,b,hashes,engine,idempotencyKey,createdAt}`를 담는다.
-계정·키·선수·해시·엔진을 함께 묶는다. 같은 키의 입력이 달라지면 409 `idempotency-conflict`다.
+`mode`는 `registered` 또는 `official`이며 생략하면 등록 경기다. 혼합 경기는 받지 않는다.
+공식 선수의 slug·이름·해시와 `officialEngine`은 게임 저장소의 빌드가 만든 서버 어댑터에서만 가져온다.
+공식 선수의 `owned`는 false다. 클라이언트의 공식 목록·시드·결과는 신뢰하지 않는다.
+예약과 완료 RPC는 서비스가 주입한 공식 목록으로 다시 검사한다. 등록선수가 0명이어도 공식 경기를 할 수 있다.
+게임 저장소의 Edge 게시 계획이 `official-practice.mjs`를 빌드 산출물로 교체한다. 저장소의 빈 자리만 쓰면
+공식 목록은 비어 있고 `officialEngine`은 null이다. 엔진을 초기화하는 함수는 첫 요청에서 계산 후 재사용한다.
+
+완료 `match`는 기존 경기 필드와 `mode`, 비공개 `idempotencyKey`를 담는다.
+`pending`은 `{id,a,b,hashes,engine,idempotencyKey,createdAt,mode}`를 담는다.
+계정·키·선수·해시·엔진·모드를 함께 묶는다. 같은 키의 입력이 달라지면 409 `idempotency-conflict`다.
 완료된 동일 요청은 저장 결과를 반환한다. 미완료 동일 요청은 30초 이내 409 `match-busy`다.
 30초 뒤 같은 입력으로 재시도할 수 있다. 게임은 기록을 조회하고 사용자의 명시적 재시도로 복구한다.
 과거 기록은 저장 결과 조회를 보장한다. 과거 엔진·패키지를 내려받아 재생하는 API는 제공하지 않는다.
@@ -89,6 +97,7 @@ grant는 60초 동안 한 번 쓸 수 있고 attemptId·게임 origin·PKCE chal
 `af_embed_grants`와 `af_embed_sessions`에는 bearer 원문 대신 SHA-256 hash만 저장한다.
 교환은 grant 행 잠금으로 한 번만 소비한다. 소비와 세션 생성은 한 트랜잭션에서 끝난다.
 `af_embed_matches`는 연결 계정별 비공개 기록이다. `af_duels`·순위·금화·Discord outbox에 쓰지 않는다.
+공식·등록 경기는 이 테이블과 모든 경기 예산을 공유한다. 선수 ID는 모드에 따라 UUID 문자열 또는 공식 slug이며 기존 기록은 등록 모드로 유지한다.
 세 테이블은 RLS를 켜고 PUBLIC·anon·authenticated·service_role의 직접 접근을 막는다.
 명시한 전용 RPC만 service_role에 실행 권한을 준다. 내부 연결·세션 helper에는 그 권한도 주지 않는다.
 
@@ -111,5 +120,10 @@ grant는 60초 동안 한 번 쓸 수 있고 attemptId·게임 origin·PKCE chal
 비활성 경로는 framing을 거절한다. 활성 경로는 지정 조상만 허용하고 전용 경로의 X-Frame-Options를 제거하도록 산출한다.
 이 `_headers` 문법은 Cloudflare Pages용이다. GitHub Pages나 다른 호스트에서 같은 헤더가 적용된다고 가정하지 않는다.
 [`check-chatgpt-iframe.mjs`](../scripts/check-chatgpt-iframe.mjs)는 명시 설정 후 HTTP 응답을 읽는 진단 도구다.
+`ODDBOUT_CHATGPT_GAME_LAUNCHER=1`, `ODDBOUT_CHATGPT_GAME_URL`과
+`ODDBOUT_CHATGPT_EXPECTED_ANCESTORS`를 설정한 뒤 `node scripts/check-chatgpt-iframe.mjs`로 실행한다.
+`ODDBOUT_CHATGPT_EXPECTED_ANCESTORS`는 실제 ChatGPT 실행에서 확인한 조상 origin 목록의 JSON 배열이다
+(예: `'["<확인한 HTTPS origin>"]'`). 추정한 값이나 Sites의 게시 URL을 대신 넣지 않는다.
+실제 조상 origin을 확인하기 전에는 설정을 채우거나 기능을 활성화하지 않는다. 도구 검사는 각 적용 CSP 정책이 확인한 origin 목록과 정확히 일치하는지, 경로가 직접 HTML을 반환하는지 확인한다.
 헤더 확인은 실제 ChatGPT iframe·OAuth·게임 렌더·재생 검증을 대신하지 않는다.
 배포는 이 문서의 설정 변경만으로 시작하지 않는다. 기존 [호스팅 절차](CREATOR-HOSTING.md)와 게임 저장소의 배포 규칙을 따른다.

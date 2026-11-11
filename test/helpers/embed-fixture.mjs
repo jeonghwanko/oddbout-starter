@@ -12,10 +12,10 @@ const RPC_ARGS = {
   af_embed_revoke_session: ['p_token_hash', 'p_origin'],
   af_embed_fighters: ['p_token_hash', 'p_origin'],
   af_embed_matches: ['p_token_hash', 'p_origin', 'p_id'],
-  af_embed_reserve_match: ['p_token_hash', 'p_origin', 'p_key', 'p_a', 'p_b', 'p_hash_a', 'p_hash_b', 'p_engine'],
-  af_embed_complete_match: ['p_token_hash', 'p_origin', 'p_id', 'p_engine', 'p_result'],
+  af_embed_reserve_match: ['p_token_hash', 'p_origin', 'p_key', 'p_a', 'p_b', 'p_hash_a', 'p_hash_b', 'p_engine', 'p_mode', 'p_official'],
+  af_embed_complete_match: ['p_token_hash', 'p_origin', 'p_id', 'p_engine', 'p_result', 'p_official'],
 };
-export async function fixture({ origin = ORIGIN, beforeRun = null } = {}) {
+export async function fixture({ origin = ORIGIN, beforeRun = null, official = false, includeRegistered = true, beforeOfficialRun = null } = {}) {
   const gameOrigin = origin;
   const sql = await migratedDatabase();
   const client = crypto.randomUUID(),
@@ -32,7 +32,7 @@ export async function fixture({ origin = ORIGIN, beforeRun = null } = {}) {
     await sql.query('insert into af_creators(owner_id) values($1)', [owner]);
     await sql.query("insert into auth.sessions(id,user_id,oauth_client_id,scopes) values($1,$2,$3,'openid email profile')", [session, owner, client]);
     await sql.query("insert into auth.oauth_consents(user_id,client_id,scopes) values($1,$2,'openid email profile')", [owner, client]);
-    if (i === 2) continue; // The third account can try public fighters without claiming ownership.
+    if (i === 2 || !includeRegistered) continue; // The third account can try public fighters without claiming ownership.
     const submission = crypto.randomUUID(),
       id = crypto.randomUUID();
     fighters.push(id);
@@ -54,12 +54,15 @@ export async function fixture({ origin = ORIGIN, beforeRun = null } = {}) {
     rpc: async (name, args) => {
       assert.ok(Object.hasOwn(RPC_ARGS, name), `unexpected RPC ${name}`);
       try {
-        const values = RPC_ARGS[name].map(key => args[key]);
-        const placeholders = values.map((_, i) => '$' + (i + 1)).join(',');
+        const keys = RPC_ARGS[name].filter(key => Object.hasOwn(args, key));
+        const values = keys.map(key => args[key]);
+        const placeholders = keys.map((key, i) => key + ' => $' + (i + 1)).join(',');
         const query =
-          name === 'af_embed_matches' ? `select * from public.${name}(${placeholders})` : `select to_jsonb(public.${name}(${placeholders})) as value`;
+          name === 'af_embed_matches'
+            ? `select to_jsonb(m) as value from public.${name}(${placeholders}) m`
+            : `select to_jsonb(public.${name}(${placeholders})) as value`;
         const result = await sql.query(query, values);
-        return { data: name === 'af_embed_matches' ? result.rows : result.rows[0].value };
+        return { data: name === 'af_embed_matches' ? result.rows.map(row => row.value) : result.rows[0].value };
       } catch (error) {
         return { error };
       }
@@ -81,10 +84,29 @@ export async function fixture({ origin = ORIGIN, beforeRun = null } = {}) {
       return q;
     },
   };
-  let calls = 0;
+  let calls = 0,
+    officialCalls = 0;
+  const officialPractice = official
+    ? {
+        engine: 'official-test-v1',
+        fighters: [
+          { id: 'academy-one', name: '공식 하나', manifestSha256: 'a'.repeat(64) },
+          { id: 'academy-two', name: '공식 둘', manifestSha256: 'b'.repeat(64) },
+        ],
+        simulate: async (a, b, seed) => {
+          officialCalls++;
+          if (beforeOfficialRun) await beforeOfficialRun();
+          assert.equal(a, 'academy-one');
+          assert.equal(b, 'academy-two');
+          assert.ok(seed >= 0 && seed <= 0xffffffff);
+          return RESULT;
+        },
+      }
+    : null;
   const handle = createHandler({
     db,
     embed: { enabled: true, gameOrigin },
+    officialPractice,
     engineVersion: 'test-v1',
     simulateDuel: async (a, ma, b, mb, seed) => {
       calls++;
@@ -115,5 +137,33 @@ export async function fixture({ origin = ORIGIN, beforeRun = null } = {}) {
     return response.json();
   };
   const matchBody = () => ({ a: fighters[0], b: fighters[1], hashes: [hash, hash], engine: 'test-v1', idempotencyKey: crypto.randomUUID() });
-  return { sql, db, handle, request, launch, exchange, matchBody, identities, fighters, hash, calls: () => calls };
+  const officialBody = () => ({
+    mode: 'official',
+    a: 'academy-one',
+    b: 'academy-two',
+    hashes: ['a'.repeat(64), 'b'.repeat(64)],
+    engine: 'official-test-v1',
+    idempotencyKey: crypto.randomUUID(),
+  });
+  const officialAdmission = () => ({
+    engine: officialPractice.engine,
+    fighters: officialPractice.fighters.map(({ id, manifestSha256 }) => ({ id, manifestSha256 })),
+  });
+  return {
+    sql,
+    db,
+    handle,
+    request,
+    launch,
+    exchange,
+    matchBody,
+    officialBody,
+    officialAdmission,
+    officialPractice,
+    identities,
+    fighters,
+    hash,
+    calls: () => calls,
+    officialCalls: () => officialCalls,
+  };
 }

@@ -93,7 +93,7 @@ function check(error) {
  * @param {{ db: any, simulateDuel?: any, engineVersion?: any, engines?: any, release?: any, creatorLink?: import('./http.mjs').CreatorLink | null,
  *   analytics?: import('./http.mjs').Analytics | null, agentClient?: any, limiter?: import('./http.mjs').Limiter | null, decisionsReviewer?: import('./http.mjs').Reviewer | null,
  *   responsesReviewer?: import('./http.mjs').Reviewer | null, cascadeReviewer?: import('./http.mjs').Reviewer | null,
- *   embed?: import('./embed.mjs').EmbedConfig | null }} options
+ *   embed?: import('./embed.mjs').EmbedConfig | null, officialPractice?: import('./embed.mjs').OfficialPracticeSource | null }} options
  * @returns {(request: Request) => Promise<Response>}
  */
 export function createHandler({
@@ -110,9 +110,10 @@ export function createHandler({
   responsesReviewer = null,
   cascadeReviewer = null,
   embed = null,
+  officialPractice = null,
 }) {
   const duelHandler = createDuelHandler({ db, simulateDuel, engineVersion, engines, release, limiter });
-  const embedHandler = createEmbedHandler({ db, embed, simulateDuel, engineVersion, engines });
+  const embedHandler = createEmbedHandler({ db, embed, simulateDuel, engineVersion, engines, officialPractice });
   const statisticsHandler = createFighterStatisticsHandler({ db });
   const accountHandler = createAccountHandler({ db, creatorLink });
   const deviceLoginHandler = createDeviceLoginHandler({ db, creatorLink, limiter });

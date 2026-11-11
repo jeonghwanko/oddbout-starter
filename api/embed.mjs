@@ -6,6 +6,7 @@ const HASH = /^[a-f0-9]{64}$/;
 const CHALLENGE = /^[A-Za-z0-9_-]{43}$/;
 const VERIFIER = /^[A-Za-z0-9._~-]{43,128}$/;
 const ENGINE = /^[a-z0-9][a-z0-9.-]{0,63}$/;
+const OFFICIAL_ID = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const STATUS = Object.freeze({
   'authentication-required': 401,
   'invalid-grant': 401,
@@ -25,6 +26,45 @@ const STATUS = Object.freeze({
   'invalid-result': 503,
 });
 /** @typedef {{ enabled?: boolean, gameOrigin?: string }} EmbedConfig */
+/** @typedef {{ engine: string, fighters: {id: string, name: string, manifestSha256: string}[], simulate: (a: string, b: string, seed: number) => any }} OfficialPractice */
+/** @typedef {OfficialPractice | Promise<OfficialPractice> | (() => OfficialPractice | Promise<OfficialPractice>)} OfficialPracticeSource */
+/** @param {OfficialPracticeSource | null} source @returns {Promise<OfficialPractice | null>} */
+async function officialCatalog(source) {
+  const catalog = await (typeof source === 'function' ? source() : source);
+  if (!catalog) return null;
+  if (
+    typeof catalog.engine !== 'string' ||
+    !ENGINE.test(catalog.engine) ||
+    typeof catalog.simulate !== 'function' ||
+    !Array.isArray(catalog.fighters) ||
+    catalog.fighters.length < 2 ||
+    catalog.fighters.length > 200 ||
+    new Set(catalog.fighters.map(f => f?.id)).size !== catalog.fighters.length ||
+    catalog.fighters.some(
+      f =>
+        !f ||
+        typeof f.id !== 'string' ||
+        f.id.length > 64 ||
+        !OFFICIAL_ID.test(f.id) ||
+        UUID.test(f.id) ||
+        typeof f.name !== 'string' ||
+        !f.name.trim() ||
+        f.name.length > 100 ||
+        typeof f.manifestSha256 !== 'string' ||
+        !HASH.test(f.manifestSha256),
+    )
+  )
+    throw new Problem(503, 'official-unavailable');
+  return catalog;
+}
+/** The only official admission payload; never copied from an HTTP body. @param {OfficialPractice | null} catalog */
+const officialAdmission = catalog =>
+  catalog
+    ? {
+        engine: catalog.engine,
+        fighters: catalog.fighters.map(({ id, manifestSha256 }) => ({ id, manifestSha256 })),
+      }
+    : null;
 /** @param {EmbedConfig | null} config */
 export function embedEnabled(config) {
   if (config?.enabled !== true || !config.gameOrigin) return false;
@@ -84,10 +124,11 @@ async function bodyOf(request) {
 /** @param {any} body @param {string} keys */
 const exactKeys = (body, keys) => body && typeof body === 'object' && !Array.isArray(body) && Object.keys(body).sort().join(',') === keys;
 /** @param {any} row */
-const privateMatch = row => ({ ...presentDuel(row), idempotencyKey: row.request_key });
+const privateMatch = row => ({ ...presentDuel(row), mode: row.mode ?? 'registered', idempotencyKey: row.request_key });
 /** @param {any} row */
 const pendingMatch = row => ({
   id: row.id,
+  mode: row.mode ?? 'registered',
   a: row.a,
   b: row.b,
   hashes: [row.hash_a, row.hash_b],
@@ -99,10 +140,10 @@ const pendingMatch = row => ({
 /**
  * A separate credential and private match ledger: no account, upload, ranking, reward or Discord writes. Disabled by default.
  * Tokens stay only in the iframe's memory. Every database operation rechecks the originating OAuth session and consent.
- * @param {{ db: any, embed?: EmbedConfig | null, simulateDuel?: any, engineVersion?: any, engines?: any }} options
+ * @param {{ db: any, embed?: EmbedConfig | null, simulateDuel?: any, engineVersion?: any, engines?: any, officialPractice?: OfficialPracticeSource | null }} options
  * @returns {import('./http.mjs').Route}
  */
-export function createEmbedHandler({ db, embed = null, simulateDuel = null, engineVersion = null, engines = null }) {
+export function createEmbedHandler({ db, embed = null, simulateDuel = null, engineVersion = null, engines = null, officialPractice = null }) {
   const call = rpcCaller(db, STATUS, { unavailable: 'embed-unavailable' });
   /** @type {Map<string, any>} */
   const available = new Map(Object.entries(engines ?? {}).filter(([name, run]) => ENGINE.test(name) && typeof run === 'function'));
@@ -157,8 +198,19 @@ export function createEmbedHandler({ db, embed = null, simulateDuel = null, engi
         return reply({ ok: true });
       }
       if (request.method === 'GET' && route === 'fighters') {
-        const fighters = await call('af_embed_fighters', auth);
-        return reply({ ok: true, fighters, engine: available.has(engineVersion) ? engineVersion : null, engines: [...available.keys()] });
+        const registered = await call('af_embed_fighters', auth);
+        const official = await officialCatalog(officialPractice);
+        const fighters = [
+          ...registered.slice(0, 200 - (official?.fighters.length ?? 0)).map((/** @type {any} */ f) => ({ ...f, mode: 'registered' })),
+          ...(official?.fighters ?? []).map(({ id, name, manifestSha256 }) => ({ id, name, manifestSha256, mode: 'official', owned: false })),
+        ];
+        return reply({
+          ok: true,
+          fighters,
+          engine: available.has(engineVersion) ? engineVersion : null,
+          engines: [...available.keys()],
+          officialEngine: official?.engine ?? null,
+        });
       }
       if (request.method === 'GET' && route === 'matches') {
         /** @type {any[]} */
@@ -177,8 +229,13 @@ export function createEmbedHandler({ db, embed = null, simulateDuel = null, engi
       if (request.method !== 'POST' || route !== 'matches') throw new Problem(404, 'not-found');
       const body = await bodyOf(request);
       if (
-        !exactKeys(body, 'a,b,engine,hashes,idempotencyKey') ||
-        ![body.a, body.b, body.idempotencyKey].every(x => typeof x === 'string' && UUID.test(x)) ||
+        !(exactKeys(body, 'a,b,engine,hashes,idempotencyKey') || exactKeys(body, 'a,b,engine,hashes,idempotencyKey,mode')) ||
+        !['registered', 'official'].includes(body.mode === undefined ? 'registered' : body.mode) ||
+        ![body.a, body.b].every(
+          x => typeof x === 'string' && ((body.mode ?? 'registered') === 'registered' ? UUID.test(x) : x.length <= 64 && OFFICIAL_ID.test(x) && !UUID.test(x)),
+        ) ||
+        typeof body.idempotencyKey !== 'string' ||
+        !UUID.test(body.idempotencyKey) ||
         body.a.toLowerCase() === body.b.toLowerCase() ||
         !Array.isArray(body.hashes) ||
         body.hashes.length !== 2 ||
@@ -187,8 +244,10 @@ export function createEmbedHandler({ db, embed = null, simulateDuel = null, engi
         !ENGINE.test(body.engine)
       )
         throw new Problem(422, 'invalid-match');
-      const run = available.get(body.engine);
-      if (!run) throw new Problem(409, 'engine-mismatch');
+      const mode = body.mode ?? 'registered';
+      const official = mode === 'official' ? await officialCatalog(officialPractice) : null;
+      const run = mode === 'official' ? official?.simulate : available.get(body.engine);
+      if (!run || (mode === 'official' && body.engine !== official?.engine)) throw new Problem(409, 'engine-mismatch');
       const row = await call('af_embed_reserve_match', {
         ...auth,
         p_key: body.idempotencyKey.toLowerCase(),
@@ -197,16 +256,27 @@ export function createEmbedHandler({ db, embed = null, simulateDuel = null, engi
         p_hash_a: body.hashes[0],
         p_hash_b: body.hashes[1],
         p_engine: body.engine,
+        p_mode: mode,
+        p_official: officialAdmission(official),
       });
       if (row.result) return reply({ ok: true, match: privateMatch(row) });
       let result;
       try {
-        const [ma, mb] = await Promise.all([loadDuelManifest(db, row.a, row.hash_a), loadDuelManifest(db, row.b, row.hash_b)]);
-        result = await run(row.a, ma, row.b, mb, row.seed);
+        if (mode === 'official') result = await run(row.a, row.b, row.seed);
+        else {
+          const [ma, mb] = await Promise.all([loadDuelManifest(db, row.a, row.hash_a), loadDuelManifest(db, row.b, row.hash_b)]);
+          result = await run(row.a, ma, row.b, mb, row.seed);
+        }
       } catch (e) {
         throw e instanceof Problem ? e : Object.assign(new Problem(503, 'duel-engine-failed'), { cause: e });
       }
-      const completed = await call('af_embed_complete_match', { ...auth, p_id: row.id, p_engine: row.engine, p_result: result });
+      const completed = await call('af_embed_complete_match', {
+        ...auth,
+        p_id: row.id,
+        p_engine: row.engine,
+        p_result: result,
+        p_official: officialAdmission(official),
+      });
       return reply({ ok: true, match: privateMatch(completed) });
     } catch (e) {
       logFailure('embed', request, e);
