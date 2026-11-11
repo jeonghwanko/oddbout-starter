@@ -19,7 +19,7 @@ import { withFileLock } from '../mcp/file-lock.mjs';
 import { pathWithoutLinks, relativeParts, renameRetrying } from '../plugins/ai-fighter/local-files.mjs';
 import { defaultSessionPath } from './login.mjs';
 import { createDummyClient } from '../tools/flow/client.mjs';
-import { assertDummyBase, DUMMY_LABEL, manifestSealed, sidecarSealed } from '../tools/flow/seal.mjs';
+import { assertDummyBase, DUMMY_LABEL, manifestSealed, sidecarSealed, stamp } from '../tools/flow/seal.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const KEY_FILE = '.oddbout-registration.json';
@@ -296,6 +296,7 @@ export async function runRegister({
   const route = fighterId ? `submissions?fighter=${encodeURIComponent(fighterId)}` : 'submissions';
   const request = { method: 'POST', route, idempotencyKey: stored.key };
   const summary = {
+    ...(dummyUrl ? stamp({ dummyBase: dummyUrl.origin }) : {}),
     fighterId,
     name: pkg.name,
     manifestSha256: pkg.sha,
@@ -312,7 +313,6 @@ export async function runRegister({
       ok: true,
       dryRun: true,
       ...summary,
-      ...(dummyUrl ? { mode: 'dummy', production: false, label: DUMMY_LABEL, dummyBase: dummyUrl.origin } : {}),
       next: dummyUrl
         ? 'Dry run only: the package was checked locally and the server was not contacted. --submit with this --dummy URL talks only to that loopback ODDBOUT-DUMMY server.'
         : 'Dry run only: the package was checked locally and the server was not contacted. Re-run with --submit after the user asks to register.',

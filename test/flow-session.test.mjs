@@ -4,7 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { access, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
+import { promisify } from 'node:util';
 import { once } from 'node:events';
 import { createConnection } from 'node:net';
 import Ajv from 'ajv';
@@ -83,6 +84,29 @@ test('one stdio session builds revisions and shares their immutable history with
   const second = await call('get_my_fighters', { view: 'submission', submissionId: prepared.submissionId });
   assert.equal(second.stage, 'registered');
   assert.equal(second.fighterId, fighter.id);
+
+  // Submitting the same MCP package through the real CLI must still identify
+  // this rejection as dummy, with the same exit status and immutable history.
+  await assert.rejects(
+    promisify(execFile)(
+      process.execPath,
+      [path.join(ROOT, 'scripts/register-fighter.mjs'), '--dir', built.dir, '--fighter', fighter.id, '--dummy', profile.dummyRegistrationUrl, '--submit'],
+      { cwd: ROOT, env: {}, timeout: 15_000 },
+    ),
+    error => {
+      assert.equal(error.code, 1);
+      const answer = JSON.parse(error.stdout);
+      assert.equal(answer.ok, false);
+      assert.equal(answer.code, 'fighter-unchanged');
+      assert.equal(answer.mode, 'dummy');
+      assert.equal(answer.service, 'oddbout-dummy');
+      assert.match(answer.label, /ODDBOUT-DUMMY/);
+      assert.equal(answer.production, false);
+      assert.equal(answer.dummyBase, profile.dummyRegistrationUrl);
+      return true;
+    },
+  );
+  assert.equal((await call('get_my_fighters', { view: 'fighter', fighterId: fighter.id })).fighter.submissionIds.length, 2);
 
   const thirdPack = await call('create_dummy_package', {
     fighterId: fighter.id,

@@ -24,6 +24,27 @@ const checkStyle = new Ajv({ allErrors: true, ownProperties: true }).compile(sch
 
 const sha256 = (/** @type {Uint8Array} */ bytes) => createHash('sha256').update(bytes).digest('hex');
 
+// A small boundary-only label cleanup for this fixture, not character/name NLP.
+const DELEGATION = String.raw`(?:(?:외형|외모)\s*(?:선택)?(?:까지|은|는|도|을|를)?\s*(?:맡길게(?:요)?|(?:네가\s*)?(?:골라|선택해)\s*줘)|you\s+(?:can\s+)?(?:choose|pick)\s+(?:the\s+)?(?:appearance|look)|i(?:'ll| will)\s+leave\s+(?:the\s+)?(?:appearance|look)(?:\s+(?:choice|selection))?\s+to\s+you)`;
+const DELEGATION_PREFIX = new RegExp(`^${DELEGATION}(?:\\s*[,.;:!?。！？]\\s*|$)`, 'i');
+const DELEGATION_SUFFIX = new RegExp(`(?:^|\\s*[,.;:!?。！？]\\s*)${DELEGATION}$`, 'i');
+const trimLabel = (/** @type {string} */ text) => text.replace(/^[\s,.;:!?。！？]+|[\s,.;:!?。！？]+$/g, '');
+
+/** @param {string} description */
+function hostedNameLabel(description) {
+  const subject = trimLabel(description).replace(DELEGATION_PREFIX, '').replace(DELEGATION_SUFFIX, '');
+  return (
+    trimLabel(
+      trimLabel(subject)
+        .replace(/^(?:please\s+)?(?:create|make|generate)(?:\s+me)?(?:\s+(?:a|an|the))?(?:\s+|$)/i, '')
+        .replace(/(?:을|를)?\s*(?:만들어|제작해)\s*(?:줘|주세요)$/, '')
+        .replace(/(?:,\s*)?\s+please$/i, ''),
+    )
+      .replace(/^DUMMY(?:\s+|$)/i, '')
+      .trim() || 'Hosted'
+  );
+}
+
 /**
  * @param {number} status
  * @param {Record<string, unknown>} body
@@ -271,7 +292,7 @@ export function createDummyStore({ fighterLimit = 3, tokenBalance = 500_000, pol
         .replace(/\s+/g, ' ')
         .trim() || 'Hosted';
     let name = 'DUMMY ';
-    for (const character of label.replace(/^DUMMY\s+/i, '')) {
+    for (const character of hostedNameLabel(label)) {
       if (name.length + character.length > 40) break;
       name += character;
     }
