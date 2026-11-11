@@ -53,7 +53,10 @@ sequence in [MCP-GATEWAY](MCP-GATEWAY.md) if nameservers have not migrated.
 An environment change selects the upload target; **it does not switch DNS**.
 After DNS migration, `npm run site:republish -- <current-publication-sha>` publishes
 production and additionally verifies `oddbout.com`. Normal future deployments still
-use the game's `npm run publish:fighter`; additive kits use their existing publisher.
+use the game's `npm run publish:fighter`; additive kits use their existing publisher. Now that `oddbout.com` is on Cloudflare
+Pages, run that publisher with the same provider settings, which the game keeps in
+`kaito_web/deploy/oddbout-site-publication.json` (no secret: the login is Wrangler's or `CLOUDFLARE_API_TOKEN`). Left on the
+`github-pages` default it refuses with `site-provider-mismatch` before writing anything.
 Recovery never rebuilds or bypasses validation. No provider fallback is automatic.
 
 To roll back, select `github-pages`, republish the reviewed tree, verify it on GitHub,

@@ -51,6 +51,22 @@ export function cloudflareFetch(request = fetch) {
   };
 }
 
+/**
+ * The GitHub route needs the live site on GitHub Pages. Cloudflare Pages answers `/index.html` with a same-origin redirect to `/`,
+ * which GitHub Pages never does: refuse there, before anything is written, instead of failing after the branch commit.
+ * @param {ReturnType<typeof publicationConfig>} config @param {string} origin @param {typeof fetch} [request]
+ */
+export async function assertProviderServesSite(config, origin, request = fetch) {
+  if (config.provider !== 'github-pages') return;
+  const response = await request(`${origin}/index.html`, { redirect: 'manual', cache: 'no-store', signal: AbortSignal.timeout(30_000) });
+  await response.body?.cancel();
+  if ([301, 302, 307, 308].includes(response.status) && new URL(response.headers.get('location') ?? '', origin).origin === origin)
+    throw Error(
+      'site-provider-mismatch: the live site answers like Cloudflare Pages. Set ODDBOUT_SITE_PROVIDER=cloudflare-pages with the ' +
+        "settings in the game's kaito_web/deploy/oddbout-site-publication.json (docs/CREATOR-HOSTING.md).",
+    );
+}
+
 /** @returns {typeof fetch} */
 export function publicationFetch() {
   return publicationConfig().provider === 'cloudflare-pages' ? cloudflareFetch() : fetch;
