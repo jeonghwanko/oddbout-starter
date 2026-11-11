@@ -7,12 +7,14 @@ import { fileURLToPath } from 'node:url';
 import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { promisify } from 'node:util';
-import { Client } from '@modelcontextprotocol/client';
+import { Client, ReadBuffer, serializeMessage } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { createTraceRecorder, TracedStdioTransport } from '../tools/flow/trace.mjs';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const run = promisify(execFile);
+// Windows has no POSIX mode bits, and a SIGTERM from another process terminates it without running handlers.
+const WINDOWS = process.platform === 'win32';
 
 test('trace is exclusive, private, ordered and explicitly unscored', async t => {
   const dir = await mkdtemp(path.join(tmpdir(), 'flow-trace-'));
@@ -32,7 +34,7 @@ test('trace is exclusive, private, ordered and explicitly unscored', async t => 
   assert.equal(records[0].data.production, false);
   assert.equal(records[0].data.prompt, '상태만 보여줘');
   assert.equal(records.at(-1).type, 'end');
-  assert.equal((await stat(file)).mode & 0o777, 0o600);
+  if (!WINDOWS) assert.equal((await stat(file)).mode & 0o777, 0o600);
   assert.throws(() => createTraceRecorder(file, {}), /EEXIST/);
   assert.equal(await readFile(file, 'utf8'), bytes);
   assert.throws(() => trace.record('receive', {}), /dummy-trace-closed/);
@@ -159,7 +161,8 @@ test('outbound recording failure closes before sending an unrecorded response', 
 });
 
 for (const mode of ['EOF', 'SIGTERM']) {
-  test(`traced session finalizes and removes packages on ${mode}`, { timeout: 60_000 }, async t => {
+  const skip = WINDOWS && mode === 'SIGTERM' && 'Windows terminates on SIGTERM without running handlers';
+  test(`traced session finalizes and removes packages on ${mode}`, { timeout: 60_000, skip }, async t => {
     const dir = await mkdtemp(path.join(tmpdir(), 'flow-trace-close-'));
     t.after(() => rm(dir, { recursive: true, force: true }));
     const file = path.join(dir, 'run.jsonl');
@@ -231,66 +234,95 @@ test('an underlying send rejection is recorded before termination', async t => {
   );
 });
 
-test('SIGTERM drains active package writes before deleting the session directory', { timeout: 60_000 }, async t => {
-  const dir = await mkdtemp(path.join(tmpdir(), 'flow-trace-drain-'));
-  t.after(() => rm(dir, { recursive: true, force: true }));
-  const file = path.join(dir, 'run.jsonl');
-  const prompt = path.join(dir, 'prompt.txt');
-  await writeFile(prompt, 'dummy concurrency test');
-  const transport = new StdioClientTransport({
-    command: process.execPath,
-    args: [path.join(ROOT, 'scripts/flow-mcp.mjs'), '--trace', file, '--prompt-file', prompt],
-    cwd: ROOT,
-    env: {},
-    stderr: 'pipe',
-  });
-  transport.stderr?.resume();
-  const client = new Client({ name: 'flow-drain-test', version: '1' });
-  t.after(() => client.close());
-  await client.connect(transport);
-  const setup = (await readFile(file, 'utf8'))
-    .trim()
-    .split('\n')
-    .map(JSON.parse)
-    .find(r => r.type === 'setup').data;
-  t.after(() => rm(setup.packageRoot, { recursive: true, force: true }));
-  let finished = 0;
-  const calls = Array.from({ length: 8 }, () =>
-    client.callTool({ name: 'create_dummy_package', arguments: {} }).then(
-      () => {
-        finished++;
-      },
-      () => {
-        finished++;
-      },
-    ),
-  );
-  const deadline = Date.now() + 10_000;
-  while (!(await readdir(setup.packageRoot)).length) {
-    assert.ok(Date.now() < deadline, 'a package write should start');
-    await new Promise(resolve => setTimeout(resolve, 10));
+/** Plain-pipe client transport: the test, not an SDK kill timer, decides how the server is stopped. */
+class ChildTransport {
+  /** @param {string[]} args */
+  constructor(args) {
+    this.args = args;
+    this.buffer = new ReadBuffer();
   }
-  assert.equal(finished, 0, 'interrupt while package writes are still active');
-  const onclose = transport.onclose;
-  const closed = new Promise(resolve => {
-    transport.onclose = () => {
-      onclose?.();
-      resolve();
-    };
+  async start() {
+    this.child = spawn(process.execPath, this.args, { cwd: ROOT, env: {}, stdio: ['pipe', 'pipe', 'pipe'] });
+    this.child.stderr.resume();
+    this.child.stdout.on('data', chunk => {
+      this.buffer.append(chunk);
+      while (true) {
+        const message = this.buffer.readMessage();
+        if (message === null) break;
+        this.onmessage?.(message);
+      }
+    });
+    this.child.on('error', error => this.onerror?.(error));
+    this.child.on('close', () => this.onclose?.());
+    await once(this.child, 'spawn');
+  }
+  async send(message) {
+    this.child.stdin.write(serializeMessage(message));
+  }
+  async close() {
+    this.child?.stdin.end();
+  }
+}
+
+for (const mode of WINDOWS ? ['EOF'] : ['SIGTERM', 'EOF']) {
+  test(`${mode} drains active package writes before deleting the session directory`, { timeout: 60_000 }, async t => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'flow-trace-drain-'));
+    t.after(() => rm(dir, { recursive: true, force: true }));
+    const file = path.join(dir, 'run.jsonl');
+    const prompt = path.join(dir, 'prompt.txt');
+    await writeFile(prompt, 'dummy concurrency test');
+    const transport = new ChildTransport(['scripts/flow-mcp.mjs', '--trace', file, '--prompt-file', prompt]);
+    t.after(() => {
+      if (transport.child?.exitCode === null) transport.child.kill('SIGKILL');
+    });
+    const client = new Client({ name: 'flow-drain-test', version: '1' });
+    t.after(() => client.close());
+    await client.connect(transport);
+    const setup = (await readFile(file, 'utf8'))
+      .trim()
+      .split('\n')
+      .map(JSON.parse)
+      .find(r => r.type === 'setup').data;
+    t.after(() => rm(setup.packageRoot, { recursive: true, force: true }));
+    let finished = 0;
+    const calls = Array.from({ length: 8 }, () =>
+      client.callTool({ name: 'create_dummy_package', arguments: {} }).then(
+        () => {
+          finished++;
+        },
+        () => {
+          finished++;
+        },
+      ),
+    );
+    const deadline = Date.now() + 10_000;
+    while (!(await readdir(setup.packageRoot)).length) {
+      assert.ok(Date.now() < deadline, 'a package write should start');
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    assert.equal(finished, 0, 'interrupt while package writes are still active');
+    const onclose = transport.onclose;
+    const closed = new Promise(resolve => {
+      transport.onclose = () => {
+        onclose?.();
+        resolve();
+      };
+    });
+    // EOF is how an MCP host ends a session. Draining eight writes can outlast the SDK client's 2s grace on Windows.
+    if (mode === 'SIGTERM') transport.child.kill('SIGTERM');
+    else transport.child.stdin.end();
+    await closed;
+    await Promise.all(calls);
+    await assert.rejects(stat(setup.packageRoot), { code: 'ENOENT' });
+    const records = (await readFile(file, 'utf8')).trim().split('\n').map(JSON.parse);
+    assert.equal(records.at(-1).type, 'end');
+    assert.equal(records.at(-1).data.reason, mode === 'SIGTERM' ? 'SIGTERM' : 'session-closed');
+    assert.equal(
+      records.some(r => r.type === 'lifecycle_error'),
+      false,
+    );
   });
-  assert.ok(transport.pid);
-  process.kill(transport.pid, 'SIGTERM');
-  await closed;
-  await Promise.all(calls);
-  await assert.rejects(stat(setup.packageRoot), { code: 'ENOENT' });
-  const records = (await readFile(file, 'utf8')).trim().split('\n').map(JSON.parse);
-  assert.equal(records.at(-1).type, 'end');
-  assert.equal(records.at(-1).data.reason, 'SIGTERM');
-  assert.equal(
-    records.some(r => r.type === 'lifecycle_error'),
-    false,
-  );
-});
+}
 
 test('a partial disk write stays incomplete even after storage recovers', async t => {
   const { default: fs } = await import('node:fs');
