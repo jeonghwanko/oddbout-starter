@@ -72,7 +72,7 @@ button.secondary{background:#2b3443;color:#f5f7fa}button:disabled{opacity:.55}#m
 const GAME_URL=${JSON.stringify(game.url)}, GAME_ORIGIN=${JSON.stringify(game.origin)}, CHANNEL='oddbout-launcher-v2';
 const stage=document.getElementById('stage'), start=document.getElementById('start'), reload=document.getElementById('reload');
 const back=document.getElementById('back'), full=document.getElementById('full'), message=document.getElementById('message');
-let state='idle', frame=null, nonce=null, attemptId=null, watchdog=null, helloTimer=null, helloCount=0, hostModes=null, gameReady=false, gameAuthenticated=false;
+let state='idle', frame=null, nonce=null, attemptId=null, watchdog=null, helloTimer=null, helloCount=0, grantRequestGeneration=0, hostModes=null, gameReady=false, gameAuthenticated=false;
 function localizeControls(){const locale=(window.openai?.locale||document.documentElement.lang||'ko').toLowerCase(),english=locale.startsWith('en');
   start.textContent=english?'Start game':'게임 시작';reload.textContent=english?'Restart':'다시 시작';
   back.textContent=english?'Close game':'런처로 돌아가기';full.textContent=english?'Fullscreen':'전체화면';document.documentElement.lang=english?'en':'ko'}
@@ -87,7 +87,7 @@ function freshId(){if(typeof crypto?.randomUUID!=='function')throw Error('secure
 function randomNonce(){if(typeof crypto?.getRandomValues!=='function')throw Error('secure-random-unavailable');
   const bytes=new Uint8Array(16);crypto.getRandomValues(bytes);return Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('')}
 function removeFrame(){resetHello();if(frame){sendToGame('launcher:stop',{});frame.removeAttribute('src');frame.remove();frame=null}stage.replaceChildren();stage.style.display='none'}
-function stop(){resetTimer();resetHello();removeFrame();state='idle';nonce=null;attemptId=null;gameReady=false;gameAuthenticated=false;start.hidden=false;reload.hidden=true;back.hidden=true;
+function stop(){grantRequestGeneration++;resetTimer();resetHello();removeFrame();state='idle';nonce=null;attemptId=null;gameReady=false;gameAuthenticated=false;start.hidden=false;reload.hidden=true;back.hidden=true;
   note('The game was closed. Select Start to open a new game.','게임을 닫았습니다. 새로 시작하려면 게임 시작을 누르세요.')}
 function requestFullscreen(showError){if(!hostModes?.has('fullscreen')||typeof window.openai?.requestDisplayMode!=='function'){
   if(showError)note('Fullscreen is not available here.','전체화면을 사용할 수 없습니다.');return}
@@ -108,7 +108,7 @@ function repeatHello(expectedAttempt){
   helloTimer=setTimeout(()=>repeatHello(expectedAttempt),500);
 }
 function startAttempt(){
-  resetTimer();resetHello();removeFrame();gameReady=false;gameAuthenticated=false;
+  grantRequestGeneration++;resetTimer();resetHello();removeFrame();gameReady=false;gameAuthenticated=false;
   try{nonce=randomNonce();attemptId=freshId()}catch{nonce=null;attemptId=null;state='idle';note('Secure startup is unavailable in this browser.','이 브라우저에서 보안 실행을 시작할 수 없습니다.');return}
   const thisAttempt=attemptId;state='loading';start.hidden=true;reload.hidden=false;back.hidden=false;stage.style.display='block';
   frame=document.createElement('iframe');frame.title=(window.openai?.locale||document.documentElement.lang||'ko').toLowerCase().startsWith('en')?'ODDBOUT game':'ODDBOUT 게임';
@@ -127,22 +127,22 @@ function startAttempt(){
 function failAttempt(text){resetTimer();state='unverified';note(text[0],text[1])}
 async function grantGame(data){
   if(state!=='auth-required'||!attemptId||!nonce||!window.openai||typeof window.openai.callTool!=='function')return;
-  const thisAttempt=attemptId, thisNonce=nonce;state='granting';
+  const thisAttempt=attemptId, thisNonce=nonce, thisChallenge=data.challenge, thisRequest=++grantRequestGeneration;state='granting';
   armWatchdog(thisAttempt,'granting',['Sign-in is taking too long. Try starting again.','로그인 확인이 오래 걸립니다. 다시 시작해 주세요.']);
   try{
     const result=await window.openai.callTool('issue_game_launch_grant',{nonce:thisNonce,attemptId:thisAttempt,challenge:data.challenge});
-    if(attemptId!==thisAttempt||nonce!==thisNonce||state!=='granting')return;
+    if(attemptId!==thisAttempt||nonce!==thisNonce||state!=='granting'||grantRequestGeneration!==thisRequest)return;
     const envelope=result?.mcp_tool_result||result?.call_tool_result||result;
     const hostEnvelope=window.openai.toolResponseMetadata?.mcp_tool_result||window.openai.toolResponseMetadata?.call_tool_result||{_meta:window.openai.toolResponseMetadata};
-    const privateResult=envelope?._meta?.attemptId===thisAttempt&&envelope?._meta?.nonce===thisNonce?envelope._meta:
-      hostEnvelope?._meta?.attemptId===thisAttempt&&hostEnvelope?._meta?.nonce===thisNonce?hostEnvelope._meta:null;
+    const privateResult=envelope?._meta?.attemptId===thisAttempt&&envelope?._meta?.nonce===thisNonce&&envelope?._meta?.challenge===thisChallenge?envelope._meta:
+      hostEnvelope?._meta?.attemptId===thisAttempt&&hostEnvelope?._meta?.nonce===thisNonce&&hostEnvelope?._meta?.challenge===thisChallenge?hostEnvelope._meta:null;
     const grant=privateResult?.gameLaunchGrant;
     if(typeof grant!=='string'||!/^afg_[0-9a-f]{64}$/.test(grant))throw Error('grant-unavailable');
     resetTimer();state=gameReady?'ready':'grant-sent';sendToGame('launcher:grant',{grant});
     if(gameReady)armWatchdog(thisAttempt,'ready',['Sign-in was not confirmed. Try starting again.','로그인을 확인하지 못했습니다. 다시 시작해 주세요.']);
     else armWatchdog(thisAttempt,'grant-sent',['The game did not finish signing in. Try again.','게임 로그인이 끝나지 않았습니다. 다시 시도해 주세요.']);
   }catch{
-    if(attemptId!==thisAttempt||nonce!==thisNonce||state!=='granting')return;
+    if(attemptId!==thisAttempt||nonce!==thisNonce||state!=='granting'||grantRequestGeneration!==thisRequest)return;
     failAttempt(['Sign-in could not be confirmed. Try starting again.','로그인을 확인하지 못했습니다. 다시 시작해 주세요.']);
   }
 }
@@ -189,7 +189,7 @@ window.addEventListener('message',event=>{
 });
 function post(value){parent.postMessage({jsonrpc:'2.0',...value},'*')}
 start.addEventListener('click',startAttempt);reload.addEventListener('click',startAttempt);back.addEventListener('click',stop);
-full.addEventListener('click',()=>requestFullscreen(true));window.addEventListener('pagehide',()=>{resetTimer();resetHello();removeFrame()});
+full.addEventListener('click',()=>requestFullscreen(true));window.addEventListener('pagehide',()=>{grantRequestGeneration++;resetTimer();resetHello();removeFrame()});
 if(typeof ResizeObserver==='function')new ResizeObserver(()=>post({method:'ui/notifications/size-changed',params:{height:document.body.scrollHeight}})).observe(document.body);
 post({id:1,method:'ui/initialize',params:{appInfo:{name:'ODDBOUT launcher',version:'2.0.0'},
   appCapabilities:{availableDisplayModes:['inline','fullscreen']},protocolVersion:'2026-01-26'}});
@@ -235,7 +235,7 @@ export function registerGameLauncherTools(register, game, issueGrant) {
       return {
         ok: true,
         attemptId: args.attemptId,
-        _uiMeta: { gameLaunchGrant: grant, gameLaunchGrantExpiresAt: expiresAt, attemptId: args.attemptId, nonce: args.nonce },
+        _uiMeta: { gameLaunchGrant: grant, gameLaunchGrantExpiresAt: expiresAt, attemptId: args.attemptId, nonce: args.nonce, challenge: args.challenge },
       };
     },
     { write: true, idempotent: false, openWorld: false, uiVisibility: ['app'] },

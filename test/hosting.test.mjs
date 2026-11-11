@@ -10,12 +10,14 @@ import {
   hosting,
   verifyArtifact,
   verifyLiveSite,
+  publishedFiles,
   siteEntries,
   buildRevision,
   assertSameRevision,
   git,
   waitForJson,
 } from '../scripts/hosting-lib.mjs';
+import { CHATGPT_GAME_ENTRY, chatGptEmbedBuild } from '../scripts/chatgpt-embed-site.mjs';
 import { createServer } from 'node:http';
 
 test('published policies have effective dates and working local links, while previews remain marked', async () => {
@@ -317,6 +319,34 @@ test("the artifact check walks the pages' module graph before the push, shared e
     await seal();
     await assert.rejects(verifyArtifact(root), /Missing Vite entry: service\.ko\.html/);
   } finally {
+    await rm(root, { recursive: true });
+  }
+});
+
+test('a configured ChatGPT embed cannot disappear from the published artifact or its route policy', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'fighter-chatgpt-entry-test-'));
+  const previous = hosting.chatgptEmbed;
+  hosting.chatgptEmbed = {
+    enabled: true,
+    apiBase: 'https://api.example.test/functions/v1/ai-fighter',
+    parentOrigins: ['https://widget.example.test'],
+    ancestorOrigins: ['https://widget.example.test'],
+  };
+  try {
+    await mkdir(join(root, '.vite'));
+    await writeFile(join(root, '.vite/manifest.json'), JSON.stringify(Object.fromEntries(siteEntries.map(page => [page, { file: 'assets/main.js' }]))));
+    await assert.rejects(publishedFiles(root), /Missing required ChatGPT game entry/);
+
+    await mkdir(join(root, 'embed/chatgpt'), { recursive: true });
+    await writeFile(join(root, CHATGPT_GAME_ENTRY), '<main>missing emitted game bundle</main>');
+    await assert.rejects(publishedFiles(root), /Missing or changed ChatGPT route headers/);
+
+    const policy = chatGptEmbedBuild(hosting.chatgptEmbed);
+    await writeFile(join(root, '_headers'), policy.headers);
+    await assert.rejects(publishedFiles(root), /Missing Vite entry: embed\/chatgpt\/index\.html/);
+  } finally {
+    if (previous === undefined) delete hosting.chatgptEmbed;
+    else hosting.chatgptEmbed = previous;
     await rm(root, { recursive: true });
   }
 });

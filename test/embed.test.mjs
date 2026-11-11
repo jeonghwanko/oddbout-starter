@@ -439,6 +439,93 @@ test('official pending attempts recover with the same seed and completion rechec
   }
 });
 
+test('private completion rejects malformed engine output without poisoning either mode or granting helper access', async () => {
+  const f = await fixture({ official: true });
+  try {
+    const { token } = await f.exchange();
+    const auth = { p_token_hash: await sha256(new TextEncoder().encode(token)), p_origin: ORIGIN };
+    const malformed = [
+      null,
+      [],
+      {},
+      { ...RESULT, winner: null, how: null, ms: null, digest: null },
+      ...['winner', 'how', 'ms', 'digest', 'hp', 'contacts'].map(key => ({ ...RESULT, [key]: null })),
+      { ...RESULT, winner: '0' },
+      { ...RESULT, winner: 0.5 },
+      { ...RESULT, how: 'draw' },
+      { ...RESULT, digest: 'not-a-digest' },
+      { ...RESULT, ms: '1000' },
+      { ...RESULT, ms: 1.5 },
+      { ...RESULT, ms: 0 },
+      { ...RESULT, ms: 90001 },
+      { ...RESULT, hp: [null, 0] },
+      { ...RESULT, hp: ['0.5', 0] },
+      { ...RESULT, hp: [-0.1, 0] },
+      { ...RESULT, hp: [1.1, 0] },
+      { ...RESULT, hp: [0.5] },
+      { ...RESULT, contacts: ['3', 1] },
+      { ...RESULT, contacts: [null, 1] },
+      { ...RESULT, contacts: [-1, 1] },
+      { ...RESULT, contacts: [1.5, 1] },
+      { ...RESULT, contacts: [9007199254740992, 1] },
+      { ...RESULT, contacts: [3, 1, 0] },
+    ];
+    for (const body of [f.matchBody(), f.officialBody()]) {
+      const official = body.mode === 'official' ? f.officialAdmission() : null;
+      const reserved = await f.db.rpc('af_embed_reserve_match', {
+        ...auth,
+        p_key: body.idempotencyKey,
+        p_a: body.a,
+        p_b: body.b,
+        p_hash_a: body.hashes[0],
+        p_hash_b: body.hashes[1],
+        p_engine: body.engine,
+        p_mode: body.mode ?? 'registered',
+        p_official: official,
+      });
+      assert.ok(reserved.data?.id);
+      const complete = result =>
+        f.db.rpc('af_embed_complete_match', { ...auth, p_id: reserved.data.id, p_engine: body.engine, p_result: result, p_official: official });
+      for (const result of malformed) assert.equal((await complete(result)).error?.message, 'invalid-result', JSON.stringify(result));
+      assert.equal((await f.sql.query('select result from af_embed_matches where id=$1', [reserved.data.id])).rows[0].result, null);
+      assert.deepEqual((await complete(RESULT)).data.result, RESULT);
+    }
+    // PostgreSQL serializes nonfinite numerics as JSON strings; none may enter numeric result slots.
+    for (const special of ['NaN', 'Infinity', '-Infinity']) {
+      for (const path of ['{winner}', '{ms}', '{hp,0}', '{contacts,1}']) {
+        const result = await f.sql.query('select af_embed_result_valid(jsonb_set($1::jsonb,$2::text[],to_jsonb($3::numeric))) as valid', [
+          RESULT,
+          path,
+          special,
+        ]);
+        assert.equal(result.rows[0].valid, false, `${path}: ${special}`);
+      }
+    }
+    const valid = await f.sql.query('select af_embed_result_valid($1::jsonb) as valid', [
+      { ...RESULT, ms: 90000, hp: [0, 1], contacts: [0, 9007199254740991] },
+    ]);
+    assert.equal(valid.rows[0].valid, true);
+    for (const role of ['anon', 'authenticated', 'service_role']) {
+      await f.sql.exec(`set role ${role}`);
+      await assert.rejects(f.sql.query('select af_embed_result_valid($1::jsonb)', [RESULT]), /permission denied/);
+      await f.sql.exec('reset role');
+    }
+    // The real API reaches the same DB validator; a broken adapter leaves a recoverable pending row.
+    f.officialPractice.simulate = () => ({ ...RESULT, winner: null, ms: null, how: null, digest: null });
+    const body = f.officialBody(),
+      rejected = await f.request('matches', { token, body });
+    assert.equal(rejected.status, 503);
+    assert.equal((await rejected.json()).code, 'invalid-result');
+    const pending = (await (await f.request('matches', { token })).json()).pending.find(row => row.idempotencyKey === body.idempotencyKey);
+    assert.ok(pending);
+    f.officialPractice.simulate = () => RESULT;
+    await f.sql.query("update af_embed_matches set last_run_at=now()-interval '31 seconds' where id=$1", [pending.id]);
+    assert.equal((await f.request('matches', { token, body })).status, 200);
+  } finally {
+    await f.sql.close();
+  }
+});
+
 test('combined roster caps at 200, awaits the official adapter and exposes only public official descriptors', async () => {
   const official = {
     engine: 'official-test-v1',

@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { policyFiles } from './build-plugin-policy-site.mjs';
 import { discoveryFiles } from './site-discovery.mjs';
 import { updatesPublishedFiles } from './site-updates.mjs';
-import { CHATGPT_GAME_ENTRY } from './chatgpt-embed-site.mjs';
+import { CHATGPT_GAME_ENTRY, chatGptEmbedBuild } from './chatgpt-embed-site.mjs';
 
 export const hosting = JSON.parse(await readFile(new URL('../deploy/creator-site.json', import.meta.url), 'utf8'));
 /** @type {(cwd: string, ...args: string[]) => string} */
@@ -173,7 +173,15 @@ async function fetchPublished(url, file, request, wait) {
  */
 export async function publishedFiles(root, siteUrl = hosting.siteUrl) {
   const manifest = JSON.parse(await readFile(join(root, '.vite/manifest.json'), 'utf8'));
-  const entries = [...siteEntries, ...(manifest[CHATGPT_GAME_ENTRY] ? [CHATGPT_GAME_ENTRY] : [])];
+  const chatgpt = chatGptEmbedBuild(hosting.chatgptEmbed);
+  const chatgptEntry = await stat(join(root, CHATGPT_GAME_ENTRY)).catch(() => null);
+  const includeChatgptEntry = chatgpt.enabled || Boolean(manifest[CHATGPT_GAME_ENTRY]) || chatgptEntry?.isFile() === true;
+  if (chatgpt.enabled && !chatgptEntry?.isFile()) throw new Error(`Missing required ChatGPT game entry: ${CHATGPT_GAME_ENTRY}`);
+  if (includeChatgptEntry) {
+    const headers = await readFile(join(root, '_headers'), 'utf8').catch(() => '');
+    if (!headers.includes(chatgpt.headers)) throw new Error('Missing or changed ChatGPT route headers');
+  }
+  const entries = [...siteEntries, ...(includeChatgptEntry ? [CHATGPT_GAME_ENTRY] : [])];
   const files = new Set(['index.html', ...entries, ...policyFiles, ...discoveryFiles, ...(hosting.customDomain ? ['CNAME'] : [])]),
     visited = new Set();
   /** @param {string} key */

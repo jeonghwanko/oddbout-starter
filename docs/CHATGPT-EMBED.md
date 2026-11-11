@@ -15,6 +15,7 @@
 | 기존 엔진용 패키지 검증과 경기 표현 | [`api/duels.mjs`](../api/duels.mjs)의 공유 함수 |
 | 저장·철회·예산 | [`마이그레이션`](../supabase/migrations/20261111041038_chatgpt_embed_sessions_and_matches.sql) |
 | 공식 체험과 모드별 기록 | [`공식 경기 마이그레이션`](../supabase/migrations/20261111062000_chatgpt_embed_official_practice.sql), [`Edge 어댑터 자리`](../supabase/functions/ai-fighter/official-practice.mjs) |
+| 완료 결과 형식 | [`결과 검증 마이그레이션`](../supabase/migrations/20261111064155_chatgpt_embed_result_validation.sql) |
 | 공개 빌드 설정과 응답 헤더 산출 | [`chatgpt-embed-site.mjs`](../scripts/chatgpt-embed-site.mjs), [`build-creator-site.mjs`](../scripts/build-creator-site.mjs) |
 
 ## 활성화 설정
@@ -37,6 +38,8 @@
 
 현재 추적된 `deploy/creator-site.json`에는 `chatgptEmbed`가 없다. 따라서 빌드는 비활성 값을 주입한다.
 활성 빌드는 게임 소스에 `embed/chatgpt/index.html`이 없으면 실패한다.
+게시 산출물 검사도 활성 설정이면 게임 HTML·설정에 맞는 route headers·Vite 의존 그래프를 모두 요구한다.
+비활성 게임 파일이 산출물에 있으면 그 경로의 차단 헤더와 의존 그래프를 확인한다.
 MCP의 게임 URL origin과 API의 게임 origin은 같아야 한다.
 실제 ChatGPT의 부모·조상 origin은 아직 확인하지 않았다. 추측한 호스트 목록으로 운영을 활성화하지 않는다.
 
@@ -50,7 +53,8 @@ visibility는 호스트의 노출 계약이다. 서버는 별도로 검증된 OA
 
 `mcp/cloud.mjs`는 결과의 내부 `_uiMeta`를 모델용 본문·`structuredContent`·호출 로그에서 제거하고 응답 `_meta`로 옮긴다.
 grant는 `_meta.gameLaunchGrant`, 만료 시각은 `_meta.gameLaunchGrantExpiresAt`에만 둔다.
-컴포넌트는 현재 nonce·attemptId가 맞는 응답만 exact-origin `postMessage`로 게임에 전달한다.
+컴포넌트는 현재 nonce·attemptId·challenge와 호출 순서가 맞는 응답만 exact-origin `postMessage`로 게임에 전달한다.
+타임아웃 뒤 같은 iframe에서 재연결해도 이전 호출의 응답과 이전 도구 메타데이터는 버린다.
 grant나 원래 OAuth 토큰을 URL·일반 채팅·모델용 결과에 넣지 않는다.
 
 발급기는 클라이언트의 user ID를 받지 않는다. Cloud MCP가 검증한 owner·OAuth session·client를 사용한다.
@@ -97,6 +101,8 @@ grant는 60초 동안 한 번 쓸 수 있고 attemptId·게임 origin·PKCE chal
 `af_embed_grants`와 `af_embed_sessions`에는 bearer 원문 대신 SHA-256 hash만 저장한다.
 교환은 grant 행 잠금으로 한 번만 소비한다. 소비와 세션 생성은 한 트랜잭션에서 끝난다.
 `af_embed_matches`는 연결 계정별 비공개 기록이다. `af_duels`·순위·금화·Discord outbox에 쓰지 않는다.
+완료 RPC는 엔진 결과의 필드 타입과 수치 범위를 검사한다. JSON null, 문자열 수치, 범위 밖 HP와
+정수가 아닌 경기 시간·타격 횟수는 저장하지 않는다. 실패한 계산은 원래 요청 키와 시드로 복구한다.
 공식·등록 경기는 이 테이블과 모든 경기 예산을 공유한다. 선수 ID는 모드에 따라 UUID 문자열 또는 공식 slug이며 기존 기록은 등록 모드로 유지한다.
 세 테이블은 RLS를 켜고 PUBLIC·anon·authenticated·service_role의 직접 접근을 막는다.
 명시한 전용 RPC만 service_role에 실행 권한을 준다. 내부 연결·세션 helper에는 그 권한도 주지 않는다.
