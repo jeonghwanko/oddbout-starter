@@ -133,7 +133,7 @@ async function grantGame(data){
     const result=await window.openai.callTool('issue_game_launch_grant',{nonce:thisNonce,attemptId:thisAttempt,challenge:data.challenge});
     if(attemptId!==thisAttempt||nonce!==thisNonce||state!=='granting')return;
     const envelope=result?.mcp_tool_result||result?.call_tool_result||result;
-    const hostEnvelope=window.openai.toolResponseMetadata?.mcp_tool_result||window.openai.toolResponseMetadata?.call_tool_result;
+    const hostEnvelope=window.openai.toolResponseMetadata?.mcp_tool_result||window.openai.toolResponseMetadata?.call_tool_result||{_meta:window.openai.toolResponseMetadata};
     const privateResult=envelope?._meta?.attemptId===thisAttempt&&envelope?._meta?.nonce===thisNonce?envelope._meta:
       hostEnvelope?._meta?.attemptId===thisAttempt&&hostEnvelope?._meta?.nonce===thisNonce?hostEnvelope._meta:null;
     const grant=privateResult?.gameLaunchGrant;
@@ -151,8 +151,8 @@ window.addEventListener('message',event=>{
   if(frame&&event.source===frame.contentWindow){const data=event.data;
     if(event.origin!==GAME_ORIGIN||!validGameMessage(data)||state==='idle')return;
     if(['game:ready','game:auth-required','game:authenticated','game:error','game:close'].includes(data.type))resetHello();
-    if(data.type==='game:auth-required'&&validBase64url43(data.challenge)&&['handshake','ready'].includes(state)){
-      resetTimer();state='auth-required';note('Checking your ODDBOUT sign-in…','ODDBOUT 로그인을 확인하는 중…');void grantGame(data);
+    if(data.type==='game:auth-required'&&validBase64url43(data.challenge)&&['handshake','ready','authenticated','unverified'].includes(state)){
+      resetTimer();gameAuthenticated=false;state='auth-required';note('Checking your ODDBOUT sign-in…','ODDBOUT 로그인을 확인하는 중…');void grantGame(data);
     }else if(data.type==='game:ready'&&['handshake','granting','grant-sent','ready','authenticated'].includes(state)){
       const firstReady=!gameReady;gameReady=true;
       if(state==='handshake')state='ready';
