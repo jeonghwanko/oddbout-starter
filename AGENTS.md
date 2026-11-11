@@ -33,11 +33,11 @@ Motion frames face right at one scale: standing body height 400, not each pose's
 | Change code, tests or docs here | [Hard rules](#hard-rules), [Changing this repository](#changing-this-repository) | The doc that owns the area ([docs/README.md](docs/README.md)). [Creating a fighter](#creating-a-fighter) states product requirements the code implements: read the part your change touches |
 | Deploy or operate the service | [Hard rules](#hard-rules), [Deploys](#deploys) | `docs/CREATOR-HOSTING.md`, `docs/CLOUD-MCP.md`, `docs/GENERATION-HOST.md` |
 
-`docs/records/` and `docs/research/` are history, not procedure, unless a rule below directs you there. `docs/TOOL-PERMISSIONS.md`.
+`docs/records/` and `docs/research/` are history, not procedure, unless a rule below directs you there. MCP tool permission tiers: `docs/TOOL-PERMISSIONS.md`.
 
 ## Hard rules
 
-These apply to every task; later sections cannot relax them.
+These apply to every task; no other section or doc can relax them.
 
 1. Never invent hashes, origins, measurements, contact timing, successful generation or registration results.
    Report only what a tool, file or server response returned or what you observed in the actual output; anything
@@ -60,8 +60,8 @@ These apply to every task; later sections cannot relax them.
 
 ## Creating a fighter
 
-For each user's fighter, use bundled sprite-gen: read `docs/DOT-CREATION.md` and `docs/AUTHORING.md` before generation,
-and the live AI Fighter spec before packaging.
+For a fighter generated in a workspace, use bundled sprite-gen: read `docs/DOT-CREATION.md` and `docs/AUTHORING.md` before generation,
+and the live AI Fighter spec (`get_fighter_spec`) before packaging.
 
 ### Intent and intake
 
@@ -96,7 +96,6 @@ and the live AI Fighter spec before packaging.
 
 - Hosted creation skips workspace motion reviews: after the appearance choice (including delegation), complete motions
   and register into production. Honor holds/edits; await server confirmation before claiming registration. The owner enters on the site.
-
 - Creation is conversational in review groups: appearance (concept/idle), locomotion (fightIdle/walk/run), attacks
   (combo/slam/dash), defense and reactions (block/hit/groggy/fall), then final review.
 - Appearance starts with the front (the profile set, `get_fighter_spec` → `profileSet`): the user chooses a full-body front view;
@@ -146,8 +145,8 @@ and the live AI Fighter spec before packaging.
 - Run creation in a workspace per `docs/EXECUTION-HOST.md` (bot service VM or the user's PC): one user per workspace,
   the user's own login only, no service API keys in the environment, work folders and attempt records preserved
   across sessions, and no pulls of this repository while a character is in progress.
-- Call MCP `check_creation_readiness` before a character's first generation, after a workspace restart and before
-  registration. Use purpose `generation` only for generation setup; `connection` and `registration` must not ask for
+- Run workspace `preflight_creation` (read-only; `npm run creation:preflight`) before a character's first generation, after a
+  workspace restart and before registration; only a kit older than 0.6.21 uses `check_creation_readiness`, which can fast-forward the kit. Use purpose `generation` only for generation setup; `connection` and `registration` must not ask for
   generation subscriptions or install/update the engine.
 - Run the readiness result's kit `nextCommands` (restart when told). Pass `account` only as the user stated it;
   otherwise let the conversation host's form or numbered options ask.
@@ -192,57 +191,10 @@ and the live AI Fighter spec before packaging.
   Existing reports stay intact as diagnostics; stale/failed/missing reports do not block. Fresh usable measurements
   may supply geometry/stride, but never claim visual approval. Session quality reviews are also non-blocking;
   missing/changed files, unselected versions, requested edits and an unvalidated package still block.
-- The following gait procedures are optional later quality work. When explicitly requested, keep one coordinate/scale
-  reference, bind observations to the actual pixels and durations, and leave uncertain observations unverified.
-- Split heel/forefoot contacts, padded/hoofed/clawed soles and lifted heels (digitigrade) may use
-  `docs/FOOT-EVIDENCE.md` only with fresh per-frame outlines of both feet; v2 evidence groups sole lobes per foot and
-  tracks the leading ground contact. This is an explicit AI Fighter extension: retain the upstream report and every
-  other rejection. Never fabricate foot identity.
-- For a requested generation-free gait experiment, use `gait-guide` (`docs/GAIT-REVIEW.md`). Render and review the
-  authored phase/IK/foot-lock proxy before any new generation. Proxy joints, depth and contacts are design ground
-  truth, never observations of generated artwork. Show actual normal/slow previews and keep visible part masks
-  distinct from X-ray joints.
-- A numerical flight flag is not visible flight. Check the final projection and exact sample times with
-  `screen_audit`, then inspect raster foot contours and occlusion separately. Keep per-foot projected ground
-  references; never substitute guide labels for output observations.
-- Save video latents before decoding when supported. Isolate temporal decoding artifacts on the same latent; do not
-  resample diffusion or silently reduce tile size to diagnose decoding.
-
-### GPT locomotion
-
-GPT locomotion uses the motion engine in the pinned sprite-gen-agent; run it through `npm run sprite --`.
-
-When the user chooses authored joint pose guidance, use the v5 measured `gen-motion` route documented in
-`docs/GAIT-REVIEW.md` and `vendor/sprite-gen/docs/pose-motion.md`:
-
-- One whole-body pose per call: target guide + immutable appearance-only identity + reviewed anchors, the authored
-  pose route's 16/12-frame plans, then pose and cycle review. These route defaults do not require resampling video cycles.
-- Review the actual prepared original/guide pairing in `input-review.json` before generation; a coordinate plan is not
-  proof of anatomical fit. Inspect `image_tool_trace` for actual dispatch evidence.
-- Structural canvas errors and unknown timeout outcomes must not consume another generation; reconcile existing results.
-- New generation requires a version-2 plan with visible original body-landmark calibration. Measure actual body points
-  and fresh physical-foot outlines/sole points before visual approval.
-- `--measure` and explicit `--register` never generate. Registration permits only a bounded uniform whole-body
-  scale/translation inferred from body points, with independent foot/flight checks. It is not bottom alignment: feet
-  never drive the transform, wrong anatomy is not repaired, raw pixels remain immutable and corrected pixels require fresh review.
-- Geometry failures block retry in contract 3/4 runs. New gait-motion runs are contract 5: semantic pose prompts,
-  diagnostic guide geometry, declared hidden points (`unverified_hidden`, never pass), and export gated by sequence
-  review plus per-stance-interval `contact-coverage.json` (`docs/GAIT-REVIEW.md`).
-- This route exports `sprite-gen-asset` directly and does not use row extraction or `bind-keyposes`.
-
-The existing row route:
-
-- Use `fighter:gait init` for separate key-pose and full-sequence requests. Review both physical legs, hip
-  attachments, contacts and whole-body continuity before `fighter:gait bind-keyposes`; missing/failed observations
-  remain unverified. The full sequence must carry the actual phase guide and reviewed key-pose image.
-- Preserve painted-row source Y with `fit.ground_frames: false`; do not erase flight by bottom-aligning each frame.
-
-Both routes:
-
-- A generic skeleton guide is phase vocabulary, not a measurement of this character's proportions.
-- Do not splice a frozen torso onto separate legs, duplicate poses, or label a plan as observed gait.
-- `gen-set` success is generation only. Stop after repeated failure of the same anatomy/contact requirement, preserve
-  versions and explain the limitation instead of continuing unbounded generation or compositing.
+- Gait experiments, foot evidence (`docs/FOOT-EVIDENCE.md`) and the GPT locomotion routes (pose `gen-motion`, row
+  `fighter:gait`) are optional later quality work, run only on explicit request: first read "Agent rules for optional
+  gait work" in `docs/GAIT-REVIEW.md`. Never fabricate foot identity, splice a frozen torso onto separate legs or label
+  a plan as observed gait; stop after repeated failure of the same anatomy/contact requirement.
 
 ### Packaging and registration
 
@@ -330,7 +282,7 @@ npm run spec:check && npm run validate -- examples/sparring-bot/fighter.json && 
 
 ### Deploys
 
-Merging to `main` starts no service deploy: the only workflow is `test`, and Render's auto-deploy is off. Creators who
+Merging to `main` starts no service deploy: the only automatic workflow is `test`, and Render's auto-deploy is off. Creators who
 clone or pull `main` from a repository link get the change at once. Each production part carries the import graph of
 its entry point, so a shared module (`api/`, `mcp/`, `contracts/`, `server/`, `deploy/`) can reach several parts.
 Procedures: `docs/CREATOR-HOSTING.md`.

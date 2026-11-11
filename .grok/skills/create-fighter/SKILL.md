@@ -1,6 +1,6 @@
 ---
 name: create-fighter
-description: Create, revise, resume, validate or register an ODDBOUT fighter in a PC or supported Dots workspace using the user's generation account and connected ODDBOUT registration. Also inspect the user's registered fighters. Process design and forwarded examples do not authorize generation.
+description: Create (on ODDBOUT's hosted worker, or in the user's PC or Dots workspace with the user's generation account), revise, resume, validate or register an ODDBOUT fighter, its profile set or fighting style. Also check the ODDBOUT connection and inspect the user's registered fighters. Not for cups, sparring, stories or changing the kit's code. Process design and forwarded examples do not authorize generation.
 ---
 
 # Checkout copy
@@ -19,11 +19,11 @@ A connection or status request does not authorize starting or resuming creation.
 
 These stay in this file. A reference page cannot relax them.
 
-- Quota: read `get_profile`, then `get_my_fighters` view `list`, and report the returned account id, email, `fighterCount` and `fighterLimit`. Missing or null stays unknown. At the limit, stop. Do not prepare a package or call `request_hosted_fighter`. The error is `fighter-quota`.
+- Quota: read `get_profile`, then `get_my_fighters` view `list`, and report the returned account id, email, `fighterCount` and `fighterLimit`. Missing or null stays unknown. At the limit, a new fighter is refused with `fighter-quota`: stop, and do not call `request_hosted_fighter` or prepare a package without a `fighterId`. A revision of a fighter already in the roster is not a new fighter and is not counted.
 - Revision without a target: confirm the fighter is in the returned roster. If it is absent or ambiguous, stop and ask which fighter is meant. Never create a substitute. A revision is a new package with the same `fighterId`. The prior submission stays immutable. `revise_hosted_motion` (`request_hosted_fighter` step `revise_motion`) only edits a legacy job at `motion_ready`. A style-only edit is `update_fighter` kind `style`.
 - Delegation: set `delegate: true` only when the user explicitly delegates the appearance choice. "Make it", "just make it" and "그냥 만들어줘" request creation but do not delegate. Ask the user to choose the look and do not pass `delegate: true`.
 - `idempotencyKey` is required for `prepare_fighter_registration`, a profile set, `update_fighter` kind `style`, and `request_hosted_fighter` step `request`. Reuse the original key for the same bytes. Changed bytes need a new key. An unknown outcome is not a failure: inspect the existing record before any retry.
-- Never call `enter_fighter` automatically: call it only on the user's request after showing every required motion and hearing each confirmed. Call `delete_fighter` only on the user's explicit request. The live ODDBOUT tools take no `confirmed` flag; the user's request in this chat is the confirmation. The dummy flow harness (`npm run flow:test`, results labelled `ODDBOUT-DUMMY`) is stricter: there `enter_fighter` and `delete_fighter` are `permission-forbidden`, and a mutate tool runs only with `confirmed: true` and confirmation text on that same call (`docs/TOOL-PERMISSIONS.md`). No flag confirms every tool or the next call.
+- Never call `enter_fighter` automatically: call it only on the user's request after showing every required motion and hearing each confirmed. Call `delete_fighter` only on the user's explicit request, after `prepare_fighter_deletion` has returned the account and fighter and you have shown them; pass its token, the exact `confirmName` and `confirm: true`. `enter_fighter` takes the hash of the package the user watched and every reviewed clip. The live ODDBOUT tools take no `confirmed` flag. The dummy flow harness (`npm run flow:test`, results labelled `ODDBOUT-DUMMY`) is stricter: there `enter_fighter` and `delete_fighter` are `permission-forbidden`, and a mutate tool runs only with `confirmed: true` and confirmation text on that same call (`docs/TOOL-PERMISSIONS.md`). No flag confirms every tool or the next call.
 - Show the measured profile set and get approval before `prepare_fighter_registration` kind `profile_set` and before entry. `pending` and `pendingStages` are stage names, never asset ids. Upload each `missingAssets` entry.
 - Do not ask for callback URLs or tokens in chat. Do not switch provider, account or registration route because a tool failed.
 - Queued panels, text reports and local paths are not displayed previews. Say the stage in one sentence while a long job runs. Approval still waits for the actual images.
@@ -48,8 +48,9 @@ The workspace route is the user's choice of a PC or Dots workspace. Read `worksp
 | Registration, revision, style, entry | `registration` (`plugins/ai-fighter/skills/create-fighter/references/registration.md`) |
 | Workspace kit, Dots, `creation:tool` | `workspace routing` (`plugins/ai-fighter/skills/create-fighter/references/workspace.md`) |
 | Skill, kit and project lifetimes | `docs/LIFECYCLE.md` |
-| Poses, style fields, gait, delivery | The kit docs named in the reference for that question |
+| Poses, style fields, gait | The kit docs named in `registration` (`plugins/ai-fighter/skills/create-fighter/references/registration.md`) |
+| Delivery of previews to this chat | `docs/DELIVERY.md`, named in `workspace routing` (`plugins/ai-fighter/skills/create-fighter/references/workspace.md`) |
 
 ## Resume
 
-A workspace session writes `BRIEF.md` and `PROGRESS.md` beside `creation-session.json`. They are a summary. `get_creation_session` and `get_creation_job` are the record. Record the agreed route, account id, account email and hosted job id with `update_creation_session` type `memory`. Do not put tokens, callback URLs or login links in that note. Hosted resume is `get_hosted_fighter` with the original job id or `idempotencyKey`.
+A workspace session writes `BRIEF.md` and `PROGRESS.md` beside `creation-session.json`. They are a summary. `get_creation_session` and `get_creation_job` are the record. When a workspace session exists, record the agreed route, account id, account email and hosted job id with `update_creation_session` type `memory`. Do not put tokens, callback URLs or login links in that note. Hosted resume is `get_hosted_fighter` with the original job id or `idempotencyKey`.

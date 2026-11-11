@@ -30,7 +30,7 @@ Dots generation requiring protected session output is blocked before dispatch. N
 proves an official image bridge; use an actually supported host route or report the blocker.
 
 In the returned runtime, use Node 22.12+ and run `npm ci --ignore-scripts` if dependencies are missing.
-When generation in this workspace is the agreed route, and only then, read `AGENTS.md`, `docs/DOT-CREATION.md`, `docs/AUTHORING.md`, `docs/EXECUTION-HOST.md`,
+When generation in this workspace is the agreed route, and only then, read `AGENTS.md`, `docs/CREATION-UX.md`, `docs/DOT-CREATION.md`, `docs/AUTHORING.md`, `docs/EXECUTION-HOST.md`,
 `docs/DELIVERY.md` and `vendor/sprite-gen/SKILL.md`. Run `npm run creation:preflight -- --purpose generation` before that setup, and run sprite setup only when the preflight names it and the user is generating here. A kit older than 0.6.21 has no preflight: use workspace `check_creation_readiness` there.
 If the host cannot expose the bundled files, preserve the task and report that limitation. Do not claim
 another chat's files or an arbitrary PC path exist in this workspace.
@@ -67,8 +67,9 @@ Use these calls wherever the main skill names `list_creation_sessions`, `create_
 Preparing a job never executes it. Run its returned exact cwd/command/args/env through normal host tools.
 Preserve actual previews, user review boundaries, provider choices and unknown-outcome recovery.
 
-Call workspace `check_creation_readiness` before generation, after restart and before registration,
-using only the account choice stated by the user. It checks kit and project state and reports registration
+Run workspace `preflight_creation` (or `npm run creation:preflight -- --purpose <purpose>`) before generation, after restart
+and before registration, using only the account choice stated by the user. It is read-only; only a kit older than 0.6.21
+uses `check_creation_readiness`, which can fast-forward the kit. It checks kit and project state and reports registration
 as requiring connector verification. Also use the connected ODDBOUT `get_my_fighters` view `readiness` for its
 account checks. Neither response verifies generation, file delivery, visual acceptance or registration.
 Cloud registration never requires `npm run login` in the workspace.
