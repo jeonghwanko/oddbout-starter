@@ -1,6 +1,6 @@
 # Share on X
 
-The skill body's hard rules win if this page disagrees. Detail: `docs/SOCIAL-EXPORT.md`.
+The skill body's hard rules win if this page disagrees. Detail: `docs/SOCIAL-EXPORT.md`. A kit older than 0.6.22 has neither `fighter:social` nor `export_social_media` / `prepare_grok_face_clip` (its `package.json` version says which): say the export needs kit 0.6.22, and do not update a kit with a character in progress just to get it.
 
 A finished fighter can be posted on X as the user's own character: moves as short videos, a showcase ending on the fighter's card, and the six faces as reaction GIFs (X has no custom stickers or emoji; a reply GIF is X's "emoji"). The export only reads the package and the profile set and writes a new folder. It generates nothing, spends no generation quota and never touches a submitted package.
 
