@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { publicationConfig, loadPublicationEnvironment, cloudflareFetch, assertProviderServesSite } from '../scripts/site-publication.mjs';
 import { validateCloudflareFiles } from '../scripts/cloudflare-publication.mjs';
+import { chatGptEmbedBuild } from '../scripts/chatgpt-embed-site.mjs';
 
 test('publication defaults to GitHub and rejects unknown or incomplete provider settings', () => {
   assert.equal(publicationConfig({}).provider, 'github-pages');
@@ -90,6 +91,16 @@ test('Cloudflare upload rejects oversized assets and executable routing controls
     await rm(join(root, 'large.webp'));
     await mkdir(join(root, 'functions'));
     await assert.rejects(validateCloudflareFiles(root), /explicit review/);
+    await rm(join(root, 'functions'), { recursive: true });
+    // Only the generated ChatGPT route rules pass; an edited or unexpected file does not.
+    const headers = chatGptEmbedBuild(undefined).headers;
+    await writeFile(join(root, '_headers'), '\n' + headers);
+    await assert.rejects(validateCloudflareFiles(root), /explicit review: _headers/);
+    assert.equal(await validateCloudflareFiles(root, { headers }), 2);
+    await writeFile(join(root, '_headers'), headers + '\n/*\n  Access-Control-Allow-Origin: *\n');
+    await assert.rejects(validateCloudflareFiles(root, { headers }), /explicit review: _headers/);
+    await writeFile(join(root, '_headers'), headers.replace('DENY', 'SAMEORIGIN'));
+    await assert.rejects(validateCloudflareFiles(root, { headers }), /explicit review: _headers/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -43,6 +43,9 @@ restores immutable kits, checks the 20,000-file and 25-MiB-per-file limits, and 
 to the separate `hosting-migration` branch. It verifies the returned deployment's
 commit, project and environment, then compares the live entry/asset/kit bytes.
 Only Cloudflare's same-origin `.html` canonical redirects are allowed.
+The upload refuses Cloudflare control files (`_worker.js`, `functions`, `_redirects`, `_routes.json`). `_headers` passes only
+when it is exactly the ChatGPT game-entry rules that `scripts/chatgpt-embed-site.mjs` generates from `deploy/creator-site.json`;
+with no `chatgptEmbed` setting those rules deny framing of `/embed/chatgpt`.
 The default branch named by `ODDBOUT_CLOUDFLARE_BRANCH` must match the project's
 production branch; deployment metadata validation rejects a mismatch.
 
