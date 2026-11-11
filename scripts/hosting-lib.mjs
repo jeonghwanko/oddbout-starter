@@ -6,6 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { policyFiles } from './build-plugin-policy-site.mjs';
 import { discoveryFiles } from './site-discovery.mjs';
 import { updatesPublishedFiles } from './site-updates.mjs';
+import { CHATGPT_GAME_ENTRY } from './chatgpt-embed-site.mjs';
 
 export const hosting = JSON.parse(await readFile(new URL('../deploy/creator-site.json', import.meta.url), 'utf8'));
 /** @type {(cwd: string, ...args: string[]) => string} */
@@ -172,7 +173,8 @@ async function fetchPublished(url, file, request, wait) {
  */
 export async function publishedFiles(root, siteUrl = hosting.siteUrl) {
   const manifest = JSON.parse(await readFile(join(root, '.vite/manifest.json'), 'utf8'));
-  const files = new Set(['index.html', ...siteEntries, ...policyFiles, ...discoveryFiles, ...(hosting.customDomain ? ['CNAME'] : [])]),
+  const entries = [...siteEntries, ...(manifest[CHATGPT_GAME_ENTRY] ? [CHATGPT_GAME_ENTRY] : [])];
+  const files = new Set(['index.html', ...entries, ...policyFiles, ...discoveryFiles, ...(hosting.customDomain ? ['CNAME'] : [])]),
     visited = new Set();
   /** @param {string} key */
   function visit(key) {
@@ -183,7 +185,7 @@ export async function publishedFiles(root, siteUrl = hosting.siteUrl) {
     for (const file of [entry.file, ...(entry.css ?? []), ...(entry.assets ?? [])]) files.add(file);
     for (const imported of [...(entry.imports ?? []), ...(entry.dynamicImports ?? [])]) visit(imported);
   }
-  for (const page of siteEntries) {
+  for (const page of entries) {
     if (manifest[page]) {
       visit(page);
       continue;

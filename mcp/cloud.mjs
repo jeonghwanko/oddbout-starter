@@ -12,6 +12,8 @@ import { registerAgentTools } from './cloud/agent-tools.mjs';
 import { registerProfileSetTools } from './cloud/profile-set-tools.mjs';
 import { registerWorkshopTools } from './cloud/workshop-tools.mjs';
 import { HOSTED_INSTRUCTIONS, hostedCandidateImages, registerHostedTools } from './cloud/hosted-tools.mjs';
+import { configuredGameLauncher, registerGameLauncherTools, registerGameLauncherUi } from './cloud/game-launcher-ui.mjs';
+import { issueEmbedLaunchGrant } from '../api/embed.mjs';
 import { LOOK_UI, registerLookUi } from './cloud/hosted-look-ui.mjs';
 import { DIRECTORY_DESCRIPTIONS, DIRECTORY_INSTRUCTIONS, DIRECTORY_TITLES } from './cloud/directory-edition.mjs';
 import { aliasCall, memberOf, mergingRegister, renameTools } from './cloud/merged-tools.mjs';
@@ -100,6 +102,17 @@ const json = (value, status = 200, headers = {}) =>
     status,
     headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', ...headers },
   });
+
+/** @param {string | undefined} resourceUri @param {('model' | 'app')[] | undefined} visibility */
+export function componentToolMetadata(resourceUri, visibility) {
+  if (!resourceUri && !visibility) return {};
+  return {
+    ui: { ...(resourceUri ? { resourceUri } : {}), ...(visibility ? { visibility } : {}) },
+    ...(resourceUri ? { 'openai/outputTemplate': resourceUri } : {}),
+    ...(visibility?.includes('app') ? { 'openai/widgetAccessible': true } : {}),
+    ...(visibility?.length === 1 && visibility[0] === 'app' ? { 'openai/visibility': 'private' } : {}),
+  };
+}
 
 /**
  * An expired connector token is still taken from Cursor's web agents (2026-10-31). Cursor's Grok Bot signed in at 02:21Z and never
@@ -287,9 +300,10 @@ const LIST_CACHE = { ttlMs: 300_000, cacheScope: 'private' };
  * The full edition serves /mcp and /signin alike: the same tools, metadata and texts (MCP 리뷰 2026-11-05). Codex connects at /signin
  * (docs/CLOUD-MCP.md) and its native file input reaches the upload tools through OpenAI's file hosts, so /signin keeps them.
  * @param {{ db: any, identity: Identity | null, fetcher?: typeof fetch, arena?: Arena | null, hosted?: Hosted | null,
+ *   gameLauncherConfig?: {enabled?: boolean, gameUrl?: string} | null,
  *   host?: { compact?: boolean, caller?: string | null }, edition?: 'full' | 'directory', call?: Call }} options
  */
-export function cloudServer({ db, identity, fetcher = fetch, arena = null, hosted = null, host = {}, edition = 'full', call = {} }) {
+export function cloudServer({ db, identity, fetcher = fetch, arena = null, hosted = null, gameLauncherConfig = null, host = {}, edition = 'full', call = {} }) {
   const directory = edition === 'directory';
   // Hosts with OpenAI's file host (ChatGPT, Codex) attach the files the upload tools take, and read OpenAI's tool metadata (securitySchemes,
   // openai/fileParams, openai/profile). The directory edition lists neither, and its texts name no upload tool (`uploads`).
@@ -327,8 +341,13 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
   );
   // The existing API runs in-process with an identity bound to this verified request.
   const scoped = identity ? scopedDatabase(db, identity.owner) : null;
+  const gameLauncher = directory ? null : configuredGameLauncher(gameLauncherConfig);
   // The workshop labels what this client writes (made with); the in-process API takes its OAuth client from the verified token only.
-  const api = createHandler({ db: scoped ?? db, agentClient: identity?.claims.client_id ?? null });
+  const api = createHandler({
+    db: scoped ?? db,
+    agentClient: identity?.claims.client_id ?? null,
+    embed: { enabled: Boolean(gameLauncher), ...(gameLauncher ? { gameOrigin: gameLauncher.origin } : {}) },
+  });
   /** @type {Invoke} */
   const invoke = async (path, method = 'GET', body, headers = {}) => {
     // The request id rides along, so an API failure's line (logFailure) names the call that made it.
@@ -374,6 +393,8 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
       publicTool = false,
       diagnostic = false,
       logAs,
+      uiResourceUri,
+      uiVisibility,
     } = {},
   ) => {
     if (typeof idempotent !== 'boolean') throw Error(`${name}: a write tool states idempotent`);
@@ -398,6 +419,7 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
           ? {
               _meta: {
                 securitySchemes: publicTool ? [{ type: 'noauth' }] : AUTH,
+                ...componentToolMetadata(uiResourceUri, uiVisibility),
                 ...(name === 'get_hosted_fighter' && hosted ? { ui: { resourceUri: LOOK_UI }, 'openai/outputTemplate': LOOK_UI } : {}),
                 ...(files.length ? { 'openai/fileParams': files } : {}),
                 ...(profile ? { 'openai/profile': true } : {}),
@@ -440,6 +462,11 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
           failure = error;
           value = { ok: false, code: error instanceof Problem ? error.message : 'cloud-operation-unavailable' };
         }
+        const uiMeta = typeof value._uiMeta === 'object' && value._uiMeta !== null ? value._uiMeta : null;
+        if (uiMeta) {
+          value = { ...value };
+          delete value._uiMeta;
+        }
         logCall({ tool: logAs ? logAs(args) : name, via: name, edition, client: identity?.claims.client_id ?? null, call, started, value, failure });
         if (failure !== undefined) return reply(value);
         if (name === 'get_hosted_fighter' && identity && value.ok === true) {
@@ -461,7 +488,8 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
         }
         const result = reply(value, host.compact === true);
         // A diagnostic failure is useful data; keep it readable by hosts that throw away tool errors.
-        return (typeof diagnostic === 'function' ? diagnostic(args) : diagnostic) ? { ...result, isError: false } : result;
+        const withUiMeta = uiMeta ? { ...result, _meta: uiMeta } : result;
+        return (typeof diagnostic === 'function' ? diagnostic(args) : diagnostic) ? { ...withUiMeta, isError: false } : withUiMeta;
       },
     );
   };
@@ -486,6 +514,20 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
   if (hosted && !directory) {
     registerLookUi(server);
     registerHostedTools({ register, db, identity, invoke, fetcher, hosted, uploads: fileHost });
+  }
+  if (gameLauncher) {
+    registerGameLauncherUi(server, gameLauncher);
+    registerGameLauncherTools(register, gameLauncher, args => {
+      if (!identity) throw new Problem(401, 'authentication-required');
+      return issueEmbedLaunchGrant({
+        db: scoped ?? db,
+        identity,
+        attemptId: args.attemptId,
+        challenge: args.challenge,
+        gameOrigin: gameLauncher.origin,
+        enabled: true,
+      });
+    });
   }
   registerFileInputProbe({ register, fileSchema: FILE, identity, downloadFile: downloadHostFile, fetcher });
   registerCreatorSources({ register, fileSchema: FILE, identity, db, downloadFile: downloadHostFile, fetcher });
@@ -580,11 +622,20 @@ function publishedToolList(result) {
  * @param {typeof fetch} [options.fetcher]
  * @param {{url: string, key: string, fetcher?: typeof fetch, cupWaitMs?: number, pollMs?: number, pollTries?: number} | null} [options.arena]
  * @param {{pollMs?: number} | null} [options.hosted]
+ * @param {{enabled?: boolean, gameUrl?: string} | null} [options.gameLauncherConfig]
  * @param {number} [options.budgetMs]  one call's budget from its arrival (CALL_BUDGET_MS; shorter in tests)
  * @param {(line: string) => void} [options.log]  where each MCP request's line goes (console.log)
  * @returns {(request: Request) => Promise<Response>}
  */
-export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted = null, budgetMs = CALL_BUDGET_MS, log = console.log }) {
+export function createCloudHandler({
+  db,
+  fetcher = fetch,
+  arena = null,
+  hosted = null,
+  gameLauncherConfig = null,
+  budgetMs = CALL_BUDGET_MS,
+  log = console.log,
+}) {
   const serve = mcpServing(65536);
   /**
    * One line per MCP request (MCP 최적화 2026-11-05): the address it came to, its method, tool and edition, whether the host got ChatGPT's
@@ -702,7 +753,7 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted =
       ...(legacy ? { legacy } : {}),
     };
     /** @type {Parameters<typeof cloudServer>[0]} */
-    const options = { db, identity, fetcher, arena, hosted, host, edition, call };
+    const options = { db, identity, fetcher, arena, hosted, gameLauncherConfig, host, edition, call };
     try {
       const response = await serve(cloudServer(options), request, body);
       if (body.method === 'tools/list' && response.status === 200) return json(publishedToolList(await response.json()));

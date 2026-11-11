@@ -17,6 +17,7 @@ import { PUBLIC_CREATOR_PAGE } from '../mcp/creator-handoff.mjs';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { fingerprint, buildRevision, assertSameRevision, siteEntries, publicSiteText } from './hosting-lib.mjs';
+import { CHATGPT_GAME_ENTRY, chatGptEmbedBuild } from './chatgpt-embed-site.mjs';
 
 // Build the AI Fighter entries with explicit public settings, without loading source .env files.
 const [sourceArg, outputArg] = process.argv.slice(2);
@@ -31,6 +32,13 @@ const hostingRoot = fileURLToPath(new URL('../', import.meta.url));
 const revision = buildRevision(source, hostingRoot);
 const builtAt = new Date().toISOString();
 const config = JSON.parse(await readFile(new URL('../deploy/creator-site.json', import.meta.url), 'utf8'));
+const chatgpt = chatGptEmbedBuild(config.chatgptEmbed);
+const hasChatGptEntry = await readFile(join(source, CHATGPT_GAME_ENTRY)).then(
+  () => true,
+  () => false,
+);
+if (chatgpt.enabled && !hasChatGptEntry) throw new Error('The selected game source has no ChatGPT entry');
+const buildEntries = [...siteEntries, ...(hasChatGptEntry ? [CHATGPT_GAME_ENTRY] : [])];
 if (config.siteUrl !== PUBLIC_CREATOR_PAGE) throw new Error('Hosting URL must match the MCP homepage');
 if (!config.publishableKey.startsWith('sb_publishable_')) throw new Error('A public publishable key is required');
 await readFile(join(source, 'creator.html'));
@@ -89,6 +97,7 @@ await build({
     },
   ],
   define: {
+    ...chatgpt.define,
     'import.meta.env.VITE_AI_FIGHTER_API_BASE': JSON.stringify(config.apiBase),
     'import.meta.env.VITE_AI_FIGHTER_PUBLISHABLE_KEY': JSON.stringify(config.publishableKey),
     'import.meta.env.VITE_AI_FIGHTER_GAME_URL': JSON.stringify(config.gameUrl),
@@ -99,7 +108,7 @@ await build({
     outDir: output,
     emptyOutDir: false,
     copyPublicDir: false,
-    rolldownOptions: { input: Object.fromEntries(siteEntries.map(page => [page.replace('.html', ''), join(source, page)])) },
+    rolldownOptions: { input: Object.fromEntries(buildEntries.map(page => [page.replace('.html', ''), join(source, page)])) },
   },
 });
 // Keep original asset names, manifests and license notices, including lazily loaded character packs.
@@ -110,6 +119,12 @@ for (const entry of await readdir(join(source, 'public'))) {
   await cp(join(source, 'public', entry), join(output, entry), { recursive: true, force: false, errorOnExist: true });
 }
 await writeFile(join(output, '.nojekyll'), '');
+if (hasChatGptEntry) {
+  const existing = await readFile(join(output, '_headers'), 'utf8').catch(() => '');
+  // Refuse competing rules rather than silently weakening a more restrictive CSP or producing duplicate directives.
+  if (/embed\/chatgpt/.test(existing)) throw new Error('ChatGPT headers already have another owner');
+  await writeFile(join(output, '_headers'), existing + '\n' + chatgpt.headers);
+}
 if (config.customDomain) await writeFile(join(output, 'CNAME'), config.customDomain + '\n');
 // Policy files must exist before the artifact fingerprint is measured.
 await buildPluginPolicySite(join(output, 'ai-fighter-creator'), { publish: true });

@@ -6,6 +6,7 @@ import { createDeviceLoginHandler } from './device-login.mjs';
 import { createHostPairingHandler, hostPairingRoute } from './host-pairing.mjs';
 import { createAdminHandler } from './admin.mjs';
 import { createDuelHandler } from './duels.mjs';
+import { createEmbedHandler } from './embed.mjs';
 import { createFighterStatisticsHandler } from './fighter-statistics.mjs';
 import { createWorkshopHandler, workshopRoute } from './workshop.mjs';
 import { attachJobProfileSet, createGenerationHandler, generationRoute } from './generations.mjs';
@@ -91,7 +92,8 @@ function check(error) {
 /**
  * @param {{ db: any, simulateDuel?: any, engineVersion?: any, engines?: any, release?: any, creatorLink?: import('./http.mjs').CreatorLink | null,
  *   analytics?: import('./http.mjs').Analytics | null, agentClient?: any, limiter?: import('./http.mjs').Limiter | null, decisionsReviewer?: import('./http.mjs').Reviewer | null,
- *   responsesReviewer?: import('./http.mjs').Reviewer | null, cascadeReviewer?: import('./http.mjs').Reviewer | null }} options
+ *   responsesReviewer?: import('./http.mjs').Reviewer | null, cascadeReviewer?: import('./http.mjs').Reviewer | null,
+ *   embed?: import('./embed.mjs').EmbedConfig | null }} options
  * @returns {(request: Request) => Promise<Response>}
  */
 export function createHandler({
@@ -107,8 +109,10 @@ export function createHandler({
   decisionsReviewer = null,
   responsesReviewer = null,
   cascadeReviewer = null,
+  embed = null,
 }) {
   const duelHandler = createDuelHandler({ db, simulateDuel, engineVersion, engines, release, limiter });
+  const embedHandler = createEmbedHandler({ db, embed, simulateDuel, engineVersion, engines });
   const statisticsHandler = createFighterStatisticsHandler({ db });
   const accountHandler = createAccountHandler({ db, creatorLink });
   const deviceLoginHandler = createDeviceLoginHandler({ db, creatorLink, limiter });
@@ -226,6 +230,7 @@ export function createHandler({
         prefix = segments.indexOf('ai-fighter');
       const parts = prefix >= 0 ? segments.slice(prefix + 1) : segments,
         method = request.method;
+      if (parts[0] === 'embed') return embedHandler(request, parts);
       const profileRoute = parts[0] === 'fighters' && parts[2] === 'profile' && parts.length === 3;
       if (profileRoute) {
         cors = { methods: 'PATCH, OPTIONS', headers: 'Authorization, Content-Type, Idempotency-Key' };

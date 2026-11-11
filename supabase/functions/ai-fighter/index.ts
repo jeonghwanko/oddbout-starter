@@ -25,6 +25,10 @@ Deno.serve(
     engineVersion,
     engines,
     release,
+    embed: {
+      enabled: Deno.env.get('ODDBOUT_CHATGPT_GAME_LAUNCHER') === '1',
+      gameOrigin: Deno.env.get('ODDBOUT_CHATGPT_GAME_ORIGIN') ?? '',
+    },
     limiter,
     creatorLink: createCreatorLink({ db }),
     cascadeReviewer: createLunaSolReviewer({ apiKey: Deno.env.get('ODDBOUT_DECISIONS_API_KEY'), enabled: Deno.env.get('ODDBOUT_DECISIONS_MODE') === 'shadow' }),
