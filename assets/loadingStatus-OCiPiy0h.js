@@ -1,1 +1,0 @@
-function e(){let e=document.createElement(`span`);return e.className=`ui-loading-spinner`,e.setAttribute(`aria-hidden`,`true`),e}function t(t){let n=document.createElement(`div`);return n.className=`ui-loading-status`,n.setAttribute(`role`,`status`),n.append(e(),document.createTextNode(t)),n}export{t as n,e as t};
