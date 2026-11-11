@@ -4,7 +4,7 @@ The skill body's hard rules win if this page disagrees. An unknown generation ou
 
 ## Say the stage, decide from the pictures
 
-While a long job runs, say the stage, what is left, and what is blocked, in a sentence or two. That narration is not the preview. Appearance and motion approval still require the actual images. `get_creation_job` is observation: `executedByThisCall` and `cancelledByThisCall` are false. Stopping the reader does not cancel the runner. Cancel only with `cancel_creation_job`, and only for the reason that tool allows. Hosted jobs are watched with `get_hosted_fighter` `waitSeconds`. The same split applies: the read does not start a new job.
+While a long job runs, say the stage, what is left, and what is blocked, in a sentence or two. That narration is not the preview. Appearance and motion approval still require the actual images. `get_creation_job` is observation: `executedByThisCall` and `cancelledByThisCall` are false. Stopping the reader does not cancel the runner. Cancel only with `cancel_creation_job`, and only for the reason that tool allows. Read a hosted job with `get_hosted_fighter`. That read does not start a job, advance a motion, or register. `advance_hosted_fighter` is the separate confirmed step.
 
 ## Plan before generation
 
@@ -34,7 +34,7 @@ Do not reuse by sending the same registration `idempotencyKey` as a new package,
 
 ## Checkpoints
 
-A long job writes `output/<sessionId>-work/jobs/<jobId>.checkpoint.json` whenever its record is saved. `read_creation_checkpoint` and `resume_creation_job` only read that file. `executed` stays false. The checkpoint's `registrationKey` is the `idempotencyKey` to reuse. Resume does not mint a key and does not submit again.
+A long job writes `output/<sessionId>-work/jobs/<jobId>.checkpoint.json` whenever its record is saved. `read_creation_checkpoint` and `resume_creation_job` only read. `executed` stays false. The job record is the authority: a checkpoint whose schema, job id, session, status or `registrationKey` disagrees is refused with `checkpoint-mismatch`, and the file's key is not used. Resume does not mint a key and does not submit again.
 
-For a hosted job, `get_hosted_fighter` with `observe: true` returns the checkpoint and does not advance a motion or register. The same `idempotencyKey` returns the same job. `waitSeconds` without `observe` is the explicit dummy worker tick, not a status poll.
+For a hosted job, `get_hosted_fighter` only reads, including when `observe: true` or `waitSeconds` is set. It does not advance a motion or register. `advance_hosted_fighter` is the mutating step. The same `idempotencyKey` returns the same job.
 

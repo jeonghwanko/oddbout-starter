@@ -18,7 +18,9 @@ export const TOOL_PERMISSIONS = {
   resume_creation_job: 'read',
   preflight_creation: 'read',
   plan_creation: 'read',
-  check_creation_readiness: 'read',
+  // This workspace tool can fast-forward the kit. The read-only summary is preflight_creation.
+  check_creation_readiness: 'mutate',
+  advance_hosted_fighter: 'mutate',
   review_creation_progress: 'read',
   validate_fighter_manifest: 'read',
   validate_fighter_package: 'read',
@@ -47,9 +49,25 @@ export const TOOL_PERMISSIONS = {
 /** Names that must not unlock a forbidden or unconfirmed tool. */
 export const IGNORED_BYPASS = ['yolo', 'confirmAll', 'skipConfirmation', 'allowAll', 'autoApprove'];
 
+const CONFIRMATION_MIN = 8;
+
+/** Trim and lowercase a tool name. Unknown names stay forbidden. @param {string} name */
+export function canonicalToolName(name) {
+  return name.trim().toLowerCase().replace(/\s+/g, '');
+}
+
 /** @param {string} name @returns {PermissionTier} */
 export function permissionFor(name) {
-  return TOOL_PERMISSIONS[name] ?? 'forbidden';
+  return TOOL_PERMISSIONS[canonicalToolName(name)] ?? 'forbidden';
+}
+
+/** A mutate call needs a boolean confirmation and words from that same call. Nothing is remembered for the next call. @param {Record<string, unknown>} args */
+export function confirmationAccepted(args) {
+  if (args.confirmed !== true) return false;
+  if (typeof args.confirmationText !== 'string') return false;
+  const text = args.confirmationText.trim();
+  if (text.length < CONFIRMATION_MIN) return false;
+  return !IGNORED_BYPASS.some(word => text.toLowerCase() === word.toLowerCase());
 }
 
 /**
@@ -62,6 +80,6 @@ export function decidePermission(name, args = {}) {
   const bypassIgnored = IGNORED_BYPASS.some(key => args[key] === true);
   if (tier === 'read') return { allow: true, tier, code: null, bypassIgnored };
   if (tier === 'forbidden') return { allow: false, tier, code: 'permission-forbidden', bypassIgnored };
-  if (args.confirmed === true) return { allow: true, tier, code: null, bypassIgnored };
+  if (confirmationAccepted(args)) return { allow: true, tier, code: null, bypassIgnored };
   return { allow: false, tier, code: 'permission-required', bypassIgnored };
 }

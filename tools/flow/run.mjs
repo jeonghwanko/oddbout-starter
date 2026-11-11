@@ -116,7 +116,7 @@ const connectorFor = (store, roots) => {
   // The scripted step already stands for the user's confirmation of that step. Forbidden tools still refuse.
   return {
     /** @param {string} name @param {Record<string, unknown>} [args] */
-    call: (name, args) => raw.call(name, { ...(args ?? {}), confirmed: true }),
+    call: (name, args) => raw.call(name, { ...(args ?? {}), confirmed: true, confirmationText: 'scripted scenario user confirmed this step' }),
   };
 };
 
@@ -212,10 +212,10 @@ export async function runFlows({ scenario } = {}) {
           `choice ${requested.job?.choice}, status ${requested.job?.status}`,
           requested.ok && requested.job.choice === 'a' && requested.statusSummary.actionRequired === 'wait',
         );
-        const current = await connector.call('get_hosted_fighter', { jobId: requested.job.id, waitSeconds: 5 });
+        const current = await connector.call('advance_hosted_fighter', { jobId: requested.job.id, waitSeconds: 5 });
         agent(
           state,
-          'get_hosted_fighter',
+          'advance_hosted_fighter',
           'until-registered',
           'wait without choose_look',
           `state ${current.statusSummary?.state}, drafts ${current.job?.drafts.length}`,
@@ -319,11 +319,11 @@ export async function runFlows({ scenario } = {}) {
           `choice a, status ${choice.job?.status}`,
           choice.ok && choice.job?.status === 'motions',
         );
-        const watched = await connector.call('get_hosted_fighter', { jobId: requested.job.id, waitSeconds: 5 });
+        const watched = await connector.call('advance_hosted_fighter', { jobId: requested.job.id, waitSeconds: 5 });
         const seen = watched.job?.drafts ?? [];
         agent(
           state,
-          'get_hosted_fighter',
+          'advance_hosted_fighter',
           'until-registered',
           'get_hosted_fighter until registered',
           `drafts ${seen.join(', ')}; state ${watched.statusSummary?.state}; fighter ${watched.job?.submission?.fighterId}; tokensCharged ${watched.tokensCharged}; waitedMs ${watched.waitedMs}`,
@@ -946,6 +946,7 @@ export async function runFlows({ scenario } = {}) {
           expectedManifestSha256: 'a'.repeat(64),
           reviewedClips: rawStore.motions,
           confirmed: true,
+          confirmationText: 'user confirmed this hosted request',
           yolo: true,
         });
         const blockedDelete = await raw.call('delete_fighter', { confirmed: true, yolo: true });
@@ -965,6 +966,7 @@ export async function runFlows({ scenario } = {}) {
           language: 'ko',
           idempotencyKey: hostedKey,
           confirmed: true,
+          confirmationText: 'user confirmed this hosted request',
         });
         const seen = await raw.call('get_hosted_fighter', { jobId: created.job.id, observe: true });
         const replay = await raw.call('request_hosted_fighter', {
@@ -972,6 +974,7 @@ export async function runFlows({ scenario } = {}) {
           language: 'ko',
           idempotencyKey: hostedKey,
           confirmed: true,
+          confirmationText: 'user confirmed this hosted request',
         });
         probe(
           state,

@@ -29,7 +29,7 @@ export const SCENARIOS = [
       { tool: 'get_profile' },
       { tool: 'get_my_fighters', selector: 'list' },
       { tool: 'request_hosted_fighter', selector: 'request' },
-      { tool: 'get_hosted_fighter', selector: 'until-registered' },
+      { tool: 'advance_hosted_fighter', selector: 'until-registered' },
     ],
   },
   {
@@ -48,7 +48,7 @@ export const SCENARIOS = [
       { tool: 'get_fighter_spec', selector: 'overview' },
       { tool: 'request_hosted_fighter', selector: 'request' },
       { tool: 'request_hosted_fighter', selector: 'choose_look' },
-      { tool: 'get_hosted_fighter', selector: 'until-registered' },
+      { tool: 'advance_hosted_fighter', selector: 'until-registered' },
     ],
   },
   {
@@ -288,6 +288,7 @@ export async function checkDocs(root) {
     'permission-forbidden',
     'delete_fighter',
     'observe: true',
+    'advance_hosted_fighter',
   ]) {
     if (!skill.includes(phrase)) problems.push(`SKILL.md missing ${phrase}`);
   }

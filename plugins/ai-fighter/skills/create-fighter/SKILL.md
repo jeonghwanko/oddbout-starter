@@ -19,11 +19,11 @@ These stay in this file. A reference page cannot relax them.
 - Revision without a target: confirm the fighter is in the returned roster. If it is absent or ambiguous, stop and ask which fighter is meant. Never create a substitute. A revision is a new package with the same `fighterId`. The prior submission stays immutable. `revise_hosted_motion` (`request_hosted_fighter` step `revise_motion`) only edits a legacy job at `motion_ready`. A style-only edit is `update_fighter` kind `style`.
 - Delegation: set `delegate: true` only when the user explicitly delegates the appearance choice. "Make it", "just make it" and "그냥 만들어줘" request creation but do not delegate. Ask the user to choose the look and do not pass `delegate: true`.
 - `idempotencyKey` is required for `prepare_fighter_registration`, a profile set, `update_fighter` kind `style`, and `request_hosted_fighter` step `request`. Reuse the original key for the same bytes. Changed bytes need a new key. An unknown outcome is not a failure: inspect the existing record before any retry.
-- Never call `enter_fighter` automatically. `enter_fighter` and `delete_fighter` are `permission-forbidden`. A mutate tool runs only with `confirmed: true` on that call. No flag confirms every tool.
+- Never call `enter_fighter` automatically. `enter_fighter` and `delete_fighter` are `permission-forbidden`. A mutate tool runs only with `confirmed: true` and confirmation text on that same call. No flag confirms every tool or the next call.
 - Show the measured profile set and get approval before `prepare_fighter_registration` kind `profile_set` and before entry. `pending` and `pendingStages` are stage names, never asset ids. Upload each `missingAssets` entry.
 - Do not ask for callback URLs or tokens in chat. Do not switch provider, account or registration route because a tool failed.
 - Queued panels, text reports and local paths are not displayed previews. Say the stage in one sentence while a long job runs. Approval still waits for the actual images.
-- Watching a job does not run it or cancel it. `get_creation_job` returns `executedByThisCall: false` and `cancelledByThisCall: false`. Hosted `observe: true` returns the checkpoint and does not advance the job. Resume reuses the stored `idempotencyKey` and does not start a second registration.
+- Watching a job does not run it or cancel it. `get_creation_job` returns `executedByThisCall: false` and `cancelledByThisCall: false`. `get_hosted_fighter` with `observe: true` does not advance a job, and neither does `waitSeconds` on that read. `advance_hosted_fighter` is the mutating step and needs `confirmed: true` plus confirmation text on that call. Resume reuses the stored `idempotencyKey` and does not start a second registration.
 
 ## Which route
 

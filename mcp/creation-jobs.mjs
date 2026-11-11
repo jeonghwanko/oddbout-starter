@@ -363,22 +363,26 @@ export function createJobStore(store) {
   /** Read the checkpoint file only. @param {string} id @param {string} jobId */
   async function readCheckpoint(id, jobId) {
     jobIdSchema.parse(jobId);
-    const checkpoint = await readJson(await store.fileFor(id, `jobs/${jobId}.checkpoint.json`));
-    return { ...checkpoint, executedByThisCall: false, cancelledByThisCall: false };
+    const job = await read(id, jobId);
+    const file = await readJson(await store.fileFor(id, `jobs/${jobId}.checkpoint.json`));
+    return acceptedCheckpoint(file, job);
   }
   /**
-   * Return the stored checkpoint and registration key. Does not run the engine or create a submission.
+   * Return the job's registration key. A checkpoint file that disagrees is refused and its key is not used.
+   * Does not run the engine or create a submission.
    * @param {string} id @param {string} jobId
    */
   async function resume(id, jobId) {
     const checkpoint = await readCheckpoint(id, jobId);
     const job = await read(id, jobId);
+    const key = job.registrationKey ?? job.plan?.registrationKey ?? null;
+    if (key !== checkpoint.registrationKey || job.status !== checkpoint.status) fail('checkpoint-mismatch');
     return {
       resumed: true,
       executed: false,
       status: job.status,
-      idempotencyKey: checkpoint.registrationKey ?? null,
-      idempotencyKeyReused: Boolean(checkpoint.registrationKey),
+      idempotencyKey: key,
+      idempotencyKeyReused: Boolean(key),
       checkpoint,
       next: 'Resume this checkpoint. Reuse idempotencyKey for the same registration. Do not start another one.',
     };
@@ -386,6 +390,34 @@ export function createJobStore(store) {
   return { read, list, prepare, inspect, resolve, cancel, gate, write, stopFile, readCheckpoint, resume };
 }
 /** @typedef {ReturnType<typeof createJobStore>} JobStore */
+
+const CHECKPOINT_KEY = /^[0-9a-f]{8}-[0-9a-f]{4}-[4][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** The job record wins. A file that disagrees, or that carries extra instructions, is refused. @param {any} file @param {Job} job */
+function acceptedCheckpoint(file, job) {
+  const key = job.registrationKey ?? job.plan?.registrationKey ?? null;
+  const fileKey = file?.registrationKey ?? null;
+  if (
+    file?.schema !== 'oddbout.checkpoint/1' ||
+    file?.jobId !== job.jobId ||
+    file?.sessionId !== job.sessionId ||
+    file?.status !== job.status ||
+    fileKey !== key ||
+    (fileKey !== null && !CHECKPOINT_KEY.test(String(fileKey)))
+  )
+    fail('checkpoint-mismatch');
+  return {
+    schema: 'oddbout.checkpoint/1',
+    sessionId: job.sessionId,
+    jobId: job.jobId,
+    status: job.status,
+    stage: job.stage ?? null,
+    updatedAt: job.updatedAt,
+    registrationKey: key,
+    executedByThisCall: false,
+    cancelledByThisCall: false,
+  };
+}
 
 /** A workspace-relative engine path as a file under `root`, or null when it is not one the store allows. @param {string} root @param {string | null} relative */
 async function engineFile(root, relative) {

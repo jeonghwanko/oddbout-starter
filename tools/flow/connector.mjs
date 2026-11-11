@@ -5,7 +5,7 @@ import path from 'node:path';
 import { z } from 'zod';
 import { buildDummyPackage } from './package-builder.mjs';
 import { DUMMY_LABEL, stamp } from './seal.mjs';
-import { decidePermission } from '../../mcp/tool-permissions.mjs';
+import { canonicalToolName, decidePermission } from '../../mcp/tool-permissions.mjs';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 /** @param {string} code */
@@ -37,7 +37,7 @@ export function createConnector(store, { roots, packageRoot }) {
   /** @param {unknown} file */
   async function bytesOf(file) {
     const found = typeof file === 'string' ? await confined(file) : null;
-    if (!found) return { error: { ok: false, code: 'dummy-path-refused', production: false } };
+    if (!found) return { error: stamp({ ok: false, code: 'dummy-path-refused' }) };
     return { bytes: await readFile(found) };
   }
   return {
@@ -53,21 +53,35 @@ export function createConnector(store, { roots, packageRoot }) {
           code: decision.code,
           permission: decision.tier,
           executed: false,
-          tool: name,
+          tool: canonicalToolName(name),
           bypassIgnored: decision.bypassIgnored,
         });
       }
-      if (name === 'create_dummy_package') {
+      const tool = canonicalToolName(name);
+      /** @param {any} result */
+      const finish = result =>
+        decision.tier === 'mutate' && result && typeof result === 'object'
+          ? {
+              ...result,
+              confirmationTrail: {
+                tool,
+                text: String(args.confirmationText ?? '')
+                  .trim()
+                  .slice(0, 200),
+              },
+            }
+          : result;
+      if (tool === 'create_dummy_package') {
         if (!packageRoot) return stampUnavailable('dummy-package-builder-unavailable');
-        return buildDummyPackage(store, packageRoot, args);
+        return finish(await buildDummyPackage(store, packageRoot, args));
       }
-      if (name === 'get_profile') return store.profile().body;
-      if (name === 'get_fighter_spec') return store.spec(args.section ?? 'overview').body;
-      if (name === 'browse_oddbout') {
+      if (tool === 'get_profile') return store.profile().body;
+      if (tool === 'get_fighter_spec') return store.spec(args.section ?? 'overview').body;
+      if (tool === 'browse_oddbout') {
         if ((args.view ?? 'style_guide') !== 'style_guide') return stampUnavailable(args.view);
         return store.styleGuide().body;
       }
-      if (name === 'get_my_fighters') {
+      if (tool === 'get_my_fighters') {
         const view = args.view ?? 'list';
         if (view === 'list') return store.listFighters().body;
         if (view === 'readiness') return store.readiness(args.purpose ?? 'registration').body;
@@ -76,59 +90,51 @@ export function createConnector(store, { roots, packageRoot }) {
         if (view === 'profile_set') return store.profileSet(args.profileSetId).body;
         return stampUnavailable(view);
       }
-      if (name === 'prepare_fighter_registration') {
+      if (tool === 'prepare_fighter_registration') {
         const found = typeof args.manifestPath === 'string' ? await confined(args.manifestPath) : null;
-        if (!found)
-          return {
-            ok: false,
-            code: 'dummy-path-refused',
-            production: false,
-            mode: 'dummy',
-            service: 'oddbout-dummy',
-            label: 'ODDBOUT-DUMMY — not production. No live server, no tokens, no model calls.',
-          };
+        if (!found) return stamp({ ok: false, code: 'dummy-path-refused' });
         const text = await readFile(found, 'utf8');
-        if (args.kind === 'profile_set') return store.prepareProfileSet(args.fighterId, text, args.idempotencyKey).body;
-        if (args.kind === 'package' || !args.kind) return store.createSubmission({ text, fighterId: args.fighterId, idempotencyKey: args.idempotencyKey }).body;
+        if (args.kind === 'profile_set') return finish(store.prepareProfileSet(args.fighterId, text, args.idempotencyKey).body);
+        if (args.kind === 'package' || !args.kind)
+          return finish(store.createSubmission({ text, fighterId: args.fighterId, idempotencyKey: args.idempotencyKey }).body);
         return stampUnavailable(args.kind);
       }
-      if (name === 'upload_fighter_asset') {
+      if (tool === 'upload_fighter_asset') {
         const file = await bytesOf(args.filePath);
         if (file.error) return file.error;
-        if (args.kind === 'profile_set') return store.uploadProfileAsset(args.profileSetId, args.assetId ?? 'front', file.bytes).body;
-        return store.putAsset(args.submissionId, args.assetId, file.bytes).body;
+        if (args.kind === 'profile_set') return finish(store.uploadProfileAsset(args.profileSetId, args.assetId ?? 'front', file.bytes).body);
+        return finish(store.putAsset(args.submissionId, args.assetId, file.bytes).body);
       }
-      if (name === 'submit_fighter_registration') {
-        if (args.kind === 'profile_set') return store.submitProfileSet(args.profileSetId).body;
-        if (args.kind === 'hosted') return store.registerHosted(args.jobId).body;
-        return store.submit(args.submissionId).body;
+      if (tool === 'submit_fighter_registration') {
+        if (args.kind === 'profile_set') return finish(store.submitProfileSet(args.profileSetId).body);
+        if (args.kind === 'hosted') return finish(store.registerHosted(args.jobId).body);
+        return finish(store.submit(args.submissionId).body);
       }
-      if (name === 'update_fighter') {
-        if (args.kind === 'style') return store.updateStyle(args.fighterId, args.style, args.idempotencyKey).body;
+      if (tool === 'update_fighter') {
+        if (args.kind === 'style') return finish(store.updateStyle(args.fighterId, args.style, args.idempotencyKey).body);
         return stampUnavailable(args.kind ?? 'profile');
       }
-      if (name === 'request_hosted_fighter') {
+      if (tool === 'request_hosted_fighter') {
         const step = args.step ?? 'request';
         if (step === 'request') {
-          return store.requestHosted({ description: args.description, language: args.language, idempotencyKey: args.idempotencyKey, delegate: args.delegate })
-            .body;
+          return finish(
+            store.requestHosted({ description: args.description, language: args.language, idempotencyKey: args.idempotencyKey, delegate: args.delegate }).body,
+          );
         }
-        if (step === 'choose_look') return store.chooseLook(args.jobId, args.choose).body;
-        if (step === 'revise_motion') return store.reviseMotion(args.jobId, args.clip, args.note).body;
+        if (step === 'choose_look') return finish(store.chooseLook(args.jobId, args.choose).body);
+        if (step === 'revise_motion') return finish(store.reviseMotion(args.jobId, args.clip, args.note).body);
         return stampUnavailable(step);
       }
-      if (name === 'get_hosted_fighter')
-        return (await store.waitHosted({ jobId: args.jobId, idempotencyKey: args.idempotencyKey, waitSeconds: args.waitSeconds, observe: args.observe })).body;
-      if (name === 'enter_fighter') return store.enter(args.fighterId, args).body;
-      return {
-        ok: false,
-        code: 'unknown-tool',
-        tool: name,
-        production: false,
-        mode: 'dummy',
-        service: 'oddbout-dummy',
-        label: 'ODDBOUT-DUMMY — not production. No live server, no tokens, no model calls.',
-      };
+      if (tool === 'get_hosted_fighter') {
+        return (await store.waitHosted({ jobId: args.jobId, idempotencyKey: args.idempotencyKey, waitSeconds: 0, observe: true })).body;
+      }
+      if (tool === 'advance_hosted_fighter') {
+        return finish((await store.waitHosted({ jobId: args.jobId, idempotencyKey: args.idempotencyKey, waitSeconds: args.waitSeconds, observe: false })).body);
+      }
+      if (tool === 'enter_fighter' || tool === 'delete_fighter' || tool === 'withdraw_fighter') {
+        return stamp({ ok: false, code: 'permission-forbidden', permission: 'forbidden', executed: false, tool });
+      }
+      return stamp({ ok: false, code: 'unknown-tool', tool });
     },
   };
 }
@@ -165,6 +171,7 @@ export const DUMMY_TOOLS = [
       style: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
       moves: z.object({ combo: MOVE.optional(), slam: MOVE.optional(), dash: MOVE.optional(), block: MOVE.optional() }).strict().optional(),
       confirmed: z.boolean().optional(),
+      confirmationText: z.string().max(200).optional(),
     },
   },
   { name: 'get_profile', title: 'ODDBOUT-DUMMY account', description: banner + 'Read the dummy account. Nickname is ODDBOUT.', shape: {} },
@@ -202,6 +209,7 @@ export const DUMMY_TOOLS = [
       idempotencyKey: REQUIRED_KEY,
       fighterId: UUID.optional(),
       confirmed: z.boolean().optional(),
+      confirmationText: z.string().max(200).optional(),
     },
   },
   {
@@ -215,6 +223,7 @@ export const DUMMY_TOOLS = [
       assetId: z.string().optional(),
       filePath: z.string(),
       confirmed: z.boolean().optional(),
+      confirmationText: z.string().max(200).optional(),
     },
   },
   {
@@ -227,6 +236,7 @@ export const DUMMY_TOOLS = [
       profileSetId: UUID.optional(),
       jobId: UUID.optional(),
       confirmed: z.boolean().optional(),
+      confirmationText: z.string().max(200).optional(),
     },
   },
   {
@@ -239,6 +249,7 @@ export const DUMMY_TOOLS = [
       style: z.union([z.record(z.string(), z.unknown()), z.null()]),
       idempotencyKey: REQUIRED_KEY,
       confirmed: z.boolean().optional(),
+      confirmationText: z.string().max(200).optional(),
     },
   },
   {
@@ -258,19 +269,30 @@ export const DUMMY_TOOLS = [
       clip: z.string().optional(),
       note: z.string().optional(),
       confirmed: z.boolean().optional(),
+      confirmationText: z.string().max(200).optional(),
     },
   },
   {
     name: 'get_hosted_fighter',
     title: 'ODDBOUT-DUMMY hosted status',
-    description:
-      banner +
-      'Read a hosted job. observe true returns the checkpoint and does not advance or register. waitSeconds (0–30) without observe runs bounded simulated worker ticks. waitedMs measures actual elapsed time.',
+    description: banner + 'Read a hosted job. This call does not advance motions or register, even with waitSeconds or confirmed.',
     shape: {
       jobId: UUID.optional(),
       idempotencyKey: UUID.optional(),
       waitSeconds: z.number().int().min(0).max(30).optional(),
       observe: z.boolean().optional(),
+    },
+  },
+  {
+    name: 'advance_hosted_fighter',
+    title: 'ODDBOUT-DUMMY hosted advance',
+    description: banner + 'Mutating. Moves the dummy worker. get_hosted_fighter does not.',
+    shape: {
+      jobId: UUID.optional(),
+      idempotencyKey: UUID.optional(),
+      waitSeconds: z.number().int().min(0).max(30).optional(),
+      confirmed: z.boolean().optional(),
+      confirmationText: z.string().max(200).optional(),
     },
   },
   {
@@ -282,13 +304,14 @@ export const DUMMY_TOOLS = [
       expectedManifestSha256: z.string().regex(/^[a-f0-9]{64}$/),
       reviewedClips: z.array(z.string()),
       confirmed: z.boolean().optional(),
+      confirmationText: z.string().max(200).optional(),
     },
   },
   {
     name: 'delete_fighter',
     title: 'ODDBOUT-DUMMY delete',
     description: banner + 'Forbidden. This dummy does not delete a fighter.',
-    shape: { fighterId: UUID.optional(), confirmed: z.boolean().optional(), yolo: z.boolean().optional() },
+    shape: { fighterId: UUID.optional(), confirmed: z.boolean().optional(), confirmationText: z.string().max(200).optional(), yolo: z.boolean().optional() },
   },
 ];
 

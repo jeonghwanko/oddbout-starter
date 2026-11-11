@@ -78,10 +78,19 @@ test('the shipped stdio MCP completes hosted creation using real choose_look arg
     language: 'en',
     idempotencyKey: randomUUID(),
     confirmed: true,
+    confirmationText: 'user confirmed this call',
   });
-  await call('request_hosted_fighter', { step: 'choose_look', jobId: requested.job.id, choose: 'a', confirmed: true });
+  await call('request_hosted_fighter', {
+    step: 'choose_look',
+    jobId: requested.job.id,
+    choose: 'a',
+    confirmed: true,
+    confirmationText: 'user confirmed this call',
+  });
   let current;
-  for (let i = 0; i < 12; i++) current = await call('get_hosted_fighter', { jobId: requested.job.id });
+  for (let i = 0; i < 12; i++) {
+    current = await call('advance_hosted_fighter', { jobId: requested.job.id, confirmed: true, confirmationText: 'user confirmed this call' });
+  }
   assert.equal(current.statusSummary.completed, true);
   assert.equal(current.job.submission.stage, 'registered');
   const again = await call('get_hosted_fighter', { jobId: requested.job.id });
