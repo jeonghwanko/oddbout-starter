@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile, rm, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, rm, stat, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -194,3 +194,130 @@ for (const mode of ['EOF', 'SIGTERM']) {
     await assert.rejects(stat(setup.packageRoot), { code: 'ENOENT' });
   });
 }
+
+test('a failed record poisons evidence and cannot produce a normal end marker', async t => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'flow-trace-poison-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'trace.jsonl');
+  const trace = createTraceRecorder(file, {});
+  const circular = {};
+  circular.self = circular;
+  assert.throws(() => trace.record('receive', circular), /circular/i);
+  assert.throws(() => trace.record('receive', {}), /dummy-trace-failed/);
+  trace.close();
+  const records = (await readFile(file, 'utf8')).trim().split('\n').map(JSON.parse);
+  assert.deepEqual(
+    records.map(r => r.type),
+    ['metadata'],
+  );
+});
+
+test('an underlying send rejection is recorded before termination', async t => {
+  const { StdioServerTransport } = await import('@modelcontextprotocol/server/stdio');
+  t.mock.method(StdioServerTransport.prototype, 'send', async () => {
+    throw new Error('simulated-write-failure');
+  });
+  const dir = await mkdtemp(path.join(tmpdir(), 'flow-trace-send-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'trace.jsonl');
+  const trace = createTraceRecorder(file, {});
+  const transport = new TracedStdioTransport(trace);
+  transport.onclose = () => trace.close();
+  await assert.rejects(transport.send({ jsonrpc: '2.0', id: 1, result: {} }), /simulated-write-failure/);
+  const records = (await readFile(file, 'utf8')).trim().split('\n').map(JSON.parse);
+  assert.deepEqual(
+    records.map(r => r.type),
+    ['metadata', 'send', 'transport_error', 'end'],
+  );
+});
+
+test('SIGTERM drains active package writes before deleting the session directory', { timeout: 60_000 }, async t => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'flow-trace-drain-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'run.jsonl');
+  const prompt = path.join(dir, 'prompt.txt');
+  await writeFile(prompt, 'dummy concurrency test');
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [path.join(ROOT, 'scripts/flow-mcp.mjs'), '--trace', file, '--prompt-file', prompt],
+    cwd: ROOT,
+    env: {},
+    stderr: 'pipe',
+  });
+  transport.stderr?.resume();
+  const client = new Client({ name: 'flow-drain-test', version: '1' });
+  t.after(() => client.close());
+  await client.connect(transport);
+  const setup = (await readFile(file, 'utf8'))
+    .trim()
+    .split('\n')
+    .map(JSON.parse)
+    .find(r => r.type === 'setup').data;
+  t.after(() => rm(setup.packageRoot, { recursive: true, force: true }));
+  let finished = 0;
+  const calls = Array.from({ length: 8 }, () =>
+    client.callTool({ name: 'create_dummy_package', arguments: {} }).then(
+      () => {
+        finished++;
+      },
+      () => {
+        finished++;
+      },
+    ),
+  );
+  const deadline = Date.now() + 10_000;
+  while (!(await readdir(setup.packageRoot)).length) {
+    assert.ok(Date.now() < deadline, 'a package write should start');
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+  assert.equal(finished, 0, 'interrupt while package writes are still active');
+  const onclose = transport.onclose;
+  const closed = new Promise(resolve => {
+    transport.onclose = () => {
+      onclose?.();
+      resolve();
+    };
+  });
+  assert.ok(transport.pid);
+  process.kill(transport.pid, 'SIGTERM');
+  await closed;
+  await Promise.all(calls);
+  await assert.rejects(stat(setup.packageRoot), { code: 'ENOENT' });
+  const records = (await readFile(file, 'utf8')).trim().split('\n').map(JSON.parse);
+  assert.equal(records.at(-1).type, 'end');
+  assert.equal(records.at(-1).data.reason, 'SIGTERM');
+  assert.equal(
+    records.some(r => r.type === 'lifecycle_error'),
+    false,
+  );
+});
+
+test('a partial disk write stays incomplete even after storage recovers', async t => {
+  const { default: fs } = await import('node:fs');
+  const { syncBuiltinESMExports } = await import('node:module');
+  const dir = await mkdtemp(path.join(tmpdir(), 'flow-trace-partial-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'trace.jsonl');
+  const trace = createTraceRecorder(file, {});
+  const write = fs.writeSync;
+  let first = true;
+  fs.writeSync = (fd, buffer, offset, length) => {
+    if (first) {
+      first = false;
+      return write(fd, buffer, offset, Math.min(length, 10));
+    }
+    throw Object.assign(new Error('disk-full'), { code: 'ENOSPC' });
+  };
+  syncBuiltinESMExports();
+  try {
+    assert.throws(() => trace.record('receive', { id: 1 }), { code: 'ENOSPC' });
+  } finally {
+    fs.writeSync = write;
+    syncBuiltinESMExports();
+  }
+  assert.throws(() => trace.record('receive', { id: 2 }), /dummy-trace-failed/);
+  trace.close();
+  const bytes = await readFile(file, 'utf8');
+  assert.equal(bytes.includes('"type":"end"'), false);
+  assert.throws(() => JSON.parse(bytes.split('\n')[1]));
+});

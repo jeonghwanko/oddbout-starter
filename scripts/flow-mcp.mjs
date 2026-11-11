@@ -57,19 +57,28 @@ let pendingStop;
 async function shutdown(reason = 'session-closed') {
   if (closing) return;
   closing = true;
+  let cleanupFailed = false;
   try {
-    await server?.close();
-  } finally {
     try {
-      await http?.close();
+      await server?.closeAndDrain();
     } finally {
       try {
-        if (packageRoot) await rm(packageRoot, { recursive: true, force: true });
+        await http?.close();
       } finally {
-        process.stdin.destroy();
-        trace?.close(reason);
+        if (packageRoot) await rm(packageRoot, { recursive: true, force: true });
       }
     }
+  } catch (error) {
+    cleanupFailed = true;
+    try {
+      trace?.record('lifecycle_error', { message: error instanceof Error ? error.message : String(error) });
+    } catch {
+      // A failed recorder must remain incomplete, never look like successful cleanup.
+    }
+    throw error;
+  } finally {
+    process.stdin.destroy();
+    trace?.close(cleanupFailed ? 'cleanup-failed' : reason);
   }
 }
 /** @param {string} [reason] */
@@ -90,6 +99,9 @@ try {
   packageRoot = await mkdtemp(path.join(tmpdir(), 'oddbout-dummy-packages-'));
   http = await startDummyServer(store);
   server = createDummyMcp(store, { roots: [process.cwd(), packageRoot], packageRoot });
+  server.server.onerror = () => {
+    process.exitCode = 1;
+  };
   server.server.onclose = () => stop();
   const manifest = { ...setup, dummyRegistrationUrl: http.url, packageRoot };
   process.stderr.write(`${DUMMY_LABEL}\n${JSON.stringify(manifest)}\nThis process does not open a production connection.\n`);

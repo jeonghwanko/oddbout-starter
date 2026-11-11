@@ -9,15 +9,22 @@ export function createTraceRecorder(file, metadata) {
   const fd = openSync(file, 'wx', 0o600);
   let sequence = 0;
   let closed = false;
+  let failed = false;
   /** @param {string} type @param {unknown} data */
   const record = (type, data) => {
     if (closed) throw new Error('dummy-trace-closed');
-    const bytes = Buffer.from(JSON.stringify({ sequence: sequence++, time: new Date().toISOString(), type, data }) + '\n');
-    let offset = 0;
-    while (offset < bytes.length) {
-      const written = writeSync(fd, bytes, offset, bytes.length - offset);
-      if (!written) throw new Error('dummy-trace-write-failed');
-      offset += written;
+    if (failed) throw new Error('dummy-trace-failed');
+    try {
+      const bytes = Buffer.from(JSON.stringify({ sequence: sequence++, time: new Date().toISOString(), type, data }) + '\n');
+      let offset = 0;
+      while (offset < bytes.length) {
+        const written = writeSync(fd, bytes, offset, bytes.length - offset);
+        if (!written) throw new Error('dummy-trace-write-failed');
+        offset += written;
+      }
+    } catch (error) {
+      failed = true;
+      throw error;
     }
   };
   try {
@@ -32,7 +39,8 @@ export function createTraceRecorder(file, metadata) {
     close(reason = 'session-closed') {
       if (closed) return;
       try {
-        record('end', { reason });
+        // Never append a normal end marker after a failed or partial evidence write.
+        if (!failed) record('end', { reason });
       } finally {
         closed = true;
         closeSync(fd);
@@ -83,7 +91,13 @@ export class TracedStdioTransport extends StdioServerTransport {
       this.trace.record('send', message);
       await super.send(message);
     } catch (error) {
-      await this.close();
+      try {
+        this.trace.record('transport_error', { message: error instanceof Error ? error.message : String(error) });
+      } catch {
+        // A poisoned recorder deliberately leaves the transcript incomplete.
+      } finally {
+        await this.close();
+      }
       throw error;
     }
   }
