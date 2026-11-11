@@ -113,16 +113,22 @@ jobs:
           list="$RUNNER_TEMP/ffmpeg-ubuntu.list"
           opts=(-o "Dir::Etc::sourcelist=$list" -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0
                 -o Acquire::Retries=1 -o Acquire::https::Timeout=20)
-          for mirror in https://archive.ubuntu.com/ubuntu https://azure.archive.ubuntu.com/ubuntu; do
-            for suite in "$VERSION_CODENAME" "$VERSION_CODENAME-updates" "$VERSION_CODENAME-security"; do
-              echo "deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] $mirror $suite main universe restricted multiverse"
-            done > "$list"
-            # Bound network waits only. Never interrupt dpkg while it installs the verified packages.
-            if sudo timeout 90s apt-get "${opts[@]}" update &&
-               sudo timeout 180s apt-get "${opts[@]}" --download-only --no-install-recommends -y install ffmpeg; then
-              sudo apt-get "${opts[@]}" --no-download --no-install-recommends -y install ffmpeg
-              break
-            fi
+          # A runner whose resolver is not up yet fails both mirrors at once ("Temporary failure resolving", twice in a row on
+          # 2026-11-11): go round the mirrors again after a pause before giving up.
+          for round in 1 2 3 4; do
+            for mirror in https://archive.ubuntu.com/ubuntu https://azure.archive.ubuntu.com/ubuntu; do
+              for suite in "$VERSION_CODENAME" "$VERSION_CODENAME-updates" "$VERSION_CODENAME-security"; do
+                echo "deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] $mirror $suite main universe restricted multiverse"
+              done > "$list"
+              # Bound network waits only. Never interrupt dpkg while it installs the verified packages.
+              if sudo timeout 90s apt-get "${opts[@]}" update &&
+                 sudo timeout 180s apt-get "${opts[@]}" --download-only --no-install-recommends -y install ffmpeg; then
+                sudo apt-get "${opts[@]}" --no-download --no-install-recommends -y install ffmpeg
+                break 2
+              fi
+            done
+            echo "ffmpeg: no mirror answered in round $round"
+            sleep $((round * 20))
           done
           ffmpeg -version >/dev/null
           ffprobe -version >/dev/null
