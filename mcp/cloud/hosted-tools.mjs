@@ -64,7 +64,6 @@ export const HOSTED_INSTRUCTIONS =
   "If ODDBOUT tools are not loaded in this turn, use the host's plugin/tool discovery when available. " +
   'If discovery is unavailable or fails, explain that limitation and ask the user to select the connected ODDBOUT app in this chat; ' +
   'a missing tool is not evidence of a server, account or job failure. ' +
-  'The creation description contains character artwork requirements only; keep workflow, waiting and tool-use instructions out of it. ' +
   'Save the verified get_profile account id, idempotencyKey and original arguments before sending, ' +
   'and the returned job.id. After a timeout or disconnection, verify get_profile still matches that account, ' +
   'then use get_hosted_fighter with jobId or, if the response was lost, idempotencyKey. ' +
@@ -75,8 +74,7 @@ export const HOSTED_INSTRUCTIONS =
   'Read the same job again for fresh preview URLs; a URL is not proof that the user saw the image. ' +
   'While the user watches a working job in this chat, read it again with waitSeconds 25 each time a read returns and tell him each change. ' +
   'Use statusSummary for the current stage, completion and required action; progress is stage-local, never overall completion. ' +
-  'When appearanceAutoSelectAt is present, explain that unanswered looks default to A ten minutes after the pair is ready. ' +
-  'The server selects it; do not send a fabricated user choice or run a chat timer. ' +
+  'The server selects an unanswered look (A, ten minutes after the pair is ready); do not send a fabricated user choice or run a chat timer. ' +
   'appearanceAutoSelection is the server event proving that A was selected after no answer; report its selectedAt and deadline. ' +
   'Without that evidence, do not infer an automatic selection from choice A or elapsed time. ' +
   "Hosted creation includes registration into production after file validation. Motion review and entry happen on the owner's site page. " +

@@ -2,7 +2,7 @@
 
 The skill body's hard rules win if this page disagrees.
 
-A connection or status request does not authorize starting or resuming creation. Inspect this conversation's actual ODDBOUT tools, call native `get_profile` when available, and use `get_my_fighters` view `readiness` with `purpose: connection` (the cloud tool named `check_creation_readiness` until 2026-11-06; that name still answers). `npm run creation:preflight -- --purpose connection` is the same check in one read-only JSON reply. It does not install the kit or ask for a generation subscription.
+A connection or status request does not authorize starting or resuming creation. Inspect this conversation's actual ODDBOUT tools, call native `get_profile` when available, and use `get_my_fighters` view `readiness` with `purpose: connection` (the cloud tool named `check_creation_readiness` until 2026-11-06; that name still answers). Where a kit is already present, `npm run creation:preflight -- --purpose connection` adds the workspace side in one read-only JSON reply; it does not verify the account, install the kit or ask for a generation subscription.
 
 Keep server discovery, account plugin import or update, installation and selection in this conversation, tool exposure, and the returned account identity separate. A released ZIP, local Codex connection or successful public MCP tool listing does not establish any Dots-native account connection.
 

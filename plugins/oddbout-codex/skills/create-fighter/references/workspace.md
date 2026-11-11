@@ -59,8 +59,9 @@ Use these calls wherever the main skill names `list_creation_sessions`, `create_
 Preparing a job never executes it. Run its returned exact cwd/command/args/env through normal host tools.
 Preserve actual previews, user review boundaries, provider choices and unknown-outcome recovery.
 
-Call workspace `check_creation_readiness` before generation, after restart and before registration,
-using only the account choice stated by the user. It checks kit and project state and reports registration
+Run workspace `preflight_creation` (or `npm run creation:preflight -- --purpose <purpose>`) before generation, after restart
+and before registration, using only the account choice stated by the user. It is read-only; only a kit older than 0.6.21
+uses `check_creation_readiness`, which can fast-forward the kit. It checks kit and project state and reports registration
 as requiring connector verification. Also use the connected ODDBOUT `get_my_fighters` view `readiness` for its
 account checks. Neither response verifies generation, file delivery, visual acceptance or registration.
 Cloud registration never requires `npm run login` in the workspace.
