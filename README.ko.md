@@ -271,4 +271,4 @@ npm run mcp:smoke
 
 ## 라이선스
 
-제작 키트는 [MIT 라이선스](LICENSE)를 따릅니다. 포함된 [sprite-gen](vendor/sprite-gen) 서브모듈은 Alex Kim의 [sprite-gen](https://github.com/aldegad/sprite-gen)을 포크한 [sprite-gen-agent](https://github.com/jeonghwanko/sprite-gen-agent)이며, 별도의 Apache-2.0 LICENSE와 NOTICE가 적용됩니다. 생성 서비스의 계정과 이용에는 각 제공자의 약관이 적용됩니다.
+제작 키트는 [MIT 라이선스](LICENSE)를 따릅니다. 예제 선수 [examples/overtime-king](examples/overtime-king)의 그림은 따로 [CC BY 4.0(ODDBOUT 출처 표기)](examples/overtime-king/LICENSE.md)을 따릅니다. 포함된 [sprite-gen](vendor/sprite-gen) 서브모듈은 Alex Kim의 [sprite-gen](https://github.com/aldegad/sprite-gen)을 포크한 [sprite-gen-agent](https://github.com/jeonghwanko/sprite-gen-agent)이며, 별도의 Apache-2.0 LICENSE와 NOTICE가 적용됩니다. 생성 서비스의 계정과 이용에는 각 제공자의 약관이 적용됩니다.
