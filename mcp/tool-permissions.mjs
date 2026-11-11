@@ -38,6 +38,9 @@ export const TOOL_PERMISSIONS = {
   cancel_creation_job: 'mutate',
   resolve_creation_job: 'mutate',
   pack_fighter_package: 'mutate',
+  // New folders under output/ only; nothing generated or posted.
+  export_social_media: 'mutate',
+  prepare_grok_face_clip: 'mutate',
   update_creation_environment: 'mutate',
   prepare_generation_login: 'mutate',
   // Entry and deletion stay blocked in this harness. The owner enters on the site.

@@ -18,6 +18,7 @@ import { identifier } from './creation-store.mjs';
 import { accountChoice, registerEnvironmentTools } from './creation-environment.mjs';
 import { errorCode } from './error-code.mjs';
 import { registerPackagingTools } from './packaging-tools.mjs';
+import { registerSocialTools } from './social-tools.mjs';
 import { serialQueue } from './serial-worker.mjs';
 import { compactText } from './tool-result.mjs';
 import kit from '../package.json' with { type: 'json' };
@@ -216,6 +217,7 @@ export function createServer({ root, contextRequest } = {}) {
   const queue = serialQueue();
   const validatePackage = root ? makePackageValidator(root, { queue }) : undefined;
   if (root) registerPackagingTools(server, { root, respond, queue });
+  if (root) registerSocialTools(server, { root, respond, queue });
   const records = root ? registerCreatorTools(server, { root, contextRequest, respond, outputSchema, validatePackage }) : null;
   if (records) {
     server.registerTool(

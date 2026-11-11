@@ -20,6 +20,7 @@ const entries = [
   'scripts/creation-tool.mjs',
   'scripts/check-creation-delivery.mjs',
   'scripts/connect-generation.mjs',
+  'scripts/social-export.mjs',
   'tools/ai-fighter/gait.mjs',
   'server/ai-fighter-package.mjs',
   'mcp/server.mjs',
@@ -53,6 +54,9 @@ test('the runtime file list is closed over imports and keeps the Edge-only cloud
     'scripts/check-cloud-discovery.mjs',
     'plugins/ai-fighter/mcp.json',
     'plugins/ai-fighter/local-files.mjs',
+    'scripts/social/encode.mjs',
+    'scripts/social/frames.mjs',
+    'docs/SOCIAL-EXPORT.md',
     ...shippedDocs,
   ])
     assert.ok(files.includes(required), required);

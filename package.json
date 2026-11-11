@@ -42,6 +42,7 @@
     "fighter:gait": "node scripts/gait.mjs",
     "fighter:contact": "node scripts/contact.mjs",
     "fighter:profile-set": "node scripts/profile-set.mjs",
+    "fighter:social": "node scripts/social-export.mjs",
     "fighter:register": "node scripts/register-fighter.mjs",
     "flow:test": "node scripts/flow-test.mjs",
     "flow:eval": "node scripts/flow-eval.mjs",

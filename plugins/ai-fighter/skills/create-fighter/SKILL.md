@@ -42,6 +42,7 @@ The workspace route is the user's choice of a PC or Dots workspace. Read [worksp
 | Jobs, watching, plan, reuse, recovery | [jobs](references/jobs.md) |
 | Tool permission tiers | `docs/TOOL-PERMISSIONS.md` |
 | Registration, revision, style, entry | [registration](references/registration.md) |
+| Share on X: clips, reaction faces, Grok face clips | [share on X](references/social.md) |
 | Workspace kit, Dots, `creation:tool` | [workspace routing](references/workspace.md) |
 | Skill, kit and project lifetimes | `docs/LIFECYCLE.md` |
 | Poses, style fields, gait | The kit docs named in [registration](references/registration.md) |
