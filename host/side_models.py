@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Side models (2026-11-07, prototype, opt-in): a local answer to the side judge's `side` check — "the character is seen from the side and
-faces right" (generation-prompts.mjs sideJudgePrompt) — which the pixel judge (motions.py pixel_judge_side, pixels-v1) always leaves
+faces right" (generation-prompts.mjs sideJudgePrompt) — which the pixel judge (motions.py pixel_judge_side, pixels-v2) always leaves
 "unknown", so hybrid asks codex on nearly every side take.
 
 It runs in its own venv with onnxruntime (never the kit's sprite-gen venv; `setup` makes the venv and fetches the pinned weights, sha256

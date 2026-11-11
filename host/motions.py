@@ -800,6 +800,8 @@ def judge_prompt(motion: str) -> str:
         f"Image 2 is {what} of a 2D fighting-game character seen from the side, every frame in order, left to right and top to bottom,",
         "with a thin ground line. Image 1 is the character's approved look. Judge the frames strictly; answer with JSON only, as the schema says.",
         "- identity: pass if every frame is clearly the same character as image 1 (face, colours, outfit, proportions, props), fail otherwise.",
+        "  Small effects that float apart from the body in image 1 (sparkles, holograms, an aura) may be left out of the frames: that alone",
+        "  is not a fail. Something he holds or wears must stay.",
         "- anatomy: pass if every frame has a believable body: no extra, missing, melted or doubled limbs, no torn or ghosted body parts.",
         "  A faint key-colour fringe of a few pixels on an outline is not an anatomy problem.",
         "- loop: pass if the last frame leads smoothly back into the first (no jump in pose, size or position), fail otherwise.",
@@ -1006,7 +1008,7 @@ def frame_front(path: Path, out: Path) -> dict:
 # three-quarter views, 3 loops for a frying pan missing in every frame and 1 for gloves shrinking in some frames) and on defects painted
 # into their passes. What they did not show: a profile from a three-quarter view, a part changing size, a face.
 
-PIXEL_MODEL = "pixels-v1"
+PIXEL_MODEL = "pixels-v2"
 PJ_HEIGHT = 256            # the standing figure's height every share and size is measured at
 PJ_CANVAS = 384            # a canvas's longest side when its parts and margins are measured
 PJ_OPAQUE = 128            # alpha from which a pixel is part of the figure
@@ -1036,6 +1038,11 @@ PJ_SMALL_KEPT = (0.3, 0.2)
 # A region gone from some frames while the others show it (below PJ_GONE in one, above PJ_SEEN in another): an item lost in those frames
 # or an arm passing in front of it. Pixels cannot tell which: unknown (passing loops: 0.29 the least in a frame).
 PJ_GONE, PJ_SEEN = 0.12, 0.5
+# A region whose pixels in the look sit mostly (this share) apart from the body (8-connected parts other than the largest) is something
+# floating beside him: sparkles, holograms, an aura. A walk or run may leave it out and still be him (job 98a88093, 2026-11-11: speech
+# bubbles and cubes floating by the hands, 3.4 % and 2.3 % of the look, gone from three clean walks and failed each time). Pixels cannot
+# tell an effect left out from an item lost: unknown.
+PJ_APART = 0.5
 # style (side): the share of soft steps (Lab 1.5-8 between neighbours: gradients, gloss) against the front's. Never a fail: codex's own
 # style misses are let through (generation-prompts.mjs sideStyleOnly).
 PJ_SOFT = 1.25
@@ -1118,6 +1125,18 @@ def _pj_regions(rgba: np.ndarray):
         raise SystemExit("pixel-judge: the reference has no figure")
     centres = _pj_kmeans(_pj_lab(pixels[::max(1, len(pixels) // PJ_SAMPLE)]), PJ_REGIONS)
     return centres, _pj_shares(rgba, centres)[0]
+
+
+def _pj_apart(rgba: np.ndarray, centres: np.ndarray) -> np.ndarray:
+    """Per region of the reference: the share of its solid pixels that sit apart from the main part (the largest 8-connected one)."""
+    solid = rgba[..., 3] >= PJ_SOLID
+    labels, ids, _ = _pj_parts(rgba[..., 3] >= PJ_OPAQUE)
+    if len(ids) < 2 or not solid.any():
+        return np.zeros(len(centres))
+    nearest, dist = _pj_assign(_pj_lab(rgba[..., :3][solid]), centres)
+    near, off = dist <= PJ_FAR, labels[solid] != ids[0]
+    total = np.bincount(nearest[near], minlength=len(centres))
+    return np.bincount(nearest[near & off], minlength=len(centres)) / np.maximum(total, 1)
 
 
 def _pj_parts(mask: np.ndarray):
@@ -1341,6 +1360,7 @@ def pixel_judge_loop(look_path: Path, strip_path: Path) -> dict:
     notes, m = [], {"frames": count}
     lf = _pj_figure(_pj_rgba(look_path))
     centres, ref = _pj_regions(lf)
+    apart = _pj_apart(lf, centres)
     tall, area, ghost, parts, rows, far = [], [], [], [], [], []
     for cell in cells:
         # cut to everything not background (a half-transparent limb beside the body stays in), measured tall by its opaque pixels
@@ -1365,12 +1385,16 @@ def pixel_judge_loop(look_path: Path, strip_path: Path) -> dict:
     for j in range(len(centres)):
         median, low, high = float(np.median(ratios[:, j])), float(ratios[:, j].min()), float(ratios[:, j].max())
         m["regions"].append({"lab": [round(float(v), 1) for v in centres[j]], "look": round(float(ref[j]), 4), "median": round(median, 3),
-                             "min": round(low, 3), "max": round(high, 3)})
+                             "min": round(low, 3), "max": round(high, 3), "apart": round(float(apart[j]), 3)})
         if ref[j] < PJ_SMALL_SHARE:
             continue
         name = _pj_name(centres[j])
         state = _pj_grade(median, PJ_LOOP_KEPT if ref[j] >= PJ_KEPT_SHARE else PJ_SMALL_KEPT, below=True)
-        if state != "pass":
+        if state != "pass" and apart[j] >= PJ_APART:
+            state = "unknown"
+            notes.append(f"identity: region {name}, {ref[j]:.1%} of the look, keeps a median {median:.2f} of its share over the frames; "
+                         "in the look it floats apart from the body (an effect left out, or an item lost).")
+        elif state != "pass":
             notes.append(f"identity: region {name}, {ref[j]:.1%} of the look, keeps a median {median:.2f} of its share over the frames: "
                          "something the look shows is missing.")
         elif low < PJ_GONE and high > PJ_SEEN:

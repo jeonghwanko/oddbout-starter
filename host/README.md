@@ -229,6 +229,7 @@ GPT는 자세마다 몸을 따로 그려 외형보다 2~20% 커지거나 작아�
   픽셀 판정기의 답은 `take-<n>.pixels.json`·`judge/pixels.json`(측정값 포함), hybrid가 부른 codex 판정은 `take-<n>.codex-verdict.json`·`judge/codex-verdict.json`에 남는다.
   결과 파일의 `judge.kind`(`pixels`·`hybrid`, codex 판정은 없음)와 키가 누가 판정했는지 말하므로, 모드를 바꾼 뒤 남아 있는 판정은 위 규칙대로 다시 묻지 않고 `stale`로 표시해 쓴다.
   `side`·`gait` 이벤트와 `tried`에는 `judgeBy`(`pixels`·`pixels+codex`)가 붙는다. 픽셀 판정기가 답하지 못하면(`side-pixel-judge-<종료>`, `pixel-judge-<종료>`) 단계를 나중에 다시 돌고, codex가 대신 판정하지 않는다.
+  걷기·달리기 identity에서, 기준 그림 안에서 몸과 떨어져 떠 있는 색 영역(반짝임·홀로그램 같은 이펙트, 그 영역의 절반 이상이 몸 밖)이 프레임에서 사라진 것은 실패가 아니라 `unknown`이다(`pixels-v2`, 2026-11-11 작업 98a88093: 손 옆에 떠 있는 말풍선·큐브가 빠진 깨끗한 걷기 세 번이 모두 실패해 `walk-not-clean`으로 멈췄다). hybrid에서는 codex가 보고, 몸에 붙은 것(들거나 입은 것)이 사라지면 전처럼 실패다.
   픽셀이 보는 것: 캔버스 가장자리 잘림, 따로 떨어진 덩어리·바닥 선·테두리, 기준 그림 색 영역의 사라짐·새 색, 반투명(겹친 프레임), 프레임 높이·면적 튐, 엔진의 이음새 비율.
   보지 못하는 것: 옆모습과 3/4 시점의 구분(옆모습 `side`는 늘 `unknown`), 얼굴, 부위 크기 변화(장갑이 작아짐), 팔다리 모양. 판정 실패는 다시 그리기·다시 찍기(유료)로 이어진다.
 - 판정 기록(2026-11-07, `createJudgeArchive`): 새로 한 옆모습·걷기·달리기 판정마다 한 줄을 `<root>/judge-archive/judgments-<YYYY-MM>.jsonl`에 남긴다.
