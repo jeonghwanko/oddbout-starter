@@ -17,7 +17,8 @@ import { toolRef } from './merged-tools.mjs';
  * @typedef {(submissionId: string | undefined) => Promise<void>} RecordAgent
  * @typedef {{ content: { type: 'text', text: string }[], structuredContent: Record<string, unknown>, isError?: boolean }} ToolOutput
  * @typedef {{ write?: boolean, publish?: boolean, openWorld?: boolean, idempotent?: boolean, files?: string[], profile?: boolean,
- *   publicTool?: boolean, diagnostic?: boolean | ((args: Record<string, unknown>) => boolean),
+ *   publicTool?: boolean, diagnostic?: boolean | ((args: Record<string, unknown>) => boolean), uiResourceUri?: string,
+ *   uiVisibility?: ('model' | 'app')[],
  *   logAs?: (args: Record<string, unknown>) => string }} ToolOptions  `diagnostic` and `logAs` may depend on the call (a merged tool's view)
  * @typedef {{ signal: AbortSignal, deadline: number, legacy?: boolean }} ToolContext  The call's own: aborted when its client goes away; its answer is
  *   due by `deadline`; `legacy` when it came by a name no longer listed (a merged tool's member)

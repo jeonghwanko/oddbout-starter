@@ -5,6 +5,7 @@ import { createRegistrationAnalytics } from '../../../api/registration-analytics
 import { createCreatorLink } from '../../../api/creator-link.mjs';
 import { simulateDuel, engineVersion } from './duel-engine.mjs';
 import { engines } from './duel-engines.mjs';
+import { officialPractice } from './official-practice.mjs';
 import { release } from './release.mjs';
 import { createClientLimiter } from '../../../api/client-limit.mjs';
 import { createDecisionsReviewer } from '../../../api/decisions-review.mjs';
@@ -24,7 +25,12 @@ Deno.serve(
     simulateDuel,
     engineVersion,
     engines,
+    officialPractice,
     release,
+    embed: {
+      enabled: Deno.env.get('ODDBOUT_CHATGPT_GAME_LAUNCHER') === '1',
+      gameOrigin: Deno.env.get('ODDBOUT_CHATGPT_GAME_ORIGIN') ?? '',
+    },
     limiter,
     creatorLink: createCreatorLink({ db }),
     cascadeReviewer: createLunaSolReviewer({ apiKey: Deno.env.get('ODDBOUT_DECISIONS_API_KEY'), enabled: Deno.env.get('ODDBOUT_DECISIONS_MODE') === 'shadow' }),

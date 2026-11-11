@@ -76,6 +76,7 @@ creator-kit ZIP에는 제작·연결 안내와 이 문서 지도가 들어 있�
 | --- | --- |
 | [CREATOR-HOSTING](CREATOR-HOSTING.md) | ODDBOUT 사이트·API·검증 작업자의 호스팅 구성 |
 | [CLOUD-MCP](CLOUD-MCP.md) | 단일 호스팅 MCP(`mcp.oddbout.com`) 연결과 계정 확인을 통한 등록. 터미널 에이전트의 한 줄 연결(`npx -y oddbout@latest connect`, `packages/oddbout`) |
+| [CHATGPT-EMBED](CHATGPT-EMBED.md) | 기본 비활성 ChatGPT 게임 런처·전용 세션·비공개 연습 경기 API와 게시 설정 |
 | [MCP-GATEWAY](MCP-GATEWAY.md) | Cloudflare 중계·Render 예비 경로의 구현, DNSSEC 이전 순서와 검증 |
 | [PUBLIC-API](PUBLIC-API.md) | 공개 조회의 싱가포르 리전·15초 캐시·배포와 되돌리기 |
 | [GENERATION-HOST](GENERATION-HOST.md) | 호스팅 생성 신청을 실제로 그리는 생성 PC 되기 |

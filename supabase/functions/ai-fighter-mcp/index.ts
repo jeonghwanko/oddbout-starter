@@ -10,4 +10,9 @@ const db = createClient(url, secret, { auth: { persistSession: false, autoRefres
 const arenaKey = Deno.env.get('ODDBOUT_ARENA_AGENT_KEY');
 // The hosted generation tools (2026-10-28) list only while this secret is '1'; the service switch still decides whether a request is taken.
 const hosted = Deno.env.get('ODDBOUT_HOSTED_GENERATION_TOOLS') === '1' ? {} : null;
-Deno.serve(createCloudHandler({ db, arena: arenaKey ? { url: ARENA_URL, key: arenaKey } : null, hosted }));
+// Embedded ChatGPT launch stays disabled unless both operator settings are present and validated by the MCP server.
+const gameLauncherConfig = {
+  enabled: Deno.env.get('ODDBOUT_CHATGPT_GAME_LAUNCHER') === '1',
+  gameUrl: Deno.env.get('ODDBOUT_CHATGPT_GAME_URL') ?? '',
+};
+Deno.serve(createCloudHandler({ db, arena: arenaKey ? { url: ARENA_URL, key: arenaKey } : null, hosted, gameLauncherConfig }));

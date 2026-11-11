@@ -11,7 +11,7 @@ const reply = (body, status = 200) => jsonResponse(body, status, CORS);
  *   completed_at: string | null, result: unknown }} DuelRow
  */
 /** @type {(row: DuelRow) => object} */
-const present = row => ({
+export const presentDuel = row => ({
   id: row.id,
   a: row.a,
   b: row.b,
@@ -38,6 +38,25 @@ const DUEL_STATUS = Object.freeze({
 function check(error) {
   if (error) throw rpcProblem(error, DUEL_STATUS, { unavailable: 'duel-service-unavailable' });
 }
+/** Load and validate the same registered package for public and private matches.
+ * @param {any} db @param {string} id @param {string} hash */
+export async function loadDuelManifest(db, id, hash) {
+  const { data: f, error: e } = await db.from('af_fighters').select('submission_id').eq('id', id).maybeSingle();
+  check(e);
+  if (!f) throw new Problem(404, 'not-found');
+  const { data: s, error } = await db
+    .from('af_submissions')
+    .select('manifest_text,manifest_sha')
+    .eq('id', f.submission_id)
+    .eq('status', 'registered')
+    .maybeSingle();
+  check(error);
+  if (!s || s.manifest_sha !== hash || (await sha256(new TextEncoder().encode(s.manifest_text))) !== hash) throw new Problem(409, 'package-mismatch');
+  const parsed = parseFighterJson(s.manifest_text);
+  if (!parsed.ok || !validateFighter(parsed.data).ok) throw new Problem(409, 'package-invalid');
+  return parsed.data;
+}
+
 const ENGINE_NAME = /^[a-z0-9][a-z0-9.-]{0,63}$/;
 /**
  * Guest-triggered, server-computed matches. No client result or seed is accepted. All DB access stays service-only.
@@ -64,23 +83,6 @@ export function createDuelHandler({ db, simulateDuel, engineVersion, engines = n
     check(error);
     return data;
   };
-  /** @param {string} id @param {string} hash */
-  async function manifest(id, hash) {
-    const { data: f, error: e } = await db.from('af_fighters').select('submission_id').eq('id', id).maybeSingle();
-    check(e);
-    if (!f) throw new Problem(404, 'not-found');
-    const { data: s, error } = await db
-      .from('af_submissions')
-      .select('manifest_text,manifest_sha')
-      .eq('id', f.submission_id)
-      .eq('status', 'registered')
-      .maybeSingle();
-    check(error);
-    if (!s || s.manifest_sha !== hash || (await sha256(new TextEncoder().encode(s.manifest_text))) !== hash) throw new Problem(409, 'package-mismatch');
-    const parsed = parseFighterJson(s.manifest_text);
-    if (!parsed.ok || !validateFighter(parsed.data).ok) throw new Problem(409, 'package-invalid');
-    return parsed.data;
-  }
   /** The ranking rows with each fighter's per-language names (contract profile.names) where he has them. */
   async function rankings() {
     // One query: the ranking carries each fighter's per-language names (2026-10-29), shown only when he has them.
@@ -97,7 +99,7 @@ export function createDuelHandler({ db, simulateDuel, engineVersion, engines = n
         const { data, error } = await db.from('af_duels').select('*').eq('id', parts[1]).not('completed_at', 'is', null).maybeSingle();
         check(error);
         if (!data) throw new Problem(404, 'not-found');
-        return reply({ ok: true, match: present(data) });
+        return reply({ ok: true, match: presentDuel(data) });
       }
       if (request.method !== 'POST' || parts.join('/') !== 'duels') throw new Problem(404, 'not-found');
       const [engine, run] = pick(request);
@@ -120,7 +122,7 @@ export function createDuelHandler({ db, simulateDuel, engineVersion, engines = n
       const { bucket, limit, windowSeconds } = CLIENT_LIMITS.duel;
       if (limiter && !(await limiter.allow(request, bucket, limit, windowSeconds))) throw new Problem(429, 'rate-limit');
       const row = await rpc('af_reserve_duel', { p_key: body.idempotencyKey, p_a: body.a, p_b: body.b, p_engine: engine });
-      if (row.result) return reply({ ok: true, match: present(row) });
+      if (row.result) return reply({ ok: true, match: presentDuel(row) });
       if (row.engine !== engine) throw new Problem(409, 'engine-mismatch');
       // A run that cannot finish is recorded as failed: it leaves the match budget and counts toward the failure brake.
       /** @type {(code: string) => Promise<void>} */
@@ -131,7 +133,7 @@ export function createDuelHandler({ db, simulateDuel, engineVersion, engines = n
         );
       let result;
       try {
-        const [ma, mb] = await Promise.all([manifest(row.a, row.hash_a), manifest(row.b, row.hash_b)]);
+        const [ma, mb] = await Promise.all([loadDuelManifest(db, row.a, row.hash_a), loadDuelManifest(db, row.b, row.hash_b)]);
         result = await run(row.a, ma, row.b, mb, row.seed);
       } catch (e) {
         await fail(e instanceof Problem ? e.message : 'engine-error');
@@ -144,7 +146,7 @@ export function createDuelHandler({ db, simulateDuel, engineVersion, engines = n
         if (e instanceof Problem && ['invalid-result', 'duel-not-approved'].includes(e.message)) await fail(e.message);
         throw e;
       }
-      return reply({ ok: true, match: present(completed) });
+      return reply({ ok: true, match: presentDuel(completed) });
     } catch (e) {
       logFailure('duels', request, e);
       return reply({ ok: false, code: e instanceof Problem ? e.message : 'duel-service-unavailable' }, e instanceof Problem ? e.status : 503);
