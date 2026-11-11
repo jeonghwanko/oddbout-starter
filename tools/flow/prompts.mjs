@@ -284,6 +284,10 @@ export async function checkDocs(root) {
     'stop and ask',
     'not displayed previews',
     'does not authorize starting or resuming creation',
+    'confirmed: true',
+    'permission-forbidden',
+    'delete_fighter',
+    'observe: true',
   ]) {
     if (!skill.includes(phrase)) problems.push(`SKILL.md missing ${phrase}`);
   }
