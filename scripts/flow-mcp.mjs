@@ -2,46 +2,103 @@
 // @ts-check
 // npm run flow:mcp — stdio MCP for an agent. Loopback memory only. stderr carries the dummy banner.
 import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { createDummyMcp } from '../tools/flow/mcp.mjs';
 import { DUMMY_LABEL } from '../tools/flow/seal.mjs';
 import { FIXTURE_NAMES, prepareDummyFixture } from '../tools/flow/fixtures.mjs';
 import { startDummyServer } from '../tools/flow/server.mjs';
+import { createTraceRecorder, TracedStdioTransport } from '../tools/flow/trace.mjs';
 
 const args = process.argv.slice(2);
-if (args.length && (args.length !== 2 || args[0] !== '--fixture' || !FIXTURE_NAMES.includes(args[1]))) {
-  throw new Error('Usage: npm run flow:mcp -- [--fixture empty|registered|quota]');
+/** @type {Record<string, string>} */
+const options = {};
+for (let i = 0; i < args.length; i += 2) {
+  const key = args[i];
+  if (!['--fixture', '--trace', '--prompt-file'].includes(key) || !args[i + 1] || args[i + 1].startsWith('--') || options[key]) {
+    throw new Error('Usage: npm run flow:mcp -- [--fixture empty|registered|quota] [--trace <new.jsonl> --prompt-file <prompt.txt>]');
+  }
+  options[key] = args[i + 1];
 }
-const { store, setup } = await prepareDummyFixture(args[1] ?? 'empty');
-const packageRoot = await mkdtemp(path.join(tmpdir(), 'oddbout-dummy-packages-'));
-const http = await startDummyServer(store);
-const server = createDummyMcp(store, { roots: [process.cwd(), packageRoot], packageRoot });
+const fixture = options['--fixture'] ?? 'empty';
+if (!FIXTURE_NAMES.includes(fixture)) throw new Error('unknown-dummy-fixture');
+if (Boolean(options['--trace']) !== Boolean(options['--prompt-file'])) throw new Error('trace-and-prompt-file-required-together');
+// This records the operator's declared prompt; it does not send that prompt to a model.
+const prompt = options['--prompt-file'] ? await readFile(options['--prompt-file'], 'utf8') : null;
+if (prompt !== null && !prompt.trim()) throw new Error('dummy-trace-empty-prompt');
+const sourceHashes = options['--trace']
+  ? Object.fromEntries(
+      await Promise.all(
+        ['AGENTS.md', 'plugins/ai-fighter/skills/create-fighter/SKILL.md', 'tools/flow/connector.mjs'].map(async file => [
+          file,
+          createHash('sha256')
+            .update(await readFile(new URL(`../${file}`, import.meta.url)))
+            .digest('hex'),
+        ]),
+      ),
+    )
+  : null;
+const trace = options['--trace']
+  ? createTraceRecorder(options['--trace'], { fixture, prompt, model: null, selectionMode: 'unverified', sourceHashes, node: process.version })
+  : null;
+/** @type {Awaited<ReturnType<typeof startDummyServer>> | undefined} */
+let http;
+/** @type {ReturnType<typeof createDummyMcp> | undefined} */
+let server;
+/** @type {string | undefined} */
+let packageRoot;
 let closing = false;
-async function shutdown() {
+let starting = true;
+/** @type {string | undefined} */
+let pendingStop;
+/** @param {string} [reason] */
+async function shutdown(reason = 'session-closed') {
   if (closing) return;
   closing = true;
-  await server.close();
-  await http.close();
-  await rm(packageRoot, { recursive: true, force: true });
-  process.stdin.pause();
+  try {
+    await server?.close();
+  } finally {
+    try {
+      await http?.close();
+    } finally {
+      try {
+        if (packageRoot) await rm(packageRoot, { recursive: true, force: true });
+      } finally {
+        process.stdin.destroy();
+        trace?.close(reason);
+      }
+    }
+  }
 }
-server.server.onclose = () => {
-  void shutdown();
-};
-process.once('SIGINT', () => {
-  void shutdown();
-});
-process.once('SIGTERM', () => {
-  void shutdown();
-});
-process.stderr.write(
-  `${DUMMY_LABEL}\n${JSON.stringify({ ...setup, dummyRegistrationUrl: http.url, packageRoot })}\nThis process does not open a production connection.\n`,
-);
+/** @param {string} [reason] */
+function stop(reason = 'session-closed') {
+  if (starting) {
+    pendingStop = reason;
+    return;
+  }
+  void shutdown(reason).catch(error => {
+    process.exitCode = 1;
+    console.error(error);
+  });
+}
+process.once('SIGINT', () => stop('SIGINT'));
+process.once('SIGTERM', () => stop('SIGTERM'));
 try {
-  await server.connect(new StdioServerTransport());
+  const { store, setup } = await prepareDummyFixture(fixture);
+  packageRoot = await mkdtemp(path.join(tmpdir(), 'oddbout-dummy-packages-'));
+  http = await startDummyServer(store);
+  server = createDummyMcp(store, { roots: [process.cwd(), packageRoot], packageRoot });
+  server.server.onclose = () => stop();
+  const manifest = { ...setup, dummyRegistrationUrl: http.url, packageRoot };
+  process.stderr.write(`${DUMMY_LABEL}\n${JSON.stringify(manifest)}\nThis process does not open a production connection.\n`);
+  trace?.record('setup', manifest);
+  starting = false;
+  if (pendingStop) await shutdown(pendingStop);
+  else await server.connect(trace ? new TracedStdioTransport(trace) : new StdioServerTransport());
 } catch (error) {
-  await shutdown();
+  starting = false;
+  await shutdown('startup-failed');
   throw error;
 }
