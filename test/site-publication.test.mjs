@@ -58,11 +58,21 @@ test('Cloudflare verification follows only same-origin HTML canonical redirects'
 
 test('the GitHub route refuses a live site that answers like Cloudflare Pages', async () => {
   const github = publicationConfig({});
-  const cloudflare = publicationConfig({ ODDBOUT_SITE_PROVIDER: 'cloudflare-pages', CLOUDFLARE_ACCOUNT_ID: 'a'.repeat(32), ODDBOUT_CLOUDFLARE_PROJECT: 'oddbout' });
+  const cloudflare = publicationConfig({
+    ODDBOUT_SITE_PROVIDER: 'cloudflare-pages',
+    CLOUDFLARE_ACCOUNT_ID: 'a'.repeat(32),
+    ODDBOUT_CLOUDFLARE_PROJECT: 'oddbout',
+  });
   const canonical = async () => new Response(null, { status: 308, headers: { location: '/' } });
   await assert.rejects(assertProviderServesSite(github, 'https://example.com', canonical), /site-provider-mismatch/);
   await assert.doesNotReject(assertProviderServesSite(github, 'https://example.com', async () => new Response('page')));
-  await assert.doesNotReject(assertProviderServesSite(github, 'https://example.com', async () => new Response(null, { status: 302, headers: { location: 'https://elsewhere.example/' } })));
+  await assert.doesNotReject(
+    assertProviderServesSite(
+      github,
+      'https://example.com',
+      async () => new Response(null, { status: 302, headers: { location: 'https://elsewhere.example/' } }),
+    ),
+  );
   let called = false;
   await assert.doesNotReject(assertProviderServesSite(cloudflare, 'https://example.com', async () => ((called = true), new Response('page'))));
   assert.equal(called, false);
