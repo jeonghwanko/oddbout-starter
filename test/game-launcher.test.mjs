@@ -268,6 +268,90 @@ test('a timed-out grant call cannot win a reconnect race or reuse stale host met
   assert.equal(grants[0].data.grant, `afg_${'c'.repeat(64)}`);
 });
 
+async function signedInLauncher() {
+  const harness = launcherHarness();
+  harness.start();
+  harness.load();
+  harness.gameMessage('game:ready');
+  const attempt = harness.gameMessage('game:auth-required', { challenge: 'A'.repeat(43) });
+  harness.pendingCalls[0].resolve({
+    _meta: { gameLaunchGrant: `afg_${'a'.repeat(64)}`, attemptId: attempt.attemptId, nonce: attempt.nonce, challenge: 'A'.repeat(43) },
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(harness.postedToGame.filter(message => message.data.type === 'launcher:grant').length, 1);
+  harness.gameMessage('game:authenticated');
+  assert.match(harness.ids.get('message').textContent, /sign-in confirmed\. The game is ready/);
+  return harness;
+}
+const watchdogs = harness => [...harness.timers.values()].filter(timer => timer.delay === 20_000);
+const stopped = harness => harness.postedToGame.some(message => message.data.type === 'launcher:stop');
+
+test('recoverable game errors during play keep the game and its sign-in path open', async () => {
+  const harness = await signedInLauncher();
+  harness.gameMessage('game:error', { code: 'request-failed' });
+  assert.match(harness.ids.get('message').textContent, /request did not finish.*records/);
+  harness.gameMessage('game:error', { code: 'incompatible-match' });
+  assert.match(harness.ids.get('message').textContent, /does not fit this game version/);
+  assert.equal(stopped(harness), false);
+  assert.equal(harness.ids.get('stage').children.length, 1);
+  assert.deepEqual(watchdogs(harness), []);
+
+  // The credential expired: the game asks again when the user selects Connect, and the launcher must answer.
+  harness.gameMessage('game:error', { code: 'auth-required' });
+  assert.match(harness.ids.get('message').textContent, /sign-in ended\. Select Connect/);
+  assert.deepEqual(watchdogs(harness), []);
+  const attempt = harness.gameMessage('game:auth-required', { challenge: 'B'.repeat(43) });
+  assert.equal(harness.pendingCalls.length, 2);
+  harness.pendingCalls[1].resolve({
+    _meta: { gameLaunchGrant: `afg_${'b'.repeat(64)}`, attemptId: attempt.attemptId, nonce: attempt.nonce, challenge: 'B'.repeat(43) },
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(harness.postedToGame.filter(message => message.data.type === 'launcher:grant').at(-1).data.grant, `afg_${'b'.repeat(64)}`);
+  harness.gameMessage('game:authenticated');
+  assert.match(harness.ids.get('message').textContent, /sign-in confirmed\. The game is ready/);
+  assert.equal(stopped(harness), false);
+});
+
+test('a failed boot ends the launch and offers Restart; errors before sign-in fail the attempt', async () => {
+  const booted = launcherHarness();
+  booted.start();
+  booted.load();
+  booted.gameMessage('game:ready');
+  booted.gameMessage('game:error', { code: 'boot-failed' });
+  assert.match(booted.ids.get('message').textContent, /could not start\. Select Restart/);
+  assert.equal(stopped(booted), true);
+  assert.equal(booted.ids.get('stage').children.length, 0);
+  assert.equal(booted.ids.get('reload').hidden, false);
+  assert.equal(booted.ids.get('start').hidden, true);
+  assert.deepEqual(watchdogs(booted), []);
+
+  const early = launcherHarness();
+  early.start();
+  early.load();
+  early.gameMessage('game:error', { code: 'request-failed' });
+  assert.match(early.ids.get('message').textContent, /could not finish signing in/);
+  assert.deepEqual(watchdogs(early), []);
+  early.gameMessage('game:error', { code: 'something-new' });
+  assert.match(early.ids.get('message').textContent, /reported a problem/);
+  assert.equal(early.ids.get('stage').children.length, 1);
+});
+
+test('a game that signs in before it renders is not failed by the loading watchdog', async () => {
+  const harness = launcherHarness();
+  harness.start();
+  harness.load();
+  const attempt = harness.gameMessage('game:auth-required', { challenge: 'A'.repeat(43) });
+  harness.pendingCalls[0].resolve({
+    _meta: { gameLaunchGrant: `afg_${'a'.repeat(64)}`, attemptId: attempt.attemptId, nonce: attempt.nonce, challenge: 'A'.repeat(43) },
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  harness.gameMessage('game:authenticated');
+  assert.equal(watchdogs(harness).length, 1);
+  harness.gameMessage('game:ready');
+  assert.deepEqual(watchdogs(harness), []);
+  assert.match(harness.ids.get('message').textContent, /sign-in confirmed\. The game is ready/);
+});
+
 test('iframe diagnostics require the configured exact ancestor chain in every enforced CSP policy', async () => {
   const expected = ['https://chat.example', 'https://widget.example'];
   const valid = inspectFrameHeaders(new Headers({ 'content-security-policy': `default-src 'self'; frame-ancestors ${expected.join(' ')}` }), expected);
