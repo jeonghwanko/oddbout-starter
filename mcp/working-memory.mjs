@@ -72,6 +72,7 @@ export function progressDocument(state) {
     ...(reuse.length ? reuse : ['- none']),
     '',
     'Reuse lists files the user asked to keep. It does not generate, and it does not replace a selected version.',
+    'Checkpoints are files beside the job record. Reading one does not run the job.',
     '',
   ];
   return lines.join('\n');

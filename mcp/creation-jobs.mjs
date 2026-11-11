@@ -61,6 +61,11 @@ export const jobPlanSchema = z
     timeoutMinutes: z.number().int().min(1).max(720).optional(),
     // Opt-in. Names targets the user asked to generate again even though a reuse record exists. Absent means those items stay blocked.
     regenerate: z.array(z.string().min(1).max(64)).max(12).optional(),
+    // The registration key for this attempt. Resume returns it and does not mint another.
+    registrationKey: z
+      .string()
+      .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[4][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)
+      .optional(),
   })
   .strict();
 // Generous so a long video run finishes; a hung provider no longer leaves a job running forever.
@@ -81,7 +86,8 @@ const terminal = new Set(['succeeded', 'failed', 'needs-input', 'resolved', 'can
  *   createdAt: string, updatedAt?: string, status: JobStatus, attempt: number, runnerPid?: number, runToken?: string, startedAt?: string,
  *   finishedAt?: string, stage?: string, exitCode?: number | null, signal?: string | null, reason?: string, outputs?: FileRecord[],
  *   outcome?: ReturnType<typeof judgeOutcome>,
- *   resolution?: { outcome: 'recovered' | 'not-started' | 'duplicate-risk-accepted', note: string, evidence: FileRecord[], source: string, at: string } }} Job
+ *   resolution?: { outcome: 'recovered' | 'not-started' | 'duplicate-risk-accepted', note: string, evidence: FileRecord[], source: string, at: string },
+ *   registrationKey?: string | null }} Job
  * @typedef {{ code: number | null, signal?: NodeJS.Signals | null, notStarted?: boolean, stopped?: string }} EngineResult
  */
 
@@ -100,6 +106,17 @@ export function createJobStore(store) {
   async function write(id, job) {
     job.updatedAt = new Date().toISOString();
     await atomicJson(await jobFile(id, job.jobId), job);
+    await atomicJson(await store.fileFor(id, `jobs/${job.jobId}.checkpoint.json`), {
+      schema: 'oddbout.checkpoint/1',
+      sessionId: job.sessionId,
+      jobId: job.jobId,
+      status: job.status,
+      stage: job.stage ?? null,
+      updatedAt: job.updatedAt,
+      registrationKey: job.registrationKey ?? job.plan?.registrationKey ?? null,
+      executedByThisCall: false,
+      cancelledByThisCall: false,
+    });
     return job;
   }
   /** Every job record. One that cannot be read is listed as unreadable instead of failing the list, so inspection still works.
@@ -264,6 +281,7 @@ export function createJobStore(store) {
         createdAt: new Date().toISOString(),
         status: 'prepared',
         attempt: 0,
+        registrationKey: plan.registrationKey ?? null,
       });
     });
   }
@@ -342,7 +360,30 @@ export function createJobStore(store) {
     jobIdSchema.parse(jobId);
     return store.fileFor(id, `jobs/${jobId}.stop`);
   };
-  return { read, list, prepare, inspect, resolve, cancel, gate, write, stopFile };
+  /** Read the checkpoint file only. @param {string} id @param {string} jobId */
+  async function readCheckpoint(id, jobId) {
+    jobIdSchema.parse(jobId);
+    const checkpoint = await readJson(await store.fileFor(id, `jobs/${jobId}.checkpoint.json`));
+    return { ...checkpoint, executedByThisCall: false, cancelledByThisCall: false };
+  }
+  /**
+   * Return the stored checkpoint and registration key. Does not run the engine or create a submission.
+   * @param {string} id @param {string} jobId
+   */
+  async function resume(id, jobId) {
+    const checkpoint = await readCheckpoint(id, jobId);
+    const job = await read(id, jobId);
+    return {
+      resumed: true,
+      executed: false,
+      status: job.status,
+      idempotencyKey: checkpoint.registrationKey ?? null,
+      idempotencyKeyReused: Boolean(checkpoint.registrationKey),
+      checkpoint,
+      next: 'Resume this checkpoint. Reuse idempotencyKey for the same registration. Do not start another one.',
+    };
+  }
+  return { read, list, prepare, inspect, resolve, cancel, gate, write, stopFile, readCheckpoint, resume };
 }
 /** @typedef {ReturnType<typeof createJobStore>} JobStore */
 

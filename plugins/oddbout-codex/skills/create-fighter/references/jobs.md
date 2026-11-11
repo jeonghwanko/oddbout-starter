@@ -31,3 +31,10 @@ For detailed schema examples and recovery semantics read `docs/LOCAL-PLUGIN.md` 
 Reuse is opt-in. `update_creation_session` type `reuse` records existing files under `output/<sessionId>-work/` for one item, with a note of the user's words. The files must already exist. The record does not copy them over a selected version and does not generate. `prepare_creation_job` then refuses that item with `reuse-recorded` until the plan's `regenerate` array names it. `regenerate` is the explicit request to draw that item again. Clearing the record is type `reuse-clear`.
 
 Do not reuse by sending the same registration `idempotencyKey` as a new package, and do not drop a key because a generation failed. Registration retries keep the original key for the same bytes. A new package needs a new key. Selected versions stay until the user accepts a replacement through `version` and `select`.
+
+## Checkpoints
+
+A long job writes `output/<sessionId>-work/jobs/<jobId>.checkpoint.json` whenever its record is saved. `read_creation_checkpoint` and `resume_creation_job` only read that file. `executed` stays false. The checkpoint's `registrationKey` is the `idempotencyKey` to reuse. Resume does not mint a key and does not submit again.
+
+For a hosted job, `get_hosted_fighter` with `observe: true` returns the checkpoint and does not advance a motion or register. The same `idempotencyKey` returns the same job. `waitSeconds` without `observe` is the explicit dummy worker tick, not a status poll.
+

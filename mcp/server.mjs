@@ -235,6 +235,40 @@ export function createServer({ root, contextRequest } = {}) {
         }
       },
     );
+    server.registerTool(
+      'read_creation_checkpoint',
+      {
+        description: 'Read one job checkpoint. executedByThisCall is false. Does not run the engine, cancel the job, or register.',
+        inputSchema: z.object({ sessionId: identifier, jobId: z.string().uuid() }),
+        outputSchema,
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+        _meta: { oddbout: { permission: 'read' } },
+      },
+      async ({ sessionId, jobId }) => {
+        try {
+          return respond({ ok: true, stage: 'creation-checkpoint', data: await records.jobs.readCheckpoint(sessionId, jobId) });
+        } catch (error) {
+          return respond({ ok: false, stage: 'creation-checkpoint', code: errorCode(error, 'checkpoint-unreadable', { missing: 'record-or-file-not-found' }) });
+        }
+      },
+    );
+    server.registerTool(
+      'resume_creation_job',
+      {
+        description: 'Return the checkpoint and its registration idempotencyKey. Does not execute the job, mint a key, or submit a second registration.',
+        inputSchema: z.object({ sessionId: identifier, jobId: z.string().uuid() }),
+        outputSchema,
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+        _meta: { oddbout: { permission: 'read' } },
+      },
+      async ({ sessionId, jobId }) => {
+        try {
+          return respond({ ok: true, stage: 'creation-resume', data: await records.jobs.resume(sessionId, jobId) });
+        } catch (error) {
+          return respond({ ok: false, stage: 'creation-resume', code: errorCode(error, 'checkpoint-unreadable', { missing: 'record-or-file-not-found' }) });
+        }
+      },
+    );
   }
   const environment = root ? registerEnvironmentTools(server, { root, respond, outputSchema }) : undefined;
   server.registerTool(
