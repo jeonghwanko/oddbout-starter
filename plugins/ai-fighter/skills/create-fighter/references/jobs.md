@@ -10,7 +10,7 @@ While a long job runs, say the stage, what is left, and what is blocked, in a se
 
 `plan_creation`, or `npm run creation:plan -- --workspace <absolute dir> --session <id>`, lists the current group's kept selections, items still open, recorded reuse files and known jobs. `startedGeneration` is false. `cost.known` is false. Do not fill in a price, token total or subscription charge. A hosted token balance is reported only by the hosted tool result that actually returned it. The plan does not prepare a job and does not change provider.
 
-Run `preflight_creation` or `npm run creation:preflight` before the first generation and again before registration. `purpose: connection` and `purpose: registration` do not ask for a generation subscription or install the engine. The command does not run `nextCommands`.
+Run `preflight_creation` or `npm run creation:preflight` before the first generation and again before registration. A kit older than 0.6.21 has neither, nor the plan or checkpoint tools: use `check_creation_readiness` there. `purpose: connection` and `purpose: registration` do not ask for a generation subscription or install the engine. The command does not run `nextCommands`.
 
 ## Execute and recover
 
