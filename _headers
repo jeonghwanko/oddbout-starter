@@ -1,0 +1,14 @@
+
+/embed/chatgpt
+  Content-Security-Policy: frame-ancestors 'none'; object-src 'none'; base-uri 'self'
+  X-Frame-Options: DENY
+  Cache-Control: no-store
+  Referrer-Policy: no-referrer
+  X-Robots-Tag: noindex, nofollow
+
+/embed/chatgpt/*
+  Content-Security-Policy: frame-ancestors 'none'; object-src 'none'; base-uri 'self'
+  X-Frame-Options: DENY
+  Cache-Control: no-store
+  Referrer-Policy: no-referrer
+  X-Robots-Tag: noindex, nofollow

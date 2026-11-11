@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <title>Shop · ODDBOUT</title>
+    <script>
+      const bootLocale = (() => {
+        const known = value => ["ko", "en", "ja"].includes(value) ? value : null;
+        let saved = null;
+        try { saved = localStorage.getItem("ai-fighter.creator.locale.v1"); } catch { /* The URL and the browser still decide. */ }
+        const browser = (navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language])
+          .map(tag => known(String(tag).split("-")[0].toLowerCase())).find(Boolean);
+        const requested = new URLSearchParams(location.search).get("lang");
+        if (requested === "qps") return "en";
+        return known(requested) || known(saved) || browser || "en";
+      })();
+      document.documentElement.lang = bootLocale;
+    </script>
+  <script type="module" crossorigin src="/assets/shop-Cp9Q3DkW.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/_oddbout-analytics-CiIVnasc.js">
+  <link rel="modulepreload" crossorigin href="/assets/pseudo-B3ZLOM_E.js">
+  <link rel="modulepreload" crossorigin href="/assets/catalog-C-siAyxf.js">
+  <link rel="modulepreload" crossorigin href="/assets/Locale-Bfnpz3E7.js">
+  <link rel="modulepreload" crossorigin href="/assets/localeLoader-iMHQKnrl.js">
+  <link rel="modulepreload" crossorigin href="/assets/preload-helper-7y9sWmk5.js">
+  <link rel="modulepreload" crossorigin href="/assets/chrome-Cajkl63h.js">
+  <link rel="modulepreload" crossorigin href="/assets/site-DCcops3l.js">
+  <link rel="modulepreload" crossorigin href="/assets/OddboutShop-CJxKxnzy.js">
+  <link rel="modulepreload" crossorigin href="/assets/PublicAssetVersions-BIKpRtz9.js">
+  <link rel="modulepreload" crossorigin href="/assets/storageKeys-DrW9C73_.js">
+  <link rel="modulepreload" crossorigin href="/assets/localePreference-CV7HdNsy.js">
+  <link rel="modulepreload" crossorigin href="/assets/fighterApiBase-CeB_1v89.js">
+  <link rel="modulepreload" crossorigin href="/assets/oddboutSession-C4KoBx1u.js">
+  <link rel="modulepreload" crossorigin href="/assets/agentNames-C9gi1FWq.js">
+  <link rel="modulepreload" crossorigin href="/assets/registeredFighters-BcAk2ay7.js">
+  <link rel="modulepreload" crossorigin href="/assets/oddboutRelayCall-Y-fP_age.js">
+  <link rel="modulepreload" crossorigin href="/assets/arenaRankings-DmwJYB26.js">
+  <link rel="modulepreload" crossorigin href="/assets/oddboutShopServer-PvJ5gAcr.js">
+  <link rel="modulepreload" crossorigin href="/assets/ShadowFighter-qozKPUYQ.js">
+  <link rel="modulepreload" crossorigin href="/assets/ArenaArtCatalog-DSxWzrhM.js">
+  <link rel="modulepreload" crossorigin href="/assets/palette-HxNEvnEY.js">
+  <link rel="modulepreload" crossorigin href="/assets/OddboutUiIcons-DTKvsskE.js">
+  <link rel="modulepreload" crossorigin href="/assets/bootCopy-DUheN_9n.js">
+  <link rel="modulepreload" crossorigin href="/assets/playerSettingsStorage-CLS3JsXb.js">
+  <link rel="modulepreload" crossorigin href="/assets/siteDialog-Cus74mbf.js">
+  <link rel="modulepreload" crossorigin href="/assets/siteGameLaunch-ucPqHwNx.js">
+  <link rel="modulepreload" crossorigin href="/assets/GameMenuState-DyP8rWU9.js">
+  <link rel="modulepreload" crossorigin href="/assets/accountControl-BmOwg3-9.js">
+  <link rel="modulepreload" crossorigin href="/assets/OddboutCommunity-CLWy8SdF.js">
+  <link rel="modulepreload" crossorigin href="/assets/siteChrome-BBfe_qXK.js">
+  <link rel="stylesheet" crossorigin href="/assets/playerSettingsStorage-CL-cL7BT.css">
+  <link rel="stylesheet" crossorigin href="/assets/gameLoading-CCs2iulv.css">
+  <link rel="stylesheet" crossorigin href="/assets/accountControl-CWZ8z-IX.css">
+  <link rel="stylesheet" crossorigin href="/assets/siteChrome-BnBZ9gvv.css">
+  <link rel="stylesheet" crossorigin href="/assets/shop-BAEvu67i.css">
+</head>
+  <body class="shop-page">
+    <div data-club-header></div>
+    <main id="main" class="shop-main" data-site-pending></main>
+    <div data-club-footer></div>
+    <script>(()=>{const p={"en":["assets/en-CmuU1PYY.js","assets/en-dJGXMmjd.js","assets/en-ztcM5eHz.js"],"ko":["assets/ko-BSrrTO9F.js","assets/ko-DUyAERHr.js","assets/ko-fK3iJnBa.js"],"ja":["assets/ja-BjgTOTzl.js","assets/ja-DSiTEDkJ.js","assets/ja-ZM5hVT8F.js"]}[document.documentElement.lang];if(!p)return;for(const f of p){const l=document.createElement("link");l.rel="modulepreload";l.crossOrigin="";l.href="./"+f;document.head.append(l)}})()</script>
+  </body>
+</html>
