@@ -270,7 +270,32 @@ export async function checkDocs(root) {
   for (const phrase of ['pendingStages', 'missingAssets', 'motion_ready', 'update_fighter', 'npm run flow:test', 'docs/FLOW-TEST.md', 'fighter:register']) {
     if (!agents.includes(phrase)) problems.push(`AGENTS.md missing ${phrase}`);
   }
-  for (const phrase of ['request_hosted_fighter', 'fighterId', 'pendingStages', 'update_fighter']) {
+  for (const phrase of [
+    'request_hosted_fighter',
+    'fighterId',
+    'pendingStages',
+    'update_fighter',
+    'delegate: true',
+    '그냥 만들어줘',
+    'just make it',
+    'idempotencyKey',
+    'enter_fighter',
+    'fighter-quota',
+    'stop and ask',
+    'not displayed previews',
+    'does not authorize starting or resuming creation',
+  ]) {
+    if (!skill.includes(phrase)) problems.push(`SKILL.md missing ${phrase}`);
+  }
+  for (const phrase of [
+    'references/connection.md',
+    'references/hosted.md',
+    'references/front.md',
+    'references/groups.md',
+    'references/jobs.md',
+    'references/registration.md',
+    'references/workspace.md',
+  ]) {
     if (!skill.includes(phrase)) problems.push(`SKILL.md missing ${phrase}`);
   }
   const names = new Set(SCENARIOS.flatMap(scenario => [...(scenario.expect ?? []), ...scenario.forbid.map(tool => ({ tool }))]).map(step => step.tool));

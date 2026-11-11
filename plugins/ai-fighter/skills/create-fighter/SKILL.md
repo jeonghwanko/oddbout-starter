@@ -5,259 +5,46 @@ description: Create, revise, resume, validate or register an ODDBOUT fighter in 
 
 # ODDBOUT
 
-One workflow covers creation, review and registration. When exposed in this conversation, the connected ODDBOUT tools own the registration
-account; the workspace kit owns files, version selections and generation jobs. Do not ask the user to
-install AI Fighter Creator as a second plugin or choose between two product names.
-For registered-fighter lookup or status, first check that the connected ODDBOUT tools are available here; no workspace setup is needed.
-For creation, read [workspace routing](references/workspace.md). Use the same project tools through
-`creation:tool` in the user's PC or the Dots workspace. Do not move work to a PC when the user chose Dots.
-For Dots initialization/resume, also follow the kit's `docs/DOTS-START.md`: offline doctor, recovery inventory,
-then explicit bootstrap if this is a new workspace. Keep unsupported output contracts blocked; never read
-protected Codex sessions or start a second generation because the original exec is still waiting.
-Workspace generation uses the installed creator kit's sprite-gen and the user's account.
-For supported direct conversation appearance generation/display, check that route first under `docs/DELIVERY.md`;
-do not require a PC or leave the user's chosen VM scope. Packaging still uses the creator kit.
+One workflow covers creation, review and registration. The connected ODDBOUT tools own the registration account. The workspace kit owns files, version selections and generation jobs. Do not ask the user to install a second plugin or choose between two product names.
 
-## Connection-only checks and missing tools
+The skill, the kit and a fighter project do not share a lifetime. Detail: `docs/LIFECYCLE.md`. Installing this skill does not install the kit or sign anyone in. The kit is the workspace executor and is not required for a hosted fighter or a connection check. A project is the session, selected versions, jobs and packages. Do not update the kit while a project is in progress, and do not rewrite a project when the skill or the kit changes.
 
-A connection/status request does not authorize starting or resuming creation. Inspect this conversation's actual
-ODDBOUT tools, call native `get_profile` when available, and use `get_my_fighters` view `readiness` with `purpose: connection`
-(the cloud tool named `check_creation_readiness` until 2026-11-06; that name still answers).
-Keep server discovery, account plugin import/update, installation and selection in this conversation, tool exposure,
-and the returned account identity separate. A released ZIP, local Codex connection or successful public MCP tool listing
-does not establish any Dots-native account connection.
+A connection or status request does not authorize starting or resuming creation. For registered-fighter lookup, check that the connected ODDBOUT tools are available; no workspace setup is needed. For creation, choose the route below and open only the reference that matches the question.
 
-In ChatGPT/Dots, reuse the existing available ODDBOUT cloud App with its account tools and creation skill.
-Read the skill and support document from that same App through the host's skill tools; do not substitute an old ZIP package's skill.
-An imported plugin's root `mcp.json`, even with an HTTPS server, may be desktop-only. The creator-kit ZIP is optional
-reviewed source/runtime delivery for an explicitly chosen workspace, not the cloud App connection or a second required plugin.
-Only when no existing App is available should supported first-time cloud MCP OAuth provisioning be considered.
-Only an actually missing skill calls for a maintainer to add it through Plugin Creator to the same app-backed plugin,
-preserving its binding and presentation. Do not copy the kit's root MCP declaration into that app-backed plugin.
-After an explicitly requested old-plugin removal, verify the installed list, all host skill-list pages, and native account
-lookup in the same conversation. Uninstall and permanent deletion of an owned plugin are different actions; do not turn
-a `not_installed` response into permission for permanent deletion. Preserve existing work and use the verified App package.
+## Hard rules
 
-If `get_profile` is absent, report tool exposure as unverified; do not start local login, device pairing or generation
-to replace the missing cloud connection. Resolve the current plugin through the host's supported discovery and settings.
-Use only a returned current plugin URL/ID, never a historical private link or an invented replacement. A missing ID or
-empty search does not prove deletion, replacement or a server outage. Prefer refreshing/selecting an existing verified
-plugin. Preserve OAuth grants, workspaces, pending requests and jobs. Remove an old connection only within an explicit
-user request after the replacement succeeds in this same conversation and its account matches the intended account.
-If a native call returns an authentication error, follow that error's supported connection action; missing tools alone
-are not evidence that the token expired.
+These stay in this file. A reference page cannot relax them.
 
-## Hosted route
+- Quota: read `get_profile`, then `get_my_fighters` view `list`, and report the returned account id, email, `fighterCount` and `fighterLimit`. Missing or null stays unknown. At the limit, stop. Do not prepare a package or call `request_hosted_fighter`. The error is `fighter-quota`.
+- Revision without a target: confirm the fighter is in the returned roster. If it is absent or ambiguous, stop and ask which fighter is meant. Never create a substitute. A revision is a new package with the same `fighterId`. The prior submission stays immutable. `revise_hosted_motion` (`request_hosted_fighter` step `revise_motion`) only edits a legacy job at `motion_ready`. A style-only edit is `update_fighter` kind `style`.
+- Delegation: set `delegate: true` only when the user explicitly delegates the appearance choice. "Make it", "just make it" and "그냥 만들어줘" request creation but do not delegate. Ask the user to choose the look and do not pass `delegate: true`.
+- `idempotencyKey` is required for `prepare_fighter_registration`, a profile set, `update_fighter` kind `style`, and `request_hosted_fighter` step `request`. Reuse the original key for the same bytes. Changed bytes need a new key. An unknown outcome is not a failure: inspect the existing record before any retry.
+- Never call `enter_fighter` automatically. The owner enters on the site after watching each required motion and confirming each one.
+- Show the measured profile set and get approval before `prepare_fighter_registration` kind `profile_set` and before entry. `pending` and `pendingStages` are stage names, never asset ids. Upload each `missingAssets` entry.
+- Do not ask for callback URLs or tokens in chat. Do not switch provider, account or registration route because a tool failed.
+- Queued panels, text reports and local paths are not displayed previews. Say the stage in one sentence while a long job runs. Approval still waits for the actual images.
+- Watching a job does not run it or cancel it. `get_creation_job` returns `executedByThisCall: false` and `cancelledByThisCall: false`. `get_hosted_fighter` reads a hosted job. Closing the chat leaves the job running. Do not start a second job to recover an unknown one.
 
-When the connected ODDBOUT tools list `request_hosted_fighter`, ODDBOUT can make the fighter on its own worker:
-no workspace, kit or generation account of the user's is needed. Offer it first when the user wants ODDBOUT to make
-the fighter or has no generation setup; the workspace route below stays the user's choice. Pass the user's words (and
-their own pictures with their confirmation of rights: attached files where the host attaches them, else `request_hosted_fighter` step `picture_ticket`
-(with the host you will request), whose link the user opens, or with `terminal: true` whose command sends a picture file you have;
-`get_hosted_fighter` view `upload` before resending one that got no answer; show them before passing them), then follow each result's `next`: show both looks (front views; the pick
-is also the fighter's profile picture) and pass the user's pick or one change, show the motion previews (made from a side view
-ODDBOUT draws from the pick). Hosted creation includes registration into production: do not wait for motion approval.
-The server continues to packaging and registration; for an older job at `motion_ready`, call `submit_fighter_registration`
-with `kind: hosted` to continue the requested creation. Honor an explicit hold or revision request.
-Only the owner reviews and enters the registered fighter on the website; never enter it automatically.
-Set `delegate: true` only when the user explicitly delegates the appearance choice (for example, “you choose the look”). “Make it”, “just make it” and “그냥 만들어줘” request creation but do not delegate appearance; ask the user to choose the look and do not pass `delegate: true`.
-Use `statusSummary` to report the stage, required action and last check. Stage progress 100% is not registration completion.
-Wait with `get_hosted_fighter` `waitSeconds` rather than repeated reads. If the chat stops, provide `siteUrl`;
-do not promise background chat notifications. Do not generate locally for a hosted job.
-If the user runs a generation host on their own PC (`npm run host -- join` from the site), pass `host: mine`: their own subscription makes it, with no
-consent to give and without using their tokens (each account starts with 500,000; ODDBOUT's own worker takes off what it spends).
-Another person's host (`browse_oddbout` view `hosts`) takes none of their tokens and needs the user's consent first.
+## Which route
 
-## Start or resume
+When `request_hosted_fighter` is available, offer hosted creation first if the user wants ODDBOUT to make the fighter or has no generation setup. No workspace or generation account of the user's is required. Pass the user's words, follow each result's `next`, and read [hosted creation](references/hosted.md) before the first call. Hosted creation includes registration into production. Do not wait for motion approval. Only the owner enters the fighter.
 
-1. Read the connected ODDBOUT `get_fighter_spec` sections `overview` and `creation` using its actual schema.
-   The cloud connector does not necessarily support `context` or `guide`. Use workspace `get_fighter_spec`
-   through `creation:tool` for `context`, `guide`, and the kit's `creation` section. Its creation response supplies
-   this user's runtime kit root (`tool.repositoryRoot`), workspace (`packageRoot`), sprite-gen skill path,
-   and the full creation/interaction guides. In a portable installation the kit and workspace differ.
-   Read those guides, `docs/AUTHORING.md` and `vendor/sprite-gen/SKILL.md` in the returned kit root.
-   If generation is needed and the Python environment is missing, run `npm run sprite:setup` with cwd set to that kit root.
-   Connecting or registering an already-built package does not require generation setup.
-   Keep all project inputs and outputs in the returned workspace. Run prepared jobs with their exact
-   returned cwd/env. Do not put assets, sessions, or a Python venv in the plugin cache.
-   Game data owns motions, frame counts and timing. Refresh it on resume and before each new group.
-2. Use `list_creation_sessions` and `get_creation_session` for an existing project. Prefer the current
-   conversation over earlier notes. Create a session only for the user's actual project; use
-   `mode: dialogue-only` for requested simulations. A link or process question is not a generation request.
-3. Accept text, images or both. Ask only about unresolved reference roles or material conflicts.
-   Confirm current image and video access together when missing; reuse answers in the current conversation.
-   Prefer GPT base + Grok motion when both are available, or the available provider for both.
-   An explicit user choice wins. Read the upstream workflow and obtain `ready` before generating.
-   Preserve a stop-on-failure choice; never silently switch provider or billing route.
-4. Read `docs/DELIVERY.md` in the returned kit root before generation. Check generation and parent-conversation
-   delivery routes separately. Dots conversation model, CLI `--model` worker and image tool/backend are distinct;
-   a copied report model, login or tool listing does not verify generation. Require actual call/completion/output
-   evidence, keep unknown backend/account identity unknown, and treat `creation:delivery` as a record check only.
-   Local/Library saves and child-only or queued previews do not prove parent display. Recover existing results
-   before retries; delivery failures do not authorize regeneration.
-5. Use workspace `check_creation_readiness` and `docs/CONNECTION-READINESS.md` for kit, tool and generation readiness.
-   Set `purpose: connection` for sign-in checks and `purpose: registration` for an existing final package;
-   only `purpose: generation` prepares the generation engine or asks about generation access.
-   Its login item only points to the connected ODDBOUT tools: verify the account with native `get_profile` and the
-   connected `get_my_fighters` view `readiness`. The workspace never silently switches to a registration login when cloud
-   tools or authentication are missing or failing. Local CLI registration is a separate route only when the user explicitly
-   chooses it, using their own account and a supported secure login handoff; never ask for callback URLs or tokens in chat.
-   Keep authenticated registration API access, generation access and parent delivery separate. Environment-preparer
-   actions (VM host allowlist/Republish) are initial workspace setup, not repeated creator steps; the kit cannot
-   perform those settings changes. Reuse preserved sessions/jobs after recovery.
+The workspace route is the user's choice of a PC or Dots workspace. Read [workspace routing](references/workspace.md) before the first generation there. Use the same project tools through `creation:tool`. Do not move a Dots task to a PC. Before generation, run `npm run creation:preflight -- --purpose generation` or workspace `preflight_creation`. It does not install or generate. `npm run creation:plan` lists what is still open and does not start it.
 
-## Front first
+## Read the page for the question
 
-The appearance group starts with the fighter's **front** (the profile set, `get_fighter_spec` → `profileSet`): one full-body front
-view, the user's approval of it, then the side view and the motions drawn from it. The front is his profile picture on the site and
-his face in the arena, and the home lists him only once his profile set is approved.
+| Question | Read |
+| --- | --- |
+| Connection, missing tools, plugin selection | [connection](references/connection.md) |
+| Hosted creation, looks, wait, delegation on that route | [hosted creation](references/hosted.md) |
+| Front, profile set, expression sheet | [front](references/front.md) |
+| Review groups and session decisions | [groups](references/groups.md) |
+| Jobs, watching, plan, reuse, recovery | [jobs](references/jobs.md) |
+| Registration, revision, style, entry | [registration](references/registration.md) |
+| Workspace kit, Dots, `creation:tool` | [workspace routing](references/workspace.md) |
+| Skill, kit and project lifetimes | `docs/LIFECYCLE.md` |
+| Poses, style fields, gait, delivery | The kit docs named in the reference for that question |
 
-1. Draw two front candidates with the user's account. Every generation of this fighter (fronts, the expression sheet, the side view,
-   later edits) carries the spec's `profileSet.style.colouring` text and attaches `profileSet.style.anchor.url` (the house style anchor)
-   as the LAST reference image: our plain cel colouring, never the user's references' rendering. His pictures give the character, not the style.
-2. Show both and take the user's pick or change.
-3. Draw his expression sheet from the approved front: one generation with `profileSet.expressions.prompt`, the colouring text, the
-   approved front as the FIRST reference and the style anchor LAST. It holds his six arena faces; the sixth is the face the KO card shows
-   when he loses. Without it the arena shows one face for every mood, his defeat included. A sheet that is not transparent goes through
-   `npm run sprite -- cutout <sheet> --out <sheet>-cutout.png` first; never generate it again only for a delivery or format problem.
-4. Build the set with `npm run fighter:profile-set -- --front <pick> --expressions <sheet> --out <new folder>`. It frames the front,
-   measures the face square, checks both pictures as the server will and writes `profile-set.json`, `front.webp`, `expressions.webp`,
-   `face-preview.png` and `ko-preview.png`. Never type sizes, hashes or the face square. Show the face as a round crop and the sheet with
-   its KO face, in the appearance group's review. Only when the user sees the measured crop miss the face (a big round head whose face
-   sits low): build again into a new folder with `--face <x>,<y>,<side>`, a square in the framed front's pixels that holds the face (its side
-   10–30 % of the figure's height), show that crop, and use it only once the user approves it; the same checks run on it.
-5. Draw the side view (facing right) from the approved front as the first reference, same colouring; check it is the same character.
-   Continue the appearance group (concept/idle) from that side view; the motions follow it.
-6. After registration, upload the set with `prepare_fighter_registration` kind `profile_set` (fighter id, its `profile-set.json`),
-   `upload_fighter_asset` kind `profile_set` for `front` and then `expressions`, and `submit_fighter_registration` kind `profile_set`, and
-   follow `get_my_fighters` view `profile_set`. The set is not part of the package.
+## Resume
 
-A registered fighter without a sheet (made before 2026-11-03) can get one when the user asks for it: that request is the new generation's
-authorization. Draw the sheet from his approved front, build a new set from the same front and the sheet, and upload it. His package,
-entry and record do not change; his current set stays until an operator approves the new one. A sheet that fails the server's check is
-left out (`get_my_fighters` view `profile_set` → `sheetErrors`) and the set goes on with his face square only.
-
-## Work in review groups
-
-Complete appearance, locomotion, attacks, defense, and final review in the game's order.
-Offer the optional style group (skill, entrance and victory clips, fighting style) once after defense when the context lists it; skip it if the user declines.
-Finish the agreed group autonomously, show its actual images/animations together, and wait for feedback.
-Positive feedback advances when all other current versions are already accepted and checks pass.
-Praise plus a requested change is a revision. Later delegation does not waive an earlier pending group.
-Only explicitly delegated groups may proceed without their user review boundary.
-
-Use `update_creation_session` with the current `expectedRevision` to record one decision:
-
-- `version`: record a new version and the actual files. Never reuse a version ID or overwrite selected files.
-  Keep outputs under `output/<sessionId>-work/artifacts/<item>/<version>/`.
-- `review`: record actual observations and existing evidence files. `passed` is an agent observation,
-  not a tool-generated visual certificate. Unknown observations remain unverified. Dialogue simulations
-  use `hypothetical` and must never become production approvals.
-- `select`: quote the user's actual acceptance of the named current version.
-- `revision`: record the affected item and feedback, preserve accepted versions, and change only affected art.
-- `delegate`: record the exact groups delegated and the user's words.
-- `profile`: record the chosen name/description. Metadata changes do not invalidate animation choices.
-- `advance`: enforce the group boundary. Resolve only the returned blockers; do not ask for accepted items again.
-
-Re-read after a revision conflict; do not blindly replay a stale update. If game context changed,
-explain the changed requirements and use `refresh-context` after comparing them. Old selections remain
-recorded, but stale evidence must be reviewed. Keep brief conversational notes in `creation-notes.md`.
-
-## Execute and recover
-
-The state tools do not generate images. Prepare an immutable command using `prepare_creation_job`;
-it returns a structured local execution command. Read the engine's relevant workflow before choosing args.
-Declare all input files, including request/plan JSON and their referenced assets, and expected output files.
-Generation plans include the exact resolved upstream `workflowArgs` for a fresh access preflight.
-Use explicit providers on `gen`/`gen-set`; the preflight and generation provider must agree.
-
-Run the returned command through the host's normal terminal execution tool, using the returned cwd/env.
-It launches the existing engine without a shell, records the attempt before launch, and does not retry it.
-Keep progress visible during long jobs. `get_creation_job` retrieves the actual outcome; process success
-and file hashes are not visual approval. `get_creation_job` without a job ID lists existing work.
-
-- Reuse the same job ID for an identical preparation retry. Changed args require a new ID.
-- Use `cancel_creation_job` to discard an unstarted preparation before creating a corrected one.
-- If the outcome is unknown, inspect existing provider request records and local outputs first, even
-  when no request ID was returned. Use upstream `video-resume` where appropriate; never resubmit blindly.
-- `resolve_creation_job` requires actual evidence: recovered output, proof no request started, or an
-  explicit user choice accepting possible duplicate generation/usage. A generic “continue” is insufficient.
-  Resolution does not rerun a job or approve an animation. Preserve the original job as evidence.
-- Exit 75 and a preflight requiring input preserve the user's existing provider policy. Do not choose
-  another account, provider, billing mode, or retry on the user's behalf.
-
-For detailed schema examples and recovery semantics read `docs/LOCAL-PLUGIN.md` in the returned kit root.
-For commands not supported by the initial managed runner, use the documented kit CLI directly and
-record their actual outputs as versions/evidence; do not claim they received managed-job guarantees.
-
-## Revise a registered fighter
-
-`revise_hosted_motion` (`request_hosted_fighter` step `revise_motion`) only changes one motion of a legacy hosted job that is still at `motion_ready`. It does not edit a fighter that is already registered.
-
-To change motions on a registered fighter, build a new local package and submit it with that fighter's id using `prepare_fighter_registration` `fighterId` by default. If this host cannot attach files, use `npm run fighter:register -- --dir <package> --fighter <id> --submit` only when the user explicitly chooses local registration and has a supported secure CLI login. A cloud-tool or auth failure alone does not authorize switching. This is a new submission. The fighter id stays. The previous submission is left as it was. A style-only edit with no new art is `update_fighter` kind `style`.
-
-First read the returned fighter roster and confirm the requested target is present. If it is absent or ambiguous, stop and ask which fighter the user means. Never create or register a new fighter as a substitute for a missing revision target.
-
-Read `get_profile`, then `get_my_fighters` view `list`. Report the account id and email returned by the profile and the count and limit returned in the list's `account` block. Missing fields (older servers) or a null limit stay unknown. The default of 3 is not a verified account limit. The profile nickname is always `ODDBOUT`.
-
-Read `browse_oddbout` view `style_guide` before filling `combat.style`. There is no super clip: `super` is `slam`, `combo`, `fast` or `dash`. `temper` is an object of optional 1–5 grades (`guard`, `retreat`, `measure`, `patience`). `shockwave`, if present, must be `true`. Skill clip kinds are `stretch`, `pincer`, `flight`, `feint`, `slide`, `counter` and `brace`. The skill clip has no display-name field. The skill clip, a summon and a shockwave together are at most 2. `mix.fast` must be at most `mix.slam` + `mix.combo`.
-
-New motion frames follow `docs/POSE-GENERATION.md`: right-facing side view, one scale based on standing body height 400 (not each pose's extent), and `https://oddbout.com/art/oddbout/style-anchor-front.webp` as the last reference. `inspect-motion` `needs-review` without a foot ROI is expected on action clips and does not block packaging. A `BORROWED_LANDMARK` warning means a landmark uses another clip's frame; prefer that clip's own frame. The warning does not fail validation.
-
-## Final files and registration
-
-Use native cloud `prepare_fighter_packaging` for packaging failures. It returns exact invocations of the
-workspace MCP tools `inspect_fighter_packaging` and `pack_fighter_package`; execute them through the host's
-ordinary terminal tool using the returned JSON arguments, rather than asking the user to relay errors or
-hand-patch the kit. Cloud preparation does not read VM files and is not a successful package. A new reviewed
-kit can run separately against the existing workspace; keep the active runtime and selected originals.
-When the user permits resolution optimization and the live contract lists `texture-resolution-1`, use
-`fitSheets: true` with kit 0.6.10+: it fits sheet dimensions and total/per-asset byte/pixel budgets using actual
-measurements, keeps frames/timing and preserves game size with `pixelScale`. It uniformly reduces density across
-normalized motions when totals need it, preserving the chosen encoding and originals. Read `report.budget`;
-the optional `outputScale` caps post-normalization density. A bounded worker may take up to ten minutes: resume
-the same host execution after its initial 30-second wait. Never silently shrink
-only a motion's character or remove frames. Required file, contract and upload limits still apply.
-
-Quality diagnosis in `docs/GAIT-REVIEW.md` is optional later work. Preserve selected files and actual previews;
-no same-foot stance, visual verdict or numerical pass is required for packaging or registration.
-For GPT walk/run, use the kit CLI and the pinned sprite-gen-agent motion engine. Generate diagnostic key poses first;
-review both physical legs, their hip attachments, contacts and body continuity before binding that image.
-Full sequences require the actual phase guide and reviewed key-pose reference, not only a layout guide.
-Use painted extraction with `ground_frames: false` to retain source flight height. Generation OK is not
-motion approval. Do not repair failed gait by pasting a frozen torso over separate legs, and stop after
-two consecutive failures of the same anatomy/contact requirement. Preserve unknown attempts without retrying.
-Use upstream `game-pack`, then `fighter:pack` with the default `reviewPolicy: files-only`.
-Only file/contract checks gate packaging and registration. Gait scores and visual quality verdicts are deferred;
-do not require a passing report, an explicit visual override, or regeneration. Preserve existing diagnostics unchanged.
-Legacy `required`/`engine-loop` plans also use file checks only; review-group user choices still apply. Never hand-assemble sheets
-or invent measurements. A format fixture is never a generated character.
-
-Run the existing manifest and full-file validators. Record `package` with the manifest and every asset,
-and preserve the user's final preview feedback. `package-review` is an optional quality record, not a gate.
-The session requires current validated package bytes, not a quality verdict or generation authorization.
-The final `get_creation_session` must have no blockers before submission.
-
-Use the connected ODDBOUT account for registration from either workspace by default. Verify `get_profile` matches
-the user's intended account and call the cloud `get_my_fighters` view `readiness`; a workspace readiness result
-does not verify that login. Never copy a CLI session into the connector. If the user explicitly chooses local CLI registration
-because this host cannot attach package files, use only the user's own account and a supported secure login handoff. A missing
-or failing cloud tool or authentication alone does not authorize that switch. Dry-run needs no login; do not ask for callback URLs
-or tokens in chat, and report an authentication blocker if no secure handoff is available.
-Read the cloud tools' current schemas, then call `prepare_fighter_registration` with the actual approved
-manifest, `upload_fighter_asset` for each `missingAssets` id (or each `assets` id when `missingAssets` is absent),
-`submit_fighter_registration`, and `get_my_fighters` view `submission`. `pending` and `pendingStages` are pipeline
-stage names, never asset ids. When the user explicitly chooses local registration on a host that cannot attach files, use
-`npm run fighter:register -- --dir <package>` for the login-free dry run, then the same command with `--submit` only after
-the user's registration request and secure CLI login. Never switch to it merely because cloud registration or auth failed.
-Pass actual host attachments/files, not rendered previews, made-up URLs, or
-paths on another machine. Materialize supported Library files with their original bytes and verify hashes.
-Preserve the submission ID and idempotency key across identical retries; inspect status before retrying
-an unknown response. Changed package bytes need a new key. A metadata-only final edit followed by an
-explicit registration request requires fresh validation, not repeated approval of unchanged animations.
-Then upload the approved front and expression sheet as his profile set ([Front first](#front-first) step 6).
-Report registration only after the response confirms it. A registered fighter starts in production (제작 중): it stays out of
-other people's cups, ranked duels and lists. Tell the user to check each required motion on the fighter page's All motions and enter it there; call
-`enter_fighter` only on the user's request after showing every required motion and hearing each confirmed.
-If the connector or attachment route is missing,
-preserve the completed package and report that blocker; do not silently switch registration accounts.
+A workspace session writes `BRIEF.md` and `PROGRESS.md` beside `creation-session.json`. They are a summary. `get_creation_session` and `get_creation_job` are the record. Record the agreed route, account id, account email and hosted job id with `update_creation_session` type `memory`. Do not put tokens, callback URLs or login links in that note. Hosted resume is `get_hosted_fighter` with the original job id or `idempotencyKey`.

@@ -5,9 +5,9 @@ Keep these product rules in code and docs. The shipped kit lacks repository-only
 
 ## Agent quickstart
 
-Workspace agents start here. Detail: [docs/AGENT-QUICKSTART.md](docs/AGENT-QUICKSTART.md), poses: [docs/POSE-GENERATION.md](docs/POSE-GENERATION.md).
+Detail: [docs/AGENT-QUICKSTART.md](docs/AGENT-QUICKSTART.md), poses: [docs/POSE-GENERATION.md](docs/POSE-GENERATION.md), lifetimes: [docs/LIFECYCLE.md](docs/LIFECYCLE.md).
 
-Offline check (Node 22.12+): `npm ci --ignore-scripts`, `npm run example`, `npm run validate -- output/sparring-bot/fighter.json`. Generation: ffmpeg and `npm run sprite:setup` (RIFE ~430 MB). Host PCs: Linux.
+Offline check (Node 22.12+): `npm ci --ignore-scripts`, `npm run example`, `npm run validate -- output/sparring-bot/fighter.json`. Generation: ffmpeg and `npm run sprite:setup`. Host PCs: Linux.
 
 Cloud registration stays default. Use `fighter:register` only by user choice, with their account and secure CLI login. Cloud/auth failure alone never switches routes. Dry-run needs no login: `npm run fighter:register -- --dir <package>`. Submit on request; reuse its key and record for retries.
 
