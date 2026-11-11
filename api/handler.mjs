@@ -232,6 +232,8 @@ export function createHandler({
       const parts = prefix >= 0 ? segments.slice(prefix + 1) : segments,
         method = request.method;
       if (parts[0] === 'embed') return embedHandler(request, parts);
+      // A ChatGPT embed session (afe_) is valid only under /embed: no other route may act on it, including the guests' POST duels.
+      if (/^afe_/.test(bearerToken(request) ?? '')) throw new Problem(401, 'authentication-required');
       const profileRoute = parts[0] === 'fighters' && parts[2] === 'profile' && parts.length === 3;
       if (profileRoute) {
         cors = { methods: 'PATCH, OPTIONS', headers: 'Authorization, Content-Type, Idempotency-Key' };

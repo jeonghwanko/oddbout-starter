@@ -2,6 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHandler, sha256 } from '../api/handler.mjs';
 import { embedChallenge, embedEnabled } from '../api/embed.mjs';
+import { createCommerceHandler } from '../api/commerce/handler.mjs';
+import { verifiedUserId } from '../api/http.mjs';
+import { createClient } from '@supabase/supabase-js';
 import { fixture, ORIGIN, RESULT } from './helpers/embed-fixture.mjs';
 
 test('embed is disabled by default, requires an exact HTTPS origin and implements standard S256', async () => {
@@ -553,4 +556,105 @@ test('combined roster caps at 200, awaits the official adapter and exposes only 
     roster.fighters.filter(f => f.mode === 'official'),
     official.fighters.map(({ id, name, manifestSha256 }) => ({ id, name, manifestSha256, mode: 'official', owned: false })),
   );
+});
+
+test('an embed session credential is never an account credential on ordinary routes', async () => {
+  const f = await fixture();
+  const { token } = await f.exchange();
+  const owner = f.identities[0].owner,
+    fighter = f.fighters[0];
+  const userJwt = 'test-only-user-session-jwt';
+  // The production client rejects the opaque embed secret locally, before any Auth round trip.
+  const realAuth = createClient('http://127.0.0.1:9', 'test-anon-key', {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  }).auth;
+  const decoded = await realAuth.getClaims(token);
+  assert.ok(decoded.error);
+  assert.equal(decoded.data?.claims ?? null, null);
+  f.db.auth = {
+    getClaims: async value =>
+      value === userJwt
+        ? { data: { claims: { sub: owner, role: 'authenticated', session_id: f.identities[0].claims.session_id } }, error: null }
+        : realAuth.getClaims(value),
+  };
+  const rpcs = [],
+    tables = [],
+    { rpc, from } = f.db;
+  f.db.rpc = (name, args) => {
+    rpcs.push(name);
+    return rpc(name, args);
+  };
+  f.db.from = table => {
+    tables.push(table);
+    return from(table);
+  };
+  const counts = async () => {
+    const { rows } = await f.sql.query("select table_name from information_schema.tables where table_schema='public' and table_type='BASE TABLE' order by 1");
+    const out = {};
+    for (const { table_name: name } of rows) out[name] = Number((await f.sql.query(`select count(*)::int as n from public.${name}`)).rows[0].n);
+    return out;
+  };
+  const before = await counts();
+  const key = crypto.randomUUID();
+  const routes = [
+    ['GET', 'me'],
+    ['POST', 'creator-handoffs', {}],
+    ['POST', 'device-logins/approve', { userCode: 'ABCD-EFGH' }],
+    ['POST', 'submissions', { manifest: {} }],
+    ['POST', `submissions/${crypto.randomUUID()}/submit`, {}],
+    ['PATCH', `fighters/${fighter}/profile`, { name: 'Renamed' }],
+    ['POST', `fighters/${fighter}/entry`, {}],
+    ['POST', `fighters/${fighter}/deletion`, {}],
+    ['POST', 'generations', {}],
+    ['POST', 'commerce/checkout', {}],
+    ['POST', 'duels', { a: f.fighters[0], b: f.fighters[1], idempotencyKey: key }],
+  ];
+  const send = (method, path, body, bearer) =>
+    f.handle(
+      new Request(`https://api.example/ai-fighter/${path}`, {
+        method,
+        headers: { origin: ORIGIN, authorization: `Bearer ${bearer}`, 'idempotency-key': key, ...(body ? { 'content-type': 'application/json' } : {}) },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      }),
+    );
+  for (const [method, path, body] of routes) {
+    const response = await send(method, path, body, token);
+    assert.equal(response.status, 401, `${method} ${path}`);
+    assert.equal((await response.json()).code, 'authentication-required', `${method} ${path}`);
+    assert.equal(response.headers.has('access-control-allow-credentials'), false);
+  }
+  assert.deepEqual(rpcs, [], 'an embed bearer reached a database function outside /embed');
+  assert.deepEqual(tables, [], 'an embed bearer reached a table outside /embed');
+  assert.deepEqual(await counts(), before);
+  // Commerce (wallet, checkout, top-up) authenticates the same way wherever it is mounted (scripts/broadcast-demo.mjs).
+  const commerceCalls = [];
+  const service = new Proxy(
+    {},
+    {
+      get:
+        (_, name) =>
+        (...args) =>
+          commerceCalls.push([name, args]),
+    },
+  );
+  const commerce = createCommerceHandler({ service, publicOrigin: ORIGIN, authenticate: request => verifiedUserId(f.db, request) });
+  for (const [method, path, body] of [
+    ['GET', 'commerce/wallet'],
+    ['POST', 'commerce/checkout', { productId: 'gold-100' }],
+    ['POST', `commerce/topups/${crypto.randomUUID()}/checkout`, { confirmed: true }],
+  ]) {
+    const response = await commerce(
+      new Request(`https://api.example/${path}`, {
+        method,
+        headers: { origin: ORIGIN, authorization: `Bearer ${token}`, ...(body ? { 'content-type': 'application/json' } : {}) },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      }),
+    );
+    assert.equal(response.status, 401, `${method} ${path}`);
+  }
+  assert.deepEqual(commerceCalls, []);
+  // Controls: a real user session gets past the same authentication, and the embed credential still works where it belongs.
+  for (const [method, path, body] of routes.filter(([, path]) => path !== 'duels'))
+    assert.notEqual((await send(method, path, body, userJwt)).status, 401, `${method} ${path} with a user session`);
+  assert.equal((await f.request('fighters', { token })).status, 200);
 });
