@@ -7,7 +7,8 @@ import sharp from 'sharp';
 const FONTS = "'Pretendard', 'Noto Sans KR', 'Noto Sans CJK KR', 'Malgun Gothic', 'Apple SD Gothic Neo', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
 
 /** @param {string} text */
-const xml = text => text.replace(/[<>&'"]/g, c => /** @type {Record<string, string>} */ ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' })[c]);
+const xml = text =>
+  text.replace(/[<>&'"]/g, c => /** @type {Record<string, string>} */ ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' })[c]);
 
 /**
  * Whether this host's fonts can draw the name. Windows and macOS ship Korean, Japanese and Chinese fonts; a Linux host (a Dots VM) often
@@ -24,7 +25,10 @@ export function nameFontWarning(name, platform = process.platform) {
     return found.status !== 0 || !found.stdout.trim();
   });
   return missing.length
-    ? { code: 'NAME_FONT_MISSING', detail: `No font here draws ${missing.join('')}: the end card's name shows as boxes. Install fonts-noto-cjk, or export with --no-endcard.` }
+    ? {
+        code: 'NAME_FONT_MISSING',
+        detail: `No font here draws ${missing.join('')}: the end card's name shows as boxes. Install fonts-noto-cjk, or export with --no-endcard.`,
+      }
     : null;
 }
 
@@ -67,7 +71,10 @@ export async function endCard({ width, height, background, name, front = null, f
   let textLeft = pad;
   if (front) {
     const frontHeight = Math.round(height - pad * 2);
-    const picture = await sharp(front).resize({ height: frontHeight, width: Math.round(width * 0.46), fit: 'inside' }).png().toBuffer();
+    const picture = await sharp(front)
+      .resize({ height: frontHeight, width: Math.round(width * 0.46), fit: 'inside' })
+      .png()
+      .toBuffer();
     const meta = await sharp(picture).metadata();
     layers.push({ input: picture, left: pad, top: Math.round((height - (meta.height ?? frontHeight)) / 2) });
     textLeft = pad + (meta.width ?? 0) + pad;
@@ -102,5 +109,9 @@ export async function endCard({ width, height, background, name, front = null, f
       top: Math.round(top + nameSize * 1.3 + Math.floor(i / 3) * (faceSide + pad * 0.25)),
     });
   }
-  return sharp({ create: { width, height, channels: 3, background } }).composite(layers).removeAlpha().raw().toBuffer();
+  return sharp({ create: { width, height, channels: 3, background } })
+    .composite(layers)
+    .removeAlpha()
+    .raw()
+    .toBuffer();
 }

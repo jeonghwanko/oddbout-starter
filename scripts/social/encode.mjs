@@ -24,7 +24,22 @@ export function toolsReady() {
  * @param {Iterable<Buffer> | AsyncIterable<Buffer>} frames @param {{ width: number, height: number, fps: number, out: string, silentAudio?: boolean, crf?: number }} options
  */
 export async function encodeMp4(frames, { width, height, fps, out, silentAudio = false, crf = 18 }) {
-  const args = ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', `${width}x${height}`, '-r', String(fps), '-i', 'pipe:0'];
+  const args = [
+    '-hide_banner',
+    '-loglevel',
+    'error',
+    '-y',
+    '-f',
+    'rawvideo',
+    '-pix_fmt',
+    'rgb24',
+    '-s',
+    `${width}x${height}`,
+    '-r',
+    String(fps),
+    '-i',
+    'pipe:0',
+  ];
   if (silentAudio) args.push('-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100', '-shortest', '-c:a', 'aac', '-b:a', '64k');
   args.push('-c:v', 'libx264', '-profile:v', 'high', '-preset', 'medium', '-crf', String(crf), '-pix_fmt', 'yuv420p', '-movflags', '+faststart', out);
   const child = spawn('ffmpeg', args, { stdio: ['pipe', 'ignore', 'pipe'] });
@@ -44,8 +59,7 @@ export async function encodeMp4(frames, { width, height, fps, out, silentAudio =
           ),
     );
   });
-  for await (const frame of frames)
-    if (!child.stdin.write(frame)) await new Promise(resolve => child.stdin.once('drain', resolve));
+  for await (const frame of frames) if (!child.stdin.write(frame)) await new Promise(resolve => child.stdin.once('drain', resolve));
   child.stdin.end();
   await done;
 }
@@ -63,7 +77,16 @@ function run(args) {
 export async function probe(file) {
   const result = spawnSync(
     'ffprobe',
-    ['-v', 'error', '-count_frames', '-show_entries', 'stream=codec_type,codec_name,width,height,nb_read_frames,r_frame_rate:format=duration', '-of', 'json', file],
+    [
+      '-v',
+      'error',
+      '-count_frames',
+      '-show_entries',
+      'stream=codec_type,codec_name,width,height,nb_read_frames,r_frame_rate:format=duration',
+      '-of',
+      'json',
+      file,
+    ],
     { encoding: 'utf8' },
   );
   if (result.status !== 0) throw new EncodeFailure('PROBE_FAILED', (result.stderr || '').trim());

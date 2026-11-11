@@ -17,7 +17,9 @@ const fixture = fileURLToPath(new URL('../examples/sparring-bot/', import.meta.u
 async function picture(file, width, height, rects) {
   const data = Buffer.alloc(width * height * 4);
   for (const [x0, y0, x1, y1] of rects) for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) data.set([200, 120, 90, 255], (y * width + x) * 4);
-  await sharp(data, { raw: { width, height, channels: 4 } }).png().toFile(file);
+  await sharp(data, { raw: { width, height, channels: 4 } })
+    .png()
+    .toFile(file);
 }
 
 /** A profile set the kit's own builder accepts: a front and a six-face sheet. */
@@ -28,7 +30,12 @@ async function profileSet(dir) {
     [440, 140, 580, 280],
     [380, 280, 640, 1400],
   ]);
-  await picture(sheet, 1536, 1024, [0, 1, 2, 3, 4, 5].map(c => [(c % 3) * 512 + 100, Math.floor(c / 3) * 512 + 60, (c % 3) * 512 + 420, Math.floor(c / 3) * 512 + 511]));
+  await picture(
+    sheet,
+    1536,
+    1024,
+    [0, 1, 2, 3, 4, 5].map(c => [(c % 3) * 512 + 100, Math.floor(c / 3) * 512 + 60, (c % 3) * 512 + 420, Math.floor(c / 3) * 512 + 511]),
+  );
   const out = path.join(dir, 'set');
   const built = await buildProfileSet({ front, expressions: sheet, out });
   assert.equal(built.ok, true, JSON.stringify(built));
@@ -66,12 +73,18 @@ test('fighter:social writes MP4 and GIF loops, reactions, a showcase and a four-
     assert.doesNotMatch(guide, /\b(him|his|her)\b/);
 
     // Never over a folder, never inside the package.
-    assert.deepEqual((await exportSocial({ packageDir: fixture, profileSetDir: set, out })).errors.map(e => e.code), ['OUTPUT_EXISTS']);
+    assert.deepEqual(
+      (await exportSocial({ packageDir: fixture, profileSetDir: set, out })).errors.map(e => e.code),
+      ['OUTPUT_EXISTS'],
+    );
     assert.deepEqual(
       (await exportSocial({ packageDir: fixture, out: path.join(fixture, 'social-out') })).errors.map(e => e.code),
       ['OUTPUT_INSIDE_SOURCE'],
     );
-    assert.deepEqual((await exportSocial({ packageDir: fixture, out: path.join(dir, 'y'), clips: ['victory'] })).errors.map(e => e.code), ['CLIP_MISSING']);
+    assert.deepEqual(
+      (await exportSocial({ packageDir: fixture, out: path.join(dir, 'y'), clips: ['victory'] })).errors.map(e => e.code),
+      ['CLIP_MISSING'],
+    );
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -82,9 +95,17 @@ test('fighter:social refuses a package whose sheet no longer matches its fighter
   try {
     const copy = path.join(dir, 'package');
     await cp(fixture, copy, { recursive: true });
-    await writeFile(path.join(copy, 'assets', 'combo.webp'), await sharp({ create: { width: 8, height: 8, channels: 4, background: '#000' } }).webp().toBuffer());
+    await writeFile(
+      path.join(copy, 'assets', 'combo.webp'),
+      await sharp({ create: { width: 8, height: 8, channels: 4, background: '#000' } })
+        .webp()
+        .toBuffer(),
+    );
     const result = await exportSocial({ packageDir: copy, out: path.join(dir, 'x') });
-    assert.deepEqual(result.errors.map(e => e.code), ['ASSET_CHANGED']);
+    assert.deepEqual(
+      result.errors.map(e => e.code),
+      ['ASSET_CHANGED'],
+    );
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -101,11 +122,25 @@ test('grok-face prepares a looping still, prompt and command without generating;
     // The still opens and closes the clip, so it loops.
     assert.equal(prepared.command[prepared.command.indexOf('--image') + 1], prepared.command[prepared.command.indexOf('--last-frame') + 1]);
     assert.deepEqual((await readdir(path.join(dir, 'grok'))).sort(), ['sideeye-prompt.txt', 'sideeye-still.png']);
-    assert.deepEqual((await prepareGrokFace({ profileSetDir: set, face: 'wink', out: path.join(dir, 'g2') })).errors.map(e => e.code), ['FACE_UNKNOWN']);
+    assert.deepEqual(
+      (await prepareGrokFace({ profileSetDir: set, face: 'wink', out: path.join(dir, 'g2') })).errors.map(e => e.code),
+      ['FACE_UNKNOWN'],
+    );
 
     // A stand-in for the finished clip (ffmpeg's test pattern), never a generation.
     const clip = path.join(dir, 'sideeye-grok.mp4');
-    const made = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'testsrc=size=640x640:rate=24:duration=2', '-pix_fmt', 'yuv420p', clip]);
+    const made = spawnSync('ffmpeg', [
+      '-hide_banner',
+      '-loglevel',
+      'error',
+      '-f',
+      'lavfi',
+      '-i',
+      'testsrc=size=640x640:rate=24:duration=2',
+      '-pix_fmt',
+      'yuv420p',
+      clip,
+    ]);
     assert.equal(made.status, 0);
     const out = path.join(dir, 'x');
     const result = await exportSocial({ packageDir: fixture, out, clips: ['fightIdle'], addClips: [clip] });

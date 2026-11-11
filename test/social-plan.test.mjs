@@ -26,8 +26,14 @@ const clip = {
 };
 
 test('a clip plays its sequence, or each frame for durationMs, from its sheet cells row by row', () => {
-  assert.deepEqual(clipSteps(clip).map(s => s.frame), [0, 1, 2, 1]);
-  assert.deepEqual(clipSteps({ ...clip, sequence: undefined, durationMs: 80 }), clip.frames.map(frame => ({ frame, durationMs: 80 })));
+  assert.deepEqual(
+    clipSteps(clip).map(s => s.frame),
+    [0, 1, 2, 1],
+  );
+  assert.deepEqual(
+    clipSteps({ ...clip, sequence: undefined, durationMs: 80 }),
+    clip.frames.map(frame => ({ frame, durationMs: 80 })),
+  );
   assert.deepEqual(cellRect(clip, 4), { left: 200, top: 400, width: 200, height: 400 });
 });
 
@@ -71,7 +77,7 @@ test("canvas sizes stay inside X's video size and are even", () => {
   assert.deepEqual(canvasSize(720, '16:9'), { width: 1280, height: 720 });
   for (const size of [canvasSize(1024, '1:1'), canvasSize(1024, '16:9')]) {
     assert.ok(size.width <= X_LIMITS.video.width && size.height <= X_LIMITS.video.height);
-    assert.equal(size.width % 2 + size.height % 2, 0);
+    assert.equal((size.width % 2) + (size.height % 2), 0);
   }
 });
 

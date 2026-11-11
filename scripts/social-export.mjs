@@ -140,7 +140,8 @@ export async function faceCells(profile) {
     }
     return { source: 'sheet', faces };
   }
-  if (!profile.front || !profile.set?.face) throw new SocialFailure('NO_FACES', 'The profile set has neither an expression sheet nor a front with a face square');
+  if (!profile.front || !profile.set?.face)
+    throw new SocialFailure('NO_FACES', 'The profile set has neither an expression sheet nor a front with a face square');
   const { x, y, side } = profile.set.face;
   const square = await sharp(profile.front).extract({ left: x, top: y, width: side, height: side }).resize(REACTION_SIZE, REACTION_SIZE).png().toBuffer();
   for (const face of EXPRESSIONS) faces.set(face, square);
@@ -187,12 +188,24 @@ async function stageFrames(clip, sheet, stage, { width, height, background, mark
     const left = Math.max(0, -place.left),
       top = Math.max(0, -place.top);
     const visible = await sharp(cell)
-      .extract({ left, top, width: Math.min(place.width - left, width - Math.max(0, place.left)), height: Math.min(place.height - top, height - Math.max(0, place.top)) })
+      .extract({
+        left,
+        top,
+        width: Math.min(place.width - left, width - Math.max(0, place.left)),
+        height: Math.min(place.height - top, height - Math.max(0, place.top)),
+      })
       .toBuffer();
     /** @type {import('sharp').OverlayOptions[]} */
     const layers = [{ input: visible, left: Math.max(0, place.left), top: Math.max(0, place.top) }];
     if (mark) layers.push({ input: mark, left: 0, top: 0 });
-    frames.set(frame, await sharp({ create: { width, height, channels: 3, background } }).composite(layers).removeAlpha().raw().toBuffer());
+    frames.set(
+      frame,
+      await sharp({ create: { width, height, channels: 3, background } })
+        .composite(layers)
+        .removeAlpha()
+        .raw()
+        .toBuffer(),
+    );
   }
   return frames;
 }
@@ -219,14 +232,29 @@ async function reactionFrames(face, cell, size, background, mark) {
     const cropLeft = Math.max(0, -left),
       cropTop = Math.max(0, -top);
     const shown = await sharp(picture)
-      .extract({ left: cropLeft, top: cropTop, width: Math.min(w - cropLeft, size - Math.max(0, left)), height: Math.min(h - cropTop, size - Math.max(0, top)) })
+      .extract({
+        left: cropLeft,
+        top: cropTop,
+        width: Math.min(w - cropLeft, size - Math.max(0, left)),
+        height: Math.min(h - cropTop, size - Math.max(0, top)),
+      })
       .toBuffer();
     /** @type {import('sharp').OverlayOptions[]} */
     const layers = [{ input: shown, left: Math.max(0, left), top: Math.max(0, top) }];
     if (pose.flash > 0)
-      layers.push({ input: { create: { width: size, height: size, channels: 4, background: { r: 255, g: 255, b: 255, alpha: pose.flash } } }, left: 0, top: 0 });
+      layers.push({
+        input: { create: { width: size, height: size, channels: 4, background: { r: 255, g: 255, b: 255, alpha: pose.flash } } },
+        left: 0,
+        top: 0,
+      });
     if (mark) layers.push({ input: mark, left: 0, top: 0 });
-    frames.push(await sharp({ create: { width: size, height: size, channels: 3, background } }).composite(layers).removeAlpha().raw().toBuffer());
+    frames.push(
+      await sharp({ create: { width: size, height: size, channels: 3, background } })
+        .composite(layers)
+        .removeAlpha()
+        .raw()
+        .toBuffer(),
+    );
   }
   return frames;
 }
@@ -278,7 +306,11 @@ async function packagePicture(fighter, sheets) {
   const sheet = preview && sheets.get(preview.assetId);
   if (!sheet || !preview.crop) return null;
   const { x, y, width, height } = preview.crop;
-  return sharp(sheet).extract({ left: x, top: y, width, height }).png().toBuffer().catch(() => null);
+  return sharp(sheet)
+    .extract({ left: x, top: y, width, height })
+    .png()
+    .toBuffer()
+    .catch(() => null);
 }
 
 /** The suggested post text, in the fighter's language and English. @param {string} name @param {string} language */
@@ -295,7 +327,10 @@ function postGuide({ name, language, files, out, faceSource }) {
   const list = (/** @type {string} */ dir) =>
     files
       .filter(f => rel(f.path).startsWith(dir))
-      .map(f => `- \`${rel(f.path)}\` — ${f.kind}, ${f.width}×${f.height}, ${(f.bytes / 1024).toFixed(0)} KB${f.seconds ? `, ${f.seconds}s` : ''}${f.x.ok ? '' : ` (over X's limits: ${f.x.problems.join('; ')})`}`)
+      .map(
+        f =>
+          `- \`${rel(f.path)}\` — ${f.kind}, ${f.width}×${f.height}, ${(f.bytes / 1024).toFixed(0)} KB${f.seconds ? `, ${f.seconds}s` : ''}${f.x.ok ? '' : ` (over X's limits: ${f.x.problems.join('; ')})`}`,
+      )
       .join('\n');
   return `# ${name} on X
 
@@ -381,7 +416,11 @@ export async function exportSocial({
     const reach = new Map();
     for (const clipName of new Set([...chosen.map(([clipName]) => clipName), ...showcase]))
       reach.set(clipName, await clipReach(fighter.clips[clipName], sheetOf(clipName)));
-    const showStage = stageFor(showcase.flatMap(clipName => reach.get(clipName) ?? []), width, height);
+    const showStage = stageFor(
+      showcase.flatMap(clipName => reach.get(clipName) ?? []),
+      width,
+      height,
+    );
     /** @param {string} clipName @param {import('./social/frames.mjs').Stage} stage */
     const framesOf = async (clipName, stage) => ({
       frames: await stageFrames(fighter.clips[clipName], sheetOf(clipName), stage, { width, height, background, mark }),
@@ -399,7 +438,12 @@ export async function exportSocial({
       const { frames, steps } = await framesOf(clipName, stageFor(reach.get(clipName) ?? [], width, height));
       const total = steps.reduce((sum, step) => sum + step.durationMs, 0);
       const order = resample(steps, FPS, repeatsFor(total, Boolean(clip.loop)));
-      files.push(...(await writeMotion(order.map(i => /** @type {Buffer} */ (frames.get(steps[i].frame))), { width, height, folder: path.join(temporary, 'clips'), name: clipName, gif, silentAudio })));
+      files.push(
+        ...(await writeMotion(
+          order.map(i => /** @type {Buffer} */ (frames.get(steps[i].frame))),
+          { width, height, folder: path.join(temporary, 'clips'), name: clipName, gif, silentAudio },
+        )),
+      );
     }
 
     // The faces, when the export has a profile set.
@@ -408,9 +452,21 @@ export async function exportSocial({
     if (faces) {
       for (const [face, cell] of faces.faces) {
         await writeFile(path.join(temporary, 'reactions', `${face}.png`), cell);
-        files.push(await describe(path.join(temporary, 'reactions', `${face}.png`), 'image', { bytes: cell.length, width: REACTION_SIZE, height: REACTION_SIZE }));
+        files.push(
+          await describe(path.join(temporary, 'reactions', `${face}.png`), 'image', { bytes: cell.length, width: REACTION_SIZE, height: REACTION_SIZE }),
+        );
         const frames = await reactionFrames(face, cell, REACTION_SIZE, background, reactionMark);
-        files.push(...(await writeMotion(frames, { width: REACTION_SIZE, height: REACTION_SIZE, folder: path.join(temporary, 'reactions'), name: face, gif, silentAudio, gifBytes: REACTION_GIF_BYTES })));
+        files.push(
+          ...(await writeMotion(frames, {
+            width: REACTION_SIZE,
+            height: REACTION_SIZE,
+            folder: path.join(temporary, 'reactions'),
+            name: face,
+            gif,
+            silentAudio,
+            gifBytes: REACTION_GIF_BYTES,
+          })),
+        );
       }
     }
 
@@ -424,7 +480,14 @@ export async function exportSocial({
       for (const i of resample(steps, FPS, repeats)) reel.push(/** @type {Buffer} */ (frames.get(steps[i].frame)));
     }
     if (endcard && reel.length) {
-      const card = await endCard({ width, height, background, name, front: profile?.front ?? (await packagePicture(fighter, sheets)), faces: faces ? [...new Set(faces.faces.values())] : [] });
+      const card = await endCard({
+        width,
+        height,
+        background,
+        name,
+        front: profile?.front ?? (await packagePicture(fighter, sheets)),
+        faces: faces ? [...new Set(faces.faces.values())] : [],
+      });
       for (let i = 0; i < Math.round((END_CARD_MS / 1000) * FPS); i++) reel.push(card);
     }
     if (reel.length) files.push(...(await writeMotion(reel, { width, height, folder: temporary, name: 'showcase', gif: false, silentAudio })));
@@ -432,7 +495,10 @@ export async function exportSocial({
     // Four pictures: the front, then three faces (his attacks' key frames when he has no sheet).
     const still = async (/** @type {Buffer} */ picture, /** @type {number} */ index) => {
       const side = 1200;
-      const fitted = await sharp(picture).resize({ width: Math.round(side * 0.88), height: Math.round(side * 0.88), fit: 'inside' }).png().toBuffer();
+      const fitted = await sharp(picture)
+        .resize({ width: Math.round(side * 0.88), height: Math.round(side * 0.88), fit: 'inside' })
+        .png()
+        .toBuffer();
       const meta = await sharp(fitted).metadata();
       const file = path.join(temporary, 'post-set', `${index}.png`);
       const bytes = await sharp({ create: { width: side, height: side, channels: 3, background } })
@@ -451,7 +517,10 @@ export async function exportSocial({
       const clip = fighter.clips[clipName];
       const steps = clipSteps(clip);
       const key = clip.hitSequenceIndices?.[0] ?? Math.floor(steps.length / 2);
-      const cell = await sharp(/** @type {Buffer} */ (sheets.get(clip.assetId))).extract(cellRect(clip, steps[key]?.frame ?? 0)).png().toBuffer();
+      const cell = await sharp(/** @type {Buffer} */ (sheets.get(clip.assetId)))
+        .extract(cellRect(clip, steps[key]?.frame ?? 0))
+        .png()
+        .toBuffer();
       // Clips may share a sheet and a key frame: the same picture twice would waste one of the post's four.
       if (!pictures.some(known => known.equals(cell))) pictures.push(cell);
     }
@@ -530,7 +599,7 @@ export const GROK_FACE_MOTION = /** @type {const} */ ({
  */
 export async function prepareGrokFace({ profileSetDir, face, out, background = { ...BACKGROUNDS.light }, seconds = 6 }) {
   try {
-    if (!(EXPRESSIONS).includes(face)) throw new SocialFailure('FACE_UNKNOWN', `${face}; one of ${EXPRESSIONS.join(', ')}`);
+    if (!EXPRESSIONS.includes(face)) throw new SocialFailure('FACE_UNKNOWN', `${face}; one of ${EXPRESSIONS.join(', ')}`);
     if (await exists(out)) throw new SocialFailure('OUTPUT_EXISTS', out);
     if (within(profileSetDir, out)) throw new SocialFailure('OUTPUT_INSIDE_SOURCE', out);
     const profile = await readProfileSet(profileSetDir);
@@ -538,7 +607,15 @@ export async function prepareGrokFace({ profileSetDir, face, out, background = {
     const cell = /** @type {Buffer} */ (faces.faces.get(face));
     const side = 1024;
     const still = await sharp({ create: { width: side, height: side, channels: 3, background } })
-      .composite([{ input: await sharp(cell).resize(Math.round(side * 0.8), Math.round(side * 0.8)).png().toBuffer(), gravity: 'centre' }])
+      .composite([
+        {
+          input: await sharp(cell)
+            .resize(Math.round(side * 0.8), Math.round(side * 0.8))
+            .png()
+            .toBuffer(),
+          gravity: 'centre',
+        },
+      ])
       .png()
       .toBuffer();
     const prompt = [
@@ -556,11 +633,28 @@ export async function prepareGrokFace({ profileSetDir, face, out, background = {
     const clip = path.join(out, `${face}-grok.mp4`);
     const report = path.join(out, `${face}-grok.report.json`);
     const command = [
-      'npm', 'run', 'sprite', '--', 'video',
-      '--image', stillPath, '--last-frame', stillPath,
-      '--prompt-file', path.join(out, `${face}-prompt.txt`),
-      '--aspect-ratio', '1:1', '--duration', String(seconds), '--resolution', '720p', '--no-audio',
-      '--out', clip, '--report', report,
+      'npm',
+      'run',
+      'sprite',
+      '--',
+      'video',
+      '--image',
+      stillPath,
+      '--last-frame',
+      stillPath,
+      '--prompt-file',
+      path.join(out, `${face}-prompt.txt`),
+      '--aspect-ratio',
+      '1:1',
+      '--duration',
+      String(seconds),
+      '--resolution',
+      '720p',
+      '--no-audio',
+      '--out',
+      clip,
+      '--report',
+      report,
     ];
     return {
       ok: true,
@@ -576,7 +670,8 @@ export async function prepareGrokFace({ profileSetDir, face, out, background = {
         'recover it with `npm run sprite -- video-resume` from the report; never send it again.',
     };
   } catch (error) {
-    if (error instanceof SocialFailure) return { ok: false, stage: 'grok-face', errors: [{ code: error.message, ...(error.detail ? { detail: error.detail } : {}) }] };
+    if (error instanceof SocialFailure)
+      return { ok: false, stage: 'grok-face', errors: [{ code: error.message, ...(error.detail ? { detail: error.detail } : {}) }] };
     throw error;
   }
 }
@@ -628,7 +723,13 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
       console.error(usage);
       process.exitCode = 2;
     } else {
-      const result = await prepareGrokFace({ profileSetDir: /** @type {string} */ (at(values['profile-set'])), face: values.face, out: /** @type {string} */ (at(values.out)), background, seconds });
+      const result = await prepareGrokFace({
+        profileSetDir: /** @type {string} */ (at(values['profile-set'])),
+        face: values.face,
+        out: /** @type {string} */ (at(values.out)),
+        background,
+        seconds,
+      });
       console.log(JSON.stringify(result, null, 2));
       process.exitCode = result.ok ? 0 : 1;
     }
@@ -644,7 +745,12 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
       aspect: /** @type {'1:1' | '16:9'} */ (values.aspect),
       background,
       endcard: !values['no-endcard'],
-      clips: values.clips ? values.clips.split(',').map(c => c.trim()).filter(Boolean) : null,
+      clips: values.clips
+        ? values.clips
+            .split(',')
+            .map(c => c.trim())
+            .filter(Boolean)
+        : null,
       gif: !values['no-gif'],
       silentAudio: values['silent-audio'],
       addClips: (values['add-clip'] ?? []).map(file => /** @type {string} */ (at(file))),
