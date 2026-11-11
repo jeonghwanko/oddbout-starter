@@ -1689,15 +1689,28 @@ test('the motions scale-check every clip against the look before the game pack, 
   // Two rounds (the first grew the combo's canvas), each the clips against the look and the fall and its get-up searched to 90°.
   assert.equal(checks.length, 4);
   for (const args of checks) assert.equal(flag(args, '--reference'), path.join(asm, 'clips', 'idle.json'));
+  // The two groups of a round are measured at once, so a group is known by its angle, not by its place among the calls.
+  const wide = checks.filter(a => a.includes('--angle')),
+    plain = checks.filter(a => !a.includes('--angle'));
+  assert.deepEqual([plain.length, wide.length], [2, 2]);
   assert.deepEqual(
-    values(checks[0], '--asset').map(f => path.basename(f, '.json')),
+    values(plain[0], '--asset').map(f => path.basename(f, '.json')),
     ['idle', 'fightIdle', 'combo', 'walk', 'run'],
   );
   assert.deepEqual(
-    values(checks[1], '--asset').map(f => path.basename(f, '.json')),
+    values(wide[0], '--asset').map(f => path.basename(f, '.json')),
     SCALE_WIDE,
   );
-  assert.ok(!checks[0].includes('--angle') && flag(checks[1], '--angle') === '90');
+  assert.equal(flag(wide[0], '--angle'), '90');
+  // Each group keeps its head searches from one round to the next, in a file of its own.
+  for (const [group, file] of [
+    [plain, 'check.searches.json'],
+    [wide, 'check-wide.searches.json'],
+  ])
+    assert.deepEqual(
+      group.map(args => flag(args, '--cache')),
+      [path.join(asm, 'scale', file), path.join(asm, 'scale', file)],
+    );
   const fits = calls.filter(a => a[1] === 'scale-fit');
   assert.deepEqual(fits[0].slice(2), [
     asm,
