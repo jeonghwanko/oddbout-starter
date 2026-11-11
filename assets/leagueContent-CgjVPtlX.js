@@ -1,1 +1,0 @@
-export{r as profiles}from"./leagueContent-CkfSNBR2.js";
