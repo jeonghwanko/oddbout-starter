@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process';
 import { readdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
-export const HEAVY = ['pack', 'runtime-fetch', 'contact-evidence', 'gait-engine', 'gpt-motion', 'decisions-review'].map(name => `test/${name}.test.mjs`);
+export const HEAVY = ['pack', 'runtime-fetch', 'contact-evidence', 'gait-engine', 'gpt-motion', 'decisions-review', 'social-export'].map(name => `test/${name}.test.mjs`);
 const root = fileURLToPath(new URL('../', import.meta.url));
 
 const mode = process.argv[2];

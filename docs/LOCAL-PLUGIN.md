@@ -167,6 +167,8 @@ The `creation:tool` CLI's absolute workspace argument enables these local tools:
 | `resolve_creation_job` | Record evidence resolving an unknown outcome |
 | `inspect_fighter_packaging` | Measure/encode existing game-pack inputs without writing; return layout blockers and supported fits |
 | `pack_fighter_package` | Build a new artifact package with all required file checks; never generate or register |
+| `export_social_media` | Write a finished package's X files (MP4/GIF loops, reaction faces, four-picture post) to a new output folder; never generate or post ([SOCIAL-EXPORT](SOCIAL-EXPORT.md)) |
+| `prepare_grok_face_clip` | Prepare a looping Grok face clip's still, prompt and command without generating |
 
 For packaging recovery in Dots, first call the cloud MCP's `prepare_fighter_packaging`. It checks the deployed
 contract and returns structured invocations for these two workspace MCP tools. The cloud server cannot open a VM
