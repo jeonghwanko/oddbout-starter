@@ -1,8 +1,9 @@
 # Overtime King Mr. Park: a real fighter package
 
-A complete ODDBOUT fighter, exactly as it is registered: [`fighter.json`](fighter.json) and 14 sprite sheets in
+The package of a registered ODDBOUT fighter, byte for byte: [`fighter.json`](fighter.json) and 14 sprite sheets in
 [`assets/`](assets). Use it to see what a package that passes looks like, whatever tool you draw with. You do not need
-ODDBOUT's generation tools: a package that follows the format below validates, uploads and plays.
+ODDBOUT's generation tools: a package that follows the format below passes the file check and registers
+([what follows](#after-the-upload)).
 
 The artwork is licensed separately from the code: see [LICENSE.md](LICENSE.md) (CC BY 4.0, credit ODDBOUT).
 
@@ -45,7 +46,7 @@ You do not submit hit points, damage, reach or code: the game's own rules set th
 
 - **One sheet per clip, static WebP with an alpha channel.** The background is transparent. An animated WebP is refused.
 - **A grid of equal cells.** The sheet is `frameWidth × columns` wide and `frameHeight × rows` tall. Frames are numbered
-  from 0, top row first, left to right. Unused cells at the end stay empty. Here `walk` is 22 frames of 330 × 419 in an
+  from 0, top row first, left to right. Unused cells at the end may stay empty. Here `walk` is 22 frames of 330 × 419 in an
   8 × 3 grid: a 2640 × 1257 sheet.
 - **Side view, facing right.** The game mirrors the sheet for the left, so lettering and one-sided marks flip too.
 - **One scale for every clip: a standing body 400 pixels tall** (`appearance.bodyHeight`). A cell may be taller or
@@ -69,7 +70,8 @@ the ground (centre `x`, `y`, radii `rx`, `ry`); a frame in the air has an empty 
 - `idle`, `walk` and `run` carry one `durationMs`: the time of **one frame**. A cycle is `durationMs × frames`.
   `walk` also needs `stridePixels`, a number from 1 to 1600.
 - Every other clip carries a `sequence` of `{ "frame", "durationMs" }` steps. A step may repeat a frame.
-- `hitSequenceIndices` marks the steps where a blow lands. They are **step numbers in `sequence`, not frame numbers**.
+- `hitSequenceIndices` marks the steps where a blow lands. They are **step numbers in `sequence`, not frame numbers**,
+  greater than 0 and in ascending order.
 - `landmarks` names other steps the game needs (see the table). They are step numbers too, except a `{ "clip", "frame" }`
   pair, which points at a frame.
 
@@ -132,5 +134,13 @@ stages that come after (preview in the game, review, registration). The
 On [My fighters](https://oddbout.com/creator.html?lang=en) choose New fighter → Other ways → Upload a finished package.
 From this checkout, `npm run fighter:register -- --dir <package>` is a dry run that needs no sign-in, and `--submit`
 sends it with your own account.
+
+## After the upload
+
+The server runs the same file check. A package that passes is registered **in production**: you preview it and
+practise with it, and other people do not meet it yet. To enter it into public play you play each of the eleven
+required clips on its page and confirm them. Entry also needs a front painting of the character (the profile set: a
+separate upload, not part of this package), which this folder does not hold. The rules are in
+[`docs/OPEN-REGISTRATION.md`](../../docs/OPEN-REGISTRATION.md) (Korean).
 
 **Do not upload this example as your fighter.** It is here to read and to test tools against. Make your own character.
