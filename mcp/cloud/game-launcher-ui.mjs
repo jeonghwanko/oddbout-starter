@@ -161,6 +161,7 @@ window.addEventListener('message',event=>{
     }else if(data.type==='game:ready'&&['handshake','granting','grant-sent','ready','authenticated'].includes(state)){
       const firstReady=!gameReady;gameReady=true;
       if(state==='handshake')state='ready';
+      if(state==='authenticated')resetTimer();
       if(firstReady&&state==='ready'&&!gameAuthenticated)armWatchdog(attemptId,'ready',['Sign-in was not confirmed. Try starting again.','로그인을 확인하지 못했습니다. 다시 시작해 주세요.']);
       reportGameStatus();
     }else if(data.type==='game:authenticated'&&['grant-sent','ready','authenticated'].includes(state)){
@@ -168,7 +169,21 @@ window.addEventListener('message',event=>{
       if(!gameReady)armWatchdog(attemptId,'authenticated',['The game did not finish loading. Try starting again.','게임 로딩이 끝나지 않았습니다. 다시 시작해 주세요.']);
       reportGameStatus();
     }else if(data.type==='game:error'&&typeof data.code==='string'){
+      // The game's codes (ChatGptGame.fail/fatal). Only boot-failed is final; the game recovers the others itself.
+      if(data.code==='boot-failed'){
+        grantRequestGeneration++;resetTimer();removeFrame();state='unverified';gameReady=false;gameAuthenticated=false;start.hidden=true;reload.hidden=false;back.hidden=true;
+        note('The game could not start. Select Restart to try again.','게임을 시작하지 못했습니다. 다시 시작을 눌러 다시 시도해 주세요.');return}
+      if(data.code==='auth-required'){
+        // Expiry or a rejected credential: the game asks again with game:auth-required when the user selects Connect in it.
+        resetTimer();gameAuthenticated=false;state=gameReady?'ready':'handshake';
+        note('The ODDBOUT sign-in ended. Select Connect in the game to continue.','ODDBOUT 로그인이 끝났습니다. 게임에서 연결을 눌러 계속하세요.');return}
+      if(gameAuthenticated&&data.code==='request-failed'){
+        note('A game request did not finish. Check the game’s records, or restart if it does not continue.','게임 요청이 끝나지 않았습니다. 게임의 기록을 확인하고, 이어지지 않으면 다시 시작해 주세요.');return}
+      if(gameAuthenticated&&data.code==='incompatible-match'){
+        note('That match does not fit this game version. Check the game’s records, or restart to update.','이 경기는 현재 게임 버전과 맞지 않습니다. 게임의 기록을 확인하거나 다시 시작해 주세요.');return}
       const errors={
+        'request-failed':['The game could not finish signing in. Try starting again.','게임 로그인을 마치지 못했습니다. 다시 시작해 주세요.'],
+        'incompatible-match':['This game version does not match the server. Restart the game.','게임 버전이 서버와 맞지 않습니다. 게임을 다시 시작해 주세요.'],
         'invalid-grant':['The game sign-in expired. Start again.','게임 로그인 정보가 만료됐습니다. 다시 시작해 주세요.'],
         'sign-in-required':['Sign in to ODDBOUT in the game.','게임에서 ODDBOUT에 로그인해 주세요.'],
         'launch-failed':['The game could not start. Try again.','게임을 시작하지 못했습니다. 다시 시도해 주세요.']};
