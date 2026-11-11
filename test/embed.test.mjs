@@ -628,7 +628,15 @@ test('an embed session credential is never an account credential on ordinary rou
   assert.deepEqual(await counts(), before);
   // Commerce (wallet, checkout, top-up) authenticates the same way wherever it is mounted (scripts/broadcast-demo.mjs).
   const commerceCalls = [];
-  const service = new Proxy({}, { get: (_, name) => (...args) => commerceCalls.push([name, args]) });
+  const service = new Proxy(
+    {},
+    {
+      get:
+        (_, name) =>
+        (...args) =>
+          commerceCalls.push([name, args]),
+    },
+  );
   const commerce = createCommerceHandler({ service, publicOrigin: ORIGIN, authenticate: request => verifiedUserId(f.db, request) });
   for (const [method, path, body] of [
     ['GET', 'commerce/wallet'],
