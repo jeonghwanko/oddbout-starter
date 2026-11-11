@@ -3211,14 +3211,14 @@ const pass5 = Object.fromEntries(SIDE_CHECKS.map(check => [check, 'pass']));
 /** A pixel judge answer as motions.py writes it. */
 const pixelSide = (checks, notes = 'whole: the figure keeps 5% from every edge.') => ({
   kind: 'side',
-  model: 'pixels-v1',
+  model: 'pixels-v2',
   checks: { ...pass5, side: 'unknown', ...checks },
   notes,
   measures: { ms: 90 },
 });
 const pixelLoop = (checks, notes = "identity: the look's colour regions stay in every frame.") => ({
   kind: 'loop',
-  model: 'pixels-v1',
+  model: 'pixels-v2',
   identity: 'pass',
   anatomy: 'pass',
   loop: 'pass',
@@ -3239,7 +3239,7 @@ test("the judges mode: codex unless one of the three is named, and a pixel answe
     'codex',
   ]);
   assert.deepEqual(checkedPixels('side', pixelSide({ style: 'unknown' })), {
-    model: 'pixels-v1',
+    model: 'pixels-v2',
     checks: { ...pass5, side: 'unknown', style: 'unknown' },
     notes: 'whole: the figure keeps 5% from every edge.',
   });
@@ -3257,7 +3257,7 @@ test("the judges mode: codex unless one of the three is named, and a pixel answe
   // Each mode its own key: a verdict one mode made is never the current one of another.
   const codexKey = judgeKey({ prompt: 'p', schema: 's' });
   assert.equal(new Set([codexKey, pixelJudgeKey('side'), pixelJudgeKey('loop'), hybridJudgeKey(pixelJudgeKey('side'), codexKey)]).size, 4);
-  assert.equal(PIXEL_JUDGE.model, 'pixels-v1');
+  assert.equal(PIXEL_JUDGE.model, 'pixels-v2');
 });
 
 /** The side still under a judges mode: `pixels` and `codex` are queues of answers, one per call; motions.py's other commands fail (enough). */
@@ -3351,7 +3351,7 @@ test('pixels: the pixel judge decides a side take alone, its open checks counted
   assert.match(second.notes, /^Not judged by pixels, counted as pass: side, style\. whole:/);
   assert.deepEqual(
     [second.judge.kind, second.judge.key, second.judge.unknownAsPass, second.judge.decidedBy, second.judge.pixels.observed],
-    ['pixels', pixelJudgeKey('side'), ['side', 'style'], 'pixels', 'pixels-v1'],
+    ['pixels', pixelJudgeKey('side'), ['side', 'style'], 'pixels', 'pixels-v2'],
   );
   assert.deepEqual(
     run.events.filter(e => e.kind === 'side').map(e => [e.outcome, e.judgeBy, e.open]),
@@ -3368,7 +3368,7 @@ test('pixels: the pixel judge decides a side take alone, its open checks counted
   const models = run.events.find(e => e.kind === 'models');
   assert.deepEqual(
     models.runs.filter(r => r.role === 'pixel-judge'),
-    [{ role: 'pixel-judge', requested: 'pixels-v1', observed: 'pixels-v1', n: 2 }],
+    [{ role: 'pixel-judge', requested: 'pixels-v2', observed: 'pixels-v2', n: 2 }],
   );
   // A stage run again judges nothing it has.
   run.calls.length = 0;
@@ -3454,7 +3454,7 @@ test('the judgment archive: checks, numbers and models, a salted job key and no 
     mode: 'hybrid',
     decidedBy: 'pixels',
     final: { ...pass5, notes: 'no' },
-    pixels: { model: 'pixels-v1', observed: 'pixels-v1', checks: { ...pass5, side: 'unknown', extra: 'x' }, measures: { ms: 80, words: 'gone' }, ms: 80 },
+    pixels: { model: 'pixels-v2', observed: 'pixels-v2', checks: { ...pass5, side: 'unknown', extra: 'x' }, measures: { ms: 80, words: 'gone' }, ms: 80 },
   });
   assert.deepEqual(line, {
     v: 2,
@@ -3466,7 +3466,7 @@ test('the judgment archive: checks, numbers and models, a salted job key and no 
     mode: 'hybrid',
     decidedBy: 'pixels',
     final: pass5,
-    pixels: { model: 'pixels-v1', observed: 'pixels-v1', checks: { ...pass5, side: 'unknown' }, measures: { ms: 80 }, ms: 80, wallMs: null },
+    pixels: { model: 'pixels-v2', observed: 'pixels-v2', checks: { ...pass5, side: 'unknown' }, measures: { ms: 80 }, ms: 80, wallMs: null },
     codex: null,
   });
   assert.equal(
@@ -3478,7 +3478,7 @@ test('the judgment archive: checks, numbers and models, a salted job key and no 
       mode: 'pixels',
       decidedBy: 'none',
       final: null,
-      pixels: { model: 'pixels-v1', error: 1, wallMs: 700 },
+      pixels: { model: 'pixels-v2', error: 1, wallMs: 700 },
     }).pixels.error,
     '1',
   );
@@ -4067,7 +4067,7 @@ test('pixels and hybrid judge the walk and the run: who decided goes to tried an
   assert.match(verdict.notes, /^Not judged by pixels, counted as pass: anatomy\./);
   assert.deepEqual(
     [walk.judgeKey, walk.judge],
-    ['keyed', 'pixels pixels-v1 (observed pixels-v1; NumPy on the frames, no vision model; checks it left open counted as pass: anatomy)'],
+    ['keyed', 'pixels pixels-v2 (observed pixels-v2; NumPy on the frames, no vision model; checks it left open counted as pass: anatomy)'],
   );
   // The walk and the run judge at once: the walk's pixel judge reads the look and the walk's aligned strip.
   assert.deepEqual(
@@ -4102,7 +4102,7 @@ test('pixels and hybrid judge the walk and the run: who decided goes to tried an
   );
   assert.match(
     (await config(hybrid.dir, 'walk')).judge,
-    /^pixels pixels-v1 \(observed pixels-v1; NumPy on the frames, no vision model\) then codex gpt-6\.1-sol effort medium/,
+    /^pixels pixels-v2 \(observed pixels-v2; NumPy on the frames, no vision model\) then codex gpt-6\.1-sol effort medium/,
   );
   assert.match((await config(hybrid.dir, 'run')).judge, /hybrid, codex not asked\)$/);
 });
@@ -4222,7 +4222,7 @@ strip("walk"); strip("lost", item=False); strip("ghost", ghost=5); strip("jump",
       };
       const side = take => {
         const answer = judge('side', 'front.png', take);
-        assert.deepEqual([answer.kind, answer.model], ['side', 'pixels-v1']);
+        assert.deepEqual([answer.kind, answer.model], ['side', 'pixels-v2']);
         assert.ok(checkedPixels('side', answer), 'the stage reads it as a pixel answer');
         // Profile or three-quarter is never decided by pixels; the style statistic never fails.
         assert.equal(answer.checks.side, 'unknown');

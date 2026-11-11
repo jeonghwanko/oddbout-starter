@@ -85,7 +85,7 @@ test(
     assert.notEqual(facts.rule, facts.name, 'a threshold changed: a new name');
     assert.notEqual(facts.weights, facts.name, 'a weight revision changed: a new name');
     // checkedPixels keeps 40 characters of a model; the pixel judge's name and a '+' go in front.
-    assert.ok(`pixels-v1+${facts.name}`.length <= 40);
+    assert.ok(`pixels-v2+${facts.name}`.length <= 40);
     assert.ok(
       facts.packages.every(/** @param {string} p */ p => /^[a-z]+==\d+(\.\d+)+$/.test(p)),
       'every package pinned to one version',
@@ -128,7 +128,7 @@ test(
     );
     const checked = checkedPixels('side', answer);
     assert.ok(checked, 'the worker accepts the answer');
-    assert.match(checked.model, /^pixels-v1\+side-models-v1-[0-9a-f]{6}$/);
+    assert.match(checked.model, /^pixels-v2\+side-models-v1-[0-9a-f]{6}$/);
     assert.equal(checked.checks.side, 'pass');
     assert.doesNotMatch(checked.notes, /side: not judged by pixels/, "the pixel judge's own side note gives way");
     assert.match(checked.notes, /side \(side-models-v1\): pass/);

@@ -19,7 +19,7 @@ const side = (
   mode,
   decidedBy,
   final: codex ?? pixels,
-  pixels: { model: 'pixels-v1', observed: 'pixels-v1', checks: { ...pass5, side: 'unknown', ...pixels }, measures: { ms: pms }, ms: pms, wallMs: pwall },
+  pixels: { model: 'pixels-v2', observed: 'pixels-v2', checks: { ...pass5, side: 'unknown', ...pixels }, measures: { ms: pms }, ms: pms, wallMs: pwall },
   codex: codex ? { checks: { ...pass5, ...codex }, model: 'gpt', effort: 'medium', observed: 'gpt', wallMs: reused ? null : cwall, reused } : null,
 });
 const noAnswer = (mode = 'hybrid') => ({
@@ -29,7 +29,7 @@ const noAnswer = (mode = 'hybrid') => ({
   mode,
   decidedBy: 'none',
   final: null,
-  pixels: { model: 'pixels-v1', error: 1, wallMs: 600 },
+  pixels: { model: 'pixels-v2', error: 1, wallMs: 600 },
 });
 
 /** An archive the host's own writer made, with `entries` in order a minute apart. */

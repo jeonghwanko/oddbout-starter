@@ -136,7 +136,7 @@ export const judgesNeedCodex = mode => mode !== 'pixels';
 /** @param {string | null | undefined} configured @param {{ codex?: boolean }} [options] */
 export const judgesFor = (configured, { codex = false } = {}) => (configured ? judgesMode(configured) : codex ? 'codex' : 'pixels');
 /** The pixel judge asked for (motions.py PIXEL_MODEL; its answer names the one that ran, `observed`). */
-export const PIXEL_JUDGE = Object.freeze({ model: 'pixels-v1' });
+export const PIXEL_JUDGE = Object.freeze({ model: 'pixels-v2' });
 /** The key of a pixel verdict (`kind`: side or loop), and of a hybrid one (the pixel judge's and codex's keys together). @param {string} kind */
 export const pixelJudgeKey = kind => reviewHash(JSON.stringify({ version: JUDGE_KEY_VERSION, judge: 'pixels', model: PIXEL_JUDGE.model, kind }));
 /** @param {string} pixelKey @param {string} codexKey */
