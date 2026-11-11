@@ -1495,27 +1495,35 @@ export function createStages({
     ];
     await mkdir(folder, { recursive: true });
     for (let round = 0; round < SCALE_ROUNDS; round++) {
-      const reports = [];
-      for (const [name, group, extra] of groups.filter(([, group]) => group.length)) {
-        const out = path.join(folder, `${name}.json`);
-        await rm(out, { force: true }); // an earlier round's report must never stand in for this one
-        const { code } = await og(
-          sprite(
-            'scale-check',
-            '--reference',
-            clip('idle'),
-            ...group.flatMap(id => ['--asset', clip(id)]),
-            ...extra,
-            '--out',
-            out,
-            '--board',
-            path.join(folder, `${name}.png`),
-          ),
-        );
-        // 1 with a report: measured, some frames left for an eye check (the policy takes them); anything else: the engine refused.
-        if (![0, 1].includes(code) || !existsSync(out)) return { review: 'scale-check' };
-        reports.push(out);
-      }
+      // The two groups share no clip and no file, so they are measured at once. `--cache` keeps each group's head searches for the
+      // next round: a canvas that grew is new pixels and is searched, the clips left as they were are not (sprite-gen scale-check).
+      const measured = await Promise.all(
+        groups
+          .filter(([, group]) => group.length)
+          .map(async ([name, group, extra]) => {
+            const out = path.join(folder, `${name}.json`);
+            await rm(out, { force: true }); // an earlier round's report must never stand in for this one
+            const { code } = await og(
+              sprite(
+                'scale-check',
+                '--reference',
+                clip('idle'),
+                ...group.flatMap(id => ['--asset', clip(id)]),
+                ...extra,
+                '--cache',
+                path.join(folder, `${name}.searches.json`),
+                '--out',
+                out,
+                '--board',
+                path.join(folder, `${name}.png`),
+              ),
+            );
+            // 1 with a report: measured, some frames left for an eye check (the policy takes them); anything else: the engine refused.
+            return [0, 1].includes(code) && existsSync(out) ? out : null;
+          }),
+      );
+      if (measured.includes(null)) return { review: 'scale-check' };
+      const reports = /** @type {string[]} */ (measured);
       if ((await motionsPy(['scale-fit', asm, fitFile, ...reports])).code !== 0) return { review: 'scale-fit' };
       const fit = await readJson(fitFile);
       if (!Object.keys(fit.grown).length) return { fit };
