@@ -59,6 +59,8 @@ export const jobPlanSchema = z
     workflowArgs: args.optional(),
     // How long the runner lets the engine work before stopping it (default DEFAULT_TIMEOUT_MINUTES).
     timeoutMinutes: z.number().int().min(1).max(720).optional(),
+    // Opt-in. Names targets the user asked to generate again even though a reuse record exists. Absent means those items stay blocked.
+    regenerate: z.array(z.string().min(1).max(64)).max(12).optional(),
   })
   .strict();
 // Generous so a long video run finishes; a hung provider no longer leaves a job running forever.
@@ -231,8 +233,11 @@ export function createJobStore(store) {
       if (jobs.some(j => 'unreadable' in j)) fail('unreadable-job-needs-inspection');
       if (jobs.some(j => !('unreadable' in j) && !terminal.has(j.status) && plan.targets.some(t => j.plan.targets.some(x => x.item === t.item))))
         fail('existing-job-needs-inspection');
-      for (const target of plan.targets)
+      for (const item of plan.regenerate ?? []) if (!plan.targets.some(target => target.item === item)) fail('regenerate-not-a-target');
+      for (const target of plan.targets) {
+        if (state.reuse?.[target.item] && !(plan.regenerate ?? []).includes(target.item)) fail('reuse-recorded');
         if (state.items[target.item]?.versions[target.version] && plan.engine !== 'fighter-pack') fail('target-version-already-exists');
+      }
       for (const output of plan.outputs) {
         if (!output.startsWith(`${store.prefix(id)}/artifacts/`)) fail('output-outside-session-artifacts');
         const destination = await localPath(store.root, output);
@@ -275,7 +280,14 @@ export function createJobStore(store) {
       }
     }
     if (job.status === 'succeeded' && !(await unchanged(store.root, job.outputs))) observedStatus = 'outputs-changed';
-    return { ...job, observedStatus, canExecute: job.status === 'prepared', nextAction: nextAction(job, observedStatus) };
+    return {
+      ...job,
+      observedStatus,
+      canExecute: job.status === 'prepared',
+      executedByThisCall: false,
+      cancelledByThisCall: false,
+      nextAction: nextAction(job, observedStatus),
+    };
   }
   /**
    * @param {string} id @param {string} jobId
