@@ -1,1 +1,0 @@
-import{t as e}from"./RuntimeOptions-B5o08Ujz.js";function t(){return e().arenaClub===`on`}function n(e){let t=new URLSearchParams(e);return t.get(`club`)===`1`||!(t.get(`arena`)===`1`||t.get(`play`)===`1`||[`week`,`twitchBout`,`clubPreview`].some(e=>t.has(e)))}function r(){return globalThis.document?.documentElement?.dataset.clubDefault===`1`}export{t as n,n as r,r as t};
