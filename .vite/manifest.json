@@ -1,6 +1,6 @@
 {
-  "_ArenaArtCatalog-CcIogMvF.js": {
-    "file": "assets/ArenaArtCatalog-CcIogMvF.js",
+  "_ArenaArtCatalog-D-uD_tLM.js": {
+    "file": "assets/ArenaArtCatalog-D-uD_tLM.js",
     "name": "ArenaArtCatalog",
     "imports": [
       "_ShadowFighter-qozKPUYQ.js"
@@ -10,31 +10,31 @@
     "file": "assets/ArenaBoutLink-C72WWppH.js",
     "name": "ArenaBoutLink"
   },
-  "_ArenaClubAfterMatch-9tCnzovS.js": {
-    "file": "assets/ArenaClubAfterMatch-9tCnzovS.js",
+  "_ArenaClubAfterMatch-D-PRWQbP.js": {
+    "file": "assets/ArenaClubAfterMatch-D-PRWQbP.js",
     "name": "ArenaClubAfterMatch",
     "imports": [
       "_rolldown-runtime-BWaJ3C7D.js",
       "_Locale-Bfnpz3E7.js",
-      "_registeredFighters-DcFC9muA.js",
+      "_registeredFighters-5Z95dYW5.js",
       "_RuntimeOptions-nnuamCaA.js",
       "_FighterIdentity--_l0xpOr.js",
-      "_ClubRelations-Chm-KQG0.js",
+      "_ClubRelations-DddwnhX8.js",
       "_ShadowFighter-qozKPUYQ.js",
-      "_ArenaArtCatalog-CcIogMvF.js",
+      "_ArenaArtCatalog-D-uD_tLM.js",
       "_palette-8vpL4DNx.js",
       "_CareerRules-C1vSMPaW.js",
       "_BigNumber-xBCh8Tqr.js",
       "_FighterFrames-DWiIwNQS.js",
       "_NativeCityOrthoPack-UR-Sg-fC.js",
       "_NativeCityOrthoPack-CJnew50_.js",
-      "_UiFeedback-BceJlero.js",
-      "_domButton-Kp7x-FnX.js",
+      "_UiFeedback-CgRR3R9S.js",
+      "_domButton-CJSJv_Q9.js",
       "_ArenaRoster-1XvL67U0.js",
-      "_ArenaFacePaint-dsRkQcBc.js",
-      "_arenaClubTourServer-qUg-i37Q.js",
+      "_ArenaFacePaint-CpsO8JGT.js",
+      "_arenaClubTourServer-GBWNgR8e.js",
       "_CityFighterPacks-Dj_Z9ign.js",
-      "_RegisteredArenaFighters-J84hUyEW.js"
+      "_RegisteredArenaFighters-BAeKoywA.js"
     ]
   },
   "_ArenaClubMode-BlSXK7-H.js": {
@@ -44,52 +44,52 @@
       "_RuntimeOptions-nnuamCaA.js"
     ]
   },
-  "_ArenaComicBackdrop-cUOHaD6z.js": {
-    "file": "assets/ArenaComicBackdrop-cUOHaD6z.js",
+  "_ArenaComicBackdrop-yU9mnNnm.js": {
+    "file": "assets/ArenaComicBackdrop-yU9mnNnm.js",
     "name": "ArenaComicBackdrop",
     "imports": [
       "_rolldown-runtime-BWaJ3C7D.js",
       "_palette-8vpL4DNx.js",
-      "_UiFeedback-BceJlero.js",
-      "_domButton-Kp7x-FnX.js",
-      "_ArenaFacePaint-dsRkQcBc.js"
+      "_UiFeedback-CgRR3R9S.js",
+      "_domButton-CJSJv_Q9.js",
+      "_ArenaFacePaint-CpsO8JGT.js"
     ]
   },
-  "_ArenaDuelScene-DGcQpiIi.js": {
-    "file": "assets/ArenaDuelScene-DGcQpiIi.js",
+  "_ArenaDuelScene-DjOMxMTZ.js": {
+    "file": "assets/ArenaDuelScene-DjOMxMTZ.js",
     "name": "ArenaDuelScene",
     "imports": [
       "_rolldown-runtime-BWaJ3C7D.js",
       "__oddbout-milestones-CTI00lJ4.js",
-      "_ArenaFacePaint-dsRkQcBc.js",
-      "_ClubRelations-Chm-KQG0.js",
+      "_ArenaFacePaint-CpsO8JGT.js",
+      "_ClubRelations-DddwnhX8.js",
       "_ShadowFighter-qozKPUYQ.js",
       "_fighterApiBase-CeB_1v89.js",
-      "_domButton-Kp7x-FnX.js",
-      "_rankedDuels-DhnINi21.js",
+      "_domButton-CJSJv_Q9.js",
+      "_rankedDuels-JTaRfnRF.js",
       "_ArenaRoster-1XvL67U0.js",
-      "_UiFeedback-BceJlero.js",
+      "_UiFeedback-CgRR3R9S.js",
       "_FighterIdentity--_l0xpOr.js",
       "_FighterFrames-DWiIwNQS.js",
-      "_ArenaArtCatalog-CcIogMvF.js",
+      "_ArenaArtCatalog-D-uD_tLM.js",
       "_palette-8vpL4DNx.js",
       "_RuntimeOptions-nnuamCaA.js",
-      "_RegisteredArenaFighters-J84hUyEW.js",
+      "_RegisteredArenaFighters-BAeKoywA.js",
       "_CityFighterPacks-Dj_Z9ign.js",
       "_CityTournamentRules-CDfBW4O_.js",
-      "_ArenaClubAfterMatch-9tCnzovS.js",
+      "_ArenaClubAfterMatch-D-PRWQbP.js",
       "_PhaserTextureFamilies-C8vBSGBz.js",
       "_playerSettingsStorage-Dsl4WW5n.js",
       "_ArenaClubMode-BlSXK7-H.js",
-      "_arenaClubTourServer-qUg-i37Q.js",
+      "_arenaClubTourServer-GBWNgR8e.js",
       "_GameMenuState-CDnM5zRW.js",
       "_NativeCityOrthoPack-CJnew50_.js",
       "_NativeCityOrthoPack-UR-Sg-fC.js",
       "_preload-helper-7y9sWmk5.js",
       "_ArenaBoutLink-C72WWppH.js",
       "_OddboutCommunity-CLWy8SdF.js",
-      "_registeredFighters-DcFC9muA.js",
-      "_ArenaGoldDropView-W-NARScu.js",
+      "_registeredFighters-5Z95dYW5.js",
+      "_ArenaGoldDropView-CXIwjYAv.js",
       "_Locale-Bfnpz3E7.js",
       "_BigNumber-xBCh8Tqr.js",
       "_CareerRules-C1vSMPaW.js",
@@ -103,14 +103,14 @@
     "file": "assets/ArenaFacePaint-Bq4DLEir.css",
     "src": "_ArenaFacePaint-Bq4DLEir.css"
   },
-  "_ArenaFacePaint-dsRkQcBc.js": {
-    "file": "assets/ArenaFacePaint-dsRkQcBc.js",
+  "_ArenaFacePaint-CpsO8JGT.js": {
+    "file": "assets/ArenaFacePaint-CpsO8JGT.js",
     "name": "ArenaFacePaint",
     "imports": [
       "_rolldown-runtime-BWaJ3C7D.js",
       "_preload-helper-7y9sWmk5.js",
       "_storageKeys-DrW9C73_.js",
-      "_registeredFighters-DcFC9muA.js",
+      "_registeredFighters-5Z95dYW5.js",
       "_fighterApiBase-CeB_1v89.js",
       "_oddboutSession-C4KoBx1u.js",
       "_RuntimeOptions-nnuamCaA.js",
@@ -118,24 +118,24 @@
       "_playerSettingsStorage-Dsl4WW5n.js",
       "_GameMenuState-CDnM5zRW.js",
       "_FighterIdentity--_l0xpOr.js",
-      "_ClubRelations-Chm-KQG0.js",
+      "_ClubRelations-DddwnhX8.js",
       "_ShadowFighter-qozKPUYQ.js",
-      "_ArenaArtCatalog-CcIogMvF.js",
+      "_ArenaArtCatalog-D-uD_tLM.js",
       "_palette-8vpL4DNx.js",
-      "_arenaRankings-N5PUSNYY.js",
+      "_arenaRankings-kxX7pG7e.js",
       "_rng-DryEJwf9.js",
       "_CityTournamentRules-CDfBW4O_.js",
       "_CareerRules-C1vSMPaW.js",
       "_FighterCombat-CQbN37Dl.js",
       "_BigNumber-xBCh8Tqr.js",
       "_FighterFrames-DWiIwNQS.js",
-      "_UiFeedback-BceJlero.js",
-      "_domButton-Kp7x-FnX.js",
+      "_UiFeedback-CgRR3R9S.js",
+      "_domButton-CJSJv_Q9.js",
       "_ArenaRoster-1XvL67U0.js",
       "_CityFighterIds-P54OTYif.js",
       "_DisposableBag-DN_PCP1k.js",
-      "_arenaClubTourServer-qUg-i37Q.js",
-      "_oddboutRelayCall-Dr8RKFlM.js",
+      "_arenaClubTourServer-GBWNgR8e.js",
+      "_oddboutRelayCall-C--mgzgm.js",
       "_RegisteredAirCombo-E_J6BicM.js"
     ],
     "dynamicImports": [
@@ -146,28 +146,28 @@
       "assets/ArenaFacePaint-Bq4DLEir.css"
     ]
   },
-  "_ArenaGoldDropView-W-NARScu.js": {
-    "file": "assets/ArenaGoldDropView-W-NARScu.js",
+  "_ArenaGoldDropView-CXIwjYAv.js": {
+    "file": "assets/ArenaGoldDropView-CXIwjYAv.js",
     "name": "ArenaGoldDropView",
     "imports": [
       "_rolldown-runtime-BWaJ3C7D.js",
       "_Locale-Bfnpz3E7.js",
       "_palette-8vpL4DNx.js",
       "_CityTournamentRules-CDfBW4O_.js",
-      "_UiFeedback-BceJlero.js",
-      "_domButton-Kp7x-FnX.js",
-      "_ArenaFacePaint-dsRkQcBc.js"
+      "_UiFeedback-CgRR3R9S.js",
+      "_domButton-CJSJv_Q9.js",
+      "_ArenaFacePaint-CpsO8JGT.js"
     ]
   },
-  "_ArenaRecordChips-CwpT9Vfa.js": {
-    "file": "assets/ArenaRecordChips-CwpT9Vfa.js",
+  "_ArenaRecordChips-DtWpiPMC.js": {
+    "file": "assets/ArenaRecordChips-DtWpiPMC.js",
     "name": "ArenaRecordChips",
     "imports": [
       "_palette-8vpL4DNx.js",
-      "_UiFeedback-BceJlero.js",
-      "_domButton-Kp7x-FnX.js",
-      "_ArenaFacePaint-dsRkQcBc.js",
-      "_ArenaGoldDropView-W-NARScu.js"
+      "_UiFeedback-CgRR3R9S.js",
+      "_domButton-CJSJv_Q9.js",
+      "_ArenaFacePaint-CpsO8JGT.js",
+      "_ArenaGoldDropView-CXIwjYAv.js"
     ]
   },
   "_ArenaRoster-1XvL67U0.js": {
@@ -186,11 +186,11 @@
       "_Locale-Bfnpz3E7.js"
     ]
   },
-  "_BootPresentation-CsLaSopS.js": {
-    "file": "assets/BootPresentation-CsLaSopS.js",
+  "_BootPresentation-Cq7-c-A-.js": {
+    "file": "assets/BootPresentation-Cq7-c-A-.js",
     "name": "BootPresentation",
     "imports": [
-      "_domButton-Kp7x-FnX.js"
+      "_domButton-CJSJv_Q9.js"
     ]
   },
   "_CareerRules-C1vSMPaW.js": {
@@ -261,16 +261,16 @@
       "_rng-DryEJwf9.js"
     ]
   },
-  "_ClubRelations-Chm-KQG0.js": {
-    "file": "assets/ClubRelations-Chm-KQG0.js",
+  "_ClubRelations-DddwnhX8.js": {
+    "file": "assets/ClubRelations-DddwnhX8.js",
     "name": "ClubRelations",
     "imports": [
       "_catalog-C-siAyxf.js",
       "_localeLoader-iMHQKnrl.js",
       "_preload-helper-7y9sWmk5.js",
-      "_PublicAssetVersions-XlqrkIRf.js",
+      "_PublicAssetVersions-26dfK_QB.js",
       "_ShadowFighter-qozKPUYQ.js",
-      "_ArenaArtCatalog-CcIogMvF.js",
+      "_ArenaArtCatalog-D-uD_tLM.js",
       "_palette-8vpL4DNx.js",
       "_CareerRules-C1vSMPaW.js",
       "_FighterCombat-CQbN37Dl.js"
@@ -306,25 +306,25 @@
     "file": "assets/FighterIdentity--_l0xpOr.js",
     "name": "FighterIdentity"
   },
-  "_FighterRelations-DL1PpKa0.js": {
-    "file": "assets/FighterRelations-DL1PpKa0.js",
+  "_FighterRelations-DcmSwKoC.js": {
+    "file": "assets/FighterRelations-DcmSwKoC.js",
     "name": "FighterRelations",
     "imports": [
-      "_ClubRelations-Chm-KQG0.js",
+      "_ClubRelations-DddwnhX8.js",
       "_CareerRules-C1vSMPaW.js"
     ]
   },
-  "_GameBoot-GgYLh6Ap.js": {
-    "file": "assets/GameBoot-GgYLh6Ap.js",
+  "_GameBoot-CR5hAFau.js": {
+    "file": "assets/GameBoot-CR5hAFau.js",
     "name": "GameBoot",
     "imports": [
       "_rolldown-runtime-BWaJ3C7D.js",
-      "_domButton-Kp7x-FnX.js",
+      "_domButton-CJSJv_Q9.js",
       "_chrome-WTCfkHbK.js",
-      "_UiFeedback-BceJlero.js",
+      "_UiFeedback-CgRR3R9S.js",
       "_palette-8vpL4DNx.js",
       "_playerSettingsStorage-Dsl4WW5n.js",
-      "_BootPresentation-CsLaSopS.js"
+      "_BootPresentation-Cq7-c-A-.js"
     ]
   },
   "_GameMenuState-CDnM5zRW.js": {
@@ -357,16 +357,16 @@
     "file": "assets/PhaserTextureFamilies-C8vBSGBz.js",
     "name": "PhaserTextureFamilies"
   },
-  "_PublicAssetVersions-XlqrkIRf.js": {
-    "file": "assets/PublicAssetVersions-XlqrkIRf.js",
+  "_PublicAssetVersions-26dfK_QB.js": {
+    "file": "assets/PublicAssetVersions-26dfK_QB.js",
     "name": "PublicAssetVersions"
   },
   "_RegisteredAirCombo-E_J6BicM.js": {
     "file": "assets/RegisteredAirCombo-E_J6BicM.js",
     "name": "RegisteredAirCombo"
   },
-  "_RegisteredArenaFighters-J84hUyEW.js": {
-    "file": "assets/RegisteredArenaFighters-J84hUyEW.js",
+  "_RegisteredArenaFighters-BAeKoywA.js": {
+    "file": "assets/RegisteredArenaFighters-BAeKoywA.js",
     "name": "RegisteredArenaFighters",
     "imports": [
       "_validate-Beb91gKy.js",
@@ -374,9 +374,9 @@
       "_ArenaRoster-1XvL67U0.js",
       "_fighterLines-BqpSV2Ld.js",
       "_fighterSheetData-B1Prhdsf.js",
-      "_registeredFighters-DcFC9muA.js",
+      "_registeredFighters-5Z95dYW5.js",
       "_NativeCityOrthoPack-CJnew50_.js",
-      "_ArenaArtCatalog-CcIogMvF.js",
+      "_ArenaArtCatalog-D-uD_tLM.js",
       "_NativeCityOrthoPack-UR-Sg-fC.js",
       "_ShadowFighter-qozKPUYQ.js",
       "_RegisteredAirCombo-E_J6BicM.js",
@@ -395,24 +395,24 @@
     "file": "assets/SceneCameraShake-BLoV0hKv.css",
     "src": "_SceneCameraShake-BLoV0hKv.css"
   },
-  "_SceneCameraShake-McM1EZBf.js": {
-    "file": "assets/SceneCameraShake-McM1EZBf.js",
+  "_SceneCameraShake-C7Vwxt90.js": {
+    "file": "assets/SceneCameraShake-C7Vwxt90.js",
     "name": "SceneCameraShake",
     "imports": [
       "_Locale-Bfnpz3E7.js",
-      "_PublicAssetVersions-XlqrkIRf.js",
+      "_PublicAssetVersions-26dfK_QB.js",
       "_oddboutSession-C4KoBx1u.js",
       "_chrome-WTCfkHbK.js",
       "_playerSettingsStorage-Dsl4WW5n.js",
       "_GameMenuState-CDnM5zRW.js",
-      "_ClubRelations-Chm-KQG0.js",
-      "_ArenaArtCatalog-CcIogMvF.js",
+      "_ClubRelations-DddwnhX8.js",
+      "_ArenaArtCatalog-D-uD_tLM.js",
       "_palette-8vpL4DNx.js",
-      "_UiFeedback-BceJlero.js",
-      "_domButton-Kp7x-FnX.js",
-      "_ArenaFacePaint-dsRkQcBc.js",
-      "_gameMenuParts-D4fHNiCq.js",
-      "_arenaClubTourServer-qUg-i37Q.js"
+      "_UiFeedback-CgRR3R9S.js",
+      "_domButton-CJSJv_Q9.js",
+      "_ArenaFacePaint-CpsO8JGT.js",
+      "_gameMenuParts-DNKE8hFm.js",
+      "_arenaClubTourServer-GBWNgR8e.js"
     ],
     "css": [
       "assets/SceneCameraShake-BLoV0hKv.css"
@@ -430,17 +430,17 @@
       "_RuntimeOptions-nnuamCaA.js"
     ]
   },
-  "_UiFeedback-BceJlero.js": {
-    "file": "assets/UiFeedback-BceJlero.js",
+  "_UiFeedback-CgRR3R9S.js": {
+    "file": "assets/UiFeedback-CgRR3R9S.js",
     "name": "UiFeedback",
     "imports": [
       "_rolldown-runtime-BWaJ3C7D.js",
       "_Locale-Bfnpz3E7.js",
-      "_PublicAssetVersions-XlqrkIRf.js",
+      "_PublicAssetVersions-26dfK_QB.js",
       "_RuntimeOptions-nnuamCaA.js",
       "_playerSettingsStorage-Dsl4WW5n.js",
       "_palette-8vpL4DNx.js",
-      "_domButton-Kp7x-FnX.js",
+      "_domButton-CJSJv_Q9.js",
       "_PhaserTextureFamilies-C8vBSGBz.js"
     ]
   },
@@ -490,24 +490,24 @@
     "file": "assets/agentNames-C9gi1FWq.js",
     "name": "agentNames"
   },
-  "_arenaClubTourServer-qUg-i37Q.js": {
-    "file": "assets/arenaClubTourServer-qUg-i37Q.js",
+  "_arenaClubTourServer-GBWNgR8e.js": {
+    "file": "assets/arenaClubTourServer-GBWNgR8e.js",
     "name": "arenaClubTourServer",
     "imports": [
       "_oddboutSession-C4KoBx1u.js",
       "_FighterIdentity--_l0xpOr.js",
       "_ShadowFighter-qozKPUYQ.js",
-      "_arenaRankings-N5PUSNYY.js",
+      "_arenaRankings-kxX7pG7e.js",
       "_rng-DryEJwf9.js",
       "_CareerRules-C1vSMPaW.js",
-      "_oddboutRelayCall-Dr8RKFlM.js"
+      "_oddboutRelayCall-C--mgzgm.js"
     ]
   },
-  "_arenaRankings-N5PUSNYY.js": {
-    "file": "assets/arenaRankings-N5PUSNYY.js",
+  "_arenaRankings-kxX7pG7e.js": {
+    "file": "assets/arenaRankings-kxX7pG7e.js",
     "name": "arenaRankings",
     "imports": [
-      "_registeredFighters-DcFC9muA.js",
+      "_registeredFighters-5Z95dYW5.js",
       "_fighterApiBase-CeB_1v89.js"
     ]
   },
@@ -515,17 +515,17 @@
     "file": "assets/bootCopy-DUheN_9n.js",
     "name": "bootCopy"
   },
-  "_boothApi-sGVYC4ft.js": {
-    "file": "assets/boothApi-sGVYC4ft.js",
+  "_boothApi-D03UOfpu.js": {
+    "file": "assets/boothApi-D03UOfpu.js",
     "name": "boothApi",
     "imports": [
       "_preload-helper-7y9sWmk5.js",
-      "_PublicAssetVersions-XlqrkIRf.js",
-      "_registeredFighters-DcFC9muA.js",
+      "_PublicAssetVersions-26dfK_QB.js",
+      "_registeredFighters-5Z95dYW5.js",
       "_fighterApiBase-CeB_1v89.js",
       "_oddboutSession-C4KoBx1u.js",
       "_FighterIdentity--_l0xpOr.js",
-      "_arenaRankings-N5PUSNYY.js"
+      "_arenaRankings-kxX7pG7e.js"
     ],
     "dynamicImports": [
       "node_modules/@supabase/supabase-js/dist/index.mjs"
@@ -560,8 +560,8 @@
     "file": "assets/dist-C9fd7Nwh.js",
     "name": "dist"
   },
-  "_domButton-Kp7x-FnX.js": {
-    "file": "assets/domButton-Kp7x-FnX.js",
+  "_domButton-CJSJv_Q9.js": {
+    "file": "assets/domButton-CJSJv_Q9.js",
     "name": "domButton",
     "imports": [
       "_rolldown-runtime-BWaJ3C7D.js",
@@ -569,7 +569,7 @@
       "_localeLoader-iMHQKnrl.js",
       "_preload-helper-7y9sWmk5.js",
       "_playerSettingsStorage-Dsl4WW5n.js",
-      "_PublicAssetVersions-XlqrkIRf.js",
+      "_PublicAssetVersions-26dfK_QB.js",
       "_palette-8vpL4DNx.js",
       "_RuntimeOptions-nnuamCaA.js"
     ],
@@ -590,12 +590,12 @@
     "file": "assets/fighterApiBase-CeB_1v89.js",
     "name": "fighterApiBase"
   },
-  "_fighterCreator-DynxoIVE.js": {
-    "file": "assets/fighterCreator-DynxoIVE.js",
+  "_fighterCreator-DeJkrfQP.js": {
+    "file": "assets/fighterCreator-DeJkrfQP.js",
     "name": "fighterCreator",
     "imports": [
       "__oddbout-milestones-CTI00lJ4.js",
-      "_registeredFighters-DcFC9muA.js",
+      "_registeredFighters-5Z95dYW5.js",
       "_agentNames-C9gi1FWq.js",
       "_dist-C9fd7Nwh.js",
       "_oddboutSession-C4KoBx1u.js",
@@ -603,42 +603,42 @@
       "_fighterLines-BqpSV2Ld.js"
     ]
   },
-  "_fighterFace-C_6E8IdG.js": {
-    "file": "assets/fighterFace-C_6E8IdG.js",
+  "_fighterFace-eIlHsShc.js": {
+    "file": "assets/fighterFace-eIlHsShc.js",
     "name": "fighterFace",
     "imports": [
-      "_ArenaArtCatalog-CcIogMvF.js",
-      "_PublicAssetVersions-XlqrkIRf.js"
+      "_ArenaArtCatalog-D-uD_tLM.js",
+      "_PublicAssetVersions-26dfK_QB.js"
     ]
   },
   "_fighterLines-BqpSV2Ld.js": {
     "file": "assets/fighterLines-BqpSV2Ld.js",
     "name": "fighterLines"
   },
-  "_fighterProfile-BwRWt4hz.js": {
-    "file": "assets/fighterProfile-BwRWt4hz.js",
+  "_fighterProfile-D-6vFD-5.js": {
+    "file": "assets/fighterProfile-D-6vFD-5.js",
     "name": "fighterProfile",
     "imports": [
       "_Locale-Bfnpz3E7.js",
       "_leagueContent-DwE9CIgd.js",
       "_chrome-WTCfkHbK.js",
       "_worldCommunityLocale-mS9Yjif4.js",
-      "_registeredFighters-DcFC9muA.js",
+      "_registeredFighters-5Z95dYW5.js",
       "_dist-C9fd7Nwh.js",
-      "_fighterCreator-DynxoIVE.js",
+      "_fighterCreator-DeJkrfQP.js",
       "_fighterApiBase-CeB_1v89.js",
-      "_ClubRelations-Chm-KQG0.js",
-      "_oddboutValue-CSL1eUB7.js",
+      "_ClubRelations-DddwnhX8.js",
+      "_oddboutValue--ibbkm4Z.js",
       "_fighterSheetData-B1Prhdsf.js",
-      "_arenaRankings-N5PUSNYY.js",
+      "_arenaRankings-kxX7pG7e.js",
       "_ArenaBoutLink-C72WWppH.js",
       "_CityTournamentRules-CDfBW4O_.js",
       "_UtcTime-BFPbMiHs.js",
       "_agentNames-C9gi1FWq.js",
-      "_FighterRelations-DL1PpKa0.js",
+      "_FighterRelations-DcmSwKoC.js",
       "_FighterIdentity--_l0xpOr.js",
       "_leagueSheets-BEteDG-_.js",
-      "_PublicAssetVersions-XlqrkIRf.js",
+      "_PublicAssetVersions-26dfK_QB.js",
       "_siteDialog-Cus74mbf.js"
     ],
     "css": [
@@ -662,13 +662,13 @@
     "file": "assets/gameLoading-Hsr9VoDJ.css",
     "src": "_gameLoading-Hsr9VoDJ.css"
   },
-  "_gameMenuParts-D4fHNiCq.js": {
-    "file": "assets/gameMenuParts-D4fHNiCq.js",
+  "_gameMenuParts-DNKE8hFm.js": {
+    "file": "assets/gameMenuParts-DNKE8hFm.js",
     "name": "gameMenuParts",
     "imports": [
       "_GameMenuState-CDnM5zRW.js",
       "_palette-8vpL4DNx.js",
-      "_domButton-Kp7x-FnX.js",
+      "_domButton-CJSJv_Q9.js",
       "_DisposableBag-DN_PCP1k.js"
     ]
   },
@@ -676,11 +676,11 @@
     "file": "assets/info-Ccu8E5aT.css",
     "src": "_info-Ccu8E5aT.css"
   },
-  "_infoPage-DteBQX11.js": {
-    "file": "assets/infoPage-DteBQX11.js",
+  "_infoPage-BvzfCLr_.js": {
+    "file": "assets/infoPage-BvzfCLr_.js",
     "name": "infoPage",
     "imports": [
-      "_siteChrome-Cm9ddRvS.js",
+      "_siteChrome-M-MdUC4O.js",
       "_localePreference-CV7HdNsy.js",
       "_chrome-WTCfkHbK.js",
       "_Locale-Bfnpz3E7.js"
@@ -748,11 +748,11 @@
       "_storageKeys-DrW9C73_.js"
     ]
   },
-  "_oddboutRelayCall-Dr8RKFlM.js": {
-    "file": "assets/oddboutRelayCall-Dr8RKFlM.js",
+  "_oddboutRelayCall-C--mgzgm.js": {
+    "file": "assets/oddboutRelayCall-C--mgzgm.js",
     "name": "oddboutRelayCall",
     "imports": [
-      "_registeredFighters-DcFC9muA.js",
+      "_registeredFighters-5Z95dYW5.js",
       "_oddboutSession-C4KoBx1u.js"
     ]
   },
@@ -768,31 +768,31 @@
       "node_modules/@supabase/supabase-js/dist/index.mjs"
     ]
   },
-  "_oddboutShopServer-BIRFt7vw.js": {
-    "file": "assets/oddboutShopServer-BIRFt7vw.js",
+  "_oddboutShopServer-BSvQ4yso.js": {
+    "file": "assets/oddboutShopServer-BSvQ4yso.js",
     "name": "oddboutShopServer",
     "imports": [
       "_RuntimeOptions-nnuamCaA.js",
-      "_oddboutRelayCall-Dr8RKFlM.js",
-      "_arenaRankings-N5PUSNYY.js",
-      "_registeredFighters-DcFC9muA.js",
+      "_oddboutRelayCall-C--mgzgm.js",
+      "_arenaRankings-kxX7pG7e.js",
+      "_registeredFighters-5Z95dYW5.js",
       "_oddboutSession-C4KoBx1u.js"
     ]
   },
-  "_oddboutValue-CSL1eUB7.js": {
-    "file": "assets/oddboutValue-CSL1eUB7.js",
+  "_oddboutValue--ibbkm4Z.js": {
+    "file": "assets/oddboutValue--ibbkm4Z.js",
     "name": "oddboutValue",
     "imports": [
-      "_ClubRelations-Chm-KQG0.js"
+      "_ClubRelations-DddwnhX8.js"
     ]
   },
-  "_packageChecker-CbmDEs6t.js": {
-    "file": "assets/packageChecker-CbmDEs6t.js",
+  "_packageChecker-DJ7B0HY0.js": {
+    "file": "assets/packageChecker-DJ7B0HY0.js",
     "name": "packageChecker",
     "imports": [
       "_spec-CABr0Tau.js",
       "_validate-Beb91gKy.js",
-      "_registeredFighters-DcFC9muA.js",
+      "_registeredFighters-5Z95dYW5.js",
       "_Locale-Bfnpz3E7.js",
       "_UtcTime-BFPbMiHs.js",
       "_catalog-C-siAyxf.js",
@@ -844,22 +844,22 @@
     "file": "assets/pseudo-B3ZLOM_E.js",
     "name": "pseudo"
   },
-  "_rankedDuels-DhnINi21.js": {
-    "file": "assets/rankedDuels-DhnINi21.js",
+  "_rankedDuels-JTaRfnRF.js": {
+    "file": "assets/rankedDuels-JTaRfnRF.js",
     "name": "rankedDuels",
     "imports": [
-      "_registeredFighters-DcFC9muA.js",
+      "_registeredFighters-5Z95dYW5.js",
       "_storageKeys-DrW9C73_.js",
       "_fighterApiBase-CeB_1v89.js"
     ]
   },
-  "_registeredFighters-DcFC9muA.js": {
-    "file": "assets/registeredFighters-DcFC9muA.js",
+  "_registeredFighters-5Z95dYW5.js": {
+    "file": "assets/registeredFighters-5Z95dYW5.js",
     "name": "registeredFighters",
     "imports": [
       "_fighterApiBase-CeB_1v89.js",
       "_agentNames-C9gi1FWq.js",
-      "_PublicAssetVersions-XlqrkIRf.js",
+      "_PublicAssetVersions-26dfK_QB.js",
       "_storageKeys-DrW9C73_.js",
       "_preload-helper-7y9sWmk5.js"
     ],
@@ -875,12 +875,12 @@
     "file": "assets/rolldown-runtime-BWaJ3C7D.js",
     "name": "rolldown-runtime"
   },
-  "_service-BCYRlR9L.js": {
-    "file": "assets/service-BCYRlR9L.js",
+  "_service-CFXgRCWJ.js": {
+    "file": "assets/service-CFXgRCWJ.js",
     "name": "service",
     "imports": [
       "_agentLogos-ugSANJFV.js",
-      "_siteChrome-Cm9ddRvS.js",
+      "_siteChrome-M-MdUC4O.js",
       "_localePreference-CV7HdNsy.js"
     ]
   },
@@ -892,8 +892,8 @@
     "file": "assets/shopCatalogView-BqIZCQ0R.css",
     "src": "_shopCatalogView-BqIZCQ0R.css"
   },
-  "_shopCatalogView-l9s39qo-.js": {
-    "file": "assets/shopCatalogView-l9s39qo-.js",
+  "_shopCatalogView-CufPoIWT.js": {
+    "file": "assets/shopCatalogView-CufPoIWT.js",
     "name": "shopCatalogView",
     "imports": [
       "_GameMenuState-CDnM5zRW.js",
@@ -901,10 +901,10 @@
       "_Locale-Bfnpz3E7.js",
       "_RuntimeOptions-nnuamCaA.js",
       "_oddboutSession-C4KoBx1u.js",
-      "_oddboutShopServer-BIRFt7vw.js",
+      "_oddboutShopServer-BSvQ4yso.js",
       "_palette-8vpL4DNx.js",
-      "_gameMenuParts-D4fHNiCq.js",
-      "_domButton-Kp7x-FnX.js"
+      "_gameMenuParts-DNKE8hFm.js",
+      "_domButton-CJSJv_Q9.js"
     ],
     "css": [
       "assets/shopCatalogView-BqIZCQ0R.css"
@@ -914,18 +914,18 @@
     "file": "assets/siteChrome-BnBZ9gvv.css",
     "src": "_siteChrome-BnBZ9gvv.css"
   },
-  "_siteChrome-Cm9ddRvS.js": {
-    "file": "assets/siteChrome-Cm9ddRvS.js",
+  "_siteChrome-M-MdUC4O.js": {
+    "file": "assets/siteChrome-M-MdUC4O.js",
     "name": "siteChrome",
     "imports": [
-      "_siteGameLaunch-C3EYzzLs.js",
+      "_siteGameLaunch-DC2i81Dm.js",
       "_Locale-Bfnpz3E7.js",
       "_accountControl-Cxfkst-T.js",
       "_OddboutCommunity-CLWy8SdF.js",
       "_oddboutSession-C4KoBx1u.js",
       "_localePreference-CV7HdNsy.js",
       "_chrome-WTCfkHbK.js",
-      "_PublicAssetVersions-XlqrkIRf.js"
+      "_PublicAssetVersions-26dfK_QB.js"
     ],
     "css": [
       "assets/siteChrome-BnBZ9gvv.css"
@@ -1119,14 +1119,14 @@
     "file": "assets/siteDialog-Cus74mbf.js",
     "name": "siteDialog"
   },
-  "_siteGameLaunch-C3EYzzLs.js": {
-    "file": "assets/siteGameLaunch-C3EYzzLs.js",
+  "_siteGameLaunch-DC2i81Dm.js": {
+    "file": "assets/siteGameLaunch-DC2i81Dm.js",
     "name": "siteGameLaunch",
     "imports": [
       "_bootCopy-DUheN_9n.js",
       "_ArenaClubMode-BlSXK7-H.js",
       "_playerSettingsStorage-Dsl4WW5n.js",
-      "_PublicAssetVersions-XlqrkIRf.js",
+      "_PublicAssetVersions-26dfK_QB.js",
       "_siteDialog-Cus74mbf.js"
     ],
     "css": [
@@ -1188,13 +1188,13 @@
     ]
   },
   "about.html": {
-    "file": "assets/about-BU7o6uAz.js",
+    "file": "assets/about-Cgcqt1Ol.js",
     "name": "about",
     "src": "about.html",
     "isEntry": true,
     "imports": [
       "__oddbout-analytics-CiIVnasc.js",
-      "_infoPage-DteBQX11.js"
+      "_infoPage-BvzfCLr_.js"
     ],
     "css": [
       "assets/info-Ccu8E5aT.css",
@@ -1386,19 +1386,19 @@
     ]
   },
   "admin.html": {
-    "file": "assets/admin-C7jEkbIa.js",
+    "file": "assets/admin-B2kn28in.js",
     "name": "admin",
     "src": "admin.html",
     "isEntry": true,
     "imports": [
       "__oddbout-analytics-CiIVnasc.js",
-      "_siteChrome-Cm9ddRvS.js",
-      "_fighterCreator-DynxoIVE.js",
+      "_siteChrome-M-MdUC4O.js",
+      "_fighterCreator-DeJkrfQP.js",
       "_RuntimeOptions-nnuamCaA.js",
       "_oddboutSession-C4KoBx1u.js",
       "_UtcTime-BFPbMiHs.js",
-      "_arenaClubTourServer-qUg-i37Q.js",
-      "_oddboutShopServer-BIRFt7vw.js"
+      "_arenaClubTourServer-GBWNgR8e.js",
+      "_oddboutShopServer-BSvQ4yso.js"
     ],
     "css": [
       "assets/admin-DS7B74ky.css",
@@ -1406,41 +1406,41 @@
     ]
   },
   "bet-host.html": {
-    "file": "assets/betHost-CHVjVYWf.js",
+    "file": "assets/betHost-BvUEn8Q4.js",
     "name": "betHost",
     "src": "bet-host.html",
     "isEntry": true,
     "imports": [
       "__oddbout-analytics-CiIVnasc.js",
-      "_boothApi-sGVYC4ft.js",
+      "_boothApi-D03UOfpu.js",
       "_TwitchArenaBout-D6SeEmlv.js",
       "_fighterApiBase-CeB_1v89.js",
       "_twitchAuth-D_EF5MKR.js",
       "_twitchChat-DC6AsFIs.js",
-      "_PublicAssetVersions-XlqrkIRf.js"
+      "_PublicAssetVersions-26dfK_QB.js"
     ],
     "css": [
       "assets/betHost-Cn2QZLFZ.css"
     ]
   },
   "bet.html": {
-    "file": "assets/bet-RAMcjnr4.js",
+    "file": "assets/bet-n90yupBP.js",
     "name": "bet",
     "src": "bet.html",
     "isEntry": true,
     "imports": [
       "__oddbout-analytics-CiIVnasc.js",
-      "_boothApi-sGVYC4ft.js",
+      "_boothApi-D03UOfpu.js",
       "_fighterApiBase-CeB_1v89.js",
       "_twitchAuth-D_EF5MKR.js",
-      "_PublicAssetVersions-XlqrkIRf.js"
+      "_PublicAssetVersions-26dfK_QB.js"
     ],
     "css": [
       "assets/bet-BtnSbXVJ.css"
     ]
   },
   "broadcast.html": {
-    "file": "assets/broadcast-HNf1TlPK.js",
+    "file": "assets/broadcast-DoczlbHF.js",
     "name": "broadcast",
     "src": "broadcast.html",
     "isEntry": true,
@@ -1448,7 +1448,7 @@
       "__oddbout-analytics-CiIVnasc.js",
       "_TwitchArenaBout-D6SeEmlv.js",
       "_FighterIdentity--_l0xpOr.js",
-      "_PublicAssetVersions-XlqrkIRf.js"
+      "_PublicAssetVersions-26dfK_QB.js"
     ],
     "css": [
       "assets/broadcast-C6UgeAAQ.css"
@@ -1468,27 +1468,27 @@
     ]
   },
   "creator.html": {
-    "file": "assets/creator-DXvLGT7f.js",
+    "file": "assets/creator-BmgZLW1D.js",
     "name": "creator",
     "src": "creator.html",
     "isEntry": true,
     "imports": [
       "__oddbout-analytics-CiIVnasc.js",
       "__oddbout-milestones-CTI00lJ4.js",
-      "_fighterProfile-BwRWt4hz.js",
-      "_siteChrome-Cm9ddRvS.js",
+      "_fighterProfile-D-6vFD-5.js",
+      "_siteChrome-M-MdUC4O.js",
       "_BigNumber-xBCh8Tqr.js",
       "_oddboutSession-C4KoBx1u.js",
-      "_packageChecker-CbmDEs6t.js",
-      "_registeredFighters-DcFC9muA.js",
-      "_fighterFace-C_6E8IdG.js",
+      "_packageChecker-DJ7B0HY0.js",
+      "_registeredFighters-5Z95dYW5.js",
+      "_fighterFace-eIlHsShc.js",
       "_fighterApiBase-CeB_1v89.js",
-      "_rankedDuels-DhnINi21.js",
-      "_arenaRankings-N5PUSNYY.js",
+      "_rankedDuels-JTaRfnRF.js",
+      "_arenaRankings-kxX7pG7e.js",
       "_Locale-Bfnpz3E7.js",
       "_OddboutCommunity-CLWy8SdF.js",
-      "_ArenaArtCatalog-CcIogMvF.js",
-      "_fighterCreator-DynxoIVE.js",
+      "_ArenaArtCatalog-D-uD_tLM.js",
+      "_fighterCreator-DeJkrfQP.js",
       "_storageKeys-DrW9C73_.js",
       "_localePreference-CV7HdNsy.js",
       "_fighterSheetData-B1Prhdsf.js",
@@ -1498,7 +1498,7 @@
       "_agentLogos-ugSANJFV.js",
       "_spec-CABr0Tau.js",
       "_chrome-WTCfkHbK.js",
-      "_PublicAssetVersions-XlqrkIRf.js",
+      "_PublicAssetVersions-26dfK_QB.js",
       "_preload-helper-7y9sWmk5.js"
     ],
     "dynamicImports": [
@@ -1510,13 +1510,13 @@
     ]
   },
   "credits.html": {
-    "file": "assets/credits-DVgwXCqE.js",
+    "file": "assets/credits-BB-qSD9G.js",
     "name": "credits",
     "src": "credits.html",
     "isEntry": true,
     "imports": [
       "__oddbout-analytics-CiIVnasc.js",
-      "_siteChrome-Cm9ddRvS.js",
+      "_siteChrome-M-MdUC4O.js",
       "_leagueContent-DwE9CIgd.js",
       "_localePreference-CV7HdNsy.js",
       "_Locale-Bfnpz3E7.js",
@@ -1527,13 +1527,13 @@
     ]
   },
   "docs.html": {
-    "file": "assets/docs-C6Ndt5_K.js",
+    "file": "assets/docs-D4BkWQdq.js",
     "name": "docs",
     "src": "docs.html",
     "isEntry": true,
     "imports": [
       "__oddbout-analytics-CiIVnasc.js",
-      "_infoPage-DteBQX11.js",
+      "_infoPage-BvzfCLr_.js",
       "_spec-CABr0Tau.js",
       "_Locale-Bfnpz3E7.js",
       "_localePreference-CV7HdNsy.js",
@@ -1749,7 +1749,7 @@
     ]
   },
   "fighter.html": {
-    "file": "assets/fighter-DFE-ABer.js",
+    "file": "assets/fighter-Dg5jXGd6.js",
     "name": "fighter",
     "src": "fighter.html",
     "isEntry": true,
@@ -1757,44 +1757,44 @@
       "_rolldown-runtime-BWaJ3C7D.js",
       "__oddbout-analytics-CiIVnasc.js",
       "_GameMenuState-CDnM5zRW.js",
-      "_UiFeedback-BceJlero.js",
+      "_UiFeedback-CgRR3R9S.js",
       "_RuntimeOptions-nnuamCaA.js",
-      "_GameBoot-GgYLh6Ap.js",
+      "_GameBoot-CR5hAFau.js",
       "_ArenaClubMode-BlSXK7-H.js",
       "_TwitchArenaBout-D6SeEmlv.js",
       "_accountControl-Cxfkst-T.js",
-      "_ClubRelations-Chm-KQG0.js",
+      "_ClubRelations-DddwnhX8.js",
       "_Locale-Bfnpz3E7.js",
-      "_ArenaFacePaint-dsRkQcBc.js",
-      "_SceneCameraShake-McM1EZBf.js",
+      "_ArenaFacePaint-CpsO8JGT.js",
+      "_SceneCameraShake-C7Vwxt90.js",
       "_oddboutSession-C4KoBx1u.js",
       "_localePreference-CV7HdNsy.js",
       "_playerSettingsStorage-Dsl4WW5n.js",
-      "_domButton-Kp7x-FnX.js",
+      "_domButton-CJSJv_Q9.js",
       "_chrome-WTCfkHbK.js",
-      "_ArenaArtCatalog-CcIogMvF.js",
-      "_oddboutShopServer-BIRFt7vw.js",
+      "_ArenaArtCatalog-D-uD_tLM.js",
+      "_oddboutShopServer-BSvQ4yso.js",
       "_palette-8vpL4DNx.js",
-      "_gameMenuParts-D4fHNiCq.js",
-      "_arenaClubTourServer-qUg-i37Q.js",
-      "_PublicAssetVersions-XlqrkIRf.js",
-      "_shopCatalogView-l9s39qo-.js",
-      "_BootPresentation-CsLaSopS.js",
-      "_ArenaComicBackdrop-cUOHaD6z.js",
+      "_gameMenuParts-DNKE8hFm.js",
+      "_arenaClubTourServer-GBWNgR8e.js",
+      "_PublicAssetVersions-26dfK_QB.js",
+      "_shopCatalogView-CufPoIWT.js",
+      "_BootPresentation-Cq7-c-A-.js",
+      "_ArenaComicBackdrop-yU9mnNnm.js",
       "_BigNumber-xBCh8Tqr.js",
       "_CareerRules-C1vSMPaW.js",
       "_UtcTime-BFPbMiHs.js",
-      "_arenaRankings-N5PUSNYY.js",
-      "_FighterRelations-DL1PpKa0.js",
+      "_arenaRankings-kxX7pG7e.js",
+      "_FighterRelations-DcmSwKoC.js",
       "_CityTournamentRules-CDfBW4O_.js",
-      "_registeredFighters-DcFC9muA.js",
-      "_oddboutRelayCall-Dr8RKFlM.js",
+      "_registeredFighters-5Z95dYW5.js",
+      "_oddboutRelayCall-C--mgzgm.js",
       "_ArenaRoster-1XvL67U0.js",
-      "_ArenaGoldDropView-W-NARScu.js",
+      "_ArenaGoldDropView-CXIwjYAv.js",
       "_FighterIdentity--_l0xpOr.js",
       "_storageKeys-DrW9C73_.js",
-      "_rankedDuels-DhnINi21.js",
-      "_ArenaRecordChips-CwpT9Vfa.js",
+      "_rankedDuels-JTaRfnRF.js",
+      "_ArenaRecordChips-DtWpiPMC.js",
       "_preload-helper-7y9sWmk5.js"
     ],
     "dynamicImports": [
@@ -1995,21 +1995,21 @@
     ]
   },
   "fighters.html": {
-    "file": "assets/fighters-b3-yLgLK.js",
+    "file": "assets/fighters-NppC3Icy.js",
     "name": "fighters",
     "src": "fighters.html",
     "isEntry": true,
     "imports": [
       "__oddbout-analytics-CiIVnasc.js",
-      "_siteChrome-Cm9ddRvS.js",
+      "_siteChrome-M-MdUC4O.js",
       "_localePreference-CV7HdNsy.js",
       "_leagueContent-DwE9CIgd.js",
       "_fighterApiBase-CeB_1v89.js",
-      "_oddboutValue-CSL1eUB7.js",
-      "_ClubRelations-Chm-KQG0.js",
-      "_fighterProfile-BwRWt4hz.js",
+      "_oddboutValue--ibbkm4Z.js",
+      "_ClubRelations-DddwnhX8.js",
+      "_fighterProfile-D-6vFD-5.js",
       "_Locale-Bfnpz3E7.js",
-      "_registeredFighters-DcFC9muA.js",
+      "_registeredFighters-5Z95dYW5.js",
       "_chrome-WTCfkHbK.js"
     ],
     "css": [
@@ -2018,13 +2018,13 @@
     ]
   },
   "league.html": {
-    "file": "assets/league-BR8HVbDF.js",
+    "file": "assets/league-DNQBClwU.js",
     "name": "league",
     "src": "league.html",
     "isEntry": true,
     "imports": [
       "__oddbout-analytics-CiIVnasc.js",
-      "_siteGameLaunch-C3EYzzLs.js",
+      "_siteGameLaunch-DC2i81Dm.js",
       "_preload-helper-7y9sWmk5.js"
     ],
     "dynamicImports": [
@@ -2044,13 +2044,13 @@
     ]
   },
   "privacy.html": {
-    "file": "assets/privacy-BY7PYT6i.js",
+    "file": "assets/privacy-BLRt1kOQ.js",
     "name": "privacy",
     "src": "privacy.html",
     "isEntry": true,
     "imports": [
       "__oddbout-analytics-CiIVnasc.js",
-      "_siteChrome-Cm9ddRvS.js",
+      "_siteChrome-M-MdUC4O.js",
       "_localePreference-CV7HdNsy.js"
     ],
     "css": [
@@ -2058,7 +2058,7 @@
     ]
   },
   "shop.html": {
-    "file": "assets/shop-uikdu0UV.js",
+    "file": "assets/shop-CZXYX0Vn.js",
     "name": "shop",
     "src": "shop.html",
     "isEntry": true,
@@ -2066,16 +2066,16 @@
       "__oddbout-analytics-CiIVnasc.js",
       "_chrome-WTCfkHbK.js",
       "_localePreference-CV7HdNsy.js",
-      "_gameMenuParts-D4fHNiCq.js",
-      "_shopCatalogView-l9s39qo-.js",
-      "_siteChrome-Cm9ddRvS.js"
+      "_gameMenuParts-DNKE8hFm.js",
+      "_shopCatalogView-CufPoIWT.js",
+      "_siteChrome-M-MdUC4O.js"
     ],
     "css": [
       "assets/shop-6LOc0mL7.css"
     ]
   },
   "src/app/i18n/bundles/core/en.ts": {
-    "file": "assets/en-D_EJRQ9t.js",
+    "file": "assets/en-D1j5CtmK.js",
     "name": "en",
     "src": "src/app/i18n/bundles/core/en.ts",
     "isDynamicEntry": true,
@@ -2085,7 +2085,7 @@
     ]
   },
   "src/app/i18n/bundles/core/ja.ts": {
-    "file": "assets/ja-CxKyr38P.js",
+    "file": "assets/ja-PScbD9fx.js",
     "name": "ja",
     "src": "src/app/i18n/bundles/core/ja.ts",
     "isDynamicEntry": true,
@@ -2095,7 +2095,7 @@
     ]
   },
   "src/app/i18n/bundles/core/ko.ts": {
-    "file": "assets/ko-otOkYgfv.js",
+    "file": "assets/ko-CRm2hrEg.js",
     "name": "ko",
     "src": "src/app/i18n/bundles/core/ko.ts",
     "isDynamicEntry": true,
@@ -3201,18 +3201,18 @@
     "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.91.woff2"
   },
   "src/creator/league.ts": {
-    "file": "assets/league-B2bgzv9H.js",
+    "file": "assets/league-BeremC8_.js",
     "name": "league",
     "src": "src/creator/league.ts",
     "isDynamicEntry": true,
     "imports": [
-      "_siteChrome-Cm9ddRvS.js",
+      "_siteChrome-M-MdUC4O.js",
       "_localePreference-CV7HdNsy.js",
       "_leagueContent-DwE9CIgd.js",
-      "_fighterFace-C_6E8IdG.js",
+      "_fighterFace-eIlHsShc.js",
       "_fighterApiBase-CeB_1v89.js",
-      "_fighterProfile-BwRWt4hz.js",
-      "_registeredFighters-DcFC9muA.js",
+      "_fighterProfile-D-6vFD-5.js",
+      "_registeredFighters-5Z95dYW5.js",
       "_Locale-Bfnpz3E7.js"
     ]
   },
@@ -3253,16 +3253,16 @@
     ]
   },
   "src/creator/packageChecker.ts": {
-    "file": "assets/packageChecker-CAz3TpBf.js",
+    "file": "assets/packageChecker-2G3trwwb.js",
     "name": "packageChecker",
     "src": "src/creator/packageChecker.ts",
     "isDynamicEntry": true,
     "imports": [
-      "_packageChecker-CbmDEs6t.js"
+      "_packageChecker-DJ7B0HY0.js"
     ]
   },
   "src/creator/worldLore.ts": {
-    "file": "assets/worldLore-BBXz9hF-.js",
+    "file": "assets/worldLore-0EMX1w6m.js",
     "name": "worldLore",
     "src": "src/creator/worldLore.ts",
     "isDynamicEntry": true,
@@ -3273,7 +3273,7 @@
       "_worldCommunityLocale-mS9Yjif4.js",
       "_worldText-DESfuLh0.js",
       "_siteDialog-Cus74mbf.js",
-      "_PublicAssetVersions-XlqrkIRf.js"
+      "_PublicAssetVersions-26dfK_QB.js"
     ],
     "dynamicImports": [
       "src/app/i18n/namespaces/worldLore/en.ts",
@@ -3291,25 +3291,25 @@
     ]
   },
   "src/render/art/RegisteredArenaFighters.ts": {
-    "file": "assets/RegisteredArenaFighters-DArx7yIs.js",
+    "file": "assets/RegisteredArenaFighters-Dcp2Ud0A.js",
     "name": "RegisteredArenaFighters",
     "src": "src/render/art/RegisteredArenaFighters.ts",
     "isDynamicEntry": true,
     "imports": [
-      "_RegisteredArenaFighters-J84hUyEW.js"
+      "_RegisteredArenaFighters-BAeKoywA.js"
     ]
   },
   "src/render/boot/TwitchArenaBoot.ts": {
-    "file": "assets/TwitchArenaBoot-CxBfYrI8.js",
+    "file": "assets/TwitchArenaBoot-CNFPMlMX.js",
     "name": "TwitchArenaBoot",
     "src": "src/render/boot/TwitchArenaBoot.ts",
     "isDynamicEntry": true,
     "imports": [
       "_rolldown-runtime-BWaJ3C7D.js",
-      "_domButton-Kp7x-FnX.js",
-      "_UiFeedback-BceJlero.js",
+      "_domButton-CJSJv_Q9.js",
+      "_UiFeedback-CgRR3R9S.js",
       "_TwitchArenaBout-D6SeEmlv.js",
-      "_GameBoot-GgYLh6Ap.js",
+      "_GameBoot-CR5hAFau.js",
       "_preload-helper-7y9sWmk5.js"
     ],
     "dynamicImports": [
@@ -3319,46 +3319,46 @@
     ]
   },
   "src/render/scenes/ArenaClubTourScene.ts": {
-    "file": "assets/ArenaClubTourScene-DjDAyMud.js",
+    "file": "assets/ArenaClubTourScene-CverTvU3.js",
     "name": "ArenaClubTourScene",
     "src": "src/render/scenes/ArenaClubTourScene.ts",
     "isDynamicEntry": true,
     "imports": [
       "_rolldown-runtime-BWaJ3C7D.js",
       "_ArenaClubMode-BlSXK7-H.js",
-      "_domButton-Kp7x-FnX.js",
-      "_ClubRelations-Chm-KQG0.js",
-      "_ArenaComicBackdrop-cUOHaD6z.js",
-      "_SceneCameraShake-McM1EZBf.js",
-      "_ArenaFacePaint-dsRkQcBc.js",
-      "_ArenaClubAfterMatch-9tCnzovS.js",
+      "_domButton-CJSJv_Q9.js",
+      "_ClubRelations-DddwnhX8.js",
+      "_ArenaComicBackdrop-yU9mnNnm.js",
+      "_SceneCameraShake-C7Vwxt90.js",
+      "_ArenaFacePaint-CpsO8JGT.js",
+      "_ArenaClubAfterMatch-D-PRWQbP.js",
       "_GameMenuState-CDnM5zRW.js",
-      "_UiFeedback-BceJlero.js",
+      "_UiFeedback-CgRR3R9S.js",
       "_Locale-Bfnpz3E7.js",
-      "_arenaClubTourServer-qUg-i37Q.js",
+      "_arenaClubTourServer-GBWNgR8e.js",
       "_RuntimeOptions-nnuamCaA.js",
       "_storageKeys-DrW9C73_.js",
       "_ArenaRoster-1XvL67U0.js",
-      "_ArenaArtCatalog-CcIogMvF.js",
+      "_ArenaArtCatalog-D-uD_tLM.js",
       "_CityTournamentRules-CDfBW4O_.js",
-      "_BootPresentation-CsLaSopS.js",
+      "_BootPresentation-Cq7-c-A-.js",
       "_palette-8vpL4DNx.js",
-      "_RegisteredArenaFighters-J84hUyEW.js",
+      "_RegisteredArenaFighters-BAeKoywA.js",
       "_playerSettingsStorage-Dsl4WW5n.js",
       "_oddboutSession-C4KoBx1u.js",
-      "_oddboutShopServer-BIRFt7vw.js",
-      "_arenaRankings-N5PUSNYY.js",
-      "_oddboutRelayCall-Dr8RKFlM.js",
+      "_oddboutShopServer-BSvQ4yso.js",
+      "_arenaRankings-kxX7pG7e.js",
+      "_oddboutRelayCall-C--mgzgm.js",
       "_rng-DryEJwf9.js",
       "_CareerRules-C1vSMPaW.js",
       "_fighterSheetData-B1Prhdsf.js",
-      "_gameMenuParts-D4fHNiCq.js",
-      "_oddboutValue-CSL1eUB7.js",
+      "_gameMenuParts-DNKE8hFm.js",
+      "_oddboutValue--ibbkm4Z.js",
       "_preload-helper-7y9sWmk5.js",
       "_UtcTime-BFPbMiHs.js",
-      "_PublicAssetVersions-XlqrkIRf.js",
+      "_PublicAssetVersions-26dfK_QB.js",
       "_BigNumber-xBCh8Tqr.js",
-      "_FighterRelations-DL1PpKa0.js",
+      "_FighterRelations-DcmSwKoC.js",
       "_ShadowFighter-qozKPUYQ.js",
       "_chrome-WTCfkHbK.js"
     ],
@@ -3370,37 +3370,37 @@
     ]
   },
   "src/render/scenes/ArenaDuelScene.ts": {
-    "file": "assets/ArenaDuelScene-DIcukQtH.js",
+    "file": "assets/ArenaDuelScene-BebGGKI_.js",
     "name": "ArenaDuelScene",
     "src": "src/render/scenes/ArenaDuelScene.ts",
     "isDynamicEntry": true,
     "imports": [
-      "_ArenaDuelScene-DGcQpiIi.js"
+      "_ArenaDuelScene-DjOMxMTZ.js"
     ]
   },
   "src/render/scenes/arena/ArenaModule.ts": {
-    "file": "assets/ArenaModule-Czcg-XRw.js",
+    "file": "assets/ArenaModule-dCBzhZgs.js",
     "name": "ArenaModule",
     "src": "src/render/scenes/arena/ArenaModule.ts",
     "isDynamicEntry": true,
     "imports": [
       "_rolldown-runtime-BWaJ3C7D.js",
-      "_ArenaDuelScene-DGcQpiIi.js",
-      "_domButton-Kp7x-FnX.js",
-      "_ArenaComicBackdrop-cUOHaD6z.js",
-      "_ArenaFacePaint-dsRkQcBc.js",
-      "_ArenaGoldDropView-W-NARScu.js",
+      "_ArenaDuelScene-DjOMxMTZ.js",
+      "_domButton-CJSJv_Q9.js",
+      "_ArenaComicBackdrop-yU9mnNnm.js",
+      "_ArenaFacePaint-CpsO8JGT.js",
+      "_ArenaGoldDropView-CXIwjYAv.js",
       "_ArenaClubMode-BlSXK7-H.js",
       "_GameMenuState-CDnM5zRW.js",
-      "_UiFeedback-BceJlero.js",
+      "_UiFeedback-CgRR3R9S.js",
       "_RuntimeOptions-nnuamCaA.js",
-      "_ArenaArtCatalog-CcIogMvF.js",
+      "_ArenaArtCatalog-D-uD_tLM.js",
       "_CityFighterPacks-Dj_Z9ign.js",
-      "_RegisteredArenaFighters-J84hUyEW.js",
+      "_RegisteredArenaFighters-BAeKoywA.js",
       "_palette-8vpL4DNx.js",
-      "_ArenaRecordChips-CwpT9Vfa.js",
-      "_ArenaClubAfterMatch-9tCnzovS.js",
-      "_arenaRankings-N5PUSNYY.js",
+      "_ArenaRecordChips-DtWpiPMC.js",
+      "_ArenaClubAfterMatch-D-PRWQbP.js",
+      "_arenaRankings-kxX7pG7e.js",
       "_ArenaRoster-1XvL67U0.js"
     ]
   },
@@ -3431,20 +3431,20 @@
     ]
   },
   "twitch.html": {
-    "file": "assets/twitch-_EFpuDFc.js",
+    "file": "assets/twitch-DxlyLy4I.js",
     "name": "twitch",
     "src": "twitch.html",
     "isEntry": true,
     "imports": [
       "__oddbout-analytics-CiIVnasc.js",
       "_FighterIdentity--_l0xpOr.js",
-      "_registeredFighters-DcFC9muA.js",
+      "_registeredFighters-5Z95dYW5.js",
       "_fighterApiBase-CeB_1v89.js",
       "_TwitchArenaBout-D6SeEmlv.js",
       "_twitchChat-DC6AsFIs.js",
       "_twitchAuth-D_EF5MKR.js",
-      "_ArenaArtCatalog-CcIogMvF.js",
-      "_PublicAssetVersions-XlqrkIRf.js"
+      "_ArenaArtCatalog-D-uD_tLM.js",
+      "_PublicAssetVersions-26dfK_QB.js"
     ],
     "css": [
       "assets/twitch-DRH-Vl3h.css"
@@ -3455,7 +3455,7 @@
     "src": "updates.html"
   },
   "world.html": {
-    "file": "assets/world-CRgacHjG.js",
+    "file": "assets/world-2CACn5Xe.js",
     "name": "world",
     "src": "world.html",
     "isEntry": true,
@@ -3464,15 +3464,15 @@
       "_worldCommunityLocale-mS9Yjif4.js",
       "_worldText-DESfuLh0.js",
       "_UtcTime-BFPbMiHs.js",
-      "_fighterProfile-BwRWt4hz.js",
-      "_siteChrome-Cm9ddRvS.js",
+      "_fighterProfile-D-6vFD-5.js",
+      "_siteChrome-M-MdUC4O.js",
       "_oddboutSession-C4KoBx1u.js",
       "_Locale-Bfnpz3E7.js",
       "_fighterApiBase-CeB_1v89.js",
-      "_fighterCreator-DynxoIVE.js",
-      "_registeredFighters-DcFC9muA.js",
-      "_arenaRankings-N5PUSNYY.js",
-      "_PublicAssetVersions-XlqrkIRf.js",
+      "_fighterCreator-DeJkrfQP.js",
+      "_registeredFighters-5Z95dYW5.js",
+      "_arenaRankings-kxX7pG7e.js",
+      "_PublicAssetVersions-26dfK_QB.js",
       "_siteDialog-Cus74mbf.js",
       "_chrome-WTCfkHbK.js",
       "_preload-helper-7y9sWmk5.js"
