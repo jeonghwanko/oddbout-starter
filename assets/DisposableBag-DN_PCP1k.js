@@ -1,0 +1,1 @@
+var e=class{disposers=[];disposed=!1;add(e){return this.disposed?e():this.disposers.push(e),e}dispose(){if(this.disposed)return;this.disposed=!0;let e=this.disposers.splice(0).reverse(),t=[];for(let n of e)try{n()}catch(e){t.push(e)}if(t.length)throw AggregateError(t,`Lifecycle cleanup failed`)}get isDisposed(){return this.disposed}};export{e as t};
