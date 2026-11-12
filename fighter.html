@@ -27,24 +27,24 @@
     <!--
       본문 글꼴 Pretendard 는 글자 범위 조각(unicode-range)이다(2026-11-08): 전체 판 두 굵기 1.56 MB 대신 이 페이지가 쓰는 조각만 받는다.
       부팅(render/boot/GameBoot.ts)의 loadUiFont 가 이 언어 문구의 조각을 기다리고, 표 밖 글자는 그릴 때 받아 다시 그린다(fontArrivalRedraw).
-    -->
-    <!-- 굵은 글자의 한글(2026-11-08): 같은 Bold 조각을 "Pretendard Display" 로 한 단계 작게(size-adjust) — tools/art/pretendard-display-css.mjs. -->
+    -->
+    <!-- 굵은 글자의 한글(2026-11-08): 같은 Bold 조각을 "Pretendard Display" 로 한 단계 작게(size-adjust) — tools/art/pretendard-display-css.mjs. -->
     <!-- 부팅의 loadUiFont 가 기다린다. 빠뜨리면 JS 를 다 받은 뒤에야 따로 받기 시작한다. -->
     <link
       rel="preload"
-      href="./fonts/BlackHanSans-Lettering.woff2?v=c09bb684"
+      href="./fonts/BlackHanSans-Lettering.woff2?v=f3e86980"
       as="font"
       type="font/woff2"
       crossorigin
     />
-    <style>@font-face{font-family:NanumSquareRound;src:url(./fonts/NanumSquareRound-Bold.woff2?v=c09bb684)format("woff2");font-weight:700;font-style:normal;font-display:block}@font-face{font-family:NanumSquareRound;src:url(./fonts/NanumSquareRound-ExtraBold.woff2?v=c09bb684)format("woff2");font-weight:800;font-style:normal;font-display:block}@font-face{font-family:Black Han Sans;src:url(./fonts/BlackHanSans-Lettering.woff2?v=c09bb684)format("woff2");unicode-range:U+20-7E,U+B7,U+2019,U+2026;font-weight:400;font-style:normal;font-display:block}@font-face{font-family:Gaegu;src:url(./fonts/Gaegu-Notebook.woff2?v=c09bb684)format("woff2");font-weight:700;font-style:normal;font-display:block}@font-face{font-family:Patrick Hand;src:url(./fonts/PatrickHand-Notebook.woff2?v=c09bb684)format("woff2");font-weight:400;font-style:normal;font-display:block}@font-face{font-family:Yomogi;src:url(./fonts/Yomogi-Notebook.woff2?v=c09bb684)format("woff2");font-weight:400;font-style:normal;font-display:block}html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adjust:100%;background:#44b4f2;height:100%;margin:0;padding:0;overflow:hidden}body{box-sizing:border-box;height:100dvh;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);flex-direction:column;display:flex}.game-navigation{box-sizing:border-box;background:#141020;flex:0 0 48px;align-items:center;padding:0 16px;display:flex}.game-navigation[hidden]{display:none}.game-home{box-sizing:border-box;color:#fff;align-items:center;gap:8px;min-height:44px;padding:0 12px;font:700 16px/1.4 Pretendard,Malgun Gothic,sans-serif;text-decoration:none;display:inline-flex}.game-home[hidden]{display:none}.game-home:hover{background:#ffffff17}.game-home:focus-visible{outline-offset:-2px;outline:2px solid #eaff50}.game-logo{filter:brightness(0)invert();width:auto;height:26px;display:block}#game{flex:1;width:100%;min-height:0;position:relative}#game canvas{touch-action:none;display:block}</style>
-  <script type="module" crossorigin src="/assets/fighter-B8C5c7fO.js"></script>
+    <style>@font-face{font-family:NanumSquareRound;src:url(./fonts/NanumSquareRound-Bold.woff2?v=f3e86980)format("woff2");font-weight:700;font-style:normal;font-display:block}@font-face{font-family:NanumSquareRound;src:url(./fonts/NanumSquareRound-ExtraBold.woff2?v=f3e86980)format("woff2");font-weight:800;font-style:normal;font-display:block}@font-face{font-family:Black Han Sans;src:url(./fonts/BlackHanSans-Lettering.woff2?v=f3e86980)format("woff2");unicode-range:U+20-7E,U+B7,U+2019,U+2026;font-weight:400;font-style:normal;font-display:block}@font-face{font-family:Gaegu;src:url(./fonts/Gaegu-Notebook.woff2?v=f3e86980)format("woff2");font-weight:700;font-style:normal;font-display:block}@font-face{font-family:Patrick Hand;src:url(./fonts/PatrickHand-Notebook.woff2?v=f3e86980)format("woff2");font-weight:400;font-style:normal;font-display:block}@font-face{font-family:Yomogi;src:url(./fonts/Yomogi-Notebook.woff2?v=f3e86980)format("woff2");font-weight:400;font-style:normal;font-display:block}html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adjust:100%;background:#44b4f2;height:100%;margin:0;padding:0;overflow:hidden}body{box-sizing:border-box;height:100dvh;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);flex-direction:column;display:flex}.game-navigation{box-sizing:border-box;background:#141020;flex:0 0 48px;align-items:center;padding:0 16px;display:flex}.game-navigation[hidden]{display:none}.game-home{box-sizing:border-box;color:#fff;align-items:center;gap:8px;min-height:44px;padding:0 12px;font:700 16px/1.4 Pretendard,Malgun Gothic,sans-serif;text-decoration:none;display:inline-flex}.game-home[hidden]{display:none}.game-home:hover{background:#ffffff17}.game-home:focus-visible{outline-offset:-2px;outline:2px solid #eaff50}.game-logo{filter:brightness(0)invert();width:auto;height:26px;display:block}#game{flex:1;width:100%;min-height:0;position:relative}#game canvas{touch-action:none;display:block}</style>
+  <script type="module" crossorigin src="/assets/fighter-DCi8bwmA.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-BWaJ3C7D.js">
   <link rel="modulepreload" crossorigin href="/assets/_oddbout-analytics-CiIVnasc.js">
   <link rel="modulepreload" crossorigin href="/assets/GameMenuState-CDnM5zRW.js">
   <link rel="modulepreload" crossorigin href="/assets/pseudo-B3ZLOM_E.js">
   <link rel="modulepreload" crossorigin href="/assets/Locale-Bfnpz3E7.js">
-  <link rel="modulepreload" crossorigin href="/assets/PublicAssetVersions-BWatBF7N.js">
+  <link rel="modulepreload" crossorigin href="/assets/PublicAssetVersions-DPEXrbmt.js">
   <link rel="modulepreload" crossorigin href="/assets/RuntimeOptions-nnuamCaA.js">
   <link rel="modulepreload" crossorigin href="/assets/storageKeys-DrW9C73_.js">
   <link rel="modulepreload" crossorigin href="/assets/playerSettingsStorage-Dsl4WW5n.js">
@@ -52,9 +52,9 @@
   <link rel="modulepreload" crossorigin href="/assets/catalog-C-siAyxf.js">
   <link rel="modulepreload" crossorigin href="/assets/localeLoader-iMHQKnrl.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-7y9sWmk5.js">
-  <link rel="modulepreload" crossorigin href="/assets/domButton-yJEQlYGr.js">
+  <link rel="modulepreload" crossorigin href="/assets/domButton-DqBC1yAO.js">
   <link rel="modulepreload" crossorigin href="/assets/PhaserTextureFamilies-C8vBSGBz.js">
-  <link rel="modulepreload" crossorigin href="/assets/UiFeedback-D_qvfCyz.js">
+  <link rel="modulepreload" crossorigin href="/assets/UiFeedback-vUhGtDa-.js">
   <link rel="modulepreload" crossorigin href="/assets/ArenaClubMode-BlSXK7-H.js">
   <link rel="modulepreload" crossorigin href="/assets/ShadowFighter-qozKPUYQ.js">
   <link rel="modulepreload" crossorigin href="/assets/FighterIdentity--_l0xpOr.js">
@@ -69,32 +69,32 @@
   <link rel="modulepreload" crossorigin href="/assets/rng-DryEJwf9.js">
   <link rel="modulepreload" crossorigin href="/assets/CareerRules-C1vSMPaW.js">
   <link rel="modulepreload" crossorigin href="/assets/FighterCombat-CQbN37Dl.js">
-  <link rel="modulepreload" crossorigin href="/assets/ClubRelations-B6Wkz77k.js">
+  <link rel="modulepreload" crossorigin href="/assets/ClubRelations-DOncfGpm.js">
   <link rel="modulepreload" crossorigin href="/assets/agentNames-C9gi1FWq.js">
-  <link rel="modulepreload" crossorigin href="/assets/registeredFighters-BZ0JxqCU.js">
-  <link rel="modulepreload" crossorigin href="/assets/arenaRankings-CwsPRe2d.js">
+  <link rel="modulepreload" crossorigin href="/assets/registeredFighters-oeKmWCty.js">
+  <link rel="modulepreload" crossorigin href="/assets/arenaRankings-CuNQbxVl.js">
   <link rel="modulepreload" crossorigin href="/assets/CityTournamentRules-CDfBW4O_.js">
   <link rel="modulepreload" crossorigin href="/assets/BigNumber-xBCh8Tqr.js">
   <link rel="modulepreload" crossorigin href="/assets/NativeCityOrthoPack-UR-Sg-fC.js">
   <link rel="modulepreload" crossorigin href="/assets/FighterFrames-DWiIwNQS.js">
   <link rel="modulepreload" crossorigin href="/assets/DisposableBag-DN_PCP1k.js">
-  <link rel="modulepreload" crossorigin href="/assets/oddboutRelayCall-AIK6uMnu.js">
-  <link rel="modulepreload" crossorigin href="/assets/arenaClubTourServer-bKCfNoMG.js">
+  <link rel="modulepreload" crossorigin href="/assets/oddboutRelayCall-DMMM0_eH.js">
+  <link rel="modulepreload" crossorigin href="/assets/arenaClubTourServer-C-FvJDGs.js">
   <link rel="modulepreload" crossorigin href="/assets/RegisteredAirCombo-E_J6BicM.js">
-  <link rel="modulepreload" crossorigin href="/assets/ArenaFacePaint-YNmlP8iM.js">
-  <link rel="modulepreload" crossorigin href="/assets/gameMenuParts-3inXAHtr.js">
-  <link rel="modulepreload" crossorigin href="/assets/SceneCameraShake-CsksbqG7.js">
+  <link rel="modulepreload" crossorigin href="/assets/ArenaFacePaint-BpwZZAUL.js">
+  <link rel="modulepreload" crossorigin href="/assets/gameMenuParts-4zLgOVk4.js">
+  <link rel="modulepreload" crossorigin href="/assets/SceneCameraShake-DEEHoqly.js">
   <link rel="modulepreload" crossorigin href="/assets/localePreference-CV7HdNsy.js">
-  <link rel="modulepreload" crossorigin href="/assets/BootPresentation-BakWxz5b.js">
-  <link rel="modulepreload" crossorigin href="/assets/GameBoot-BoFWA3eE.js">
-  <link rel="modulepreload" crossorigin href="/assets/oddboutShopServer-DMlVg-sV.js">
-  <link rel="modulepreload" crossorigin href="/assets/shopCatalogView-CgsGdV8M.js">
-  <link rel="modulepreload" crossorigin href="/assets/ArenaComicBackdrop-BRiIDFcZ.js">
+  <link rel="modulepreload" crossorigin href="/assets/BootPresentation-n8obPbwk.js">
+  <link rel="modulepreload" crossorigin href="/assets/GameBoot-pfyN9XKu.js">
+  <link rel="modulepreload" crossorigin href="/assets/oddboutShopServer-DZnWQJyc.js">
+  <link rel="modulepreload" crossorigin href="/assets/shopCatalogView-ByeDnsNv.js">
+  <link rel="modulepreload" crossorigin href="/assets/ArenaComicBackdrop-BRDFP_rO.js">
   <link rel="modulepreload" crossorigin href="/assets/UtcTime-BFPbMiHs.js">
-  <link rel="modulepreload" crossorigin href="/assets/FighterRelations-CRLh_iCM.js">
-  <link rel="modulepreload" crossorigin href="/assets/ArenaGoldDropView-D9hhkeau.js">
-  <link rel="modulepreload" crossorigin href="/assets/rankedDuels-CodgRFIP.js">
-  <link rel="modulepreload" crossorigin href="/assets/ArenaRecordChips-C4sVtP0z.js">
+  <link rel="modulepreload" crossorigin href="/assets/FighterRelations-DZRDkH4p.js">
+  <link rel="modulepreload" crossorigin href="/assets/ArenaGoldDropView-MmmKhqlD.js">
+  <link rel="modulepreload" crossorigin href="/assets/rankedDuels-D55AkTYg.js">
+  <link rel="modulepreload" crossorigin href="/assets/ArenaRecordChips-DbH144d2.js">
   <link rel="stylesheet" crossorigin href="/assets/playerSettingsStorage-CL-cL7BT.css">
   <link rel="stylesheet" crossorigin href="/assets/accountControl-CWZ8z-IX.css">
   <link rel="stylesheet" crossorigin href="/assets/ArenaFacePaint-PZQYdF8s.css">
@@ -226,7 +226,7 @@
           if (target && target.tagName === "SCRIPT" && target.type === "module") open(true);
         }, true);
       })();
-    </script>
-    <script>(()=>{const p={"en":["assets/bootCopy-DUheN_9n.js","assets/en-CAqqIz3y.js","assets/en-D5Leo2vz.js","assets/en-ztcM5eHz.js"],"ko":["assets/bootCopy-DUheN_9n.js","assets/ko-BGHkPm82.js","assets/ko-BSrrTO9F.js","assets/ko-yMMuAcUr.js"],"ja":["assets/bootCopy-DUheN_9n.js","assets/ja-C3OLh43X.js","assets/ja-C86ST8bx.js","assets/ja-ZM5hVT8F.js"]}[document.documentElement.lang];if(!p)return;for(const f of p){const l=document.createElement("link");l.rel="modulepreload";l.crossOrigin="";l.href="./"+f;document.head.append(l)}})()</script>
+    </script>
+    <script>(()=>{const p={"en":["assets/bootCopy-DUheN_9n.js","assets/en-BLer9ZA0.js","assets/en-D5Leo2vz.js","assets/en-ztcM5eHz.js"],"ko":["assets/bootCopy-DUheN_9n.js","assets/ko-BSrrTO9F.js","assets/ko-D7qGlUAb.js","assets/ko-yMMuAcUr.js"],"ja":["assets/bootCopy-DUheN_9n.js","assets/ja-Bfl6FL52.js","assets/ja-C3OLh43X.js","assets/ja-ZM5hVT8F.js"]}[document.documentElement.lang];if(!p)return;for(const f of p){const l=document.createElement("link");l.rel="modulepreload";l.crossOrigin="";l.href="./"+f;document.head.append(l)}})()</script>
   </body>
 </html>

@@ -1,11 +1,11 @@
 {
-  "buildId": "81b01b8d-0645-4492-aa59-7e9036f714a9",
+  "buildId": "6cf1d0be-ae2c-4189-9ca0-c201e2952f91",
   "siteUrl": "https://oddbout.com/creator.html",
-  "builtAt": "2026-11-12T09:11:21.506Z",
-  "sourceCommit": "b4ac5585cc33752155fe5a0debd932db710bda63",
+  "builtAt": "2026-11-12T09:17:54.849Z",
+  "sourceCommit": "cf42c05358660197fd54168ad9c775a492c1a20a",
   "hostingCommit": "b1220ef7c3469941f01397cf427f17fa9a31c2b9",
   "dirty": false,
-  "digest": "367c65198bb9e213b80de3d6975c27980b1ebf485bd0f39d46a5aa049dbbb385",
+  "digest": "75c95e58cf4272be954935d1c0627b714431f835aead7cd6357c2e2c7281d8a0",
   "files": 7859,
-  "bytes": 375038776
+  "bytes": 375044731
 }
