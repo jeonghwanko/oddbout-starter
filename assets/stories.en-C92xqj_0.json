@@ -1,0 +1,761 @@
+{
+ "version": 1,
+ "lang": "en",
+ "digest": "65090efd",
+ "edges": {
+  "lupin-female|lupin-male": {
+   "title": "Two calling cards",
+   "beats": [
+    "41 meetings, 13 of them finals. Female Lupin 22, Male Lupin 19.",
+    "S1 final to Female Lupin on a 48-second comeback. S5 opening round to Female Lupin on a 61-second comeback upset.",
+    "The S9 finals went one each: Male Lupin on a 40-second comeback, Female Lupin on a 58-second comeback."
+   ]
+  },
+  "kuma|lupin-male": {
+   "title": "Bear suit, calling card",
+   "beats": [
+    "55 meetings, 3 of them finals. Male Lupin 28, Kuma 27.",
+    "Male Lupin won the S1 final on a 36-second comeback. Kuma's S1 final upset took 34 seconds.",
+    "S4 challenge bout to Kuma in a 35-second upset. Kuma took the S9 quarterfinal too, on a 37-second comeback."
+   ]
+  },
+  "lupin-male|tyson": {
+   "title": "Three seconds, one card",
+   "beats": [
+    "28 meetings, 7 of them finals. Typhoon 15, Male Lupin 13.",
+    "Male Lupin won the S1 final on a 38-second comeback. Male Lupin took the S6 final too, on a 31-second comeback.",
+    "Typhoon won both S8 opening rounds: in a 28-second upset, then on a 42-second comeback."
+   ]
+  },
+  "lupin-male|pink": {
+   "title": "Finals encore",
+   "beats": [
+    "58 meetings, 4 of them finals. 29 wins each.",
+    "Pink won the S5 final on a 35-second comeback, Cash Uncle watching. Pink took the S6 final too, on a 38-second comeback.",
+    "S9 semifinal to Pink on a 30-second comeback. Every standout bout was Pink's. The encore goes on."
+   ]
+  },
+  "lupin-male|zuck": {
+   "title": "A lagging calling card",
+   "beats": [
+    "14 meetings, 7 of them finals. Male Lupin 8, Mark Zuckerberry 6.",
+    "The S4 finals went one each: Male Lupin in 34 seconds, Zuckerberry on a 41-second comeback.",
+    "Male Lupin won the S3 quarterfinal on a 38-second comeback, Vuvuzela Uncle blowing."
+   ]
+  },
+  "guldaejang|lupin-male": {
+   "title": "Card at the exit",
+   "beats": [
+    "11 meetings, 3 of them finals. Male Lupin 8, Guldaejang 3.",
+    "Guldaejang won the S5 final on a 43-second comeback. Guldaejang took the S6 final too, on a 39-second comeback.",
+    "S7 final to Male Lupin on a 36-second comeback. Male Lupin took the S9 semifinal too, on a 39-second comeback."
+   ]
+  },
+  "bravow|lupin-male": {
+   "title": "Feints and cards",
+   "beats": [
+    "12 meetings, one of them a final. Bravow 7, Male Lupin 5.",
+    "Bravow won the S6 quarterfinal on a 35-second comeback, Gnat Swarm buzzing. Bravow took the S6 final too, in 28 seconds.",
+    "The S10 opening rounds went one each: Bravow on a 35-second comeback upset, Male Lupin on a 43-second comeback."
+   ]
+  },
+  "beotim|lupin-male": {
+   "title": "Late counter, early card",
+   "beats": [
+    "10 meetings, none of them finals. Beotim 6, Male Lupin 4.",
+    "Male Lupin won the S6 semifinal on a 28-second comeback, Vuvuzela Uncle blowing.",
+    "Beotim's S10 opening round upset took 28 seconds, a comeback. Beotim took the S10 challenge bout too, in 16 seconds."
+   ]
+  },
+  "kungjjak|lupin-male": {
+   "title": "Calling card on the beat",
+   "beats": [
+    "11 meetings, none of them finals. Male Lupin 7, Kungjjak 4.",
+    "Kungjjak won the S7 opening round on a 33-second comeback upset.",
+    "The S8 opening rounds went one each: Kungjjak on a 30-second comeback upset, Male Lupin on a 39-second comeback."
+   ]
+  },
+  "lupin-male|sikeundung": {
+   "title": "Unimpressed by the card",
+   "beats": [
+    "6 meetings, one of them a final. Sikeundung 5, Male Lupin 1.",
+    "S6 quarterfinal to Sikeundung in a 17-second upset. S7 final to Sikeundung on a 26-second comeback upset.",
+    "S9 quarterfinal to Sikeundung on a 30-second comeback."
+   ]
+  },
+  "lupin-male|morne": {
+   "title": "Sleepy eyes, calling card",
+   "beats": [
+    "2 meetings, none of them finals. 1 win each.",
+    "Morne won the S10 quarterfinal on a 39-second comeback. Male Lupin won the S10 semifinal on a 44-second comeback."
+   ]
+  },
+  "lupin-female|yume": {
+   "title": "Two finals regulars",
+   "beats": [
+    "40 meetings, 8 of them finals. Female Lupin 23, Yume 17.",
+    "Yume won the S2 quarterfinal on a 35-second comeback upset. Female Lupin won the S3 final in 26 seconds.",
+    "S6 final to Female Lupin in 35 seconds. Yume won the S9 semifinal on a 39-second comeback."
+   ]
+  },
+  "lupin-female|singha": {
+   "title": "Kick and delivery",
+   "beats": [
+    "31 meetings, 3 of them finals. Female Lupin 17, Kick Bro 14.",
+    "Kick Bro won the S1 final on a 36-second comeback. Kick Bro took the S3 quarterfinal too, in a 23-second upset.",
+    "S4 final to Kick Bro in 19 seconds. Female Lupin won the S10 quarterfinal on a 39-second comeback."
+   ]
+  },
+  "lupin-female|tyson": {
+   "title": "Three seconds won't do",
+   "beats": [
+    "46 meetings, one of them a final. Female Lupin 25, Typhoon 21.",
+    "Female Lupin won the S1 quarterfinal on a 37-second comeback. Female Lupin took the S5 final too, in 40 seconds.",
+    "S10 opening round to Typhoon on a 34-second comeback upset."
+   ]
+  },
+  "elon|lupin-female": {
+   "title": "Takeover on hold",
+   "beats": [
+    "61 meetings, 4 of them finals. Female Lupin 37, Elong Muscat 24.",
+    "Female Lupin won the S2 final on a 37-second comeback. Elong won the S4 final in 27 seconds, Camera Bot filming.",
+    "S8 opening round to Elong in a 40-second upset."
+   ]
+  },
+  "dolseok|lupin-female": {
+   "title": "The delivery case",
+   "beats": [
+    "19 meetings, 2 of them finals. Ma Dolseok 10, Female Lupin 9.",
+    "Dolseok won the S3 final on a 49-second comeback. Dolseok took the S4 final too, on a 38-second comeback.",
+    "S4 semifinal to Female Lupin in a 36-second upset. Female Lupin took the S9 semifinal too, on a 35-second comeback."
+   ]
+  },
+  "lupin-female|sikeundung": {
+   "title": "Delivery and a sigh",
+   "beats": [
+    "10 meetings, one of them a final. Sikeundung 6, Female Lupin 4.",
+    "Female Lupin won the S6 semifinal in 23 seconds. Sikeundung won the S6 final in 11 seconds.",
+    "S10 opening round to Sikeundung in 16 seconds, Flash Fan watching."
+   ]
+  },
+  "lupin-female|rena": {
+   "title": "Card meets beat",
+   "beats": [
+    "3 meetings, none of them finals. Rena Volt 2, Female Lupin 1.",
+    "Rena won the S10 quarterfinal on a 45-second comeback. Female Lupin won the S10 semifinal on a 38-second comeback."
+   ]
+  },
+  "kuma|singha": {
+   "title": "Bear vs. kick",
+   "beats": [
+    "38 meetings, 9 of them finals. Kick Bro 24, Kuma 14.",
+    "Kuma won the S2 final in 34 seconds. Kick Bro won the S3 final in 23 seconds.",
+    "S10 semifinal to Kick Bro in 20 seconds."
+   ]
+  },
+  "bingpanjang|kuma": {
+   "title": "A bear on ice",
+   "beats": [
+    "20 meetings, none of them finals. 10 wins each.",
+    "Kuma won the S5 opening round on a 43-second comeback. Bingpanjang's S8 opening round upset took 47 seconds.",
+    "S9 semifinal to Kuma on a 48-second comeback."
+   ]
+  },
+  "malfoy|yume": {
+   "title": "Magic and martial arts",
+   "beats": [
+    "36 meetings, 2 of them finals. Yume 21, Miss Malfoy 15.",
+    "Malfoy won the S1 final on a 47-second comeback. Malfoy took the S5 final too, in 38 seconds, Ring Cat watching.",
+    "S3 quarterfinal to Malfoy in a 28-second upset. Yume won the S7 semifinal on a 38-second comeback."
+   ]
+  },
+  "elon|yume": {
+   "title": "A merger meets kung fu",
+   "beats": [
+    "28 meetings, 3 of them finals. Yume 17, Elong Muscat 11.",
+    "Elong won the S1 final in 35 seconds, Banana Monkey watching. Yume won the S2 final in 30 seconds.",
+    "S3 quarterfinal to Elong in a 34-second upset. Elong took the S9 opening round too, in 27 seconds."
+   ]
+  },
+  "pink|yume": {
+   "title": "One song vs. kung fu",
+   "beats": [
+    "43 meetings, 8 of them finals. Yume 23, Big Bro Pink 20.",
+    "Yume won the S4 final on a 32-second comeback. Pink won the S8 final in 25 seconds.",
+    "S2 quarterfinal to Yume on a 37-second comeback upset. Yume took the S9 opening round too, on a 33-second comeback."
+   ]
+  },
+  "bing|yume": {
+   "title": "Slips and finals",
+   "beats": [
+    "22 meetings, 3 of them finals. Mr. Bing 12, Yume 10.",
+    "Bing won the S3 semifinal on a 42-second comeback. Yume won the S3 final on a 35-second comeback.",
+    "S4 final to Yume on a 39-second comeback. Yume took the S5 quarterfinal too, on a 39-second comeback."
+   ]
+  },
+  "cinnamon|yume": {
+   "title": "An unseen move",
+   "beats": [
+    "27 meetings, one of them a final. Yume 14, John Cinnamon 13.",
+    "Yume won the S3 quarterfinal in 41 seconds. John Cinnamon won the S10 final in 27 seconds."
+   ]
+  },
+  "eoridung|yume": {
+   "title": "What was that move?",
+   "beats": [
+    "11 meetings, none of them finals. Yume 6, Eoridung 5.",
+    "Yume won the S6 opening round in 24 seconds. Eoridung won the S9 quarterfinal in 31 seconds, Name Tag Chaser watching."
+   ]
+  },
+  "ahn|yume": {
+   "title": "The shot never landed",
+   "beats": [
+    "4 meetings, one of them a final. Yume 4, Ahn Jung-geun 0.",
+    "Yume won the S8 opening round in 39 seconds. Yume took the S9 final too, in 42 seconds."
+   ]
+  },
+  "nova|yume": {
+   "title": "The rookie's first test",
+   "beats": [
+    "A single meeting, not a final. Yume won it.",
+    "Yume won the S10 opening round on a 38-second comeback."
+   ]
+  },
+  "malfoy|pink": {
+   "title": "Magic and an encore",
+   "beats": [
+    "35 meetings, 2 of them finals. Big Bro Pink 20, Miss Malfoy 15.",
+    "Malfoy won the S2 final in a 33-second upset. Malfoy took the S4 final too, on a 36-second comeback.",
+    "S7 quarterfinal to Pink on a 44-second comeback, Cash Uncle watching."
+   ]
+  },
+  "bingpanjang|malfoy": {
+   "title": "Magic, meet belly",
+   "beats": [
+    "7 meetings, one of them a final. Bingpanjang 6, Miss Malfoy 1.",
+    "Bingpanjang won the S5 final in 29 seconds. Bingpanjang took the S8 quarterfinal too, on a 41-second comeback."
+   ]
+  },
+  "malfoy|ttakbujang": {
+   "title": "Turf and spellbook",
+   "beats": [
+    "26 meetings, none of them finals. Miss Malfoy 19, Ttakbujang 7.",
+    "Ttakbujang won both S5 opening rounds: on a 28-second comeback, then on a 27-second comeback upset.",
+    "Malfoy won the S9 opening round on a 27-second comeback."
+   ]
+  },
+  "dolseok|singha": {
+   "title": "Detective vs. kick",
+   "beats": [
+    "31 meetings, 3 of them finals. Kick Bro 22, Ma Dolseok 9.",
+    "Kick Bro won the S3 quarterfinal on a 21-second comeback. Kick Bro took the S3 final too, in 17 seconds.",
+    "S4 final to Dolseok in 31 seconds. Kick Bro won the S9 semifinal on a 22-second comeback upset."
+   ]
+  },
+  "duldul|singha": {
+   "title": "Before the kick lands",
+   "beats": [
+    "8 meetings, one of them a final. Duldul 7, Kick Bro 1.",
+    "Duldul won the S6 opening round on a 34-second comeback. Duldul took the S9 final too, in 31 seconds."
+   ]
+  },
+  "bing|tyson": {
+   "title": "Three seconds and a slip",
+   "beats": [
+    "17 meetings, 5 of them finals. Mr. Bing 10, Typhoon 7.",
+    "Typhoon won the S3 quarterfinal in 26 seconds. Typhoon took the S3 final too, on a 47-second comeback.",
+    "S4 final to Bing in 33 seconds. Bing took the S7 opening round too, in 35 seconds."
+   ]
+  },
+  "elon|ito": {
+   "title": "Veteran acquired",
+   "beats": [
+    "5 meetings, one of them a final. Elong Muscat 5, Itō Hirobumi 0.",
+    "Elong won the S8 quarterfinal in 25 seconds. Elong took the S8 final too, on a 32-second comeback.",
+    "S9 quarterfinal to Elong in 36 seconds."
+   ]
+  },
+  "elon|rena": {
+   "title": "Kick before takeover",
+   "beats": [
+    "3 meetings, one of them a final. Rena Volt 2, Elong Muscat 1.",
+    "Rena won the S10 quarterfinal on a 48-second comeback. Elong won the S10 final on a 48-second comeback."
+   ]
+  },
+  "pink|ttakbujang": {
+   "title": "Encore in the turf",
+   "beats": [
+    "13 meetings, none of them finals. Ttakbujang 8, Big Bro Pink 5.",
+    "Ttakbujang won the S5 semifinal on a 38-second comeback. Pink won the S10 opening round in 27 seconds."
+   ]
+  },
+  "guldaejang|pink": {
+   "title": "Encore at the exit",
+   "beats": [
+    "25 meetings, one of them a final. Big Bro Pink 17, Guldaejang 8.",
+    "The S5 opening rounds went one each: Pink in 43 seconds, Guldaejang on a 51-second comeback upset.",
+    "Guldaejang won the S6 final in 43 seconds. Pink won the S9 opening round in 32 seconds."
+   ]
+  },
+  "dolseok|ito": {
+   "title": "Palm vs. old guard",
+   "beats": [
+    "4 meetings, one of them a final. Ma Dolseok 4, Itō Hirobumi 0.",
+    "Dolseok won the S9 quarterfinal in 28 seconds. Dolseok took the S10 final too, in 37 seconds.",
+    "S10 challenge bout to Dolseok in 33 seconds, Sympathy Squad cheering."
+   ]
+  },
+  "bing|quickcat": {
+   "title": "Shortcut vs. slip",
+   "beats": [
+    "8 meetings, one of them a final. Mr. Bing 6, Quickcat 2.",
+    "Bing won the S6 final in 33 seconds. Quickcat's S10 opening round upset took 37 seconds, a comeback."
+   ]
+  },
+  "cinnamon|zuck": {
+   "title": "Connected but unseen",
+   "beats": [
+    "24 meetings, 4 of them finals. Mark Zuckerberry 14, John Cinnamon 10.",
+    "The S3 finals went one each: John Cinnamon on a 39-second comeback, Zuckerberry on a 45-second comeback.",
+    "S3 quarterfinal to John Cinnamon in 28 seconds. S6 opening round to John Cinnamon on a 35-second comeback upset."
+   ]
+  },
+  "eoridung|zuck": {
+   "title": "Connection lost",
+   "beats": [
+    "11 meetings, one of them a final. Eoridung 9, Mark Zuckerberry 2.",
+    "Eoridung won the S6 semifinal in 24 seconds. Eoridung took the S7 final too, in 17 seconds.",
+    "S10 challenge bout to Eoridung in 19 seconds."
+   ]
+  },
+  "rubia|ttakbujang": {
+   "title": "A tail in the final",
+   "beats": [
+    "A single meeting, and it was a final. Rubia won it.",
+    "Rubia won the S10 final in 40 seconds."
+   ]
+  },
+  "guldaejang|nyamjab": {
+   "title": "Nyam Jab shown the exit",
+   "beats": [
+    "A single meeting, not a final. Guldaejang won it.",
+    "Guldaejang won the S10 opening round on a 36-second comeback."
+   ]
+  },
+  "beotim|bravow": {
+   "title": "Feint and counter",
+   "beats": [
+    "8 meetings, one of them a final. 4 wins each.",
+    "Beotim won the S6 challenge bout in 16 seconds. Beotim took the S7 final too, on a 29-second comeback.",
+    "S10 challenge bout to Bravow in 25 seconds."
+   ]
+  },
+  "bravow|toegeunbara": {
+   "title": "Three bouts, one face",
+   "beats": [
+    "3 meetings, one of them a final. Clock-Out Bara 3, Bravow 0.",
+    "Clock-Out Bara won the S10 quarterfinal in 29 seconds. Clock-Out Bara took the S10 final too, in 35 seconds.",
+    "S10 challenge bout to Clock-Out Bara on a 43-second comeback. Even the feints could not change his face."
+   ]
+  },
+  "duldul|quickcat": {
+   "title": "An inch ahead of the shortcut",
+   "beats": [
+    "7 meetings, one of them a final. Duldul 5, Quickcat 2.",
+    "Duldul won the S6 opening round in 23 seconds. Duldul took the S7 final too, on a 36-second comeback.",
+    "S9 semifinal to Duldul on a 33-second comeback, Cash Uncle watching."
+   ]
+  },
+  "eoridung|kungjjak": {
+   "title": "What was that? A beat.",
+   "beats": [
+    "9 meetings, none of them finals. Kungjjak 7, Eoridung 2.",
+    "S6 opening round to Kungjjak on a 33-second comeback. S10 quarterfinal to Kungjjak on a 44-second comeback."
+   ]
+  },
+  "kungjjak|velora": {
+   "title": "Beat and wine-red sleeves",
+   "beats": [
+    "3 meetings, one of them a final. Kungjjak 2, Velora 1.",
+    "Kungjjak won the S9 semifinal in 24 seconds, Vuvuzela Uncle blowing. Velora won the S10 final in 29 seconds.",
+    "S10 challenge bout to Kungjjak on a 48-second comeback."
+   ]
+  },
+  "duldul|velora": {
+   "title": "Three for Velora",
+   "beats": [
+    "3 meetings, one of them a final. Velora 3, Duldul 0.",
+    "Velora won the S9 opening round in 31 seconds. Velora took the S9 final too, in 27 seconds.",
+    "S9 challenge bout to Velora on a 41-second comeback."
+   ]
+  },
+  "eoridung|rubia": {
+   "title": "What was that tail?",
+   "beats": [
+    "2 meetings, one of them a final. 1 win each.",
+    "Rubia won the S10 final on a 39-second comeback, Camera Bot filming. Eoridung won the S10 challenge bout in 23 seconds."
+   ]
+  },
+  "ahn|ito": {
+   "title": "One shot vs. old guard",
+   "beats": [
+    "11 meetings, none of them finals. Ahn Jung-geun 8, Itō Hirobumi 3.",
+    "Ahn won the S8 opening round in 41 seconds. Ahn took the S10 challenge bout too, on a 47-second comeback."
+   ]
+  },
+  "toegeunbara|velora": {
+   "title": "Two straight faces",
+   "beats": [
+    "2 meetings, none of them finals. 1 win each.",
+    "Velora won the S10 quarterfinal in 29 seconds. Clock-Out Bara won the S10 semifinal in 38 seconds."
+   ]
+  },
+  "leon|nera": {
+   "title": "Center vs. lead vocal",
+   "beats": [
+    "2 meetings, one of them a final. 1 win each.",
+    "Nera won the S10 final in 25 seconds. Leon won the S10 challenge bout on a 26-second comeback."
+   ]
+  },
+  "leon|nyamjab": {
+   "title": "Sword and jab",
+   "beats": [
+    "2 meetings, none of them finals. 1 win each.",
+    "The S10 opening rounds went one each: Leon in 30 seconds, Nyam Jab in 34 seconds."
+   ]
+  },
+  "nova|rubia": {
+   "title": "Center and tail",
+   "beats": [
+    "2 meetings, none of them finals. 1 win each.",
+    "The S10 opening rounds went one each: Rubia in 31 seconds, Nova on a 43-second comeback."
+   ]
+  },
+  "morne|nera": {
+   "title": "A step-late harmony",
+   "beats": [
+    "3 meetings, one of them a final. Nera 3, Morne 0.",
+    "Nera won the S10 opening round in 32 seconds. Nera took the S10 final too, in 25 seconds.",
+    "S10 challenge bout to Nera in 27 seconds."
+   ]
+  }
+ },
+ "fighters": {
+  "lupin-male": {
+   "title": "Calling cards, 25 titles",
+   "beats": [
+    "25 titles from 57 finals, 235 wins. Peak: S6.",
+    "235 wins, 196 losses. More days than not, it went as announced."
+   ]
+  },
+  "lupin-female": {
+   "title": "Delivery complete",
+   "beats": [
+    "27 titles from 51 finals. Peak: S7.",
+    "230 wins, 177 losses, 5 upsets. The card always arrives on time."
+   ]
+  },
+  "kuma": {
+   "title": "The bear suit stays on",
+   "beats": [
+    "184 wins, 174 losses, 19 titles. 7 upsets.",
+    "39 finals, peak in S9. The suit stays on, win or lose."
+   ]
+  },
+  "yume": {
+   "title": "Finals regular",
+   "beats": [
+    "21 titles from 40 finals. Peak: S2.",
+    "Has held a finals seat since the S1 debut. 202 wins, 186 losses."
+   ]
+  },
+  "malfoy": {
+   "title": "The dark horse",
+   "beats": [
+    "14 upsets, 15 titles. Peak: S5.",
+    "192 losses, 27 finals. Magic grades on a curve."
+   ]
+  },
+  "singha": {
+   "title": "Short speech, long kick",
+   "beats": [
+    "21 titles, 29 finals, 7 upsets. Peak: S3.",
+    "Skips the speech and goes straight to the kick. 181 wins, 180 losses."
+   ]
+  },
+  "tyson": {
+   "title": "Three seconds, tops",
+   "beats": [
+    "12 titles from 27 finals, 21 upsets. Peak: S3.",
+    "Said three seconds would do. 146 wins, 185 losses; the league took longer."
+   ]
+  },
+  "elon": {
+   "title": "Hostile takeover artist",
+   "beats": [
+    "27 upsets, 15 titles. Peak: S9.",
+    "Buys out the favorites one upset at a time. 188 losses count as capital spent."
+   ]
+  },
+  "pink": {
+   "title": "One more song",
+   "beats": [
+    "21 titles from 42 finals, just 3 upsets. Peak: S6.",
+    "Said one song. Stayed for the encore. 200 wins, 186 losses."
+   ]
+  },
+  "dolseok": {
+   "title": "One smiling slap",
+   "beats": [
+    "Debuted in S3. 14 titles from 22 finals. Peak: S10.",
+    "130 wins, 118 losses, just 4 upsets. Says he always went easy."
+   ]
+  },
+  "bing": {
+   "title": "Mistakes as moves",
+   "beats": [
+    "Debuted in S3. 11 titles from 28 finals. Peak: S8.",
+    "130 wins, 131 losses. Every slip is a signature move."
+   ]
+  },
+  "zuck": {
+   "title": "Log in, get tackled",
+   "beats": [
+    "Debuted in S3. 16 titles from 29 finals. Peak: S5.",
+    "143 wins, 122 losses, 3 upsets. Connects fast, tackles faster."
+   ]
+  },
+  "cinnamon": {
+   "title": "The unseen superstar",
+   "beats": [
+    "Debuted in S3. 4 titles from 15 finals, 13 upsets.",
+    "Peak: S8. 90 wins, 120 losses. Can't be seen, yet keeps turning up in finals."
+   ]
+  },
+  "bingpanjang": {
+   "title": "Belly first, straight ahead",
+   "beats": [
+    "Debuted in S5, peaked in S5. 2 titles from 3 finals.",
+    "60 wins, 76 losses, 7 upsets. Turning is someone else's job."
+   ]
+  },
+  "ttakbujang": {
+   "title": "Marking territory",
+   "beats": [
+    "Debuted in S5. 3 titles from 9 finals. Peak: S8.",
+    "69 wins, 76 losses. The turf is small, but the markings are clear."
+   ]
+  },
+  "guldaejang": {
+   "title": "Exit is this way",
+   "beats": [
+    "Debuted in S5. 6 titles from 12 finals. Peak: S10.",
+    "85 wins, 86 losses, 7 upsets. Never forgets to point out the exit. Politely."
+   ]
+  },
+  "bravow": {
+   "title": "Eyes left, fist right",
+   "beats": [
+    "Debuted in S6. 2 titles from 8 finals. Peak: S7.",
+    "59 wins, 68 losses, 7 upsets. Looks left, hits right."
+   ]
+  },
+  "beotim": {
+   "title": "Late, but counters",
+   "beats": [
+    "Debuted in S6. 1 title, 13 upsets. Peak: S7.",
+    "46 wins, 71 losses. Arrives late, counters on time."
+   ]
+  },
+  "quickcat": {
+   "title": "Rainbow route",
+   "beats": [
+    "Debuted in S6. 5 titles from 8 finals. Peak: S7.",
+    "65 wins, 64 losses. Takes the shortcut. According to plan."
+   ]
+  },
+  "kungjjak": {
+   "title": "Exit rhythm",
+   "beats": [
+    "Debuted in S6. 3 titles from 7 finals, 12 upsets.",
+    "Peak: S9. 49 wins, 60 losses. Exits on the beat. Enters on it, too."
+   ]
+  },
+  "sikeundung": {
+   "title": "That's it",
+   "beats": [
+    "Debuted in S6. 3 titles from 5 finals. Peak: S7.",
+    "55 wins, 68 losses. Wins with a shrug and leaves with one."
+   ]
+  },
+  "duldul": {
+   "title": "One inch more",
+   "beats": [
+    "Debuted in S6. 4 titles from 7 finals. Peak: S7.",
+    "62 wins, 52 losses, 0 upsets. An inch more, an inch more, and the trophy was reached."
+   ]
+  },
+  "eoridung": {
+   "title": "Wait, what was that?",
+   "beats": [
+    "Debuted in S6. 3 titles from 7 finals. Peak: S10.",
+    "67 wins, 58 losses, 1 upset. Won, then asked: what was that?"
+   ]
+  },
+  "ahn": {
+   "title": "The steady shot",
+   "beats": [
+    "Debuted in S8. 3 titles from 5 finals. Peak: S10.",
+    "42 wins, 37 losses, 0 upsets. Never hurries the aim."
+   ]
+  },
+  "ito": {
+   "title": "Old guard",
+   "beats": [
+    "Debuted in S8, peaked in S8. 1 title from 4 finals.",
+    "53 wins, 42 losses, 0 upsets. Stands tall in the ring, too."
+   ]
+  },
+  "velora": {
+   "title": "Leader in wine-red sleeves",
+   "beats": [
+    "Debuted in S9, peaked in S9. 2 titles from 3 finals.",
+    "27 wins, 17 losses, 0 upsets. Acts unshakable, then goes quiet at sincere praise."
+   ]
+  },
+  "leon": {
+   "title": "Center with a sword",
+   "beats": [
+    "Debuted in S10. 1 final, 0 titles.",
+    "8 wins, 9 losses, 0 upsets. Stands center with confidence. Stalls at the self-introduction."
+   ]
+  },
+  "rena": {
+   "title": "Kicks over words",
+   "beats": [
+    "Debuted in S10. 1 final, 0 titles.",
+    "16 wins, 8 losses, 0 upsets. Says little. Never drops the beat."
+   ]
+  },
+  "nova": {
+   "title": "Cute hits harder",
+   "beats": [
+    "Debuted in S10. 0 finals, 0 titles.",
+    "4 wins, 9 losses, 0 upsets. The smile holds even when she takes a hit. Center stage can wait."
+   ]
+  },
+  "rubia": {
+   "title": "The tail moves first",
+   "beats": [
+    "Debuted in S10. 2 titles from 2 finals.",
+    "9 wins, 10 losses, 1 upset. A demure face, and the tail tip moves first."
+   ]
+  },
+  "nera": {
+   "title": "A voice like a mirror",
+   "beats": [
+    "Debuted in S10. 2 titles from 2 finals.",
+    "14 wins, 10 losses, 0 upsets. Strictest in practice, last to leave a teammate who slipped."
+   ]
+  },
+  "morne": {
+   "title": "Sleepy eyes, sharp ears",
+   "beats": [
+    "Debuted in S10. 1 final, 0 titles.",
+    "9 wins, 10 losses, 0 upsets. Moves a step late and fills the gap."
+   ]
+  },
+  "nyamjab": {
+   "title": "A playful contender",
+   "beats": [
+    "Debuted in S10. 0 finals, 0 titles.",
+    "1 win, 6 losses, 0 upsets. Tail up, snaps out quick jabs. The real fight starts now."
+   ]
+  },
+  "toegeunbara": {
+   "title": "A face that says nothing happened",
+   "beats": [
+    "Debuted in S10. 1 title from 1 final.",
+    "11 wins, 8 losses, 0 upsets. Hit or be hit, his face never changes. His mind is at a hot spring."
+   ]
+  }
+ },
+ "seasons": [
+  {
+   "title": "Opening season",
+   "beats": [
+    "Male Lupin won 7 of the 39 cups and the title, Female Lupin 7 as well. Nine fighters debuted.",
+    "14 upsets. Malfoy won one final on a 40-second comeback, Cash Uncle watching. Pink's took 30 seconds, Ring Cat watching."
+   ]
+  },
+  {
+   "title": "Nine cups for one",
+   "beats": [
+    "Female Lupin won 9 of the 39 cups and the title. No rookies, 14 upsets.",
+    "Yume won one final on a 40-second comeback, Banana Monkey watching. Kuma's took 60, Commentator Uncle calling it.",
+    "Female Lupin's final was a 35-second comeback, Flash Fan watching."
+   ]
+  },
+  {
+   "title": "A rookie takes the title",
+   "beats": [
+    "Four fighters debuted, and rookie Zuckerberry won 6 of the 39 cups and the title.",
+    "15 upsets. Bing won one final on a 38-second comeback, Name Tag Chaser watching. Zuckerberry's took 38."
+   ]
+  },
+  {
+   "title": "12 upsets, the fewest",
+   "beats": [
+    "Just 12 upsets, the fewest of any season. Male Lupin won 7 of the 39 cups and the title.",
+    "Zuckerberry won one final in 21 seconds, Ring Cat watching. Malfoy's was a 36-second comeback, Vuvuzela Uncle blowing."
+   ]
+  },
+  {
+   "title": "Down to 18 cups",
+   "beats": [
+    "The season shrank to 18 cups. Malfoy won 4 and the title. Three rookies debuted.",
+    "22 upsets. Pink won one final on a 35-second comeback, Cash Uncle watching.",
+    "Malfoy won two finals: a 37-second comeback, Vuvuzela Uncle blowing, and one in 37, Ring Cat watching."
+   ]
+  },
+  {
+   "title": "Seven rookies",
+   "beats": [
+    "Seven rookies debuted. Female Lupin won 3 of the 18 cups and the title.",
+    "13 upsets. Quickcat won one final on a 27-second comeback, Commentator Uncle calling it. Male Lupin's took 31."
+   ]
+  },
+  {
+   "title": "Sikeundung's final upset",
+   "beats": [
+    "22 upsets. Female Lupin won 3 of the 18 cups and the title.",
+    "Sikeundung took one final on a 26-second comeback upset, Flash Fan watching.",
+    "Guldaejang won one on a 37-second comeback, Cash Uncle watching. Malfoy's took 32."
+   ]
+  },
+  {
+   "title": "Two debuts, one trophy",
+   "beats": [
+    "Ahn Jung-geun and Itō Hirobumi debuted. Kuma won 3 of the 18 cups and the title.",
+    "Itō won a title in his debut season, the final in 27 seconds, Curler Landlady shushing.",
+    "Cinnamon won one on a 35-second comeback, Name Tag Chaser watching. Eoridung's took 27."
+   ]
+  },
+  {
+   "title": "Velora debuts",
+   "beats": [
+    "Velora debuted. Kuma won 2 of the 18 cups and the title.",
+    "Velora also won 1 title in her debut season. 19 upsets.",
+    "Dolseok won two finals: 32 seconds, Vuvuzela Uncle blowing, and a 38-second comeback, Milk Truck Uncle watching."
+   ]
+  },
+  {
+   "title": "Eight rookies",
+   "beats": [
+    "Eight rookies debuted at once. Dolseok won 2 of the 18 cups and the title.",
+    "Thirteen fighters split the 18 cups. Rubia and Nera won 2 each, Clock-Out Bara 1. 21 upsets.",
+    "Camera Bot filmed two finals: Rubia's 39-second comeback and Clock-Out Bara's 35 seconds."
+   ]
+  }
+ ]
+}
