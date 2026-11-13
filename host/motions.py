@@ -39,8 +39,8 @@ NumPy and Pillow only: it runs on the kit's sprite-gen venv (`<kit>/vendor/sprit
   progress-sheet <manifest.json> <out.webp>
       One still contact sheet of the eleven motion clips, rebuilt whenever a clip preview is ready (2026-11-13).
       The manifest names the preview files finished so far (`{"clips":[{"clip","file","state"}]}`; state is
-      `checking` or `retaking`). Each finished clip contributes up to three key frames (first, middle, last);
-      a clip with no file is a labelled placeholder. No redraw and no judge: it only resamples previews that
+      `checking`, `retaking`, or `warning` for a take kept after the judge refused it). Each finished clip contributes
+      up to three key frames (first, middle, last); a clip with no file is a labelled placeholder. No redraw and no judge: it only resamples previews that
       already exist. Writes <out.webp> and <out>.json (`clips`: status, and frames and durationMs when known).
   drafts <assemble-dir> <out-dir> [skip,clips]
       One animated WebP per clip the assembly has (the action rows'), before the package: the creator watches them while the gaits film.
@@ -817,7 +817,7 @@ def progress_sheet(manifest_path: Path, out: Path) -> dict:
     summary = []
     for row, clip in enumerate(PROGRESS_CLIPS):
         item = given.get(clip) or {}
-        state = item.get("state") if item.get("state") in ("checking", "retaking") else None
+        state = item.get("state") if item.get("state") in ("checking", "retaking", "warning") else None
         read = _progress_clip(Path(item["file"])) if isinstance(item.get("file"), str) and item.get("file") else None
         y = row * row_h
         if read is None:

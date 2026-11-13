@@ -264,13 +264,29 @@ test('the worker carries a job through brief, two looks, a change, a pick, motio
     );
     assert.equal(sheet.clips.find(clip => clip.clip === 'combo').frames, undefined);
     assert.equal(sheet.clips.length, 11);
-    // A take the judge refused and the worker kept (warning) stays a warning after the packed preview exists.
+    // A later list without a sheet (its build superseded or failed) keeps the round's last sheet; the clip rows are the newer list's.
     await work('POST', 'progress', {
       jobId: held.id,
       leaseToken: held.leaseToken,
       event: {
         kind: 'drafts',
         seq: 1_800_000_000_005,
+        clips: [
+          { clip: 'combo', name: 'draft-combo-0' },
+          { clip: 'walk', name: 'draft-walk-t0-0', state: 'retaking' },
+        ],
+      },
+    });
+    const kept = (await call('GET', `generations/${job.id}`)).body.job.motionSheet;
+    assert.match(kept.url, /jobs\/.*sheet-0\.webp/);
+    assert.equal(kept.clips.find(clip => clip.clip === 'walk').status, 'retaking');
+    // A take the judge refused and the worker kept (warning) stays a warning after the packed preview exists.
+    await work('POST', 'progress', {
+      jobId: held.id,
+      leaseToken: held.leaseToken,
+      event: {
+        kind: 'drafts',
+        seq: 1_800_000_000_006,
         sheet: 'sheet-0',
         clips: [
           { clip: 'combo', name: 'draft-combo-0' },

@@ -322,7 +322,16 @@ export function createMotionSheetQueue({ build, commit, signal = null }) {
       return running;
     },
     flush: async () => {
-      while (running && !stopped()) await running;
+      if (!signal) {
+        while (running) await running;
+        return;
+      }
+      // A build in progress when the signal aborts is not waited out: the abort ends the wait at once.
+      const aborted = new Promise(resolve => {
+        if (signal.aborted) resolve(undefined);
+        else signal.addEventListener('abort', () => resolve(undefined), { once: true });
+      });
+      while (running && !stopped()) await Promise.race([running, aborted]);
     },
   };
 }
@@ -2363,28 +2372,28 @@ export function createStages({
       return { outcome: 'review', result: { code: 'preview' } };
     }
     // The eleven previews are independent files. Uploading them together waits for the slowest PUT, not the sum, before registration.
-    /** @type {{ clip: string, name: string, note?: string }[] | null} */
-    let preview = null;
-    try {
-      preview = await Promise.all(
-        PREVIEW_CLIPS.map(async clip => {
-          const file = path.join(previews, `${clip}.webp`);
-          try {
-            if (!existsSync(file)) throw new Error('missing');
-            const name = previewName(clip, job.motionRound);
-            await api.artifact(job, name, await readFile(file));
-            sheetFiles.set(clip, file);
-            return { clip, name, ...(clip === 'run' && run.note ? { note: run.note } : {}) };
-          } catch {
-            // Any miss, including a failed PUT, stops the stage. Registration runs only after outcome ok, so a partial upload is not submitted.
-            throw new Error(clip);
-          }
-        }),
-      );
-    } catch (/** @type {any} */ error) {
+    // A missing file is an operator's (`preview-<clip>`). A failed PUT is thrown as before, so the worker retries the stage (a retry
+    // uploads the same names again). Either way registration runs only after outcome ok, so a partial upload is not submitted.
+    const missing = PREVIEW_CLIPS.find(clip => !existsSync(path.join(previews, `${clip}.webp`)));
+    if (missing) {
       await flushSheets();
-      return { outcome: 'review', result: { code: `preview-${String(error?.message ?? 'missing').slice(0, 40)}` } };
+      return { outcome: 'review', result: { code: `preview-${missing}` } };
     }
+    const uploaded = await Promise.allSettled(
+      PREVIEW_CLIPS.map(async clip => {
+        const file = path.join(previews, `${clip}.webp`);
+        const name = previewName(clip, job.motionRound);
+        await api.artifact(job, name, await readFile(file));
+        sheetFiles.set(clip, file);
+        return { clip, name, ...(clip === 'run' && run.note ? { note: run.note } : {}) };
+      }),
+    );
+    const failed = uploaded.find(result => result.status === 'rejected');
+    if (failed) {
+      await flushSheets();
+      throw /** @type {PromiseRejectedResult} */ (failed).reason;
+    }
+    const preview = uploaded.map(result => /** @type {PromiseFulfilledResult<{ clip: string, name: string, note?: string }>} */ (result).value);
     postDrafts();
     await flushSheets();
     return { outcome: 'ok', result: { preview, scaleCheck } };

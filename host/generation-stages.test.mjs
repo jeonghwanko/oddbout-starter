@@ -169,6 +169,25 @@ test('a contact sheet queue uploads only the latest snapshot and still settles w
   releaseHung();
   await hung;
   assert.ok(!uploaded.includes('should-not-commit'));
+  // A flush already waiting on a stuck build returns when the stage is cancelled, not when the build settles.
+  const later = new AbortController();
+  let releaseStuck = () => {};
+  const stuckGate = new Promise(done => {
+    releaseStuck = done;
+  });
+  const stuck = createMotionSheetQueue({ signal: later.signal, build: () => stuckGate, commit: async () => {} });
+  const stuckRun = stuck.kick({ id: 'stuck' });
+  let flushed = false;
+  const waiting = stuck.flush().then(() => {
+    flushed = true;
+  });
+  await new Promise(done => setImmediate(done));
+  assert.equal(flushed, false);
+  later.abort();
+  await waiting;
+  assert.equal(flushed, true);
+  releaseStuck();
+  await stuckRun;
 });
 /** motions.py's face-box needs Pillow and NumPy (the kit's sprite-gen venv has them; a bare CI runner may not). */
 const hasPillow = () => spawnSync('python3', ['-c', 'import PIL, numpy']).status === 0;
@@ -1569,6 +1588,31 @@ test('a walk that fails identity still stops; one that fails anatomy continues w
   events.length = 0;
   assert.equal((await again()).outcome, 'ok');
   assert.equal(events.filter(e => e.kind === 'warning').length, 0, 'a stage run again does not record the waiver twice');
+});
+
+test('a final preview whose upload fails retries the stage; a missing preview goes to an operator; neither registers', async () => {
+  const failing = await scaleStage({
+    scaleFit: fitAll,
+    onArtifact: name => {
+      if (name === 'motion-walk-0') throw Object.assign(new Error('storage 503'), { code: 'artifact-failed' });
+    },
+  }).then(
+    () => null,
+    error => error,
+  );
+  assert.equal(failing?.message, 'storage 503', 'a failed PUT is thrown for the worker to retry, not parked for an operator');
+  const missing = await scaleStage({
+    scaleFit: fitAll,
+    hooks: {
+      motionsPy: async (command, rest) => {
+        if (command !== 'preview') return null;
+        await mkdir(rest[1], { recursive: true });
+        for (const clip of PREVIEW_CLIPS.filter(c => c !== 'groggy')) await writeFile(path.join(rest[1], `${clip}.webp`), clip);
+        return { code: 0 };
+      },
+    },
+  });
+  assert.deepEqual(missing.done, { outcome: 'review', result: { code: 'preview-groggy' } });
 });
 
 test('a run the judge refuses but would keep with a warning is made from the clean walk first; failing that, kept with the warning', async () => {

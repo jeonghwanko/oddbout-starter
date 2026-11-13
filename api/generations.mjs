@@ -501,7 +501,16 @@ export function createGenerationHandler({
     );
     const drafts = row.status === 'motions' ? named.slice(0, MOTIONS.length) : [];
     const expected = `sheet-${row.motion_revisions}`;
-    const sheetName = typeof data?.sheet === 'string' && data.sheet === expected && SHEET_NAME.test(data.sheet) ? data.sheet : null;
+    const sheetOf = (/** @type {any} */ d) => (typeof d?.sheet === 'string' && d.sheet === expected && SHEET_NAME.test(d.sheet) ? d.sheet : null);
+    // A list sent without a sheet (its build superseded, failed, or its upload refused) keeps the round's last sheet: that file is
+    // still stored, and the clip rows below are the newest list's either way.
+    const sheetName =
+      sheetOf(data) ??
+      [...latest]
+        .sort((a, b) => seqOf(b) - seqOf(a))
+        .map(r => sheetOf(r?.data))
+        .find(Boolean) ??
+      null;
     const current = sheetName !== null || named.length > 0;
     if (!current) return { drafts, sheet: null };
     /** @type {Map<string, { frames: number | null, durationMs: number | null }>} */
