@@ -36,7 +36,8 @@ export async function uploadSigned(url, bytes) {
  */
 export async function runBoutVideoOnce(worker) {
   const claimed = await worker.send('worker/bout-video/claim', {});
-  if (!claimed || claimed.stage === 'idle' || !claimed.job) return 'idle';
+  // An older API answers an empty queue with a job of nulls (no id): that is idle too.
+  if (!claimed || claimed.stage === 'idle' || !claimed.job?.id) return 'idle';
   const job = claimed.job;
   const upload = worker.upload ?? uploadSigned;
   try {
