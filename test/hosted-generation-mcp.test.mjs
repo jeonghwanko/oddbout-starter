@@ -1200,11 +1200,7 @@ test("the contact sheet inline accepts only this job's signed sheet webp", async
   const image = await hostedMotionSheetImage({ job: { id, status: 'motions' }, motionSheet: { url } }, fetcher, context);
   assert.deepEqual(image, [{ type: 'image', mimeType: 'image/webp', data: encodeBase64(bytes) }]);
   assert.deepEqual(await hostedMotionSheetImage({ watch: true, job: { id, status: 'motions' }, motionSheet: { url } }, fetcher, context), []);
-  const attached = await hostedMotionSheetImage(
-    { watch: true, job: { id, status: 'motions' }, motionSheet: { url, attach: true } },
-    fetcher,
-    context,
-  );
+  const attached = await hostedMotionSheetImage({ watch: true, job: { id, status: 'motions' }, motionSheet: { url, attach: true } }, fetcher, context);
   assert.equal(attached.length, 1);
   const before = calls.length;
   for (const bad of [url.replace(origin, 'https://untrusted.example'), url.replace('sheet-0.webp', 'draft-walk-0.webp'), url.replace('?token=fixture', '')])
@@ -1250,12 +1246,15 @@ test('get_hosted_fighter inlines the contact sheet and returns when a clip finis
     assert.equal(body.job.motionSheet.attach, undefined);
     assert.match(body.next, /contact sheet/);
     assert.doesNotMatch(body.next, /download each file/);
-    assert.deepEqual(body.job.motionSheet.clips.find(clip => clip.clip === 'walk'), {
-      clip: 'walk',
-      status: 'checking',
-      frames: 8,
-      durationMs: 640,
-    });
+    assert.deepEqual(
+      body.job.motionSheet.clips.find(clip => clip.clip === 'walk'),
+      {
+        clip: 'walk',
+        status: 'checking',
+        frames: 8,
+        durationMs: 640,
+      },
+    );
     assert.equal(body.job.motionSheet.clips.find(clip => clip.clip === 'idle').status, 'pending');
     const afterFull = seen.length;
     await age();

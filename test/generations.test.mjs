@@ -246,13 +246,22 @@ test('the worker carries a job through brief, two looks, a change, a pick, motio
           { clip: 'combo', name: 'draft-combo-0', frames: 0 },
           { clip: 'walk', name: 'draft-walk-t0-0', state: 'checking', frames: 12, durationMs: 800 },
         ],
-        metrics: [{ clip: 'walk', frames: 12, durationMs: 800 }, { clip: 'idle', frames: 1, durationMs: 400 }],
+        metrics: [
+          { clip: 'walk', frames: 12, durationMs: 800 },
+          { clip: 'idle', frames: 1, durationMs: 400 },
+        ],
       },
     });
     const sheet = (await call('GET', `generations/${job.id}`)).body.job.motionSheet;
     assert.match(sheet.url, /jobs\/.*sheet-0\.webp/);
-    assert.deepEqual(sheet.clips.find(clip => clip.clip === 'walk'), { clip: 'walk', status: 'checking', frames: 12, durationMs: 800 });
-    assert.deepEqual(sheet.clips.find(clip => clip.clip === 'idle'), { clip: 'idle', status: 'ready', frames: 1, durationMs: 400 });
+    assert.deepEqual(
+      sheet.clips.find(clip => clip.clip === 'walk'),
+      { clip: 'walk', status: 'checking', frames: 12, durationMs: 800 },
+    );
+    assert.deepEqual(
+      sheet.clips.find(clip => clip.clip === 'idle'),
+      { clip: 'idle', status: 'ready', frames: 1, durationMs: 400 },
+    );
     assert.equal(sheet.clips.find(clip => clip.clip === 'combo').frames, undefined);
     assert.equal(sheet.clips.length, 11);
     // The run made from the walk carries its note (2026-10-29); a note the API does not know is refused.

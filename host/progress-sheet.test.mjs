@@ -48,8 +48,14 @@ Image.new("RGBA", (30, 70), (10, 180, 40, 255)).save(${JSON.stringify(path.join(
       report.clips.map(clip => clip.clip),
       ['idle', 'walk', 'run', 'fightIdle', 'combo', 'slam', 'dash', 'block', 'hit', 'groggy', 'fall'],
     );
-    assert.deepEqual(report.clips.find(clip => clip.clip === 'walk'), { clip: 'walk', status: 'checking', frames: 2, durationMs: 240 });
-    assert.deepEqual(report.clips.find(clip => clip.clip === 'idle'), { clip: 'idle', status: 'ready', frames: 1 });
+    assert.deepEqual(
+      report.clips.find(clip => clip.clip === 'walk'),
+      { clip: 'walk', status: 'checking', frames: 2, durationMs: 240 },
+    );
+    assert.deepEqual(
+      report.clips.find(clip => clip.clip === 'idle'),
+      { clip: 'idle', status: 'ready', frames: 1 },
+    );
     assert.equal(report.clips.find(clip => clip.clip === 'run').status, 'pending');
     assert.equal(report.clips.find(clip => clip.clip === 'fall').status, 'pending');
     const image = probeImage(await readFile(out));
