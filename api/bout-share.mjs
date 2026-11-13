@@ -142,19 +142,22 @@ export function attachBoutShare(result, locale = 'ko') {
 
 /**
  * The highlight span to keep, in milliseconds, or null when the record has no times.
- * Highlight times use the same unit as `record.ms`.
+ * Highlight times use the same unit as `record.ms` (seconds when `record.ms` is under 1000). The span is always milliseconds,
+ * so the padding is the same length of time in both units.
  * @param {any} record @param {number} [padMs]
  * @returns {{ startMs: number, endMs: number } | null}
  */
 export function highlightWindow(record, padMs = 1000) {
   const raw = Array.isArray(record?.highlights) ? record.highlights : [];
+  const scale = typeof record?.ms === 'number' && record.ms < 1000 ? 1000 : 1;
   /** @type {number[]} */
   const times = [];
   for (const mark of raw) {
     const value = typeof mark === 'number' ? mark : (mark?.ms ?? mark?.t ?? mark?.at);
-    if (typeof value === 'number' && Number.isFinite(value) && value >= 0) times.push(value);
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 0) times.push(value * scale);
   }
   if (!times.length) return null;
-  const end = typeof record.ms === 'number' && record.ms >= Math.max(...times) ? record.ms : Math.max(...times);
+  const total = typeof record.ms === 'number' && Number.isFinite(record.ms) ? record.ms * scale : 0;
+  const end = Math.max(total, ...times);
   return { startMs: Math.max(0, Math.min(...times) - padMs), endMs: end + 1500 };
 }

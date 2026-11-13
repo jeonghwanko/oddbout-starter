@@ -8,8 +8,8 @@ import path from 'node:path';
 import { createHandler } from '../api/handler.mjs';
 import { sha256 } from '../api/http.mjs';
 import { finishBoutVideo, presentBoutVideo, requestBoutVideo } from '../api/bout-video.mjs';
-import { acceptPlayed, composeBoutFile, filmBout, trimSeconds } from '../scripts/bout-video-render.mjs';
-import { runBoutVideoOnce } from '../scripts/bout-video.mjs';
+import { acceptPlayed, composeBoutFile, filmBout, recordingCut, trimSeconds } from '../scripts/bout-video-render.mjs';
+import { runBoutVideoOnce, runBoutVideoWorker } from '../scripts/bout-video.mjs';
 import { CLOUD_ISSUER, CLOUD_RESOURCE, createCloudHandler as cloudHandler } from '../mcp/cloud.mjs';
 
 const A = 'f600611b-ae49-4c9c-ae81-8a9b4a1cb9d9';
@@ -439,4 +439,46 @@ test('spar and render_bout_video return the playback page and a queued file, and
   assert.equal(video.postsToX, false);
   assert.equal(video.video, undefined);
   assert.equal(video.record.how, 'ko');
+});
+
+test('the cut starts where the bout started in the recording, not at the loading screen', async () => {
+  // Highlights are bout time; the recording began when the page opened, 3.2 s earlier.
+  assert.deepEqual(recordingCut(3.2, { start: 9, end: 45 }), { start: 12.2, end: 48.2 });
+  assert.deepEqual(recordingCut(3.2, null), { start: 3.2 });
+  assert.deepEqual(recordingCut(Number.NaN, null), { start: 0 });
+  // A record in seconds pads by the same second, not a thousand.
+  assert.deepEqual(trimSeconds({ ms: 43.5, highlights: [12, 40] }), { start: 11, end: 45 });
+  const page = 'https://oddbout.com/fighter.html?play=1&fighter=a&opponent=b&bout=7';
+  /** @param {number | null} started */
+  const open = started => async () => ({ url: () => page, started: async () => started, played: async () => DIGEST, close: async () => {} });
+  const filmed = await filmBout({ url: page, expectedDigest: DIGEST, width: 1280, height: 720, timeoutMs: 1000, open: open(2.5) });
+  assert.deepEqual(filmed, { played: { digest: DIGEST }, startOffset: 2.5 });
+  // The hook never appeared (a pair the game refused): no film.
+  await assert.rejects(filmBout({ url: page, expectedDigest: DIGEST, width: 1280, height: 720, timeoutMs: 1000, open: open(null) }), /playback-unavailable/);
+});
+
+test('the worker keeps claiming after a thrown request', async () => {
+  /** @type {number[]} */
+  const waits = [];
+  /** @type {string[]} */
+  const logs = [];
+  let calls = 0;
+  await runBoutVideoWorker({
+    send: async () => {
+      calls++;
+      if (calls <= 2) throw Object.assign(new Error('fetch failed'), { code: 'ECONNRESET' });
+      return { ok: true, stage: 'idle' };
+    },
+    render: async () => {
+      throw new Error('not called');
+    },
+    sleep: async ms => {
+      waits.push(ms);
+    },
+    log: message => logs.push(message),
+    stop: () => calls >= 3,
+  });
+  assert.equal(calls, 3);
+  assert.deepEqual(waits, [5000, 10000, 5000]);
+  assert.match(logs[0], /ECONNRESET/);
 });

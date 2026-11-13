@@ -28,24 +28,39 @@ export function boutError(code) {
  * @param {any} played @param {string} expectedDigest
  */
 export function acceptPlayed(played, expectedDigest) {
+  if (typeof played === 'string') played = { digest: played };
   if (!played || played.missing === true || played.protocolVersion === 0) throw boutError('playback-unavailable');
   if (typeof played.digest !== 'string' || played.digest !== expectedDigest) throw boutError('digest-mismatch');
   return played;
 }
 
 /**
- * Highlight trim in seconds, or null when the record has no highlight times (the whole bout is kept).
+ * Highlight trim in seconds of bout time, or null when the record has no highlight times (the whole bout is kept).
  * @param {any} record
  * @returns {{ start: number, end: number } | null}
  */
 export function trimSeconds(record) {
   const window = highlightWindow(record);
   if (!window) return null;
-  const scale = typeof record?.ms === 'number' && record.ms >= 1000 ? 1000 : 1;
-  const start = window.startMs / scale;
-  const end = window.endMs / scale;
+  const start = window.startMs / 1000;
+  const end = window.endMs / 1000;
   return end - start >= 0.5 ? { start, end } : null;
 }
+
+/**
+ * The cut of the recording, in seconds of the recording. The recording starts when the page opens, so the loading
+ * screen comes first; `startOffset` is when the bout started (the hook appeared). Bout-time trims move by that offset.
+ * A full cut keeps everything from the bout start; `end` is absent.
+ * @param {number} startOffset @param {{ start: number, end: number } | null} trim
+ * @returns {{ start: number, end?: number }}
+ */
+export function recordingCut(startOffset, trim) {
+  const offset = Number.isFinite(startOffset) && startOffset > 0 ? startOffset : 0;
+  return trim ? { start: offset + trim.start, end: offset + trim.end } : { start: offset };
+}
+
+/** How long the page may load before its bout starts. A club lobby never sets the hook. */
+export const HOOK_WAIT_MS = 60_000;
 
 /** @param {string} text */
 const xml = text => text.replace(/[<>&'"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' })[c] ?? c);
@@ -76,7 +91,7 @@ async function* repeat(frame, count) {
 
 /**
  * @param {{ boutPath: string, out: string, width: number, height: number, left: string, right: string, winner?: string | null,
- *   trim?: { start: number, end: number } | null }} cut
+ *   trim?: { start: number, end?: number } | null }} cut The trim is in seconds of the recording (recordingCut).
  */
 export async function composeBoutFile(cut) {
   const missing = ['ffmpeg'].filter(tool => spawnSync(tool, ['-version'], { stdio: 'ignore' }).status !== 0);
@@ -92,7 +107,9 @@ export async function composeBoutFile(cut) {
     const card = await endCard({ width: cut.width, height: cut.height, background: INK, name: cut.winner || `${cut.left} vs ${cut.right}` });
     await encodeMp4(repeat(card, Math.round(END_S * FPS)), { width: cut.width, height: cut.height, fps: FPS, out: ending });
     await writeFile(mark, await cornerMark(cut.width, cut.height, INK));
-    const trim = cut.trim ? ['-ss', String(cut.trim.start), '-to', String(cut.trim.end)] : [];
+    const trim = cut.trim
+      ? [...(cut.trim.start > 0 ? ['-ss', cut.trim.start.toFixed(3)] : []), ...(cut.trim.end !== undefined ? ['-to', cut.trim.end.toFixed(3)] : [])]
+      : [];
     const scaled = spawnSync(
       'ffmpeg',
       [
@@ -155,17 +172,23 @@ export async function composeBoutFile(cut) {
 }
 
 /**
- * Open the playback page with a browser and wait until its hook reports this digest.
- * `open` is the browser. Tests pass a fake; the command line passes Playwright.
- * @param {{ open: (size: { width: number, height: number, url?: string }) => Promise<{ url: () => string, played: (timeoutMs: number) => Promise<any>, close: () => Promise<void> }>,
- *   url: string, expectedDigest: string, width: number, height: number, timeoutMs: number }} session
+ * Open the playback page with a browser, wait for the bout to start (the hook appears) and for its hook to report this digest.
+ * `open` is the browser. Tests pass a fake; the command line passes Playwright. `started` is the recording time, in seconds,
+ * at which the hook appeared, or null when it never did (a club lobby, a refused pair).
+ * @param {{ open: (size: { width: number, height: number, url?: string }) => Promise<{ url: () => string,
+ *   started?: (waitMs: number) => Promise<number | null>, played: (timeoutMs: number) => Promise<any>, close: () => Promise<void> }>,
+ *   url: string, expectedDigest: string, width: number, height: number, timeoutMs: number, hookWaitMs?: number }} session
+ * @returns {Promise<{ played: any, startOffset: number }>}
  */
 export async function filmBout(session) {
   const page = await session.open({ width: session.width, height: session.height, url: session.url });
   try {
     const landed = new URL(page.url());
     if (landed.searchParams.get('play') !== '1' || landed.searchParams.get('club') === '1') throw boutError('playback-unavailable');
-    return acceptPlayed(await page.played(session.timeoutMs), session.expectedDigest);
+    const startOffset = page.started ? await page.started(session.hookWaitMs ?? HOOK_WAIT_MS) : 0;
+    if (startOffset === null) throw boutError('playback-unavailable');
+    const played = acceptPlayed(await page.played(session.timeoutMs), session.expectedDigest);
+    return { played, startOffset };
   } finally {
     await page.close();
   }
@@ -191,7 +214,9 @@ export async function recordBoutPage(options) {
       recordVideo: { dir, size: { width: options.width, height: options.height } },
     });
     const page = await context.newPage();
-    const played = await filmBout({
+    // Recording starts with the page. The bout's place in the file is measured from here.
+    const openedAt = Date.now();
+    const filmed = await filmBout({
       url: options.url,
       expectedDigest: options.expectedDigest,
       width: options.width,
@@ -201,6 +226,15 @@ export async function recordBoutPage(options) {
         await page.goto(options.url, { waitUntil: 'domcontentloaded', timeout: 45_000 });
         return {
           url: () => page.url(),
+          // The game sets the hook when the shared bout starts, after its assets load. Wait for it, not for the DOM.
+          started: async waitMs => {
+            try {
+              await page.waitForFunction(() => /** @type {any} */ (window).oddboutBout?.protocolVersion === 1, null, { timeout: waitMs, polling: 50 });
+            } catch {
+              return null;
+            }
+            return (Date.now() - openedAt) / 1000;
+          },
           played: timeoutMs =>
             page.evaluate(async (/** @type {number} */ limit) => {
               const hook = /** @type {any} */ (window).oddboutBout;
@@ -216,7 +250,7 @@ export async function recordBoutPage(options) {
     const recorded = video ? await video.path() : null;
     if (!recorded) throw boutError('playback-unavailable');
     const bytes = await readFile(recorded);
-    return { played, bytes, recorded };
+    return { played: filmed.played, startOffset: filmed.startOffset, bytes, recorded };
   } finally {
     await browser.close().catch(() => {});
     await rm(dir, { recursive: true, force: true });
