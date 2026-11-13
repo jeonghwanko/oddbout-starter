@@ -1162,6 +1162,8 @@ test('every write tool says whether a retry is safe; the ones that make somethin
     manage_career: false,
     request_hosted_fighter: false,
     cancel_hosted_fighter: true,
+    // Same arguments return the same rendered file (2026-11-13).
+    render_bout_video: true,
   });
   for (const tool of tools.filter(t => t.annotations.readOnlyHint)) assert.equal(tool.annotations.idempotentHint, true, tool.name);
   // The look and motion revisions advance/replace working artwork and can consume non-refundable generation tokens (public plugin scan,
@@ -1475,7 +1477,7 @@ test('the sign-in-first address lists exactly what /mcp lists and says the same;
   };
   const hello = { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'codex', version: '1' } };
   for (const [setup, options, count] of [
-    ['arena and hosted', { arena, hosted: {} }, 19],
+    ['arena and hosted', { arena, hosted: {} }, 20],
     ['bare', {}, 10],
   ]) {
     const handle = createCloudHandler({ db, ...options });
@@ -1506,7 +1508,7 @@ test('the sign-in-first address lists exactly what /mcp lists and says the same;
     // 2단계 B (2026-11-06, once ChatGPT's portal published all 24): the five reviewed reads left the list for get_my_fighters, 24 to 19
     // (ab96aea0… before).
     // 그림 제공자 (2026-11-06): request_hosted_fighter takes imageProvider, grok or gpt (a35f57da… before). Not a tool ChatGPT's app pins.
-    if (count === 19) {
+    if (count === 20) {
       const hash = list => createHash('sha256').update(JSON.stringify(list)).digest('hex');
       // Default A (2026-11-13): the hosted request explains the three-minute deadline and no motion-approval gate.
       const request = tools.find(t => t.name === 'request_hosted_fighter');
@@ -1521,19 +1523,20 @@ test('the sign-in-first address lists exactly what /mcp lists and says the same;
       // and revise_hosted_motion points a registered fighter at a fighterId package. Inventory unchanged.
       // 2026-11-11: ordinary creation requests do not imply appearance-choice delegation.
       // 2026-11-13: get_hosted_fighter describes the progressive contact sheet, job.timeline and job.warnings; the look default is three minutes. Inventory and permission hints are unchanged.
-      assert.equal(hash(tools), '803d255b1efb449e7fe8be751def8aea61e11ab7637719b96504bbc2b9f11f69');
+      // 2026-11-13: render_bout_video is the 20th tool. spar and read_bout describe the playback page. The four reviewed tools below are unchanged.
+      assert.equal(hash(tools), '1772b9b6def7b2d74dedd79447703379e7244d341be62a0df816035c06367116');
       // Both addresses retain the same inventory when the comparison template metadata is omitted.
       const prior = structuredClone(tools),
         meta = prior.find(t => t.name === 'get_hosted_fighter')._meta;
       delete meta.ui;
       delete meta['openai/outputTemplate'];
-      assert.equal(hash(prior), '2a667e31d7a3447adff7edbee8c040fe2ad58b6988318ea4d00470ad2e09cada');
+      assert.equal(hash(prior), '2eafdde17fa8360f2e96066cd112e16d9d1782ba11ca7b84fb8e23e5a896f15b');
     }
     // ChatGPT's published app 1.0.3 (docs/records/CLOUD-PLUGIN-REVIEW.md): four of its twelve tools are listed with their reviewed bytes (nine
     // until 2단계 B, 16a9ae15…). prepare_fighter_registration, upload_fighter_asset and submit_fighter_registration took a `kind`, and a call
     // without it is the reviewed tool's call; the other five are get_my_fighters views, and their own names still answer (cloud/merged-tools.mjs).
     const reviewed = ['get_fighter_spec', 'get_profile', 'prepare_fighter_deletion', 'delete_fighter'];
-    if (count === 19)
+    if (count === 20)
       assert.equal(
         createHash('sha256')
           .update(JSON.stringify(reviewed.map(name => tools.find(t => t.name === name))))
@@ -1596,7 +1599,7 @@ test('the directory edition lists only its tools, in English, with every hint; t
     'remove_world_fighter',
     'set_fighter_world',
   ];
-  assert.deepEqual([tools.length, full.length], [35, 19]);
+  assert.deepEqual([tools.length, full.length], [36, 20]);
   assert.deepEqual(tools.map(t => t.name).sort(), [...DIRECTORY_TITLES.keys()].sort());
   // What this edition does not have: the full edition's tools, and the reads it merged into views (MCP 통합 1단계, 2026-11-05), by their own names.
   const dropped = [...full.map(t => t.name), ...ALIASES.keys()].filter(name => !DIRECTORY_TITLES.has(name));

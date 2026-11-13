@@ -46,6 +46,7 @@ creator-kit ZIP에는 제작·연결 안내와 이 문서 지도가 들어 있�
 | [CONNECTION-READINESS](CONNECTION-READINESS.md) | ODDBOUT 연결과 제작 준비 상태 확인 |
 | [OPEN-REGISTRATION](OPEN-REGISTRATION.md) | 가입 후 제작·검토·업로드·검사·등록: 연결된 클라우드 계정 사용 |
 | [SOCIAL-EXPORT](SOCIAL-EXPORT.md) | 완성한 선수를 X에 올릴 영상·GIF·리액션 표정·4장 게시물로 꺼내기(생성 없음), 요청 시 Grok 표정 클립 |
+| [BOUT-VIDEO](BOUT-VIDEO.md) | 시드 한 판의 재생 주소와 X용 MP4. 도구는 X에 올리지 않는다 |
 | [DOT-DIALOGUE-ONLY](DOT-DIALOGUE-ONLY.md) | 생성 없이 실제 Dot에서 대화 흐름만 시험하기 |
 | [LOCAL-VOICE](LOCAL-VOICE.md) | 사용자 PC의 VoiceStudio로 음성 만들기 |
 

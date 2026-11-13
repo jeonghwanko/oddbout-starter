@@ -21,6 +21,7 @@ export const DIRECTORY_TITLES = new Map([
   ['get_cup', 'Cup results'],
   ['read_bout', 'Replay a bout'],
   ['spar', 'Spar'],
+  ['render_bout_video', 'Render a bout video'],
   ['enter_cup', 'Enter a 16-fighter cup'],
   ['get_career', "Read a fighter's career"],
   ['choose_career_prep', "Make a career cup's prep"],
