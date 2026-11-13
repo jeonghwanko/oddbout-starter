@@ -442,8 +442,9 @@ test('spar and render_bout_video return the playback page and a queued file, and
 });
 
 test('the cut starts where the bout started in the recording, not at the loading screen', async () => {
-  // Highlights are bout time; the recording began when the page opened, 3.2 s earlier.
-  assert.deepEqual(recordingCut(3.2, { start: 9, end: 45 }), { start: 12.2, end: 48.2 });
+  // Highlights are bout time; the recording began when the page opened, 3.2 s earlier. Every cut runs to the end of the film (the screen
+  // runs longer than the bout clock: READY, the KO freeze, slow motion).
+  assert.deepEqual(recordingCut(3.2, { start: 9, end: 45 }), { start: 12.2 });
   assert.deepEqual(recordingCut(3.2, null), { start: 3.2 });
   assert.deepEqual(recordingCut(Number.NaN, null), { start: 0 });
   // A record in seconds pads by the same second, not a thousand.
