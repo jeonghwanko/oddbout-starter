@@ -1969,6 +1969,8 @@ export function createStages({
     // the very clip he asked to change. His takes passed or an operator looks.
     const runChanged = changes.some(c => c.clip === 'run');
     const runFallback = (/** @type {any} */ review) => !runChanged && ['run-not-clean', 'run-align', 'run-cut'].includes(review);
+    // A run the judge refused but kept with a warning (same character) is still a refused run: the walk's clean run comes first.
+    const runWaivable = (/** @type {Loop} */ loop) => !runChanged && Boolean(loop.warning) && Boolean(loop.strip) && !loop.review && !loop.retry;
     /** @param {'walk' | 'run'} gait @param {number} delayMs @param {(() => Promise<Loop | null>) | null} [early] @returns {() => Promise<Loop>} */
     const gaitBranch =
       (gait, delayMs, early = null) =>
@@ -1988,19 +1990,25 @@ export function createStages({
           showTake(gait),
         );
         await shownTakes[gait];
-        if (loop.strip && !loop.retry && !loop.review) await gaitDraft(gait, loop.strip);
+        // A run kept with a warning is not drafted, announced or warned about yet: the walk may still make a clean run (RUN_FROM_WALK),
+        // which is tried first once both branches end.
+        const deferred = gait === 'run' && runWaivable(loop);
+        if (loop.strip && !loop.retry && !loop.review && !deferred) await gaitDraft(gait, loop.strip);
         // Not passed: a run the walk may still make keeps its refused take marked; any other comes off.
-        else await unshown(gait, !(gait === 'run' && runFallback(loop.review)));
-        await Promise.resolve(api.progress?.(job, undefined, gaitEvent(gait, loop))).catch(() => {});
-        if (loop.warning) {
-          const mark = loop.verdict ? path.join(path.dirname(loop.verdict), 'continued.json') : '';
-          if (!mark || !existsSync(mark)) {
-            await warn(job, loop.warning);
-            if (mark) await writeFile(mark, JSON.stringify({ code: loop.warning.code, take: loop.warning.take })).catch(() => {});
-          }
-        }
+        else await unshown(gait, !(gait === 'run' && (deferred || runFallback(loop.review))));
+        if (!deferred) await keptGait(gait, loop);
         return loop;
       };
+    /** The gait event, and a waiver recorded once per take (`continued.json` beside its verdict). @param {string} gait @param {Loop} loop */
+    const keptGait = async (gait, loop) => {
+      await Promise.resolve(api.progress?.(job, undefined, gaitEvent(gait, loop))).catch(() => {});
+      if (!loop.warning) return;
+      const mark = loop.verdict ? path.join(path.dirname(loop.verdict), 'continued.json') : '';
+      if (!mark || !existsSync(mark)) {
+        await warn(job, loop.warning);
+        if (mark) await writeFile(mark, JSON.stringify({ code: loop.warning.code, take: loop.warning.take })).catch(() => {});
+      }
+    };
     const gaitDraft = async (/** @type {string} */ gait, /** @type {string} */ strip) => {
       const file = path.join(draftDir, `${gait}.webp`);
       await mkdir(draftDir, { recursive: true });
@@ -2047,13 +2055,19 @@ export function createStages({
     // A run the gate refused (or could not align or cut) while the walk passed: the walk makes it (RUN_FROM_WALK, runFallback); otherwise the
     // stage stops as before.
     let run = filmed;
-    if (runFallback(filmed.review) && walk.strip && !actions.review && !actions.retry) {
+    const waived = runWaivable(filmed);
+    if ((runFallback(filmed.review) || waived) && walk.strip && !walk.review && !walk.retry && !actions.review && !actions.retry) {
       const made = await runFromWalk(walk, look, m);
       if (made) {
         run = made;
         await gaitDraft('run', /** @type {string} */ (made.strip));
         await Promise.resolve(api.progress?.(job, undefined, gaitEvent('run', { ...made, tried: filmed.tried }))).catch(() => {});
       }
+    }
+    // No clean run from the walk: the run kept with a warning goes on, drafted and recorded now.
+    if (waived && run === filmed) {
+      await gaitDraft('run', /** @type {string} */ (filmed.strip));
+      await keptGait('run', filmed);
     }
     const branches = [actions, walk, run],
       stopped = branches.find(b => b.review) ?? branches.find(b => b.retry);

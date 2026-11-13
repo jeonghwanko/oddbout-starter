@@ -93,8 +93,10 @@ const WARNING_READ = 10;
 const HISTORY_TOKEN = /^[a-z0-9][a-z0-9-]{0,40}$/;
 // A job past its appearance choice: its side still, expression sheet and automatic choice can be read.
 const PAST_CHOICE = Object.freeze(['motions', 'motion_ready', 'submitting', 'submitted', 'needs_review']);
-// A list reads every event kind for its jobs in one query, bounded: when the bound is met, each job reads its own as before,
-// so a busy history never hides an event. The picture views still use only their own kinds of that batch.
+// The event kinds a job's view reads. A list reads them for all its jobs in one query, bounded: when the bound is met, each job
+// reads its own as before, so a busy history never hides an event. Its warnings are a second bounded query of their own kind; a
+// list carries no timeline (every kind of event would fill the bound after a job or two, and each job would read alone again).
+const VIEW_EVENT_KINDS = Object.freeze(['drafts', 'side', 'expressions', 'appearance-auto-selected', 'appearance-answer']);
 const LIST_EVENTS_READ = 200;
 const CORS = { methods: 'GET, POST, PATCH, DELETE, OPTIONS', headers: 'Authorization, Content-Type, Idempotency-Key' };
 // A join code (내 PC 붙이기): made by the site for a signed-in host, copied into his PC's terminal once; 160 bits, so nobody guesses one.
@@ -384,31 +386,35 @@ export function createGenerationHandler({
    * What a list of jobs reads at once instead of job by job (N+1, 리뷰 2026-11-08: a list of five made about forty reads every 25 seconds):
    * the view's events, hosts, submissions, and one signing call for the pictures of all of them. Each part is null when it could not be
    * batched (events past LIST_EVENTS_READ), and the job then reads that part on its own as before.
-   * @typedef {{ events: Map<string, any[]> | null, hosts: Map<string | null, any>, submissions: Map<string, any>, signed: (paths: string[]) => Promise<Map<string, string>> }} ListReads
+   * @typedef {{ events: Map<string, any[]> | null, warnings: Map<string, any[]> | null, hosts: Map<string | null, any>, submissions: Map<string, any>, signed: (paths: string[]) => Promise<Map<string, string>> }} ListReads
    * @param {Job[]} rows @returns {Promise<ListReads>}
    */
   async function listReads(rows) {
+    const eventJobs = rows.filter(row => row.status === 'motions' || (row.choice && PAST_CHOICE.includes(row.status))).map(row => row.id);
     const submissionIds = [...new Set(rows.map(row => row.submission_id).filter(Boolean))];
-    const [events, hosts, submissions] = await Promise.all([
-      (async () => {
-        /** @type {Map<string, any[]>} */
-        const byJob = new Map(rows.map(row => [row.id, []]));
-        if (!rows.length) return byJob;
-        // Every kind: the compact timeline is the same list a single job read builds. Kinds the picture views ignore stay in the batch.
-        const { data, error } = await db
-          .from('af_generation_events')
-          .select('id,job_id,at,kind,data')
-          .in(
-            'job_id',
-            rows.map(row => row.id),
-          )
-          .order('id', { ascending: false })
-          .limit(LIST_EVENTS_READ);
-        if (error) throw unavailable('database-unavailable', error);
-        if ((data ?? []).length >= LIST_EVENTS_READ) return null;
-        for (const event of data ?? []) byJob.get(event.job_id)?.push(event);
-        return byJob;
-      })(),
+    /** Events of the given kinds for these jobs, newest first, by job; null past the bound. @param {string[]} jobs @param {readonly string[]} kinds */
+    const batched = async (jobs, kinds) => {
+      /** @type {Map<string, any[]>} */
+      const byJob = new Map(jobs.map(job => [job, []]));
+      if (!jobs.length) return byJob;
+      const { data, error } = await db
+        .from('af_generation_events')
+        .select('id,job_id,at,kind,data')
+        .in('job_id', jobs)
+        .in('kind', [...kinds])
+        .order('id', { ascending: false })
+        .limit(LIST_EVENTS_READ);
+      if (error) throw unavailable('database-unavailable', error);
+      if ((data ?? []).length >= LIST_EVENTS_READ) return null;
+      for (const event of data ?? []) byJob.get(event.job_id)?.push(event);
+      return byJob;
+    };
+    const [events, warnings, hosts, submissions] = await Promise.all([
+      batched(eventJobs, VIEW_EVENT_KINDS),
+      batched(
+        rows.map(row => row.id),
+        ['warning'],
+      ),
       hostsOf(rows.flatMap(row => [row.requested_host, row.assigned_host])),
       (async () => {
         if (!submissionIds.length) return new Map();
@@ -417,7 +423,7 @@ export function createGenerationHandler({
         return new Map((data ?? []).map(/** @param {any} s */ s => [s.id, { id: s.id, stage: s.status, fighterId: s.fighter_id ?? null }]));
       })(),
     ]);
-    return { events, hosts, submissions, signed: batchedSigned() };
+    return { events, warnings, hosts, submissions, signed: batchedSigned() };
   }
   /** Signing requests made in the same turn go out as one createSignedUrls call. @returns {(paths: string[]) => Promise<Map<string, string>>} */
   function batchedSigned() {
@@ -517,71 +523,55 @@ export function createGenerationHandler({
     return { at, code: data.code, ...(take !== undefined ? { take } : {}), ...(outcome ? { outcome } : {}), ...(failed.length ? { failed } : {}) };
   }
   /**
-   * Timeline and warnings from events already loaded, newest 40 and 10. Same shape as historyOf.
+   * Warnings from a job's warning events, newest first as read (at most WARNING_READ). A stage run again used to record the same
+   * waiver twice: one row per code and take, earliest first.
    * @param {any[]} events
+   * @returns {{ at: string, code: string, take?: number, outcome?: string, failed?: string[] }[]}
    */
-  function historyFrom(events) {
-    const newest = [...events].sort((a, b) => Number(b.id) - Number(a.id) || (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0));
-    const warned = newest
-      .filter(event => event.kind === 'warning')
+  function warningsFrom(events) {
+    const seen = new Set();
+    return [...events]
       .slice(0, WARNING_READ)
       .reverse()
       .flatMap(event => {
         const entry = warningEntry(event);
         return entry ? [entry] : [];
-      });
-    const seen = new Set();
-    return {
-      timeline: newest
-        .slice(0, TIMELINE_READ)
-        .reverse()
-        .flatMap(event => {
-          const entry = timelineEntry(event);
-          return entry ? [entry] : [];
-        }),
-      warnings: warned.filter(warning => {
+      })
+      .filter(warning => {
         const key = `${warning.code}:${warning.take ?? ''}`;
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
-      }),
-    };
+      });
   }
   /**
-   * The compact event timeline and the warnings on one job. A failed read leaves both empty: the job itself still shows.
-   * @param {Job} row
-   * @returns {Promise<{ timeline: { at: string, kind: string, take?: number, outcome?: string }[], warnings: { at: string, code: string, take?: number, outcome?: string, failed?: string[] }[] }>}
+   * The compact event timeline (one job's own read only) and the warnings on one job. A failed read leaves them empty: the job itself still shows.
+   * @param {Job} row @param {boolean} [withTimeline]
+   * @returns {Promise<{ timeline?: { at: string, kind: string, take?: number, outcome?: string }[], warnings: { at: string, code: string, take?: number, outcome?: string, failed?: string[] }[] }>}
    */
-  async function historyOf(row) {
-    const empty = { timeline: [], warnings: [] };
+  async function historyOf(row, withTimeline = true) {
     try {
-      const events = db.from('af_generation_events').select('at,kind,data').eq('job_id', row.id);
       const [timeline, warnings] = await Promise.all([
-        events.order('id', { ascending: false }).limit(TIMELINE_READ),
+        withTimeline
+          ? db.from('af_generation_events').select('at,kind,data').eq('job_id', row.id).order('id', { ascending: false }).limit(TIMELINE_READ)
+          : { data: null, error: null },
         db.from('af_generation_events').select('at,kind,data').eq('job_id', row.id).eq('kind', 'warning').order('id', { ascending: false }).limit(WARNING_READ),
       ]);
       if (timeline.error || warnings.error) throw timeline.error || warnings.error;
-      const warned = /** @type {any[]} */ (warnings.data ?? []).reverse().flatMap(event => {
-        const entry = warningEntry(event);
-        return entry ? [entry] : [];
-      });
-      const seen = new Set();
       return {
-        timeline: /** @type {any[]} */ (timeline.data ?? []).reverse().flatMap(event => {
-          const entry = timelineEntry(event);
-          return entry ? [entry] : [];
-        }),
-        // A stage run again used to record the same waiver twice. One row per code and take, earliest first.
-        warnings: warned.filter(warning => {
-          const key = `${warning.code}:${warning.take ?? ''}`;
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        }),
+        ...(withTimeline
+          ? {
+              timeline: /** @type {any[]} */ (timeline.data ?? []).reverse().flatMap(event => {
+                const entry = timelineEntry(event);
+                return entry ? [entry] : [];
+              }),
+            }
+          : {}),
+        warnings: warningsFrom(warnings.data ?? []),
       };
     } catch (error) {
       logSkipped('generation', 'job-history', error);
-      return empty;
+      return withTimeline ? { timeline: [], warnings: [] } : { warnings: [] };
     }
   }
   /** A verified server timeout selection, never inferred from A or the clock. A later answer/revision invalidates older evidence.
@@ -690,8 +680,8 @@ export function createGenerationHandler({
       // One job's read only: a list (tokens read for it at once) shows no next per job.
       taken === undefined ? profileFrontOf(row) : null,
       autoSelectionOf(row, batch),
-      // The list uses the events it already loaded. Past that batch's bound, or a single job, read here. Either way the fields match.
-      list?.events ? historyFrom(list.events.get(row.id) ?? []) : historyOf(row),
+      // A list: its batched warnings (past that batch's bound, each job reads its own), no timeline. One job: both, read here.
+      list ? (list.warnings ? { timeline: undefined, warnings: warningsFrom(list.warnings.get(row.id) ?? []) } : historyOf(row, false)) : historyOf(row),
     ]);
     const drafts = value(reads[0]),
       side = value(reads[1]),
@@ -752,8 +742,8 @@ export function createGenerationHandler({
       imageProvider: row.image_provider ?? 'gpt',
       // The agent that asked for it (2026-11-03: the cloud MCP's client name, as the client gave it), null for a request made on the site.
       agent: row.agent_name ?? null,
-      // Recent events (at, kind, take, outcome) and checks the worker continued past. The list shows the same fields.
-      timeline: history.timeline,
+      // Recent events (at, kind, take, outcome) on one job's own read, and checks the worker continued past (a list shows these too).
+      ...(history.timeline ? { timeline: history.timeline } : {}),
       warnings: history.warnings,
     };
   }

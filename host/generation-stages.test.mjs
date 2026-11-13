@@ -1494,6 +1494,40 @@ test('a walk that fails identity still stops; one that fails anatomy continues w
   assert.equal(events.filter(e => e.kind === 'warning').length, 0, 'a stage run again does not record the waiver twice');
 });
 
+test('a run the judge refuses but would keep with a warning is made from the clean walk first; failing that, kept with the warning', async () => {
+  const flag = (args, name) => args[args.indexOf(name) + 1];
+  const refused = { identity: 'pass', anatomy: 'fail', loop: 'pass', notes: 'The far leg bends backwards.' };
+  const judge = derivedVerdict => async (args, _flag, tool) => {
+    if (tool !== 'codex') return null;
+    const out = String(flag(args, '-o'));
+    if (out.includes(`${path.sep}video-run`)) {
+      await writeFile(out, JSON.stringify(refused));
+      return { code: 0 };
+    }
+    if (derivedVerdict && out.includes('run-from-walk-')) {
+      await writeFile(out, JSON.stringify(derivedVerdict));
+      return { code: 0 };
+    }
+    return null;
+  };
+  const fromWalk = await scaleStage({ scaleFit: fitAll, hooks: { og: judge(null) } });
+  assert.equal(fromWalk.done.outcome, 'ok', JSON.stringify(fromWalk.done));
+  assert.deepEqual(
+    fromWalk.done.result.preview.filter(p => p.note).map(p => [p.clip, p.note]),
+    [['run', RUN_FROM_WALK]],
+  );
+  assert.equal(fromWalk.events.filter(e => e.kind === 'warning').length, 0, 'a clean run from the walk records no warning');
+  assert.ok(!fromWalk.events.some(e => e.kind === 'gait' && e.gait === 'run' && e.outcome === 'continued'));
+  const kept = await scaleStage({ scaleFit: fitAll, hooks: { og: judge(refused) } });
+  assert.equal(kept.done.outcome, 'ok', JSON.stringify(kept.done));
+  const added = kept.calls.find(a => a[0] === 'motions.py' && a[1] === 'add-gait' && a[3] === 'run');
+  assert.match(added[4], /video-run-/);
+  assert.deepEqual(
+    kept.events.filter(e => e.kind === 'warning').map(e => [e.code, e.outcome, e.failed]),
+    [['run-not-clean', 'continued', ['anatomy']]],
+  );
+});
+
 test("the motion-auto cut stopped by the GPU after the first cut's alignment did is cut again on the next pass, not a new take", async () => {
   // Pass 0: video-set's cut stops aligning (out of memory) and so does the motion-auto cut made right after it. Pass 1: the first cut
   // aligns with a broken beat; the motion-auto cut, made again, aligns clean and is judged. Before 2026-11-01 (review of #211) it was

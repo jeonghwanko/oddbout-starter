@@ -225,7 +225,8 @@ test('a waiting host selects A when it claims at the deadline, and the job view 
       for (const key of Object.keys(event)) assert.ok(['at', 'kind', 'take', 'outcome'].includes(key));
     }
     const listed = (await g.call('GET', 'generations')).body.jobs.find(job => job.id === id);
-    assert.deepEqual(listed.timeline, view.timeline);
+    // A list carries the same warnings, from its own batched read, and no timeline (that is one job's read).
+    assert.equal(listed.timeline, undefined);
     assert.deepEqual(listed.warnings, view.warnings);
     // A deadline already stored (the ten-minute window) is not rewritten by an unrelated update.
     const kept = await ready(g);
