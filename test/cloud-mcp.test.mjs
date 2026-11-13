@@ -1508,9 +1508,9 @@ test('the sign-in-first address lists exactly what /mcp lists and says the same;
     // 그림 제공자 (2026-11-06): request_hosted_fighter takes imageProvider, grok or gpt (a35f57da… before). Not a tool ChatGPT's app pins.
     if (count === 19) {
       const hash = list => createHash('sha256').update(JSON.stringify(list)).digest('hex');
-      // Default A (2026-11-08): the hosted request now explains the ten-minute deadline and no motion-approval gate.
+      // Default A (2026-11-13): the hosted request explains the three-minute deadline and no motion-approval gate.
       const request = tools.find(t => t.name === 'request_hosted_fighter');
-      assert.match(request.description, /default to A after ten minutes/);
+      assert.match(request.description, /default to A after three minutes/);
       assert.match(request.description, /registration follows file validation/);
       assert.match(request.description, /only when he explicitly delegates the appearance choice/);
       assert.match(request.description, /creation request alone.*does not delegate/);
@@ -1520,14 +1520,14 @@ test('the sign-in-first address lists exactly what /mcp lists and says the same;
       // 2026-11-10: registration text names pendingStages and missingAssets, list_my_fighters carries the account limit,
       // and revise_hosted_motion points a registered fighter at a fighterId package. Inventory unchanged.
       // 2026-11-11: ordinary creation requests do not imply appearance-choice delegation.
-      // 2026-11-13: get_hosted_fighter describes the progressive contact sheet. Inventory and permission hints are unchanged.
-      assert.equal(hash(tools), 'f1e6ad7545df008ee58a2c7376861d4b9c6e84c197e504ae9487f387b54994a7');
+      // 2026-11-13: get_hosted_fighter describes the progressive contact sheet, job.timeline and job.warnings; the look default is three minutes. Inventory and permission hints are unchanged.
+      assert.equal(hash(tools), '803d255b1efb449e7fe8be751def8aea61e11ab7637719b96504bbc2b9f11f69');
       // Both addresses retain the same inventory when the comparison template metadata is omitted.
       const prior = structuredClone(tools),
         meta = prior.find(t => t.name === 'get_hosted_fighter')._meta;
       delete meta.ui;
       delete meta['openai/outputTemplate'];
-      assert.equal(hash(prior), 'b7df8781f5d10b44f9a681828218460aaa32c95e46e24a904b184972792317f9');
+      assert.equal(hash(prior), '2a667e31d7a3447adff7edbee8c040fe2ad58b6988318ea4d00470ad2e09cada');
     }
     // ChatGPT's published app 1.0.3 (docs/records/CLOUD-PLUGIN-REVIEW.md): four of its twelve tools are listed with their reviewed bytes (nine
     // until 2단계 B, 16a9ae15…). prepare_fighter_registration, upload_fighter_asset and submit_fighter_registration took a `kind`, and a call

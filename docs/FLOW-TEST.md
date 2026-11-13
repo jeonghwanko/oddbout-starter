@@ -106,7 +106,7 @@ JSONL에는 `metadata`, `setup`, `receive`, `send`, `end` 이벤트가 순서 �
 | `legacy-motion` | `motion_ready`인 옛 작업 | 그 전에 `revise_motion`은 `generation-state`. 노트만 기록되고 그림은 바뀌지 않은 채 등록 |
 | `guard` | (프롬프트 없음) | 봉인 패키지와 프로덕션처럼 보이는 주소가 라이브로 나가지 않음 |
 
-호스팅 경로의 외형 후보는 글자 라벨이다. 모델 그림이 아니다. `appearanceAutoSelectAt`은 읽어 볼 수 있게만 두고, 10분 타이머는 돌리지 않는다. `delegate: true`는 기다리지 않고 후보 A를 선택한다. 새로 만들어 달라는 말만으로 선택을 위임한 것으로 보지 않는다. 새 작업 접수와 등록 확정 때 모두 파이터 한도를 확인한다. 작업 도중 한도가 차면 완성된 동작을 보존하고 등록만 멈추며, 읽기로 재생성하지 않는다.
+호스팅 경로의 외형 후보는 글자 라벨이다. 모델 그림이 아니다. `appearanceAutoSelectAt`은 읽어 볼 수 있게만 두고, 3분 타이머는 돌리지 않는다. `delegate: true`는 기다리지 않고 후보 A를 선택한다. 새로 만들어 달라는 말만으로 선택을 위임한 것으로 보지 않는다. 새 작업 접수와 등록 확정 때 모두 파이터 한도를 확인한다. 작업 도중 한도가 차면 완성된 동작을 보존하고 등록만 멈추며, 읽기로 재생성하지 않는다.
 
 자리 표시 스프라이트는 `npm run example`과 같은 기하 도형이다. `npm run validate`와 같은 검사(`bytes-hashes-and-full-decode`)를 통과한다. `BORROWED_LANDMARK` 경고는 실패가 아니다. 프로필 세트는 `npm run fighter:profile-set`와 같은 빌더를 통과하고, 운영자 승인은 주지 않는다(`operatorApproved: false`).
 
