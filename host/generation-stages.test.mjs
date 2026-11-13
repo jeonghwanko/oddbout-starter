@@ -757,8 +757,8 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
   ])
     assert.ok(timeline.includes(`up draft-${shown}-0`) && timeline.indexOf(`up draft-${shown}-0`) < timeline.indexOf(`align ${aligned}`), timeline.join(', '));
   const drafts = events.filter(e => e.kind === 'drafts');
-  assert.equal(drafts[0].sheet, 'sheet-0');
-  assert.ok(drafts[0].metrics.some(metric => metric.frames === 4 && metric.durationMs === 400));
+  // A take that is already out of date is still listed, without its sheet. The sheet is on the snapshots that were still current.
+  assert.ok(drafts.some(event => event.sheet === 'sheet-0' && event.metrics?.some(metric => metric.frames === 4 && metric.durationMs === 400)));
   assert.equal(drafts.at(-1).sheet, 'sheet-0');
   assert.ok(drafts.at(-1).metrics.some(metric => metric.clip === 'idle' && metric.frames === 4));
   assert.deepEqual(
