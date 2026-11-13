@@ -473,9 +473,9 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
           const looks = await hostedCandidateImages(/** @type {Parameters<typeof hostedCandidateImages>[0]} */ (value.job), fetcher, context);
           const sheet = await hostedMotionSheetImage(/** @type {Parameters<typeof hostedMotionSheetImage>[0]} */ (value), fetcher, context);
           const motionSheet = value.motionSheet;
-          if (motionSheet && Object.prototype.hasOwnProperty.call(motionSheet, 'attach')) {
-            const { attach, ...rest } = /** @type {{ attach?: boolean }} */ (motionSheet);
-            void attach;
+          if (motionSheet && typeof motionSheet === 'object' && Object.hasOwn(motionSheet, 'attach')) {
+            const rest = { .../** @type {Record<string, unknown>} */ (motionSheet) };
+            delete rest.attach;
             value = { ...value, motionSheet: rest };
           }
           if (looks.length || sheet.length) {

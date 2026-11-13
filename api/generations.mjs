@@ -489,7 +489,8 @@ export function createGenerationHandler({
     );
     const drafts = row.status === 'motions' ? named.slice(0, MOTIONS.length) : [];
     const expected = `sheet-${row.motion_revisions}`;
-    const current = data?.sheet === expected || named.length > 0;
+    const sheetName = typeof data?.sheet === 'string' && data.sheet === expected && SHEET_NAME.test(data.sheet) ? data.sheet : null;
+    const current = sheetName !== null || named.length > 0;
     if (!current) return { drafts, sheet: null };
     /** @type {Map<string, { frames: number | null, durationMs: number | null }>} */
     const metrics = new Map();
@@ -522,7 +523,7 @@ export function createGenerationHandler({
         ...(metric?.durationMs ? { durationMs: metric.durationMs } : {}),
       };
     });
-    return { drafts, sheet: { name: data?.sheet === expected ? expected : null, clips } };
+    return { drafts, sheet: { name: sheetName, clips } };
   }
   /**
    * The side still drawn from the chosen front (2026-10-31, the worker's latest `side` event naming it) or his expression sheet (2026-11-03,
