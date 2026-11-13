@@ -64,6 +64,8 @@ export function recordingCut(startOffset, trim) {
 export const HOOK_WAIT_MS = 60_000;
 /** The winner's screen kept after the bout ends (the page resolves `played` at the result), before the end card. */
 export const END_HOLD_MS = 2500;
+/** Waits between the pick presses on the shared bout's versus card, after the hook appears (0.5 s, 1.5 s, 3 s). */
+export const PICK_PRESS_MS = [500, 1000, 1500];
 
 /** @param {string} text */
 const xml = text => text.replace(/[<>&'"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' })[c] ?? c);
@@ -238,12 +240,20 @@ export async function recordBoutPage(options) {
             }
             return (Date.now() - openedAt) / 1000;
           },
-          played: timeoutMs =>
-            page.evaluate(async (/** @type {number} */ limit) => {
+          played: async timeoutMs => {
+            // A shared bout opens on the game's "who wins?" card and waits for a pick (`ArenaVersusCard`, key 1 or 2). The renderer always
+            // backs corner a, never the known winner, so the HUD's pick mark does not tell the viewer. The card takes no press for its
+            // first 0.22 s: three presses cover a slow first frame; one after the card is gone does nothing.
+            for (const at of PICK_PRESS_MS) {
+              await page.waitForTimeout(at);
+              await page.keyboard.press('Digit1');
+            }
+            return page.evaluate(async (/** @type {number} */ limit) => {
               const hook = /** @type {any} */ (window).oddboutBout;
               if (hook?.protocolVersion !== 1 || !hook.played) return { missing: true };
               return await Promise.race([hook.played, new Promise(resolve => setTimeout(() => resolve({ missing: true }), limit))]);
-            }, timeoutMs),
+            }, timeoutMs);
+          },
           close: async () => {},
         };
       },
