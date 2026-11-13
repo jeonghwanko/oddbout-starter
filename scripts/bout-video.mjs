@@ -11,7 +11,7 @@ import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { apiRequest } from '../api/client.mjs';
 import { sha256 } from '../api/http.mjs';
-import { composeBoutFile, recordBoutPage, trimSeconds } from './bout-video-render.mjs';
+import { composeBoutFile, recordBoutPage, recordingCut, trimSeconds } from './bout-video-render.mjs';
 
 /** @param {string} url @param {Uint8Array} bytes */
 export async function uploadSigned(url, bytes) {
@@ -81,6 +81,8 @@ export async function renderClaimedJob(job) {
     const left = names[0]?.name || job.a || 'A';
     const right = names[1]?.name || job.b || 'B';
     const span = job.trim === 'highlights' ? trimSeconds(job.record) : null;
+    // Bout time starts where the hook appeared, not where the recording (the loading screen) starts.
+    const cut = recordingCut(filmed.startOffset, span);
     const winner = job.record?.winner === 0 ? left : job.record?.winner === 1 ? right : null;
     await composeBoutFile({
       boutPath: raw,
@@ -90,12 +92,38 @@ export async function renderClaimedJob(job) {
       left: String(left),
       right: String(right),
       winner,
-      trim: span,
+      trim: cut,
     });
     const bytes = new Uint8Array(await readFile(out));
     return { bytes, sha256: await sha256(bytes), width: job.width, height: job.height, trimApplied: span ? 'highlights' : 'full' };
   } finally {
     await rm(dir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Claim jobs until stopped. A thrown claim, upload report or failure report (a network blip, a redeploy) does not end
+ * the process: it is logged and the next claim waits longer, up to a minute. An expired lease puts that job back in the queue.
+ * @param {{ send: (route: string, body: object) => Promise<any>, render: (job: any) => Promise<any>,
+ *   sleep?: (ms: number) => Promise<void>, log?: (message: string) => void, stop?: () => boolean }} worker
+ */
+export async function runBoutVideoWorker(worker) {
+  const sleep = worker.sleep ?? (ms => new Promise(resolve => setTimeout(resolve, ms)));
+  const log = worker.log ?? (message => console.error(message));
+  let failures = 0;
+  while (!worker.stop?.()) {
+    let outcome;
+    try {
+      outcome = await runBoutVideoOnce({ send: worker.send, render: worker.render });
+      failures = 0;
+    } catch (/** @type {any} */ error) {
+      failures++;
+      const wait = Math.min(60_000, 5000 * 2 ** (failures - 1));
+      log(`bout-video worker: ${error?.code ?? error?.message ?? error}; retrying in ${wait / 1000}s`);
+      await sleep(wait);
+      continue;
+    }
+    if (outcome === 'idle') await sleep(5000);
   }
 }
 
@@ -113,10 +141,8 @@ export async function main(argv) {
     /** @param {string} route @param {object} body */
     const send = (route, body) =>
       apiRequest(project, token, route, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-    for (;;) {
-      const outcome = await runBoutVideoOnce({ send, render: renderClaimedJob });
-      if (outcome === 'idle') await new Promise(resolve => setTimeout(resolve, 5000));
-    }
+    await runBoutVideoWorker({ send, render: renderClaimedJob });
+    return;
   }
   const { values } = parseArgs({
     args: argv,
@@ -141,7 +167,8 @@ export async function main(argv) {
   try {
     const raw = path.join(dir, 'bout.webm');
     await writeFile(raw, filmed.bytes);
-    await composeBoutFile({ boutPath: raw, out: path.resolve(values.out), width, height, left: 'A', right: 'B', winner: null, trim: null });
+    const trim = recordingCut(filmed.startOffset, null);
+    await composeBoutFile({ boutPath: raw, out: path.resolve(values.out), width, height, left: 'A', right: 'B', winner: null, trim });
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
