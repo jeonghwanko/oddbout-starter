@@ -193,7 +193,8 @@ export async function presentBoutVideo(db, row) {
 export async function claimBoutVideo(db, lease) {
   const { data, error } = await db.rpc('af_bout_video_claim', { p_lease: lease, p_seconds: BOUT_VIDEO_LEASE_S });
   check(error);
-  if (!data) return null;
+  // An empty queue: the function's `return null` reaches PostgREST as one row of nulls, not as null.
+  if (!data?.id) return null;
   const path = `${data.id}.mp4`;
   const { data: upload, error: uploadError } = await db.storage.from(BOUT_VIDEO_BUCKET).createSignedUploadUrl(path, { upsert: true });
   if (uploadError || !upload?.signedUrl) throw unavailable('storage-unavailable', uploadError);

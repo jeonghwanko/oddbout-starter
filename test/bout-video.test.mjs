@@ -168,7 +168,9 @@ test('the worker route claims nothing for a valid token and refuses everyone els
         }
         return store.from(table);
       },
-      rpc: async name => (name === 'af_bout_video_claim' ? { data: null, error: null } : { data: true, error: null }),
+      // Production's empty queue: the plpgsql `return null` of a row type reaches PostgREST as one row of nulls (2026-11-13).
+      rpc: async name =>
+        name === 'af_bout_video_claim' ? { data: { id: null, page: null, digest: null, aspect: null }, error: null } : { data: true, error: null },
       storage: store.storage,
     },
   });
@@ -185,6 +187,20 @@ test('the worker route claims nothing for a valid token and refuses everyone els
   ).json();
   assert.deepEqual(idle, { ok: true, stage: 'idle' });
   assert.equal(token.length, 4 + 64);
+  // A worker on an older API (a job of nulls) stays idle and reports nothing.
+  /** @type {string[]} */
+  const routes = [];
+  const outcome = await runBoutVideoOnce({
+    send: async route => {
+      routes.push(route);
+      return { ok: true, stage: 'rendering', job: { id: null, leaseToken: 'lease', page: null } };
+    },
+    render: async () => {
+      throw new Error('not filmed');
+    },
+  });
+  assert.equal(outcome, 'idle');
+  assert.deepEqual(routes, ['worker/bout-video/claim']);
 });
 
 test('a film is refused when the page is the club or the digest is not the bout, and the worker records that refusal', async () => {
