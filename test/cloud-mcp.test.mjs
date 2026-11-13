@@ -1520,13 +1520,14 @@ test('the sign-in-first address lists exactly what /mcp lists and says the same;
       // 2026-11-10: registration text names pendingStages and missingAssets, list_my_fighters carries the account limit,
       // and revise_hosted_motion points a registered fighter at a fighterId package. Inventory unchanged.
       // 2026-11-11: ordinary creation requests do not imply appearance-choice delegation.
-      assert.equal(hash(tools), 'b01b23f221ac4c345492721b87a54389e2d9d623b2ee551b08ceac88eeda33f6');
+      // 2026-11-13: get_hosted_fighter describes the progressive contact sheet, job.timeline and job.warnings; the look default is three minutes. Inventory and permission hints are unchanged.
+      assert.equal(hash(tools), '803d255b1efb449e7fe8be751def8aea61e11ab7637719b96504bbc2b9f11f69');
       // Both addresses retain the same inventory when the comparison template metadata is omitted.
       const prior = structuredClone(tools),
         meta = prior.find(t => t.name === 'get_hosted_fighter')._meta;
       delete meta.ui;
       delete meta['openai/outputTemplate'];
-      assert.equal(hash(prior), '31ca49a5f6565bdf6f232aa63949a65d2bbacb5e4f4e28f9496060ee392a8eb0');
+      assert.equal(hash(prior), '2a667e31d7a3447adff7edbee8c040fe2ad58b6988318ea4d00470ad2e09cada');
     }
     // ChatGPT's published app 1.0.3 (docs/records/CLOUD-PLUGIN-REVIEW.md): four of its twelve tools are listed with their reviewed bytes (nine
     // until 2단계 B, 16a9ae15…). prepare_fighter_registration, upload_fighter_asset and submit_fighter_registration took a `kind`, and a call

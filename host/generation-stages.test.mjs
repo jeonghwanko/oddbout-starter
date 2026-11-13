@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { createStages, EXTRACT_REDRAWS, extractFailedRows, writeWhole, webpSize } from './generation-stages.mjs';
+import { createMotionSheetQueue, createStages, EXTRACT_REDRAWS, extractFailedRows, writeWhole, webpSize } from './generation-stages.mjs';
 import {
   ALIGN_AGAIN,
   BEAT_LIMIT,
@@ -110,6 +110,85 @@ import { parseEnv, parseHealth } from './generation-worker.mjs';
 import { ASKS } from './generation-prompts.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+
+test('a contact sheet queue uploads only the latest snapshot and still settles when a build fails', async () => {
+  const uploaded = [];
+  const events = [];
+  let releaseFirst = () => {};
+  const firstGate = new Promise(done => {
+    releaseFirst = done;
+  });
+  let builds = 0;
+  const queue = createMotionSheetQueue({
+    build: async snap => {
+      builds += 1;
+      if (snap.id === 'slow') await firstGate;
+      if (snap.id === 'bad') throw new Error('sheet-failed');
+      return { id: snap.id };
+    },
+    commit: async (snap, built) => {
+      uploaded.push(built?.id ?? null);
+      events.push(snap.id);
+    },
+  });
+  const slow = queue.kick({ id: 'slow' });
+  const newer = queue.kick({ id: 'newer' });
+  releaseFirst();
+  await Promise.all([slow, newer]);
+  await queue.flush();
+  // The slow sheet is not uploaded. Its clip event is still recorded, then the newer sheet.
+  assert.deepEqual(events, ['slow', 'newer']);
+  assert.deepEqual(uploaded, [null, 'newer']);
+  await queue.kick({ id: 'bad' });
+  await queue.flush();
+  assert.deepEqual(events, ['slow', 'newer', 'bad']);
+  assert.deepEqual(uploaded, [null, 'newer', null]);
+  assert.ok(builds >= 2);
+  const controller = new AbortController();
+  let started = false;
+  let releaseHung = () => {};
+  const hungGate = new Promise(done => {
+    releaseHung = done;
+  });
+  const cancelled = createMotionSheetQueue({
+    signal: controller.signal,
+    build: async () => {
+      started = true;
+      await hungGate;
+      return { id: 'hung' };
+    },
+    commit: async () => {
+      uploaded.push('should-not-commit');
+    },
+  });
+  const hung = cancelled.kick({ id: 'hung' });
+  await new Promise(done => setImmediate(done));
+  assert.equal(started, true);
+  controller.abort();
+  await cancelled.flush();
+  releaseHung();
+  await hung;
+  assert.ok(!uploaded.includes('should-not-commit'));
+  // A flush already waiting on a stuck build returns when the stage is cancelled, not when the build settles.
+  const later = new AbortController();
+  let releaseStuck = () => {};
+  const stuckGate = new Promise(done => {
+    releaseStuck = done;
+  });
+  const stuck = createMotionSheetQueue({ signal: later.signal, build: () => stuckGate, commit: async () => {} });
+  const stuckRun = stuck.kick({ id: 'stuck' });
+  let flushed = false;
+  const waiting = stuck.flush().then(() => {
+    flushed = true;
+  });
+  await new Promise(done => setImmediate(done));
+  assert.equal(flushed, false);
+  later.abort();
+  await waiting;
+  assert.equal(flushed, true);
+  releaseStuck();
+  await stuckRun;
+});
 /** motions.py's face-box needs Pillow and NumPy (the kit's sprite-gen venv has them; a bare CI runner may not). */
 const hasPillow = () => spawnSync('python3', ['-c', 'import PIL, numpy']).status === 0;
 
@@ -635,6 +714,21 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
       for (const clip of ['combo', 'fightIdle']) await writeFile(path.join(rest[1], `${clip}.webp`), clip);
     }
     if (command === 'strip-preview') await writeFile(rest[1], 'loop');
+    if (command === 'progress-sheet') {
+      const manifest = JSON.parse(await readFile(rest[0], 'utf8'));
+      await mkdir(path.dirname(rest[1]), { recursive: true });
+      await writeFile(rest[1], 'sheet');
+      const have = new Map((manifest.clips ?? []).map(item => [item.clip, item]));
+      await writeFile(
+        rest[1].replace(/\.webp$/, '.json'),
+        JSON.stringify({
+          clips: PREVIEW_CLIPS.map(clip => {
+            const item = have.get(clip);
+            return item ? { clip, status: item.state ?? 'ready', frames: 4, durationMs: 400 } : { clip, status: 'pending' };
+          }),
+        }),
+      );
+    }
     return { code: 0 };
   };
   const api = {
@@ -662,10 +756,7 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
     done.result.preview.map(p => p.clip),
     PREVIEW_CLIPS,
   );
-  assert.deepEqual(
-    uploads.filter(name => name.startsWith('motion-')),
-    PREVIEW_CLIPS.map(clip => `motion-${clip.toLowerCase()}-0`),
-  );
+  assert.deepEqual(uploads.filter(name => name.startsWith('motion-')).sort(), PREVIEW_CLIPS.map(clip => `motion-${clip.toLowerCase()}-0`).sort());
   // Drafts went up as the branches passed (the action clips, then each gait), before the package's previews; each gait's take went up as it
   // was cut (2026-11-01), before its alignment, under a name of its own.
   assert.deepEqual(uploads.filter(name => name.startsWith('draft-')).sort(), [
@@ -678,12 +769,20 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
     'draft-walk-t0-0',
   ]);
   assert.ok(uploads.indexOf('draft-walk-0') < uploads.indexOf('motion-idle-0'));
+  // The contact sheet goes up with the first draft, and again from the packed previews, before the stage ends.
+  assert.ok(uploads.includes('sheet-0'));
+  assert.ok(uploads.indexOf('sheet-0') < uploads.indexOf('motion-idle-0'));
+  assert.ok(py.some(args => args[0] === 'progress-sheet'));
   for (const [shown, aligned] of [
     ['walk-t0', 'loop-16'],
     ['run-t0', 'loop-12'],
   ])
     assert.ok(timeline.includes(`up draft-${shown}-0`) && timeline.indexOf(`up draft-${shown}-0`) < timeline.indexOf(`align ${aligned}`), timeline.join(', '));
   const drafts = events.filter(e => e.kind === 'drafts');
+  // A take that is already out of date is still listed, without its sheet. The sheet is on the snapshots that were still current.
+  assert.ok(drafts.some(event => event.sheet === 'sheet-0' && event.metrics?.some(metric => metric.frames === 4 && metric.durationMs === 400)));
+  assert.equal(drafts.at(-1).sheet, 'sheet-0');
+  assert.ok(drafts.at(-1).metrics.some(metric => metric.clip === 'idle' && metric.frames === 4));
   assert.deepEqual(
     drafts
       .at(-1)
@@ -833,10 +932,7 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
   const atRound1 = calls.length;
   const slam = await stages.motions({ ...job, motionNote: { clip: 'slam', note: 'a much bigger punch' }, motionRound: 1 }, dir);
   assert.equal(slam.outcome, 'ok');
-  assert.deepEqual(
-    uploads.filter(name => name.startsWith('motion-')),
-    PREVIEW_CLIPS.map(clip => `motion-${clip.toLowerCase()}-1`),
-  );
+  assert.deepEqual(uploads.filter(name => name.startsWith('motion-')).sort(), PREVIEW_CLIPS.map(clip => `motion-${clip.toLowerCase()}-1`).sort());
   assert.ok(uploads.includes('draft-combo-1'));
   const remade = py.find(a => a[0] === 'request' && a.length === 5);
   assert.deepEqual([remade[3], await readFile(remade[4], 'utf8')], ['slam-a', 'a much bigger punch']);
@@ -1492,6 +1588,31 @@ test('a walk that fails identity still stops; one that fails anatomy continues w
   events.length = 0;
   assert.equal((await again()).outcome, 'ok');
   assert.equal(events.filter(e => e.kind === 'warning').length, 0, 'a stage run again does not record the waiver twice');
+});
+
+test('a final preview whose upload fails retries the stage; a missing preview goes to an operator; neither registers', async () => {
+  const failing = await scaleStage({
+    scaleFit: fitAll,
+    onArtifact: name => {
+      if (name === 'motion-walk-0') throw Object.assign(new Error('storage 503'), { code: 'artifact-failed' });
+    },
+  }).then(
+    () => null,
+    error => error,
+  );
+  assert.equal(failing?.message, 'storage 503', 'a failed PUT is thrown for the worker to retry, not parked for an operator');
+  const missing = await scaleStage({
+    scaleFit: fitAll,
+    hooks: {
+      motionsPy: async (command, rest) => {
+        if (command !== 'preview') return null;
+        await mkdir(rest[1], { recursive: true });
+        for (const clip of PREVIEW_CLIPS.filter(c => c !== 'groggy')) await writeFile(path.join(rest[1], `${clip}.webp`), clip);
+        return { code: 0 };
+      },
+    },
+  });
+  assert.deepEqual(missing.done, { outcome: 'review', result: { code: 'preview-groggy' } });
 });
 
 test('a run the judge refuses but would keep with a warning is made from the clean walk first; failing that, kept with the warning', async () => {

@@ -57,8 +57,9 @@ const MOTIONS = Object.keys(spec.motions);
 /** What the worker may say about one preview clip: `run-from-walk`, a run the gate refused made from the walk (2026-10-29). */
 export const PREVIEW_NOTES = Object.freeze(['run-from-walk']);
 /** What the worker may say about one draft (2026-11-01): a walk or run take shown as it is cut, `checking` while the gate looks at it,
- * `retaking` when the gate refused it and the next take films. A draft with no state passed (or is an action clip). */
-export const DRAFT_STATES = Object.freeze(['checking', 'retaking']);
+ * `retaking` when the gate refused it and the next take films. `warning` (2026-11-13, the keep-and-continue path): the judge refused the
+ * take and the worker kept it. A draft with no state passed (or is an action clip). */
+export const DRAFT_STATES = Object.freeze(['checking', 'retaking', 'warning']);
 /** What the worker's `profile-front` event says of his profile set (host/generation-stages.mjs profileFront, 2026-11-07): it went to the job
  * (`ok`), the server refused it (`refused`), a front that is not a portrait could not be framed (`unframed`), its face square could not be
  * measured (`unmeasured`), or something else stopped it (`error`). */
@@ -87,6 +88,12 @@ const runnerSays = health => {
   };
 };
 const DRAFT_EVENTS_READ = 5;
+/** The eleven clips a contact sheet rows, in the order the worker draws them (host/generation-prompts.mjs PREVIEW_CLIPS). */
+const SHEET_CLIPS = Object.freeze(['idle', 'walk', 'run', 'fightIdle', 'combo', 'slam', 'dash', 'block', 'hit', 'groggy', 'fall']);
+/** Artifact of the progressive contact sheet (`host/generation-stages.mjs` publishSheet). One per motion round. */
+const SHEET_NAME = /^sheet-[0-9]{1,2}$/;
+/** Statuses whose latest drafts event still names the sheet. After motions, the per-clip previews stay; the sheet stays with them. */
+const SHEET_STATUSES = new Set(['motions', 'motion_ready', 'needs_review', 'submitting', 'submitted']);
 /** Recent events on one job's view, newest kept, shown oldest first. Compact: at, kind, and take/outcome when the event recorded them. */
 const TIMELINE_READ = 40;
 const WARNING_READ = 10;
@@ -469,20 +476,79 @@ export function createGenerationHandler({
   }
   // A job as its creator reads it: no lease, no prompt, no brief beyond its profile draft; pictures as signed URLs.
   // While the motions are made: the previews the worker put up as its branches passed, and each gait's take before its gate (its latest
-  // `drafts` event, this round's).
-  /** @param {Job} row @param {any[]} [batch] */
-  async function draftsOf(row, batch) {
-    if (row.status !== 'motions') return [];
+  // `drafts` event, this round's). The same event may name one contact sheet (`sheet-<round>`) and per-clip frame counts.
+  /** @param {unknown} value @param {number} max @returns {number | null} */
+  const sheetCount = (value, max) => {
+    const n = typeof value === 'number' ? value : Number.NaN;
+    return Number.isInteger(n) && n >= 1 && n <= max ? n : null;
+  };
+  /**
+   * The latest drafts list (while motions are made) and the contact sheet built from it.
+   * @param {Job} row @param {any[]} [batch]
+   * @returns {Promise<{ drafts: any[], sheet: { name: string | null, clips: { clip: string, status: string, frames?: number, durationMs?: number }[] } | null }>}
+   */
+  async function motionProgressOf(row, batch) {
+    if (!SHEET_STATUSES.has(row.status)) return { drafts: [], sheet: null };
     const rows = await eventsOf(row, ['drafts'], 'at', DRAFT_EVENTS_READ, batch);
     // Of the latest few, the list the worker sent last (its `seq`, 2026-11-01): a send it timed out on may land after a later one.
     // Lists without a `seq` (a worker before it) go by their time.
     const seqOf = (/** @type {any} */ r) => (Number.isSafeInteger(r?.data?.seq) ? r.data.seq : -1);
     const latest = /** @type {any[]} */ (rows);
-    const data = latest.reduce((best, r) => (seqOf(r) > seqOf(best) ? r : best), latest[0] ?? null);
+    const data = latest.reduce((best, r) => (seqOf(r) > seqOf(best) ? r : best), latest[0] ?? null)?.data;
     const round = `-${row.motion_revisions}`;
-    return /** @type {any[]} */ (Array.isArray(data?.data?.clips) ? data.data.clips : [])
-      .filter(d => isObject(d) && MOTIONS.includes(d.clip) && ARTIFACT.test(d.name ?? '') && d.name.startsWith('draft-') && d.name.endsWith(round))
-      .slice(0, MOTIONS.length);
+    const named = /** @type {any[]} */ (Array.isArray(data?.clips) ? data.clips : []).filter(
+      d => isObject(d) && MOTIONS.includes(d.clip) && ARTIFACT.test(d.name ?? '') && d.name.startsWith('draft-') && d.name.endsWith(round),
+    );
+    const drafts = row.status === 'motions' ? named.slice(0, MOTIONS.length) : [];
+    const expected = `sheet-${row.motion_revisions}`;
+    const sheetOf = (/** @type {any} */ d) => (typeof d?.sheet === 'string' && d.sheet === expected && SHEET_NAME.test(d.sheet) ? d.sheet : null);
+    // A list sent without a sheet (its build superseded, failed, or its upload refused) keeps the round's last sheet: that file is
+    // still stored, and the clip rows below are the newest list's either way.
+    const sheetName =
+      sheetOf(data) ??
+      [...latest]
+        .sort((a, b) => seqOf(b) - seqOf(a))
+        .map(r => sheetOf(r?.data))
+        .find(Boolean) ??
+      null;
+    const current = sheetName !== null || named.length > 0;
+    if (!current) return { drafts, sheet: null };
+    /** @type {Map<string, { frames: number | null, durationMs: number | null }>} */
+    const metrics = new Map();
+    const take = (/** @type {any} */ item) => {
+      if (!isObject(item) || !SHEET_CLIPS.includes(item.clip)) return;
+      const prev = metrics.get(item.clip) ?? { frames: null, durationMs: null };
+      metrics.set(item.clip, {
+        frames: sheetCount(item.frames, 128) ?? prev.frames,
+        durationMs: sheetCount(item.durationMs, 120_000) ?? prev.durationMs,
+      });
+    };
+    if (Array.isArray(data?.clips)) for (const row of data.clips) take(row);
+    if (Array.isArray(data?.metrics)) for (const row of data.metrics) take(row);
+    const byClip = new Map(named.map(d => [d.clip, d]));
+    const previewClips = new Set(previewOf(row).map(p => p.clip));
+    const clips = SHEET_CLIPS.map(clip => {
+      const draft = byClip.get(clip);
+      const metric = metrics.get(clip);
+      // A kept warning stays a warning after the packed preview exists. Checking and retaking only apply while the motions are still open.
+      const status =
+        draft?.state === 'warning'
+          ? 'warning'
+          : previewClips.has(clip)
+            ? 'ready'
+            : draft?.state === 'checking' || draft?.state === 'retaking'
+              ? draft.state
+              : draft || metric?.frames
+                ? 'ready'
+                : 'pending';
+      return {
+        clip,
+        status,
+        ...(metric?.frames ? { frames: metric.frames } : {}),
+        ...(metric?.durationMs ? { durationMs: metric.durationMs } : {}),
+      };
+    });
+    return { drafts, sheet: { name: sheetName, clips } };
   }
   /**
    * The side still drawn from the chosen front (2026-10-31, the worker's latest `side` event naming it) or his expression sheet (2026-11-03,
@@ -663,7 +729,7 @@ export function createGenerationHandler({
       return result.value;
     };
     const reads = await Promise.allSettled([
-      draftsOf(row, batch),
+      motionProgressOf(row, batch),
       chosenArtifactOf(row, 'side', batch),
       chosenArtifactOf(row, 'expressions', batch),
       list ? list.hosts : hostsOf([row.requested_host, row.assigned_host]),
@@ -683,7 +749,8 @@ export function createGenerationHandler({
       // A list: its batched warnings (past that batch's bound, each job reads its own), no timeline. One job: both, read here.
       list ? (list.warnings ? { timeline: undefined, warnings: warningsFrom(list.warnings.get(row.id) ?? []) } : historyOf(row, false)) : historyOf(row),
     ]);
-    const drafts = value(reads[0]),
+    const progress = value(reads[0]),
+      drafts = progress.drafts,
       side = value(reads[1]),
       expressions = value(reads[2]),
       hosts = value(reads[3]);
@@ -691,6 +758,7 @@ export function createGenerationHandler({
       ...candidates.map(name => artifactPath(row.id, name)),
       ...preview.map(p => artifactPath(row.id, p.name)),
       ...drafts.map(d => artifactPath(row.id, d.name)),
+      ...(progress.sheet?.name ? [artifactPath(row.id, progress.sheet.name)] : []),
       ...[side, expressions].flatMap(name => (name ? [artifactPath(row.id, name)] : [])),
     ]);
     const submission = value(reads[4]),
@@ -728,6 +796,14 @@ export function createGenerationHandler({
         url: urls.get(artifactPath(row.id, d.name)) ?? null,
         ...(DRAFT_STATES.includes(d.state) ? { state: d.state } : {}),
       })),
+      // One still of every clip finished so far (null until the worker publishes sheet-<round>). `clips` is the whole roster:
+      // ready, still being checked, being filmed again, or not started, with frame count and duration when the sheet measured them.
+      motionSheet: progress.sheet
+        ? {
+            url: progress.sheet.name ? (urls.get(artifactPath(row.id, progress.sheet.name)) ?? null) : null,
+            clips: progress.sheet.clips,
+          }
+        : null,
       // 선수 프로필 세트 (2026-10-31): the candidates are fronts; the side still the motions are made from, and the set made at registration.
       side: side ? { url: urls.get(artifactPath(row.id, side)) ?? null } : null,
       // His six arena faces (2026-11-03), 3 × 2 in the arena's order; the last is the face he makes when he is knocked out.

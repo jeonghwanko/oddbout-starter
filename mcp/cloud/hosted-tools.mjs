@@ -41,6 +41,7 @@ import { toolRef } from './merged-tools.mjs';
  *   tokens?: number | null, expressions?: { url: string | null } | null,
  *   progress?: number, description?: string, profile?: { name?: string } | null, createdAt?: string, updatedAt?: string, agent?: string | null,
  *   side?: { url: string | null } | null, drafts?: { clip: string, url: string | null, state?: string }[],
+ *   motionSheet?: { url?: string | null, clips?: { clip: string, status?: string, frames?: number, durationMs?: number }[], attach?: boolean } | null,
  *   appearanceAutoSelectAt?: string | null, appearanceAutoSelection?: { choice: 'a', selectedAt: string, deadline: string } | null,
  *   timeline?: { at: string, kind: string, take?: number, outcome?: string }[],
  *   warnings?: { at: string, code: string, take?: number, outcome?: string, failed?: string[] }[],
@@ -74,6 +75,8 @@ export const HOSTED_INSTRUCTIONS =
   'Preserve the unknown outcome and inspect the original call, rather than replaying request_hosted_fighter to recover it. ' +
   'Never create a new key or repeat a look/motion revision merely to recover an unknown outcome. ' +
   'Read the same job again for fresh preview URLs; a URL is not proof that the user saw the image. ' +
+  'While motions are being made, show the attached contact sheet (one image of the clips finished so far) and motionSheet.clips. ' +
+  'Do not download each clip preview when that sheet is attached. ' +
   'While the user watches a working job in this chat, read it again with waitSeconds 25 each time a read returns and tell him each change. ' +
   'Use statusSummary for the current stage, completion and required action; progress is stage-local, never overall completion. ' +
   'The server selects an unanswered look (A, three minutes after the pair is ready); do not send a fabricated user choice or run a chat timer. ' +
@@ -122,6 +125,16 @@ const RUN_FROM_WALK_NEXT =
  * or its own image card, and showed the picture once the bot downloaded the file and attached it.
  */
 const IMAGES_NEXT = 'where this chat shows no picture from its url, download each file (the url lasts ten minutes) and attach it';
+/**
+ * What the agent shows while motions exist: one contact sheet, not the eleven clip files. Used only once the worker has published
+ * `job.motionSheet.url`. Without that URL the older per-clip instruction stays, so a worker from before the sheet still has pictures.
+ */
+const SHEET_SHOW =
+  'Show the user the contact sheet: one image of key frames for every motion finished so far, with unfinished motions as placeholders. ' +
+  'The image is attached to this result when it changed; otherwise use job.motionSheet.url (it lasts ten minutes). ' +
+  'Summarize job.motionSheet.clips (ready, checking, retaking, warning, or pending; frames and durationMs when present). ' +
+  'A warning means the judge refused that take and ODDBOUT kept it. ' +
+  'Do not download the separate clip previews.';
 
 // Keep the pair under 5.4 MB after base64 encoding. Oversize or unavailable previews retain the ordinary signed-link response.
 const INLINE_CANDIDATE_BYTES = 2_000_000;
@@ -163,6 +176,48 @@ export async function hostedCandidateImages(job, fetcher, { signal, deadline }) 
         return { type: /** @type {const} */ ('image'), mimeType: /** @type {const} */ ('image/webp'), data: encodeBase64(bytes) };
       }),
     );
+  } catch {
+    return [];
+  } finally {
+    cancel.abort();
+  }
+}
+
+const SHEET_INLINE_BYTES = 2_000_000;
+/**
+ * The one contact sheet for a job read. A watch attaches it only when `motionSheet.attach` is set (a clip finished during the wait);
+ * a read without a wait always attaches the current sheet. The URL has to be this job's own signed `sheet-<round>.webp`. Anything else,
+ * including a caller-supplied address, is ignored and the signed URL in the JSON remains.
+ * @param {{ job?: HostedJob, watch?: boolean, motionSheet?: HostedJob['motionSheet'] }} result
+ * @param {typeof fetch} fetcher @param {import('./common.mjs').ToolContext} context
+ * @returns {Promise<Array<{type:'image', mimeType:'image/webp', data:string}>>}
+ */
+export async function hostedMotionSheetImage(result, fetcher, { signal, deadline }) {
+  const job = result?.job;
+  const sheet = result?.motionSheet ?? job?.motionSheet;
+  if (!job || !UUID.test(job.id ?? '') || !sheet?.url || signal.aborted || Date.now() >= deadline) return [];
+  if (result.watch === true && sheet.attach !== true) return [];
+  const cancel = new AbortController();
+  try {
+    const url = new URL(sheet.url);
+    const prefix = '/storage/v1/object/sign/af-generation/jobs/' + job.id + '/';
+    const name = url.pathname.slice(prefix.length);
+    if (
+      url.origin !== new URL(CLOUD_RESOURCE).origin ||
+      url.username ||
+      url.password ||
+      url.hash ||
+      !url.searchParams.get('token') ||
+      !url.pathname.startsWith(prefix) ||
+      !/^sheet-[0-9]{1,2}\.webp$/.test(name)
+    )
+      return [];
+    const bounded = AbortSignal.any([within(signal, timeLeft(deadline, HOSTED_READ_MS)), cancel.signal]);
+    const response = await fetcher(url.href, { signal: bounded, redirect: 'error', credentials: 'omit' });
+    if (!response.ok) return [];
+    const bytes = await readBody(response, SHEET_INLINE_BYTES);
+    if (probeImage(bytes)?.type !== 'image/webp') return [];
+    return [{ type: /** @type {const} */ ('image'), mimeType: /** @type {const} */ ('image/webp'), data: encodeBase64(bytes) }];
   } catch {
     return [];
   } finally {
@@ -264,13 +319,17 @@ function hostedStep(job, uploads = true) {
       return (
         `ODDBOUT is drawing ${job.delegate ? 'the look it picked' : 'the chosen look'} from the side (job.side once it is drawn) and making the eleven motions ` +
         'from that side view (about 15 to 30 minutes), and his six arena faces from the front (job.expressions once drawn; the last is his ' +
-        'knocked-out face on the KO card). Each motion shows in job.drafts as soon as it is made; a walk or run with a state ' +
-        `is still being checked and may be filmed again. Tell the user and show him what is made so far (${IMAGES_NEXT}). ${WATCH_NEXT}`
+        'knocked-out face on the KO card). ' +
+        (job.motionSheet?.url
+          ? `${SHEET_SHOW} A walk or run marked checking is still being judged and may be filmed again. ${WATCH_NEXT}`
+          : 'Each motion shows in job.drafts as soon as it is made; a walk or run with a state ' +
+            `is still being checked and may be filmed again. Tell the user and show him what is made so far (${IMAGES_NEXT}). ${WATCH_NEXT}`)
       );
     case 'motion_ready':
       return (
         `${job.preview?.some(p => p.note === 'run-from-walk') ? RUN_FROM_WALK_NEXT : ''}` +
-        `Show the user ${job.delegate ? `the look ODDBOUT picked (candidate ${job.choice}), ` : ''}the motion previews as images (${IMAGES_NEXT}), ` +
+        `Show the user ${job.delegate ? `the look ODDBOUT picked (candidate ${job.choice}), ` : ''}` +
+        `${job.motionSheet?.url ? `${SHEET_SHOW} ` : `the motion previews as images (${IMAGES_NEXT}), `}` +
         `${job.expressions?.url ? 'his six arena faces (job.expressions: the last one is his face when he is knocked out), ' : ''}and the profile draft. ` +
         'The motions are finished, but registration has not started. This is a legacy waiting job: ' +
         'continue the requested creation with register_hosted_fighter now, without asking for motion approval. ' +
@@ -302,7 +361,8 @@ function hostedStep(job, uploads = true) {
     case 'needs_review':
       return (
         `This step needs an ODDBOUT operator's attention; it is not waiting for user motion approval${error}. Tell the user and show him what is made so far ` +
-        `(${IMAGES_NEXT}); check later.${spent(job)}`
+        (job.motionSheet?.url ? `(${SHEET_SHOW})` : `(${IMAGES_NEXT})`) +
+        `; check later.${spent(job)}`
       );
     case 'rejected':
       return `ODDBOUT declined this request${error}.${spent(job)} A different request may be made while his balance is above zero.`;
@@ -508,17 +568,31 @@ function watchedView(job, first, changes, baseline) {
         }
       : {}),
     siteUrl: jobSite(job),
+    ...(job.motionSheet?.url
+      ? {
+          motionSheet: {
+            clips: job.motionSheet.clips ?? [],
+            // The signed URL and the image go out only when a clip changed. A quiet poll keeps the short clip summary.
+            ...(pictures.some(picture => picture.new) ? { url: job.motionSheet.url, attach: true } : {}),
+          },
+        }
+      : {}),
     next:
-      `Still working: tell the user what changed${
-        show.length
-          ? ` and show him ${show.join(' and ')} unless you already showed it (by kind, ` + `clip and name; a url changes every read; ${IMAGES_NEXT})`
-          : ''
-      }${
-        job.warnings?.length
-          ? ` ODDBOUT kept going after a check it could not pass (${[...new Set(job.warnings.map(warning => warning.code))].join(', ')}).`
-          : ''
-      }, then while he watches call get_hosted_fighter again with waitSeconds 25. ` +
-      "Without waitSeconds it returns the whole job: every picture's url, the profile draft and the full next.",
+      (job.motionSheet?.url
+        ? 'Still working: show the contact sheet attached to this result when a clip finished during this wait, and summarize job.motionSheet.clips. ' +
+          'Do not download each clip. If no image is attached and you have not shown the sheet for these clips, call get_hosted_fighter once without waitSeconds.'
+        : `Still working: tell the user what changed${
+            show.length
+              ? ` and show him ${show.join(' and ')} unless you already showed it (by kind, ` + `clip and name; a url changes every read; ${IMAGES_NEXT})`
+              : ''
+          }.`) +
+      (job.warnings?.length
+        ? ` ODDBOUT kept going after a check it could not pass (${[...new Set(job.warnings.map(warning => warning.code))].join(', ')}).`
+        : '') +
+      ' Then while he watches call get_hosted_fighter again with waitSeconds 25. ' +
+      (job.motionSheet?.url
+        ? 'Without waitSeconds it returns the whole job.'
+        : "Without waitSeconds it returns the whole job: every picture's url, the profile draft and the full next."),
   };
 }
 /**
@@ -877,15 +951,17 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
     'ODDBOUT이 만드는 선수',
     `Read or resume the connected user's hosted fighter after a timeout or disconnection: its state, ` +
       `the two front-view looks, the side view drawn from the chosen one (side), his six arena faces (expressions: 3 × 2, the last his KO face) ` +
-      `or the motion previews as fresh image URLs (ten minutes), ` +
-      `the profile draft, the profile set made at registration (profileSetId), job.timeline (recent events as at, kind, take and outcome), ` +
-      `job.warnings (checks the worker continued past) and next. ` +
+      `or the motion previews as fresh image URLs (ten minutes). ` +
+      `While motions are in progress, motionSheet is one contact sheet of the clips finished so far (the image is attached; ` +
+      `do not download each clip) plus each clip's status. ` +
+      `The profile draft, the profile set made at registration (profileSetId), job.timeline (recent events as at, kind, take and outcome), ` +
+      `job.warnings (checks the worker continued past) and next are included. ` +
       `Supply either jobId or the original request's idempotencyKey, never both. ` +
       `Key lookup only reads an existing job under this account, even when new generation is disabled; ` +
       `not-found does not prove that an interrupted request never started. With neither identifier: ` +
       `his latest five requests and whether hosted generation is open. Read the same job again if a preview URL expired; ` +
       `do not regenerate. waitSeconds (up to ${HOSTED_WAIT_SECONDS}) is a bounded wait, not a completion guarantee: it returns early when the ` +
-      `state, the progress or a picture changes; if still working, read this job again.`,
+      `state, the progress or a picture changes (including a motion clip finishing); if still working, read this job again.`,
     { jobId: JOB.optional(), idempotencyKey: UUID_ARG().optional(), waitSeconds: z.number().int().min(0).max(HOSTED_WAIT_SECONDS).optional() },
     async ({ jobId, idempotencyKey, waitSeconds = 0 }, { signal, deadline: due }) => {
       if (jobId && idempotencyKey) return { ok: false, code: 'invalid-selector' };

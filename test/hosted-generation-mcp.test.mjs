@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createCloudHandler, hostedNext, CLOUD_ISSUER, CLOUD_RESOURCE } from '../mcp/cloud.mjs';
-import { PICTURE_PAGE, TICKET_UPLOAD_URL, pictureLinkShape } from '../mcp/cloud/hosted-tools.mjs';
+import { PICTURE_PAGE, TICKET_UPLOAD_URL, hostedMotionSheetImage, pictureLinkShape } from '../mcp/cloud/hosted-tools.mjs';
+import { encodeBase64 } from '../api/base64.mjs';
 import { CREATOR_PAGE, siteUrl } from '../mcp/cloud/common.mjs';
 import { generation, png, webp } from './helpers/generation-database.mjs';
 import { widget } from './helpers/hosted-widget.mjs';
@@ -1171,8 +1172,126 @@ test('next says to attach the downloaded pictures wherever there are pictures to
   const job = { id: 'x', candidates: [], host: { choice: 'oddbout' }, revisionsLeft: { appearance: 2, motions: 3 }, preview: [] };
   for (const status of ['appearance_ready', 'motions', 'motion_ready', 'needs_review'])
     assert.match(hostedNext({ ...job, status }), /download each file \(the url lasts ten minutes\) and attach it/, status);
+  const sheet = { ...job, motionSheet: { url: 'https://example.test/sheet-0.webp', clips: [{ clip: 'walk', status: 'ready', frames: 8 }] } };
+  for (const status of ['motions', 'motion_ready', 'needs_review']) {
+    const next = hostedNext({ ...sheet, status });
+    assert.match(next, /contact sheet/, status);
+    assert.match(next, /Do not download the separate clip previews/, status);
+    assert.doesNotMatch(next, /download each file/, status);
+  }
   assert.match(hostedNext({ ...job, status: 'appearance_ready' }), /Show the user both looks[\s\S]*ask which one[\s\S]*choose_hosted_look/);
   assert.doesNotMatch(hostedNext({ ...job, status: 'queued' }), /attach/);
+});
+
+test("the contact sheet inline accepts only this job's signed sheet webp", async () => {
+  const id = crypto.randomUUID();
+  const origin = new URL(CLOUD_RESOURCE).origin;
+  const bytes = webp(16, 16);
+  const context = { signal: new AbortController().signal, deadline: Date.now() + 5000 };
+  const url = `${origin}/storage/v1/object/sign/af-generation/jobs/${id}/sheet-0.webp?token=fixture`;
+  const calls = [];
+  let body = bytes;
+  const fetcher = async (input, options) => {
+    calls.push(String(input));
+    assert.equal(options.redirect, 'error');
+    assert.equal(options.credentials, 'omit');
+    return new Response(body);
+  };
+  const image = await hostedMotionSheetImage({ job: { id, status: 'motions' }, motionSheet: { url } }, fetcher, context);
+  assert.deepEqual(image, [{ type: 'image', mimeType: 'image/webp', data: encodeBase64(bytes) }]);
+  assert.deepEqual(await hostedMotionSheetImage({ watch: true, job: { id, status: 'motions' }, motionSheet: { url } }, fetcher, context), []);
+  const attached = await hostedMotionSheetImage({ watch: true, job: { id, status: 'motions' }, motionSheet: { url, attach: true } }, fetcher, context);
+  assert.equal(attached.length, 1);
+  const before = calls.length;
+  for (const bad of [url.replace(origin, 'https://untrusted.example'), url.replace('sheet-0.webp', 'draft-walk-0.webp'), url.replace('?token=fixture', '')])
+    assert.deepEqual(await hostedMotionSheetImage({ job: { id }, motionSheet: { url: bad } }, fetcher, context), []);
+  assert.equal(calls.length, before);
+  body = new Uint8Array([1, 2, 3, 4]);
+  assert.deepEqual(await hostedMotionSheetImage({ job: { id }, motionSheet: { url } }, fetcher, context), []);
+});
+
+test('get_hosted_fighter inlines the contact sheet and returns when a clip finishes', async () => {
+  const g = await generation();
+  try {
+    const bytes = webp(80, 96);
+    const seen = [];
+    const { raw, jobId, progress, artifact, age } = await motionsJob(
+      g,
+      {},
+      {
+        drafted: 1,
+        signOrigin: new URL(CLOUD_RESOURCE).origin,
+        fetcher: async (input, options) => {
+          const url = new URL(input);
+          assert.equal(options.redirect, 'error');
+          seen.push(url.pathname);
+          if (!url.pathname.endsWith('/sheet-0.webp')) return new Response('no', { status: 404 });
+          return new Response(bytes);
+        },
+      },
+    );
+    await artifact('sheet-0');
+    const listed = {
+      kind: 'drafts',
+      seq: 20,
+      sheet: 'sheet-0',
+      clips: [{ clip: 'walk', name: 'draft-walk-0', state: 'checking', frames: 8, durationMs: 640 }],
+      metrics: [{ clip: 'walk', frames: 8, durationMs: 640 }],
+    };
+    await progress({ event: listed });
+    const full = await raw('get_hosted_fighter', { jobId });
+    const body = JSON.parse(full.content[0].text);
+    assert.deepEqual(full.content.slice(1), [{ type: 'image', mimeType: 'image/webp', data: encodeBase64(bytes) }]);
+    assert.equal(body.motionSheetInline, true);
+    assert.equal(body.job.motionSheet.attach, undefined);
+    assert.match(body.next, /contact sheet/);
+    assert.doesNotMatch(body.next, /download each file/);
+    assert.deepEqual(
+      body.job.motionSheet.clips.find(clip => clip.clip === 'walk'),
+      {
+        clip: 'walk',
+        status: 'checking',
+        frames: 8,
+        durationMs: 640,
+      },
+    );
+    assert.equal(body.job.motionSheet.clips.find(clip => clip.clip === 'idle').status, 'pending');
+    const afterFull = seen.length;
+    await age();
+    const quiet = await raw('get_hosted_fighter', { jobId, waitSeconds: 1 });
+    const quietBody = JSON.parse(quiet.content[0].text);
+    assert.equal(quietBody.watch, true);
+    assert.equal(quiet.content.filter(part => part.type === 'image').length, 0);
+    assert.equal(quietBody.motionSheetInline, undefined);
+    assert.equal(quietBody.motionSheet.attach, undefined);
+    assert.equal(seen.length, afterFull);
+    const updated = await Promise.all([
+      raw('get_hosted_fighter', { jobId, waitSeconds: 5 }),
+      new Promise(done => setTimeout(done, 150)).then(() =>
+        progress({
+          event: {
+            kind: 'drafts',
+            seq: 21,
+            sheet: 'sheet-0',
+            clips: [
+              { clip: 'walk', name: 'draft-walk-0' },
+              { clip: 'run', name: 'draft-run-0', frames: 12, durationMs: 700 },
+            ],
+          },
+        }),
+      ),
+    ]).then(([read]) => read);
+    const updatedBody = JSON.parse(updated.content[0].text);
+    assert.equal(updatedBody.watch, true);
+    assert.ok(updatedBody.changed.includes('pictures'));
+    assert.equal(updatedBody.motionSheetInline, true);
+    assert.equal(updated.content.filter(part => part.type === 'image').length, 1);
+    assert.equal(updatedBody.motionSheet.clips.find(clip => clip.clip === 'run').status, 'ready');
+    assert.ok(seen.length > afterFull);
+    assert.ok(seen.every(path => path.endsWith('/sheet-0.webp')));
+  } finally {
+    await g.sql.close();
+  }
 });
 
 // Grok 점검 (2026-11-03): the user watching asked for 25-second reads; a wait returns as soon as a picture, the progress or the state
@@ -1236,16 +1355,21 @@ test('a wait on a working job returns when a picture or the progress changes, no
 // 감시 응답 줄이기 (MCP 최적화 2026-11-05): a chat that watched read the whole job — every picture's signed URL and the long next — at each
 // 25-second wait. A job in its motions, with Storage-length signed URLs, two looks, the side view, his faces and `drafted` drafts.
 const CLIPS = ['walk', 'run', 'fightIdle', 'combo', 'slam', 'dash', 'block', 'hit', 'groggy', 'fall'];
-async function motionsJob(g, options = {}, { drafted = 9, delegate = false } = {}) {
+async function motionsJob(g, options = {}, { drafted = 9, delegate = false, fetcher, signOrigin = null } = {}) {
   await g.healthy();
   const storage = g.db.storage.from;
   g.db.storage.from = bucket => ({
     ...storage(bucket),
     createSignedUrls: async paths => ({
-      data: paths.map(path => ({ path, signedUrl: `https://storage.test/storage/v1/object/sign/${bucket}/${path}?token=${'t'.repeat(300)}` })),
+      data: paths.map(path => ({
+        path,
+        signedUrl: signOrigin
+          ? `${signOrigin}/storage/v1/object/sign/${bucket}/${path}?token=fixture`
+          : `https://storage.test/storage/v1/object/sign/${bucket}/${path}?token=${'t'.repeat(300)}`,
+      })),
     }),
   });
-  const c = await connector(g, { pollMs: 10 }, undefined, options);
+  const c = await connector(g, { pollMs: 10 }, fetcher, options);
   const jobId = (
     await c.call('request_hosted_fighter', {
       description: '빨간 글러브를 낀 고양이 복서, 귀가 크다',
@@ -1299,7 +1423,7 @@ async function motionsJob(g, options = {}, { drafted = 9, delegate = false } = {
     Promise.all([c.call('get_hosted_fighter', { jobId, waitSeconds }), send ? new Promise(done => setTimeout(done, 150)).then(send) : null]).then(
       ([read]) => read,
     );
-  return { ...c, jobId, drafts, send, progress, watch, finish, age };
+  return { ...c, jobId, drafts, send, progress, watch, finish, age, artifact };
 }
 /** A watch's pictures as [kind or clip, new]. */
 const named = read => (read.pictures ?? []).map(p => [p.clip ?? p.kind, p.new]);
