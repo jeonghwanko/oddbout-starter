@@ -884,6 +884,12 @@ export const sidePassed = value => SIDE_CHECKS.every(check => value?.checks?.[ch
 /** Whether a side take failed on the colouring alone: the same character, seen from the side, whole and clean. @param {any} value */
 export const sideStyleOnly = value => !sidePassed(value) && SIDE_CHECKS.every(check => check === 'style' || value?.checks?.[check] === 'pass');
 /**
+ * A failed side still may still feed the motions: the same character, whole, and seen from the side. A cropped figure,
+ * a view that is not the side, or a different character stays an operator stop (`side-look`). No new judge call.
+ * @param {any} value
+ */
+export const sideContinuable = value => ['whole', 'side', 'match'].every(check => value?.checks?.[check] === 'pass');
+/**
  * Which failed side still to keep (higher is better). The same character (`match`) outweighs a colouring miss, so a
  * `sideStyleOnly` take (30) beats one that fails `match`. No new judge call: the score is the verdict already recorded.
  * @type {Readonly<Record<string, number>>}

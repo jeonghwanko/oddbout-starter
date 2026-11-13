@@ -1,6 +1,13 @@
 -- New pairs get three minutes to answer (was ten). Jobs already waiting keep the deadline stored on the row:
 -- this only replaces the trigger that stamps a deadline when a pair becomes ready. A row whose
 -- appearance_auto_select_at is already set is not rewritten, so a wait the creator was told is not cut short.
+-- An update that does not enter appearance_ready from appearance leaves that timestamp alone.
+--
+-- Claim and the minute cron both call af_generation_auto_choose_look. The second caller finds the row
+-- already in motions (or skip-locked behind the creator's own answer) and selects nothing. A choice that
+-- commits first keeps its letter. Restoring the ten-minute window is a new migration that replaces this
+-- function again; it does not rewrite deadlines already stored. Dropping af_generation_next_look_select_ms
+-- is safe: the API treats a missing function as no wake hint, and the cron still selects.
 create or replace function public.af_generation_look_deadline() returns trigger
 language plpgsql security invoker set search_path = '' as $$
 begin

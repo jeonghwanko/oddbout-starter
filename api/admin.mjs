@@ -102,13 +102,15 @@ async function generationDetail(db, id) {
   if (error) throw new Problem(503, 'admin-unavailable');
   if (!row) throw new Problem(404, 'not-found');
   const hostIds = [...new Set([row.requested_host, row.assigned_host].filter(Boolean))];
-  const [hosts, uploads, events, user] = await Promise.all([
+  const [hosts, uploads, events, warnings, user] = await Promise.all([
     hostIds.length ? db.from('af_generation_hosts').select('id,name,official').in('id', hostIds) : { data: [] },
     db.from('af_generation_uploads').select('id,path,content_type,width,height').eq('job_id', id),
     db.from('af_generation_events').select('id,at,kind,data').eq('job_id', id).order('at', { ascending: false }).limit(ADMIN_JOB_EVENTS),
+    // Not taken from the latest 80 events: a side warning is written before the motion drafts and would scroll off that window.
+    db.from('af_generation_events').select('at,data').eq('job_id', id).eq('kind', 'warning').order('id', { ascending: false }).limit(10),
     typeof db.auth?.admin?.getUserById === 'function' ? db.auth.admin.getUserById(row.owner_id).catch(() => null) : null,
   ]);
-  if (hosts.error || uploads.error || events.error) throw new Problem(503, 'admin-unavailable');
+  if (hosts.error || uploads.error || events.error || warnings.error) throw new Problem(503, 'admin-unavailable');
   /** @type {Map<string, { id: string, name: string, official: boolean }>} */
   const named = new Map((hosts.data ?? []).map(/** @param {any} h */ h => [h.id, { id: h.id, name: h.name, official: h.official === true }]));
   const candidates = (Array.isArray(row.candidates) ? row.candidates : []).filter(/** @param {any} name */ name => ARTIFACT_NAME.test(name ?? ''));
@@ -163,18 +165,28 @@ async function generationDetail(db, id) {
       /** @param {any} p */ p => ({ clip: typeof p.clip === 'string' ? p.clip : null, name: p.name, url: urls.get(artifactPath(id, p.name)) ?? null }),
     ),
     events: (events.data ?? []).map(/** @param {any} e */ e => ({ at: e.at, kind: e.kind, data: e.data ?? {} })),
-    // Checks the worker continued past, newest first, from the events already loaded. The full event remains in `events`.
-    warnings: (events.data ?? [])
-      .filter(/** @param {any} e */ e => e.kind === 'warning' && e.data && typeof e.data.code === 'string')
-      .map(
-        /** @param {any} e */ e => ({
-          at: e.at,
-          code: e.data.code,
-          ...(Number.isInteger(e.data.take) ? { take: e.data.take } : {}),
-          ...(typeof e.data.outcome === 'string' ? { outcome: e.data.outcome } : {}),
-          ...(Array.isArray(e.data.failed) ? { failed: e.data.failed } : {}),
-        }),
-      ),
+    // Checks the worker continued past, newest first, one row per code and take. The full event remains in `events` when it is still in the latest 80.
+    warnings: (() => {
+      const seen = new Set();
+      return (warnings.data ?? []).flatMap(
+        /** @param {any} e */ e => {
+          const data = e.data ?? {};
+          if (typeof data.code !== 'string') return [];
+          const key = `${data.code}:${data.take ?? ''}`;
+          if (seen.has(key)) return [];
+          seen.add(key);
+          return [
+            {
+              at: e.at,
+              code: data.code,
+              ...(Number.isInteger(data.take) ? { take: data.take } : {}),
+              ...(typeof data.outcome === 'string' ? { outcome: data.outcome } : {}),
+              ...(Array.isArray(data.failed) ? { failed: data.failed } : {}),
+            },
+          ];
+        },
+      );
+    })(),
   };
 }
 /**

@@ -227,6 +227,35 @@ test('a waiting host selects A when it claims at the deadline, and the job view 
     const listed = (await g.call('GET', 'generations')).body.jobs.find(job => job.id === id);
     assert.equal(listed.timeline, undefined);
     assert.equal(listed.warnings, undefined);
+    // A deadline already stored (the ten-minute window) is not rewritten by an unrelated update.
+    const kept = await ready(g);
+    await g.sql.query("update public.af_generation_jobs set appearance_auto_select_at = waiting_since + interval '10 minutes' where id = $1", [kept]);
+    const before = new Date((await row(g, kept)).appearance_auto_select_at).getTime();
+    await g.sql.query('update public.af_generation_jobs set progress = 1 where id = $1', [kept]);
+    assert.equal(new Date((await row(g, kept)).appearance_auto_select_at).getTime() - new Date((await row(g, kept)).waiting_since).getTime(), 600_000);
+    assert.equal(new Date((await row(g, kept)).appearance_auto_select_at).getTime(), before);
+    // A choice that commits before the claim wins. Claim does not select a second time.
+    const chosen = await ready(g);
+    await overdue(g, chosen);
+    assert.equal((await g.call('POST', `generations/${chosen}/appearance`, { choose: 'b' })).status, 200);
+    await g.work('POST', 'claim', {});
+    assert.equal((await row(g, chosen)).choice, 'b');
+    // Notes and a long history stay off the compact timeline. A warning stays even when newer events fill the window.
+    await g.sql.query(
+      `insert into public.af_generation_events(job_id, kind, data)
+       select $1, 'drafts', jsonb_build_object('seq', g, 'note', 'the creator wrote this') from generate_series(1, 45) g`,
+      [id],
+    );
+    const capped = (await g.call('GET', `generations/${id}`)).body.job;
+    assert.ok(capped.timeline.length <= 40);
+    assert.equal(JSON.stringify(capped.timeline).includes('the creator wrote this'), false);
+    assert.ok(capped.warnings.some(item => item.code === 'side-look'));
+    await g.sql.query("insert into public.af_generation_events(job_id, kind, data) values ($1, 'warning', $2)", [
+      id,
+      { kind: 'warning', code: 'side-look', take: 1, outcome: 'continued', failed: ['match'] },
+    ]);
+    const once = (await g.call('GET', `generations/${id}`)).body.job.warnings.filter(item => item.code === 'side-look' && item.take === 1);
+    assert.equal(once.length, 1);
   } finally {
     await g.sql.close();
   }

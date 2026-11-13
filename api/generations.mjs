@@ -529,14 +529,22 @@ export function createGenerationHandler({
         db.from('af_generation_events').select('at,kind,data').eq('job_id', row.id).eq('kind', 'warning').order('id', { ascending: false }).limit(WARNING_READ),
       ]);
       if (timeline.error || warnings.error) throw timeline.error || warnings.error;
+      const warned = /** @type {any[]} */ (warnings.data ?? []).reverse().flatMap(event => {
+        const entry = warningEntry(event);
+        return entry ? [entry] : [];
+      });
+      const seen = new Set();
       return {
         timeline: /** @type {any[]} */ (timeline.data ?? []).reverse().flatMap(event => {
           const entry = timelineEntry(event);
           return entry ? [entry] : [];
         }),
-        warnings: /** @type {any[]} */ (warnings.data ?? []).reverse().flatMap(event => {
-          const entry = warningEntry(event);
-          return entry ? [entry] : [];
+        // A stage run again used to record the same waiver twice. One row per code and take, earliest first.
+        warnings: warned.filter(warning => {
+          const key = `${warning.code}:${warning.take ?? ''}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
         }),
       };
     } catch (error) {

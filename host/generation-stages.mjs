@@ -118,6 +118,7 @@ import {
   sideJudgePrompt,
   sideLookNames,
   sideName,
+  sideContinuable,
   sidePassed,
   sidePrompt,
   sideRank,
@@ -949,18 +950,20 @@ export function createStages({
    * The side still the motions are made from (2026-10-31): drawn from the chosen front, judged against it, at most SIDE_TAKES drawings. A
    * drawing and its verdict stay in the job folder (`looks/side-<round>-<choice>/take-<n>`): a stage run again judges or draws only what is
    * missing, never a paid drawing twice. The passing still goes up as an artifact and a `side` event for the creator.
-   * @param {Job} job @param {string} dir @param {string} front @returns {Promise<Stop & { still?: string }>}
+   * @param {Job} job @param {string} dir @param {string} front @param {() => void} [onDrawn]
+   * @returns {Promise<Stop & { still?: string }>}
    */
-  async function sideStill(job, dir, front) {
+  async function sideStill(job, dir, front, onDrawn) {
     const folder = path.join(dir, 'looks', sideName(job.appearanceRound, job.choice));
     await mkdir(folder, { recursive: true });
     const promptFile = path.join(folder, 'prompt.txt'),
       schema = path.join(folder, 'judge-schema.json');
     await writeFile(promptFile, sidePrompt(job.brief, image));
     await writeFile(schema, JSON.stringify(SIDE_JUDGE_SCHEMA));
-    /** The best take that did not pass every check (`sideRank`): kept when the cap is reached, instead of an operator stop.
+    /** The best continuable take (`sideContinuable`, then `sideRank`). A cropped or different character is not a candidate.
      * @type {{ png: string, take: number, rank: number, failed: string[], styleOnly: boolean } | null} */
     let best = null;
+    let drawn = false;
     for (let take = 0; take < SIDE_TAKES; take += 1) {
       const png = path.join(folder, `take-${take}.png`),
         report = path.join(folder, `take-${take}.report.json`),
@@ -972,6 +975,10 @@ export function createStages({
         if (code !== 0) return failedRun('side', code, report, since, image.limited);
         if (!existsSync(png)) return { review: 'side-no-output' };
         await noteImage(report, since);
+      }
+      if (!drawn) {
+        drawn = true;
+        onDrawn?.();
       }
       // A take's verdict is kept in the job folder (JUDGE_CACHE_RULE): a stage run again judges only a take it has none for.
       const judgedTake = await judged({
@@ -1013,17 +1020,19 @@ export function createStages({
         }),
       ).catch(() => {});
       if (!passed) {
-        const rank = sideRank(verdict);
         const failed = SIDE_CHECKS.filter(check => verdict?.checks?.[check] !== 'pass');
-        // A tie keeps the earlier take: a later drawing is not bought to replace it, and this one is already paid for.
-        if (best === null || rank > best.rank) best = { png, take, rank, failed, styleOnly: sideStyleOnly(verdict) };
+        // Cropped, not a side view, or a different character: not a motion reference. Style and cleanliness can be waived.
+        if (sideContinuable(verdict)) {
+          const rank = sideRank(verdict);
+          // A tie keeps the earlier take: a later drawing is not bought to replace it, and this one is already paid for.
+          if (best === null || rank > best.rank) best = { png, take, rank, failed, styleOnly: sideStyleOnly(verdict) };
+        }
         continue;
       }
       return chooseSide(job, folder, png, take, false);
     }
-    // No take passed all five. A colouring-only miss is still the one to keep (2026-10-31): the front the creator chose is his profile
-    // painting; this still only feeds the motions. Anything else keeps the highest score already judged and records a warning — the
-    // fighter is not held for an operator, and nothing further is drawn.
+    // No take passed all five. A colouring-only miss is still the one to keep (2026-10-31). Any other continuable take (the same
+    // character, whole, from the side) is kept with a warning. Nothing further is drawn. A cropped or different character stops.
     if (!best) return { review: 'side-look' };
     if (best.styleOnly) return chooseSide(job, folder, best.png, best.take, true);
     return chooseSide(job, folder, best.png, best.take, false, { code: 'side-look', take: best.take, failed: best.failed });
@@ -1050,7 +1059,14 @@ export function createStages({
     } catch {
       /* the creator's view of it is a courtesy; the motions go on */
     }
-    if (warning) await warn(job, warning);
+    if (warning) {
+      const mark = path.join(folder, 'continued.json');
+      // A stage run again must not record the same waiver twice.
+      if (!existsSync(mark)) {
+        await warn(job, warning);
+        await writeFile(mark, JSON.stringify({ code: warning.code, take })).catch(() => {});
+      }
+    }
     return { still: png };
   }
   /** A check the fighter went on past, for the operator and the job view. Never stops the stage.
@@ -1431,7 +1447,8 @@ export function createStages({
           }
           const failed = LOOP_VISUAL.filter(key => verdict[key] !== 'pass');
           const rank = loopRank(verdict);
-          if (!best || rank > best.rank)
+          // Wrong identity is not a take to pack. Anatomy and the seam can be waived; a missing cut never reaches here.
+          if (verdict.identity === 'pass' && (!best || rank > best.rank))
             best = {
               strip,
               verdict: verdictFile,
@@ -1466,8 +1483,8 @@ export function createStages({
         if (made) return { ...made, tried };
       }
     }
-    // The retakes are done and none passed. A cut the judge already saw is packable: keep the best and warn, with no further filming.
-    // No such cut (nothing aligned, or the engine refused every clip) still stops — there is no take to continue with.
+    // The retakes are done and none passed. A cut the judge saw as the same character is packed with a warning, and nothing further is filmed.
+    // Wrong identity, or no cut at all, still stops.
     if (best)
       return {
         strip: best.strip,
@@ -1589,10 +1606,17 @@ export function createStages({
     await mkdir(m, { recursive: true });
     const chosen = await chosenLook(job, dir);
     if (!chosen || !job.brief?.look) return { outcome: 'review', result: { code: 'look-missing' } };
-    // His expression sheet needs only the chosen front, so it starts with the side still. The stage still waits for it before it ends
-    // (`screened`), whatever its outcome. A front (2026-10-31) is the profile painting: the motions are made from the side still drawn from it.
-    if (chosen.front) screening.push(expressionSheet(job, dir, chosen.file));
-    const side = chosen.front ? await sideStill(job, dir, chosen.file) : { still: chosen.file };
+    // His expression sheet needs only the chosen front. It starts once the first side picture is on disk, so it overlaps the side judge
+    // and any retake without taking the image slot ahead of that first picture. The stage still waits for it (`screened`). A provider
+    // stop before any picture does not start it, and a sheet already started is not drawn again. A front (2026-10-31) is the profile
+    // painting: the motions are made from the side still drawn from it.
+    let sheet = false;
+    const startSheet = () => {
+      if (sheet || !chosen.front) return;
+      sheet = true;
+      screening.push(expressionSheet(job, dir, chosen.file));
+    };
+    const side = chosen.front ? await sideStill(job, dir, chosen.file, startSheet) : { still: chosen.file };
     if (!side.still) return asOutcome(side);
     const look = side.still;
     const brief = path.join(m, 'brief.json');
@@ -1968,7 +1992,13 @@ export function createStages({
         // Not passed: a run the walk may still make keeps its refused take marked; any other comes off.
         else await unshown(gait, !(gait === 'run' && runFallback(loop.review)));
         await Promise.resolve(api.progress?.(job, undefined, gaitEvent(gait, loop))).catch(() => {});
-        if (loop.warning) await warn(job, loop.warning);
+        if (loop.warning) {
+          const mark = loop.verdict ? path.join(path.dirname(loop.verdict), 'continued.json') : '';
+          if (!mark || !existsSync(mark)) {
+            await warn(job, loop.warning);
+            if (mark) await writeFile(mark, JSON.stringify({ code: loop.warning.code, take: loop.warning.take })).catch(() => {});
+          }
+        }
         return loop;
       };
     const gaitDraft = async (/** @type {string} */ gait, /** @type {string} */ strip) => {
