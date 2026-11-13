@@ -36,6 +36,12 @@ NumPy and Pillow only: it runs on the kit's sprite-gen venv (`<kit>/vendor/sprit
       The `fighter:pack` plan of the whole fighter: reviewPolicy engine-loop, the walk and run loop reviews under <out-dir>/loop/.
   preview <package-dir> <out-dir>
       One animated WebP per clip of the packed fighter, as the game plays its sequence (for the creator's check).
+  progress-sheet <manifest.json> <out.webp>
+      One still contact sheet of the eleven motion clips, rebuilt whenever a clip preview is ready (2026-11-13).
+      The manifest names the preview files finished so far (`{"clips":[{"clip","file","state"}]}`; state is
+      `checking` or `retaking`). Each finished clip contributes up to three key frames (first, middle, last);
+      a clip with no file is a labelled placeholder. No redraw and no judge: it only resamples previews that
+      already exist. Writes <out.webp> and <out>.json (`clips`: status, and frames and durationMs when known).
   drafts <assemble-dir> <out-dir> [skip,clips]
       One animated WebP per clip the assembly has (the action rows'), before the package: the creator watches them while the gaits film.
       `skip`: clips already drafted early (below) from the same cells.
@@ -736,6 +742,109 @@ def stride(pack_file: Path, strikes_file: Path, facing="right"):
     if not moving:
         return None, speeds
     return round(float(np.mean(moving)) * sum(durations) / 1000, 2), speeds
+
+
+# The eleven clips the creator watches, in the contract's order (generation-prompts.mjs PREVIEW_CLIPS).
+PROGRESS_CLIPS = ("idle", "walk", "run", "fightIdle", "combo", "slam", "dash", "block", "hit", "groggy", "fall")
+PROGRESS_FRAME = (72, 72)   # each key frame's box; three across, so the sheet stays small enough to inline
+PROGRESS_LABEL = 104
+PROGRESS_GAP = 4
+
+
+def _progress_indices(count: int) -> list[int]:
+    """First, middle and last frame. A short clip does not repeat a frame."""
+    if count <= 1:
+        return [0]
+    if count == 2:
+        return [0, 1]
+    return [0, count // 2, count - 1]
+
+
+def _progress_clip(file: Path):
+    """Key frames plus the clip's own frame count and duration. None when the file is not a picture."""
+    try:
+        image = Image.open(file)
+        count = max(1, int(getattr(image, "n_frames", 1) or 1))
+    except Exception:
+        return None
+    # A preview is a short clip. Past this, skip it rather than decoding a long file into the sheet.
+    if count > 128:
+        return None
+    duration = 0
+    frames = []
+    wanted = set(_progress_indices(count))
+    try:
+        for index in range(count):
+            image.seek(index)
+            image.load()  # WebP writes the frame's duration only once that frame is loaded
+            duration += int(image.info.get("duration") or 0)
+            if index in wanted:
+                frames.append(image.convert("RGBA"))
+    except Exception:
+        return None
+    return count, duration, frames
+
+
+def _fit_frame(image: Image.Image, box):
+    """`image` inside `box`, feet on the bottom edge, without changing its proportions."""
+    width, height = box
+    scale = min(width / image.width, height / image.height)
+    fitted = image.resize((max(1, round(image.width * scale)), max(1, round(image.height * scale))), Image.LANCZOS)
+    canvas = Image.new("RGBA", box, (236, 240, 246, 255))
+    canvas.alpha_composite(fitted, ((width - fitted.width) // 2, height - fitted.height))
+    return canvas
+
+
+def progress_sheet(manifest_path: Path, out: Path) -> dict:
+    """The creator's contact sheet while motions are still being made: key frames of every clip that has a preview,
+    placeholders for the rest. Reads pixels that already exist; it does not draw, judge or time a provider call."""
+    from PIL import ImageDraw
+    manifest = json.loads(manifest_path.read_text())
+    if not isinstance(manifest, dict):
+        raise SystemExit("progress-sheet: manifest must be an object")
+    given = {}
+    for item in manifest.get("clips") or []:
+        if not isinstance(item, dict):
+            continue
+        clip = item.get("clip")
+        if clip in PROGRESS_CLIPS and clip not in given:
+            given[clip] = item
+    width, height = PROGRESS_FRAME
+    row_h = height + 20
+    sheet_w = PROGRESS_LABEL + PROGRESS_GAP + len(_progress_indices(3)) * (width + PROGRESS_GAP)
+    sheet = Image.new("RGBA", (sheet_w, row_h * len(PROGRESS_CLIPS)), (236, 240, 246, 255))
+    draw = ImageDraw.Draw(sheet)
+    summary = []
+    for row, clip in enumerate(PROGRESS_CLIPS):
+        item = given.get(clip) or {}
+        state = item.get("state") if item.get("state") in ("checking", "retaking") else None
+        read = _progress_clip(Path(item["file"])) if isinstance(item.get("file"), str) and item.get("file") else None
+        y = row * row_h
+        if read is None:
+            status = "pending"
+            draw.rectangle((PROGRESS_LABEL, y + 8, sheet_w - PROGRESS_GAP, y + row_h - 8), fill=(214, 218, 226, 255))
+            draw.text((PROGRESS_LABEL + 8, y + 14), "…", fill=(90, 96, 110, 255))
+            summary.append({"clip": clip, "status": status})
+        else:
+            count, duration, frames = read
+            status = state or "ready"
+            for index, frame in enumerate(frames):
+                placed = _fit_frame(frame, PROGRESS_FRAME)
+                x = PROGRESS_LABEL + PROGRESS_GAP + index * (width + PROGRESS_GAP)
+                sheet.alpha_composite(placed, (x, y + 16))
+                draw.line((x, y + 16 + height - 1, x + width, y + 16 + height - 1), fill=(110, 120, 140, 255))
+            entry = {"clip": clip, "status": status, "frames": count}
+            if duration > 0:
+                entry["durationMs"] = duration
+            summary.append(entry)
+        draw.text((6, y + 8), clip, fill=(32, 36, 48, 255))
+        if status != "ready":
+            draw.text((6, y + 22), status, fill=(90, 96, 110, 255))
+    out.parent.mkdir(parents=True, exist_ok=True)
+    sheet.convert("RGB").save(out, "WEBP", quality=60, method=4)
+    report = {"clips": summary}
+    out.with_suffix(".json").write_text(json.dumps(report) + "\n")
+    return report
 
 
 def contact_sheet(strip_file: Path, out: Path, columns=8, height=240):
@@ -1504,6 +1613,8 @@ def main(argv):
         pack_plan(Path(rest[0]), json.loads(Path(rest[1]).read_text()), rest[2], *rest[3:])
     elif command == "preview" and len(rest) == 2:
         print(json.dumps(preview(Path(rest[0]), Path(rest[1]))))
+    elif command == "progress-sheet" and len(rest) == 2:
+        print(json.dumps(progress_sheet(Path(rest[0]), Path(rest[1]))))
     elif command == "drafts" and len(rest) in (2, 3):
         print(json.dumps(drafts(Path(rest[0]), Path(rest[1]), [c for c in (rest[2].split(",") if len(rest) == 3 else []) if c])))
     elif command == "early-drafts" and len(rest) == 3:

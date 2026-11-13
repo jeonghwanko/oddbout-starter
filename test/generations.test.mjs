@@ -223,6 +223,38 @@ test('the worker carries a job through brief, two looks, a change, a pick, motio
       (await call('GET', `generations/${job.id}`)).body.job.drafts.map(d => d.state ?? null),
       [null, 'retaking'],
     );
+    // A name that is not this round's contact sheet is ignored. The roster still says which clips exist.
+    await work('POST', 'progress', {
+      jobId: held.id,
+      leaseToken: held.leaseToken,
+      event: { kind: 'drafts', seq: 1_800_000_000_003, sheet: 'motion-idle-0', clips: [{ clip: 'combo', name: 'draft-combo-0' }] },
+    });
+    const unnamed = (await call('GET', `generations/${job.id}`)).body.job.motionSheet;
+    assert.equal(unnamed.url, null);
+    assert.equal(unnamed.clips.find(clip => clip.clip === 'combo').status, 'ready');
+    assert.equal(unnamed.clips.find(clip => clip.clip === 'idle').status, 'pending');
+    // The sheet artifact and the measured clips. A count that is not a positive integer is left out.
+    await work('PUT', `jobs/${held.id}/artifacts/sheet-0`, webp(320, 480), drafting0);
+    await work('POST', 'progress', {
+      jobId: held.id,
+      leaseToken: held.leaseToken,
+      event: {
+        kind: 'drafts',
+        seq: 1_800_000_000_004,
+        sheet: 'sheet-0',
+        clips: [
+          { clip: 'combo', name: 'draft-combo-0', frames: 0 },
+          { clip: 'walk', name: 'draft-walk-t0-0', state: 'checking', frames: 12, durationMs: 800 },
+        ],
+        metrics: [{ clip: 'walk', frames: 12, durationMs: 800 }, { clip: 'idle', frames: 1, durationMs: 400 }],
+      },
+    });
+    const sheet = (await call('GET', `generations/${job.id}`)).body.job.motionSheet;
+    assert.match(sheet.url, /jobs\/.*sheet-0\.webp/);
+    assert.deepEqual(sheet.clips.find(clip => clip.clip === 'walk'), { clip: 'walk', status: 'checking', frames: 12, durationMs: 800 });
+    assert.deepEqual(sheet.clips.find(clip => clip.clip === 'idle'), { clip: 'idle', status: 'ready', frames: 1, durationMs: 400 });
+    assert.equal(sheet.clips.find(clip => clip.clip === 'combo').frames, undefined);
+    assert.equal(sheet.clips.length, 11);
     // The run made from the walk carries its note (2026-10-29); a note the API does not know is refused.
     const preview = ['idle', 'walk', 'run'].map(clip => ({
       clip,
@@ -234,6 +266,10 @@ test('the worker carries a job through brief, two looks, a change, a pick, motio
     await finish(held, 'ok', { preview });
     read = (await call('GET', `generations/${job.id}`)).body.job;
     assert.equal(read.status, 'submitting');
+    // The sheet stays after the motions stage: packed clips are ready, including a walk that was still being checked.
+    assert.match(read.motionSheet.url, /sheet-0\.webp/);
+    assert.equal(read.motionSheet.clips.find(clip => clip.clip === 'walk').status, 'ready');
+    assert.equal(read.motionSheet.clips.find(clip => clip.clip === 'run').status, 'ready');
     // Existing motion_ready jobs remain supported. Restore that legacy fixture to exercise revision/profile edits.
     await sql.query("update public.af_generation_jobs set status='motion_ready' where id=$1", [job.id]);
     assert.deepEqual(
@@ -251,7 +287,9 @@ test('the worker carries a job through brief, two looks, a change, a pick, motio
     );
     held = await step('motions');
     assert.deepEqual(held.motionNote, { clip: 'walk', note: '덜 통통 튀게'.repeat(25) });
-    assert.deepEqual((await call('GET', `generations/${job.id}`)).body.job.drafts, []); // round 0's drafts are not this round's
+    const revised = (await call('GET', `generations/${job.id}`)).body.job;
+    assert.deepEqual(revised.drafts, []); // round 0's drafts are not this round's
+    assert.equal(revised.motionSheet, null);
     await finish(held, 'ok', { preview });
     await sql.query("update public.af_generation_jobs set status='motion_ready' where id=$1", [job.id]);
     // Registered: his confirmed profile, the package submitted under his account by the worker.

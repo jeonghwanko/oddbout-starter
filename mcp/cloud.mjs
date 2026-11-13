@@ -11,7 +11,7 @@ import { registerPackagingPreparation } from './cloud/packaging-tools.mjs';
 import { registerAgentTools } from './cloud/agent-tools.mjs';
 import { registerProfileSetTools } from './cloud/profile-set-tools.mjs';
 import { registerWorkshopTools } from './cloud/workshop-tools.mjs';
-import { HOSTED_INSTRUCTIONS, hostedCandidateImages, registerHostedTools } from './cloud/hosted-tools.mjs';
+import { HOSTED_INSTRUCTIONS, hostedCandidateImages, hostedMotionSheetImage, registerHostedTools } from './cloud/hosted-tools.mjs';
 import { configuredGameLauncher, registerGameLauncherTools, registerGameLauncherUi } from './cloud/game-launcher-ui.mjs';
 import { issueEmbedLaunchGrant } from '../api/embed.mjs';
 import { LOOK_UI, registerLookUi } from './cloud/hosted-look-ui.mjs';
@@ -470,20 +470,29 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
         logCall({ tool: logAs ? logAs(args) : name, via: name, edition, client: identity?.claims.client_id ?? null, call, started, value, failure });
         if (failure !== undefined) return reply(value);
         if (name === 'get_hosted_fighter' && identity && value.ok === true) {
-          const images = await hostedCandidateImages(/** @type {Parameters<typeof hostedCandidateImages>[0]} */ (value.job), fetcher, context);
-          if (images.length) {
+          const looks = await hostedCandidateImages(/** @type {Parameters<typeof hostedCandidateImages>[0]} */ (value.job), fetcher, context);
+          const sheet = await hostedMotionSheetImage(/** @type {Parameters<typeof hostedMotionSheetImage>[0]} */ (value), fetcher, context);
+          const motionSheet = value.motionSheet;
+          if (motionSheet && Object.prototype.hasOwnProperty.call(motionSheet, 'attach')) {
+            const { attach, ...rest } = /** @type {{ attach?: boolean }} */ (motionSheet);
+            void attach;
+            value = { ...value, motionSheet: rest };
+          }
+          if (looks.length || sheet.length) {
             const answer = reply(
               {
                 ...value,
-                previewPair: true,
+                ...(looks.length ? { previewPair: true } : {}),
+                ...(sheet.length ? { motionSheetInline: true } : {}),
                 next:
-                  'The read-only comparison shows the original fronts A and B in hosts with app UI. ' +
-                  'Do not claim the user saw them solely because the tool returned images. ' +
-                  value.next,
+                  (looks.length
+                    ? 'The read-only comparison shows the original fronts A and B in hosts with app UI. ' +
+                      'Do not claim the user saw them solely because the tool returned images. '
+                    : '') + String(value.next ?? ''),
               },
               host.compact === true,
             );
-            return { ...answer, content: [...answer.content, ...images] };
+            return { ...answer, content: [...answer.content, ...looks, ...sheet] };
           }
         }
         const result = reply(value, host.compact === true);

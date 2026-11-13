@@ -20,6 +20,7 @@
 //   again with his words (its cells alone replace the first run's), a walk or run filmed again with them; idle is the look (an operator's).
 //   A seventh, optional row (2026-10-28) draws the entrance and the victory beside the six; when it fails the fighter goes without them.
 //   The action clips' previews go up as the rows finish (2026-10-30): gen-set's finished rows are extracted in a scratch run while it still draws the rest.
+//   Each finished clip also refreshes one contact sheet (motions.py progress-sheet): key frames of the clips ready so far, placeholders for the rest.
 // submitting: the package the motions stage left in the job folder, with the profile the creator confirmed, submitted under his account;
 //   before it, the chosen front (framed into a portrait card first when it is not one: Grok's are square) and its face square (measured here on
 //   the uploaded WebP, `motions.py face-box`) and his expression sheet go to the job: the server
@@ -1564,23 +1565,95 @@ export function createStages({
     const report = (/** @type {number} */ progress) => Promise.resolve(api.progress?.(job, progress)).catch(() => {});
     // Previews as the branches pass (2026-10-28): the creator watches the action clips while the walk and run still film (the stage
     // took about 20 minutes). Each goes up as an artifact and the list as a progress event; the package's previews replace them at the end.
-    // A preview is a courtesy: one that fails never stops the stage.
+    // With every list, one contact sheet of the clips finished so far (motions.py progress-sheet) goes up under the same name, so a reader
+    // sees every finished clip in one picture instead of waiting for the package. A preview is a courtesy: one that fails never stops the stage.
     /** @type {{ clip: string, name: string, state?: string }[]} */
     const drafted = [],
       draftDir = path.join(m, `drafts-${job.motionRound}`);
+    /** The preview file the sheet should sample for each clip (a gait take replaces the previous file). */
+    const sheetFiles = new Map();
+    let sheetSent = false;
     // The list goes up as a `drafts` event; the API shows the one with the highest `seq` (a send that timed out here and landed late never
     // wins over a later list), and `seq` grows across this stage's runs (the clock). Sends go one after another, each with the list as it
     // stands when it leaves; a list still waiting takes every change made before it leaves (one send, not one per change).
     let sending = Promise.resolve(),
       waiting = null,
       seq = 0;
+    /**
+     * The contact sheet for these preview files, uploaded as `sheet-<round>` (the same name each time, so the job's view keeps one URL).
+     * Null when there is nothing to show or the sheet could not be written: the clip list still goes up.
+     * @param {{ clip: string, file: string | null, state?: string }[]} files
+     * @returns {Promise<{ name: string, clips: any[] } | null>}
+     */
+    async function publishSheet(files) {
+      const usable = files.filter(item => item.file && existsSync(item.file));
+      if (!usable.length && !sheetSent) return null;
+      const dir = path.join(m, `sheet-${job.motionRound}`);
+      await mkdir(dir, { recursive: true });
+      const manifest = path.join(dir, 'manifest.json'),
+        out = path.join(dir, 'sheet.webp');
+      await writeFile(
+        manifest,
+        JSON.stringify({
+          clips: usable.map(item => ({ clip: item.clip, file: item.file, ...(item.state ? { state: item.state } : {}) })),
+        }),
+      );
+      if ((await motionsPy(['progress-sheet', manifest, out])).code !== 0 || !existsSync(out)) return null;
+      const name = `sheet-${job.motionRound}`;
+      await api.artifact(job, name, await readFile(out));
+      sheetSent = true;
+      const report = await readJson(out.replace(/\.webp$/, '.json')).catch(() => null);
+      return { name, clips: Array.isArray(report?.clips) ? report.clips : [] };
+    }
+    /** @param {number} count @param {number} max */
+    const metricCount = (count, max) => (Number.isInteger(count) && count >= 1 && count <= max ? count : null);
+    /**
+     * @param {number} at @param {{ clip: string, name: string, state?: string }[]} clips
+     * @param {{ name: string, clips: any[] } | null} sheet
+     */
+    function draftEvent(at, clips, sheet) {
+      const metrics = (sheet?.clips ?? []).flatMap(row => {
+        if (!row || !PREVIEW_CLIPS.some(name => name === row.clip)) return [];
+        const frames = metricCount(row.frames, 128),
+          durationMs = metricCount(row.durationMs, 120_000);
+        return frames || durationMs ? [{ clip: row.clip, ...(frames ? { frames } : {}), ...(durationMs ? { durationMs } : {}) }] : [];
+      });
+      /** @type {Record<string, unknown>} */
+      const event = {
+        kind: 'drafts',
+        seq: at,
+        ...(sheet?.name ? { sheet: sheet.name } : {}),
+        clips,
+        ...(metrics.length ? { metrics } : {}),
+      };
+      if (JSON.stringify(event).length <= 1900) return event;
+      delete event.metrics;
+      if (JSON.stringify(event).length <= 1900) return event;
+      delete event.sheet;
+      return event;
+    }
     const postDrafts = () =>
       (waiting ??= sending =
         sending
-          .then(() => {
+          .then(async () => {
             waiting = null;
             seq = Math.max(seq + 1, Date.now());
-            return api.progress?.(job, undefined, { kind: 'drafts', seq, clips: drafted.map(d => ({ ...d })) });
+            const clips = drafted.map(d => ({ ...d }));
+            /** @type {{ clip: string, file: string | null, state?: string }[]} */
+            const files = [];
+            for (const clip of PREVIEW_CLIPS) {
+              const file = sheetFiles.get(clip);
+              if (!file) continue;
+              const entry = clips.find(d => d.clip === clip);
+              files.push({ clip, file, ...(entry?.state ? { state: entry.state } : {}) });
+            }
+            let sheet = null;
+            try {
+              sheet = await publishSheet(files);
+            } catch {
+              sheet = null;
+            }
+            return api.progress?.(job, undefined, draftEvent(seq, clips, sheet));
           })
           .catch(() => {}));
     /** `<clip>.webp`, or a gait's take `<gait>-t<take>.webp` shown before its gate with a state ('checking', then 'retaking' — the API's
@@ -1597,6 +1670,7 @@ export function createStages({
             at = drafted.findIndex(d => d.clip === clip);
           if (at < 0) drafted.push(entry);
           else drafted[at] = entry;
+          if (PREVIEW_CLIPS.some(name => name === clip)) sheetFiles.set(clip, file);
         }
         if (files.length) await postDrafts();
       } catch {
@@ -1609,8 +1683,10 @@ export function createStages({
     async function unshown(clip, drop = false) {
       const at = drafted.findIndex(d => d.clip === clip);
       if (at < 0 || !drafted[at].state || (!drop && drafted[at].state === 'retaking')) return;
-      if (drop) drafted.splice(at, 1);
-      else drafted[at] = { ...drafted[at], state: 'retaking' };
+      if (drop) {
+        drafted.splice(at, 1);
+        sheetFiles.delete(clip);
+      } else drafted[at] = { ...drafted[at], state: 'retaking' };
       await postDrafts();
     }
     /**
@@ -2069,7 +2145,10 @@ export function createStages({
       const name = previewName(clip, job.motionRound);
       await api.artifact(job, name, await readFile(file));
       preview.push({ clip, name, ...(clip === 'run' && run.note ? { note: run.note } : {}) });
+      // The packed preview replaces the draft in the sheet. The clip list on the event stays the drafts; the sheet shows every clip.
+      sheetFiles.set(clip, file);
     }
+    await postDrafts();
     return { outcome: 'ok', result: { preview, scaleCheck } };
   }
 

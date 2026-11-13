@@ -632,6 +632,21 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
       for (const clip of ['combo', 'fightIdle']) await writeFile(path.join(rest[1], `${clip}.webp`), clip);
     }
     if (command === 'strip-preview') await writeFile(rest[1], 'loop');
+    if (command === 'progress-sheet') {
+      const manifest = JSON.parse(await readFile(rest[0], 'utf8'));
+      await mkdir(path.dirname(rest[1]), { recursive: true });
+      await writeFile(rest[1], 'sheet');
+      const have = new Map((manifest.clips ?? []).map(item => [item.clip, item]));
+      await writeFile(
+        rest[1].replace(/\.webp$/, '.json'),
+        JSON.stringify({
+          clips: PREVIEW_CLIPS.map(clip => {
+            const item = have.get(clip);
+            return item ? { clip, status: item.state ?? 'ready', frames: 4, durationMs: 400 } : { clip, status: 'pending' };
+          }),
+        }),
+      );
+    }
     return { code: 0 };
   };
   const api = {
@@ -675,12 +690,20 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
     'draft-walk-t0-0',
   ]);
   assert.ok(uploads.indexOf('draft-walk-0') < uploads.indexOf('motion-idle-0'));
+  // The contact sheet goes up with the first draft, and again from the packed previews, before the stage ends.
+  assert.ok(uploads.includes('sheet-0'));
+  assert.ok(uploads.indexOf('sheet-0') < uploads.indexOf('motion-idle-0'));
+  assert.ok(py.some(args => args[0] === 'progress-sheet'));
   for (const [shown, aligned] of [
     ['walk-t0', 'loop-16'],
     ['run-t0', 'loop-12'],
   ])
     assert.ok(timeline.includes(`up draft-${shown}-0`) && timeline.indexOf(`up draft-${shown}-0`) < timeline.indexOf(`align ${aligned}`), timeline.join(', '));
   const drafts = events.filter(e => e.kind === 'drafts');
+  assert.equal(drafts[0].sheet, 'sheet-0');
+  assert.ok(drafts[0].metrics.some(metric => metric.frames === 4 && metric.durationMs === 400));
+  assert.equal(drafts.at(-1).sheet, 'sheet-0');
+  assert.ok(drafts.at(-1).metrics.some(metric => metric.clip === 'idle' && metric.frames === 4));
   assert.deepEqual(
     drafts
       .at(-1)
