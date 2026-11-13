@@ -561,17 +561,16 @@ function watchedView(job, first, changes, baseline) {
     ...(job.motionSheet?.url
       ? {
           motionSheet: {
-            url: job.motionSheet.url,
             clips: job.motionSheet.clips ?? [],
-            // The image is attached only when a clip changed during this wait, so a quiet poll does not send the same picture again.
-            ...(pictures.some(picture => picture.new) ? { attach: true } : {}),
+            // The signed URL and the image go out only when a clip changed. A quiet poll keeps the short clip summary.
+            ...(pictures.some(picture => picture.new) ? { url: job.motionSheet.url, attach: true } : {}),
           },
         }
       : {}),
     next: job.motionSheet?.url
-      ? 'Still working: show the contact sheet (attached when a clip finished during this wait; otherwise job.motionSheet.url, ten minutes) ' +
-        'and summarize job.motionSheet.clips. Do not download each clip. Then while he watches call get_hosted_fighter again with waitSeconds 25. ' +
-        'Without waitSeconds it returns the whole job.'
+      ? 'Still working: show the contact sheet attached to this result when a clip finished during this wait, and summarize job.motionSheet.clips. ' +
+        'Do not download each clip. If no image is attached and you have not shown the sheet for these clips, call get_hosted_fighter once without waitSeconds. ' +
+        'Then while he watches call get_hosted_fighter again with waitSeconds 25. Without waitSeconds it returns the whole job.'
       : `Still working: tell the user what changed${
           show.length
             ? ` and show him ${show.join(' and ')} unless you already showed it (by kind, ` + `clip and name; a url changes every read; ${IMAGES_NEXT})`

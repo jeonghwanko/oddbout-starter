@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { createStages, EXTRACT_REDRAWS, extractFailedRows, writeWhole, webpSize } from './generation-stages.mjs';
+import { createMotionSheetQueue, createStages, EXTRACT_REDRAWS, extractFailedRows, writeWhole, webpSize } from './generation-stages.mjs';
 import {
   ALIGN_AGAIN,
   BEAT_LIMIT,
@@ -107,6 +107,40 @@ import { parseEnv, parseHealth } from './generation-worker.mjs';
 import { ASKS } from './generation-prompts.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+
+test('a contact sheet queue uploads only the latest snapshot and still settles when a build fails', async () => {
+  const uploaded = [];
+  const events = [];
+  let releaseFirst = () => {};
+  const firstGate = new Promise(done => {
+    releaseFirst = done;
+  });
+  let builds = 0;
+  const queue = createMotionSheetQueue({
+    build: async snap => {
+      builds += 1;
+      if (snap.id === 'slow') await firstGate;
+      if (snap.id === 'bad') throw new Error('sheet-failed');
+      return { id: snap.id };
+    },
+    commit: async (snap, built) => {
+      uploaded.push(built?.id ?? null);
+      events.push(snap.id);
+    },
+  });
+  const slow = queue.kick({ id: 'slow' });
+  const newer = queue.kick({ id: 'newer' });
+  releaseFirst();
+  await Promise.all([slow, newer]);
+  await queue.flush();
+  assert.deepEqual(uploaded, ['newer']);
+  assert.deepEqual(events, ['newer']);
+  await queue.kick({ id: 'bad' });
+  await queue.flush();
+  assert.deepEqual(events, ['newer', 'bad']);
+  assert.deepEqual(uploaded, ['newer', null]);
+  assert.ok(builds >= 2);
+});
 /** motions.py's face-box needs Pillow and NumPy (the kit's sprite-gen venv has them; a bare CI runner may not). */
 const hasPillow = () => spawnSync('python3', ['-c', 'import PIL, numpy']).status === 0;
 
@@ -674,10 +708,7 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
     done.result.preview.map(p => p.clip),
     PREVIEW_CLIPS,
   );
-  assert.deepEqual(
-    uploads.filter(name => name.startsWith('motion-')),
-    PREVIEW_CLIPS.map(clip => `motion-${clip.toLowerCase()}-0`),
-  );
+  assert.deepEqual(uploads.filter(name => name.startsWith('motion-')).sort(), PREVIEW_CLIPS.map(clip => `motion-${clip.toLowerCase()}-0`).sort());
   // Drafts went up as the branches passed (the action clips, then each gait), before the package's previews; each gait's take went up as it
   // was cut (2026-11-01), before its alignment, under a name of its own.
   assert.deepEqual(uploads.filter(name => name.startsWith('draft-')).sort(), [
@@ -853,10 +884,7 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
   const atRound1 = calls.length;
   const slam = await stages.motions({ ...job, motionNote: { clip: 'slam', note: 'a much bigger punch' }, motionRound: 1 }, dir);
   assert.equal(slam.outcome, 'ok');
-  assert.deepEqual(
-    uploads.filter(name => name.startsWith('motion-')),
-    PREVIEW_CLIPS.map(clip => `motion-${clip.toLowerCase()}-1`),
-  );
+  assert.deepEqual(uploads.filter(name => name.startsWith('motion-')).sort(), PREVIEW_CLIPS.map(clip => `motion-${clip.toLowerCase()}-1`).sort());
   assert.ok(uploads.includes('draft-combo-1'));
   const remade = py.find(a => a[0] === 'request' && a.length === 5);
   assert.deepEqual([remade[3], await readFile(remade[4], 'utf8')], ['slam-a', 'a much bigger punch']);
