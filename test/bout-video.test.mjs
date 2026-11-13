@@ -289,7 +289,7 @@ test('finish accepts an H.264 file of the canvas and rejects a different picture
         '-f',
         'lavfi',
         '-i',
-        'color=c=black:s=1280x720:d=1',
+        'color=c=black:s=960x540:d=1',
         '-c:v',
         'libx264',
         '-profile:v',
@@ -309,11 +309,11 @@ test('finish accepts an H.264 file of the canvas and rejects a different picture
     db.rows[0].status = 'rendering';
     db.rows[0].lease_token = 'lease';
     db.objects.set(`${row.id}.mp4`, bytes);
-    const done = await finishBoutVideo(db, { id: row.id, leaseToken: 'lease', sha256: await sha256(bytes), width: 1280, height: 720, trimApplied: 'full' });
+    const done = await finishBoutVideo(db, { id: row.id, leaseToken: 'lease', sha256: await sha256(bytes), width: 960, height: 540, trimApplied: 'full' });
     assert.equal(done.status, 'ready');
     const shown = await presentBoutVideo(db, db.rows[0]);
     assert.equal(shown.video.url, `https://storage.test/${row.id}.mp4`);
-    assert.equal(shown.video.width, 1280);
+    assert.equal(shown.video.width, 960);
     assert.equal(shown.postsToX, false);
     db.rows[0].status = 'rendering';
     db.rows[0].lease_token = 'lease';
