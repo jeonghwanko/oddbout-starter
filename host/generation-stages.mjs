@@ -2079,8 +2079,7 @@ export function createStages({
       const reviewCode = (await og(['npm', 'run', 'fighter:gait', '--', 'loop-review', config, reviewFile])).code;
       // A take kept with a warning already failed the visual gate. The review file is the diagnostic pack reads and defers;
       // a missing file is the tool stopping, which still needs an operator. A passing take is unchanged: a non-zero exit still stops.
-      if (reviewCode !== 0 && !(loops[gait].warning && existsSync(reviewFile)))
-        return { outcome: 'review', result: { code: `${gait}-loop-review` } };
+      if (reviewCode !== 0 && !(loops[gait].warning && existsSync(reviewFile))) return { outcome: 'review', result: { code: `${gait}-loop-review` } };
       if (serverReviewEnabled(job, api)) {
         // Review final game-pack frames at their actual durations, after all existing gait gates passed.
         // This comparison cannot select a version, retry generation, or waive a gate.

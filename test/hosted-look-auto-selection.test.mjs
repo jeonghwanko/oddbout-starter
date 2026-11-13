@@ -218,10 +218,7 @@ test('a waiting host selects A when it claims at the deadline, and the job view 
     assert.ok(view.timeline.some(event => event.kind === 'appearance-auto-selected'));
     assert.ok(view.timeline.some(event => event.kind === 'side' && event.take === 1 && event.outcome === 'fail'));
     const warning = view.warnings.find(item => item.code === 'side-look');
-    assert.deepEqual(
-      [warning.take, warning.outcome, warning.failed],
-      [1, 'continued', ['match']],
-    );
+    assert.deepEqual([warning.take, warning.outcome, warning.failed], [1, 'continued', ['match']]);
     assert.equal(warning.notes, undefined);
     for (const event of view.timeline) {
       assert.ok(event.at && event.kind);

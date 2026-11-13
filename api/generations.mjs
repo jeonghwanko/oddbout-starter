@@ -530,18 +530,14 @@ export function createGenerationHandler({
       ]);
       if (timeline.error || warnings.error) throw timeline.error || warnings.error;
       return {
-        timeline: /** @type {any[]} */ (timeline.data ?? [])
-          .reverse()
-          .flatMap(event => {
-            const entry = timelineEntry(event);
-            return entry ? [entry] : [];
-          }),
-        warnings: /** @type {any[]} */ (warnings.data ?? [])
-          .reverse()
-          .flatMap(event => {
-            const entry = warningEntry(event);
-            return entry ? [entry] : [];
-          }),
+        timeline: /** @type {any[]} */ (timeline.data ?? []).reverse().flatMap(event => {
+          const entry = timelineEntry(event);
+          return entry ? [entry] : [];
+        }),
+        warnings: /** @type {any[]} */ (warnings.data ?? []).reverse().flatMap(event => {
+          const entry = warningEntry(event);
+          return entry ? [entry] : [];
+        }),
       };
     } catch (error) {
       logSkipped('generation', 'job-history', error);
