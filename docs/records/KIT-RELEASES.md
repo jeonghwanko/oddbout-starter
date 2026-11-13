@@ -4,6 +4,42 @@ Earlier source-kit releases, moved here from [PLUGIN-DISTRIBUTION.md](../PLUGIN-
 release and the distribution procedures. Each entry records that release as published and verified at the time; it is not
 current procedure. Published release paths stay immutable.
 
+**Previous source-kit release: 0.6.21** (2026-11-11 KST: read-only creation preflight and plan, job checkpoints).
+
+Workspace creation gains `npm run creation:preflight` and `creation:plan` (workspace MCP `preflight_creation`, `plan_creation`): they
+start no generation, fetch, install or registration. A long job writes a checkpoint beside its record; `read_creation_checkpoint` and
+`resume_creation_job` return the job's registration key and refuse a checkpoint that disagrees with the job record. Sessions write a
+short `BRIEF.md`/`PROGRESS.md` summary and can record files to reuse. The creation skill keeps its hard rules short and routes detail to
+reference pages ([PR #422](https://github.com/jeonghwanko/oddbout-starter/pull/422)); on a kit older than 0.6.21 it falls back to
+`check_creation_readiness` ([PR #425](https://github.com/jeonghwanko/oddbout-starter/pull/425)). The contract, the cloud tools and the
+engine pin are unchanged.
+
+- [Download the 0.6.21 ZIP](https://oddbout.com/creator-kit/0.6.21/f6ecfc2c0ebfb2548043aa3b753a16a0e22b7fd84b273e8bd8ae12be3419d216/oddbout-0.6.21.zip)
+- [Release manifest](https://oddbout.com/creator-kit/0.6.21/f6ecfc2c0ebfb2548043aa3b753a16a0e22b7fd84b273e8bd8ae12be3419d216/release.json)
+- [Download helper](https://oddbout.com/creator-kit/0.6.21/f6ecfc2c0ebfb2548043aa3b753a16a0e22b7fd84b273e8bd8ae12be3419d216/fetch-creator-kit.py)
+
+| Measured artifact | Value |
+| --- | --- |
+| ZIP size | 4,337,156 bytes |
+| ZIP SHA-256 | `0744b907c07cfc6a6ffc4f83338fd54310dda54f3acfcd6fc595b8bab6d5d749` |
+| Release manifest SHA-256 | `6008b1fdf2f697b419860330ce800f828611ffe64eb2debb5cdfc71ff0a0c072` |
+| Runtime manifest SHA-256 | `ec12c8299750d6796bd77459a2a6f54baa0b9249a2f5f0c028899595cb7b95a1` |
+| Helper SHA-256 | `b66c31ff833816dfa74c90d9155359d3fdd484dff8c12759e48addde01707592` (unchanged) |
+| Archive build source | `e0c8061b` (main after [PR #425](https://github.com/jeonghwanko/oddbout-starter/pull/425)) |
+| sprite-gen pin | `767f3ec7c62f6502eaede4c4bb86e6a1b289d78c` |
+| Kit Pages publication | `64616512603fdce0dba6c606aebc7e50bd3e5f33` (Cloudflare Pages) |
+
+The archive was built from a clean LF worktree at the main merge with the sprite-gen submodule at its pin; a trial build of the PR head
+gave byte-identical release files. The trusted helper verified and extracted the published release (769 files), and the extracted
+launcher's `--status` reported the runtime manifest above with nothing installed. No dependency install, generation login, generation or
+registration ran. Publication added only the three release files to `codex/creator-pages` (7,845 existing files preserved, none changed
+or deleted). The site is served by Cloudflare Pages, so the publisher ran with `ODDBOUT_SITE_PROVIDER=cloudflare-pages` and the shared
+settings in the game's `kaito_web/deploy/oddbout-site-publication.json`. From Git Bash the upload step first picked GNU `tar`,
+which read `C:` as a remote host and stopped after the branch commit; `npm run site:republish` of that same commit from PowerShell
+completed it. The upload now extracts with relative paths, which both tars accept. The three files then served HTTP 200 with the hashes above at 2026-11-11T09:53Z.
+`host/pins.json` selects this archive for the next host package release; it does not update an already installed host.
+
+
 **Previous source-kit release: 0.6.20** (2026-11-11 KST: local registration and retry recovery).
 
 The local registration CLI defaults to an offline dry run. Explicit `--submit` uploads only after full file/contract checks.
