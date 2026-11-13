@@ -225,8 +225,8 @@ test('a waiting host selects A when it claims at the deadline, and the job view 
       for (const key of Object.keys(event)) assert.ok(['at', 'kind', 'take', 'outcome'].includes(key));
     }
     const listed = (await g.call('GET', 'generations')).body.jobs.find(job => job.id === id);
-    assert.equal(listed.timeline, undefined);
-    assert.equal(listed.warnings, undefined);
+    assert.deepEqual(listed.timeline, view.timeline);
+    assert.deepEqual(listed.warnings, view.warnings);
     // A deadline already stored (the ten-minute window) is not rewritten by an unrelated update.
     const kept = await ready(g);
     await g.sql.query("update public.af_generation_jobs set appearance_auto_select_at = waiting_since + interval '10 minutes' where id = $1", [kept]);
