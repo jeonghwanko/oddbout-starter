@@ -49,18 +49,21 @@ export function trimSeconds(record) {
 
 /**
  * The cut of the recording, in seconds of the recording. The recording starts when the page opens, so the loading
- * screen comes first; `startOffset` is when the bout started (the hook appeared). Bout-time trims move by that offset.
- * A full cut keeps everything from the bout start; `end` is absent.
+ * screen comes first; `startOffset` is when the bout's screen started (the hook appeared, at READY). Bout-time trims move by that offset.
+ * The screen runs longer than the bout's own clock (READY → FIGHT!, the KO's freeze, slow motion), so a bout-time end would cut the KO off:
+ * every cut runs to the end of the recording (the bout's end plus `END_HOLD_MS`). A highlights cut starts a little early instead, which is safe.
  * @param {number} startOffset @param {{ start: number, end: number } | null} trim
- * @returns {{ start: number, end?: number }}
+ * @returns {{ start: number }}
  */
 export function recordingCut(startOffset, trim) {
   const offset = Number.isFinite(startOffset) && startOffset > 0 ? startOffset : 0;
-  return trim ? { start: offset + trim.start, end: offset + trim.end } : { start: offset };
+  return { start: offset + (trim ? trim.start : 0) };
 }
 
 /** How long the page may load before its bout starts. A club lobby never sets the hook. */
 export const HOOK_WAIT_MS = 60_000;
+/** The winner's screen kept after the bout ends (the page resolves `played` at the result), before the end card. */
+export const END_HOLD_MS = 2500;
 
 /** @param {string} text */
 const xml = text => text.replace(/[<>&'"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' })[c] ?? c);
@@ -198,7 +201,7 @@ export async function filmBout(session) {
  * Playwright's visible Chromium, matching the broadcast renderer: a Linux host needs a graphical session
  * unless ODDBOUT_BOUT_VIDEO_HEADLESS=1. The page's hook is the only proof the bout played.
  * @param {{ url: string, expectedDigest: string, width: number, height: number, timeoutMs: number, playwright?: any,
- *   platform?: string, env?: Record<string, string | undefined>, signal?: AbortSignal }} options
+ *   platform?: string, env?: Record<string, string | undefined>, signal?: AbortSignal, endHoldMs?: number }} options
  */
 export async function recordBoutPage(options) {
   const platform = options.platform ?? process.platform;
@@ -245,6 +248,8 @@ export async function recordBoutPage(options) {
         };
       },
     });
+    // The page resolves `played` as its winner's card comes up: keep that on the film before the end card.
+    await page.waitForTimeout(options.endHoldMs ?? END_HOLD_MS);
     const video = page.video();
     await context.close();
     const recorded = video ? await video.path() : null;

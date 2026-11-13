@@ -47,7 +47,8 @@ AI_FIGHTER_PROJECT_URL=... AI_FIGHTER_WORKER_TOKEN=afw_... npm run bout:video-wo
 페이지가 `window.oddboutBout`(`protocolVersion: 1`, `played`가 지문으로 끝나는 Promise)을 주지 않거나 주소가 구단이면
 작업은 `playback-unavailable`로 실패한다. 구단 로비를 찍어 올리지 않는다. 지문이 기록과 다르면 `digest-mismatch`다.
 렌더러는 훅이 나타난 시각을 경기 시작으로 본다. 녹화는 페이지를 열 때 시작하므로, 그 앞의 로딩 화면은 잘라 내고
-하이라이트 구간도 그 시각만큼 민다. 그래서 게임은 경기가 실제로 시작될 때 훅을 둔다(애셋을 읽기 전에 두지 않는다).
+하이라이트의 시작도 그 시각만큼 민다. 그래서 게임은 경기 화면이 시작될 때(그림이 다 들어와 READY가 뜰 때) 훅을 둔다.
+화면 시간은 경기 시계보다 길다(READY → FIGHT!, KO 정지, 슬로). 그래서 끝은 자르지 않는다. `played`가 끝난 뒤 승자 화면을 2.5초 더 찍는다.
 훅은 60초 안에 나타나야 한다. `played`는 지문 문자열이나 `{ digest }`로 resolve한다.
 워커는 요청이 실패해도 꺼지지 않는다. 기록을 남기고 5초부터 최대 1분까지 늘려 기다린 뒤 다시 가져간다.
 
@@ -83,7 +84,7 @@ npm run bout:video -- --url '<page>' --digest <8 hex> --out output/bout.mp4
 
 | 순서 | 하는 일 |
 | --- | --- |
-| 1 | 이 마이그레이션을 적용한다. `supabase/migrations/20261113210000_bout_videos.sql`. 버킷 `af-bout-videos`와 `af_bout_video_claim`. 클라이언트 정책은 없다 |
+| 1 | 이 마이그레이션을 적용한다. `supabase/migrations/20261114010000_bout_videos.sql`. 버킷 `af-bout-videos`와 `af_bout_video_claim`. 클라이언트 정책은 없다 |
 | 2 | 게임 저장소에서 `ai-fighter` 엣지를 배포한다. `worker/bout-video/claim`, `finish`, `fail`이 여기 있다 |
 | 3 | 게임 저장소에서 `ai-fighter-mcp`를 배포한다. `page`를 채우고 `render_bout_video`가 목록에 나온다. 도구 목록이 19에서 20이 된다 |
 | 4 | 위 게임 변경을 사이트에 게시한다. 그 전에도 주소는 돌아오지만, 등록 선수 둘은 재생되지 않고 영상은 `playback-unavailable`이다 |
