@@ -62,6 +62,17 @@ export const TIMING = Object.freeze({
  * @param {number} wait
  */
 export const nextIdleWait = wait => Math.min(wait * 2, TIMING.idleMaxMs);
+/** How far past the database's remaining time a host waits, so its claim runs after the deadline rather than a tick early. */
+export const LOOK_SELECT_PAD_MS = 250;
+/**
+ * The idle sleep before the next claim. A pending look deadline sooner than the backoff is slept until (plus a short pad),
+ * so the host selects at that time instead of waiting out the rest of a minute. A missing or past value keeps the backoff.
+ * @param {number} idleWait @param {unknown} lookSelectInMs
+ */
+export const idleSleepMs = (idleWait, lookSelectInMs) =>
+  Number.isInteger(lookSelectInMs) && /** @type {number} */ (lookSelectInMs) > 0
+    ? Math.min(idleWait, /** @type {number} */ (lookSelectInMs) + LOOK_SELECT_PAD_MS)
+    : idleWait;
 /**
  * When the heartbeat goes (2026-11-07): about once a heartbeatMs, riding on the turn's claim (`{ health, usage }`) once the server has said
  * on the heartbeat route that its claims take one (`claimBeats`). Until then — an older server ignores a claim's body and would claim on the
@@ -1339,7 +1350,7 @@ export async function main({
       } else {
         if (!claimed.ok) await say(`claim failed ${claimed.code ?? claimed.status}`);
         if (once) return;
-        await new Promise(resolve => setTimeout(resolve, idleWait));
+        await new Promise(resolve => setTimeout(resolve, idleSleepMs(idleWait, claimed.lookSelectInMs)));
         idleWait = nextIdleWait(idleWait);
       }
       if (once) return;

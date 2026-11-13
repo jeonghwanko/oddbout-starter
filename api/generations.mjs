@@ -87,6 +87,10 @@ const runnerSays = health => {
   };
 };
 const DRAFT_EVENTS_READ = 5;
+/** Recent events on one job's view, newest kept, shown oldest first. Compact: at, kind, and take/outcome when the event recorded them. */
+const TIMELINE_READ = 40;
+const WARNING_READ = 10;
+const HISTORY_TOKEN = /^[a-z0-9][a-z0-9-]{0,40}$/;
 // A job past its appearance choice: its side still, expression sheet and automatic choice can be read.
 const PAST_CHOICE = Object.freeze(['motions', 'motion_ready', 'submitting', 'submitted', 'needs_review']);
 // The event kinds a job's view reads. A list reads them for all its jobs in one query, bounded: when the bound is met, each job
@@ -484,6 +488,66 @@ export function createGenerationHandler({
     const name = `${kind}-${row.appearance_revisions}-${row.choice}`;
     return data.some(/** @param {{ data: any }} event */ event => event.data?.outcome === 'chosen' && event.data?.artifact === name) ? name : null;
   }
+  /**
+   * One event as the hosted job's timeline shows it. `take` and `outcome` only when the worker recorded them as short tokens.
+   * @param {any} event
+   */
+  function timelineEntry(event) {
+    const data = isObject(event?.data) ? event.data : {};
+    const at = typeof event?.at === 'string' ? event.at : null;
+    if (!at || typeof event?.kind !== 'string' || !HISTORY_TOKEN.test(event.kind)) return null;
+    const take = Number.isInteger(data.take) && data.take >= 0 && data.take <= 99 ? data.take : undefined;
+    const outcome = typeof data.outcome === 'string' && HISTORY_TOKEN.test(data.outcome) ? data.outcome : undefined;
+    return { at, kind: event.kind, ...(take !== undefined ? { take } : {}), ...(outcome ? { outcome } : {}) };
+  }
+  /**
+   * A warning the worker recorded when it kept going. Unknown shapes are dropped, never invented.
+   * @param {any} event
+   */
+  function warningEntry(event) {
+    const data = isObject(event?.data) ? event.data : {};
+    const at = typeof event?.at === 'string' ? event.at : null;
+    if (!at || typeof data.code !== 'string' || !HISTORY_TOKEN.test(data.code)) return null;
+    const take = Number.isInteger(data.take) && data.take >= 0 && data.take <= 99 ? data.take : undefined;
+    const outcome = typeof data.outcome === 'string' && HISTORY_TOKEN.test(data.outcome) ? data.outcome : undefined;
+    const failed = Array.isArray(data.failed)
+      ? data.failed.filter((/** @type {unknown} */ item) => typeof item === 'string' && HISTORY_TOKEN.test(item)).slice(0, 8)
+      : [];
+    return { at, code: data.code, ...(take !== undefined ? { take } : {}), ...(outcome ? { outcome } : {}), ...(failed.length ? { failed } : {}) };
+  }
+  /**
+   * The compact event timeline and the warnings on one job. A failed read leaves both empty: the job itself still shows.
+   * @param {Job} row
+   * @returns {Promise<{ timeline: { at: string, kind: string, take?: number, outcome?: string }[], warnings: { at: string, code: string, take?: number, outcome?: string, failed?: string[] }[] }>}
+   */
+  async function historyOf(row) {
+    const empty = { timeline: [], warnings: [] };
+    try {
+      const events = db.from('af_generation_events').select('at,kind,data').eq('job_id', row.id);
+      const [timeline, warnings] = await Promise.all([
+        events.order('id', { ascending: false }).limit(TIMELINE_READ),
+        db.from('af_generation_events').select('at,kind,data').eq('job_id', row.id).eq('kind', 'warning').order('id', { ascending: false }).limit(WARNING_READ),
+      ]);
+      if (timeline.error || warnings.error) throw timeline.error || warnings.error;
+      return {
+        timeline: /** @type {any[]} */ (timeline.data ?? [])
+          .reverse()
+          .flatMap(event => {
+            const entry = timelineEntry(event);
+            return entry ? [entry] : [];
+          }),
+        warnings: /** @type {any[]} */ (warnings.data ?? [])
+          .reverse()
+          .flatMap(event => {
+            const entry = warningEntry(event);
+            return entry ? [entry] : [];
+          }),
+      };
+    } catch (error) {
+      logSkipped('generation', 'job-history', error);
+      return empty;
+    }
+  }
   /** A verified server timeout selection, never inferred from A or the clock. A later answer/revision invalidates older evidence.
    * @param {Job} row @param {any[]} [batch]
    * @returns {Promise<{ choice: 'a', selectedAt: string, deadline: string } | null>}
@@ -590,6 +654,8 @@ export function createGenerationHandler({
       // One job's read only: a list (tokens read for it at once) shows no next per job.
       taken === undefined ? profileFrontOf(row) : null,
       autoSelectionOf(row, batch),
+      // A list of jobs skips this (the recent list is a summary). One job, the read get_hosted_fighter uses, carries the timeline.
+      list ? { timeline: [], warnings: [] } : historyOf(row),
     ]);
     const drafts = value(reads[0]),
       side = value(reads[1]),
@@ -604,7 +670,8 @@ export function createGenerationHandler({
     const submission = value(reads[4]),
       queue = value(reads[5]),
       tokens = value(reads[6]),
-      profileFront = value(reads[7]);
+      profileFront = value(reads[7]),
+      history = value(reads[9]);
     return {
       id: row.id,
       status: row.status,
@@ -649,6 +716,8 @@ export function createGenerationHandler({
       imageProvider: row.image_provider ?? 'gpt',
       // The agent that asked for it (2026-11-03: the cloud MCP's client name, as the client gave it), null for a request made on the site.
       agent: row.agent_name ?? null,
+      // Recent events (at, kind, take, outcome) and checks the worker continued past. Empty on a list.
+      ...(list ? {} : { timeline: history.timeline, warnings: history.warnings }),
     };
   }
   /** @param {string} owner @param {string} jobId @returns {Promise<Job>} */
@@ -1242,8 +1311,16 @@ export function createGenerationHandler({
       // `beat: true` confirms it. A claim without one is unchanged.
       const beat = fields(body, ['health', 'usage']);
       const beaten = beat.health === undefined ? {} : (await recordBeat(beat), { beat: true });
+      // Select a look whose deadline has passed before taking work, so a host that woke for the deadline both
+      // selects and can claim in this turn. The minute cron still runs the same function when no host is polling.
+      // A database from before the function is left to the cron (the claim itself still runs).
+      await call('af_generation_auto_choose_look', {}).catch(skipped('generation', 'auto-choose-look'));
       const row = await call('af_generation_claim_for', { p_host: host });
-      if (!row?.id) return { ok: true, stage: 'idle', ...beaten };
+      if (!row?.id) {
+        const ms = await call('af_generation_next_look_select_ms', {}).catch(skipped('generation', 'look-select-ms'));
+        const lookSelectInMs = Number.isInteger(ms) && ms > 0 && ms < 86_400_000 ? ms : null;
+        return { ok: true, stage: 'idle', ...beaten, ...(lookSelectInMs === null ? {} : { lookSelectInMs }) };
+      }
       const { data: refs, error } = await db.from('af_generation_uploads').select('id,path,content_type,width,height').eq('job_id', row.id);
       if (error) throw unavailable('database-unavailable', error);
       const candidates = candidatesOf(row);

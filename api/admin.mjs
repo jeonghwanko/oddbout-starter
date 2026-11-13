@@ -163,6 +163,18 @@ async function generationDetail(db, id) {
       /** @param {any} p */ p => ({ clip: typeof p.clip === 'string' ? p.clip : null, name: p.name, url: urls.get(artifactPath(id, p.name)) ?? null }),
     ),
     events: (events.data ?? []).map(/** @param {any} e */ e => ({ at: e.at, kind: e.kind, data: e.data ?? {} })),
+    // Checks the worker continued past, newest first, from the events already loaded. The full event remains in `events`.
+    warnings: (events.data ?? [])
+      .filter(/** @param {any} e */ e => e.kind === 'warning' && e.data && typeof e.data.code === 'string')
+      .map(
+        /** @param {any} e */ e => ({
+          at: e.at,
+          code: e.data.code,
+          ...(Number.isInteger(e.data.take) ? { take: e.data.take } : {}),
+          ...(typeof e.data.outcome === 'string' ? { outcome: e.data.outcome } : {}),
+          ...(Array.isArray(e.data.failed) ? { failed: e.data.failed } : {}),
+        }),
+      ),
   };
 }
 /**

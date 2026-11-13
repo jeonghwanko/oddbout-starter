@@ -42,6 +42,7 @@ import {
   submissionOutcome,
   withProfile,
   ENGINE_SEAM_MAX,
+  loopRank,
   loopTaken,
   HOUSE_COLOURING,
   LOOK_CHECKS,
@@ -77,6 +78,7 @@ import {
   judgesMode,
   pixelJudgeKey,
   sidePassed,
+  sideRank,
   IMAGE_PROFILES,
   GROK_IMAGE_MODEL,
   appearanceCommand,
@@ -1330,6 +1332,8 @@ test('a gait event keeps under the progress limit, the oldest cuts giving way fi
   assert.ok(JSON.stringify(event).length <= GAIT_EVENT_BYTES && event.more > 0 && event.tried.length + event.more === 40);
   assert.equal(event.tried.at(-1).cut, 'cut-auto-39');
   assert.deepEqual([event.kind, event.gait, event.outcome, event.code], ['gait', 'run', 'review', 'run-not-clean']);
+  const continued = gaitEvent('walk', { strip: 's', take: 0, tried: [], warning: { code: 'walk-not-clean', take: 0, failed: ['identity'] } });
+  assert.deepEqual([continued.outcome, continued.code, continued.take], ['continued', 'walk-not-clean', 0]);
   assert.deepEqual(gaitEvent('run', { strip: 's', take: null, note: RUN_FROM_WALK, tried: [] }), {
     kind: 'gait',
     gait: 'run',
@@ -1448,6 +1452,41 @@ test('a filmed clip the engine stopped cutting is cut again, then an operator; o
   });
   assert.deepEqual(stale.done, { outcome: 'review', result: { code: 'walk-cut' } });
   assert.equal(stale.calls.filter(a => a.includes('video-set') && flag(a, '--states') === 'walk').length, 1);
+});
+
+test('a walk the judge refuses after the retakes continues from the best take and a warning', async () => {
+  const { done, calls, events } = await scaleStage({
+    scaleFit: fitAll,
+    hooks: {
+      og: async (args, flag, tool) => {
+        if (tool === 'codex' && String(flag(args, '-o')).includes(`${path.sep}video-walk`)) {
+          await writeFile(flag(args, '-o'), JSON.stringify({ identity: 'fail', anatomy: 'pass', loop: 'pass', notes: 'The scarf leaves the frames.' }));
+          return { code: 0 };
+        }
+        // The visual review exits non-zero, as a failed loop review does, and still writes its file.
+        if (tool === 'fighter:gait' && String(args.at(-1)).includes(`${path.sep}loop${path.sep}walk${path.sep}`)) {
+          await writeFile(args.at(-1), '{"status":"fail"}');
+          return { code: 2 };
+        }
+        return null;
+      },
+    },
+  });
+  assert.equal(done.outcome, 'ok', JSON.stringify(done));
+  const flag = (args, name) => args[args.indexOf(name) + 1];
+  assert.equal(calls.filter(a => a.includes('video-set') && flag(a, '--states') === 'walk').length, 1 + GAIT_RETAKES);
+  const added = calls.find(a => a[0] === 'motions.py' && a[1] === 'add-gait' && a[3] === 'walk');
+  assert.match(added[4], /video-walk-0/);
+  const walkEvent = events.find(e => e.kind === 'gait' && e.gait === 'walk');
+  assert.deepEqual([walkEvent.outcome, walkEvent.code, walkEvent.take], ['continued', 'walk-not-clean', 0]);
+  assert.deepEqual(
+    events.filter(e => e.kind === 'warning').map(e => [e.code, e.take, e.outcome, e.failed]),
+    [['walk-not-clean', 0, 'continued', ['identity']]],
+  );
+  assert.deepEqual(
+    done.result.preview.filter(p => p.note),
+    [],
+  );
 });
 
 test("the motion-auto cut stopped by the GPU after the first cut's alignment did is cut again on the next pass, not a new take", async () => {
@@ -2072,7 +2111,7 @@ test("the house colouring is the one creators' agents are given; a front look an
   assert.match(sideJudgePrompt(brief), /same character as image 1/);
 });
 
-test('the motions start from a side still drawn from the chosen front: judged against it, drawn again, then an operator', async () => {
+test('the motions start from a side still drawn from the chosen front, and the expression sheet starts with it', async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'gen-side-')),
     calls = [],
     uploads = [],
@@ -2081,8 +2120,21 @@ test('the motions start from a side still drawn from the chosen front: judged ag
   await writeFile(path.join(dir, 'looks', 'front-b-0.png'), 'front');
   const verdicts = []; // one per judge call, in order
   const flag = (args, name) => args[args.indexOf(name) + 1];
+  // The first two image gens are held until both have entered, so a sheet that waits for the side still deadlocks this test.
+  let holdParallel = true,
+    drawing = 0,
+    overlapped = false;
+  const waiting = [];
   const og = async (args, { stdin } = {}) => {
     calls.push({ args, stdin });
+    if (args.includes('gen') && holdParallel) {
+      drawing += 1;
+      if (drawing >= 2) {
+        overlapped = true;
+        holdParallel = false;
+        for (const release of waiting.splice(0)) release();
+      } else await new Promise(release => waiting.push(release));
+    }
     if (args.includes('gen')) {
       await writeFile(flag(args, '--out'), 'side');
       await writeFile(flag(args, '--report'), JSON.stringify({ ok: true }));
@@ -2123,6 +2175,7 @@ test('the motions start from a side still drawn from the chosen front: judged ag
   const pass = Object.fromEntries(SIDE_CHECKS.map(check => [check, 'pass']));
   verdicts.push({ checks: { ...pass, match: 'fail' }, notes: 'Different gloves from the front.' }, { checks: pass, notes: 'The same boxer, facing right.' });
   await stages.motions(job, dir);
+  assert.equal(overlapped, true, 'the expression sheet and the side still draw at the same time');
   // Side drawings only (the expression sheet is drawn beside them, without a view).
   const sides = calls.filter(c => c.args.includes('gen') && c.args.includes('--direction'));
   assert.equal(sides.length, 2);
@@ -2175,14 +2228,26 @@ test('the motions start from a side still drawn from the chosen front: judged ag
     calls.some(c => c.args.includes(path.join(styleOnly, 'looks', 'side-0-a', 'take-0.png'))),
     'the motions take the first style-only take',
   );
-  // Three drawings that are not the same character go to an operator; a side look chosen before 2026-10-31 makes no side still.
+  // Three drawings that are not the same character keep the best take (the first, the scores tie) and a warning. No further drawing.
   const other = await mkdtemp(path.join(tmpdir(), 'gen-side-fail-'));
   await mkdir(path.join(other, 'looks'), { recursive: true });
   await writeFile(path.join(other, 'looks', 'front-a-0.png'), 'front');
   verdicts.push(...Array.from({ length: SIDE_TAKES }, () => ({ checks: { ...pass, match: 'fail', style: 'fail' }, notes: 'Another face.' })));
   calls.length = 0;
-  assert.deepEqual(await stages.motions({ ...job, choice: 'a' }, other), { outcome: 'review', result: { code: 'side-look' } });
-  assert.equal(calls.filter(c => c.args.includes('gen')).length, SIDE_TAKES);
+  events.length = 0;
+  const kept = await stages.motions({ ...job, choice: 'a' }, other);
+  assert.notEqual(kept.result?.code, 'side-look');
+  assert.equal(calls.filter(c => c.args.includes('gen') && c.args.includes('--direction')).length, SIDE_TAKES);
+  assert.deepEqual(
+    events.filter(e => e?.kind === 'warning').map(e => [e.code, e.take, e.outcome, e.failed]),
+    [['side-look', 0, 'continued', ['match', 'style']]],
+  );
+  assert.deepEqual(
+    events.filter(e => e?.kind === 'side' && e.outcome === 'chosen').map(e => e.take),
+    [0],
+  );
+  assert.ok(sideRank({ checks: { ...pass, style: 'fail' } }) > sideRank({ checks: { ...pass, match: 'fail', style: 'fail' } }));
+  assert.ok(loopRank({ identity: 'pass', anatomy: 'pass', loop: 'fail' }) > loopRank({ identity: 'fail', anatomy: 'pass', loop: 'pass' }));
   const legacy = await mkdtemp(path.join(tmpdir(), 'gen-side-legacy-'));
   await mkdir(path.join(legacy, 'looks'), { recursive: true });
   await writeFile(path.join(legacy, 'looks', 'look-a-0.png'), 'side look');

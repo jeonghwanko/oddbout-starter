@@ -1508,9 +1508,9 @@ test('the sign-in-first address lists exactly what /mcp lists and says the same;
     // 그림 제공자 (2026-11-06): request_hosted_fighter takes imageProvider, grok or gpt (a35f57da… before). Not a tool ChatGPT's app pins.
     if (count === 19) {
       const hash = list => createHash('sha256').update(JSON.stringify(list)).digest('hex');
-      // Default A (2026-11-08): the hosted request now explains the ten-minute deadline and no motion-approval gate.
+      // Default A (2026-11-13): the hosted request explains the three-minute deadline and no motion-approval gate.
       const request = tools.find(t => t.name === 'request_hosted_fighter');
-      assert.match(request.description, /default to A after ten minutes/);
+      assert.match(request.description, /default to A after three minutes/);
       assert.match(request.description, /registration follows file validation/);
       assert.match(request.description, /only when he explicitly delegates the appearance choice/);
       assert.match(request.description, /creation request alone.*does not delegate/);
@@ -1520,13 +1520,13 @@ test('the sign-in-first address lists exactly what /mcp lists and says the same;
       // 2026-11-10: registration text names pendingStages and missingAssets, list_my_fighters carries the account limit,
       // and revise_hosted_motion points a registered fighter at a fighterId package. Inventory unchanged.
       // 2026-11-11: ordinary creation requests do not imply appearance-choice delegation.
-      assert.equal(hash(tools), 'ea138d849edaa1c579eeda590bdbe4e5266915ead38bcacd803e405a55de7056');
+      assert.equal(hash(tools), 'b01b23f221ac4c345492721b87a54389e2d9d623b2ee551b08ceac88eeda33f6');
       // Both addresses retain the same inventory when the comparison template metadata is omitted.
       const prior = structuredClone(tools),
         meta = prior.find(t => t.name === 'get_hosted_fighter')._meta;
       delete meta.ui;
       delete meta['openai/outputTemplate'];
-      assert.equal(hash(prior), 'e32c1d2eb33329086549ce4c27b4789b9ba822cca1a286ddd06295352325070f');
+      assert.equal(hash(prior), '31ca49a5f6565bdf6f232aa63949a65d2bbacb5e4f4e28f9496060ee392a8eb0');
     }
     // ChatGPT's published app 1.0.3 (docs/records/CLOUD-PLUGIN-REVIEW.md): four of its twelve tools are listed with their reviewed bytes (nine
     // until 2단계 B, 16a9ae15…). prepare_fighter_registration, upload_fighter_asset and submit_fighter_registration took a `kind`, and a call

@@ -19,13 +19,13 @@ const tick = async g => (await g.sql.query('select public.af_generation_auto_cho
 const row = async (g, id) => (await g.sql.query('select * from public.af_generation_jobs where id=$1', [id])).rows[0];
 const overdue = (g, id) => g.sql.query("update public.af_generation_jobs set appearance_auto_select_at=now()-interval '1 second' where id=$1", [id]);
 
-test('new looks get ten minutes; only the server tick selects A once and the same job is claimable', async () => {
+test('new looks get three minutes; only the server selects A once and the same job is claimable', async () => {
   const g = await generation();
   try {
     await g.healthy();
     const id = await ready(g),
       initial = await row(g, id);
-    assert.equal(new Date(initial.appearance_auto_select_at).getTime() - new Date(initial.waiting_since).getTime(), 600_000);
+    assert.equal(new Date(initial.appearance_auto_select_at).getTime() - new Date(initial.waiting_since).getTime(), 180_000);
     assert.equal(await tick(g), 0);
     const read = (await g.call('GET', `generations/${id}`)).body.job;
     assert.equal(Date.parse(read.appearanceAutoSelectAt), new Date(initial.appearance_auto_select_at).getTime());
@@ -124,7 +124,7 @@ test('a manual B answer or cancellation committed before a tick wins even after 
   }
 });
 
-test('a revision cancels the old timer; a fresh pair gets a fresh ten minutes', async () => {
+test('a revision cancels the old timer; a fresh pair gets a fresh three minutes', async () => {
   const g = await generation();
   try {
     const id = await ready(g);
@@ -136,7 +136,7 @@ test('a revision cancels the old timer; a fresh pair gets a fresh ten minutes', 
     await g.sql.query("update public.af_generation_jobs set lease_token=$2,lease_expires_at=now()+interval '5 minutes' where id=$1", [id, token]);
     await g.sql.query("select public.af_generation_finish($1,$2,'ok',$3)", [id, token, { candidates: ['front-a-1', 'front-b-1'] }]);
     const revised = await row(g, id);
-    assert.equal(new Date(revised.appearance_auto_select_at).getTime() - new Date(revised.waiting_since).getTime(), 600_000);
+    assert.equal(new Date(revised.appearance_auto_select_at).getTime() - new Date(revised.waiting_since).getTime(), 180_000);
     assert.equal(await tick(g), 0);
     assert.deepEqual(revised.candidates, ['front-a-1', 'front-b-1']);
   } finally {
@@ -190,17 +190,73 @@ test('old waiting jobs, operator blocks, delegated picks, invalid pairs and disa
   }
 });
 
+test('a waiting host selects A when it claims at the deadline, and the job view keeps a compact timeline', async () => {
+  const g = await generation();
+  try {
+    await g.healthy();
+    const id = await ready(g);
+    const early = (await g.work('POST', 'claim', {})).body;
+    assert.equal(early.stage, 'idle');
+    assert.equal((await row(g, id)).choice, null);
+    assert.equal(early.job, undefined);
+    assert.ok(Number.isInteger(early.lookSelectInMs) && early.lookSelectInMs > 0 && early.lookSelectInMs <= 180_000);
+    await overdue(g, id);
+    const claimed = (await g.work('POST', 'claim', {})).body;
+    assert.equal(claimed.job?.id, id);
+    assert.equal(claimed.job.status, 'motions');
+    assert.equal(claimed.job.choice, 'a');
+    assert.equal(await tick(g), 0);
+    await g.sql.query('insert into public.af_generation_events(job_id, kind, data) values ($1, $2, $3), ($1, $4, $5)', [
+      id,
+      'side',
+      { kind: 'side', take: 1, outcome: 'fail', failed: ['match'], notes: 'not on the timeline' },
+      'warning',
+      { kind: 'warning', code: 'side-look', take: 1, outcome: 'continued', failed: ['match'], notes: 'not on the timeline' },
+    ]);
+    const view = (await g.call('GET', `generations/${id}`)).body.job;
+    assert.equal(view.appearanceAutoSelection.choice, 'a');
+    assert.ok(view.timeline.some(event => event.kind === 'appearance-auto-selected'));
+    assert.ok(view.timeline.some(event => event.kind === 'side' && event.take === 1 && event.outcome === 'fail'));
+    const warning = view.warnings.find(item => item.code === 'side-look');
+    assert.deepEqual(
+      [warning.take, warning.outcome, warning.failed],
+      [1, 'continued', ['match']],
+    );
+    assert.equal(warning.notes, undefined);
+    for (const event of view.timeline) {
+      assert.ok(event.at && event.kind);
+      for (const key of Object.keys(event)) assert.ok(['at', 'kind', 'take', 'outcome'].includes(key));
+    }
+    const listed = (await g.call('GET', 'generations')).body.jobs.find(job => job.id === id);
+    assert.equal(listed.timeline, undefined);
+    assert.equal(listed.warnings, undefined);
+  } finally {
+    await g.sql.close();
+  }
+});
+
 test('the chat card explains the server deadline without inventing a selection or timing out old jobs', () => {
   const job = { id: crypto.randomUUID(), status: 'appearance_ready', appearanceAutoSelectAt: '2026-11-08T01:10:00Z' };
   const status = hostedStatus(job);
   assert.equal(status.actionRequired, 'choose_look_or_wait');
   assert.match(hostedNext(job), /server automatically selects A after 2026-11-08T01:10:00Z/);
+  assert.match(hostedNext(job), /three minutes after this pair was ready/);
+  assert.match(hostedNext(job), /waiting host selects at that time/);
   assert.match(hostedNext(job), /Do not send choose_hosted_look on his behalf/);
+  assert.match(hostedNext({ ...job, status: 'motions', warnings: [{ code: 'side-look' }, { code: 'walk-not-clean' }] }), /side-look, walk-not-clean/);
   const ui = widget();
   ui.render({ structuredContent: { job, statusSummary: status } });
   assert.match(ui.root.text, /응답이 없으면 A로 자동 진행/);
-  assert.match(ui.root.text, /시안 준비 후 10분/);
+  assert.match(ui.root.text, /시안 준비 후 3분/);
   assert.match(ui.root.text, /UTC/);
+  const warned = widget();
+  warned.render({
+    structuredContent: {
+      job: { ...job, status: 'motions', warnings: [{ code: 'walk-not-clean' }] },
+      statusSummary: hostedStatus({ ...job, status: 'motions' }),
+    },
+  });
+  assert.match(warned.root.text, /경고를 남기고 이어감: walk-not-clean/);
   assert.doesNotMatch(ui.root.text, /A.*선택됨/);
   const old = { id: crypto.randomUUID(), status: 'appearance_ready' };
   ui.render({ structuredContent: { job: old, statusSummary: hostedStatus(old) } });

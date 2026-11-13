@@ -42,6 +42,8 @@ import { toolRef } from './merged-tools.mjs';
  *   progress?: number, description?: string, profile?: { name?: string } | null, createdAt?: string, updatedAt?: string, agent?: string | null,
  *   side?: { url: string | null } | null, drafts?: { clip: string, url: string | null, state?: string }[],
  *   appearanceAutoSelectAt?: string | null, appearanceAutoSelection?: { choice: 'a', selectedAt: string, deadline: string } | null,
+ *   timeline?: { at: string, kind: string, take?: number, outcome?: string }[],
+ *   warnings?: { at: string, code: string, take?: number, outcome?: string, failed?: string[] }[],
  *   candidates?: { key: string, url: string | null }[] }} HostedJob
  * @typedef {{ id: number, at: string, kind: string, data: any }} JobEvent  A row of af_generation_events.
  * @typedef {{ status: string, progress: number, submission: string | null, picture: number | null }} WatchTick  What a wait sees of a job;
@@ -74,7 +76,7 @@ export const HOSTED_INSTRUCTIONS =
   'Read the same job again for fresh preview URLs; a URL is not proof that the user saw the image. ' +
   'While the user watches a working job in this chat, read it again with waitSeconds 25 each time a read returns and tell him each change. ' +
   'Use statusSummary for the current stage, completion and required action; progress is stage-local, never overall completion. ' +
-  'The server selects an unanswered look (A, ten minutes after the pair is ready); do not send a fabricated user choice or run a chat timer. ' +
+  'The server selects an unanswered look (A, three minutes after the pair is ready); do not send a fabricated user choice or run a chat timer. ' +
   'appearanceAutoSelection is the server event proving that A was selected after no answer; report its selectedAt and deadline. ' +
   'Without that evidence, do not infer an automatic selection from choice A or elapsed time. ' +
   "Hosted creation includes registration into production after file validation. Motion review and entry happen on the owner's site page. " +
@@ -203,7 +205,12 @@ const HOSTED_FOLLOWED = new Set(['queued', 'appearance', 'appearance_ready', 'mo
  */
 export function hostedNext(job, { uploads = true } = {}) {
   const automatic = job.appearanceAutoSelection;
+  const codes = [...new Set((job.warnings ?? []).map(warning => warning.code).filter(code => typeof code === 'string'))];
+  const waived = codes.length
+    ? `ODDBOUT kept going after a check it could not pass (${codes.join(', ')}). Tell the user which step; the result is still being made for him to watch. `
+    : '';
   const step =
+    waived +
     (automatic ? `The server automatically selected A after no answer at ${automatic.selectedAt} (deadline ${automatic.deadline}). ` : '') +
     hostedStep(job, uploads);
   return HOSTED_FOLLOWED.has(job.status) || (job.status === 'submitted' && !['registered', 'rejected'].includes(job.submission?.stage ?? ''))
@@ -248,7 +255,8 @@ function hostedStep(job, uploads = true) {
         `Then choose_hosted_look with his pick, or with one sentence to change both (${left.appearance ?? 0} changes left).` +
         (job.appearanceAutoSelectAt
           ? ` Tell him: if no choice or revision is received, the server automatically selects A after ${job.appearanceAutoSelectAt}` +
-            ' (ten minutes after this pair was ready, checked once a minute), even if he closes the chat. The host continues when available.' +
+            ' (three minutes after this pair was ready). A waiting host selects at that time; otherwise a once-a-minute check does, within about a minute.' +
+            ' This happens even if he closes the chat. The host continues when available.' +
             ' Do not send choose_hosted_look on his behalf just because time elapsed; read the job to confirm the actual selection.'
           : '')
       );
@@ -482,6 +490,7 @@ function watchedView(job, first, changes, baseline) {
       id: job.id,
       status: job.status,
       progress: job.progress ?? null,
+      ...(job.warnings?.length ? { warnings: job.warnings } : {}),
       ...(job.queue ? { queue: { position: job.queue.position, ...(job.queue.reason ? { reason: job.queue.reason } : {}) } } : {}),
       ...(job.submission ? { submission: { stage: job.submission.stage } } : {}),
     },
@@ -503,6 +512,10 @@ function watchedView(job, first, changes, baseline) {
       `Still working: tell the user what changed${
         show.length
           ? ` and show him ${show.join(' and ')} unless you already showed it (by kind, ` + `clip and name; a url changes every read; ${IMAGES_NEXT})`
+          : ''
+      }${
+        job.warnings?.length
+          ? ` ODDBOUT kept going after a check it could not pass (${[...new Set(job.warnings.map(warning => warning.code))].join(', ')}).`
           : ''
       }, then while he watches call get_hosted_fighter again with waitSeconds 25. ` +
       "Without waitSeconds it returns the whole job: every picture's url, the profile draft and the full next.",
@@ -642,7 +655,7 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
     'ODDBOUT에 선수 만들기 맡기기',
     'ODDBOUT makes a fighter for the connected user on its own generation worker: ' +
       'two front-view looks to choose from (the chosen one is also his profile picture), then a side view drawn from it and the eleven ' +
-      'motions, then registration under his account. New pairs default to A after ten minutes without a choice or revision; ' +
+      'motions, then registration under his account. New pairs default to A after three minutes without a choice or revision; ' +
       'the job reports appearanceAutoSelectAt when this applies. Explain this before waiting for his choice. delegate: ' +
       'true only when he explicitly delegates the appearance choice ("외형은 네가 골라 줘", "you choose the look"). ' +
       'A creation request alone ("그냥 만들어줘", "just make it") does not delegate the choice; omit delegate or pass false and show the looks for his choice. ' +
@@ -652,7 +665,7 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
       "any or another person's host sends his words and pictures to that host's PC, so ask him first and pass hostConsent: " +
       'true. imageProvider: who draws the pictures, grok (default) or gpt (refused with image-provider-unavailable where that host ' +
       'draws no GPT pictures now). description is the character artwork brief only: name, appearance, outfit, personality and visual style. ' +
-      'Keep workflow, waiting, tool-use and permission instructions outside that field; the server owns the ten-minute default and registration workflow. ' +
+      'Keep workflow, waiting, tool-use and permission instructions outside that field; the server owns the three-minute default and registration workflow. ' +
       "These product choices do not change the conversation host's tool-call approval policy. Pass his artwork requirements and, if he gave them, " +
       'up to two of his own pictures with his confirmation that he has the rights to them: attached files (picture, secondPicture) where ' +
       'this host attaches files, else pictureUploads (usable ids from get_picture_upload, shown to him first). ' +
@@ -865,7 +878,8 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
     `Read or resume the connected user's hosted fighter after a timeout or disconnection: its state, ` +
       `the two front-view looks, the side view drawn from the chosen one (side), his six arena faces (expressions: 3 × 2, the last his KO face) ` +
       `or the motion previews as fresh image URLs (ten minutes), ` +
-      `the profile draft, the profile set made at registration (profileSetId) and next. ` +
+      `the profile draft, the profile set made at registration (profileSetId), job.timeline (recent events as at, kind, take and outcome), ` +
+      `job.warnings (checks the worker continued past) and next. ` +
       `Supply either jobId or the original request's idempotencyKey, never both. ` +
       `Key lookup only reads an existing job under this account, even when new generation is disabled; ` +
       `not-found does not prove that an interrupted request never started. With neither identifier: ` +

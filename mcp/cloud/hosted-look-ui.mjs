@@ -163,8 +163,8 @@ function statusNodes(output){
     const due=new Date(s.appearanceAutoSelectAt);
     if(Number.isFinite(due.getTime()))items.push(node('p',
       say('A auto-selection deadline: ','A 자동 선택 예정: ')+due.toLocaleString(ko()?'ko-KR':'en-US',{timeZone:'UTC'})+' UTC'+
-      say(' · Ten minutes after the pair was ready; automatic selection may take about one extra minute. Continues even with this chat closed.',
-        ' · 시안 준비 후 10분이며, 자동 선택까지 약 1분 더 걸릴 수 있습니다. 채팅을 닫아도 이어집니다.')));
+      say(' · Three minutes after the pair was ready. A waiting host selects at that time; otherwise within about a minute. Continues even with this chat closed.',
+        ' · 시안 준비 후 3분입니다. 기다리는 호스트는 그 시각에 고르고, 그렇지 않으면 약 1분 안에 고릅니다. 채팅을 닫아도 이어집니다.')));
   }
   const automatic=s.appearanceAutoSelection;
   if(automatic?.choice==='a'){
@@ -173,6 +173,9 @@ function statusNodes(output){
       say('A was selected automatically after no answer. Selected at: ','응답이 없어 A가 자동 선택됐습니다. 선택 시각: ')
       +selected.toLocaleString(ko()?'ko-KR':'en-US',{timeZone:'UTC'})+' UTC'));
   }
+  const warnings=Array.isArray(output.job?.warnings)?output.job.warnings:[];
+  const warned=[...new Set(warnings.map(w=>w&&w.code).filter(code=>typeof code==='string'&&/^[a-z0-9-]{1,40}$/.test(code)))].slice(0,4);
+  if(warned.length)items.push(node('p',say('Continued with a warning: ','경고를 남기고 이어감: ')+warned.join(', ')));
   if(s.error)items.push(node('p',say('Reason: ','사유: ')+s.error));
   if(s.updatedAt)items.push(node('p',say('Last job update: ','작업 갱신: ')+s.updatedAt));
   if(s.checkedAt)items.push(node('p',say('Snapshot checked: ','이 카드의 확인 시각: ')+s.checkedAt));
