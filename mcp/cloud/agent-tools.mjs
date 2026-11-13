@@ -5,6 +5,8 @@ import { Problem } from '../../api/http.mjs';
 import spec from '../../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { profileLimits } from '../../contracts/ai-fighter/profile-limits.mjs';
 import { CUP_WAIT_MS, UUID_ARG, arenaCall, frontNext, pause, timeLeft, unavailable } from './common.mjs';
+import { attachBoutShare, staminaPair } from '../../api/bout-share.mjs';
+import { presentBoutVideo, readBoutVideo, requestBoutVideo } from '../../api/bout-video.mjs';
 import { ENTRY_CLIPS } from '../../api/fighter-entry.mjs';
 import { toolRef } from './merged-tools.mjs';
 /**
@@ -136,7 +138,9 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
     'Fight a bout again and read its record: who won and how, HP left, hits landed and the highlights (super, air combo, ' +
       'throw, wall, big hit, comeback, KO, clutch) with their times. ' +
       'Give a played cup bout (cupId, round 0-3, slot) or a pair and seed (current packages). ' +
-      'The page link plays it in the browser.',
+      'page plays that bout in the browser (play=1, fighter, opponent, bout, the rules version and the result digest). ' +
+      'When the arena withholds page for two registered fighters, this fills that same URL. ' +
+      'share is a suggested caption and an X intent link; nothing is posted. render_bout_video makes the MP4.',
     {
       cupId: UUID_ARG().optional(),
       round: z.number().int().min(0).max(3).optional(),
@@ -146,8 +150,9 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
       seed: z.number().int().min(0).max(0xffffffff).optional(),
     },
     async ({ cupId, round, slot, a, b, seed }) => {
-      if (cupId !== undefined && round !== undefined && slot !== undefined) return read(`bout?cup=${cupId}&round=${round}&slot=${slot}`);
-      if (a !== undefined && b !== undefined && seed !== undefined) return read(`bout?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}&seed=${seed}`);
+      if (cupId !== undefined && round !== undefined && slot !== undefined) return attachBoutShare(await read(`bout?cup=${cupId}&round=${round}&slot=${slot}`));
+      if (a !== undefined && b !== undefined && seed !== undefined)
+        return attachBoutShare(await read(`bout?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}&seed=${seed}`));
       return { ok: false, code: 'invalid-bout' };
     },
     { publicTool: true },
@@ -157,10 +162,80 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
     '스파링',
     'Spar: one bout between two fighters on their current packages, read back with its record (as read_bout). ' +
       'Not ranked and not kept. Use it to see how a fighter fights, before and after a style change. Registered fighters must be entered. ' +
-      'Give a seed to fight the same bout again.',
+      'Give a seed to fight the same bout again. page and share are the playback link and a suggested X caption, as read_bout. ' +
+      'Nothing is posted. render_bout_video makes the MP4 of that seed.',
     { fighterId: ID, opponentId: ID, seed: z.number().int().min(0).max(0xffffffff).optional() },
-    ({ fighterId, opponentId, seed }) =>
-      call('agent/spar', { owner: /** @type {Identity} */ (identity).owner, a: fighterId, b: opponentId, ...(seed === undefined ? {} : { seed }) }),
+    async ({ fighterId, opponentId, seed }) =>
+      attachBoutShare(
+        await call('agent/spar', {
+          owner: /** @type {Identity} */ (identity).owner,
+          a: fighterId,
+          b: opponentId,
+          ...(seed === undefined ? {} : { seed }),
+        }),
+      ),
+  );
+  register(
+    'render_bout_video',
+    '경기 영상',
+    'Render one spar or one cup bout to an MP4 of that exact seeded fight, for the user to post on X. ' +
+      'Give a pair and seed (current packages, the same seed spar returned) or a played cup bout (cupId, round 0-3, slot). ' +
+      'The file is H.264, even-sized, at most 1280×720, with a short card of both names and the ODDBOUT end card. ' +
+      "A ready result has video.url, video.seconds, video.bytes and digest, which is the spar record's digest. " +
+      'The same arguments return the same video. While it renders, call this again. ' +
+      'trim highlights keeps the highlight span when the record has times; otherwise the whole bout. ' +
+      "This does not post to X or sign in to X. Post with the user's own X connection. Put reply in the first reply.",
+    {
+      a: ID.optional(),
+      b: ID.optional(),
+      seed: z.number().int().min(0).max(0xffffffff).optional(),
+      cupId: UUID_ARG().optional(),
+      round: z.number().int().min(0).max(3).optional(),
+      slot: z.number().int().min(0).max(7).optional(),
+      trim: z.enum(['full', 'highlights']).default('full'),
+      aspect: z.enum(['16:9', '1:1']).default('16:9'),
+      waitSeconds: z.number().int().min(0).max(20).optional(),
+    },
+    async ({ a, b, seed, cupId, round, slot, trim, aspect, waitSeconds }, { signal, deadline }) => {
+      const ofCup = cupId !== undefined || round !== undefined || slot !== undefined;
+      const ofPair = a !== undefined || b !== undefined || seed !== undefined;
+      if (ofCup === ofPair || (ofCup && (cupId === undefined || round === undefined || slot === undefined))) return { ok: false, code: 'invalid-bout' };
+      if (ofPair && (a === undefined || b === undefined || seed === undefined)) return { ok: false, code: 'invalid-bout' };
+      const raw = ofCup
+        ? await read(`bout?cup=${cupId}&round=${round}&slot=${slot}`)
+        : await read(`bout?a=${encodeURIComponent(/** @type {string} */ (a))}&b=${encodeURIComponent(/** @type {string} */ (b))}&seed=${seed}`);
+      if (!raw?.ok) return raw;
+      const shared = attachBoutShare(raw);
+      const digest = shared.record?.digest;
+      if (typeof digest !== 'string' || !/^[a-f0-9]{8}$/.test(digest)) return { ok: false, code: 'bout-digest-missing', page: shared.page ?? null };
+      if (!Number.isInteger(shared.rules)) return { ok: false, code: 'bout-rules-missing', page: shared.page ?? null };
+      if (typeof shared.page !== 'string') return { ok: false, code: 'bout-page-missing' };
+      const fighters = Array.isArray(shared.fighters) ? shared.fighters : [];
+      let row = await requestBoutVideo(db, {
+        owner: /** @type {Identity} */ (identity).owner,
+        a: shared.a,
+        b: shared.b,
+        seed: shared.seed,
+        rules: shared.rules,
+        digest,
+        stamina: staminaPair(shared.stamina) ?? staminaPair(shared.record?.stamina),
+        trim,
+        aspect,
+        page: shared.page,
+        caption: shared.share?.caption ?? null,
+        intent: shared.share?.intent ?? null,
+        reply: shared.share?.reply ?? shared.page,
+        record: shared.record,
+        fighters,
+      });
+      const until = Math.min(deadline, Date.now() + Math.min(waitSeconds ?? 0, 20) * 1000);
+      while (row?.status && row.status !== 'ready' && row.status !== 'failed' && Date.now() < until && !signal.aborted) {
+        await pause(1000, signal);
+        row = (await readBoutVideo(db, row.id)) ?? row;
+      }
+      return presentBoutVideo(db, row);
+    },
+    { write: true, idempotent: true },
   );
   register(
     'enter_cup',

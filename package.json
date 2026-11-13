@@ -43,6 +43,8 @@
     "fighter:contact": "node scripts/contact.mjs",
     "fighter:profile-set": "node scripts/profile-set.mjs",
     "fighter:social": "node scripts/social-export.mjs",
+    "bout:video": "node scripts/bout-video.mjs",
+    "bout:video-worker": "node scripts/bout-video.mjs --worker",
     "fighter:register": "node scripts/register-fighter.mjs",
     "flow:test": "node scripts/flow-test.mjs",
     "flow:eval": "node scripts/flow-eval.mjs",
