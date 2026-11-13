@@ -84,7 +84,7 @@ npm run bout:video -- --url '<page>' --digest <8 hex> --out output/bout.mp4
 
 | 순서 | 하는 일 |
 | --- | --- |
-| 1 | 이 마이그레이션을 적용한다. `supabase/migrations/20261113210000_bout_videos.sql`. 버킷 `af-bout-videos`와 `af_bout_video_claim`. 클라이언트 정책은 없다 |
+| 1 | 이 마이그레이션을 적용한다. `supabase/migrations/20261114010000_bout_videos.sql`. 버킷 `af-bout-videos`와 `af_bout_video_claim`. 클라이언트 정책은 없다 |
 | 2 | 게임 저장소에서 `ai-fighter` 엣지를 배포한다. `worker/bout-video/claim`, `finish`, `fail`이 여기 있다 |
 | 3 | 게임 저장소에서 `ai-fighter-mcp`를 배포한다. `page`를 채우고 `render_bout_video`가 목록에 나온다. 도구 목록이 19에서 20이 된다 |
 | 4 | 위 게임 변경을 사이트에 게시한다. 그 전에도 주소는 돌아오지만, 등록 선수 둘은 재생되지 않고 영상은 `playback-unavailable`이다 |
