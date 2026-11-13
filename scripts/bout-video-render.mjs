@@ -15,6 +15,15 @@ const FPS = 30;
 const INTRO_S = 1.5;
 const END_S = 1.8;
 const INK = { r: 20, g: 16, b: 32 };
+/** The posted file's quality: x264 crf 28, preset slow (2026-11-14 — a 33 s bout at 960×540 is ~2.9 MB). The steps before it stay near-lossless. */
+export const BOUT_CRF = 28;
+/**
+ * The page is filmed at the game's usual size and scaled down in the cut: a smaller viewport would lay the HUD out for a small screen.
+ * @param {number} width @param {number} height
+ */
+export function filmViewport(width, height) {
+  return width === height ? { width: 720, height: 720 } : { width: 1280, height: 720 };
+}
 
 /** @param {string} code */
 export function boutError(code) {
@@ -134,6 +143,8 @@ export async function composeBoutFile(cut) {
         'libx264',
         '-profile:v',
         'high',
+        '-crf',
+        '18',
         '-pix_fmt',
         'yuv420p',
         '-movflags',
@@ -162,6 +173,10 @@ export async function composeBoutFile(cut) {
         'libx264',
         '-profile:v',
         'high',
+        '-preset',
+        'slow',
+        '-crf',
+        String(BOUT_CRF),
         '-pix_fmt',
         'yuv420p',
         '-movflags',

@@ -11,7 +11,7 @@ import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { apiRequest } from '../api/client.mjs';
 import { sha256 } from '../api/http.mjs';
-import { composeBoutFile, recordBoutPage, recordingCut, trimSeconds } from './bout-video-render.mjs';
+import { composeBoutFile, filmViewport, recordBoutPage, recordingCut, trimSeconds } from './bout-video-render.mjs';
 
 /** @param {string} url @param {Uint8Array} bytes */
 export async function uploadSigned(url, bytes) {
@@ -66,11 +66,13 @@ export async function runBoutVideoOnce(worker) {
 export async function renderClaimedJob(job) {
   const ms = typeof job.record?.ms === 'number' ? job.record.ms : 60_000;
   const timeoutMs = (ms >= 1000 ? ms : ms * 1000) + 60_000;
+  // Filmed at the game's usual size; the cut scales it to the job's canvas.
+  const viewport = filmViewport(job.width, job.height);
   const filmed = await recordBoutPage({
     url: job.page,
     expectedDigest: job.digest,
-    width: job.width,
-    height: job.height,
+    width: viewport.width,
+    height: viewport.height,
     timeoutMs,
   });
   const dir = await mkdtemp(path.join(tmpdir(), 'bout-job-'));
@@ -151,8 +153,8 @@ export async function main(argv) {
       url: { type: 'string' },
       digest: { type: 'string' },
       out: { type: 'string' },
-      width: { type: 'string', default: '1280' },
-      height: { type: 'string', default: '720' },
+      width: { type: 'string', default: '960' },
+      height: { type: 'string', default: '540' },
     },
   });
   if (!values.url || !values.digest || !values.out || !/^[a-f0-9]{8}$/.test(values.digest)) {
@@ -163,7 +165,8 @@ export async function main(argv) {
   }
   const width = Number(values.width);
   const height = Number(values.height);
-  const filmed = await recordBoutPage({ url: values.url, expectedDigest: values.digest, width, height, timeoutMs: 180_000 });
+  const viewport = filmViewport(width, height);
+  const filmed = await recordBoutPage({ url: values.url, expectedDigest: values.digest, ...viewport, timeoutMs: 180_000 });
   const dir = await mkdtemp(path.join(tmpdir(), 'bout-local-'));
   try {
     const raw = path.join(dir, 'bout.webm');

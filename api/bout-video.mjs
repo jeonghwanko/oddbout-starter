@@ -12,7 +12,7 @@ export { BOUT_CANVAS } from './bout-video-canvas.mjs';
 export const BOUT_VIDEO_BUCKET = 'af-bout-videos';
 export const BOUT_VIDEO_TABLE = 'af_bout_videos';
 /** Bumped when the composed file changes, so an old object is not served as the new cut. */
-export const BOUT_VIDEO_VERSION = 1;
+export const BOUT_VIDEO_VERSION = 2;
 const IN_FLIGHT = 2;
 const COOLDOWN_MS = 30_000;
 export const BOUT_VIDEO_LEASE_S = 900;
