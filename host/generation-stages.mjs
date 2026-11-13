@@ -272,16 +272,19 @@ export const EXTRACT_REDRAWS = 2;
  * Contact sheets for one motion round, one at a time. A snapshot that is no longer the latest is not uploaded, so a slow
  * rebuild cannot replace a newer sheet. `build` and `commit` failures are swallowed: the queue always settles.
  * The caller does not wait, except `flush` before the stage returns.
- * @param {{ build: (snap: any) => Promise<any>, commit: (snap: any, built: any) => Promise<void> }} hooks
+ * Only the latest snapshot is kept, so kicks cannot pile up. A cancelled stage stops starting builds, and `flush` returns
+ * when the signal aborts instead of waiting out a stuck build.
+ * @param {{ build: (snap: any) => Promise<any>, commit: (snap: any, built: any) => Promise<void>, signal?: AbortSignal | null }} hooks
  */
-export function createMotionSheetQueue({ build, commit }) {
+export function createMotionSheetQueue({ build, commit, signal = null }) {
   let latest = /** @type {any} */ (null);
   let dirty = false;
   /** @type {Promise<void> | null} */
   let running = null;
+  const stopped = () => signal?.aborted === true;
   async function loop() {
     try {
-      while (dirty) {
+      while (dirty && !stopped()) {
         dirty = false;
         const snap = latest;
         let built = null;
@@ -290,29 +293,32 @@ export function createMotionSheetQueue({ build, commit }) {
         } catch {
           built = null;
         }
-        // A newer snapshot arrived while this one was built: drop it, including its bytes, and build the latest.
-        if (dirty || snap !== latest) continue;
+        if (stopped()) break;
+        // The clip list is still published. Only a snapshot that is still the latest may upload its pixels,
+        // so a slow sheet cannot replace a newer one, and a superseded take is not erased from the event list.
+        const current = !dirty && snap === latest;
         try {
-          await commit(snap, built);
+          await commit(snap, current ? built : null);
         } catch {
           /* a sheet is a courtesy */
         }
       }
     } finally {
       running = null;
-      if (dirty) running = loop();
+      if (dirty && !stopped()) running = loop();
     }
   }
   return {
     /** @param {any} snap */
     kick(snap) {
+      if (stopped()) return running ?? Promise.resolve();
       latest = snap;
       dirty = true;
       if (!running) running = loop();
       return running;
     },
     flush: async () => {
-      while (running) await running;
+      while (running && !stopped()) await running;
     },
   };
 }
@@ -339,7 +345,9 @@ export async function extractFailedRows(run) {
  * @typedef {{ verdict?: any, record?: any, status?: string, fresh?: boolean, code?: number, pixelCode?: number | string, by?: string,
  *   open?: string[] }} Judged  A judge's end: its verdict, or the exit (`code`, `pixelCode`) of the judge that gave none.
  * @typedef {Stop & { strip?: string, verdict?: string, take?: number | null, tried?: any[], note?: string,
+ *   warning?: { code: string, take: number, failed: string[] },
  *   judged?: { status?: string, label: string } }} Loop  A walk or run: its strip and verdict, or why there is none.
+ *   `warning` (PR #441): the judge refused the take and the worker kept it anyway. Absent on this branch until that lands.
  * @param {{ og: (args: string[], options?: { stdin?: string, capture?: boolean }) => Promise<Ran>, api: Api,
  *   fetchBytes: (url: string) => Promise<Uint8Array>, toWebp: (png: string, webp: string, size?: string) => Promise<unknown>,
  *   fitImage?: ((from: string, to: string) => Promise<unknown>) | null, motionsPy?: (args: string[]) => Promise<Ran>, gaitStaggerMs?: number,
@@ -457,9 +465,19 @@ export function createStages({
       since = Date.now();
     // The shadow starts with the codex call and is awaited before we return, so the next judgment does not share its files.
     const side = alongside ? alongside().catch(() => null) : null;
-    const callAt = Date.now();
-    const { code, output } = await og(judgeCommand({ schema: schemaFile, out: answerFile, refs, cwd }), { stdin: prompt, capture: true });
-    const codexMs = Date.now() - callAt;
+    let code = 0,
+      output = '',
+      codexMs = 0;
+    try {
+      const callAt = Date.now();
+      const ran = await og(judgeCommand({ schema: schemaFile, out: answerFile, refs, cwd }), { stdin: prompt, capture: true });
+      code = ran.code;
+      output = ran.output ?? '';
+      codexMs = Date.now() - callAt;
+    } finally {
+      // Join the shadow before returning so the next judgment does not share its pixel file. It never changes this verdict.
+      if (side) await side;
+    }
     const shadow = side ? await side : null;
     if (code !== 0) return { code, shadow, codexMs };
     const facts = await observeCodex(output, since);
@@ -1091,7 +1109,9 @@ export function createStages({
     screening.push(
       (async () => {
         try {
+          if (signal?.aborted) return;
           if (!existsSync(webp)) await toWebp(png, webp);
+          if (signal?.aborted) return;
           await api.artifact(job, name, await readFile(webp));
           await Promise.resolve(
             api.progress?.(job, undefined, { kind: 'side', artifact: name, outcome: 'chosen', take, ...(styleWaived ? { styleWaived: true } : {}) }),
@@ -1656,20 +1676,25 @@ export function createStages({
       await mkdir(dir, { recursive: true });
       const id = `${Date.now().toString(36)}-${randomBytes(3).toString('hex')}`;
       const manifest = path.join(dir, `manifest-${id}.json`),
-        out = path.join(dir, `sheet-${id}.webp`);
-      await writeFile(
-        manifest,
-        JSON.stringify({
-          clips: usable.map(item => ({ clip: item.clip, file: item.file, ...(item.state ? { state: item.state } : {}) })),
-        }),
-      );
-      if ((await motionsPy(['progress-sheet', manifest, out])).code !== 0 || !existsSync(out)) return null;
-      const bytes = new Uint8Array(await readFile(out));
-      const report = await readJson(out.replace(/\.webp$/, '.json')).catch(() => null);
-      await rm(out, { force: true });
-      await rm(manifest, { force: true });
-      await rm(out.replace(/\.webp$/, '.json'), { force: true });
-      return { name: `sheet-${job.motionRound}`, bytes, clips: Array.isArray(report?.clips) ? report.clips : [] };
+        out = path.join(dir, `sheet-${id}.webp`),
+        reportPath = out.replace(/\.webp$/, '.json');
+      try {
+        await writeFile(
+          manifest,
+          JSON.stringify({
+            clips: usable.map(item => ({ clip: item.clip, file: item.file, ...(item.state ? { state: item.state } : {}) })),
+          }),
+        );
+        if (signal?.aborted) return null;
+        if ((await motionsPy(['progress-sheet', manifest, out])).code !== 0 || !existsSync(out)) return null;
+        const bytes = new Uint8Array(await readFile(out));
+        const report = await readJson(reportPath).catch(() => null);
+        return { name: `sheet-${job.motionRound}`, bytes, clips: Array.isArray(report?.clips) ? report.clips : [] };
+      } finally {
+        await rm(out, { force: true });
+        await rm(manifest, { force: true });
+        await rm(reportPath, { force: true });
+      }
     }
     /** @param {number} count @param {number} max */
     const metricCount = (count, max) => (Number.isInteger(count) && count >= 1 && count <= max ? count : null);
@@ -1699,6 +1724,7 @@ export function createStages({
       return event;
     }
     const sheets = createMotionSheetQueue({
+      signal,
       build: buildSheet,
       commit: async (snap, built) => {
         let sheet = null;
@@ -2068,16 +2094,17 @@ export function createStages({
           showTake(gait),
         );
         await shownTakes[gait];
-        if (loop.strip && !loop.retry && !loop.review) await gaitDraft(gait, loop.strip);
+        if (loop.strip && !loop.retry && !loop.review) await gaitDraft(gait, loop.strip, loop.warning ? 'warning' : null);
         // Not passed: a run the walk may still make keeps its refused take marked; any other comes off.
         else await unshown(gait, !(gait === 'run' && runFallback(loop.review)));
         await Promise.resolve(api.progress?.(job, undefined, gaitEvent(gait, loop))).catch(() => {});
         return loop;
       };
-    const gaitDraft = async (/** @type {string} */ gait, /** @type {string} */ strip) => {
+    const gaitDraft = async (/** @type {string} */ gait, /** @type {string} */ strip, /** @type {string | null} */ state = null) => {
       const file = path.join(draftDir, `${gait}.webp`);
       await mkdir(draftDir, { recursive: true });
-      if ((await motionsPy(['strip-preview', strip, file])).code === 0) await draft([file]);
+      // `warning`: #441 kept this take after the judge refused it. The sheet says so instead of calling it ready.
+      if ((await motionsPy(['strip-preview', strip, file])).code === 0) await draft([file], state);
     };
     // A gait's take as soon as it is cut (2026-11-01): the creator sees the walk and the run a minute after they film, while the alignment
     // and the judge (minutes on the GPU) still run. The take that passes replaces it (gaitDraft); one refused is marked at once. A gait's
@@ -2245,11 +2272,16 @@ export function createStages({
       preview = await Promise.all(
         PREVIEW_CLIPS.map(async clip => {
           const file = path.join(previews, `${clip}.webp`);
-          if (!existsSync(file)) throw new Error(clip);
-          const name = previewName(clip, job.motionRound);
-          await api.artifact(job, name, await readFile(file));
-          sheetFiles.set(clip, file);
-          return { clip, name, ...(clip === 'run' && run.note ? { note: run.note } : {}) };
+          try {
+            if (!existsSync(file)) throw new Error('missing');
+            const name = previewName(clip, job.motionRound);
+            await api.artifact(job, name, await readFile(file));
+            sheetFiles.set(clip, file);
+            return { clip, name, ...(clip === 'run' && run.note ? { note: run.note } : {}) };
+          } catch {
+            // Any miss, including a failed PUT, stops the stage. Registration runs only after outcome ok, so a partial upload is not submitted.
+            throw new Error(clip);
+          }
         }),
       );
     } catch (/** @type {any} */ error) {

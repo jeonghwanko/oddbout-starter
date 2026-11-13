@@ -264,6 +264,20 @@ test('the worker carries a job through brief, two looks, a change, a pick, motio
     );
     assert.equal(sheet.clips.find(clip => clip.clip === 'combo').frames, undefined);
     assert.equal(sheet.clips.length, 11);
+    // A take the judge refused and the worker kept (warning) stays a warning after the packed preview exists.
+    await work('POST', 'progress', {
+      jobId: held.id,
+      leaseToken: held.leaseToken,
+      event: {
+        kind: 'drafts',
+        seq: 1_800_000_000_005,
+        sheet: 'sheet-0',
+        clips: [
+          { clip: 'combo', name: 'draft-combo-0' },
+          { clip: 'walk', name: 'draft-walk-t0-0', state: 'warning', frames: 12, durationMs: 800 },
+        ],
+      },
+    });
     // The run made from the walk carries its note (2026-10-29); a note the API does not know is refused.
     const preview = ['idle', 'walk', 'run'].map(clip => ({
       clip,
@@ -277,7 +291,7 @@ test('the worker carries a job through brief, two looks, a change, a pick, motio
     assert.equal(read.status, 'submitting');
     // The sheet stays after the motions stage: packed clips are ready, including a walk that was still being checked.
     assert.match(read.motionSheet.url, /sheet-0\.webp/);
-    assert.equal(read.motionSheet.clips.find(clip => clip.clip === 'walk').status, 'ready');
+    assert.equal(read.motionSheet.clips.find(clip => clip.clip === 'walk').status, 'warning');
     assert.equal(read.motionSheet.clips.find(clip => clip.clip === 'run').status, 'ready');
     // Existing motion_ready jobs remain supported. Restore that legacy fixture to exercise revision/profile edits.
     await sql.query("update public.af_generation_jobs set status='motion_ready' where id=$1", [job.id]);

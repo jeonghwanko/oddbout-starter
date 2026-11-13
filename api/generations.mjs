@@ -57,8 +57,9 @@ const MOTIONS = Object.keys(spec.motions);
 /** What the worker may say about one preview clip: `run-from-walk`, a run the gate refused made from the walk (2026-10-29). */
 export const PREVIEW_NOTES = Object.freeze(['run-from-walk']);
 /** What the worker may say about one draft (2026-11-01): a walk or run take shown as it is cut, `checking` while the gate looks at it,
- * `retaking` when the gate refused it and the next take films. A draft with no state passed (or is an action clip). */
-export const DRAFT_STATES = Object.freeze(['checking', 'retaking']);
+ * `retaking` when the gate refused it and the next take films. `warning` (2026-11-13, the keep-and-continue path): the judge refused the
+ * take and the worker kept it. A draft with no state passed (or is an action clip). */
+export const DRAFT_STATES = Object.freeze(['checking', 'retaking', 'warning']);
 /** What the worker's `profile-front` event says of his profile set (host/generation-stages.mjs profileFront, 2026-11-07): it went to the job
  * (`ok`), the server refused it (`refused`), a front that is not a portrait could not be framed (`unframed`), its face square could not be
  * measured (`unmeasured`), or something else stopped it (`error`). */
@@ -509,13 +510,17 @@ export function createGenerationHandler({
     const clips = SHEET_CLIPS.map(clip => {
       const draft = byClip.get(clip);
       const metric = metrics.get(clip);
-      const status = previewClips.has(clip)
-        ? 'ready'
-        : draft?.state === 'checking' || draft?.state === 'retaking'
-          ? draft.state
-          : draft || metric?.frames
+      // A kept warning stays a warning after the packed preview exists. Checking and retaking only apply while the motions are still open.
+      const status =
+        draft?.state === 'warning'
+          ? 'warning'
+          : previewClips.has(clip)
             ? 'ready'
-            : 'pending';
+            : draft?.state === 'checking' || draft?.state === 'retaking'
+              ? draft.state
+              : draft || metric?.frames
+                ? 'ready'
+                : 'pending';
       return {
         clip,
         status,

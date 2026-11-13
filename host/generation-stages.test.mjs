@@ -133,13 +133,39 @@ test('a contact sheet queue uploads only the latest snapshot and still settles w
   releaseFirst();
   await Promise.all([slow, newer]);
   await queue.flush();
-  assert.deepEqual(uploaded, ['newer']);
-  assert.deepEqual(events, ['newer']);
+  // The slow sheet is not uploaded. Its clip event is still recorded, then the newer sheet.
+  assert.deepEqual(events, ['slow', 'newer']);
+  assert.deepEqual(uploaded, [null, 'newer']);
   await queue.kick({ id: 'bad' });
   await queue.flush();
-  assert.deepEqual(events, ['newer', 'bad']);
-  assert.deepEqual(uploaded, ['newer', null]);
+  assert.deepEqual(events, ['slow', 'newer', 'bad']);
+  assert.deepEqual(uploaded, [null, 'newer', null]);
   assert.ok(builds >= 2);
+  const controller = new AbortController();
+  let started = false;
+  let releaseHung = () => {};
+  const hungGate = new Promise(done => {
+    releaseHung = done;
+  });
+  const cancelled = createMotionSheetQueue({
+    signal: controller.signal,
+    build: async () => {
+      started = true;
+      await hungGate;
+      return { id: 'hung' };
+    },
+    commit: async () => {
+      uploaded.push('should-not-commit');
+    },
+  });
+  const hung = cancelled.kick({ id: 'hung' });
+  await new Promise(done => setImmediate(done));
+  assert.equal(started, true);
+  controller.abort();
+  await cancelled.flush();
+  releaseHung();
+  await hung;
+  assert.ok(!uploaded.includes('should-not-commit'));
 });
 /** motions.py's face-box needs Pillow and NumPy (the kit's sprite-gen venv has them; a bare CI runner may not). */
 const hasPillow = () => spawnSync('python3', ['-c', 'import PIL, numpy']).status === 0;

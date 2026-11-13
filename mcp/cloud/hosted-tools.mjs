@@ -130,7 +130,8 @@ const IMAGES_NEXT = 'where this chat shows no picture from its url, download eac
 const SHEET_SHOW =
   'Show the user the contact sheet: one image of key frames for every motion finished so far, with unfinished motions as placeholders. ' +
   'The image is attached to this result when it changed; otherwise use job.motionSheet.url (it lasts ten minutes). ' +
-  'Summarize job.motionSheet.clips (ready, checking, retaking or pending; frames and durationMs when present). ' +
+  'Summarize job.motionSheet.clips (ready, checking, retaking, warning, or pending; frames and durationMs when present). ' +
+  'A warning means the judge refused that take and ODDBOUT kept it. ' +
   'Do not download the separate clip previews.';
 
 // Keep the pair under 5.4 MB after base64 encoding. Oversize or unavailable previews retain the ordinary signed-link response.
