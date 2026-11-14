@@ -32,12 +32,12 @@
     <!-- 부팅의 loadUiFont 가 기다린다. 빠뜨리면 JS 를 다 받은 뒤에야 따로 받기 시작한다. -->
     <link
       rel="preload"
-      href="./fonts/BlackHanSans-Lettering.woff2?v=5a589dd4"
+      href="https://assets.oddbout.com/fonts/BlackHanSans-Lettering.woff2?v=5a589dd4"
       as="font"
       type="font/woff2"
       crossorigin
     />
-    <style>@font-face{font-family:NanumSquareRound;src:url(./fonts/NanumSquareRound-Bold.woff2?v=5a589dd4)format("woff2");font-weight:700;font-style:normal;font-display:block}@font-face{font-family:NanumSquareRound;src:url(./fonts/NanumSquareRound-ExtraBold.woff2?v=5a589dd4)format("woff2");font-weight:800;font-style:normal;font-display:block}@font-face{font-family:Black Han Sans;src:url(./fonts/BlackHanSans-Lettering.woff2?v=5a589dd4)format("woff2");unicode-range:U+20-7E,U+B7,U+2019,U+2026;font-weight:400;font-style:normal;font-display:block}@font-face{font-family:Gaegu;src:url(./fonts/Gaegu-Notebook.woff2?v=5a589dd4)format("woff2");font-weight:700;font-style:normal;font-display:block}@font-face{font-family:Patrick Hand;src:url(./fonts/PatrickHand-Notebook.woff2?v=5a589dd4)format("woff2");font-weight:400;font-style:normal;font-display:block}@font-face{font-family:Yomogi;src:url(./fonts/Yomogi-Notebook.woff2?v=5a589dd4)format("woff2");font-weight:400;font-style:normal;font-display:block}html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adjust:100%;background:#44b4f2;height:100%;margin:0;padding:0;overflow:hidden}body{box-sizing:border-box;height:100dvh;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);flex-direction:column;display:flex}.game-navigation{box-sizing:border-box;background:#141020;flex:0 0 48px;align-items:center;padding:0 16px;display:flex}.game-navigation[hidden]{display:none}.game-home{box-sizing:border-box;color:#fff;align-items:center;gap:8px;min-height:44px;padding:0 12px;font:700 16px/1.4 Pretendard,Malgun Gothic,sans-serif;text-decoration:none;display:inline-flex}.game-home[hidden]{display:none}.game-home:hover{background:#ffffff17}.game-home:focus-visible{outline-offset:-2px;outline:2px solid #eaff50}.game-logo{filter:brightness(0)invert();width:auto;height:26px;display:block}#game{flex:1;width:100%;min-height:0;position:relative}#game canvas{touch-action:none;display:block}</style>
+    <style>@font-face{font-family:NanumSquareRound;src:url(https://assets.oddbout.com/fonts/NanumSquareRound-Bold.woff2?v=5a589dd4)format("woff2"),url(./fonts/NanumSquareRound-Bold.woff2?v=5a589dd4)format("woff2");font-weight:700;font-style:normal;font-display:block}@font-face{font-family:NanumSquareRound;src:url(https://assets.oddbout.com/fonts/NanumSquareRound-ExtraBold.woff2?v=5a589dd4)format("woff2"),url(./fonts/NanumSquareRound-ExtraBold.woff2?v=5a589dd4)format("woff2");font-weight:800;font-style:normal;font-display:block}@font-face{font-family:Black Han Sans;src:url(https://assets.oddbout.com/fonts/BlackHanSans-Lettering.woff2?v=5a589dd4)format("woff2"),url(./fonts/BlackHanSans-Lettering.woff2?v=5a589dd4)format("woff2");unicode-range:U+20-7E,U+B7,U+2019,U+2026;font-weight:400;font-style:normal;font-display:block}@font-face{font-family:Gaegu;src:url(https://assets.oddbout.com/fonts/Gaegu-Notebook.woff2?v=5a589dd4)format("woff2"),url(./fonts/Gaegu-Notebook.woff2?v=5a589dd4)format("woff2");font-weight:700;font-style:normal;font-display:block}@font-face{font-family:Patrick Hand;src:url(https://assets.oddbout.com/fonts/PatrickHand-Notebook.woff2?v=5a589dd4)format("woff2"),url(./fonts/PatrickHand-Notebook.woff2?v=5a589dd4)format("woff2");font-weight:400;font-style:normal;font-display:block}@font-face{font-family:Yomogi;src:url(https://assets.oddbout.com/fonts/Yomogi-Notebook.woff2?v=5a589dd4)format("woff2"),url(./fonts/Yomogi-Notebook.woff2?v=5a589dd4)format("woff2");font-weight:400;font-style:normal;font-display:block}html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adjust:100%;background:#44b4f2;height:100%;margin:0;padding:0;overflow:hidden}body{box-sizing:border-box;height:100dvh;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);flex-direction:column;display:flex}.game-navigation{box-sizing:border-box;background:#141020;flex:0 0 48px;align-items:center;padding:0 16px;display:flex}.game-navigation[hidden]{display:none}.game-home{box-sizing:border-box;color:#fff;align-items:center;gap:8px;min-height:44px;padding:0 12px;font:700 16px/1.4 Pretendard,Malgun Gothic,sans-serif;text-decoration:none;display:inline-flex}.game-home[hidden]{display:none}.game-home:hover{background:#ffffff17}.game-home:focus-visible{outline-offset:-2px;outline:2px solid #eaff50}.game-logo{filter:brightness(0)invert();width:auto;height:26px;display:block}#game{flex:1;width:100%;min-height:0;position:relative}#game canvas{touch-action:none;display:block}</style>
   <script>
       // 원화 서버의 JS (tools/dev/asset-host-entry.mjs — 빌드가 넣는다).
       (function () {
@@ -83,14 +83,26 @@
         }).catch(function () { clearTimeout(timer); if (window.__oddboutAssetHost === undefined) local(); });
       })();
     </script>
-  <link rel="stylesheet" crossorigin href="/assets/playerSettingsStorage-fP2WDhB0.css">
-  <link rel="stylesheet" crossorigin href="/assets/ArenaFacePaint-eBHCOm74.css">
-  <link rel="stylesheet" crossorigin href="/assets/accountControl-7DqTVVU8.css">
-  <link rel="stylesheet" crossorigin href="/assets/SceneCameraShake-8H3PfDxS.css">
-  <link rel="stylesheet" crossorigin href="/assets/shopCatalogView-i9sBFUYo.css">
-  <link rel="stylesheet" crossorigin href="/assets/fighter-AaInZVwa.css">
-  <link rel="stylesheet" crossorigin href="/assets/pretendardDisplaySubset-ye5IPim-.css">
-  <link rel="stylesheet" crossorigin href="/assets/gameLoading-Ycvm_cn0.css">
+  <script>
+      // 원화 서버의 스타일시트와 글꼴 (tools/dev/asset-host-entry.mjs — 빌드가 넣는다).
+      (function () {
+        var c = {"origin":"https://assets.oddbout.com","sites":["oddbout.com","oddbout.pages.dev"],"css":["/assets/playerSettingsStorage-fP2WDhB0.css","/assets/ArenaFacePaint-eBHCOm74.css","/assets/accountControl-7DqTVVU8.css","/assets/SceneCameraShake-8H3PfDxS.css","/assets/shopCatalogView-i9sBFUYo.css","/assets/fighter-AaInZVwa.css","/assets/pretendardDisplaySubset-ye5IPim-.css","/assets/gameLoading-Ycvm_cn0.css"]};
+        var q = new URLSearchParams(location.search), name = location.hostname.toLowerCase();
+        var use = q.get("assets") !== "site" && c.sites.some(function (s) { return name === s || name.slice(-(s.length + 1)) === "." + s; });
+        c.css.forEach(function (h) {
+          var far = c.origin + "/" + h.replace(/^\.?\//, "");
+          document.write(use ? '<link rel="stylesheet" crossorigin href="' + far + '" onerror="this.onerror=null;this.href=\'' + h + '\'">'
+            : '<link rel="stylesheet" crossorigin href="' + h + '">');
+        });
+      })();
+    </script>
+  
+  
+  
+  
+  
+  
+  
 </head>
   <body>
     <nav class="game-navigation" hidden>
