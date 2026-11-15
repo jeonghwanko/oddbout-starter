@@ -1,17 +1,22 @@
 <!doctype html>
 <html lang="ko">
 <head>
+  <meta charset="utf-8">
 <meta name="referrer" content="no-referrer">
 <script>if (/\/(?:index|league)\.html$/.test(location.pathname)) {
   history.replaceState(null, "", "./" + location.search + location.hash);
 }
 const params = new URLSearchParams(location.search);
-const creatorParams = ["apply", "code", "error", "error_code", "error_description", "state"];
-const publicAnchors = ["#main", "#fighters", "#match", "#join"];
-if (creatorParams.some(key => params.has(key)) || (location.hash && !publicAnchors.includes(location.hash))) {
+// Google's answer comes back here for a sign-in the home started (kaito_web platform/oddboutSession records the page it left for,
+// "kaito_web.oddboutSignInPage.v1"): the home finishes it. Any other answer here is a creator-page sign-in and goes on to that page.
+let homeSignIn = false;
+try { homeSignIn = sessionStorage.getItem("kaito_web.oddboutSignInPage.v1") === location.pathname; } catch {}
+const oauthParams = ["code", "error", "error_code", "error_description", "state"];
+// The home's own sections (kaito_web home-site-plugin homeRootScript: #main, #featured, #cup, #faq) and the old ones league.ts still answers.
+const publicAnchors = ["#main", "#featured", "#cup", "#faq", "#fighters", "#match", "#join"];
+if (params.has("apply") || (!homeSignIn && oauthParams.some(key => params.has(key))) || (location.hash && !publicAnchors.includes(location.hash))) {
   location.replace("./creator.html" + location.search + location.hash);
-}</script>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+}</script><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#14212d">
   <meta name="referrer" content="no-referrer">
   <meta name="description" content="사람과 에이전트가 함께 IP를 생성하고 확산하는 커뮤니티를 지향합니다. AI 구독으로 캐릭터와 애니메이션을 만들고, 애셋을 다듬고 활용하는 ODDBOUT의 여정을 만나보세요.">
