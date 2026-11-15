@@ -69,9 +69,21 @@ test('a sign-in the home started finishes on the home; any other sign-in answer 
   // No sessionStorage (blocked): the old behaviour.
   const blocked = {};
   runInNewContext(entries['index.html'].match(/<script>([\s\S]*?)<\/script>/)[1], {
-    location: { pathname: '/', search: '?code=oauth', hash: '', replace: value => { blocked.redirect = value; } },
-    history: { replaceState: () => {} }, URLSearchParams,
-    sessionStorage: { getItem: () => { throw new Error('blocked'); } },
+    location: {
+      pathname: '/',
+      search: '?code=oauth',
+      hash: '',
+      replace: value => {
+        blocked.redirect = value;
+      },
+    },
+    history: { replaceState: () => {} },
+    URLSearchParams,
+    sessionStorage: {
+      getItem: () => {
+        throw new Error('blocked');
+      },
+    },
   });
   assert.equal(blocked.redirect, './creator.html?code=oauth');
 });
