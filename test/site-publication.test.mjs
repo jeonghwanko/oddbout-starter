@@ -4,7 +4,7 @@ import { mkdtemp, writeFile, rm, open, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { publicationConfig, loadPublicationEnvironment, cloudflareFetch, assertProviderServesSite } from '../scripts/site-publication.mjs';
-import { validateCloudflareFiles } from '../scripts/cloudflare-publication.mjs';
+import { validateCloudflareFiles, verifyPagesPublicApi } from '../scripts/cloudflare-publication.mjs';
 import { chatGptEmbedBuild } from '../scripts/chatgpt-embed-site.mjs';
 
 test('publication defaults to GitHub and rejects unknown or incomplete provider settings', () => {
@@ -104,4 +104,26 @@ test('Cloudflare upload rejects oversized assets and executable routing controls
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test('publication verifies all public reads on Pages and rejects a static or legacy Worker response', async () => {
+  const paths = [];
+  const preview = 'https://deployment.oddbout.pages.dev/';
+  const response = (headers, body = { ok: true }) =>
+    new Response(JSON.stringify(body), {
+      headers: { 'content-type': 'application/json', ...headers },
+    });
+  await verifyPagesPublicApi(preview, async url => {
+    paths.push(url.pathname + url.search);
+    return response({ 'x-oddbout-api-runtime': 'pages-function' });
+  });
+  assert.deepEqual(paths, ['/api/ai-fighter/roster', '/api/ai-fighter/rankings', '/api/oddbout-arena/rankings?scope=registered']);
+  await assert.rejects(
+    verifyPagesPublicApi(preview, async () => response({ 'x-oddbout-cache': 'HIT' })),
+    /did not serve JSON/,
+  );
+  await assert.rejects(
+    verifyPagesPublicApi(preview, async () => response({ 'x-oddbout-api-runtime': 'pages-function' }, { ok: false })),
+    /did not succeed/,
+  );
 });
