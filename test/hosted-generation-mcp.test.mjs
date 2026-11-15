@@ -771,6 +771,7 @@ test('a saved key with other arguments is refused as another request, before any
     };
     const made = await call('request_hosted_fighter', ask);
     assert.equal(made.job.status, 'queued');
+    assert.equal(made.job.realPersonConsent, false);
     const count = async table => (await g.sql.query(`select count(*)::int as n from public.${table}`)).rows[0].n;
     const state = async () => ({
       jobs: await count('af_generation_jobs'),
@@ -782,7 +783,7 @@ test('a saved key with other arguments is refused as another request, before any
     assert.deepEqual(before, { jobs: 1, uploads: 1, events: 1, tokens: { granted: 500000, spent: 0, balance: 500000 } });
     // Its retry as an agent may spell it: the defaults named, the description's ends padded, the picture left out.
     for (const same of [
-      { ...ask, imageProvider: 'grok', host: 'oddbout', delegate: false },
+      { ...ask, imageProvider: 'grok', host: 'oddbout', delegate: false, realPersonConsent: false },
       { ...ask, description: ` ${ask.description}\n` },
       { description: ask.description, language: ask.language, idempotencyKey: ask.idempotencyKey },
     ]) {
@@ -796,6 +797,7 @@ test('a saved key with other arguments is refused as another request, before any
       { delegate: true },
       { host: 'any', hostConsent: true },
       { imageProvider: 'gpt' },
+      { realPersonConsent: true },
     ]) {
       const refused = await call('request_hosted_fighter', { ...ask, ...changed });
       assert.equal(refused.code, 'idempotency-conflict', JSON.stringify(changed));
@@ -808,6 +810,33 @@ test('a saved key with other arguments is refused as another request, before any
     assert.deepEqual(await state(), before);
     // Reading by the key is a read: no conflict, the same job.
     assert.equal((await call('get_hosted_fighter', { idempotencyKey: ask.idempotencyKey })).job.id, made.job.id);
+  } finally {
+    await g.sql.close();
+  }
+});
+
+test('realPersonConsent is passed only when set, and the job and its created event record it', async () => {
+  const g = await generation();
+  try {
+    await g.healthy();
+    const { call } = await connector(g, {});
+    const ask = {
+      description: '빨간 글러브를 낀 고양이 복서, 귀가 크다',
+      language: 'ko',
+      realPersonConsent: true,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const made = await call('request_hosted_fighter', ask);
+    assert.equal(made.job.realPersonConsent, true);
+    const stored = (await g.sql.query('select real_person_consent from public.af_generation_jobs where id = $1', [made.job.id])).rows[0];
+    assert.equal(stored.real_person_consent, true);
+    const created = (await g.sql.query("select data from public.af_generation_events where job_id = $1 and kind = 'created'", [made.job.id])).rows[0].data;
+    assert.equal(created.realPersonConsent, true);
+    const again = await call('request_hosted_fighter', ask);
+    assert.equal(again.job.id, made.job.id);
+    const read = await call('get_hosted_fighter', { jobId: made.job.id });
+    assert.equal(read.job.realPersonConsent, true);
+    assert.equal(read.job.timeline.find(event => event.kind === 'created')?.realPersonConsent, true);
   } finally {
     await g.sql.close();
   }

@@ -43,7 +43,8 @@ import { toolRef } from './merged-tools.mjs';
  *   side?: { url: string | null } | null, drafts?: { clip: string, url: string | null, state?: string }[],
  *   motionSheet?: { url?: string | null, clips?: { clip: string, status?: string, frames?: number, durationMs?: number }[], attach?: boolean } | null,
  *   appearanceAutoSelectAt?: string | null, appearanceAutoSelection?: { choice: 'a', selectedAt: string, deadline: string } | null,
- *   timeline?: { at: string, kind: string, take?: number, outcome?: string }[],
+ *   realPersonConsent?: boolean,
+ *   timeline?: { at: string, kind: string, take?: number, outcome?: string, realPersonConsent?: boolean }[],
  *   warnings?: { at: string, code: string, take?: number, outcome?: string, failed?: string[] }[],
  *   candidates?: { key: string, url: string | null }[] }} HostedJob
  * @typedef {{ id: number, at: string, kind: string, data: any }} JobEvent  A row of af_generation_events.
@@ -386,13 +387,13 @@ const ANSWER_LATER =
   'The requested change was not applied. Read get_hosted_fighter for the current state before doing anything else. ' +
   'Newly completed motions register automatically; do not wait for motion_ready or repeat the change automatically.';
 /**
- * A request whose key already names another request of his (af_generation_create, 2026-11-15): the description, language, delegate, host or
- * image provider differ. No job was made or changed and no tokens were charged; a picture this call had already uploaded (a first request
- * that lost a race to another with its key) stays unused, and counts in the day's uploads.
+ * A request whose key already names another request of his (af_generation_create, 2026-11-15): the description, language, delegate, host,
+ * image provider or realPersonConsent differ. No job was made or changed and no tokens were charged; a picture this call had already uploaded
+ * (a first request that lost a race to another with its key) stays unused, and counts in the day's uploads.
  */
 const KEY_CONFLICT_NEXT =
-  'Not requested: this idempotencyKey already names a different request in this account (its description, language, delegate, host ' +
-  'or imageProvider differ). No job was created or changed and no tokens were charged. To read that request, call get_hosted_fighter with this idempotencyKey; ' +
+  'Not requested: this idempotencyKey already names a different request in this account (its description, language, delegate, host, ' +
+  'imageProvider or realPersonConsent differ). No job was created or changed and no tokens were charged. To read that request, call get_hosted_fighter with this idempotencyKey; ' +
   'a retry of it keeps its original arguments. Only if the user wants this changed request as another fighter, send it with a new idempotencyKey.';
 /** @param {any} result  The API's JSON. @param {boolean} uploads */
 const withNextOf = (result, uploads) =>
@@ -752,6 +753,10 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
       "These product choices do not change the conversation host's tool-call approval policy. Pass his artwork requirements and, if he gave them, " +
       'up to two of his own pictures with his confirmation that he has the rights to them: attached files (picture, secondPicture) where ' +
       'this host attaches files, else pictureUploads (usable ids from get_picture_upload, shown to him first). ' +
+      'realPersonConsent: true only when the user confirms the pictured person (or their parent/guardian for a minor) consented to being made into a fighter. ' +
+      "Then a private individual's likeness from the user's own uploaded photo is allowed. Omit it or pass false otherwise: a real person is still refused (real-person). " +
+      'Consent does not allow a celebrity, politician or other public figure, a sexualized or demeaning depiction, or any sexualization of a minor. ' +
+      'Do not set it because the photo or the description looks like a real person; set it only after that confirmation. The job records the flag. ' +
       "Each account holds tokens (500,000 at sign-up). What ODDBOUT's own worker makes for him (host oddbout, or any when ODDBOUT's worker " +
       "takes it) takes off every token it spends, whatever the outcome; a request his own PC or another person's host makes takes none. " +
       'Unless it is on his own PC, a request is refused (generation-quota) once his balance is at or below zero; get_hosted_fighter ' +
@@ -781,10 +786,29 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
       host: z.union([z.enum(['oddbout', 'any', 'mine']), UUID_ARG()]).optional(),
       hostConsent: z.boolean().optional(),
       imageProvider: z.enum(['grok', 'gpt']).optional(),
+      realPersonConsent: z
+        .boolean()
+        .optional()
+        .describe(
+          'The user confirms the pictured person (or their parent/guardian for a minor) consented to being made into a fighter. Omit or false keeps the real-person refusal.',
+        ),
       idempotencyKey: UUID_ARG(),
     },
     async (
-      { description, language, picture, secondPicture, pictureUploads = [], rightsConfirmed, delegate, host, hostConsent, imageProvider, idempotencyKey },
+      {
+        description,
+        language,
+        picture,
+        secondPicture,
+        pictureUploads = [],
+        rightsConfirmed,
+        delegate,
+        host,
+        hostConsent,
+        imageProvider,
+        realPersonConsent,
+        idempotencyKey,
+      },
       { signal, deadline },
     ) => {
       const ask = {
@@ -793,6 +817,7 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
         ...(delegate ? { delegate: true } : {}),
         ...(host && host !== 'oddbout' ? { host, hostConsent: hostConsent === true } : {}),
         ...(imageProvider ? { imageProvider } : {}),
+        ...(realPersonConsent === true ? { realPersonConsent: true } : {}),
       };
       /** The request itself; a key that names another request of his says what to do. @param {object} [pictured]  its refs and rights */
       const request = async (pictured = {}) => {
@@ -974,7 +999,8 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
       `or the motion previews as fresh image URLs (ten minutes). ` +
       `While motions are in progress, motionSheet is one contact sheet of the clips finished so far (the image is attached; ` +
       `do not download each clip) plus each clip's status. ` +
-      `The profile draft, the profile set made at registration (profileSetId), job.timeline (recent events as at, kind, take and outcome), ` +
+      `The profile draft, the profile set made at registration (profileSetId), job.realPersonConsent, job.timeline (recent events as at, kind, take and outcome; ` +
+      `a created event also names realPersonConsent), ` +
       `job.warnings (checks the worker continued past) and next are included. ` +
       `Supply either jobId or the original request's idempotencyKey, never both. ` +
       `Key lookup only reads an existing job under this account, even when new generation is disabled; ` +

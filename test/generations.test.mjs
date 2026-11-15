@@ -145,7 +145,7 @@ test('a request key names one request: its retry gets the job back, a changed re
     for (const body of [
       { ...base, refs: [upload.id], rightsConfirmed: true },
       { ...base, description: `  ${base.description}\r\n` },
-      { ...base, imageProvider: 'grok', delegate: false, host: 'oddbout', hostConsent: true },
+      { ...base, imageProvider: 'grok', delegate: false, host: 'oddbout', hostConsent: true, realPersonConsent: false },
       { ...base, refs: [again.id], rightsConfirmed: true },
     ]) {
       const retried = await ask(body);
@@ -170,6 +170,7 @@ test('a request key names one request: its retry gets the job back, a changed re
       { host: 'any', hostConsent: true },
       { host: crypto.randomUUID(), hostConsent: true },
       { imageProvider: 'gpt' },
+      { realPersonConsent: true },
     ]) {
       const refused = await ask({ ...base, ...changed });
       assert.deepEqual([refused.status, refused.body.code], [409, 'idempotency-conflict'], JSON.stringify(changed));
@@ -207,6 +208,40 @@ test('a request key names one request: its retry gets the job back, a changed re
     assert.equal((await ask({ ...base, host: 'mine' }, hostedKey)).body.job.id, mine.body.job.id);
     const elsewhere = await ask({ ...base, host: theirs.id, hostConsent: true }, hostedKey);
     assert.deepEqual([elsewhere.status, elsewhere.body.code], [409, 'idempotency-conflict']);
+  } finally {
+    await sql.close();
+  }
+});
+
+test('realPersonConsent is a boolean on the request, the job, the worker claim and the created event', async () => {
+  const { sql, call, work, healthy } = await generation();
+  try {
+    await healthy();
+    const words = { description: '빨간 글러브를 낀 고양이 복서, 귀가 크다', language: 'ko' };
+    const ask = (body, key = crypto.randomUUID()) => call('POST', 'generations', { ...words, ...body }, undefined, { 'idempotency-key': key });
+    assert.equal((await ask({ realPersonConsent: 'yes' })).body.code, 'invalid-body');
+    assert.deepEqual((await call('POST', 'generations/check', { ...words, realPersonConsent: true })).body, { ok: true });
+    assert.equal((await sql.query('select count(*)::int as n from public.af_generation_jobs')).rows[0].n, 0);
+    const key = crypto.randomUUID();
+    const made = await ask({ realPersonConsent: true }, key);
+    assert.equal(made.status, 200);
+    assert.equal(made.body.job.realPersonConsent, true);
+    const id = made.body.job.id;
+    assert.equal((await sql.query('select real_person_consent from public.af_generation_jobs where id = $1', [id])).rows[0].real_person_consent, true);
+    const created = (await sql.query("select data from public.af_generation_events where job_id = $1 and kind = 'created'", [id])).rows[0].data;
+    assert.equal(created.realPersonConsent, true);
+    const read = (await call('GET', `generations/${id}`)).body.job;
+    assert.equal(read.realPersonConsent, true);
+    assert.equal(read.timeline.find(event => event.kind === 'created')?.realPersonConsent, true);
+    const held = (await work('POST', 'claim', {})).body.job;
+    assert.equal(held.realPersonConsent, true);
+    assert.equal(held.id, id);
+    // The same flag is the same request. The other value is a different request and changes nothing.
+    assert.equal((await ask({ realPersonConsent: true }, key)).body.job.id, id);
+    const refused = await ask({ realPersonConsent: false }, key);
+    assert.deepEqual([refused.status, refused.body.code], [409, 'idempotency-conflict']);
+    assert.equal((await sql.query('select real_person_consent from public.af_generation_jobs where id = $1', [id])).rows[0].real_person_consent, true);
+    assert.equal((await sql.query('select count(*)::int as n from public.af_generation_events where job_id = $1', [id])).rows[0].n, 2);
   } finally {
     await sql.close();
   }
@@ -1685,7 +1720,7 @@ test('af_generation_create keeps its old call: an older caller names no agent an
     await healthy();
     const signatures = (await sql.query("select pg_get_function_identity_arguments(oid) as args from pg_proc where proname = 'af_generation_create'")).rows;
     assert.equal(signatures.length, 1);
-    assert.match(signatures[0].args, /p_agent_client uuid, p_image_provider text$/);
+    assert.match(signatures[0].args, /p_agent_client uuid, p_image_provider text, p_real_person_consent boolean$/);
     const job = (
       await sql.query(
         "select to_jsonb(public.af_generation_create(p_owner => $1, p_key => $2, p_description => $3, p_language => 'ko', p_refs => '{}', p_rights => false)) as value",
@@ -1695,6 +1730,7 @@ test('af_generation_create keeps its old call: an older caller names no agent an
     assert.equal(job.agent_client, null);
     assert.equal(job.agent_name, null);
     assert.equal(job.image_provider, 'grok');
+    assert.equal(job.real_person_consent, false);
   } finally {
     await sql.close();
   }
