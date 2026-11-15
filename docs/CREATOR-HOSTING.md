@@ -331,6 +331,13 @@ the local empty `duel-engine.mjs` adapter must never replace the deployed game
 engine. `publish:rupin` remains the original Wonder Lupin publishing command;
 use `publish:fighter` for AI Fighter.
 
+Create a migration with `npm run db:new -- <snake_case_name>`, never a version
+picked by hand: it takes the current UTC second, later than every file in
+`supabase/migrations/` and never ending in `0000`. Production shares one history
+with the arena relay's migrations, which this checkout cannot read; round
+versions collided there (#407, #445). `test/migration-rules.test.mjs` refuses a
+`…0000` version after `20261114010000`.
+
 ### Verified workflow deployment (2026-10-21 KST)
 
 [Deployment run 39454712921](https://github.com/jeonghwanko/crashbang-heroes/actions/runs/39454712921)
