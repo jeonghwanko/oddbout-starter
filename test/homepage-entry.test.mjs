@@ -31,7 +31,7 @@ test('homepage is served directly, with language and public anchors preserved', 
   assert.deepEqual(navigate(entries['index.html']), {});
   assert.deepEqual(navigate(entries['index.html'], '?utm_source=instagram&utm_campaign=launch'), {});
   assert.deepEqual(navigate(entries['index.html'], '', '', '/index.html'), { address: './' });
-  for (const hash of ['', '#main', '#fighters', '#match', '#join']) {
+  for (const hash of ['', '#main', '#featured', '#cup', '#faq', '#fighters', '#match', '#join']) {
     assert.deepEqual(navigate(entries['index.html'], '?lang=ko', hash), {});
     assert.deepEqual(navigate(entries['league.html'], '?lang=ko', hash, '/league.html'), { address: './?lang=ko' + hash });
     assert.ok(entries['league.html'].includes(body));
@@ -45,6 +45,15 @@ test('homepage is served directly, with language and public anchors preserved', 
   ]) {
     assert.equal(navigate(entries['index.html'], search, hash).redirect, './creator.html' + search + hash);
   }
+});
+
+test('the entry script follows the charset declaration, which stays in the first 1024 bytes', () => {
+  const head = '<meta charset="utf-8"><meta name="viewport" content="width=device-width">';
+  const entries = homepageEntries('<!doctype html><html><head>' + head + '<title>ODDBOUT</title></head><body><main id="main"></main></body></html>');
+  const html = entries['index.html'];
+  assert.ok(html.indexOf('<meta charset="utf-8">') < 1024);
+  assert.ok(html.indexOf('<script>') > html.indexOf('<meta charset="utf-8">'));
+  assert.equal(navigate(html, '', '#faq').redirect, undefined);
 });
 
 test('a sign-in the home started finishes on the home; any other sign-in answer still goes to the creator page', () => {

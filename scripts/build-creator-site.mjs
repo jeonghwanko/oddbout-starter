@@ -144,7 +144,9 @@ await writeUpdatesAnalytics(output, updatesOutput.pages, config.analyticsMeasure
 // ko/ and ja/ are the homepage's Korean and Japanese documents (kaito_web home-site-plugin); / is English.
 const standalonePages = ['ko/index.html', 'ja/index.html', 'twitch.html', 'bet.html'].filter(page => existsSync(join(output, page)));
 const seoPages = ['index.html', ...siteEntries, ...standalonePages, ...policyFiles, ...updatesOutput.pages];
-await cleanSiteSeoUrls(output, seoPages, config.siteUrl);
+// Every published document (also the cloud plugin's and the game's own pages), not only the sitemap's: a canonical anywhere names the final URL.
+const publishedPages = (await readdir(output, { recursive: true })).map(path => String(path).replaceAll('\\', '/')).filter(path => path.endsWith('.html'));
+await cleanSiteSeoUrls(output, publishedPages, config.siteUrl);
 await writeSiteDiscovery(output, config.siteUrl, seoPages);
 // The game's public 404 belongs to another site and links to the domain root, which is not ours.
 await writeFile(
