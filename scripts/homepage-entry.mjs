@@ -4,9 +4,13 @@ const homepageRoute = `if (/\\/(?:index|league)\\.html$/.test(location.pathname)
   history.replaceState(null, "", "./" + location.search + location.hash);
 }
 const params = new URLSearchParams(location.search);
-const creatorParams = ["apply", "code", "error", "error_code", "error_description", "state"];
+// Google's answer comes back here for a sign-in the home started (kaito_web platform/oddboutSession records the page it left for,
+// "kaito_web.oddboutSignInPage.v1"): the home finishes it. Any other answer here is a creator-page sign-in and goes on to that page.
+let homeSignIn = false;
+try { homeSignIn = sessionStorage.getItem("kaito_web.oddboutSignInPage.v1") === location.pathname; } catch {}
+const oauthParams = ["code", "error", "error_code", "error_description", "state"];
 const publicAnchors = ["#main", "#fighters", "#match", "#join"];
-if (creatorParams.some(key => params.has(key)) || (location.hash && !publicAnchors.includes(location.hash))) {
+if (params.has("apply") || (!homeSignIn && oauthParams.some(key => params.has(key))) || (location.hash && !publicAnchors.includes(location.hash))) {
   location.replace("./creator.html" + location.search + location.hash);
 }`;
 

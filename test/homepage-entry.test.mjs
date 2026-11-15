@@ -4,8 +4,9 @@ import { runInNewContext } from 'node:vm';
 import { homepageEntries } from '../scripts/homepage-entry.mjs';
 import { publicSiteText, hosting } from '../scripts/hosting-lib.mjs';
 
-function navigate(html, search = '', hash = '', pathname = '/') {
+function navigate(html, search = '', hash = '', pathname = '/', signInPage = null) {
   const result = {};
+  const sessionStorage = { getItem: key => (key === 'kaito_web.oddboutSignInPage.v1' ? signInPage : null) };
   const location = {
     pathname,
     search,
@@ -19,7 +20,7 @@ function navigate(html, search = '', hash = '', pathname = '/') {
       result.address = value;
     },
   };
-  runInNewContext(html.match(/<script>([\s\S]*?)<\/script>/)[1], { location, history, URLSearchParams });
+  runInNewContext(html.match(/<script>([\s\S]*?)<\/script>/)[1], { location, history, URLSearchParams, sessionStorage });
   return result;
 }
 
@@ -44,6 +45,26 @@ test('homepage is served directly, with language and public anchors preserved', 
   ]) {
     assert.equal(navigate(entries['index.html'], search, hash).redirect, './creator.html' + search + hash);
   }
+});
+
+test('a sign-in the home started finishes on the home; any other sign-in answer still goes to the creator page', () => {
+  const entries = homepageEntries('<html><head><title>ODDBOUT</title></head><body><main id="main"></main></body></html>');
+  for (const search of ['?code=oauth', '?error=access_denied&error_description=no', '?lang=en&code=oauth']) {
+    assert.deepEqual(navigate(entries['index.html'], search, '', '/', '/'), {});
+    assert.equal(navigate(entries['index.html'], search, '', '/', '/creator.html').redirect, './creator.html' + search);
+    assert.equal(navigate(entries['index.html'], search, '', '/', null).redirect, './creator.html' + search);
+  }
+  // A creator hand-off (apply) and creator hash routes go on whatever the tab recorded.
+  assert.equal(navigate(entries['index.html'], '?apply=founding-league&code=oauth', '', '/', '/').redirect, './creator.html?apply=founding-league&code=oauth');
+  assert.equal(navigate(entries['index.html'], '', '#view=rankings', '/', '/').redirect, './creator.html#view=rankings');
+  // No sessionStorage (blocked): the old behaviour.
+  const blocked = {};
+  runInNewContext(entries['index.html'].match(/<script>([\s\S]*?)<\/script>/)[1], {
+    location: { pathname: '/', search: '?code=oauth', hash: '', replace: value => { blocked.redirect = value; } },
+    history: { replaceState: () => {} }, URLSearchParams,
+    sessionStorage: { getItem: () => { throw new Error('blocked'); } },
+  });
+  assert.equal(blocked.redirect, './creator.html?code=oauth');
 });
 
 test('public home links and canonical metadata use the root without rewriting repository links', () => {
