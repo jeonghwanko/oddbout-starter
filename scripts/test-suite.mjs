@@ -1,5 +1,6 @@
 // @ts-check
-// `npm run test:fast` runs every suite except the slow ones; `npm run test:heavy` runs only those; `npm test` runs all.
+// `npm run test:fast` runs test/*.test.mjs and host/*.test.mjs except the slow ones; `npm run test:heavy` runs only those; `npm test` runs both.
+// Subfolders (test/browser/, test/postgres/) have their own scripts: `npm run test:browser`, `npm run test:pg`.
 // Heavy: image packing (sharp encodes), real proxy/timeout paths, and the Python motion engines (need `npm run sprite:setup`).
 import { spawn } from 'node:child_process';
 import { readdir } from 'node:fs/promises';

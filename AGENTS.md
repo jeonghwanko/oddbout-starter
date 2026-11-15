@@ -255,13 +255,14 @@ and the live AI Fighter spec (`get_fighter_spec`) before packaging.
 These exist in this repository's checkout; a creator-kit installation has only the creation scripts.
 
 ```sh
-npm ci --ignore-scripts             # dependencies; ffmpeg comes from the system
-npm run sprite:setup                # pinned sprite-gen in its own venv, plus img2webp and RIFE; heavy tests and generation need it
-npm run test:fast                   # every suite except image packing, proxy and Python-engine suites
-npm run test:heavy                  # only those slow suites
-npm test                            # every suite in test/ and host/, including the strict type check
-node --test test/<name>.test.mjs    # one suite (generation-host suites live in host/)
-npm run typecheck                   # tsc alone; CI also runs the deno check below and a sprite-gen pin check
+npm ci --ignore-scripts          # dependencies; ffmpeg comes from the system
+npm run sprite:setup             # pinned sprite-gen venv, img2webp, RIFE; for heavy tests and generation
+npm test                         # test/*.test.mjs (strict type check too), host/*.test.mjs
+npm run test:fast                # npm test minus image packing, proxy, Python-engine suites; test:heavy runs those
+npm run test:browser             # test/browser/ (Chrome); npm run test:pg runs test/postgres/ (skips without ODDBOUT_TEST_PG_BIN)
+npm run db:new -- <name>         # a new migration file, its version the current UTC second
+node --test test/<name>.test.mjs # one suite (host/ has generation-host ones)
+npm run typecheck                # tsc alone; CI adds the deno check below and a sprite-gen pin check
 deno check --frozen --config supabase/functions/<name>/deno.json supabase/functions/<name>/index.ts
 npm run spec:check && npm run validate -- examples/sparring-bot/fighter.json && npm run mcp:smoke
 ```
