@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://oddbout.com/</loc></url>
-  <url><loc>https://oddbout.com/creator</loc></url>
-  <url><loc>https://oddbout.com/fighter</loc></url>
   <url><loc>https://oddbout.com/fighters</loc></url>
   <url><loc>https://oddbout.com/about</loc></url>
   <url><loc>https://oddbout.com/service</loc></url>
@@ -10,6 +8,8 @@
   <url><loc>https://oddbout.com/docs</loc></url>
   <url><loc>https://oddbout.com/privacy</loc></url>
   <url><loc>https://oddbout.com/credits</loc></url>
+  <url><loc>https://oddbout.com/ko/</loc></url>
+  <url><loc>https://oddbout.com/ja/</loc></url>
   <url><loc>https://oddbout.com/twitch</loc></url>
   <url><loc>https://oddbout.com/bet</loc></url>
   <url><loc>https://oddbout.com/ai-fighter-creator/</loc></url>
