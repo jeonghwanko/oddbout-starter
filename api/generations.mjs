@@ -1208,6 +1208,9 @@ export function createGenerationHandler({
       return { ok: true };
     }
     if (method === 'POST' && route === 'generations') {
+      // A key already saved returns its job when this is the same request, and `idempotency-conflict` (409, SUBMISSION_STATUS) when it is
+      // another: af_generation_create compares them before the service's checks. The body's own checks come first, and so does `mine`:
+      // a host he has since removed is host-not-found here, whatever the key.
       const key = id(request.headers.get('idempotency-key'));
       const { body, description, refs, target, imageProvider } = await requested(request, owner);
       const row = await call('af_generation_create', {
