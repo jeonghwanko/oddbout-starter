@@ -756,6 +756,90 @@ test('key lookup database errors stay errors and never fall back to listing or c
   }
 });
 
+// 같은 키, 다른 신청 (2026-11-15): the database decides (af_generation_create); a saved key's request goes there without its pictures.
+test('a saved key with other arguments is refused as another request, before any picture moves; its own retry and the key read still get the job', async () => {
+  const g = await generation();
+  try {
+    await g.healthy();
+    const { call, downloads } = await connector(g, {});
+    const ask = {
+      description: '빨간 글러브를 낀 고양이 복서, 귀가 크다',
+      language: 'ko',
+      picture: { download_url: 'https://files.oaiusercontent.com/file-1', file_id: 'file-1' },
+      rightsConfirmed: true,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const made = await call('request_hosted_fighter', ask);
+    assert.equal(made.job.status, 'queued');
+    const count = async table => (await g.sql.query(`select count(*)::int as n from public.${table}`)).rows[0].n;
+    const state = async () => ({
+      jobs: await count('af_generation_jobs'),
+      uploads: await count('af_generation_uploads'),
+      events: await count('af_generation_events'),
+      tokens: (await call('get_hosted_fighter', {})).tokens,
+    });
+    const before = await state();
+    assert.deepEqual(before, { jobs: 1, uploads: 1, events: 1, tokens: { granted: 500000, spent: 0, balance: 500000 } });
+    // Its retry as an agent may spell it: the defaults named, the description's ends padded, the picture left out.
+    for (const same of [
+      { ...ask, imageProvider: 'grok', host: 'oddbout', delegate: false },
+      { ...ask, description: ` ${ask.description}\n` },
+      { description: ask.description, language: ask.language, idempotencyKey: ask.idempotencyKey },
+    ]) {
+      const retried = await call('request_hosted_fighter', same);
+      assert.equal(retried.job.id, made.job.id);
+      assert.match(retried.next, /get_hosted_fighter/);
+    }
+    for (const changed of [
+      { description: '파란 글러브를 낀 고양이 복서, 귀가 크다' },
+      { language: 'en' },
+      { delegate: true },
+      { host: 'any', hostConsent: true },
+      { imageProvider: 'gpt' },
+    ]) {
+      const refused = await call('request_hosted_fighter', { ...ask, ...changed });
+      assert.equal(refused.code, 'idempotency-conflict', JSON.stringify(changed));
+      assert.equal(refused.job, undefined);
+      assert.match(refused.next, /different request.*No job was created or changed and no tokens were charged/);
+      assert.match(refused.next, /get_hosted_fighter with this idempotencyKey/);
+      assert.match(refused.next, /new idempotencyKey/);
+    }
+    assert.equal(downloads.length, 1);
+    assert.deepEqual(await state(), before);
+    // Reading by the key is a read: no conflict, the same job.
+    assert.equal((await call('get_hosted_fighter', { idempotencyKey: ask.idempotencyKey })).job.id, made.job.id);
+  } finally {
+    await g.sql.close();
+  }
+});
+
+// `mine` is looked up before the database is asked. Once he has removed that host a saved key's request cannot be compared (the API says
+// host-not-found): the saved job is read, as it was before the comparison.
+test('a saved key whose `mine` host he has since removed still gets its job back', async () => {
+  const g = await generation();
+  try {
+    await g.healthy();
+    await g.call('POST', 'generations/host', { name: '고양이 공방', billing: 'subscription', termsAccepted: true });
+    const hostKey = (await g.call('POST', 'generations/host/keys', {})).body.key;
+    await g.call('POST', 'generation-worker/heartbeat', { health: { ok: true } }, hostKey);
+    const { call } = await connector(g, {});
+    const ask = { description: '빨간 글러브를 낀 고양이 복서, 귀가 크다', language: 'ko', host: 'mine', idempotencyKey: crypto.randomUUID() };
+    const made = await call('request_hosted_fighter', ask);
+    assert.equal(made.job.status, 'queued');
+    assert.equal((await call('request_hosted_fighter', ask)).job.id, made.job.id);
+    await g.call('DELETE', `generations/${made.job.id}`);
+    assert.equal((await g.call('DELETE', 'generations/host')).status, 200);
+    const direct = await g.call('POST', 'generations', { description: ask.description, language: 'ko', host: 'mine' }, undefined, {
+      'idempotency-key': ask.idempotencyKey,
+    });
+    assert.equal(direct.body.code, 'host-not-found');
+    const retried = await call('request_hosted_fighter', ask);
+    assert.deepEqual([retried.job?.id, retried.job?.status], [made.job.id, 'cancelled']);
+  } finally {
+    await g.sql.close();
+  }
+});
+
 test('맡기기: the request leaves the look to ODDBOUT, and next says so at every step', async () => {
   const g = await generation();
   try {

@@ -110,6 +110,108 @@ test('a request: off until the worker is healthy, pictures with rights, one host
   }
 });
 
+// 같은 키, 다른 신청 (2026-11-15): a key names one request. The same request, however its retry spells it, gets its job back; another
+// (description, language, delegate, host, image provider) is refused before any check, and nothing is made, attached or charged.
+test('a request key names one request: its retry gets the job back, a changed request is refused with idempotency-conflict', async () => {
+  const { sql, owner, call, work, healthy } = await generation();
+  try {
+    await healthy();
+    const key = crypto.randomUUID(),
+      base = { description: '빨간 글러브를 낀 고양이 복서, 귀가 크다', language: 'ko' };
+    const ask = (body, k = key) => call('POST', 'generations', body, undefined, { 'idempotency-key': k });
+    const upload = (await call('POST', 'generations/uploads', png(512, 512))).body.upload;
+    const made = await ask({ ...base, refs: [upload.id], rightsConfirmed: true });
+    assert.equal(made.status, 200);
+    const jobId = made.body.job.id;
+    // The brief takes its tokens off, so a retry that charged again would show.
+    const held = (await work('POST', 'claim', {})).body.job;
+    const tokens = { total: 20000, input: 19900, cachedInput: 50, output: 100, reasoning: 0 };
+    await work('POST', 'finish', { jobId: held.id, leaseToken: held.leaseToken, outcome: 'ok', result: { brief: { profile: { name: '냥잽' } }, tokens } });
+    const state = async () => ({
+      ...(
+        await sql.query(`select (select count(*)::int from public.af_generation_jobs) as jobs, (select count(*)::int from public.af_generation_events) as events,
+          (select count(*)::int from public.af_generation_uploads where job_id is not null) as attached,
+          (select to_jsonb(j) from public.af_generation_jobs j where id = '${jobId}') as job`)
+      ).rows[0],
+      tokens: (await call('GET', 'generations')).body.tokens,
+    });
+    const before = await state();
+    assert.deepEqual(before.tokens, { granted: 500000, spent: 20000, balance: 480000 });
+    assert.equal(before.job.status, 'appearance');
+
+    // The same request as a retry may spell it: its ends padded and its line end CRLF, the defaults named, other or no pictures (a retry
+    // can upload them again under new ids, so they are not compared). Each gets the job as it is now; a fresh upload stays unused.
+    const again = (await call('POST', 'generations/uploads', png(512, 512))).body.upload;
+    for (const body of [
+      { ...base, refs: [upload.id], rightsConfirmed: true },
+      { ...base, description: `  ${base.description}\r\n` },
+      { ...base, imageProvider: 'grok', delegate: false, host: 'oddbout', hostConsent: true },
+      { ...base, refs: [again.id], rightsConfirmed: true },
+    ]) {
+      const retried = await ask(body);
+      assert.deepEqual([retried.status, retried.body.job?.id, retried.body.job?.status], [200, jobId, 'appearance'], JSON.stringify(body));
+    }
+    assert.equal((await sql.query('select job_id from public.af_generation_uploads where id = $1', [again.id])).rows[0].job_id, null);
+    // The database normalises a direct call as its first write did: btrim, and nulls as the defaults.
+    const direct = await sql.query(
+      `select (public.af_generation_create(p_owner => $1, p_key => $2, p_description => $3, p_language => 'ko', p_refs => null, p_rights => null,
+        p_delegate => null, p_host_choice => null, p_image_provider => null)).id`,
+      [owner, key, `   ${base.description} `],
+    );
+    assert.equal(direct.rows[0].id, jobId);
+    assert.deepEqual(await state(), before);
+
+    // Each input changed alone is another request: refused, whatever the checks would say (an open job refuses a new key: generation-quota).
+    assert.equal((await ask(base, crypto.randomUUID())).body.code, 'generation-quota');
+    for (const changed of [
+      { description: '빨간 글러브를 낀 고양이 복서, 귀가 작다' },
+      { language: 'en' },
+      { delegate: true },
+      { host: 'any', hostConsent: true },
+      { host: crypto.randomUUID(), hostConsent: true },
+      { imageProvider: 'gpt' },
+    ]) {
+      const refused = await ask({ ...base, ...changed });
+      assert.deepEqual([refused.status, refused.body.code], [409, 'idempotency-conflict'], JSON.stringify(changed));
+    }
+    assert.deepEqual(await state(), before);
+
+    // A job made before the image provider (its created event names no `images`) holds `gpt` for a request that named none: a retry with
+    // today's default gets it back. One whose event names it compares its provider.
+    const oldKey = crypto.randomUUID();
+    const old = (
+      await sql.query(
+        `insert into public.af_generation_jobs(owner_id, idempotency_key, description, language, status, image_provider)
+        values ($1, $2, $3, 'ko', 'submitted', 'gpt') returning id`,
+        [owner, oldKey, base.description],
+      )
+    ).rows[0].id;
+    await sql.query(`insert into public.af_generation_events(job_id, kind, data) values ($1, 'created', '{"refs":0,"delegate":false,"host":"oddbout"}')`, [
+      old,
+    ]);
+    assert.equal((await ask(base, oldKey)).body.job.id, old);
+    await sql.query(`update public.af_generation_events set data = data || '{"images":"gpt"}' where job_id = $1`, [old]);
+    assert.equal((await ask(base, oldKey)).body.code, 'idempotency-conflict');
+    assert.equal((await ask({ ...base, imageProvider: 'gpt' }, oldKey)).body.job.id, old);
+
+    // The same choice with another host is another request too: his own host first, then someone else's by its id.
+    await sql.query(`update public.af_generation_jobs set status = 'submitted' where id = $1`, [jobId]);
+    await call('POST', 'generations/host', { name: '고양이 공방', billing: 'subscription', termsAccepted: true });
+    const hostKey = (await call('POST', 'generations/host/keys', {})).body.key;
+    await call('POST', 'generation-worker/heartbeat', { health: { ok: true } }, hostKey);
+    const theirs = (await call('POST', 'generations/host', { name: '다른 공방', billing: 'subscription', termsAccepted: true }, 'other-token-0123456789')).body
+      .host;
+    const hostedKey = crypto.randomUUID();
+    const mine = await ask({ ...base, host: 'mine' }, hostedKey);
+    assert.equal(mine.status, 200);
+    assert.equal((await ask({ ...base, host: 'mine' }, hostedKey)).body.job.id, mine.body.job.id);
+    const elsewhere = await ask({ ...base, host: theirs.id, hostConsent: true }, hostedKey);
+    assert.deepEqual([elsewhere.status, elsewhere.body.code], [409, 'idempotency-conflict']);
+  } finally {
+    await sql.close();
+  }
+});
+
 test('the worker carries a job through brief, two looks, a change, a pick, motions, a clip again and the registration under the creator', async () => {
   const { sql, owner, call, work, healthy, objects, validatorToken } = await generation();
   try {

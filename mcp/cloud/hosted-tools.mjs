@@ -385,6 +385,15 @@ const jobSite = job => siteUrl({ fighterId: job.submission?.stage === 'registere
 const ANSWER_LATER =
   'The requested change was not applied. Read get_hosted_fighter for the current state before doing anything else. ' +
   'Newly completed motions register automatically; do not wait for motion_ready or repeat the change automatically.';
+/**
+ * A request whose key already names another request of his (af_generation_create, 2026-11-15): the description, language, delegate, host or
+ * image provider differ. No job was made or changed and no tokens were charged; a picture this call had already uploaded (a first request
+ * that lost a race to another with its key) stays unused, and counts in the day's uploads.
+ */
+const KEY_CONFLICT_NEXT =
+  'Not requested: this idempotencyKey already names a different request in this account (its description, language, delegate, host ' +
+  'or imageProvider differ). No job was created or changed and no tokens were charged. To read that request, call get_hosted_fighter with this idempotencyKey; ' +
+  'a retry of it keeps its original arguments. Only if the user wants this changed request as another fighter, send it with a new idempotencyKey.';
 /** @param {any} result  The API's JSON. @param {boolean} uploads */
 const withNextOf = (result, uploads) =>
   result?.ok && result.job
@@ -778,9 +787,27 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
       { description, language, picture, secondPicture, pictureUploads = [], rightsConfirmed, delegate, host, hostConsent, imageProvider, idempotencyKey },
       { signal, deadline },
     ) => {
-      // Once saved, the same key returns its job without re-uploading pictures. Before that, use read-only recovery.
-      const existingId = await jobIdForKey(idempotencyKey);
-      if (existingId) return withNext(await invoke(`generations/${existingId}`));
+      const ask = {
+        description,
+        language,
+        ...(delegate ? { delegate: true } : {}),
+        ...(host && host !== 'oddbout' ? { host, hostConsent: hostConsent === true } : {}),
+        ...(imageProvider ? { imageProvider } : {}),
+      };
+      /** The request itself; a key that names another request of his says what to do. @param {object} [pictured]  its refs and rights */
+      const request = async (pictured = {}) => {
+        const result = await post('generations', { ...ask, ...pictured }, { 'idempotency-key': idempotencyKey });
+        return result?.code === 'idempotency-conflict' ? { ...result, next: KEY_CONFLICT_NEXT } : withNext(result);
+      };
+      // Once saved, the same key goes to the request without its pictures, none downloaded or uploaded again: the database returns its
+      // job for the same request and refuses another (idempotency-conflict; it does not compare the pictures). Before that, use read-only
+      // recovery. `mine` is his own host's id, looked up before the database is asked: once he has removed that host the request cannot be
+      // compared (host-not-found), and the saved job is read as it was before the comparison.
+      const saved = await jobIdForKey(idempotencyKey);
+      if (saved) {
+        const result = await request();
+        return host === 'mine' && result?.code === 'host-not-found' ? withNext(await invoke(`generations/${saved}`)) : result;
+      }
       // A file of the shape but from no host ODDBOUT takes (an agent's own address with an id it holds), named before any check: the
       // service, the rights the user would be asked about, the request's checks. Its pictures go in through a ticket.
       const refused = /** @type {const} */ ([
@@ -806,13 +833,6 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
       // Pictures already in (a ticket's) count with the attached ones: two in all, refused before an attached one moves.
       if (pictures.length + pictureUploads.length > GENERATION_LIMITS.refs) return { ok: false, code: 'invalid-refs' };
       if ((pictures.length || pictureUploads.length) && rightsConfirmed !== true) return { ok: false, code: 'rights-required' };
-      const ask = {
-        description,
-        language,
-        ...(delegate ? { delegate: true } : {}),
-        ...(host && host !== 'oddbout' ? { host, hostConsent: hostConsent === true } : {}),
-        ...(imageProvider ? { imageProvider } : {}),
-      };
       // The request's own checks (consent, one at a time, the day's limits, the host) before a picture moves: each kept picture spends one
       // of the day's uploads and stays in storage (MCP 점검 2026-10-29). A request without pictures is checked where it is made.
       // The pictures already in are checked there too (his, unused, from the last day): a refusal keeps no attached picture.
@@ -828,7 +848,7 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
         if (!uploaded.ok) return uploaded;
         refs.push(uploaded.upload.id);
       }
-      return withNext(await post('generations', { ...ask, ...(refs.length ? { refs, rightsConfirmed: true } : {}) }, { 'idempotency-key': idempotencyKey }));
+      return request(refs.length ? { refs, rightsConfirmed: true } : {});
     },
     { write: true, openWorld: true, idempotent: false, files: ['picture', 'secondPicture'] },
   );
