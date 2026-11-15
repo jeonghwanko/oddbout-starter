@@ -51,7 +51,7 @@ async function stagePublicApi(temporary, site, project) {
     await copyFile(new URL('../' + source, import.meta.url), target);
   }
   await writeFile(join(site, '_routes.json'), JSON.stringify({ version: 1, include: ['/api/*'], exclude: [] }));
-  const config = join(temporary, 'wrangler.json');
+  const config = join(temporary, 'wrangler.jsonc');
   await writeFile(
     config,
     JSON.stringify({
@@ -61,7 +61,6 @@ async function stagePublicApi(temporary, site, project) {
       compatibility_flags: ['enable_request_signal'],
     }),
   );
-  return config;
 }
 
 /** @param {string} base @param {typeof fetch} [request] */
@@ -124,27 +123,13 @@ export async function publishCloudflare(sha, config, { preview = false } = {}) {
       extract();
     }
     await validateCloudflareFiles(site, { headers: chatGptEmbedBuild(hosting.chatgptEmbed).headers });
-    const wranglerConfig = await stagePublicApi(temporary, site, config.project);
+    await stagePublicApi(temporary, site, config.project);
     const current = git(checkout, 'ls-remote', 'origin', `refs/heads/${hosting.branch}`).split(/\s/)[0];
     if (current !== sha) throw Error('Publication branch changed before Cloudflare upload');
     const branch = preview ? 'hosting-migration' : config.branch;
     execFileSync(
       process.execPath,
-      [
-        wrangler,
-        'pages',
-        'deploy',
-        site,
-        '--project-name',
-        config.project,
-        '--branch',
-        branch,
-        '--commit-hash',
-        sha,
-        '--commit-dirty=false',
-        '--config',
-        wranglerConfig,
-      ],
+      [wrangler, 'pages', 'deploy', site, '--project-name', config.project, '--branch', branch, '--commit-hash', sha, '--commit-dirty=false'],
       { cwd: temporary, env, stdio: 'inherit' },
     );
     const entries = (await readFile(output, 'utf8'))
