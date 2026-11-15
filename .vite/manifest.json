@@ -778,8 +778,8 @@
     "file": "assets/packageChecker-AgLFTLUN.css",
     "src": "_packageChecker-AgLFTLUN.css"
   },
-  "_packageChecker-Sn1lK1TX.js": {
-    "file": "assets/packageChecker-Sn1lK1TX.js",
+  "_packageChecker-BX5v40Di.js": {
+    "file": "assets/packageChecker-BX5v40Di.js",
     "name": "packageChecker",
     "imports": [
       "_spec-CABr0Tau.js",
@@ -1452,7 +1452,7 @@
     ]
   },
   "creator.html": {
-    "file": "assets/creator-qxPWlbxx.js",
+    "file": "assets/creator-C_TdM-rc.js",
     "name": "creator",
     "src": "creator.html",
     "isEntry": true,
@@ -1463,7 +1463,7 @@
       "_siteChrome-D6ykqFe7.js",
       "_BigNumber-BuB6s8KC.js",
       "_oddboutSession-C-bAn3oS.js",
-      "_packageChecker-Sn1lK1TX.js",
+      "_packageChecker-BX5v40Di.js",
       "_registeredFighters-DVHWDz0Q.js",
       "_fighterFace-CoRzJpZF.js",
       "_fighterApiBase-CeB_1v89.js",
@@ -1511,7 +1511,7 @@
     ]
   },
   "docs.html": {
-    "file": "assets/docs-NkE7D728.js",
+    "file": "assets/docs-QAwlODEB.js",
     "name": "docs",
     "src": "docs.html",
     "isEntry": true,
@@ -2148,7 +2148,7 @@
     ]
   },
   "src/app/i18n/namespaces/site/en.ts": {
-    "file": "assets/en-Czpdzh33.js",
+    "file": "assets/en-DuIvmxPy.js",
     "name": "en",
     "src": "src/app/i18n/namespaces/site/en.ts",
     "isDynamicEntry": true,
@@ -2157,7 +2157,7 @@
     ]
   },
   "src/app/i18n/namespaces/site/ja.ts": {
-    "file": "assets/ja-BwR5qCFv.js",
+    "file": "assets/ja-DWrd5-s1.js",
     "name": "ja",
     "src": "src/app/i18n/namespaces/site/ja.ts",
     "isDynamicEntry": true,
@@ -2166,7 +2166,7 @@
     ]
   },
   "src/app/i18n/namespaces/site/ko.ts": {
-    "file": "assets/ko-C74Sh3Ef.js",
+    "file": "assets/ko-Bbb6C2iN.js",
     "name": "ko",
     "src": "src/app/i18n/namespaces/site/ko.ts",
     "isDynamicEntry": true,
@@ -3236,12 +3236,12 @@
     ]
   },
   "src/creator/packageChecker.ts": {
-    "file": "assets/packageChecker-BYP6qU6d.js",
+    "file": "assets/packageChecker-DymnJgz2.js",
     "name": "packageChecker",
     "src": "src/creator/packageChecker.ts",
     "isDynamicEntry": true,
     "imports": [
-      "_packageChecker-Sn1lK1TX.js"
+      "_packageChecker-BX5v40Di.js"
     ]
   },
   "src/creator/worldLore.ts": {
