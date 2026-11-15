@@ -66,9 +66,9 @@ test('static pages, nested relative styles and official art join publication and
   const urls = await writeSiteDiscovery(root, siteUrl, (await readUpdatesManifest(root)).pages);
   assert.deepEqual(
     urls,
-    manifest.pages.map(page => new URL(page, siteUrl).href),
+    manifest.pages.map(page => new URL(page.replace(/\.html$/, ''), siteUrl).href),
   );
-  assert.match(await readFile(join(root, 'sitemap.xml'), 'utf8'), /updates\/2026-11-03-vice-arrives.html/);
+  assert.match(await readFile(join(root, 'sitemap.xml'), 'utf8'), /updates\/2026-11-03-vice-arrives<\/loc>/);
   // A successful HTTP response with stale update art must still fail the live check.
   for (const path of files) {
     const destination = join(root, path);
