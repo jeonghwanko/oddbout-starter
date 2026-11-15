@@ -499,3 +499,47 @@ test('the worker keeps claiming after a thrown request', async () => {
   assert.deepEqual(waits, [5000, 10000, 5000]);
   assert.match(logs[0], /ECONNRESET/);
 });
+
+test('an idle worker claims less often, up to a minute apart, and again at 5 s after a job', async () => {
+  /** @type {number[]} */
+  const waits = [];
+  /** @type {string[]} */
+  const routes = [];
+  let claims = 0;
+  await runBoutVideoWorker({
+    send: async route => {
+      routes.push(route);
+      if (!route.endsWith('/claim')) return { ok: true };
+      claims++;
+      // The seventh claim takes a job (its film is refused, so nothing is uploaded); the rest find the queue empty.
+      if (claims === 7) return { stage: 'rendering', job: { id: 'job', leaseToken: 'lease', upload: { url: 'https://upload.test/job.mp4' } } };
+      return { ok: true, stage: 'idle' };
+    },
+    render: async () => {
+      throw Object.assign(new Error('playback-unavailable'), { code: 'playback-unavailable' });
+    },
+    sleep: async ms => {
+      waits.push(ms);
+    },
+    log: () => {},
+    stop: () => claims >= 8,
+  });
+  assert.deepEqual(waits, [5000, 10000, 20000, 40000, 60000, 60000, 5000]);
+  assert.equal(routes.filter(route => route.endsWith('/fail')).length, 1);
+  // The base and the cap are the caller's.
+  /** @type {number[]} */
+  const short = [];
+  await runBoutVideoWorker({
+    send: async () => ({ ok: true, stage: 'idle' }),
+    render: async () => {
+      throw new Error('not called');
+    },
+    sleep: async ms => {
+      short.push(ms);
+    },
+    stop: () => short.length >= 3,
+    idleMs: 1000,
+    idleMaxMs: 3000,
+  });
+  assert.deepEqual(short, [1000, 2000, 3000]);
+});

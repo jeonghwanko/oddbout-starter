@@ -105,15 +105,27 @@ export async function renderClaimedJob(job) {
 }
 
 /**
+ * The wait after a claim that found nothing (2026-11-15): idleMs, doubling to idleMaxMs while claims stay idle, idleMs again after a claim
+ * that took a job, as host/generation-worker.mjs `nextIdleWait`. Each claim is one Edge request and its queries: a claim every 5 s was 17,280
+ * a day, about 518,000 a month, over the free plan's 500,000 Edge requests on its own. Nothing wakes this worker, so a video asked for while
+ * it is idle waits up to idleMaxMs to be claimed.
+ */
+export const BOUT_VIDEO_IDLE = Object.freeze({ idleMs: 5000, idleMaxMs: 60_000 });
+
+/**
  * Claim jobs until stopped. A thrown claim, upload report or failure report (a network blip, a redeploy) does not end
  * the process: it is logged and the next claim waits longer, up to a minute. An expired lease puts that job back in the queue.
+ * An empty queue backs off the same way (BOUT_VIDEO_IDLE).
  * @param {{ send: (route: string, body: object) => Promise<any>, render: (job: any) => Promise<any>,
- *   sleep?: (ms: number) => Promise<void>, log?: (message: string) => void, stop?: () => boolean }} worker
+ *   sleep?: (ms: number) => Promise<void>, log?: (message: string) => void, stop?: () => boolean, idleMs?: number, idleMaxMs?: number }} worker
  */
 export async function runBoutVideoWorker(worker) {
   const sleep = worker.sleep ?? (ms => new Promise(resolve => setTimeout(resolve, ms)));
   const log = worker.log ?? (message => console.error(message));
+  const idleMs = worker.idleMs ?? BOUT_VIDEO_IDLE.idleMs;
+  const idleMaxMs = worker.idleMaxMs ?? BOUT_VIDEO_IDLE.idleMaxMs;
   let failures = 0;
+  let idleWait = idleMs;
   while (!worker.stop?.()) {
     let outcome;
     try {
@@ -126,7 +138,12 @@ export async function runBoutVideoWorker(worker) {
       await sleep(wait);
       continue;
     }
-    if (outcome === 'idle') await sleep(5000);
+    if (outcome !== 'idle') {
+      idleWait = idleMs;
+      continue;
+    }
+    await sleep(idleWait);
+    idleWait = Math.min(idleWait * 2, idleMaxMs);
   }
 }
 
