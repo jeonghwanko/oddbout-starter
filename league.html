@@ -47,92 +47,20 @@ if (creatorParams.some(key => params.has(key)) || (location.hash && !publicAncho
     }
   </script>
   <!-- The hero's octagon is a CSS background (league.css .hero-stage, .hero-crowd under 760px) and the page's largest paint; without this it starts only after the stylesheet arrives (2026-10-29 Lighthouse). -->
-  <script>
-    (function () {
-      var c = {"origin":"https://assets.oddbout.com","sites":["oddbout.com","oddbout.pages.dev"],"images":[{"path":"/art/ui/oddbout-hero-octagon-v1.webp?v=f86c9c76","media":"(min-width: 761px)","property":"--league-hero-wide"},{"path":"/art/ui/oddbout-hero-octagon-v1-m.webp?v=f86c9c76","media":"(max-width: 760px)","property":"--league-hero-narrow"}]};
-      var name = location.hostname.toLowerCase();
-      var use = new URLSearchParams(location.search).get("assets") !== "site"
-        && c.sites.some(function (s) { return name === s || name.endsWith("." + s); });
-      c.images.forEach(function (image) {
-        var local = new URL(image.path, location.href);
-        var url = use ? new URL(local.pathname + local.search, c.origin).href : local.href;
-        var root = document.documentElement;
-        root.style.setProperty(image.property, 'url("' + url + '")');
-        var link = document.createElement("link");
-        link.rel = "preload";
-        link.as = "image";
-        link.media = image.media;
-        link.fetchPriority = "high";
-        if (use) link.addEventListener("error", function () {
-          root.style.setProperty(image.property, 'url("' + local.href + '")');
-          link.href = local.href;
-        }, { once: true });
-        link.href = url;
-        document.head.appendChild(link);
-      });
-    })();
-  </script>
-  
-  <script>
-      // 원화 서버의 JS (tools/dev/asset-host-entry.mjs — 빌드가 넣는다).
-      (function () {
-        var c = {"entry":"/assets/league-Bs41XoAt.js","preloads":["/assets/_oddbout-analytics-CiIVnasc.js","/assets/bootCopy-DUheN_9n.js","/assets/storageKeys-Dc-OZ5zK.js","/assets/playerSettingsStorage-DTuJVEj0.js","/assets/PublicAssetVersions-CRbWFvQU.js","/assets/siteDialog-Cus74mbf.js","/assets/siteGameLaunch-BRLuy6XN.js","/assets/preload-helper-DclECHGd.js"],"origin":"https://assets.oddbout.com","sites":["oddbout.com","oddbout.pages.dev"],"probeMs":2500};
-        var q = new URLSearchParams(location.search), name = location.hostname.toLowerCase();
-        var use = q.get("assets") !== "site" && c.sites.some(function (s) { return name === s || name.slice(-(s.length + 1)) === "." + s; });
-        var ready = new Promise(function (go) { if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", function () { go(); }); else go(); });
-        // Module preloads (the page's own and the language packs' — tools/ai-fighter/locale-pack-preload.mjs) wait for the choice of origin.
-        var where = null, waiting = [];
-        function preload(list) { list.forEach(function (p) { var l = document.createElement("link"); l.rel = "modulepreload"; l.crossOrigin = ""; l.href = where(p); document.head.appendChild(l); }); }
-        window.__oddboutPreload = function (list) { if (where) preload(list); else waiting = waiting.concat(list); };
-        function settle(base) { where = base; preload(waiting); waiting = []; }
-        function local() {
-          window.__oddboutAssetHost = null;
-          settle(function (p) { return /^\.?\//.test(p) ? p : "./" + p; });
-          ready.then(function () { var s = document.createElement("script"); s.type = "module"; s.src = c.entry; document.head.appendChild(s); });
-        }
-        function away() {
-          if (q.get("assets") === "site") return;
-          q.set("assets", "site");
-          location.replace(location.pathname + "?" + q.toString() + location.hash);
-        }
-        if (!use || typeof fetch !== "function" || typeof AbortController !== "function") { local(); return; }
-        var at = function (p) { return c.origin + "/" + p.replace(/^\.?\//, ""); };
-        var stop = new AbortController(), timer = setTimeout(function () { stop.abort(); }, c.probeMs);
-        fetch(at(c.entry), { method: "HEAD", mode: "cors", cache: "no-store", signal: stop.signal }).then(function (response) {
-          clearTimeout(timer);
-          if (!response.ok) throw new Error("asset host " + response.status);
-          window.__oddboutAssetHost = c.origin;
-          settle(at);
-          preload(c.preloads);
-          addEventListener("vite:preloadError", away);
-          addEventListener("unhandledrejection", function (event) {
-            var text = String(event.reason && event.reason.message || event.reason);
-            if (/dynamically imported module|Importing a module script failed|error loading dynamically imported module/i.test(text)) away();
-          });
-          return ready.then(function () {
-            return import(at(c.entry)).catch(function (error) {
-              if (document.documentElement.hasAttribute("data-boot-module")) throw error;
-              local();
-            });
-          });
-        }).catch(function () { clearTimeout(timer); if (window.__oddboutAssetHost === undefined) local(); });
-      })();
-    </script>
-  <script>
-      // 원화 서버의 스타일시트와 글꼴 (tools/dev/asset-host-entry.mjs — 빌드가 넣는다).
-      (function () {
-        var c = {"origin":"https://assets.oddbout.com","sites":["oddbout.com","oddbout.pages.dev"],"css":["/assets/playerSettingsStorage-fP2WDhB0.css","/assets/gameLoading-Ycvm_cn0.css","/assets/league-Scgd4s67.css"]};
-        var q = new URLSearchParams(location.search), name = location.hostname.toLowerCase();
-        var use = q.get("assets") !== "site" && c.sites.some(function (s) { return name === s || name.slice(-(s.length + 1)) === "." + s; });
-        c.css.forEach(function (h) {
-          var far = c.origin + "/" + h.replace(/^\.?\//, "");
-          document.write(use ? '<link rel="stylesheet" crossorigin href="' + far + '" onerror="this.onerror=null;this.href=\'' + h + '\'">'
-            : '<link rel="stylesheet" crossorigin href="' + h + '">');
-        });
-      })();
-    </script>
-  
-  
+  <link rel="preload" as="image" href="/art/ui/oddbout-hero-octagon-v1.webp?v=f86c9c76" media="(min-width: 761px)" fetchpriority="high">
+  <link rel="preload" as="image" href="/art/ui/oddbout-hero-octagon-v1-m.webp?v=f86c9c76" media="(max-width: 760px)" fetchpriority="high">
+  <script type="module" crossorigin src="/assets/league-DhaOYO__.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/_oddbout-analytics-CiIVnasc.js">
+  <link rel="modulepreload" crossorigin href="/assets/bootCopy-DUheN_9n.js">
+  <link rel="modulepreload" crossorigin href="/assets/storageKeys-Dc-OZ5zK.js">
+  <link rel="modulepreload" crossorigin href="/assets/playerSettingsStorage-DTuJVEj0.js">
+  <link rel="modulepreload" crossorigin href="/assets/PublicAssetVersions-CRbWFvQU.js">
+  <link rel="modulepreload" crossorigin href="/assets/siteDialog-Cus74mbf.js">
+  <link rel="modulepreload" crossorigin href="/assets/siteGameLaunch-BRLuy6XN.js">
+  <link rel="modulepreload" crossorigin href="/assets/preload-helper-DclECHGd.js">
+  <link rel="stylesheet" crossorigin href="/assets/playerSettingsStorage-fP2WDhB0.css">
+  <link rel="stylesheet" crossorigin href="/assets/gameLoading-Ycvm_cn0.css">
+  <link rel="stylesheet" crossorigin href="/assets/league-z5AjO_uo.css">
 </head>
 <body>
   <a class="skip" href="#main"><span data-copy="skip">본문으로 건너뛰기</span></a>
