@@ -24,3 +24,18 @@ test('missing or duplicate bout start anchors still require review', () => {
   assert.throws(() => transformMilestones(finish, id), /Review ODDBOUT milestone hook/);
   assert.throws(() => transformMilestones(`${decided}\n${decided}\n${finish}`, id), /Review ODDBOUT milestone hook/);
 });
+
+test('the extracted result controller and scene share the same bout identity', () => {
+  const scene = `${decided}\nreadonly finish = new ArenaDuelFinishController(this.depsOfFinish());`;
+  const transformed = transformMilestones(scene, id);
+  assert.equal(transformed.split('milestone("game_start"').length, 2);
+  assert.ok(!transformed.includes('milestone("match_complete"'));
+  const controllerId = '/game/src/render/scenes/arena/ArenaDuelFinishController.ts';
+  const anchor = 'finishBout(result: CityFightBoutResult): void {';
+  const controller = transformMilestones(`${anchor}\nthis.deps.playback?.ended(result);\n}`, controllerId);
+  assert.ok(controller.includes('milestone("match_complete", this.deps.duel?.session, { result: result.how });'));
+  assert.ok(controller.indexOf('milestone("match_complete"') < controller.indexOf('this.deps.playback?.ended(result)'));
+  assert.throws(() => transformMilestones('', controllerId), /Review ODDBOUT milestone hook/);
+  assert.throws(() => transformMilestones(`${anchor}\n${anchor}`, controllerId), /Review ODDBOUT milestone hook/);
+  assert.throws(() => transformMilestones(decided, id), /Review ODDBOUT milestone hook/);
+});
