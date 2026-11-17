@@ -358,6 +358,12 @@ push-triggered source CI and Render auto-deploy remain off.
 
 ## Application administration
 
+The **문의** tab in `admin.html?tab=inquiries` lists website inquiries, newest
+first, after the same enabled administrator check. The public `POST /inquiries`
+accepts a title and plain text without login, with submission limits and a
+retry ID. Only the server can access `af_inquiries`. Apply the migration before
+deploying the `ai-fighter` Edge function and publishing the website.
+
 Open `admin.html` on the same published site and sign in with a pre-provisioned
 administrator's Google account. The creator homepage shows **Applications**
 only after the API confirms that account's enabled `af_admins` membership.

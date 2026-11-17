@@ -5,6 +5,7 @@ import { createAccountHandler } from './account.mjs';
 import { createDeviceLoginHandler } from './device-login.mjs';
 import { createHostPairingHandler, hostPairingRoute } from './host-pairing.mjs';
 import { createAdminHandler } from './admin.mjs';
+import { createInquiryHandler } from './inquiries.mjs';
 import { createDuelHandler } from './duels.mjs';
 import { createEmbedHandler } from './embed.mjs';
 import { createFighterStatisticsHandler } from './fighter-statistics.mjs';
@@ -210,6 +211,7 @@ export function createHandler({
   }
   // The operator's routes, his fighter edits shown as the creator's own (`present`).
   const adminHandler = createAdminHandler({ db, present });
+  const inquiryHandler = createInquiryHandler({ db, limiter });
   const workshopHandler = createWorkshopHandler({ db, authenticate: request => authenticate(request, false), rpc, agentClient });
   const generationHandler = createGenerationHandler({ db, authenticate, present, decisionsReviewer, responsesReviewer, cascadeReviewer, agentClient });
   const deletionHandler = createFighterDeletionHandler({ db });
@@ -247,6 +249,7 @@ export function createHandler({
         if (method === 'OPTIONS') return json({ ok: true });
       }
       if (parts[0] === 'admin') return adminHandler(request, parts);
+      if (parts.length === 1 && parts[0] === 'inquiries') return inquiryHandler(request, parts);
       if (workshopRoute(parts)) return workshopHandler(request, parts);
       // 내 PC 연결 (2026-11-05): start and poll are the PC's, with no account; the site's view and approve verify the user themselves.
       if (hostPairingRoute(parts)) return hostPairingHandler(request, parts);

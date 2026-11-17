@@ -6,6 +6,7 @@ import { BUCKET } from './submissions.mjs';
 import { ADMIN_EDIT_CORS, adminFighterEditRoute, createAdminFighterEdits, reasonOf } from './admin-fighter-edits.mjs';
 import { adminStorageRoute, createAdminStorage } from './admin-storage.mjs';
 import { GENERATION_BUCKET, GENERATION_LIMITS, artifactPath } from './generations.mjs';
+import { listInquiries } from './inquiries.mjs';
 
 // The fighter edits (`admin-fighter-edits.mjs`) add PUT, PATCH and the idempotency key; every admin route answers one preflight.
 const CORS = ADMIN_EDIT_CORS;
@@ -204,6 +205,7 @@ export function createAdminHandler({ db, present }) {
       if (!actor) throw new Problem(401, 'authentication-required');
       if ((await rpc('af_admin_account', { p_actor: actor })) !== true) throw new Problem(403, 'admin-required');
       if (parts.length === 2 && parts[1] === 'me' && request.method === 'GET') return reply({ ok: true, admin: true });
+      if (parts.length === 2 && parts[1] === 'inquiries' && request.method === 'GET') return reply(await listInquiries(db, request));
       // 운영자 선수 수정 (2026-11-02): a package, a profile or a style for someone's fighter, under the owner's own checks.
       if (edits && adminFighterEditRoute(parts)) return edits(request, parts, actor);
       // 저장 용량 정리 (2026-11-02): the upload budget and the package folders nothing uses, removed only as the operator names them.
