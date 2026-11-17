@@ -16,7 +16,7 @@ function startAnalytics(measurementId, hostname, apiBase, updateSlugs) {
   if (
     window.location.hostname !== hostname ||
     window.location.protocol !== 'https:' ||
-    window.location.pathname.endsWith('/admin.html') ||
+    /\/admin(?:\.html|\/(?:index\.html)?)?$/.test(window.location.pathname) ||
     window.oddboutAnalyticsStarted
   )
     return;
@@ -199,7 +199,8 @@ export function googleAnalyticsPlugin(measurementId, siteUrl, apiBase = null) {
       order: 'pre',
       handler(html, context) {
         // This page only chooses a language. Its destination sends the single page view.
-        if (context.filename.replaceAll('\\', '/').endsWith('/updates.html')) return html;
+        const filename = context.filename.replaceAll('\\', '/');
+        if (filename.endsWith('/updates.html') || /\/admin(?:\.html|\/index\.html)$/.test(filename)) return html;
         return analyticsHtml(html, context.filename.replaceAll('\\', '/').endsWith('/privacy.html'));
       },
     },

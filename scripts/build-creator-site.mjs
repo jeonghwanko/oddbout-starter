@@ -18,7 +18,7 @@ import { googleAnalyticsPlugin } from './site-analytics.mjs';
 import { PUBLIC_CREATOR_PAGE } from '../mcp/creator-handoff.mjs';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { fingerprint, buildRevision, assertSameRevision, siteEntries, publicSiteText } from './hosting-lib.mjs';
+import { adminWorkspaceEntry, fingerprint, buildRevision, assertSameRevision, siteEntries, publicSiteText } from './hosting-lib.mjs';
 import { CHATGPT_GAME_ENTRY, chatGptEmbedBuild } from './chatgpt-embed-site.mjs';
 
 // Build the AI Fighter entries with explicit public settings, without loading source .env files.
@@ -40,7 +40,7 @@ const hasChatGptEntry = await readFile(join(source, CHATGPT_GAME_ENTRY)).then(
   () => false,
 );
 if (chatgpt.enabled && !hasChatGptEntry) throw new Error('The selected game source has no ChatGPT entry');
-const buildEntries = [...siteEntries, ...(hasChatGptEntry ? [CHATGPT_GAME_ENTRY] : [])];
+const buildEntries = [...siteEntries, ...(existsSync(join(source, adminWorkspaceEntry)) ? [adminWorkspaceEntry] : []), ...(hasChatGptEntry ? [CHATGPT_GAME_ENTRY] : [])];
 if (config.siteUrl !== PUBLIC_CREATOR_PAGE) throw new Error('Hosting URL must match the MCP homepage');
 if (!config.publishableKey.startsWith('sb_publishable_')) throw new Error('A public publishable key is required');
 await readFile(join(source, 'creator.html'));

@@ -37,6 +37,8 @@ export const siteEntries = [
   'admin.html',
   'world.html',
 ];
+// Earlier game revisions only ship the legacy entry. New builds also include the operator workspace.
+export const adminWorkspaceEntry = 'admin/index.html';
 
 // The kit has its own immutable release/fingerprint. Restore it only after verifying
 // a newly built site's own artifact, then prove its staged Git objects are unchanged.
@@ -181,7 +183,8 @@ export async function publishedFiles(root, siteUrl = hosting.siteUrl) {
     const headers = await readFile(join(root, '_headers'), 'utf8').catch(() => '');
     if (!headers.includes(chatgpt.headers)) throw new Error('Missing or changed ChatGPT route headers');
   }
-  const entries = [...siteEntries, ...(includeChatgptEntry ? [CHATGPT_GAME_ENTRY] : [])];
+  const includeAdminWorkspace = Boolean(manifest[adminWorkspaceEntry]) || (await stat(join(root, adminWorkspaceEntry)).catch(() => null))?.isFile();
+  const entries = [...siteEntries, ...(includeAdminWorkspace ? [adminWorkspaceEntry] : []), ...(includeChatgptEntry ? [CHATGPT_GAME_ENTRY] : [])];
   const files = new Set(['index.html', ...entries, ...policyFiles, ...discoveryFiles, ...(hosting.customDomain ? ['CNAME'] : [])]),
     visited = new Set();
   /** @param {string} key */
