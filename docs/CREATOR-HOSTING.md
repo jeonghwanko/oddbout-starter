@@ -363,6 +363,10 @@ first, after the same enabled administrator check. The public `POST /inquiries`
 accepts a title and plain text without login, with submission limits and a
 retry ID. Only the server can access `af_inquiries`. Apply the migration before
 deploying the `ai-fighter` Edge function and publishing the website.
+`POST /admin/inquiries/<id>/status` changes `unread`, `read` or `done`, with
+the previous status to detect concurrent changes. `POST /admin/inquiries/<id>/delete`
+permanently removes one inquiry and accepts retries. Both require the same
+administrator check. Existing inquiries start as `unread` when the status migration runs.
 
 Open `admin.html` on the same published site and sign in with a pre-provisioned
 administrator's Google account. The creator homepage shows **Applications**

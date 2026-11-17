@@ -57,10 +57,35 @@ export async function listInquiries(db, request) {
   const start = Number(page) * PAGE_SIZE;
   const { data, error } = await db
     .from('af_inquiries')
-    .select('id,title,message,created_at')
+    .select('id,title,message,created_at,status')
     .order('created_at', { ascending: false })
     .order('id', { ascending: false })
     .range(start, start + PAGE_SIZE);
   if (error || !Array.isArray(data)) throw new Problem(503, 'inquiries-unavailable');
   return { ok: true, inquiries: data.slice(0, PAGE_SIZE), hasMore: data.length > PAGE_SIZE };
+}
+
+/** Called only after the admin handler verifies the caller. @param {any} db @param {Request} request @param {string} id @param {string} action */
+export async function manageInquiry(db, request, id, action) {
+  if (!UUID.test(id)) throw new Problem(400, 'invalid-inquiry');
+  if (action === 'delete') {
+    const { error } = await db.from('af_inquiries').delete().eq('id', id);
+    if (error) throw new Problem(503, 'inquiries-unavailable');
+    return { ok: true };
+  }
+  let body;
+  try {
+    body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, 512)));
+  } catch (error) {
+    if (error instanceof Problem) throw error;
+    throw new Problem(400, 'invalid-inquiry');
+  }
+  const states = ['unread', 'read', 'done'];
+  if (!body || Array.isArray(body) || Object.keys(body).some(key => !['status', 'previous'].includes(key))
+    || !states.includes(body.status) || !states.includes(body.previous)) throw new Problem(400, 'invalid-inquiry');
+  const { data, error } = await db.from('af_inquiries').update({ status: body.status })
+    .eq('id', id).eq('status', body.previous).select('id').maybeSingle();
+  if (error) throw new Problem(503, 'inquiries-unavailable');
+  if (!data) throw new Problem(409, 'review-conflict');
+  return { ok: true };
 }

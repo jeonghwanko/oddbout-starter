@@ -15,6 +15,8 @@ test('website inquiries accept guest text once and only administrators can list 
       await sql.exec(`set role ${role}`);
       await assert.rejects(sql.query('select * from public.af_inquiries'), /permission denied/);
       await assert.rejects(sql.query("insert into public.af_inquiries(id,title,message) values (gen_random_uuid(),'a','b')"), /permission denied/);
+      await assert.rejects(sql.query("update public.af_inquiries set status='done' where id=gen_random_uuid()"), /permission denied/);
+      await assert.rejects(sql.query('delete from public.af_inquiries where id=gen_random_uuid()'), /permission denied/);
       await sql.exec('reset role');
     }
     await sql.exec('set role service_role');
@@ -33,6 +35,8 @@ test('website inquiries accept guest text once and only administrators can list 
         },
         from(table) {
           assert.equal(table, 'af_inquiries');
+          let update, deleting = false;
+          const filters = {};
           const query = {
             async upsert(row) {
               await sql.query('insert into public.af_inquiries(id,title,message) values ($1,$2,$3) on conflict(id) do nothing', [
@@ -45,13 +49,27 @@ test('website inquiries accept guest text once and only administrators can list 
             select() {
               return query;
             },
+            update(row) { update = row; return query; },
+            delete() { deleting = true; return query; },
+            eq(key, value) { filters[key] = value; return query; },
+            async maybeSingle() {
+              return { data: (await sql.query('update public.af_inquiries set status=$1 where id=$2 and status=$3 returning id',
+                [update.status, filters.id, filters.status])).rows[0] ?? null };
+            },
+            async then(resolve, reject) {
+              try {
+                assert.equal(deleting, true);
+                await sql.query('delete from public.af_inquiries where id=$1', [filters.id]);
+                resolve({});
+              } catch (error) { reject(error); }
+            },
             order() {
               return query;
             },
             async range(start, end) {
               return {
                 data: (
-                  await sql.query('select id,title,message,created_at from public.af_inquiries order by created_at desc,id desc limit $1 offset $2', [
+                  await sql.query('select id,title,message,created_at,status from public.af_inquiries order by created_at desc,id desc limit $1 offset $2', [
                     end - start + 1,
                     start,
                   ])
@@ -85,6 +103,21 @@ test('website inquiries accept guest text once and only administrators can list 
       [{ id, title: '도움', message: '첫 줄\n<script>둘째 줄</script>' }],
     );
     assert.equal(hasMore, false);
+    assert.equal(inquiries[0].status, 'unread');
+    const setStatus = (token, status, previous) => call(`admin/inquiries/${id}/status`, {
+      method: 'POST', headers: headers(token), body: JSON.stringify({ status, previous }),
+    });
+    assert.equal((await setStatus(visitor, 'done', 'unread')).status, 403);
+    assert.equal((await setStatus(admin, 'unknown', 'unread')).status, 400);
+    assert.equal((await setStatus(admin, 'read', 'unread')).status, 200);
+    assert.equal((await setStatus(admin, 'done', 'unread')).status, 409);
+    assert.equal((await setStatus(admin, 'done', 'read')).status, 200);
+    assert.equal((await setStatus(admin, 'unread', 'done')).status, 200);
+    const remove = token => call(`admin/inquiries/${id}/delete`, { method: 'POST', headers: headers(token) });
+    assert.equal((await remove(visitor)).status, 403);
+    assert.equal((await remove(admin)).status, 200);
+    assert.equal((await remove(admin)).status, 200);
+    assert.deepEqual((await (await call('admin/inquiries', { headers: headers(admin) })).json()).inquiries, []);
   } finally {
     await sql.close();
   }
