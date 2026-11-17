@@ -108,6 +108,6 @@ creator-kit ZIP에는 제작·연결 안내와 이 문서 지도가 들어 있�
 | [DOTS-VM-ACCEPTANCE](records/DOTS-VM-ACCEPTANCE.md) | Dots VM 인수 시험(0.5.5 후보) |
 | [CLOUD-PLUGIN-REVIEW](records/CLOUD-PLUGIN-REVIEW.md), [PLUGIN-POLICY-AND-VIDEO](records/PLUGIN-POLICY-AND-VIDEO.md), [PLUGIN-REVIEW-CASES](records/PLUGIN-REVIEW-CASES.md) | 2026-10-22~24 플러그인 심사 준비와 상태 |
 | [PAYPAL-GATES-2026-11-03](records/PAYPAL-GATES-2026-11-03.md) | 2026-11-03 PayPal Sandbox 방송 G0~G8 실행 준비 점검과 로컬 경기 재현 |
-| [KIT-RELEASES](records/KIT-RELEASES.md) | creator-kit 0.6.20부터 0.4.0까지의 릴리스와 검증 기록 |
+| [KIT-RELEASES](records/KIT-RELEASES.md) | creator-kit 0.6.21부터 0.4.0까지의 릴리스와 검증 기록 |
 | [SUPABASE-BETA](records/SUPABASE-BETA.md) | 이전 초대 베타(v0.2)의 운영 기록 |
 | [research/](research/) | 개별 조사·실험 기록. X GTM 계획은 [X-GTM-2026-11](research/X-GTM-2026-11.md) |
