@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { migratedDatabase } from './helpers/fighter-database.mjs';
 import { copyTransferAssets } from '../scripts/creator-account-transfer-assets.mjs';
+import { checkedTransferQuery } from '../scripts/creator-account-transfer-check.mjs';
 
 test('copies keep originals, retry without overwriting, and reject same-sized different bytes',async()=>{
   const plan={source:'source',target:'target',objects:[{bucket:'private',name:'source/front.webp'}]};
@@ -43,12 +44,31 @@ test('creator transfer preserves IDs, immutable bytes, balances and limits; fail
     await assert.rejects(snapshot(),/unsupported-holdings/);
     await db.exec('drop table public.transfer_unknown');
     await db.query("insert into storage.objects(bucket_id,name,metadata) values('ai-fighter-beta',$1,'{\"size\":12}')",[source+'/fixture.webp']);
-    const plan = await snapshot();
+    const review=crypto.randomUUID();
+    await db.query("insert into af_generation_jobs(id,owner_id,idempotency_key,status,description,language) values($1,$2,$1,'needs_review','A pending fighter review','en')",[review,source]);
+    await assert.rejects(apply(await snapshot()),/assets-not-copied|generation-active/);
+    await db.query('update af_generation_jobs set owner_id=$1 where id=$2',[target,review]);
+    let plan = await snapshot();
     await assert.rejects(apply(plan),/assets-not-copied/);
     await db.query("insert into storage.objects(bucket_id,name,metadata) values('ai-fighter-beta',$1,'{\"size\":12}')",[target+'/fixture.webp']);
-    const result = (await apply(plan)).rows[0].value;
+    await db.query('update af_generation_jobs set owner_id=$1 where id=$2',[source,review]);
+    await assert.rejects(apply(await snapshot()),/generation-active/);
+    await db.query('update af_generation_jobs set owner_id=$1,lease_token=$2 where id=$2',[target,review]);
+    await assert.rejects(apply(await snapshot()),/generation-active/);
+    await db.query('update af_generation_jobs set lease_token=null where id=$1',[review]);
+    plan=await snapshot();
+    const current=(await db.query("select $1::jsonb as snapshot, encode(sha256(convert_to($1::jsonb::text,'UTF8')),'hex') as fingerprint",[JSON.stringify(plan)])).rows[0];
+    assert.throws(()=>checkedTransferQuery({...plan,limit:999},current),/stale/);
+    assert.throws(()=>checkedTransferQuery(plan,{...current,fingerprint:"'invalid"}),/fingerprint/);
+    const query=checkedTransferQuery(plan,current);
+    assert.ok(query.length<1000);
+    await db.query('update af_creators set token_grant=token_grant+1 where owner_id=$1',[target]);
+    assert.equal((await db.query(query)).rows.length,0);
+    await db.query('update af_creators set token_grant=token_grant-1 where owner_id=$1',[target]);
+    const result = (await db.query(query)).rows[0].result;
     assert.deepEqual(result.tokens,{granted:1500000,spent:0,balance:1500000});
     assert.equal(result.fighterLimit,10); assert.equal(result.fighters,2);
+    assert.deepEqual((await db.query('select owner_id,status from af_generation_jobs where id=$1',[review])).rows[0],{owner_id:target,status:'needs_review'});
     assert.deepEqual((await db.query('select id,owner_id,manifest_text,manifest_sha from af_submissions where id=$1',[sub])).rows[0],
       {id:sub,owner_id:target,manifest_text:'{}',manifest_sha:sha});
     assert.equal((await db.query('select account_slot from af_fighters where id=$1',[fighter])).rows[0].account_slot,2);
