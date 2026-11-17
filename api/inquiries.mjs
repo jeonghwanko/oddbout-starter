@@ -53,9 +53,11 @@ export function createInquiryHandler({ db, limiter }) {
 /** This is called only after createAdminHandler has verified the administrator. @param {any} db @param {Request} request */
 export async function listInquiries(db, request) {
   const params = new URL(request.url).searchParams;
-  const page = params.get('page') ?? '0', status = params.get('status') ?? 'all', search = (params.get('q') ?? '').trim();
-  if (!/^\d{1,5}$/.test(page) || !['all', 'unread', 'read', 'done'].includes(status)
-    || search.length > 120 || unstorableTextPath({ search }) !== null) throw new Problem(400, 'invalid-query');
+  const page = params.get('page') ?? '0',
+    status = params.get('status') ?? 'all',
+    search = (params.get('q') ?? '').trim();
+  if (!/^\d{1,5}$/.test(page) || !['all', 'unread', 'read', 'done'].includes(status) || search.length > 120 || unstorableTextPath({ search }) !== null)
+    throw new Problem(400, 'invalid-query');
   const start = Number(page) * PAGE_SIZE;
   let query = db.from('af_inquiries').select('id,title,message,created_at,status');
   if (status !== 'all') query = query.eq('status', status);
@@ -95,10 +97,15 @@ export async function manageInquiry(db, request, id, action) {
     throw new Problem(400, 'invalid-inquiry');
   }
   const states = ['unread', 'read', 'done'];
-  if (!body || Array.isArray(body) || Object.keys(body).some(key => !['status', 'previous'].includes(key))
-    || !states.includes(body.status) || !states.includes(body.previous)) throw new Problem(400, 'invalid-inquiry');
-  const { data, error } = await db.from('af_inquiries').update({ status: body.status })
-    .eq('id', id).eq('status', body.previous).select('id').maybeSingle();
+  if (
+    !body ||
+    Array.isArray(body) ||
+    Object.keys(body).some(key => !['status', 'previous'].includes(key)) ||
+    !states.includes(body.status) ||
+    !states.includes(body.previous)
+  )
+    throw new Problem(400, 'invalid-inquiry');
+  const { data, error } = await db.from('af_inquiries').update({ status: body.status }).eq('id', id).eq('status', body.previous).select('id').maybeSingle();
   if (error) throw new Problem(503, 'inquiries-unavailable');
   if (!data) throw new Problem(409, 'review-conflict');
   return { ok: true };
