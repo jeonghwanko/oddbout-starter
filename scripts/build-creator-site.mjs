@@ -40,7 +40,11 @@ const hasChatGptEntry = await readFile(join(source, CHATGPT_GAME_ENTRY)).then(
   () => false,
 );
 if (chatgpt.enabled && !hasChatGptEntry) throw new Error('The selected game source has no ChatGPT entry');
-const buildEntries = [...siteEntries, ...(existsSync(join(source, adminWorkspaceEntry)) ? [adminWorkspaceEntry] : []), ...(hasChatGptEntry ? [CHATGPT_GAME_ENTRY] : [])];
+const buildEntries = [
+  ...siteEntries,
+  ...(existsSync(join(source, adminWorkspaceEntry)) ? [adminWorkspaceEntry] : []),
+  ...(hasChatGptEntry ? [CHATGPT_GAME_ENTRY] : []),
+];
 if (config.siteUrl !== PUBLIC_CREATOR_PAGE) throw new Error('Hosting URL must match the MCP homepage');
 if (!config.publishableKey.startsWith('sb_publishable_')) throw new Error('A public publishable key is required');
 await readFile(join(source, 'creator.html'));

@@ -6,7 +6,9 @@ import { migratedDatabase } from './helpers/fighter-database.mjs';
 test('website inquiries accept guest text once and only administrators can list it', async () => {
   const sql = await migratedDatabase();
   try {
-    const admin = crypto.randomUUID(), visitor = crypto.randomUUID(), id = crypto.randomUUID();
+    const admin = crypto.randomUUID(),
+      visitor = crypto.randomUUID(),
+      id = crypto.randomUUID();
     await sql.query('insert into auth.users(id) values ($1), ($2)', [admin, visitor]);
     await sql.query('insert into af_admins(owner_id) values ($1)', [admin]);
     for (const role of ['anon', 'authenticated']) {
@@ -33,13 +35,28 @@ test('website inquiries accept guest text once and only administrators can list 
           assert.equal(table, 'af_inquiries');
           const query = {
             async upsert(row) {
-              await sql.query('insert into public.af_inquiries(id,title,message) values ($1,$2,$3) on conflict(id) do nothing', [row.id, row.title, row.message]);
+              await sql.query('insert into public.af_inquiries(id,title,message) values ($1,$2,$3) on conflict(id) do nothing', [
+                row.id,
+                row.title,
+                row.message,
+              ]);
               return {};
             },
-            select() { return query; },
-            order() { return query; },
+            select() {
+              return query;
+            },
+            order() {
+              return query;
+            },
             async range(start, end) {
-              return { data: (await sql.query('select id,title,message,created_at from public.af_inquiries order by created_at desc,id desc limit $1 offset $2', [end - start + 1, start])).rows };
+              return {
+                data: (
+                  await sql.query('select id,title,message,created_at from public.af_inquiries order by created_at desc,id desc limit $1 offset $2', [
+                    end - start + 1,
+                    start,
+                  ])
+                ).rows,
+              };
             },
           };
           return query;
@@ -63,8 +80,10 @@ test('website inquiries accept guest text once and only administrators can list 
     const response = await call('admin/inquiries', { headers: headers(admin) });
     assert.equal(response.headers.get('cache-control'), 'no-store');
     const { inquiries, hasMore } = await response.json();
-    assert.deepEqual(inquiries.map(({ id, title, message }) => ({ id, title, message })),
-      [{ id, title: '도움', message: '첫 줄\n<script>둘째 줄</script>' }]);
+    assert.deepEqual(
+      inquiries.map(({ id, title, message }) => ({ id, title, message })),
+      [{ id, title: '도움', message: '첫 줄\n<script>둘째 줄</script>' }],
+    );
     assert.equal(hasMore, false);
   } finally {
     await sql.close();
