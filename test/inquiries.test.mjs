@@ -35,7 +35,10 @@ test('website inquiries accept guest text once and only administrators can list 
         },
         from(table) {
           assert.equal(table, 'af_inquiries');
-          let update, deleting = false, counting = false, searchPattern = null;
+          let update,
+            deleting = false,
+            counting = false,
+            searchPattern = null;
           const filters = {};
           const query = {
             async upsert(row) {
@@ -50,9 +53,18 @@ test('website inquiries accept guest text once and only administrators can list 
               counting = options?.head === true;
               return query;
             },
-            update(row) { update = row; return query; },
-            delete() { deleting = true; return query; },
-            eq(key, value) { filters[key] = value; return query; },
+            update(row) {
+              update = row;
+              return query;
+            },
+            delete() {
+              deleting = true;
+              return query;
+            },
+            eq(key, value) {
+              filters[key] = value;
+              return query;
+            },
             or(filter) {
               const terms = /^title\.imatch\.("(?:\\.|[^"\\])*"),message\.imatch\.("(?:\\.|[^"\\])*")$/s.exec(filter);
               assert.ok(terms, 'search must remain two quoted literal filters');
@@ -61,8 +73,16 @@ test('website inquiries accept guest text once and only administrators can list 
               return query;
             },
             async maybeSingle() {
-              return { data: (await sql.query('update public.af_inquiries set status=$1 where id=$2 and status=$3 returning id',
-                [update.status, filters.id, filters.status])).rows[0] ?? null };
+              return {
+                data:
+                  (
+                    await sql.query('update public.af_inquiries set status=$1 where id=$2 and status=$3 returning id', [
+                      update.status,
+                      filters.id,
+                      filters.status,
+                    ])
+                  ).rows[0] ?? null,
+              };
             },
             async then(resolve, reject) {
               try {
@@ -74,7 +94,9 @@ test('website inquiries accept guest text once and only administrators can list 
                   await sql.query('delete from public.af_inquiries where id=$1', [filters.id]);
                   resolve({});
                 }
-              } catch (error) { reject(error); }
+              } catch (error) {
+                reject(error);
+              }
             },
             order() {
               return query;
@@ -82,12 +104,10 @@ test('website inquiries accept guest text once and only administrators can list 
             async range(start, end) {
               return {
                 data: (
-                  await sql.query('select id,title,message,created_at,status from public.af_inquiries where ($3::text is null or status=$3) and ($4::text is null or title ~* $4 or message ~* $4) order by created_at desc,id desc limit $1 offset $2', [
-                    end - start + 1,
-                    start,
-                    filters.status ?? null,
-                    searchPattern,
-                  ])
+                  await sql.query(
+                    'select id,title,message,created_at,status from public.af_inquiries where ($3::text is null or status=$3) and ($4::text is null or title ~* $4 or message ~* $4) order by created_at desc,id desc limit $1 offset $2',
+                    [end - start + 1, start, filters.status ?? null, searchPattern],
+                  )
                 ).rows,
               };
             },
@@ -124,7 +144,8 @@ test('website inquiries accept guest text once and only administrators can list 
     const unread = async () => (await (await call('admin/inquiries/count', { headers: headers(admin) })).json()).unreadCount;
     assert.equal(await unread(), 1);
     assert.equal((await call('admin/inquiries?status=invalid', { headers: headers(admin) })).status, 400);
-    const filtered = async (status, page = 0, q = '') => (await (await call(`admin/inquiries?${new URLSearchParams({ status, page: String(page), q })}`, { headers: headers(admin) })).json());
+    const filtered = async (status, page = 0, q = '') =>
+      await (await call(`admin/inquiries?${new URLSearchParams({ status, page: String(page), q })}`, { headers: headers(admin) })).json();
     assert.equal((await filtered('all', 0, '도움')).inquiries[0].id, id);
     assert.equal((await filtered('unread', 0, '둘째 줄')).inquiries[0].id, id);
     assert.equal((await filtered('read', 0, '둘째 줄')).inquiries.length, 0);
@@ -135,9 +156,12 @@ test('website inquiries accept guest text once and only administrators can list 
     assert.equal((await filtered('unread')).inquiries.length, 1);
     assert.equal((await filtered('read')).inquiries.length, 0);
     assert.equal((await filtered('done')).inquiries.length, 0);
-    const setStatus = (token, status, previous) => call(`admin/inquiries/${id}/status`, {
-      method: 'POST', headers: headers(token), body: JSON.stringify({ status, previous }),
-    });
+    const setStatus = (token, status, previous) =>
+      call(`admin/inquiries/${id}/status`, {
+        method: 'POST',
+        headers: headers(token),
+        body: JSON.stringify({ status, previous }),
+      });
     assert.equal((await setStatus(visitor, 'done', 'unread')).status, 403);
     assert.equal((await setStatus(admin, 'unknown', 'unread')).status, 400);
     assert.equal((await setStatus(admin, 'read', 'unread')).status, 200);
@@ -158,10 +182,19 @@ test('website inquiries accept guest text once and only administrators can list 
     assert.equal((await filtered('unread', 0, 'FIXTURE')).hasMore, true);
     assert.equal((await filtered('unread', 1, 'body')).inquiries.length, 1);
     await sql.query("delete from public.af_inquiries where title='fixture'");
-    const punctuationId = crypto.randomUUID(), punctuation = 'Case [a-z].*(x),"%_\\ marker';
-    await sql.query('insert into public.af_inquiries(id,title,message,status) values ($1,$2,$3,$4)', [punctuationId, punctuation, 'literal search fixture', 'done']);
+    const punctuationId = crypto.randomUUID(),
+      punctuation = 'Case [a-z].*(x),"%_\\ marker';
+    await sql.query('insert into public.af_inquiries(id,title,message,status) values ($1,$2,$3,$4)', [
+      punctuationId,
+      punctuation,
+      'literal search fixture',
+      'done',
+    ]);
     for (const term of ['case', '[a-z]', '.*', '(x),"', '%_', '\\']) {
-      assert.deepEqual((await filtered('done', 0, term)).inquiries.map(row => row.id), [punctuationId]);
+      assert.deepEqual(
+        (await filtered('done', 0, term)).inquiries.map(row => row.id),
+        [punctuationId],
+      );
     }
     assert.equal((await filtered('unread', 0, '%_')).inquiries.length, 0);
     assert.equal((await filtered('all', 0, 'missing"),status.eq.unread')).inquiries.length, 0);

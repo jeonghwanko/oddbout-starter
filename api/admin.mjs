@@ -206,8 +206,7 @@ export function createAdminHandler({ db, present }) {
       if ((await rpc('af_admin_account', { p_actor: actor })) !== true) throw new Problem(403, 'admin-required');
       if (parts.length === 2 && parts[1] === 'me' && request.method === 'GET') return reply({ ok: true, admin: true });
       if (parts.length === 2 && parts[1] === 'inquiries' && request.method === 'GET') return reply(await listInquiries(db, request));
-      if (parts.length === 3 && parts[1] === 'inquiries' && parts[2] === 'count' && request.method === 'GET')
-        return reply(await unreadInquiryCount(db));
+      if (parts.length === 3 && parts[1] === 'inquiries' && parts[2] === 'count' && request.method === 'GET') return reply(await unreadInquiryCount(db));
       if (parts.length === 4 && parts[1] === 'inquiries' && ['status', 'delete'].includes(parts[3]) && request.method === 'POST')
         return reply(await manageInquiry(db, request, parts[2], parts[3]));
       // 운영자 선수 수정 (2026-11-02): a package, a profile or a style for someone's fighter, under the owner's own checks.
