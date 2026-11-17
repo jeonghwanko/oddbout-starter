@@ -2,7 +2,7 @@
   if (
     window.location.hostname !== hostname ||
     window.location.protocol !== 'https:' ||
-    window.location.pathname.endsWith('/admin.html') ||
+    /\/admin(?:\.html|\/(?:index\.html)?)?$/.test(window.location.pathname) ||
     window.oddboutAnalyticsStarted
   )
     return;

@@ -1,0 +1,1 @@
+import"./modulepreload-polyfill-P2Xu9kJm.js";var e=new URL(document.querySelector(`a`).href);e.search=location.search,e.hash=location.hash,location.replace(e);
