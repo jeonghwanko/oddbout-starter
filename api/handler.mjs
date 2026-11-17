@@ -2,6 +2,7 @@
 import { updateFighterProfile } from './fighter-profile.mjs';
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { createAccountHandler } from './account.mjs';
+import { createAccountDeletionHandler } from './account-deletion.mjs';
 import { createDeviceLoginHandler } from './device-login.mjs';
 import { createHostPairingHandler, hostPairingRoute } from './host-pairing.mjs';
 import { createAdminHandler } from './admin.mjs';
@@ -118,6 +119,7 @@ export function createHandler({
   const embedHandler = createEmbedHandler({ db, embed, simulateDuel, engineVersion, engines, officialPractice });
   const statisticsHandler = createFighterStatisticsHandler({ db });
   const accountHandler = createAccountHandler({ db, creatorLink });
+  const accountDeletionHandler = createAccountDeletionHandler({ db });
   const deviceLoginHandler = createDeviceLoginHandler({ db, creatorLink, limiter });
   const hostPairingHandler = createHostPairingHandler({ db, limiter });
   /** @param {string} name @param {Record<string, unknown>} args */
@@ -264,6 +266,7 @@ export function createHandler({
       // Device-connection sign-in: start and poll are unauthenticated; approve verifies the user itself.
       if (parts[0] === 'device-logins') return deviceLoginHandler(request, parts);
       // Account and sign-in handoff routes work for every verified account.
+      if (parts.length === 2 && parts[0] === 'account' && parts[1] === 'deletion') return accountDeletionHandler(request, parts);
       if (parts.length === 1 && ['me', 'access-requests', 'creator-handoffs'].includes(parts[0])) return accountHandler(request, parts);
       if (method === 'GET' && parts.join('/') === 'spec')
         return json({
