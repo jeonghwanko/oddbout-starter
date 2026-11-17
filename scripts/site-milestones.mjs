@@ -37,9 +37,12 @@ const targets = {
       'const decided = duel.session.snapshot.result !== null;',
       'const decided = duel.session.snapshot.result !== null;\n        if (!decided) milestone("game_start", duel.session, { mode: this.dataIn.player ? "play" : "watch" });',
     ],
+  ],
+  // The bout's end moved from the duel scene to its finish controller (2026-11-18 duel scene split); the session is the same object game_start keyed.
+  '/src/render/scenes/arena/ArenaDuelFinishController.ts': [
     [
-      'private finish(result: CityFightBoutResult): void {',
-      'private finish(result: CityFightBoutResult): void {\n    milestone("match_complete", this.duel?.session, { result: result.how });',
+      'finishBout(result: CityFightBoutResult): void {',
+      'finishBout(result: CityFightBoutResult): void {\n    milestone("match_complete", this.deps.duel?.session, { result: result.how });',
     ],
   ],
   '/src/render/scenes/ArenaScene.ts': [
