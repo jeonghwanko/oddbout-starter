@@ -4,6 +4,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { copyTransferAssets } from './creator-account-transfer-assets.mjs';
+import { checkedTransferQuery } from './creator-account-transfer-check.mjs';
 
 // Operator CLI. Never edits auth identities or deletes users/files. Apply requires the reviewed snapshot saved by plan.
 const [action, ...args] = process.argv.slice(2);
@@ -51,11 +52,11 @@ if (action === 'plan') {
   const saved = JSON.parse(await readFile(args[0], 'utf8'));
   if (saved.version !== 1 || saved.project !== project) throw Error('Wrong project or plan version');
   const plan = saved.snapshot;
-  // Compare server JSONB values on the server; JavaScript object order is not an approval checksum.
-  const literal = JSON.stringify(plan).replaceAll("'", "''");
-  const unchanged = (await sql(`select af_private.creator_transfer_snapshot('${uuid(plan.source)}','${uuid(plan.target)}')='${literal}'::jsonb as same`))[0]
-    .same;
-  if (!unchanged) throw Error('Plan is stale. Generate and review a new plan.');
+  const current = (
+    await sql(`with current_plan as materialized (select af_private.creator_transfer_snapshot('${uuid(plan.source)}','${uuid(plan.target)}') as snapshot)
+    select snapshot, encode(sha256(convert_to(snapshot::text,'UTF8')),'hex') as fingerprint from current_plan`)
+  )[0];
+  const applyQuery = checkedTransferQuery(plan, current);
   const keys = await management('api-keys'),
     service = keys.find(/** @param {any} k */ k => k.name === 'service_role')?.api_key;
   if (typeof service !== 'string') throw Error('Storage copy requires the project service role key');
@@ -86,6 +87,7 @@ if (action === 'plan') {
       if (!response.ok) throw Error(`Asset copy failed (${response.status}); originals are untouched`);
     },
   });
-  const result = await sql(`select af_private.apply_creator_transfer('${literal}'::jsonb) as result`);
+  const result = await sql(applyQuery);
+  if (result.length !== 1) throw Error('Plan became stale. No account data was transferred; original files remain.');
   console.log(JSON.stringify({ status: 'assets-transferred', copied, ...result[0].result, identityLink: 'pending-user-oauth' }));
 }
