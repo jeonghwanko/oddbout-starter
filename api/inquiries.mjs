@@ -52,17 +52,25 @@ export function createInquiryHandler({ db, limiter }) {
 
 /** This is called only after createAdminHandler has verified the administrator. @param {any} db @param {Request} request */
 export async function listInquiries(db, request) {
-  const page = new URL(request.url).searchParams.get('page') ?? '0';
-  if (!/^\d{1,5}$/.test(page)) throw new Problem(400, 'invalid-query');
+  const params = new URL(request.url).searchParams;
+  const page = params.get('page') ?? '0', status = params.get('status') ?? 'all';
+  if (!/^\d{1,5}$/.test(page) || !['all', 'unread', 'read', 'done'].includes(status)) throw new Problem(400, 'invalid-query');
   const start = Number(page) * PAGE_SIZE;
-  const { data, error } = await db
-    .from('af_inquiries')
-    .select('id,title,message,created_at,status')
+  let query = db.from('af_inquiries').select('id,title,message,created_at,status');
+  if (status !== 'all') query = query.eq('status', status);
+  const { data, error } = await query
     .order('created_at', { ascending: false })
     .order('id', { ascending: false })
     .range(start, start + PAGE_SIZE);
   if (error || !Array.isArray(data)) throw new Problem(503, 'inquiries-unavailable');
   return { ok: true, inquiries: data.slice(0, PAGE_SIZE), hasMore: data.length > PAGE_SIZE };
+}
+
+/** Count the whole inbox without returning inquiry text. Called after the administrator check. @param {any} db */
+export async function unreadInquiryCount(db) {
+  const { count, error } = await db.from('af_inquiries').select('id', { count: 'exact', head: true }).eq('status', 'unread');
+  if (error || !Number.isSafeInteger(count) || count < 0) throw new Problem(503, 'inquiries-unavailable');
+  return { ok: true, unreadCount: count };
 }
 
 /** Called only after the admin handler verifies the caller. @param {any} db @param {Request} request @param {string} id @param {string} action */

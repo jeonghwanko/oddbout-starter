@@ -367,6 +367,9 @@ deploying the `ai-fighter` Edge function and publishing the website.
 the previous status to detect concurrent changes. `POST /admin/inquiries/<id>/delete`
 permanently removes one inquiry and accepts retries. Both require the same
 administrator check. Existing inquiries start as `unread` when the status migration runs.
+The list accepts `status=all|unread|read|done` before pagination.
+`GET /admin/inquiries/count` returns the full inbox's `unreadCount` after the
+administrator check, without returning inquiry text.
 
 Open `admin.html` on the same published site and sign in with a pre-provisioned
 administrator's Google account. The creator homepage shows **Applications**

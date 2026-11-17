@@ -35,7 +35,7 @@ test('website inquiries accept guest text once and only administrators can list 
         },
         from(table) {
           assert.equal(table, 'af_inquiries');
-          let update, deleting = false;
+          let update, deleting = false, counting = false;
           const filters = {};
           const query = {
             async upsert(row) {
@@ -46,7 +46,8 @@ test('website inquiries accept guest text once and only administrators can list 
               ]);
               return {};
             },
-            select() {
+            select(_columns, options) {
+              counting = options?.head === true;
               return query;
             },
             update(row) { update = row; return query; },
@@ -58,9 +59,14 @@ test('website inquiries accept guest text once and only administrators can list 
             },
             async then(resolve, reject) {
               try {
-                assert.equal(deleting, true);
-                await sql.query('delete from public.af_inquiries where id=$1', [filters.id]);
-                resolve({});
+                if (counting) {
+                  const result = await sql.query('select count(*)::int as count from public.af_inquiries where status=$1', [filters.status]);
+                  resolve({ count: result.rows[0].count });
+                } else {
+                  assert.equal(deleting, true);
+                  await sql.query('delete from public.af_inquiries where id=$1', [filters.id]);
+                  resolve({});
+                }
               } catch (error) { reject(error); }
             },
             order() {
@@ -69,9 +75,10 @@ test('website inquiries accept guest text once and only administrators can list 
             async range(start, end) {
               return {
                 data: (
-                  await sql.query('select id,title,message,created_at,status from public.af_inquiries order by created_at desc,id desc limit $1 offset $2', [
+                  await sql.query('select id,title,message,created_at,status from public.af_inquiries where ($3::text is null or status=$3) order by created_at desc,id desc limit $1 offset $2', [
                     end - start + 1,
                     start,
+                    filters.status ?? null,
                   ])
                 ).rows,
               };
@@ -104,18 +111,38 @@ test('website inquiries accept guest text once and only administrators can list 
     );
     assert.equal(hasMore, false);
     assert.equal(inquiries[0].status, 'unread');
+    assert.equal((await call('admin/inquiries/count')).status, 401);
+    assert.equal((await call('admin/inquiries/count', { headers: headers(visitor) })).status, 403);
+    const unread = async () => (await (await call('admin/inquiries/count', { headers: headers(admin) })).json()).unreadCount;
+    assert.equal(await unread(), 1);
+    assert.equal((await call('admin/inquiries?status=invalid', { headers: headers(admin) })).status, 400);
+    const filtered = async (status, page = 0) => (await (await call(`admin/inquiries?status=${status}&page=${page}`, { headers: headers(admin) })).json());
+    assert.equal((await filtered('unread')).inquiries.length, 1);
+    assert.equal((await filtered('read')).inquiries.length, 0);
+    assert.equal((await filtered('done')).inquiries.length, 0);
     const setStatus = (token, status, previous) => call(`admin/inquiries/${id}/status`, {
       method: 'POST', headers: headers(token), body: JSON.stringify({ status, previous }),
     });
     assert.equal((await setStatus(visitor, 'done', 'unread')).status, 403);
     assert.equal((await setStatus(admin, 'unknown', 'unread')).status, 400);
     assert.equal((await setStatus(admin, 'read', 'unread')).status, 200);
+    assert.equal(await unread(), 0);
+    assert.equal((await filtered('unread')).inquiries.length, 0);
+    assert.equal((await filtered('read')).inquiries[0].id, id);
     assert.equal((await setStatus(admin, 'done', 'unread')).status, 409);
     assert.equal((await setStatus(admin, 'done', 'read')).status, 200);
+    assert.equal((await filtered('done')).inquiries[0].id, id);
     assert.equal((await setStatus(admin, 'unread', 'done')).status, 200);
+    // Count the whole inbox, including rows beyond the first page.
+    for (let index = 0; index < 21; index++) await sql.query("insert into public.af_inquiries(id,title,message) values (gen_random_uuid(),'fixture','body')");
+    assert.equal(await unread(), 22);
+    assert.equal((await filtered('unread')).hasMore, true);
+    assert.equal((await filtered('unread', 1)).inquiries.length, 2);
+    await sql.query("delete from public.af_inquiries where title='fixture'");
     const remove = token => call(`admin/inquiries/${id}/delete`, { method: 'POST', headers: headers(token) });
     assert.equal((await remove(visitor)).status, 403);
     assert.equal((await remove(admin)).status, 200);
+    assert.equal(await unread(), 0);
     assert.equal((await remove(admin)).status, 200);
     assert.deepEqual((await (await call('admin/inquiries', { headers: headers(admin) })).json()).inquiries, []);
   } finally {
