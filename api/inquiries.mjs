@@ -19,9 +19,18 @@ export function createInquiryHandler({ db, limiter }) {
         throw new Problem(400, 'invalid-inquiry');
       }
       const { id, title, message } = body ?? {};
-      if (typeof id !== 'string' || !UUID.test(id) || typeof title !== 'string' || typeof message !== 'string'
-        || !title.trim() || !message.trim() || title.length > 120 || message.length > 4000
-        || unstorableTextPath({ title, message }) !== null) throw new Problem(400, 'invalid-inquiry');
+      if (
+        typeof id !== 'string' ||
+        !UUID.test(id) ||
+        typeof title !== 'string' ||
+        typeof message !== 'string' ||
+        !title.trim() ||
+        !message.trim() ||
+        title.length > 120 ||
+        message.length > 4000 ||
+        unstorableTextPath({ title, message }) !== null
+      )
+        throw new Problem(400, 'invalid-inquiry');
 
       if (limiter && !(await limiter.allow(request, BUCKET, 5, 3600))) throw new Problem(429, 'rate-limit');
       // Keep a global cap even when the per-client limiter has no trusted address.
@@ -29,7 +38,9 @@ export function createInquiryHandler({ db, limiter }) {
       if (budget.error || typeof budget.data !== 'boolean') throw new Problem(503, 'inquiries-unavailable');
       if (!budget.data) throw new Problem(429, 'rate-limit');
       // Retrying a request whose response was lost must not create another inquiry.
-      const { error } = await db.from('af_inquiries').upsert({ id, title: title.trim(), message: message.trim() }, { onConflict: 'id', ignoreDuplicates: true });
+      const { error } = await db
+        .from('af_inquiries')
+        .upsert({ id, title: title.trim(), message: message.trim() }, { onConflict: 'id', ignoreDuplicates: true });
       if (error) throw new Problem(503, 'inquiries-unavailable');
       return reply({ ok: true }, 201);
     } catch (error) {
@@ -44,8 +55,12 @@ export async function listInquiries(db, request) {
   const page = new URL(request.url).searchParams.get('page') ?? '0';
   if (!/^\d{1,5}$/.test(page)) throw new Problem(400, 'invalid-query');
   const start = Number(page) * PAGE_SIZE;
-  const { data, error } = await db.from('af_inquiries').select('id,title,message,created_at')
-    .order('created_at', { ascending: false }).order('id', { ascending: false }).range(start, start + PAGE_SIZE);
+  const { data, error } = await db
+    .from('af_inquiries')
+    .select('id,title,message,created_at')
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .range(start, start + PAGE_SIZE);
   if (error || !Array.isArray(data)) throw new Problem(503, 'inquiries-unavailable');
   return { ok: true, inquiries: data.slice(0, PAGE_SIZE), hasMore: data.length > PAGE_SIZE };
 }
