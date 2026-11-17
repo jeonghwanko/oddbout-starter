@@ -38,7 +38,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 // ---- the same values as bash og (og-node.test.mjs reads them from it).
 export const KIT_URL = 'https://github.com/jeonghwanko/oddbout-starter.git';
-export const KIT_REF = '8eb969647280cb3d7da9e5605dfcb21147a4437b';
+export const KIT_REF = '4573e6685998d926d58e8e14af407db2bfa66845';
 export const CODEX_VERSION = '0.165.0';
 export const GROK_VERSION = '1.0.52';
 export const RUN_TIMEOUT = 5400;

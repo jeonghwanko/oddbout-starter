@@ -1,6 +1,6 @@
 // @ts-check
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, readdir, realpath, rm, lstat } from 'node:fs/promises';
+import { copyFile, mkdtemp, mkdir, readFile, readdir, realpath, rm, lstat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -39,6 +39,47 @@ export async function validateCloudflareFiles(root, { headers } = {}) {
     if (!headers || shipped.trim() !== headers.trim()) throw Error('Cloudflare control file requires explicit review: _headers');
   }
   return files;
+}
+
+// Only deploy the checked-in public GET handler. The sealed site archive cannot supply executable routing controls.
+/** @param {string} temporary @param {string} site @param {string} project */
+async function stagePublicApi(temporary, site, project) {
+  const sources = ['functions/api/[[path]].js', 'worker/public-api.mjs', 'api/bytes.mjs'];
+  for (const source of sources) {
+    const target = join(temporary, source);
+    await mkdir(dirname(target), { recursive: true });
+    await copyFile(new URL('../' + source, import.meta.url), target);
+  }
+  await writeFile(join(site, '_routes.json'), JSON.stringify({ version: 1, include: ['/api/*'], exclude: [] }));
+  const config = join(temporary, 'wrangler.jsonc');
+  await writeFile(
+    config,
+    JSON.stringify({
+      name: project,
+      pages_build_output_dir: './site',
+      compatibility_date: '2026-11-04',
+      compatibility_flags: ['enable_request_signal'],
+    }),
+  );
+}
+
+/** @param {string} base @param {typeof fetch} [request] */
+export async function verifyPagesPublicApi(base, request = fetch) {
+  const paths = ['/api/ai-fighter/roster', '/api/ai-fighter/rankings', '/api/oddbout-arena/rankings?scope=registered'];
+  await Promise.all(
+    paths.map(async path => {
+      const response = await request(new URL(path, base), { redirect: 'error', signal: AbortSignal.timeout(15_000) });
+      if (
+        !response.ok ||
+        response.headers.get('x-oddbout-api-runtime') !== 'pages-function' ||
+        !response.headers.get('content-type')?.toLowerCase().startsWith('application/json')
+      ) {
+        await response.body?.cancel();
+        throw Error('Cloudflare Pages public API did not serve JSON: ' + path);
+      }
+      if ((await response.json()).ok !== true) throw Error('Cloudflare Pages public API did not succeed: ' + path);
+    }),
+  );
 }
 
 /** @param {string} sha @param {ReturnType<typeof import('./site-publication.mjs').publicationConfig>} config @param {{preview?:boolean}} options */
@@ -82,6 +123,7 @@ export async function publishCloudflare(sha, config, { preview = false } = {}) {
       extract();
     }
     await validateCloudflareFiles(site, { headers: chatGptEmbedBuild(hosting.chatgptEmbed).headers });
+    await stagePublicApi(temporary, site, config.project);
     const current = git(checkout, 'ls-remote', 'origin', `refs/heads/${hosting.branch}`).split(/\s/)[0];
     if (current !== sha) throw Error('Publication branch changed before Cloudflare upload');
     const branch = preview ? 'hosting-migration' : config.branch;
@@ -107,6 +149,7 @@ export async function publishCloudflare(sha, config, { preview = false } = {}) {
     if (url.protocol !== 'https:' || !url.hostname.endsWith(`.${config.project}.pages.dev`)) throw Error('Unexpected Cloudflare deployment origin');
     const base = url.origin + '/';
     await waitForJson(new URL('deployment.json', base), body => body.buildId === release.buildId && body.digest === release.digest);
+    await verifyPagesPublicApi(base);
     await verifyLiveSite(site, { siteUrl: base, request: cloudflareFetch() });
     // Immutable kits are not in the game's fingerprint or module graph; compare their bytes too.
     const kitFiles = git(checkout, 'ls-tree', '-r', '--name-only', 'HEAD', '--', 'creator-kit').split('\n').filter(Boolean);

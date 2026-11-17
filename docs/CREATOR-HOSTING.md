@@ -43,9 +43,12 @@ restores immutable kits, checks the 20,000-file and 25-MiB-per-file limits, and 
 to the separate `hosting-migration` branch. It verifies the returned deployment's
 commit, project and environment, then compares the live entry/asset/kit bytes.
 Only Cloudflare's same-origin `.html` canonical redirects are allowed.
-The upload refuses Cloudflare control files (`_worker.js`, `functions`, `_redirects`, `_routes.json`). `_headers` passes only
+The upload refuses executable or routing controls from the sealed artifact (`_worker.js`, `functions`, `_redirects`, `_routes.json`). `_headers` passes only
 when it is exactly the ChatGPT game-entry rules that `scripts/chatgpt-embed-site.mjs` generates from `deploy/creator-site.json`;
 with no `chatgptEmbed` setting those rules deny framing of `/embed/chatgpt`.
+After checking the artifact, the Cloudflare publisher adds the repository's Pages Function for `/api/*`.
+The function uses the shared public GET handler. Pages serves the homepage and other static routes directly.
+The publisher verifies all three public reads on the deployment URL. Verify them again on the custom domain after changing DNS.
 The default branch named by `ODDBOUT_CLOUDFLARE_BRANCH` must match the project's
 production branch; deployment metadata validation rejects a mismatch.
 
@@ -330,6 +333,13 @@ Supabase migrations and Edge Functions are outside this workflow. In particular,
 the local empty `duel-engine.mjs` adapter must never replace the deployed game
 engine. `publish:rupin` remains the original Wonder Lupin publishing command;
 use `publish:fighter` for AI Fighter.
+
+Create a migration with `npm run db:new -- <snake_case_name>`, never a version
+picked by hand: it takes the current UTC second, later than every file in
+`supabase/migrations/` and never ending in `0000`. Production shares one history
+with the arena relay's migrations, which this checkout cannot read; round
+versions collided there (#407, #445). `test/migration-rules.test.mjs` refuses a
+`…0000` version after `20261114010000`.
 
 ### Verified workflow deployment (2026-10-21 KST)
 

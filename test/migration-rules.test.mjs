@@ -52,6 +52,17 @@ test('every migration has its own version', () => {
   );
 });
 
+// The newest migration before `npm run db:new`. The ones up to it stay as written; production already keys on their versions.
+const HAND_PICKED_UNTIL = '20261114010000';
+
+test('a migration after 20261114010000 has no round …0000 version, the mark of one picked by hand', () => {
+  // Hand-picked versions were round times (…100000, …120000), and production shares one history with the arena relay's migrations:
+  // 20261108120000 and 20261113210000 were already taken there (#407, #445), and 20261103100000 here (358546cc). This checkout cannot
+  // see the relay's versions; a version at the current second (scripts/new-migration.mjs) is unlikely to meet one.
+  const round = migrations.filter(name => name.slice(0, 14) > HAND_PICKED_UNTIL && name.slice(10, 14) === '0000');
+  assert.deepEqual(round, [], 'create migrations with `npm run db:new -- <snake_case_name>`: its version is the current UTC second, never …0000');
+});
+
 test('every table turns on row level security, and every function is closed to clients unless a grant names them', async () => {
   // PostgREST serves the public schema to anon and authenticated: a table without row level security, or a function left with
   // Postgres's default PUBLIC execute (and Supabase's default grants), is open to anyone holding the site's key. Secrets such as the host

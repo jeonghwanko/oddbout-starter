@@ -46,6 +46,7 @@ creator-kit ZIP에는 제작·연결 안내와 이 문서 지도가 들어 있�
 | [CONNECTION-READINESS](CONNECTION-READINESS.md) | ODDBOUT 연결과 제작 준비 상태 확인 |
 | [OPEN-REGISTRATION](OPEN-REGISTRATION.md) | 가입 후 제작·검토·업로드·검사·등록: 연결된 클라우드 계정 사용 |
 | [SOCIAL-EXPORT](SOCIAL-EXPORT.md) | 완성한 선수를 X에 올릴 영상·GIF·리액션 표정·4장 게시물로 꺼내기(생성 없음), 요청 시 Grok 표정 클립 |
+| [BOUT-VIDEO](BOUT-VIDEO.md) | 시드 한 판의 재생 주소와 X용 MP4. 도구는 X에 올리지 않는다 |
 | [DOT-DIALOGUE-ONLY](DOT-DIALOGUE-ONLY.md) | 생성 없이 실제 Dot에서 대화 흐름만 시험하기 |
 | [LOCAL-VOICE](LOCAL-VOICE.md) | 사용자 PC의 VoiceStudio로 음성 만들기 |
 
@@ -107,6 +108,6 @@ creator-kit ZIP에는 제작·연결 안내와 이 문서 지도가 들어 있�
 | [DOTS-VM-ACCEPTANCE](records/DOTS-VM-ACCEPTANCE.md) | Dots VM 인수 시험(0.5.5 후보) |
 | [CLOUD-PLUGIN-REVIEW](records/CLOUD-PLUGIN-REVIEW.md), [PLUGIN-POLICY-AND-VIDEO](records/PLUGIN-POLICY-AND-VIDEO.md), [PLUGIN-REVIEW-CASES](records/PLUGIN-REVIEW-CASES.md) | 2026-10-22~24 플러그인 심사 준비와 상태 |
 | [PAYPAL-GATES-2026-11-03](records/PAYPAL-GATES-2026-11-03.md) | 2026-11-03 PayPal Sandbox 방송 G0~G8 실행 준비 점검과 로컬 경기 재현 |
-| [KIT-RELEASES](records/KIT-RELEASES.md) | creator-kit 0.6.16부터 0.4.0까지의 릴리스와 검증 기록 |
+| [KIT-RELEASES](records/KIT-RELEASES.md) | creator-kit 0.6.20부터 0.4.0까지의 릴리스와 검증 기록 |
 | [SUPABASE-BETA](records/SUPABASE-BETA.md) | 이전 초대 베타(v0.2)의 운영 기록 |
 | [research/](research/) | 개별 조사·실험 기록. X GTM 계획은 [X-GTM-2026-11](research/X-GTM-2026-11.md) |

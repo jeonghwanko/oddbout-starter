@@ -4,6 +4,8 @@ import { resolve, join, relative, isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { homepageEntries } from './homepage-entry.mjs';
 import { writeSiteDiscovery } from './site-discovery.mjs';
+import { cleanSiteSeoUrls } from './clean-urls.mjs';
+import { existsSync } from 'node:fs';
 import { readUpdatesManifest } from './site-updates.mjs';
 import { writeUpdatesAnalytics } from './site-updates-analytics.mjs';
 import { publishEnvironmentProfiles } from '../mcp/environment-profiles.mjs';
@@ -137,16 +139,24 @@ for (const [path, html] of Object.entries(homepageEntries(homepage))) {
 }
 const updatesOutput = await readUpdatesManifest(output);
 await writeUpdatesAnalytics(output, updatesOutput.pages, config.analyticsMeasurementId, config.siteUrl, config.apiBase);
-await writeSiteDiscovery(output, config.siteUrl, ['index.html', ...siteEntries, ...policyFiles, ...updatesOutput.pages]);
+// Pages serves clean URLs (/x.html redirects to /x), so canonical, hreflang and og:url must name the clean address before the sitemap reads them.
+// twitch.html and bet.html come from the game's site plugins; older game sources do not have them.
+// ko/ and ja/ are the homepage's Korean and Japanese documents (kaito_web home-site-plugin); / is English.
+const standalonePages = ['ko/index.html', 'ja/index.html', 'twitch.html', 'bet.html'].filter(page => existsSync(join(output, page)));
+const seoPages = ['index.html', ...siteEntries, ...standalonePages, ...policyFiles, ...updatesOutput.pages];
+// Every published document (also the cloud plugin's and the game's own pages), not only the sitemap's: a canonical anywhere names the final URL.
+const publishedPages = (await readdir(output, { recursive: true })).map(path => String(path).replaceAll('\\', '/')).filter(path => path.endsWith('.html'));
+await cleanSiteSeoUrls(output, publishedPages, config.siteUrl);
+await writeSiteDiscovery(output, config.siteUrl, seoPages);
 // The game's public 404 belongs to another site and links to the domain root, which is not ours.
 await writeFile(
   join(output, '404.html'),
   `<!doctype html>
 <html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="referrer" content="no-referrer"><meta name="robots" content="noindex"><title>AI Fighter · 페이지를 찾을 수 없습니다</title>
+<meta name="referrer" content="no-referrer"><meta name="robots" content="noindex"><title>ODDBOUT · 페이지를 찾을 수 없습니다 · Page not found</title>
 <style>html,body{height:100%;margin:0}body{display:grid;place-items:center;background:#14212d;color:#f5f2e9;font:16px/1.6 Arial,sans-serif;text-align:center}h1{font-size:28px;margin:0 0 12px}a{color:#e9f56a}</style>
 <main><h1>페이지를 찾을 수 없습니다 · Page not found</h1>
-<p><a href="${config.base}">AI Fighter 홈으로 · Back to AI Fighter</a></p></main></html>
+<p><a href="${config.base}">ODDBOUT 홈으로 · Back to ODDBOUT</a></p></main></html>
 `,
 );
 const assets = await readdir(join(output, 'assets'));

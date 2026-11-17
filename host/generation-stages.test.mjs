@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { createStages, EXTRACT_REDRAWS, extractFailedRows, writeWhole, webpSize } from './generation-stages.mjs';
+import { createMotionSheetQueue, createStages, EXTRACT_REDRAWS, extractFailedRows, writeWhole, webpSize } from './generation-stages.mjs';
 import {
   ALIGN_AGAIN,
   BEAT_LIMIT,
@@ -42,6 +42,7 @@ import {
   submissionOutcome,
   withProfile,
   ENGINE_SEAM_MAX,
+  loopRank,
   loopTaken,
   HOUSE_COLOURING,
   LOOK_CHECKS,
@@ -76,7 +77,9 @@ import {
   hybridJudgeKey,
   judgesMode,
   pixelJudgeKey,
+  sideContinuable,
   sidePassed,
+  sideRank,
   IMAGE_PROFILES,
   GROK_IMAGE_MODEL,
   appearanceCommand,
@@ -107,6 +110,85 @@ import { parseEnv, parseHealth } from './generation-worker.mjs';
 import { ASKS } from './generation-prompts.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+
+test('a contact sheet queue uploads only the latest snapshot and still settles when a build fails', async () => {
+  const uploaded = [];
+  const events = [];
+  let releaseFirst = () => {};
+  const firstGate = new Promise(done => {
+    releaseFirst = done;
+  });
+  let builds = 0;
+  const queue = createMotionSheetQueue({
+    build: async snap => {
+      builds += 1;
+      if (snap.id === 'slow') await firstGate;
+      if (snap.id === 'bad') throw new Error('sheet-failed');
+      return { id: snap.id };
+    },
+    commit: async (snap, built) => {
+      uploaded.push(built?.id ?? null);
+      events.push(snap.id);
+    },
+  });
+  const slow = queue.kick({ id: 'slow' });
+  const newer = queue.kick({ id: 'newer' });
+  releaseFirst();
+  await Promise.all([slow, newer]);
+  await queue.flush();
+  // The slow sheet is not uploaded. Its clip event is still recorded, then the newer sheet.
+  assert.deepEqual(events, ['slow', 'newer']);
+  assert.deepEqual(uploaded, [null, 'newer']);
+  await queue.kick({ id: 'bad' });
+  await queue.flush();
+  assert.deepEqual(events, ['slow', 'newer', 'bad']);
+  assert.deepEqual(uploaded, [null, 'newer', null]);
+  assert.ok(builds >= 2);
+  const controller = new AbortController();
+  let started = false;
+  let releaseHung = () => {};
+  const hungGate = new Promise(done => {
+    releaseHung = done;
+  });
+  const cancelled = createMotionSheetQueue({
+    signal: controller.signal,
+    build: async () => {
+      started = true;
+      await hungGate;
+      return { id: 'hung' };
+    },
+    commit: async () => {
+      uploaded.push('should-not-commit');
+    },
+  });
+  const hung = cancelled.kick({ id: 'hung' });
+  await new Promise(done => setImmediate(done));
+  assert.equal(started, true);
+  controller.abort();
+  await cancelled.flush();
+  releaseHung();
+  await hung;
+  assert.ok(!uploaded.includes('should-not-commit'));
+  // A flush already waiting on a stuck build returns when the stage is cancelled, not when the build settles.
+  const later = new AbortController();
+  let releaseStuck = () => {};
+  const stuckGate = new Promise(done => {
+    releaseStuck = done;
+  });
+  const stuck = createMotionSheetQueue({ signal: later.signal, build: () => stuckGate, commit: async () => {} });
+  const stuckRun = stuck.kick({ id: 'stuck' });
+  let flushed = false;
+  const waiting = stuck.flush().then(() => {
+    flushed = true;
+  });
+  await new Promise(done => setImmediate(done));
+  assert.equal(flushed, false);
+  later.abort();
+  await waiting;
+  assert.equal(flushed, true);
+  releaseStuck();
+  await stuckRun;
+});
 /** motions.py's face-box needs Pillow and NumPy (the kit's sprite-gen venv has them; a bare CI runner may not). */
 const hasPillow = () => spawnSync('python3', ['-c', 'import PIL, numpy']).status === 0;
 
@@ -632,6 +714,21 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
       for (const clip of ['combo', 'fightIdle']) await writeFile(path.join(rest[1], `${clip}.webp`), clip);
     }
     if (command === 'strip-preview') await writeFile(rest[1], 'loop');
+    if (command === 'progress-sheet') {
+      const manifest = JSON.parse(await readFile(rest[0], 'utf8'));
+      await mkdir(path.dirname(rest[1]), { recursive: true });
+      await writeFile(rest[1], 'sheet');
+      const have = new Map((manifest.clips ?? []).map(item => [item.clip, item]));
+      await writeFile(
+        rest[1].replace(/\.webp$/, '.json'),
+        JSON.stringify({
+          clips: PREVIEW_CLIPS.map(clip => {
+            const item = have.get(clip);
+            return item ? { clip, status: item.state ?? 'ready', frames: 4, durationMs: 400 } : { clip, status: 'pending' };
+          }),
+        }),
+      );
+    }
     return { code: 0 };
   };
   const api = {
@@ -659,10 +756,7 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
     done.result.preview.map(p => p.clip),
     PREVIEW_CLIPS,
   );
-  assert.deepEqual(
-    uploads.filter(name => name.startsWith('motion-')),
-    PREVIEW_CLIPS.map(clip => `motion-${clip.toLowerCase()}-0`),
-  );
+  assert.deepEqual(uploads.filter(name => name.startsWith('motion-')).sort(), PREVIEW_CLIPS.map(clip => `motion-${clip.toLowerCase()}-0`).sort());
   // Drafts went up as the branches passed (the action clips, then each gait), before the package's previews; each gait's take went up as it
   // was cut (2026-11-01), before its alignment, under a name of its own.
   assert.deepEqual(uploads.filter(name => name.startsWith('draft-')).sort(), [
@@ -675,12 +769,20 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
     'draft-walk-t0-0',
   ]);
   assert.ok(uploads.indexOf('draft-walk-0') < uploads.indexOf('motion-idle-0'));
+  // The contact sheet goes up with the first draft, and again from the packed previews, before the stage ends.
+  assert.ok(uploads.includes('sheet-0'));
+  assert.ok(uploads.indexOf('sheet-0') < uploads.indexOf('motion-idle-0'));
+  assert.ok(py.some(args => args[0] === 'progress-sheet'));
   for (const [shown, aligned] of [
     ['walk-t0', 'loop-16'],
     ['run-t0', 'loop-12'],
   ])
     assert.ok(timeline.includes(`up draft-${shown}-0`) && timeline.indexOf(`up draft-${shown}-0`) < timeline.indexOf(`align ${aligned}`), timeline.join(', '));
   const drafts = events.filter(e => e.kind === 'drafts');
+  // A take that is already out of date is still listed, without its sheet. The sheet is on the snapshots that were still current.
+  assert.ok(drafts.some(event => event.sheet === 'sheet-0' && event.metrics?.some(metric => metric.frames === 4 && metric.durationMs === 400)));
+  assert.equal(drafts.at(-1).sheet, 'sheet-0');
+  assert.ok(drafts.at(-1).metrics.some(metric => metric.clip === 'idle' && metric.frames === 4));
   assert.deepEqual(
     drafts
       .at(-1)
@@ -830,10 +932,7 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
   const atRound1 = calls.length;
   const slam = await stages.motions({ ...job, motionNote: { clip: 'slam', note: 'a much bigger punch' }, motionRound: 1 }, dir);
   assert.equal(slam.outcome, 'ok');
-  assert.deepEqual(
-    uploads.filter(name => name.startsWith('motion-')),
-    PREVIEW_CLIPS.map(clip => `motion-${clip.toLowerCase()}-1`),
-  );
+  assert.deepEqual(uploads.filter(name => name.startsWith('motion-')).sort(), PREVIEW_CLIPS.map(clip => `motion-${clip.toLowerCase()}-1`).sort());
   assert.ok(uploads.includes('draft-combo-1'));
   const remade = py.find(a => a[0] === 'request' && a.length === 5);
   assert.deepEqual([remade[3], await readFile(remade[4], 'utf8')], ['slam-a', 'a much bigger punch']);
@@ -1330,6 +1429,8 @@ test('a gait event keeps under the progress limit, the oldest cuts giving way fi
   assert.ok(JSON.stringify(event).length <= GAIT_EVENT_BYTES && event.more > 0 && event.tried.length + event.more === 40);
   assert.equal(event.tried.at(-1).cut, 'cut-auto-39');
   assert.deepEqual([event.kind, event.gait, event.outcome, event.code], ['gait', 'run', 'review', 'run-not-clean']);
+  const continued = gaitEvent('walk', { strip: 's', take: 0, tried: [], warning: { code: 'walk-not-clean', take: 0, failed: ['identity'] } });
+  assert.deepEqual([continued.outcome, continued.code, continued.take], ['continued', 'walk-not-clean', 0]);
   assert.deepEqual(gaitEvent('run', { strip: 's', take: null, note: RUN_FROM_WALK, tried: [] }), {
     kind: 'gait',
     gait: 'run',
@@ -1448,6 +1549,104 @@ test('a filmed clip the engine stopped cutting is cut again, then an operator; o
   });
   assert.deepEqual(stale.done, { outcome: 'review', result: { code: 'walk-cut' } });
   assert.equal(stale.calls.filter(a => a.includes('video-set') && flag(a, '--states') === 'walk').length, 1);
+});
+
+test('a walk that fails identity still stops; one that fails anatomy continues with a warning', async () => {
+  const judge = verdict => async (args, flag, tool) => {
+    if (tool === 'codex' && String(flag(args, '-o')).includes(`${path.sep}video-walk`)) {
+      await writeFile(flag(args, '-o'), JSON.stringify(verdict));
+      return { code: 0 };
+    }
+    if (tool === 'fighter:gait' && String(args.at(-1)).includes(`${path.sep}loop${path.sep}walk${path.sep}`)) {
+      await writeFile(args.at(-1), '{"status":"fail"}');
+      return { code: 2 };
+    }
+    return null;
+  };
+  const wrong = await scaleStage({
+    scaleFit: fitAll,
+    hooks: { og: judge({ identity: 'fail', anatomy: 'pass', loop: 'pass', notes: 'A different scarf and face.' }) },
+  });
+  assert.equal(wrong.done.result?.code, 'walk-not-clean');
+  assert.equal(wrong.events.filter(e => e.kind === 'warning').length, 0);
+  const flag = (args, name) => args[args.indexOf(name) + 1];
+  assert.equal(wrong.calls.filter(a => a.includes('video-set') && flag(a, '--states') === 'walk').length, 1 + GAIT_RETAKES);
+  const { done, calls, events, again } = await scaleStage({
+    scaleFit: fitAll,
+    hooks: { og: judge({ identity: 'pass', anatomy: 'fail', loop: 'pass', notes: 'The far arm melts in two frames.' }) },
+  });
+  assert.equal(done.outcome, 'ok', JSON.stringify(done));
+  assert.equal(calls.filter(a => a.includes('video-set') && flag(a, '--states') === 'walk').length, 1 + GAIT_RETAKES);
+  const added = calls.find(a => a[0] === 'motions.py' && a[1] === 'add-gait' && a[3] === 'walk');
+  assert.match(added[4], /video-walk-0/);
+  const walkEvent = events.find(e => e.kind === 'gait' && e.gait === 'walk');
+  assert.deepEqual([walkEvent.outcome, walkEvent.code, walkEvent.take], ['continued', 'walk-not-clean', 0]);
+  assert.deepEqual(
+    events.filter(e => e.kind === 'warning').map(e => [e.code, e.take, e.outcome, e.failed]),
+    [['walk-not-clean', 0, 'continued', ['anatomy']]],
+  );
+  events.length = 0;
+  assert.equal((await again()).outcome, 'ok');
+  assert.equal(events.filter(e => e.kind === 'warning').length, 0, 'a stage run again does not record the waiver twice');
+});
+
+test('a final preview whose upload fails retries the stage; a missing preview goes to an operator; neither registers', async () => {
+  const failing = await scaleStage({
+    scaleFit: fitAll,
+    onArtifact: name => {
+      if (name === 'motion-walk-0') throw Object.assign(new Error('storage 503'), { code: 'artifact-failed' });
+    },
+  }).then(
+    () => null,
+    error => error,
+  );
+  assert.equal(failing?.message, 'storage 503', 'a failed PUT is thrown for the worker to retry, not parked for an operator');
+  const missing = await scaleStage({
+    scaleFit: fitAll,
+    hooks: {
+      motionsPy: async (command, rest) => {
+        if (command !== 'preview') return null;
+        await mkdir(rest[1], { recursive: true });
+        for (const clip of PREVIEW_CLIPS.filter(c => c !== 'groggy')) await writeFile(path.join(rest[1], `${clip}.webp`), clip);
+        return { code: 0 };
+      },
+    },
+  });
+  assert.deepEqual(missing.done, { outcome: 'review', result: { code: 'preview-groggy' } });
+});
+
+test('a run the judge refuses but would keep with a warning is made from the clean walk first; failing that, kept with the warning', async () => {
+  const flag = (args, name) => args[args.indexOf(name) + 1];
+  const refused = { identity: 'pass', anatomy: 'fail', loop: 'pass', notes: 'The far leg bends backwards.' };
+  const judge = derivedVerdict => async (args, _flag, tool) => {
+    if (tool !== 'codex') return null;
+    const out = String(flag(args, '-o'));
+    if (out.includes(`${path.sep}video-run`)) {
+      await writeFile(out, JSON.stringify(refused));
+      return { code: 0 };
+    }
+    if (derivedVerdict && out.includes('run-from-walk-')) {
+      await writeFile(out, JSON.stringify(derivedVerdict));
+      return { code: 0 };
+    }
+    return null;
+  };
+  const fromWalk = await scaleStage({ scaleFit: fitAll, hooks: { og: judge(null) } });
+  assert.equal(fromWalk.done.outcome, 'ok', JSON.stringify(fromWalk.done));
+  assert.deepEqual(
+    fromWalk.done.result.preview.filter(p => p.note).map(p => [p.clip, p.note]),
+    [['run', RUN_FROM_WALK]],
+  );
+  assert.equal(fromWalk.events.filter(e => e.kind === 'warning').length, 0, 'a clean run from the walk records no warning');
+  assert.ok(!fromWalk.events.some(e => e.kind === 'gait' && e.gait === 'run' && e.outcome === 'continued'));
+  const kept = await scaleStage({ scaleFit: fitAll, hooks: { og: judge(refused) } });
+  assert.equal(kept.done.outcome, 'ok', JSON.stringify(kept.done));
+  const added = kept.calls.find(a => a[0] === 'motions.py' && a[1] === 'add-gait' && a[3] === 'run');
+  assert.match(added[4], /video-run-/);
+  assert.deepEqual(
+    kept.events.filter(e => e.kind === 'warning').map(e => [e.code, e.outcome, e.failed]),
+    [['run-not-clean', 'continued', ['anatomy']]],
+  );
 });
 
 test("the motion-auto cut stopped by the GPU after the first cut's alignment did is cut again on the next pass, not a new take", async () => {
@@ -2072,7 +2271,7 @@ test("the house colouring is the one creators' agents are given; a front look an
   assert.match(sideJudgePrompt(brief), /same character as image 1/);
 });
 
-test('the motions start from a side still drawn from the chosen front: judged against it, drawn again, then an operator', async () => {
+test('the motions start from a side still drawn from the chosen front, and the expression sheet starts with it', async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'gen-side-')),
     calls = [],
     uploads = [],
@@ -2123,6 +2322,11 @@ test('the motions start from a side still drawn from the chosen front: judged ag
   const pass = Object.fromEntries(SIDE_CHECKS.map(check => [check, 'pass']));
   verdicts.push({ checks: { ...pass, match: 'fail' }, notes: 'Different gloves from the front.' }, { checks: pass, notes: 'The same boxer, facing right.' });
   await stages.motions(job, dir);
+  // The sheet starts after the first side picture is on disk (it must not take the image slot first) and before the motions.
+  const sheetAt = calls.findIndex(c => c.args.includes('gen') && c.args.includes('--aspect-ratio'));
+  const firstSide = calls.findIndex(c => c.args.includes('gen') && c.args.includes('--direction'));
+  const motionsAt = calls.findIndex(c => c.args[0] === 'motions.py');
+  assert.ok(firstSide >= 0 && sheetAt > firstSide && (motionsAt < 0 || sheetAt < motionsAt));
   // Side drawings only (the expression sheet is drawn beside them, without a view).
   const sides = calls.filter(c => c.args.includes('gen') && c.args.includes('--direction'));
   assert.equal(sides.length, 2);
@@ -2175,14 +2379,41 @@ test('the motions start from a side still drawn from the chosen front: judged ag
     calls.some(c => c.args.includes(path.join(styleOnly, 'looks', 'side-0-a', 'take-0.png'))),
     'the motions take the first style-only take',
   );
-  // Three drawings that are not the same character go to an operator; a side look chosen before 2026-10-31 makes no side still.
+  assert.equal(events.filter(e => e?.kind === 'warning').length, 0);
+  // A different character, or a cropped figure, still stops. A whole side view of the same character that is only unclean continues.
   const other = await mkdtemp(path.join(tmpdir(), 'gen-side-fail-'));
   await mkdir(path.join(other, 'looks'), { recursive: true });
   await writeFile(path.join(other, 'looks', 'front-a-0.png'), 'front');
   verdicts.push(...Array.from({ length: SIDE_TAKES }, () => ({ checks: { ...pass, match: 'fail', style: 'fail' }, notes: 'Another face.' })));
   calls.length = 0;
-  assert.deepEqual(await stages.motions({ ...job, choice: 'a' }, other), { outcome: 'review', result: { code: 'side-look' } });
-  assert.equal(calls.filter(c => c.args.includes('gen')).length, SIDE_TAKES);
+  events.length = 0;
+  assert.deepEqual((await stages.motions({ ...job, choice: 'a' }, other)).result?.code, 'side-look');
+  assert.equal(calls.filter(c => c.args.includes('gen') && c.args.includes('--direction')).length, SIDE_TAKES);
+  assert.equal(events.filter(e => e?.kind === 'warning').length, 0);
+  const cropped = await mkdtemp(path.join(tmpdir(), 'gen-side-crop-'));
+  await mkdir(path.join(cropped, 'looks'), { recursive: true });
+  await writeFile(path.join(cropped, 'looks', 'front-a-0.png'), 'front');
+  verdicts.push(...Array.from({ length: SIDE_TAKES }, () => ({ checks: { ...pass, whole: 'fail' }, notes: 'The feet are cut off.' })));
+  assert.equal((await stages.motions({ ...job, choice: 'a' }, cropped)).result?.code, 'side-look');
+  const unclean = await mkdtemp(path.join(tmpdir(), 'gen-side-clean-'));
+  await mkdir(path.join(unclean, 'looks'), { recursive: true });
+  await writeFile(path.join(unclean, 'looks', 'front-a-0.png'), 'front');
+  verdicts.push(...Array.from({ length: SIDE_TAKES }, () => ({ checks: { ...pass, clean: 'fail' }, notes: 'A second faint figure.' })));
+  calls.length = 0;
+  events.length = 0;
+  const kept = await stages.motions({ ...job, choice: 'a' }, unclean);
+  assert.notEqual(kept.result?.code, 'side-look');
+  assert.deepEqual(
+    events.filter(e => e?.kind === 'warning').map(e => [e.code, e.take, e.outcome, e.failed]),
+    [['side-look', 0, 'continued', ['clean']]],
+  );
+  events.length = 0;
+  await stages.motions({ ...job, choice: 'a' }, unclean);
+  assert.equal(events.filter(e => e?.kind === 'warning').length, 0, 'a stage run again does not record the waiver twice');
+  assert.ok(sideRank({ checks: { ...pass, style: 'fail' } }) > sideRank({ checks: { ...pass, match: 'fail', style: 'fail' } }));
+  assert.equal(sideContinuable({ checks: { ...pass, clean: 'fail' } }), true);
+  assert.equal(sideContinuable({ checks: { ...pass, whole: 'fail' } }), false);
+  assert.ok(loopRank({ identity: 'pass', anatomy: 'pass', loop: 'fail' }) > loopRank({ identity: 'fail', anatomy: 'pass', loop: 'pass' }));
   const legacy = await mkdtemp(path.join(tmpdir(), 'gen-side-legacy-'));
   await mkdir(path.join(legacy, 'looks'), { recursive: true });
   await writeFile(path.join(legacy, 'looks', 'look-a-0.png'), 'side look');

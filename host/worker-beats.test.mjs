@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { TIMING, createApi, createBeats, healthKey, nextIdleWait } from './generation-worker.mjs';
+import { LOOK_SELECT_PAD_MS, TIMING, createApi, createBeats, healthKey, idleSleepMs, nextIdleWait } from './generation-worker.mjs';
 
 // 2026-11-07: idle claims and the minute's heartbeats were 83 % of the project's Edge requests. An idle worker now waits up to a minute
 // between claims and its heartbeat rides on the claim once the server has taken one there.
@@ -10,6 +10,10 @@ test('an idle worker waits 15 s, then twice as long each empty claim, to a minut
   for (let i = 0; i < 4; i++) waits.push(nextIdleWait(waits.at(-1) ?? 0));
   assert.deepEqual(waits, [15_000, 30_000, 60_000, 60_000, 60_000]);
   assert.ok(TIMING.idleMaxMs < 3 * 60_000, 'a host stays "on" three minutes after its last heartbeat');
+  assert.equal(idleSleepMs(60_000, 15_000), 15_000 + LOOK_SELECT_PAD_MS);
+  assert.equal(idleSleepMs(15_000, 60_000), 15_000);
+  assert.equal(idleSleepMs(60_000, null), 60_000);
+  assert.equal(idleSleepMs(60_000, 0), 60_000);
 });
 
 test('the heartbeat rides on the claim once the server says it takes one there, at most once a minute', () => {

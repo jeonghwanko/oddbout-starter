@@ -69,6 +69,31 @@ test('AGENTS.md fits within what Codex reads', async () => {
   assert.ok(size <= 32 * 1024, `AGENTS.md is ${size} bytes`);
 });
 
+test('the document index and the distribution page state the release range that records/KIT-RELEASES.md holds', async () => {
+  // A release moves into the records when a newer one is recorded as current (PLUGIN-DISTRIBUTION.md); the index still said 0.6.16
+  // after the records reached 0.6.20. Entry lines: "**Previous source-kit release: 0.6.20**", "Earlier release: 0.6.0", "Earlier: 0.5.4 (…)".
+  const records = await readFile(path.join(root, 'docs/records/KIT-RELEASES.md'), 'utf8');
+  const entries = records.match(/^(?:\*\*(?:Previous|Earlier) source-kit release|Previous release|Earlier release|Earlier):.*$/gm) ?? [];
+  /** @type {(a: string, b: string) => number} */
+  const order = (a, b) => {
+    const [x, y] = [a, b].map(version => version.split('.').map(Number));
+    return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+  };
+  // The newest is an entry's own release, the version right after its label. The oldest may be named only inside a line
+  // ("Earlier: 0.5.4 (… 0.4.0 …)"), so it is the least of every version an entry line names.
+  const released = entries.flatMap(line => /^[^:]*:\s*(\d+\.\d+\.\d+)\b/.exec(line)?.[1] ?? []).sort(order);
+  const named = entries.flatMap(line => line.match(/\b\d+\.\d+\.\d+\b/g) ?? []).sort(order);
+  assert.ok(released.length >= 2, 'records/KIT-RELEASES.md lists its releases');
+  const [oldest, newest] = [named[0], released.at(-1)];
+  const index = await readFile(path.join(root, 'docs/README.md'), 'utf8');
+  assert.ok(index.includes(`creator-kit ${newest}부터 ${oldest}까지`), `docs/README.md: KIT-RELEASES holds creator-kit ${newest}부터 ${oldest}까지`);
+  const distribution = await readFile(path.join(root, 'docs/PLUGIN-DISTRIBUTION.md'), 'utf8');
+  assert.ok(
+    distribution.includes(`Earlier releases (${newest} back to ${oldest})`),
+    `docs/PLUGIN-DISTRIBUTION.md: earlier releases ${newest} back to ${oldest}`,
+  );
+});
+
 test('agent instructions name only files, anchors and npm scripts that exist', async () => {
   const { scripts } = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
   const missing = [];

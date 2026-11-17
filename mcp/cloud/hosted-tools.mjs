@@ -41,7 +41,10 @@ import { toolRef } from './merged-tools.mjs';
  *   tokens?: number | null, expressions?: { url: string | null } | null,
  *   progress?: number, description?: string, profile?: { name?: string } | null, createdAt?: string, updatedAt?: string, agent?: string | null,
  *   side?: { url: string | null } | null, drafts?: { clip: string, url: string | null, state?: string }[],
+ *   motionSheet?: { url?: string | null, clips?: { clip: string, status?: string, frames?: number, durationMs?: number }[], attach?: boolean } | null,
  *   appearanceAutoSelectAt?: string | null, appearanceAutoSelection?: { choice: 'a', selectedAt: string, deadline: string } | null,
+ *   timeline?: { at: string, kind: string, take?: number, outcome?: string }[],
+ *   warnings?: { at: string, code: string, take?: number, outcome?: string, failed?: string[] }[],
  *   candidates?: { key: string, url: string | null }[] }} HostedJob
  * @typedef {{ id: number, at: string, kind: string, data: any }} JobEvent  A row of af_generation_events.
  * @typedef {{ status: string, progress: number, submission: string | null, picture: number | null }} WatchTick  What a wait sees of a job;
@@ -72,9 +75,11 @@ export const HOSTED_INSTRUCTIONS =
   'Preserve the unknown outcome and inspect the original call, rather than replaying request_hosted_fighter to recover it. ' +
   'Never create a new key or repeat a look/motion revision merely to recover an unknown outcome. ' +
   'Read the same job again for fresh preview URLs; a URL is not proof that the user saw the image. ' +
+  'While motions are being made, show the attached contact sheet (one image of the clips finished so far) and motionSheet.clips. ' +
+  'Do not download each clip preview when that sheet is attached. ' +
   'While the user watches a working job in this chat, read it again with waitSeconds 25 each time a read returns and tell him each change. ' +
   'Use statusSummary for the current stage, completion and required action; progress is stage-local, never overall completion. ' +
-  'The server selects an unanswered look (A, ten minutes after the pair is ready); do not send a fabricated user choice or run a chat timer. ' +
+  'The server selects an unanswered look (A, three minutes after the pair is ready); do not send a fabricated user choice or run a chat timer. ' +
   'appearanceAutoSelection is the server event proving that A was selected after no answer; report its selectedAt and deadline. ' +
   'Without that evidence, do not infer an automatic selection from choice A or elapsed time. ' +
   "Hosted creation includes registration into production after file validation. Motion review and entry happen on the owner's site page. " +
@@ -120,6 +125,16 @@ const RUN_FROM_WALK_NEXT =
  * or its own image card, and showed the picture once the bot downloaded the file and attached it.
  */
 const IMAGES_NEXT = 'where this chat shows no picture from its url, download each file (the url lasts ten minutes) and attach it';
+/**
+ * What the agent shows while motions exist: one contact sheet, not the eleven clip files. Used only once the worker has published
+ * `job.motionSheet.url`. Without that URL the older per-clip instruction stays, so a worker from before the sheet still has pictures.
+ */
+const SHEET_SHOW =
+  'Show the user the contact sheet: one image of key frames for every motion finished so far, with unfinished motions as placeholders. ' +
+  'The image is attached to this result when it changed; otherwise use job.motionSheet.url (it lasts ten minutes). ' +
+  'Summarize job.motionSheet.clips (ready, checking, retaking, warning, or pending; frames and durationMs when present). ' +
+  'A warning means the judge refused that take and ODDBOUT kept it. ' +
+  'Do not download the separate clip previews.';
 
 // Keep the pair under 5.4 MB after base64 encoding. Oversize or unavailable previews retain the ordinary signed-link response.
 const INLINE_CANDIDATE_BYTES = 2_000_000;
@@ -167,6 +182,48 @@ export async function hostedCandidateImages(job, fetcher, { signal, deadline }) 
     cancel.abort();
   }
 }
+
+const SHEET_INLINE_BYTES = 2_000_000;
+/**
+ * The one contact sheet for a job read. A watch attaches it only when `motionSheet.attach` is set (a clip finished during the wait);
+ * a read without a wait always attaches the current sheet. The URL has to be this job's own signed `sheet-<round>.webp`. Anything else,
+ * including a caller-supplied address, is ignored and the signed URL in the JSON remains.
+ * @param {{ job?: HostedJob, watch?: boolean, motionSheet?: HostedJob['motionSheet'] }} result
+ * @param {typeof fetch} fetcher @param {import('./common.mjs').ToolContext} context
+ * @returns {Promise<Array<{type:'image', mimeType:'image/webp', data:string}>>}
+ */
+export async function hostedMotionSheetImage(result, fetcher, { signal, deadline }) {
+  const job = result?.job;
+  const sheet = result?.motionSheet ?? job?.motionSheet;
+  if (!job || !UUID.test(job.id ?? '') || !sheet?.url || signal.aborted || Date.now() >= deadline) return [];
+  if (result.watch === true && sheet.attach !== true) return [];
+  const cancel = new AbortController();
+  try {
+    const url = new URL(sheet.url);
+    const prefix = '/storage/v1/object/sign/af-generation/jobs/' + job.id + '/';
+    const name = url.pathname.slice(prefix.length);
+    if (
+      url.origin !== new URL(CLOUD_RESOURCE).origin ||
+      url.username ||
+      url.password ||
+      url.hash ||
+      !url.searchParams.get('token') ||
+      !url.pathname.startsWith(prefix) ||
+      !/^sheet-[0-9]{1,2}\.webp$/.test(name)
+    )
+      return [];
+    const bounded = AbortSignal.any([within(signal, timeLeft(deadline, HOSTED_READ_MS)), cancel.signal]);
+    const response = await fetcher(url.href, { signal: bounded, redirect: 'error', credentials: 'omit' });
+    if (!response.ok) return [];
+    const bytes = await readBody(response, SHEET_INLINE_BYTES);
+    if (probeImage(bytes)?.type !== 'image/webp') return [];
+    return [{ type: /** @type {const} */ ('image'), mimeType: /** @type {const} */ ('image/webp'), data: encodeBase64(bytes) }];
+  } catch {
+    return [];
+  } finally {
+    cancel.abort();
+  }
+}
 /**
  * How an agent follows a working job (Grok 점검 2026-11-03: the bot's own schedule checked every 5 to 10 minutes, and the user asked for
  * 25 seconds): a wait returns as soon as something the user sees changes, so a chat he watches hears of each motion as it is made.
@@ -203,7 +260,12 @@ const HOSTED_FOLLOWED = new Set(['queued', 'appearance', 'appearance_ready', 'mo
  */
 export function hostedNext(job, { uploads = true } = {}) {
   const automatic = job.appearanceAutoSelection;
+  const codes = [...new Set((job.warnings ?? []).map(warning => warning.code).filter(code => typeof code === 'string'))];
+  const waived = codes.length
+    ? `ODDBOUT kept going after a check it could not pass (${codes.join(', ')}). Tell the user which step; the result is still being made for him to watch. `
+    : '';
   const step =
+    waived +
     (automatic ? `The server automatically selected A after no answer at ${automatic.selectedAt} (deadline ${automatic.deadline}). ` : '') +
     hostedStep(job, uploads);
   return HOSTED_FOLLOWED.has(job.status) || (job.status === 'submitted' && !['registered', 'rejected'].includes(job.submission?.stage ?? ''))
@@ -248,7 +310,8 @@ function hostedStep(job, uploads = true) {
         `Then choose_hosted_look with his pick, or with one sentence to change both (${left.appearance ?? 0} changes left).` +
         (job.appearanceAutoSelectAt
           ? ` Tell him: if no choice or revision is received, the server automatically selects A after ${job.appearanceAutoSelectAt}` +
-            ' (ten minutes after this pair was ready, checked once a minute), even if he closes the chat. The host continues when available.' +
+            ' (three minutes after this pair was ready). A waiting host selects at that time; otherwise a once-a-minute check does, within about a minute.' +
+            ' This happens even if he closes the chat. The host continues when available.' +
             ' Do not send choose_hosted_look on his behalf just because time elapsed; read the job to confirm the actual selection.'
           : '')
       );
@@ -256,13 +319,17 @@ function hostedStep(job, uploads = true) {
       return (
         `ODDBOUT is drawing ${job.delegate ? 'the look it picked' : 'the chosen look'} from the side (job.side once it is drawn) and making the eleven motions ` +
         'from that side view (about 15 to 30 minutes), and his six arena faces from the front (job.expressions once drawn; the last is his ' +
-        'knocked-out face on the KO card). Each motion shows in job.drafts as soon as it is made; a walk or run with a state ' +
-        `is still being checked and may be filmed again. Tell the user and show him what is made so far (${IMAGES_NEXT}). ${WATCH_NEXT}`
+        'knocked-out face on the KO card). ' +
+        (job.motionSheet?.url
+          ? `${SHEET_SHOW} A walk or run marked checking is still being judged and may be filmed again. ${WATCH_NEXT}`
+          : 'Each motion shows in job.drafts as soon as it is made; a walk or run with a state ' +
+            `is still being checked and may be filmed again. Tell the user and show him what is made so far (${IMAGES_NEXT}). ${WATCH_NEXT}`)
       );
     case 'motion_ready':
       return (
         `${job.preview?.some(p => p.note === 'run-from-walk') ? RUN_FROM_WALK_NEXT : ''}` +
-        `Show the user ${job.delegate ? `the look ODDBOUT picked (candidate ${job.choice}), ` : ''}the motion previews as images (${IMAGES_NEXT}), ` +
+        `Show the user ${job.delegate ? `the look ODDBOUT picked (candidate ${job.choice}), ` : ''}` +
+        `${job.motionSheet?.url ? `${SHEET_SHOW} ` : `the motion previews as images (${IMAGES_NEXT}), `}` +
         `${job.expressions?.url ? 'his six arena faces (job.expressions: the last one is his face when he is knocked out), ' : ''}and the profile draft. ` +
         'The motions are finished, but registration has not started. This is a legacy waiting job: ' +
         'continue the requested creation with register_hosted_fighter now, without asking for motion approval. ' +
@@ -294,7 +361,8 @@ function hostedStep(job, uploads = true) {
     case 'needs_review':
       return (
         `This step needs an ODDBOUT operator's attention; it is not waiting for user motion approval${error}. Tell the user and show him what is made so far ` +
-        `(${IMAGES_NEXT}); check later.${spent(job)}`
+        (job.motionSheet?.url ? `(${SHEET_SHOW})` : `(${IMAGES_NEXT})`) +
+        `; check later.${spent(job)}`
       );
     case 'rejected':
       return `ODDBOUT declined this request${error}.${spent(job)} A different request may be made while his balance is above zero.`;
@@ -317,6 +385,15 @@ const jobSite = job => siteUrl({ fighterId: job.submission?.stage === 'registere
 const ANSWER_LATER =
   'The requested change was not applied. Read get_hosted_fighter for the current state before doing anything else. ' +
   'Newly completed motions register automatically; do not wait for motion_ready or repeat the change automatically.';
+/**
+ * A request whose key already names another request of his (af_generation_create, 2026-11-15): the description, language, delegate, host or
+ * image provider differ. No job was made or changed and no tokens were charged; a picture this call had already uploaded (a first request
+ * that lost a race to another with its key) stays unused, and counts in the day's uploads.
+ */
+const KEY_CONFLICT_NEXT =
+  'Not requested: this idempotencyKey already names a different request in this account (its description, language, delegate, host ' +
+  'or imageProvider differ). No job was created or changed and no tokens were charged. To read that request, call get_hosted_fighter with this idempotencyKey; ' +
+  'a retry of it keeps its original arguments. Only if the user wants this changed request as another fighter, send it with a new idempotencyKey.';
 /** @param {any} result  The API's JSON. @param {boolean} uploads */
 const withNextOf = (result, uploads) =>
   result?.ok && result.job
@@ -482,6 +559,7 @@ function watchedView(job, first, changes, baseline) {
       id: job.id,
       status: job.status,
       progress: job.progress ?? null,
+      ...(job.warnings?.length ? { warnings: job.warnings } : {}),
       ...(job.queue ? { queue: { position: job.queue.position, ...(job.queue.reason ? { reason: job.queue.reason } : {}) } } : {}),
       ...(job.submission ? { submission: { stage: job.submission.stage } } : {}),
     },
@@ -499,13 +577,31 @@ function watchedView(job, first, changes, baseline) {
         }
       : {}),
     siteUrl: jobSite(job),
+    ...(job.motionSheet?.url
+      ? {
+          motionSheet: {
+            clips: job.motionSheet.clips ?? [],
+            // The signed URL and the image go out only when a clip changed. A quiet poll keeps the short clip summary.
+            ...(pictures.some(picture => picture.new) ? { url: job.motionSheet.url, attach: true } : {}),
+          },
+        }
+      : {}),
     next:
-      `Still working: tell the user what changed${
-        show.length
-          ? ` and show him ${show.join(' and ')} unless you already showed it (by kind, ` + `clip and name; a url changes every read; ${IMAGES_NEXT})`
-          : ''
-      }, then while he watches call get_hosted_fighter again with waitSeconds 25. ` +
-      "Without waitSeconds it returns the whole job: every picture's url, the profile draft and the full next.",
+      (job.motionSheet?.url
+        ? 'Still working: show the contact sheet attached to this result when a clip finished during this wait, and summarize job.motionSheet.clips. ' +
+          'Do not download each clip. If no image is attached and you have not shown the sheet for these clips, call get_hosted_fighter once without waitSeconds.'
+        : `Still working: tell the user what changed${
+            show.length
+              ? ` and show him ${show.join(' and ')} unless you already showed it (by kind, ` + `clip and name; a url changes every read; ${IMAGES_NEXT})`
+              : ''
+          }.`) +
+      (job.warnings?.length
+        ? ` ODDBOUT kept going after a check it could not pass (${[...new Set(job.warnings.map(warning => warning.code))].join(', ')}).`
+        : '') +
+      ' Then while he watches call get_hosted_fighter again with waitSeconds 25. ' +
+      (job.motionSheet?.url
+        ? 'Without waitSeconds it returns the whole job.'
+        : "Without waitSeconds it returns the whole job: every picture's url, the profile draft and the full next."),
   };
 }
 /**
@@ -642,7 +738,7 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
     'ODDBOUT에 선수 만들기 맡기기',
     'ODDBOUT makes a fighter for the connected user on its own generation worker: ' +
       'two front-view looks to choose from (the chosen one is also his profile picture), then a side view drawn from it and the eleven ' +
-      'motions, then registration under his account. New pairs default to A after ten minutes without a choice or revision; ' +
+      'motions, then registration under his account. New pairs default to A after three minutes without a choice or revision; ' +
       'the job reports appearanceAutoSelectAt when this applies. Explain this before waiting for his choice. delegate: ' +
       'true only when he explicitly delegates the appearance choice ("외형은 네가 골라 줘", "you choose the look"). ' +
       'A creation request alone ("그냥 만들어줘", "just make it") does not delegate the choice; omit delegate or pass false and show the looks for his choice. ' +
@@ -652,7 +748,7 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
       "any or another person's host sends his words and pictures to that host's PC, so ask him first and pass hostConsent: " +
       'true. imageProvider: who draws the pictures, grok (default) or gpt (refused with image-provider-unavailable where that host ' +
       'draws no GPT pictures now). description is the character artwork brief only: name, appearance, outfit, personality and visual style. ' +
-      'Keep workflow, waiting, tool-use and permission instructions outside that field; the server owns the ten-minute default and registration workflow. ' +
+      'Keep workflow, waiting, tool-use and permission instructions outside that field; the server owns the three-minute default and registration workflow. ' +
       "These product choices do not change the conversation host's tool-call approval policy. Pass his artwork requirements and, if he gave them, " +
       'up to two of his own pictures with his confirmation that he has the rights to them: attached files (picture, secondPicture) where ' +
       'this host attaches files, else pictureUploads (usable ids from get_picture_upload, shown to him first). ' +
@@ -691,9 +787,27 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
       { description, language, picture, secondPicture, pictureUploads = [], rightsConfirmed, delegate, host, hostConsent, imageProvider, idempotencyKey },
       { signal, deadline },
     ) => {
-      // Once saved, the same key returns its job without re-uploading pictures. Before that, use read-only recovery.
-      const existingId = await jobIdForKey(idempotencyKey);
-      if (existingId) return withNext(await invoke(`generations/${existingId}`));
+      const ask = {
+        description,
+        language,
+        ...(delegate ? { delegate: true } : {}),
+        ...(host && host !== 'oddbout' ? { host, hostConsent: hostConsent === true } : {}),
+        ...(imageProvider ? { imageProvider } : {}),
+      };
+      /** The request itself; a key that names another request of his says what to do. @param {object} [pictured]  its refs and rights */
+      const request = async (pictured = {}) => {
+        const result = await post('generations', { ...ask, ...pictured }, { 'idempotency-key': idempotencyKey });
+        return result?.code === 'idempotency-conflict' ? { ...result, next: KEY_CONFLICT_NEXT } : withNext(result);
+      };
+      // Once saved, the same key goes to the request without its pictures, none downloaded or uploaded again: the database returns its
+      // job for the same request and refuses another (idempotency-conflict; it does not compare the pictures). Before that, use read-only
+      // recovery. `mine` is his own host's id, looked up before the database is asked: once he has removed that host the request cannot be
+      // compared (host-not-found), and the saved job is read as it was before the comparison.
+      const saved = await jobIdForKey(idempotencyKey);
+      if (saved) {
+        const result = await request();
+        return host === 'mine' && result?.code === 'host-not-found' ? withNext(await invoke(`generations/${saved}`)) : result;
+      }
       // A file of the shape but from no host ODDBOUT takes (an agent's own address with an id it holds), named before any check: the
       // service, the rights the user would be asked about, the request's checks. Its pictures go in through a ticket.
       const refused = /** @type {const} */ ([
@@ -719,13 +833,6 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
       // Pictures already in (a ticket's) count with the attached ones: two in all, refused before an attached one moves.
       if (pictures.length + pictureUploads.length > GENERATION_LIMITS.refs) return { ok: false, code: 'invalid-refs' };
       if ((pictures.length || pictureUploads.length) && rightsConfirmed !== true) return { ok: false, code: 'rights-required' };
-      const ask = {
-        description,
-        language,
-        ...(delegate ? { delegate: true } : {}),
-        ...(host && host !== 'oddbout' ? { host, hostConsent: hostConsent === true } : {}),
-        ...(imageProvider ? { imageProvider } : {}),
-      };
       // The request's own checks (consent, one at a time, the day's limits, the host) before a picture moves: each kept picture spends one
       // of the day's uploads and stays in storage (MCP 점검 2026-10-29). A request without pictures is checked where it is made.
       // The pictures already in are checked there too (his, unused, from the last day): a refusal keeps no attached picture.
@@ -741,7 +848,7 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
         if (!uploaded.ok) return uploaded;
         refs.push(uploaded.upload.id);
       }
-      return withNext(await post('generations', { ...ask, ...(refs.length ? { refs, rightsConfirmed: true } : {}) }, { 'idempotency-key': idempotencyKey }));
+      return request(refs.length ? { refs, rightsConfirmed: true } : {});
     },
     { write: true, openWorld: true, idempotent: false, files: ['picture', 'secondPicture'] },
   );
@@ -864,14 +971,17 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
     'ODDBOUT이 만드는 선수',
     `Read or resume the connected user's hosted fighter after a timeout or disconnection: its state, ` +
       `the two front-view looks, the side view drawn from the chosen one (side), his six arena faces (expressions: 3 × 2, the last his KO face) ` +
-      `or the motion previews as fresh image URLs (ten minutes), ` +
-      `the profile draft, the profile set made at registration (profileSetId) and next. ` +
+      `or the motion previews as fresh image URLs (ten minutes). ` +
+      `While motions are in progress, motionSheet is one contact sheet of the clips finished so far (the image is attached; ` +
+      `do not download each clip) plus each clip's status. ` +
+      `The profile draft, the profile set made at registration (profileSetId), job.timeline (recent events as at, kind, take and outcome), ` +
+      `job.warnings (checks the worker continued past) and next are included. ` +
       `Supply either jobId or the original request's idempotencyKey, never both. ` +
       `Key lookup only reads an existing job under this account, even when new generation is disabled; ` +
       `not-found does not prove that an interrupted request never started. With neither identifier: ` +
       `his latest five requests and whether hosted generation is open. Read the same job again if a preview URL expired; ` +
       `do not regenerate. waitSeconds (up to ${HOSTED_WAIT_SECONDS}) is a bounded wait, not a completion guarantee: it returns early when the ` +
-      `state, the progress or a picture changes; if still working, read this job again.`,
+      `state, the progress or a picture changes (including a motion clip finishing); if still working, read this job again.`,
     { jobId: JOB.optional(), idempotencyKey: UUID_ARG().optional(), waitSeconds: z.number().int().min(0).max(HOSTED_WAIT_SECONDS).optional() },
     async ({ jobId, idempotencyKey, waitSeconds = 0 }, { signal, deadline: due }) => {
       if (jobId && idempotencyKey) return { ok: false, code: 'invalid-selector' };

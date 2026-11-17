@@ -10,8 +10,9 @@
 //   image, transparent, our plain cel colouring with the house style anchor as a reference), as WebP. The creator chooses the front: it is
 //   his profile painting too. 맡기기 (a job its creator left to us): a look judge (codex, tools off) picks one, and the job goes on without him.
 // motions (P2, 2026-10-28): first the side still (2026-10-31): the chosen front as the character reference → one side view facing right in
-//   the same colouring, a judge comparing it with the front, at most SIDE_TAKES drawings, else an operator. Beside the motions, his expression
-//   sheet (2026-11-03): six arena faces from the chosen front, one drawing, never a second; without it he still registers. Then the side still → six GPT
+//   the same colouring, a judge comparing it with the front, at most SIDE_TAKES drawings. A colouring-only miss is kept; any other miss keeps
+//   the highest-scoring take and records a warning (no further drawing). His expression sheet (2026-11-03) starts with that side still — it
+//   needs only the chosen front — six arena faces, one drawing, never a second; without it he still registers. Then the side still → six GPT
 //   keypose rows (prepare → gen-set → extract, assembled by motions.py) and a Grok walk
 //   and run (video-set → the engine's cut and cycle alignment, its retake reasons and a vision judge as the gate; a retake films from a relaxed,
 //   depth-shaded still of the look, and one alignment runs at a time on the GPU; a run the gate refused is made from the walk that passed,
@@ -20,6 +21,7 @@
 //   again with his words (its cells alone replace the first run's), a walk or run filmed again with them; idle is the look (an operator's).
 //   A seventh, optional row (2026-10-28) draws the entrance and the victory beside the six; when it fails the fighter goes without them.
 //   The action clips' previews go up as the rows finish (2026-10-30): gen-set's finished rows are extracted in a scratch run while it still draws the rest.
+//   Each finished clip also refreshes one contact sheet (motions.py progress-sheet): key frames of the clips ready so far, placeholders for the rest.
 // submitting: the package the motions stage left in the job folder, with the profile the creator confirmed, submitted under his account;
 //   before it, the chosen front (framed into a portrait card first when it is not one: Grok's are square) and its face square (measured here on
 //   the uploaded WebP, `motions.py face-box`) and his expression sheet go to the job: the server
@@ -93,6 +95,7 @@ import {
   lookNames,
   lookPick,
   LOOP_VISUAL,
+  loopRank,
   loopTaken,
   lowMarginFeet,
   MODELS,
@@ -116,8 +119,10 @@ import {
   sideJudgePrompt,
   sideLookNames,
   sideName,
+  sideContinuable,
   sidePassed,
   sidePrompt,
+  sideRank,
   sideStyleOnly,
   STYLE_ANCHOR_FILE,
   submissionOutcome,
@@ -267,6 +272,69 @@ export async function reviewOnServer({ api, job, dir, stage, scope, images, fit 
  * times; an extract that names no row of the request, or still fails, goes to an operator as before (`rows-extract`).
  */
 export const EXTRACT_REDRAWS = 2;
+/**
+ * Contact sheets for one motion round, one at a time. A snapshot that is no longer the latest is not uploaded, so a slow
+ * rebuild cannot replace a newer sheet. `build` and `commit` failures are swallowed: the queue always settles.
+ * The caller does not wait, except `flush` before the stage returns.
+ * Only the latest snapshot is kept, so kicks cannot pile up. A cancelled stage stops starting builds, and `flush` returns
+ * when the signal aborts instead of waiting out a stuck build.
+ * @param {{ build: (snap: any) => Promise<any>, commit: (snap: any, built: any) => Promise<void>, signal?: AbortSignal | null }} hooks
+ */
+export function createMotionSheetQueue({ build, commit, signal = null }) {
+  let latest = /** @type {any} */ (null);
+  let dirty = false;
+  /** @type {Promise<void> | null} */
+  let running = null;
+  const stopped = () => signal?.aborted === true;
+  async function loop() {
+    try {
+      while (dirty && !stopped()) {
+        dirty = false;
+        const snap = latest;
+        let built = null;
+        try {
+          built = await build(snap);
+        } catch {
+          built = null;
+        }
+        if (stopped()) break;
+        // The clip list is still published. Only a snapshot that is still the latest may upload its pixels,
+        // so a slow sheet cannot replace a newer one, and a superseded take is not erased from the event list.
+        const current = !dirty && snap === latest;
+        try {
+          await commit(snap, current ? built : null);
+        } catch {
+          /* a sheet is a courtesy */
+        }
+      }
+    } finally {
+      running = null;
+      if (dirty && !stopped()) running = loop();
+    }
+  }
+  return {
+    /** @param {any} snap */
+    kick(snap) {
+      if (stopped()) return running ?? Promise.resolve();
+      latest = snap;
+      dirty = true;
+      if (!running) running = loop();
+      return running;
+    },
+    flush: async () => {
+      if (!signal) {
+        while (running) await running;
+        return;
+      }
+      // A build in progress when the signal aborts is not waited out: the abort ends the wait at once.
+      const aborted = new Promise(resolve => {
+        if (signal.aborted) resolve(undefined);
+        else signal.addEventListener('abort', () => resolve(undefined), { once: true });
+      });
+      while (running && !stopped()) await Promise.race([running, aborted]);
+    },
+  };
+}
 /** The request's rows a failed extract names, in its order, or none. @param {string} run @returns {Promise<string[]>} */
 export async function extractFailedRows(run) {
   const read = async (/** @type {string} */ name) => JSON.parse(await readFile(path.join(run, name), 'utf8'));
@@ -290,7 +358,9 @@ export async function extractFailedRows(run) {
  * @typedef {{ verdict?: any, record?: any, status?: string, fresh?: boolean, code?: number, pixelCode?: number | string, by?: string,
  *   open?: string[] }} Judged  A judge's end: its verdict, or the exit (`code`, `pixelCode`) of the judge that gave none.
  * @typedef {Stop & { strip?: string, verdict?: string, take?: number | null, tried?: any[], note?: string,
+ *   warning?: { code: string, take: number, failed: string[] },
  *   judged?: { status?: string, label: string } }} Loop  A walk or run: its strip and verdict, or why there is none.
+ *   `warning` (PR #441): the judge refused the take and the worker kept it anyway. Absent on this branch until that lands.
  * @param {{ og: (args: string[], options?: { stdin?: string, capture?: boolean }) => Promise<Ran>, api: Api,
  *   fetchBytes: (url: string) => Promise<Uint8Array>, toWebp: (png: string, webp: string, size?: string) => Promise<unknown>,
  *   fitImage?: ((from: string, to: string) => Promise<unknown>) | null, motionsPy?: (args: string[]) => Promise<Ran>, gaitStaggerMs?: number,
@@ -390,10 +460,12 @@ export function createStages({
    * run) and the verdict is written with its `judge` record. `cached: false` judges every time (the look judge keeps nothing). Resolves
    * `{ verdict, record, status }`, or `{ code }` when codex gave no verdict (its exit; 0 with an answer that is not one).
    * @param {{ verdictFile: string, answerFile: string, schemaFile: string, prompt: string, refs: string[], parse: (value: any) => any,
-   *   cached?: boolean }} args
-   * @returns {Promise<Judged>}
+   *   cached?: boolean, alongside?: (() => Promise<any>) | null }} args
+   * `alongside` starts only when codex is actually called (a cached verdict does not). It runs during that call: the shadow pixel
+   * judge, which never decides the verdict. Its result is `shadow` on the return.
+   * @returns {Promise<Judged & { shadow?: any, codexMs?: number }>}
    */
-  async function judge({ verdictFile, answerFile, schemaFile, prompt, refs, parse, cached = true }) {
+  async function judge({ verdictFile, answerFile, schemaFile, prompt, refs, parse, cached = true, alongside = null }) {
     const schema = await readFile(schemaFile, 'utf8').catch(() => ''),
       key = judgeKey({ prompt, schema, isolated });
     if (cached) {
@@ -404,17 +476,32 @@ export function createStages({
     await rm(answerFile, { force: true });
     const cwd = await codexDir(),
       since = Date.now();
-    const { code, output } = await og(judgeCommand({ schema: schemaFile, out: answerFile, refs, cwd }), { stdin: prompt, capture: true });
-    if (code !== 0) return { code };
+    // The shadow starts with the codex call and is awaited before we return, so the next judgment does not share its files.
+    const side = alongside ? alongside().catch(() => null) : null;
+    let code = 0,
+      output = '',
+      codexMs = 0;
+    try {
+      const callAt = Date.now();
+      const ran = await og(judgeCommand({ schema: schemaFile, out: answerFile, refs, cwd }), { stdin: prompt, capture: true });
+      code = ran.code;
+      output = ran.output ?? '';
+      codexMs = Date.now() - callAt;
+    } finally {
+      // Join the shadow before returning so the next judgment does not share its pixel file. It never changes this verdict.
+      if (side) await side;
+    }
+    const shadow = side ? await side : null;
+    if (code !== 0) return { code, shadow, codexMs };
     const facts = await observeCodex(output, since);
     models.note(codexEntry('judge', JUDGE.model, JUDGE.effort, facts));
     const answer = await readFile(answerFile, 'utf8').then(JSON.parse, () => null),
       verdict = parse(answer);
-    if (!verdict) return { code: 0 };
+    if (!verdict) return { code: 0, shadow, codexMs };
     const record = { ...answer, judge: judgeRecord({ prompt, schema, facts, isolated }) };
     // Whole or not at all (writeWhole): a torn verdict would read as none and pay for the judge again.
     await writeWhole(verdictFile, JSON.stringify(record));
-    return { verdict, record, status: 'keyed', fresh: true };
+    return { verdict, record, status: 'keyed', fresh: true, shadow, codexMs };
   }
   /** Who decided a verdict the job folder holds: its record's `judge.kind`, codex when it names none. @param {any} record */
   const decidedBy = record =>
@@ -433,10 +520,16 @@ export function createStages({
   async function judged({ kind, item, verdictFile, pixelFile, pixelArgs, codexFile, codex }) {
     if (judges === 'codex') {
       const started = Date.now(),
-        made = await judge({ verdictFile, ...codex });
+        made = await judge({
+          verdictFile,
+          ...codex,
+          // Archive on (the default): the shadow pixel judge runs during the codex call. It never decides; waiting until codex
+          // returns used to add its whole run (about a second, judge-archive.mjs) after the verdict was already final.
+          alongside: archive ? () => pixelsOn(kind, pixelArgs, pixelFile) : null,
+        });
       if (archive && made.fresh) {
-        const took = Date.now() - started,
-          shadow = await pixelsOn(kind, pixelArgs, pixelFile);
+        const took = made.codexMs ?? Date.now() - started,
+          shadow = made.shadow;
         await archived(
           verdictFile,
           {
@@ -945,18 +1038,20 @@ export function createStages({
    * The side still the motions are made from (2026-10-31): drawn from the chosen front, judged against it, at most SIDE_TAKES drawings. A
    * drawing and its verdict stay in the job folder (`looks/side-<round>-<choice>/take-<n>`): a stage run again judges or draws only what is
    * missing, never a paid drawing twice. The passing still goes up as an artifact and a `side` event for the creator.
-   * @param {Job} job @param {string} dir @param {string} front @returns {Promise<Stop & { still?: string }>}
+   * @param {Job} job @param {string} dir @param {string} front @param {() => void} [onDrawn]
+   * @returns {Promise<Stop & { still?: string }>}
    */
-  async function sideStill(job, dir, front) {
+  async function sideStill(job, dir, front, onDrawn) {
     const folder = path.join(dir, 'looks', sideName(job.appearanceRound, job.choice));
     await mkdir(folder, { recursive: true });
     const promptFile = path.join(folder, 'prompt.txt'),
       schema = path.join(folder, 'judge-schema.json');
     await writeFile(promptFile, sidePrompt(job.brief, image));
     await writeFile(schema, JSON.stringify(SIDE_JUDGE_SCHEMA));
-    /** The first take that missed the colouring only (`sideStyleOnly`): the fighter goes on from it when no take passes all five.
-     * @type {{ png: string, take: number } | null} */
-    let styleOnly = null;
+    /** The best continuable take (`sideContinuable`, then `sideRank`). A cropped or different character is not a candidate.
+     * @type {{ png: string, take: number, rank: number, failed: string[], styleOnly: boolean } | null} */
+    let best = null;
+    let drawn = false;
     for (let take = 0; take < SIDE_TAKES; take += 1) {
       const png = path.join(folder, `take-${take}.png`),
         report = path.join(folder, `take-${take}.report.json`),
@@ -968,6 +1063,10 @@ export function createStages({
         if (code !== 0) return failedRun('side', code, report, since, image.limited);
         if (!existsSync(png)) return { review: 'side-no-output' };
         await noteImage(report, since);
+      }
+      if (!drawn) {
+        drawn = true;
+        onDrawn?.();
       }
       // A take's verdict is kept in the job folder (JUDGE_CACHE_RULE): a stage run again judges only a take it has none for.
       const judgedTake = await judged({
@@ -1009,32 +1108,69 @@ export function createStages({
         }),
       ).catch(() => {});
       if (!passed) {
-        if (styleOnly === null && sideStyleOnly(verdict)) styleOnly = { png, take };
+        const failed = SIDE_CHECKS.filter(check => verdict?.checks?.[check] !== 'pass');
+        // Cropped, not a side view, or a different character: not a motion reference. Style and cleanliness can be waived.
+        if (sideContinuable(verdict)) {
+          const rank = sideRank(verdict);
+          // A tie keeps the earlier take: a later drawing is not bought to replace it, and this one is already paid for.
+          if (best === null || rank > best.rank) best = { png, take, rank, failed, styleOnly: sideStyleOnly(verdict) };
+        }
         continue;
       }
       return chooseSide(job, folder, png, take, false);
     }
-    // A judge's strict eye on the colouring of an in-between drawing does not hold the fighter for an operator (2026-10-31): the front the
-    // creator chose is his profile painting; this still only feeds the motions. The event says the colouring was let go.
-    if (styleOnly) return chooseSide(job, folder, styleOnly.png, styleOnly.take, true);
-    return { review: 'side-look' };
+    // No take passed all five. A colouring-only miss is still the one to keep (2026-10-31). Any other continuable take (the same
+    // character, whole, from the side) is kept with a warning. Nothing further is drawn. A cropped or different character stops.
+    if (!best) return { review: 'side-look' };
+    if (best.styleOnly) return chooseSide(job, folder, best.png, best.take, true);
+    return chooseSide(job, folder, best.png, best.take, false, { code: 'side-look', take: best.take, failed: best.failed });
   }
   /** The side still chosen: uploaded for the creator's view (a courtesy — the motions go on without it) and named in a `side` event.
-   * @param {Job} job @param {string} folder @param {string} png @param {number} take @param {boolean} styleWaived */
-  async function chooseSide(job, folder, png, take, styleWaived) {
+   * @param {Job} job @param {string} folder @param {string} png @param {number} take @param {boolean} styleWaived
+   * @param {{ code: string, take: number, failed: string[] } | null} [warning] */
+  async function chooseSide(job, folder, png, take, styleWaived, warning = null) {
     const name = sideName(job.appearanceRound, job.choice),
       webp = path.join(folder, `${name}.webp`);
-    try {
-      if (!existsSync(webp)) await toWebp(png, webp);
-      await api.artifact(job, name, await readFile(webp));
-      await Promise.resolve(
-        api.progress?.(job, undefined, { kind: 'side', artifact: name, outcome: 'chosen', take, ...(styleWaived ? { styleWaived: true } : {}) }),
-      ).catch(() => {});
-    } catch {
-      /* the creator's view of it is a courtesy; the motions go on */
+    // The motions use the PNG. Encoding and uploading the creator's WebP used to finish first (toWebp is 0.1–0.2 s at method 5,
+    // then one PUT). That view is a courtesy: it runs while the motions are made, and the stage still waits for it before returning.
+    screening.push(
+      (async () => {
+        try {
+          if (signal?.aborted) return;
+          if (!existsSync(webp)) await toWebp(png, webp);
+          if (signal?.aborted) return;
+          await api.artifact(job, name, await readFile(webp));
+          await Promise.resolve(
+            api.progress?.(job, undefined, {
+              kind: 'side',
+              artifact: name,
+              outcome: 'chosen',
+              take,
+              ...(styleWaived ? { styleWaived: true } : {}),
+              ...(warning ? { warning: warning.code } : {}),
+            }),
+          ).catch(() => {});
+        } catch {
+          /* the creator's view of it is a courtesy */
+        }
+      })(),
+    );
+    if (warning) {
+      const mark = path.join(folder, 'continued.json');
+      // A stage run again must not record the same waiver twice.
+      if (!existsSync(mark)) {
+        await warn(job, warning);
+        await writeFile(mark, JSON.stringify({ code: warning.code, take })).catch(() => {});
+      }
     }
     return { still: png };
   }
+  /** A check the fighter went on past, for the operator and the job view. Never stops the stage.
+   * @param {Job} job @param {{ code: string, take: number, failed: string[] }} warning */
+  const warn = (job, warning) =>
+    Promise.resolve(
+      api.progress?.(job, undefined, { kind: 'warning', code: warning.code, take: warning.take, outcome: 'continued', failed: warning.failed }),
+    ).catch(() => {});
 
   /**
    * His expression sheet (2026-11-03): six arena faces drawn once from the chosen front, beside the motions. A drawing that was started and
@@ -1160,6 +1296,9 @@ export function createStages({
   async function gaitLoop(gait, look, stills, character, m, change = null, early = null, range = null, showTake = null) {
     /** @type {any[]} */
     const tried = [];
+    /** The best cut the judge saw and refused: frames and feet already accepted, so it can be packed. Higher `loopRank` wins; a tie keeps the earlier take.
+     * @type {{ strip: string, verdict: string, take: number, rank: number, failed: string[], judged: { status?: string, label: string } } | null} */
+    let best = null;
     for (let take = 0; take <= GAIT_RETAKES; take++) {
       // A retake films from the relaxed still and asks for an even beat. Its folder names its input (`-s<take>-<words' hash>`): a clip filmed
       // from other words or the look is never reused for it, and a stage run again with the same words reuses its clip.
@@ -1402,10 +1541,22 @@ export function createStages({
             });
             return { strip, verdict: verdictFile, take, tried, judged: { status: cutJudged.status, label: judgeLabel(cutJudged.record, cutJudged.status) } };
           }
+          const failed = LOOP_VISUAL.filter(key => verdict[key] !== 'pass');
+          const rank = loopRank(verdict);
+          // Wrong identity is not a take to pack. Anatomy and the seam can be waived; a missing cut never reaches here.
+          if (verdict.identity === 'pass' && (!best || rank > best.rank))
+            best = {
+              strip,
+              verdict: verdictFile,
+              take,
+              rank,
+              failed,
+              judged: { status: cutJudged.status, label: judgeLabel(cutJudged.record, cutJudged.status) },
+            };
           tried.push({
             take,
             cut: cutName,
-            judge: LOOP_VISUAL.filter(key => verdict[key] !== 'pass'),
+            judge: failed,
             ...keyMark(cutJudged),
             ...byMark(cutJudged),
             ...cutFacts(meta),
@@ -1428,6 +1579,17 @@ export function createStages({
         if (made) return { ...made, tried };
       }
     }
+    // The retakes are done and none passed. A cut the judge saw as the same character is packed with a warning, and nothing further is filmed.
+    // Wrong identity, or no cut at all, still stops.
+    if (best)
+      return {
+        strip: best.strip,
+        verdict: best.verdict,
+        take: best.take,
+        tried,
+        judged: best.judged,
+        warning: { code: `${gait}-not-clean`, take: best.take, failed: best.failed },
+      };
     return { review: `${gait}-not-clean`, tried };
   }
 
@@ -1540,11 +1702,18 @@ export function createStages({
     await mkdir(m, { recursive: true });
     const chosen = await chosenLook(job, dir);
     if (!chosen || !job.brief?.look) return { outcome: 'review', result: { code: 'look-missing' } };
-    // A front (2026-10-31) is the profile painting: the motions are made from the side still drawn from it.
-    const side = chosen.front ? await sideStill(job, dir, chosen.file) : { still: chosen.file };
+    // His expression sheet needs only the chosen front. It starts once the first side picture is on disk, so it overlaps the side judge
+    // and any retake without taking the image slot ahead of that first picture. The stage still waits for it (`screened`). A provider
+    // stop before any picture does not start it, and a sheet already started is not drawn again. A front (2026-10-31) is the profile
+    // painting: the motions are made from the side still drawn from it.
+    let sheet = false;
+    const startSheet = () => {
+      if (sheet || !chosen.front) return;
+      sheet = true;
+      screening.push(expressionSheet(job, dir, chosen.file));
+    };
+    const side = chosen.front ? await sideStill(job, dir, chosen.file, startSheet) : { still: chosen.file };
     if (!side.still) return asOutcome(side);
-    // His expression sheet is drawn beside the motions; the stage waits for it before it ends (`screened`), whatever its outcome.
-    if (chosen.front) screening.push(expressionSheet(job, dir, chosen.file));
     const look = side.still;
     const brief = path.join(m, 'brief.json');
     await writeFile(brief, JSON.stringify({ language: job.language, ...job.brief }));
@@ -1564,25 +1733,113 @@ export function createStages({
     const report = (/** @type {number} */ progress) => Promise.resolve(api.progress?.(job, progress)).catch(() => {});
     // Previews as the branches pass (2026-10-28): the creator watches the action clips while the walk and run still film (the stage
     // took about 20 minutes). Each goes up as an artifact and the list as a progress event; the package's previews replace them at the end.
-    // A preview is a courtesy: one that fails never stops the stage.
+    // With every list, one contact sheet of the clips finished so far (motions.py progress-sheet) goes up under the same name, so a reader
+    // sees every finished clip in one picture instead of waiting for the package. A preview is a courtesy: one that fails never stops the stage.
     /** @type {{ clip: string, name: string, state?: string }[]} */
     const drafted = [],
       draftDir = path.join(m, `drafts-${job.motionRound}`);
-    // The list goes up as a `drafts` event; the API shows the one with the highest `seq` (a send that timed out here and landed late never
-    // wins over a later list), and `seq` grows across this stage's runs (the clock). Sends go one after another, each with the list as it
-    // stands when it leaves; a list still waiting takes every change made before it leaves (one send, not one per change).
-    let sending = Promise.resolve(),
-      waiting = null,
-      seq = 0;
-    const postDrafts = () =>
-      (waiting ??= sending =
-        sending
-          .then(() => {
-            waiting = null;
-            seq = Math.max(seq + 1, Date.now());
-            return api.progress?.(job, undefined, { kind: 'drafts', seq, clips: drafted.map(d => ({ ...d })) });
-          })
-          .catch(() => {}));
+    /** The preview file the sheet should sample for each clip (a gait take replaces the previous file). */
+    const sheetFiles = new Map();
+    let sheetSent = false;
+    // The list goes up as a `drafts` event after its sheet attempt; the API shows the one with the highest `seq`. The sheet queue
+    // commits one snapshot at a time and drops a build that a newer snapshot superseded, so the stored sheet matches that event.
+    let seq = 0;
+    /**
+     * Build the contact sheet for this snapshot. Null when there is nothing to show or the build failed: the clip list still goes up.
+     * Does not upload. A newer snapshot is built separately, so this file is read into memory before the queue commits it.
+     * @param {{ files: { clip: string, file: string, state?: string }[] }} snap
+     * @returns {Promise<{ name: string, bytes: Uint8Array, clips: any[] } | null>}
+     */
+    async function buildSheet(snap) {
+      const usable = snap.files.filter(item => item.file && existsSync(item.file));
+      if (!usable.length && !sheetSent) return null;
+      const dir = path.join(m, `sheet-${job.motionRound}`);
+      await mkdir(dir, { recursive: true });
+      const id = `${Date.now().toString(36)}-${randomBytes(3).toString('hex')}`;
+      const manifest = path.join(dir, `manifest-${id}.json`),
+        out = path.join(dir, `sheet-${id}.webp`),
+        reportPath = out.replace(/\.webp$/, '.json');
+      try {
+        await writeFile(
+          manifest,
+          JSON.stringify({
+            clips: usable.map(item => ({ clip: item.clip, file: item.file, ...(item.state ? { state: item.state } : {}) })),
+          }),
+        );
+        if (signal?.aborted) return null;
+        if ((await motionsPy(['progress-sheet', manifest, out])).code !== 0 || !existsSync(out)) return null;
+        const bytes = new Uint8Array(await readFile(out));
+        const report = await readJson(reportPath).catch(() => null);
+        return { name: `sheet-${job.motionRound}`, bytes, clips: Array.isArray(report?.clips) ? report.clips : [] };
+      } finally {
+        await rm(out, { force: true });
+        await rm(manifest, { force: true });
+        await rm(reportPath, { force: true });
+      }
+    }
+    /** @param {number} count @param {number} max */
+    const metricCount = (count, max) => (Number.isInteger(count) && count >= 1 && count <= max ? count : null);
+    /**
+     * @param {number} at @param {{ clip: string, name: string, state?: string }[]} clips
+     * @param {{ name: string, clips: any[] } | null} sheet
+     */
+    function draftEvent(at, clips, sheet) {
+      const metrics = (sheet?.clips ?? []).flatMap(row => {
+        if (!row || !PREVIEW_CLIPS.some(name => name === row.clip)) return [];
+        const frames = metricCount(row.frames, 128),
+          durationMs = metricCount(row.durationMs, 120_000);
+        return frames || durationMs ? [{ clip: row.clip, ...(frames ? { frames } : {}), ...(durationMs ? { durationMs } : {}) }] : [];
+      });
+      /** @type {Record<string, unknown>} */
+      const event = {
+        kind: 'drafts',
+        seq: at,
+        ...(sheet?.name ? { sheet: sheet.name } : {}),
+        clips,
+        ...(metrics.length ? { metrics } : {}),
+      };
+      if (JSON.stringify(event).length <= 1900) return event;
+      delete event.metrics;
+      if (JSON.stringify(event).length <= 1900) return event;
+      delete event.sheet;
+      return event;
+    }
+    const sheets = createMotionSheetQueue({
+      signal,
+      build: buildSheet,
+      commit: async (snap, built) => {
+        let sheet = null;
+        if (built) {
+          try {
+            await api.artifact(job, built.name, built.bytes);
+            sheetSent = true;
+            sheet = built;
+          } catch {
+            sheet = null;
+          }
+        }
+        seq = Math.max(seq + 1, Date.now());
+        // This snapshot's event. A newer snapshot commits only after this one, with a higher seq.
+        await api.progress?.(job, undefined, draftEvent(seq, snap.clips, sheet));
+      },
+    });
+    const sheetSnap = () => {
+      const clips = drafted.map(d => ({ ...d }));
+      /** @type {{ clip: string, file: string, state?: string }[]} */
+      const files = [];
+      for (const clip of PREVIEW_CLIPS) {
+        const file = sheetFiles.get(clip);
+        if (!file) continue;
+        const entry = clips.find(d => d.clip === clip);
+        files.push({ clip, file, ...(entry?.state ? { state: entry.state } : {}) });
+      }
+      return { clips, files };
+    };
+    // Not awaited here: a sheet build must not hold the gait, the early-draft watcher, or gen-set. `flushSheets` runs before the stage returns.
+    const postDrafts = () => {
+      sheets.kick(sheetSnap());
+    };
+    const flushSheets = () => sheets.flush();
     /** `<clip>.webp`, or a gait's take `<gait>-t<take>.webp` shown before its gate with a state ('checking', then 'retaking' — the API's
      * DRAFT_STATES): a name of its own (a new take is a new picture). The clip's entry is replaced where it stands (the page keeps its order).
      * @param {string[]} files @param {string | null} [state] */
@@ -1597,6 +1854,7 @@ export function createStages({
             at = drafted.findIndex(d => d.clip === clip);
           if (at < 0) drafted.push(entry);
           else drafted[at] = entry;
+          if (PREVIEW_CLIPS.some(name => name === clip)) sheetFiles.set(clip, file);
         }
         if (files.length) await postDrafts();
       } catch {
@@ -1609,8 +1867,10 @@ export function createStages({
     async function unshown(clip, drop = false) {
       const at = drafted.findIndex(d => d.clip === clip);
       if (at < 0 || !drafted[at].state || (!drop && drafted[at].state === 'retaking')) return;
-      if (drop) drafted.splice(at, 1);
-      else drafted[at] = { ...drafted[at], state: 'retaking' };
+      if (drop) {
+        drafted.splice(at, 1);
+        sheetFiles.delete(clip);
+      } else drafted[at] = { ...drafted[at], state: 'retaking' };
       await postDrafts();
     }
     /**
@@ -1896,6 +2156,8 @@ export function createStages({
     // the very clip he asked to change. His takes passed or an operator looks.
     const runChanged = changes.some(c => c.clip === 'run');
     const runFallback = (/** @type {any} */ review) => !runChanged && ['run-not-clean', 'run-align', 'run-cut'].includes(review);
+    // A run the judge refused but kept with a warning (same character) is still a refused run: the walk's clean run comes first.
+    const runWaivable = (/** @type {Loop} */ loop) => !runChanged && Boolean(loop.warning) && Boolean(loop.strip) && !loop.review && !loop.retry;
     /** @param {'walk' | 'run'} gait @param {number} delayMs @param {(() => Promise<Loop | null>) | null} [early] @returns {() => Promise<Loop>} */
     const gaitBranch =
       (gait, delayMs, early = null) =>
@@ -1915,16 +2177,30 @@ export function createStages({
           showTake(gait),
         );
         await shownTakes[gait];
-        if (loop.strip && !loop.retry && !loop.review) await gaitDraft(gait, loop.strip);
+        // A run kept with a warning is not drafted, announced or warned about yet: the walk may still make a clean run (RUN_FROM_WALK),
+        // which is tried first once both branches end.
+        const deferred = gait === 'run' && runWaivable(loop);
+        if (loop.strip && !loop.retry && !loop.review && !deferred) await gaitDraft(gait, loop.strip, loop.warning ? 'warning' : null);
         // Not passed: a run the walk may still make keeps its refused take marked; any other comes off.
-        else await unshown(gait, !(gait === 'run' && runFallback(loop.review)));
-        await Promise.resolve(api.progress?.(job, undefined, gaitEvent(gait, loop))).catch(() => {});
+        else await unshown(gait, !(gait === 'run' && (deferred || runFallback(loop.review))));
+        if (!deferred) await keptGait(gait, loop);
         return loop;
       };
-    const gaitDraft = async (/** @type {string} */ gait, /** @type {string} */ strip) => {
+    /** The gait event, and a waiver recorded once per take (`continued.json` beside its verdict). @param {string} gait @param {Loop} loop */
+    const keptGait = async (gait, loop) => {
+      await Promise.resolve(api.progress?.(job, undefined, gaitEvent(gait, loop))).catch(() => {});
+      if (!loop.warning) return;
+      const mark = loop.verdict ? path.join(path.dirname(loop.verdict), 'continued.json') : '';
+      if (!mark || !existsSync(mark)) {
+        await warn(job, loop.warning);
+        if (mark) await writeFile(mark, JSON.stringify({ code: loop.warning.code, take: loop.warning.take })).catch(() => {});
+      }
+    };
+    const gaitDraft = async (/** @type {string} */ gait, /** @type {string} */ strip, /** @type {string | null} */ state = null) => {
       const file = path.join(draftDir, `${gait}.webp`);
       await mkdir(draftDir, { recursive: true });
-      if ((await motionsPy(['strip-preview', strip, file])).code === 0) await draft([file]);
+      // `warning`: #441 kept this take after the judge refused it. The sheet says so instead of calling it ready.
+      if ((await motionsPy(['strip-preview', strip, file])).code === 0) await draft([file], state);
     };
     // A gait's take as soon as it is cut (2026-11-01): the creator sees the walk and the run a minute after they film, while the alignment
     // and the judge (minutes on the GPU) still run. The take that passes replaces it (gaitDraft); one refused is marked at once. A gait's
@@ -1967,7 +2243,8 @@ export function createStages({
     // A run the gate refused (or could not align or cut) while the walk passed: the walk makes it (RUN_FROM_WALK, runFallback); otherwise the
     // stage stops as before.
     let run = filmed;
-    if (runFallback(filmed.review) && walk.strip && !actions.review && !actions.retry) {
+    const waived = runWaivable(filmed);
+    if ((runFallback(filmed.review) || waived) && walk.strip && !walk.review && !walk.retry && !actions.review && !actions.retry) {
       const made = await runFromWalk(walk, look, m);
       if (made) {
         run = made;
@@ -1975,23 +2252,35 @@ export function createStages({
         await Promise.resolve(api.progress?.(job, undefined, gaitEvent('run', { ...made, tried: filmed.tried }))).catch(() => {});
       }
     }
+    // No clean run from the walk: the run kept with a warning goes on, drafted and recorded now.
+    if (waived && run === filmed) {
+      await gaitDraft('run', /** @type {string} */ (filmed.strip), 'warning');
+      await keptGait('run', filmed);
+    }
     const branches = [actions, walk, run],
       stopped = branches.find(b => b.review) ?? branches.find(b => b.retry);
-    if (stopped)
+    if (stopped) {
+      await flushSheets();
       return stopped.review
         ? { outcome: 'review', result: { code: stopped.review, ...(stopped.requestIds ? { requestIds: stopped.requestIds } : {}) } }
         : { outcome: 'retry', result: { code: stopped.retry } };
+    }
     /** @type {Record<string, Loop>} */
     const loops = { walk, run };
     for (const gait of ['walk', 'run']) {
       const pace = loops[gait].note === RUN_FROM_WALK ? [String(RUN_FROM_WALK_PACE)] : [];
-      if ((await motionsPy(['add-gait', asm, gait, /** @type {string} */ (loops[gait].strip), ...pace])).code !== 0)
+      if ((await motionsPy(['add-gait', asm, gait, /** @type {string} */ (loops[gait].strip), ...pace])).code !== 0) {
+        await flushSheets();
         return { outcome: 'review', result: { code: `${gait}-add` } };
+      }
     }
     // 3. Every frame at the look's size, the game pack, the loop reviews bound to its (corrected) frames, the package, the previews.
     await report(80);
     const scaled = await scaleChecked(asm);
-    if (scaled.review) return { outcome: 'review', result: { code: scaled.review } };
+    if (scaled.review) {
+      await flushSheets();
+      return { outcome: 'review', result: { code: scaled.review } };
+    }
     // The frames the policy guessed are kept where an operator reads them (the job's events; the motions result keeps only its preview).
     const scaleCheck = {
       corrected: scaled.fit.corrected,
@@ -2000,13 +2289,20 @@ export function createStages({
       ...(scaled.fit.guessed.length > 60 ? { more: scaled.fit.guessed.length - 60 } : {}),
     };
     await Promise.resolve(api.progress?.(job, undefined, { kind: 'scale-check', ...scaleCheck })).catch(() => {});
-    if ((await og(sprite('game-pack', '--request', path.join(asm, 'game-request.json'), '--out-dir', path.join(asm, 'pack')))).code !== 0)
+    if ((await og(sprite('game-pack', '--request', path.join(asm, 'game-request.json'), '--out-dir', path.join(asm, 'pack')))).code !== 0) {
+      await flushSheets();
       return { outcome: 'review', result: { code: 'game-pack' } };
+    }
     const strideFile = path.join(asm, 'walk-stride.json');
-    if ((await motionsPy(['stride', path.join(asm, 'pack', 'game-pack.json'), path.join(asm, 'walk-strikes.json'), strideFile])).code !== 0)
+    if ((await motionsPy(['stride', path.join(asm, 'pack', 'game-pack.json'), path.join(asm, 'walk-strikes.json'), strideFile])).code !== 0) {
+      await flushSheets();
       return { outcome: 'review', result: { code: 'walk-stride' } };
+    }
     const { stridePixels } = await readJson(strideFile);
-    if (!(stridePixels > 0)) return { outcome: 'review', result: { code: 'walk-stride' } };
+    if (!(stridePixels > 0)) {
+      await flushSheets();
+      return { outcome: 'review', result: { code: 'walk-stride' } };
+    }
     for (const gait of ['walk', 'run']) {
       const folder = path.join(asm, 'loop', gait),
         config = path.join(folder, 'config.json');
@@ -2025,8 +2321,14 @@ export function createStages({
           ...(gait === 'walk' ? { stridePixels } : {}),
         }),
       );
-      if ((await og(['npm', 'run', 'fighter:gait', '--', 'loop-review', config, path.join(folder, 'review.json')])).code !== 0)
+      const reviewFile = path.join(folder, 'review.json');
+      const reviewCode = (await og(['npm', 'run', 'fighter:gait', '--', 'loop-review', config, reviewFile])).code;
+      // A take kept with a warning already failed the visual gate. The review file is the diagnostic pack reads and defers;
+      // a missing file is the tool stopping, which still needs an operator. A passing take is unchanged: a non-zero exit still stops.
+      if (reviewCode !== 0 && !(loops[gait].warning && existsSync(reviewFile))) {
+        await flushSheets();
         return { outcome: 'review', result: { code: `${gait}-loop-review` } };
+      }
       if (serverReviewEnabled(job, api)) {
         // Review final game-pack frames at their actual durations, after all existing gait gates passed.
         // This comparison cannot select a version, retry generation, or waive a gate.
@@ -2056,20 +2358,44 @@ export function createStages({
     }
     const pkg = path.join(dir, 'package');
     await rm(pkg, { recursive: true, force: true });
-    if ((await motionsPy(['pack-plan', asm, brief, `gen-${job.id.slice(0, 8)}`, path.relative(asm, pkg)])).code !== 0)
+    if ((await motionsPy(['pack-plan', asm, brief, `gen-${job.id.slice(0, 8)}`, path.relative(asm, pkg)])).code !== 0) {
+      await flushSheets();
       return { outcome: 'review', result: { code: 'pack-plan' } };
-    if ((await og(['npm', 'run', 'fighter:pack', '--', path.join(asm, 'pack-plan.json')])).code !== 0 || !existsSync(path.join(pkg, 'fighter.json')))
-      return { outcome: 'review', result: { code: 'pack' } };
-    const previews = path.join(m, `preview-${job.motionRound}`);
-    if ((await motionsPy(['preview', pkg, previews])).code !== 0) return { outcome: 'review', result: { code: 'preview' } };
-    const preview = [];
-    for (const clip of PREVIEW_CLIPS) {
-      const file = path.join(previews, `${clip}.webp`);
-      if (!existsSync(file)) return { outcome: 'review', result: { code: `preview-${clip}` } };
-      const name = previewName(clip, job.motionRound);
-      await api.artifact(job, name, await readFile(file));
-      preview.push({ clip, name, ...(clip === 'run' && run.note ? { note: run.note } : {}) });
     }
+    if ((await og(['npm', 'run', 'fighter:pack', '--', path.join(asm, 'pack-plan.json')])).code !== 0 || !existsSync(path.join(pkg, 'fighter.json'))) {
+      await flushSheets();
+      return { outcome: 'review', result: { code: 'pack' } };
+    }
+    const previews = path.join(m, `preview-${job.motionRound}`);
+    if ((await motionsPy(['preview', pkg, previews])).code !== 0) {
+      await flushSheets();
+      return { outcome: 'review', result: { code: 'preview' } };
+    }
+    // The eleven previews are independent files. Uploading them together waits for the slowest PUT, not the sum, before registration.
+    // A missing file is an operator's (`preview-<clip>`). A failed PUT is thrown as before, so the worker retries the stage (a retry
+    // uploads the same names again). Either way registration runs only after outcome ok, so a partial upload is not submitted.
+    const missing = PREVIEW_CLIPS.find(clip => !existsSync(path.join(previews, `${clip}.webp`)));
+    if (missing) {
+      await flushSheets();
+      return { outcome: 'review', result: { code: `preview-${missing}` } };
+    }
+    const uploaded = await Promise.allSettled(
+      PREVIEW_CLIPS.map(async clip => {
+        const file = path.join(previews, `${clip}.webp`);
+        const name = previewName(clip, job.motionRound);
+        await api.artifact(job, name, await readFile(file));
+        sheetFiles.set(clip, file);
+        return { clip, name, ...(clip === 'run' && run.note ? { note: run.note } : {}) };
+      }),
+    );
+    const failed = uploaded.find(result => result.status === 'rejected');
+    if (failed) {
+      await flushSheets();
+      throw /** @type {PromiseRejectedResult} */ (failed).reason;
+    }
+    const preview = uploaded.map(result => /** @type {PromiseFulfilledResult<{ clip: string, name: string, note?: string }>} */ (result).value);
+    postDrafts();
+    await flushSheets();
     return { outcome: 'ok', result: { preview, scaleCheck } };
   }
 

@@ -80,7 +80,9 @@ test('the list shows each job as its own read does, in reads that do not grow wi
     assert.ok(counts.from <= 4, `database reads ${counts.from}`);
     assert.equal(counts.signing, 1);
     for (const shown of list.jobs) {
-      const own = (await g.call('GET', `generations/${shown.id}`)).body.job;
+      // One job's own read adds its compact timeline; a list shows everything else the same, its warnings included.
+      const { timeline, ...own } = (await g.call('GET', `generations/${shown.id}`)).body.job;
+      assert.ok(Array.isArray(timeline) && shown.timeline === undefined, shown.status);
       assert.deepEqual({ ...shown, profileFront: null }, { ...own, profileFront: null }, shown.status);
     }
     const byId = new Map(list.jobs.map((/** @type {any} */ j) => [j.id, j]));
@@ -120,7 +122,9 @@ test('past the batch bound, each job reads its own events and shows the same', a
     );
     const list = (await g.call('GET', 'generations')).body;
     for (const shown of list.jobs) {
-      const own = (await g.call('GET', `generations/${shown.id}`)).body.job;
+      // One job's own read adds its compact timeline; a list shows everything else the same, its warnings included.
+      const { timeline, ...own } = (await g.call('GET', `generations/${shown.id}`)).body.job;
+      assert.ok(Array.isArray(timeline) && shown.timeline === undefined, shown.status);
       assert.deepEqual({ ...shown, profileFront: null }, { ...own, profileFront: null }, shown.status);
     }
     assert.ok(list.jobs.find((/** @type {any} */ j) => j.id === motions).side.url.includes('side-0-a'));

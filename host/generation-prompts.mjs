@@ -852,8 +852,9 @@ export function lookPick(value) {
 
 /**
  * The side still's judge (2026-10-31): codex with every tool off compares the side view with the chosen front (image 1) and the style
- * anchor (image 3). A drawing that fails any check is drawn again, at most SIDE_TAKES drawings in all; then an operator (`side-look`) —
- * unless a take missed the colouring only (`sideStyleOnly`, 2026-10-31): the fighter goes on from the first such take.
+ * anchor (image 3). A drawing that fails any check is drawn again, at most SIDE_TAKES drawings in all. A take that missed the
+ * colouring only (`sideStyleOnly`, 2026-10-31) is kept as before. Otherwise the fighter goes on from the take that passed the
+ * most checks (`sideRank`), and the job records a warning — no further drawing, and no operator stop (`side-look`).
  */
 export const SIDE_CHECKS = Object.freeze(['whole', 'side', 'match', 'style', 'clean']);
 export const SIDE_TAKES = 3;
@@ -882,6 +883,20 @@ export function sideJudgePrompt(brief) {
 export const sidePassed = value => SIDE_CHECKS.every(check => value?.checks?.[check] === 'pass');
 /** Whether a side take failed on the colouring alone: the same character, seen from the side, whole and clean. @param {any} value */
 export const sideStyleOnly = value => !sidePassed(value) && SIDE_CHECKS.every(check => check === 'style' || value?.checks?.[check] === 'pass');
+/**
+ * A failed side still may still feed the motions: the same character, whole, and seen from the side. A cropped figure,
+ * a view that is not the side, or a different character stays an operator stop (`side-look`). No new judge call.
+ * @param {any} value
+ */
+export const sideContinuable = value => ['whole', 'side', 'match'].every(check => value?.checks?.[check] === 'pass');
+/**
+ * Which failed side still to keep (higher is better). The same character (`match`) outweighs a colouring miss, so a
+ * `sideStyleOnly` take (30) beats one that fails `match`. No new judge call: the score is the verdict already recorded.
+ * @type {Readonly<Record<string, number>>}
+ */
+export const SIDE_RANK = Object.freeze({ match: 16, whole: 8, side: 4, clean: 2, style: 1 });
+/** @param {any} value */
+export const sideRank = value => SIDE_CHECKS.reduce((score, check) => score + (value?.checks?.[check] === 'pass' ? SIDE_RANK[check] : 0), 0);
 
 /** Artifact names of a look round (`look-a-0`, `look-b-0`; a revision round counts up) and of a motion preview round. */
 /**
@@ -1034,8 +1049,9 @@ export function gaitEvent(gait, loop) {
   const event = {
     kind: 'gait',
     gait,
-    outcome: loop.review ? 'review' : loop.retry ? 'retry' : 'ok',
+    outcome: loop.warning ? 'continued' : loop.review ? 'review' : loop.retry ? 'retry' : 'ok',
     ...(stopped ? { code: stopped } : {}),
+    ...(loop.warning ? { code: loop.warning.code } : {}),
     ...(loop.strip ? { take: loop.take ?? null, ...(loop.note ? { note: loop.note } : {}) } : {}),
     tried: [...(loop.tried ?? [])],
   };
@@ -1197,6 +1213,14 @@ export const ENGINE_SEAM_MAX = 2; // sprite-gen video/loop.py SEAM_RATIO_MAX
 export const loopTaken = (verdict, meta) =>
   ['identity', 'anatomy'].every(key => verdict[key] === 'pass') &&
   (verdict.loop === 'pass' || (Number.isFinite(meta?.cycle_align?.seam_ratio) && meta.cycle_align.seam_ratio <= ENGINE_SEAM_MAX));
+/**
+ * Which refused loop to keep after the retakes (higher is better). Identity and anatomy outweigh the seam, matching
+ * `loopTaken`. The score reads the verdict already recorded; it does not ask the judge again.
+ * @type {Readonly<Record<string, number>>}
+ */
+export const LOOP_RANK = Object.freeze({ identity: 4, anatomy: 2, loop: 1 });
+/** @param {any} verdict */
+export const loopRank = verdict => LOOP_VISUAL.reduce((score, key) => score + (verdict?.[key] === 'pass' ? LOOP_RANK[key] : 0), 0);
 /** Every clip the creator checks, in the contract's order, and the walk/run loops' retake reasons as the engine recorded them. */
 export const PREVIEW_CLIPS = Object.freeze(['idle', 'walk', 'run', 'fightIdle', 'combo', 'slam', 'dash', 'block', 'hit', 'groggy', 'fall']);
 /** @param {any} strip @returns {string[]} */

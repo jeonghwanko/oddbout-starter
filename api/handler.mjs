@@ -15,6 +15,7 @@ import { createFighterEntryHandler, entryRoute } from './fighter-entry.mjs';
 import { Problem, UUID, bearerToken, jsonResponse, logFailure, logSkipped, readBody, rpcProblem, sha256, unavailable, verifiedUserId } from './http.mjs';
 import { BUCKET, SUBMISSION_STATUS, checkedManifest, objectKey, storeAsset } from './submissions.mjs';
 import { PROFILE_SET_SPEC, createProfileSetHandler, profileSetRoute, profileSetWorkerRoute, rosterProfileSet } from './profile-sets.mjs';
+import { handleBoutVideoWorker } from './bout-video.mjs';
 
 export { Problem, readBody, sha256 } from './http.mjs';
 export { BUCKET, VALIDATOR_VERSION, objectKey } from './submissions.mjs';
@@ -486,6 +487,8 @@ export function createHandler({
           if (error instanceof Problem) throw error;
           throw new Problem(400, 'invalid-body');
         }
+        // A bout filmed for X (2026-11-13). The same validation worker token, a different process from package checks.
+        if (parts[1] === 'bout-video') return json(await handleBoutVideoWorker(db, parts[2], body));
         if (parts.join('/') === 'worker/claim') {
           if (body.submissionId) requireId(body.submissionId);
           /** @type {Submission | null} */
