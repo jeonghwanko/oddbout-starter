@@ -46,5 +46,5 @@ test('the extracted result controller and scene share the same bout identity', (
   assert.ok(controller.indexOf('milestone("match_complete"') < controller.indexOf('this.deps.playback?.ended(result)'));
   assert.throws(() => transformMilestones('', controllerId), /Review ODDBOUT milestone hook/);
   assert.throws(() => transformMilestones(`${anchor}\n${anchor}`, controllerId), /Review ODDBOUT milestone hook/);
-  assert.throws(() => transformMilestones(decided, id), /Review ODDBOUT milestone hook/);
+  assert.ok(transformMilestones(decided, id).includes('milestone("game_start"'));
 });

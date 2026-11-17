@@ -55,12 +55,6 @@ const targets = {
       'private finish(result: ArenaBoutResult): void {\n    milestone("match_complete", this.bout, { result: result.how });',
     ],
   ],
-  '/src/render/scenes/arena/ArenaDuelFinishController.ts': [
-    [
-      'finishBout(result: CityFightBoutResult): void {',
-      'finishBout(result: CityFightBoutResult): void {\n    milestone("match_complete", this.deps.duel?.session, { result: result.how });',
-    ],
-  ],
   '/src/creator/main.ts': [
     ['await navigator.clipboard.writeText(request.value);', 'await navigator.clipboard.writeText(request.value);\n        creationStart();'],
   ],
@@ -76,11 +70,7 @@ export function transformMilestones(code, id) {
   const match = Object.entries(targets).find(([suffix]) => id.replaceAll('\\', '/').endsWith(suffix));
   if (!match) return null;
   let result = code.replaceAll('\r\n', '\n');
-  // The result moved to a controller. Keep legacy scene builds available for rollback.
-  const extracted = match[0] === '/src/render/scenes/ArenaDuelScene.ts'
-    && result.includes('readonly finish = new ArenaDuelFinishController(this.depsOfFinish());');
-  const hooks = extracted ? match[1].slice(0, 1) : match[1];
-  for (const [before, after] of hooks) {
+  for (const [before, after] of match[1]) {
     if (result.split(before).length !== 2) throw new Error('Review ODDBOUT milestone hook: ' + match[0]);
     result = result.replace(before, after);
   }
