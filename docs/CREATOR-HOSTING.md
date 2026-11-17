@@ -368,6 +368,9 @@ the previous status to detect concurrent changes. `POST /admin/inquiries/<id>/de
 permanently removes one inquiry and accepts retries. Both require the same
 administrator check. Existing inquiries start as `unread` when the status migration runs.
 The list accepts `status=all|unread|read|done` before pagination.
+The optional `q` searches literal substrings of the title or message, ignoring
+case, together with the status filter before pagination. Search text is trimmed
+and limited to 120 characters. Empty text returns the status-filtered list.
 `GET /admin/inquiries/count` returns the full inbox's `unreadCount` after the
 administrator check, without returning inquiry text.
 

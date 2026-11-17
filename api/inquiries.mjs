@@ -53,11 +53,17 @@ export function createInquiryHandler({ db, limiter }) {
 /** This is called only after createAdminHandler has verified the administrator. @param {any} db @param {Request} request */
 export async function listInquiries(db, request) {
   const params = new URL(request.url).searchParams;
-  const page = params.get('page') ?? '0', status = params.get('status') ?? 'all';
-  if (!/^\d{1,5}$/.test(page) || !['all', 'unread', 'read', 'done'].includes(status)) throw new Problem(400, 'invalid-query');
+  const page = params.get('page') ?? '0', status = params.get('status') ?? 'all', search = (params.get('q') ?? '').trim();
+  if (!/^\d{1,5}$/.test(page) || !['all', 'unread', 'read', 'done'].includes(status)
+    || search.length > 120 || unstorableTextPath({ search }) !== null) throw new Problem(400, 'invalid-query');
   const start = Number(page) * PAGE_SIZE;
   let query = db.from('af_inquiries').select('id,title,message,created_at,status');
   if (status !== 'all') query = query.eq('status', status);
+  if (search) {
+    // Literal, case-insensitive substring search. Quote the filter value as well as escaping regex syntax.
+    const pattern = JSON.stringify(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    query = query.or(`title.imatch.${pattern},message.imatch.${pattern}`);
+  }
   const { data, error } = await query
     .order('created_at', { ascending: false })
     .order('id', { ascending: false })
