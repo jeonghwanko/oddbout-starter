@@ -3,12 +3,15 @@
   "pages": [
     "updates.html",
     "updates.ko.html",
+    "updates/2026-11-18-running-minigame.html",
     "updates/2026-11-03-vice-arrives.html",
     "updates/2026-11-03-first-version-plan.html",
     "updates.en.html",
+    "updates/2026-11-18-running-minigame.en.html",
     "updates/2026-11-03-vice-arrives.en.html",
     "updates/2026-11-03-first-version-plan.en.html",
     "updates.ja.html",
+    "updates/2026-11-18-running-minigame.ja.html",
     "updates/2026-11-03-vice-arrives.ja.html",
     "updates/2026-11-03-first-version-plan.ja.html"
   ],
