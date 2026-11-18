@@ -63,12 +63,40 @@ async function stagePublicApi(temporary, site, project) {
   );
 }
 
-/** @param {string} base @param {typeof fetch} [request] */
-export async function verifyPagesPublicApi(base, request = fetch) {
+/**
+ * A new deployment's first Pages Function reads can be slow (a cold start past the timeout) or briefly answer 502–504. Those are asked
+ * again; a response that is not the Pages Function's JSON is refused at once.
+ * @param {string} base @param {typeof fetch} [request]
+ * @param {{ attempts?: number, timeoutMs?: number, wait?: (ms: number) => Promise<unknown> }} [options]
+ */
+export async function verifyPagesPublicApi(
+  base,
+  request = fetch,
+  { attempts = 4, timeoutMs = 30_000, wait = ms => new Promise(done => setTimeout(done, ms)) } = {},
+) {
   const paths = ['/api/ai-fighter/roster', '/api/ai-fighter/rankings', '/api/oddbout-arena/rankings?scope=registered'];
+  /** @param {string} path */
+  const read = async path => {
+    for (let attempt = 1; ; attempt += 1) {
+      let response;
+      try {
+        response = await request(new URL(path, base), { redirect: 'error', signal: AbortSignal.timeout(timeoutMs) });
+      } catch (error) {
+        if (attempt >= attempts) throw Error('Cloudflare Pages public API did not answer: ' + path, { cause: error });
+        await wait(5_000 * attempt);
+        continue;
+      }
+      if (response.status >= 502 && response.status <= 504 && attempt < attempts) {
+        await response.body?.cancel();
+        await wait(5_000 * attempt);
+        continue;
+      }
+      return response;
+    }
+  };
   await Promise.all(
     paths.map(async path => {
-      const response = await request(new URL(path, base), { redirect: 'error', signal: AbortSignal.timeout(15_000) });
+      const response = await read(path);
       if (
         !response.ok ||
         response.headers.get('x-oddbout-api-runtime') !== 'pages-function' ||

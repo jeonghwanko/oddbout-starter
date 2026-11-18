@@ -126,4 +126,30 @@ test('publication verifies all public reads on Pages and rejects a static or leg
     verifyPagesPublicApi(preview, async () => response({ 'x-oddbout-api-runtime': 'pages-function' }, { ok: false })),
     /did not succeed/,
   );
+  // A cold deployment: a timeout and a 503 are asked again; a read that never answers is refused after its attempts.
+  const waits = [];
+  const tries = new Map();
+  await verifyPagesPublicApi(
+    preview,
+    async url => {
+      const n = (tries.get(url.pathname) ?? 0) + 1;
+      tries.set(url.pathname, n);
+      if (n === 1) throw new DOMException('The operation timed out.', 'TimeoutError');
+      if (n === 2) return new Response('busy', { status: 503 });
+      return response({ 'x-oddbout-api-runtime': 'pages-function' });
+    },
+    { wait: async ms => waits.push(ms) },
+  );
+  assert.deepEqual([...tries.values()], [3, 3, 3]);
+  assert.deepEqual(waits, [5_000, 5_000, 5_000, 10_000, 10_000, 10_000]);
+  await assert.rejects(
+    verifyPagesPublicApi(
+      preview,
+      async () => {
+        throw new TypeError('fetch failed');
+      },
+      { wait: async () => {} },
+    ),
+    /did not answer/,
+  );
 });
