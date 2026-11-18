@@ -1,13 +1,4 @@
 {
-  "../../../../../../../home/ubuntu/crashbang-heroes/kaito_web/node_modules/@supabase/supabase-js/dist/index.mjs": {
-    "file": "assets/dist-Dr_VjXuP.js",
-    "name": "dist",
-    "src": "../../../../../../../home/ubuntu/crashbang-heroes/kaito_web/node_modules/@supabase/supabase-js/dist/index.mjs",
-    "isDynamicEntry": true,
-    "imports": [
-      "_dist-C9fd7Nwh.js"
-    ]
-  },
   "_ArenaArtCatalog-DPIWyfin.js": {
     "file": "assets/ArenaArtCatalog-DPIWyfin.js",
     "name": "ArenaArtCatalog",
@@ -677,7 +668,7 @@
       "_arenaRankings-CIPHE57R.js"
     ],
     "dynamicImports": [
-      "../../../../../../../home/ubuntu/crashbang-heroes/kaito_web/node_modules/@supabase/supabase-js/dist/index.mjs"
+      "node_modules/@supabase/supabase-js/dist/index.mjs"
     ]
   },
   "_boundedResponse-CxNSslQ1.js": {
@@ -955,7 +946,7 @@
       "_preload-helper-DclECHGd.js"
     ],
     "dynamicImports": [
-      "../../../../../../../home/ubuntu/crashbang-heroes/kaito_web/node_modules/@supabase/supabase-js/dist/index.mjs"
+      "node_modules/@supabase/supabase-js/dist/index.mjs"
     ]
   },
   "_oddboutShopServer-B0GilzMO.js": {
@@ -2721,6 +2712,15 @@
       "assets/g-logo-CpxN0HWb.png"
     ]
   },
+  "node_modules/@supabase/supabase-js/dist/index.mjs": {
+    "file": "assets/dist-Dr_VjXuP.js",
+    "name": "dist",
+    "src": "node_modules/@supabase/supabase-js/dist/index.mjs",
+    "isDynamicEntry": true,
+    "imports": [
+      "_dist-C9fd7Nwh.js"
+    ]
+  },
   "privacy.html": {
     "file": "assets/privacy-CdS4TfS5.js",
     "name": "privacy",
@@ -2740,7 +2740,7 @@
     ]
   },
   "race.html": {
-    "file": "assets/race-FZ4tZaJc.js",
+    "file": "assets/race-BwSCMYsz.js",
     "name": "race",
     "src": "race.html",
     "isEntry": true,
@@ -2753,7 +2753,7 @@
       "_palette-BpHucxoT.js"
     ],
     "css": [
-      "assets/race-HNbdCMon.css"
+      "assets/race-148kU3i2.css"
     ]
   },
   "shop.html": {
