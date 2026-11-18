@@ -1,13 +1,4 @@
 {
-  "../../town-ladder/kaito_web/node_modules/@supabase/supabase-js/dist/index.mjs": {
-    "file": "assets/dist-Dr_VjXuP.js",
-    "name": "dist",
-    "src": "../../town-ladder/kaito_web/node_modules/@supabase/supabase-js/dist/index.mjs",
-    "isDynamicEntry": true,
-    "imports": [
-      "_dist-C9fd7Nwh.js"
-    ]
-  },
   "_ArenaArtCatalog-BMNvbT5A.js": {
     "file": "assets/ArenaArtCatalog-BMNvbT5A.js",
     "name": "ArenaArtCatalog",
@@ -691,7 +682,7 @@
       "_arenaRankings-BMjK7CIQ.js"
     ],
     "dynamicImports": [
-      "../../town-ladder/kaito_web/node_modules/@supabase/supabase-js/dist/index.mjs"
+      "node_modules/@supabase/supabase-js/dist/index.mjs"
     ]
   },
   "_boundedResponse-CxNSslQ1.js": {
@@ -970,7 +961,7 @@
       "_preload-helper-DclECHGd.js"
     ],
     "dynamicImports": [
-      "../../town-ladder/kaito_web/node_modules/@supabase/supabase-js/dist/index.mjs"
+      "node_modules/@supabase/supabase-js/dist/index.mjs"
     ]
   },
   "_oddboutShopServer-ChypwEZZ.js": {
@@ -2763,6 +2754,15 @@
       "assets/g-logo-CpxN0HWb.png"
     ]
   },
+  "node_modules/@supabase/supabase-js/dist/index.mjs": {
+    "file": "assets/dist-Dr_VjXuP.js",
+    "name": "dist",
+    "src": "node_modules/@supabase/supabase-js/dist/index.mjs",
+    "isDynamicEntry": true,
+    "imports": [
+      "_dist-C9fd7Nwh.js"
+    ]
+  },
   "privacy.html": {
     "file": "assets/privacy-DlHPA4GP.js",
     "name": "privacy",
@@ -2782,7 +2782,7 @@
     ]
   },
   "pudding.html": {
-    "file": "assets/pudding-Dv_nVqyn.js",
+    "file": "assets/pudding-BM22-CgV.js",
     "name": "pudding",
     "src": "pudding.html",
     "isEntry": true,
