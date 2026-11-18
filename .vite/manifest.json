@@ -1,4 +1,13 @@
 {
+  "../../../crashbang-heroes/kaito_web/node_modules/@supabase/supabase-js/dist/index.mjs": {
+    "file": "assets/dist-Dr_VjXuP.js",
+    "name": "dist",
+    "src": "../../../crashbang-heroes/kaito_web/node_modules/@supabase/supabase-js/dist/index.mjs",
+    "isDynamicEntry": true,
+    "imports": [
+      "_dist-C9fd7Nwh.js"
+    ]
+  },
   "_ArenaArtCatalog-BMNvbT5A.js": {
     "file": "assets/ArenaArtCatalog-BMNvbT5A.js",
     "name": "ArenaArtCatalog",
@@ -682,7 +691,7 @@
       "_arenaRankings-DD3yDFlu.js"
     ],
     "dynamicImports": [
-      "node_modules/@supabase/supabase-js/dist/index.mjs"
+      "../../../crashbang-heroes/kaito_web/node_modules/@supabase/supabase-js/dist/index.mjs"
     ]
   },
   "_boundedResponse-CxNSslQ1.js": {
@@ -961,7 +970,7 @@
       "_preload-helper-DclECHGd.js"
     ],
     "dynamicImports": [
-      "node_modules/@supabase/supabase-js/dist/index.mjs"
+      "../../../crashbang-heroes/kaito_web/node_modules/@supabase/supabase-js/dist/index.mjs"
     ]
   },
   "_oddboutShopServer-DjjddoNL.js": {
@@ -2754,15 +2763,6 @@
       "assets/g-logo-CpxN0HWb.png"
     ]
   },
-  "node_modules/@supabase/supabase-js/dist/index.mjs": {
-    "file": "assets/dist-Dr_VjXuP.js",
-    "name": "dist",
-    "src": "node_modules/@supabase/supabase-js/dist/index.mjs",
-    "isDynamicEntry": true,
-    "imports": [
-      "_dist-C9fd7Nwh.js"
-    ]
-  },
   "privacy.html": {
     "file": "assets/privacy-DOg1kpMa.js",
     "name": "privacy",
@@ -2782,7 +2782,7 @@
     ]
   },
   "pudding.html": {
-    "file": "assets/pudding-CWzMTfDo.js",
+    "file": "assets/pudding-BRhsZNTI.js",
     "name": "pudding",
     "src": "pudding.html",
     "isEntry": true,
