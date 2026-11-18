@@ -22,16 +22,44 @@ function bridge() {
   function creationStart() {
     window.dispatchEvent(new CustomEvent('oddbout:milestone', { detail: { name: 'creation_start', parameters: { method: 'request_copy' } } }));
   }
+  /** @param {string} name @param {Record<string, string | number>} [parameters] */
+  function puddingMilestone(name, parameters = {}) {
+    try {
+      window.dispatchEvent(new CustomEvent('oddbout:milestone', { detail: { name, parameters } }));
+    } catch {
+      /* Analytics cannot stop play. */
+    }
+  }
   /** @param {string} api @param {string} token @param {string} key */
   function bindIdentity(api, token, key) {
     const bind = () => window.oddboutBindAnalytics?.(api, token, key);
     bind();
     window.addEventListener('oddbout:analytics-ready', bind, { once: true });
   }
-  return { milestone, creationStart, bindIdentity };
+  return { milestone, creationStart, bindIdentity, puddingMilestone };
 }
-export const milestoneModule = `const {milestone, creationStart, bindIdentity} = (${bridge.toString()})(); export {milestone, creationStart, bindIdentity};`;
+export const milestoneModule = `const {milestone, creationStart, bindIdentity, puddingMilestone} = (${bridge.toString()})(); export {milestone, creationStart, bindIdentity, puddingMilestone};`;
 const targets = {
+  '/src/dev/pudding-escape.ts': [
+    ["  showPhase('play');", "  showPhase('play');\n  puddingMilestone('pudding_run_start', { mode: runs === 0 ? 'first' : 'retry' });"],
+    ['function endRun() {', "function endRun() {\n  if (phase !== 'play') return;"],
+    [
+      "  showPhase('over');",
+      "  showPhase('over');\n  puddingMilestone('pudding_run_end', { distance_m: dist, duration_seconds: st.runT, pudding_form: runStage, result: wasBest ? 'new_best' : 'finished' });",
+    ],
+    [
+      'tf.burst = true; stage += 1; runStage = stage;',
+      "tf.burst = true; stage += 1; runStage = stage;\n  puddingMilestone('pudding_transform', { pudding_form: stage });",
+    ],
+    [
+      '      await nav.share(file && nav.canShare?.(withFile) ? withFile : { title: GAME_TITLE, text, url: SHARE_URL });',
+      "      await nav.share(file && nav.canShare?.(withFile) ? withFile : { title: GAME_TITLE, text, url: SHARE_URL });\n      puddingMilestone('pudding_share', { method: 'native' });",
+    ],
+    [
+      'await navigator.clipboard.writeText(`${text} ${SHARE_URL}`);',
+      "await navigator.clipboard.writeText(`${text} ${SHARE_URL}`); puddingMilestone('pudding_share', { method: 'clipboard' });",
+    ],
+  ],
   '/src/render/scenes/ArenaDuelScene.ts': [
     [
       'const decided = duel.session.snapshot.result !== null;',
@@ -74,7 +102,7 @@ export function transformMilestones(code, id) {
     if (result.split(before).length !== 2) throw new Error('Review ODDBOUT milestone hook: ' + match[0]);
     result = result.replace(before, after);
   }
-  return `import { milestone, creationStart, bindIdentity } from '${milestoneVirtualId}';\n` + result;
+  return `import { milestone, creationStart, bindIdentity, puddingMilestone } from '${milestoneVirtualId}';\n` + result;
 }
 /** @returns {SitePlugin} */
 export function milestonePlugin() {

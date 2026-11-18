@@ -5,7 +5,7 @@ import { analyticsSource, analyticsHtml, googleAnalyticsPlugin } from '../script
 
 function visit(
   href,
-  { gpc = false, referrer = 'https://example.com/path?email=private#secret', apiBase = null, updates = false, lang = 'ko', slugs = [] } = {},
+  { gpc = false, referrer = 'https://example.com/path?email=private#secret', apiBase = null, updates = false, lang = 'ko', slugs = [], baseURI = href } = {},
 ) {
   const listeners = new Map(),
     scripts = [],
@@ -23,6 +23,8 @@ function visit(
       return Object.hasOwn(this.attributes, key);
     }
     closest(selector) {
+      if (selector === 'a,button' && ['a', 'button'].includes(this.attributes.tag)) return this;
+      if (selector === this.attributes.tag) return this;
       const key = selector.slice(1, -1);
       return this.hasAttribute(key) ? this : (this.parent?.closest(selector) ?? null);
     }
@@ -36,13 +38,14 @@ function visit(
   const body = new Element(updates ? { 'data-oddbout-updates': '' } : {}),
     documentListeners = new Map();
   const document = {
+    baseURI,
     referrer,
     title: 'ODDBOUT',
     body,
     documentElement: { lang },
     createElement: () => ({}),
     head: { append: script => scripts.push(script) },
-    addEventListener: (name, fn) => documentListeners.set(name, fn),
+    addEventListener: (name, fn) => documentListeners.set(name, [...(documentListeners.get(name) ?? []), fn]),
   };
   const requests = [];
   const context = {
@@ -75,7 +78,7 @@ function visit(
     body,
     Element,
     HTMLDetailsElement,
-    fire: (name, target) => documentListeners.get(name)?.({ target }),
+    fire: (name, target) => documentListeners.get(name)?.forEach(fn => fn({ target })),
     run: () => runInNewContext(source, context),
   };
 }
@@ -96,6 +99,52 @@ test('production visits send one pageview with sanitized addresses and no advert
   assert.equal(views[0][2].page_location, 'https://oddbout.com/');
   assert.equal(views[0][2].page_referrer, 'https://example.com/');
   assert.ok(!JSON.stringify(calls).includes('private'));
+});
+
+test('current navigation records fixed menu and position, without text or private destinations', () => {
+  const page = visit('https://oddbout.com/ko/', { baseURI: 'https://oddbout.com/' });
+  page.run();
+  const header = new page.Element({ tag: 'header' }, page.body);
+  const anchor = new page.Element({ tag: 'a', href: './pudding?email=private' }, header);
+  page.fire('click', new page.Element({}, anchor));
+  page.fire('click', new page.Element({ tag: 'button', 'data-club-link': 'contact' }, page.body));
+  page.fire('click', new page.Element({ tag: 'a', href: 'https://other.example/pudding' }, header));
+  page.fire('click', new page.Element({ tag: 'a', href: '/unknown?token=private' }, header));
+  const events = page.window.dataLayer.map(args => Array.from(args)).filter(args => args[1] === 'navigation_click');
+  assert.equal(events.length, 2);
+  assert.equal(events[0][2].menu_id, 'pudding');
+  assert.equal(events[0][2].link_position, 'header');
+  assert.equal(events[1][2].menu_id, 'contact');
+  assert.equal(events[1][2].link_position, 'content');
+  assert.ok(!JSON.stringify(events).includes('private'));
+  page.window['ga-disable-G-ABC123DEF4'] = true;
+  page.fire('click', anchor);
+  assert.equal(page.window.dataLayer.map(args => Array.from(args)).filter(args => args[1] === 'navigation_click').length, 2);
+});
+
+test('pudding and club milestones preserve only bounded metrics and approved values', () => {
+  const page = visit('https://oddbout.com/pudding');
+  page.run();
+  const emit = (name, parameters) => page.window.dispatchEvent({ type: 'oddbout:milestone', detail: { name, parameters } });
+  emit('pudding_run_end', { distance_m: 123.9, duration_seconds: 45.8, pudding_form: 2, result: 'new_best', email: 'private' });
+  emit('pudding_transform', { pudding_form: Infinity, distance_m: -1, duration_seconds: NaN, result: 'private' });
+  emit('club_opening_end', { via: 'skip', email: 'private' });
+  emit('club_signup_done', { method: 'one_tap' });
+  emit('unknown', { email: 'private' });
+  const events = page.window.dataLayer
+    .map(args => Array.from(args))
+    .filter(args => args[0] === 'event')
+    .slice(1);
+  assert.equal(events.length, 4);
+  assert.equal(events[0][2].game_id, 'pudding');
+  assert.equal(events[0][2].distance_m, 123);
+  assert.equal(events[0][2].duration_seconds, 45);
+  assert.equal(events[0][2].pudding_form, 2);
+  assert.equal(events[1][2].pudding_form, undefined);
+  assert.equal(events[1][2].distance_m, undefined);
+  assert.equal(events[2][2].via, 'skip');
+  assert.equal(events[3][2].method, 'one_tap');
+  assert.ok(!JSON.stringify(events).includes('private'));
 });
 
 test('campaign attribution is retained while unrelated query values are removed', () => {

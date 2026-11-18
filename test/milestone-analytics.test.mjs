@@ -17,7 +17,7 @@ test('each actual bout starts and finishes once; unloaded/aborted bouts cannot c
       }
     },
   };
-  runInNewContext(milestoneModule.replace('export {milestone, creationStart, bindIdentity};', 'this.emit=milestone; this.copy=creationStart;'), context);
+  runInNewContext(milestoneModule.replace(/export \{[^}]+\};/, 'this.emit=milestone; this.copy=creationStart;'), context);
   const first = {},
     second = {};
   context.emit('match_complete', first);

@@ -492,6 +492,30 @@ The game simulation itself is unchanged. Browser events allow only the event
 name and enumerated mode/result/method fields; browser code cannot emit the
 registration event.
 
+The current homepage emits `navigation_click` for known menu links and contact
+buttons. `menu_id` is a fixed route/social identity; `link_position` is `header`,
+`footer`, or `content`. Link text and destination query strings are never sent.
+The existing `club_*` first-session milestones are forwarded with only their
+enumerated parameters (the game owns their definitions in `gameMilestone.ts`).
+
+Pudding Escape (`/pudding`) uses the same tag and privacy guards. Exact hooks in
+`scripts/site-milestones.mjs` emit `pudding_run_start` (`mode`: `first` or `retry`
+within the current page), `pudding_run_end`, `pudding_transform`, and
+`pudding_share`. A completed native share or clipboard copy counts as a share;
+cancelled or failed attempts do not. `game_id` is `pudding`. Run ends include
+`distance_m`, active simulation `duration_seconds` (pause/transform time excluded),
+`pudding_form` (0–14), and `result` (`new_best` or `finished`). Transform events
+carry only the form; shares carry `method` (`native` or `clipboard`). Only run
+ends carry distance/time so aggregate metrics do not count transformations twice.
+The standalone CrazyGames build does not load the site's analytics plugin.
+
+GA4 event-scoped custom dimensions: `menu_id`, `link_position`, `game_id`, `mode`,
+`result`, `method`, `pudding_form`, `via`, and optionally `skip`, `reason`.
+Custom metrics: `distance_m` (Meters), `duration_seconds` (Seconds). In reports,
+compare run starts/ends/retries and completed-share users; a run end is gameplay
+activity rather than a signup conversion. Reporting definitions apply to new
+data after registration; they do not backfill historical parameters.
+
 After existing authenticated creator sign-in, the browser obtains real client_id
 and session_id values from the Google tag. It posts only those values to the
 configured same-project authenticated /analytics/context route. Backend account
