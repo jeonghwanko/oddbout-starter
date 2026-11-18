@@ -41,11 +41,13 @@ function bridge() {
 export const milestoneModule = `const {milestone, creationStart, bindIdentity, puddingMilestone} = (${bridge.toString()})(); export {milestone, creationStart, bindIdentity, puddingMilestone};`;
 const targets = {
   '/src/dev/pudding-escape.ts': [
-    ["  showPhase('play');", "  showPhase('play');\n  puddingMilestone('pudding_run_start', { mode: runs === 0 ? 'first' : 'retry' });"],
+    ['function startRun() {', 'let puddingActiveSeconds = 0;\nfunction startRun() {'],
+    ["  showPhase('play');", "  showPhase('play');\n  puddingActiveSeconds = 0;\n  puddingMilestone('pudding_run_start', { mode: runs === 0 ? 'first' : 'retry' });"],
+    ['  tutorialUpdate(fdt);', "  tutorialUpdate(fdt);\n  if (phase === 'play' && !paused && !tf.active) puddingActiveSeconds += fdt;"],
     ['function endRun() {', "function endRun() {\n  if (phase !== 'play') return;"],
     [
       "  showPhase('over');",
-      "  showPhase('over');\n  puddingMilestone('pudding_run_end', { distance_m: dist, duration_seconds: st.runT, pudding_form: runStage, result: wasBest ? 'new_best' : 'finished' });",
+      "  showPhase('over');\n  puddingMilestone('pudding_run_end', { distance_m: dist, duration_seconds: puddingActiveSeconds, pudding_form: runStage, result: wasBest ? 'new_best' : 'finished' });",
     ],
     [
       'tf.burst = true; stage += 1; runStage = stage;',

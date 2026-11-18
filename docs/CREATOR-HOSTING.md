@@ -503,7 +503,7 @@ Pudding Escape (`/pudding`) uses the same tag and privacy guards. Exact hooks in
 within the current page), `pudding_run_end`, `pudding_transform`, and
 `pudding_share`. A completed native share or clipboard copy counts as a share;
 cancelled or failed attempts do not. `game_id` is `pudding`. Run ends include
-`distance_m`, active simulation `duration_seconds` (pause/transform time excluded),
+`distance_m`, active foreground `duration_seconds` (tutorial included; pause/transform time excluded),
 `pudding_form` (0–14), and `result` (`new_best` or `finished`). Transform events
 carry only the form; shares carry `method` (`native` or `clipboard`). Only run
 ends carry distance/time so aggregate metrics do not count transformations twice.
