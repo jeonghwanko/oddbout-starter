@@ -74,9 +74,58 @@
     const { name, parameters = {} } = event.detail ?? {};
     // 첫 선수 무료 (2026-10-30): the hosted request, the entry and the wish for one more fighter (the finished motions are counted from the
     // database, measure-export's freeFunnel).
-    if (!['game_start', 'match_complete', 'creation_start', 'hosted_request', 'fighter_entered', 'extra_generation_interest'].includes(name)) return;
+    const club = {
+      club_opening_start: {},
+      club_opening_knock: {},
+      club_opening_end: { via: ['play', 'skip'] },
+      club_trial_end: { result: ['win', 'loss'], skip: ['yes', 'no'] },
+      club_contract_start: {},
+      club_sign_tap: {},
+      club_signup_done: { method: ['one_tap', 'button', 'redirect'] },
+      club_signup_miss: { reason: ['no_client', 'in_app', 'no_gis', 'no_button', 'one_tap_miss', 'refused', 'keys'] },
+      club_found: {},
+      club_turf_first_end: { result: ['win', 'loss'] },
+    };
+    const pudding = ['pudding_run_start', 'pudding_run_end', 'pudding_transform', 'pudding_share'];
+    if (
+      ![
+        'game_start',
+        'match_complete',
+        'creation_start',
+        'hosted_request',
+        'fighter_entered',
+        'extra_generation_interest',
+        ...Object.keys(club),
+        ...pudding,
+      ].includes(name)
+    )
+      return;
     /** @type {Record<string, string>} */
     const safe = { ...page, send_to: measurementId };
+    if (Object.hasOwn(club, name)) {
+      const fields = /** @type {Record<string, Record<string, string[]>>} */ (club)[name];
+      for (const [key, values] of Object.entries(fields)) if (values.includes(parameters[key])) safe[key] = parameters[key];
+      window.gtag('event', name, safe);
+      return;
+    }
+    if (pudding.includes(name)) {
+      const values = /** @type {Record<string, string | number>} */ ({ ...safe, game_id: 'pudding' });
+      if (name === 'pudding_run_start' && ['first', 'retry'].includes(parameters.mode)) values.mode = parameters.mode;
+      if (name === 'pudding_share' && ['native', 'clipboard'].includes(parameters.method)) values.method = parameters.method;
+      if (name === 'pudding_run_end' && ['new_best', 'finished'].includes(parameters.result)) values.result = parameters.result;
+      const metrics =
+        name === 'pudding_run_end'
+          ? { pudding_form: 14, distance_m: 1000000, duration_seconds: 86400 }
+          : name === 'pudding_transform'
+            ? { pudding_form: 14 }
+            : {};
+      for (const [key, max] of Object.entries(metrics)) {
+        const value = parameters[key];
+        if (typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= max) values[key] = Math.floor(value);
+      }
+      window.gtag('event', name, values);
+      return;
+    }
     if (['play', 'watch', 'tournament', 'exhibition'].includes(parameters.mode)) safe.mode = parameters.mode;
     if (['ko', 'decision', 'forfeit', 'timeout', 'win', 'loss'].includes(parameters.result)) safe.result = parameters.result;
     if (name === 'creation_start') safe.method = 'request_copy';
@@ -86,6 +135,68 @@
       safe.queued = parameters.queued === true ? 'yes' : 'no';
     }
     window.gtag('event', name, safe);
+  });
+  // Track fixed menu identities, never link text, account data or destination query strings.
+  document.addEventListener?.('click', event => {
+    if (!permitted() || !(event.target instanceof Element)) return;
+    const target = event.target.closest('a,button');
+    if (!target || !document.body?.contains(target)) return;
+    const menus = [
+      'home',
+      'service',
+      'fighters',
+      'worlds',
+      'rank',
+      'docs',
+      'about',
+      'updates',
+      'contact',
+      'privacy',
+      'credits',
+      'shop',
+      'create',
+      'youtube',
+      'discord',
+      'x',
+      'threads',
+      'instagram',
+      'tiktok',
+    ];
+    let menu = target.getAttribute('data-club-link');
+    if (!menus.includes(menu ?? '')) {
+      const destination = target.getAttribute('href') ?? target.getAttribute('data-destination');
+      if (!destination) return;
+      try {
+        const url = new URL(destination, document.baseURI ?? window.location.href);
+        if (url.origin !== current.origin) return;
+        const path = url.pathname.replace(/\/$/, '').replace(/\.html$/, '');
+        const routes = {
+          '': 'home',
+          '/ko': 'home',
+          '/ja': 'home',
+          '/league': 'home',
+          '/index': 'home',
+          '/pudding': 'pudding',
+          '/fighter': 'play',
+          '/fighters': 'fighters',
+          '/world': 'worlds',
+          '/creator': 'create',
+          '/about': 'about',
+          '/docs': 'docs',
+          '/updates': 'updates',
+          '/shop': 'shop',
+          '/service': 'service',
+          '/privacy': 'privacy',
+          '/credits': 'credits',
+        };
+        menu = /** @type {Record<string, string>} */ (routes)[path] ?? null;
+      } catch {
+        return;
+      }
+    }
+    if (!menu) return;
+    const link_position = target.closest('header') ? 'header' : target.closest('footer') ? 'footer' : 'content';
+    window.gtag('event', 'navigation_click', { ...page, send_to: measurementId, menu_id: menu, link_position });
   });
   // The static updates pages have no application module. Read only their explicit action markers;
   // labels, arbitrary attributes and destination addresses never become event parameters.
