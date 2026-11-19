@@ -5,7 +5,17 @@ import { analyticsSource, analyticsHtml, googleAnalyticsPlugin } from '../script
 
 function visit(
   href,
-  { gpc = false, referrer = 'https://example.com/path?email=private#secret', apiBase = null, updates = false, lang = 'ko', slugs = [], baseURI = href } = {},
+  {
+    gpc = false,
+    referrer = 'https://example.com/path?email=private#secret',
+    apiBase = null,
+    updates = false,
+    lang = 'ko',
+    slugs = [],
+    baseURI = href,
+    siteUrl = 'https://oddbout.com/creator.html',
+    game = null,
+  } = {},
 ) {
   const listeners = new Map(),
     scripts = [],
@@ -70,7 +80,7 @@ function visit(
       }
     },
   };
-  const source = analyticsSource('G-ABC123DEF4', 'https://oddbout.com/creator.html', apiBase, slugs);
+  const source = analyticsSource('G-ABC123DEF4', siteUrl, apiBase, slugs, { game });
   return {
     window,
     scripts,
@@ -352,4 +362,60 @@ test('authenticated binding sends actual tag identifiers only to the configured 
   await opted.window.oddboutBindAnalytics(apiBase, 'existing-auth-token', 'publishable-key');
   assert.deepEqual(JSON.parse(opted.requests[0].body), { enabled: false });
   assert.equal(opted.scripts.length, 0);
+});
+
+test('a game site reports its entry as / and forwards its milestones without the save handoff fragment', () => {
+  const site = { siteUrl: 'https://forge.oddbout.com/', game: 'forge' };
+  for (const href of [
+    'https://forge.oddbout.com/forge.html?utm_source=x&email=private#oddbout-import=private',
+    'https://forge.oddbout.com/forge?lang=ko',
+    'https://forge.oddbout.com/index.html',
+    'https://forge.oddbout.com/',
+  ]) {
+    const page = visit(href, { ...site, referrer: 'https://oddbout.com/forge?email=private' });
+    page.run();
+    const view = page.window.dataLayer.map(args => Array.from(args)).find(args => args[1] === 'page_view');
+    assert.equal(view[2].page_location, href.includes('utm_source') ? 'https://forge.oddbout.com/?utm_source=x' : 'https://forge.oddbout.com/', href);
+    assert.equal(view[2].page_referrer, 'https://oddbout.com/');
+    assert.ok(!JSON.stringify(page.window.dataLayer).includes('private'), href);
+  }
+  const page = visit('https://forge.oddbout.com/', site);
+  page.run();
+  page.window.dispatchEvent({ type: 'oddbout:milestone', detail: { name: 'forge_start', parameters: { mode: 'return' } } });
+  const event = page.window.dataLayer.map(args => Array.from(args)).find(args => args[1] === 'forge_start');
+  assert.equal(event[2].game_id, 'forge');
+  assert.equal(event[2].mode, 'return');
+  assert.equal(event[2].page_location, 'https://forge.oddbout.com/');
+  const pudding = visit('https://pudding.oddbout.com/pudding.html', { siteUrl: 'https://pudding.oddbout.com/', game: 'pudding' });
+  pudding.run();
+  pudding.window.dispatchEvent({ type: 'oddbout:milestone', detail: { name: 'pudding_run_start', parameters: { mode: 'first' } } });
+  const events = pudding.window.dataLayer.map(args => Array.from(args)).filter(args => args[0] === 'event');
+  assert.equal(
+    JSON.stringify(events.map(args => [args[1], args[2].page_location])),
+    JSON.stringify([
+      ['page_view', 'https://pudding.oddbout.com/'],
+      ['pudding_run_start', 'https://pudding.oddbout.com/'],
+    ]),
+  );
+});
+
+test('each site measures only its own host, and the ODDBOUT site keeps /forge and /pudding as pages', () => {
+  for (const [href, options] of [
+    ['https://oddbout.com/forge', { siteUrl: 'https://forge.oddbout.com/', game: 'forge' }],
+    ['https://pudding.oddbout.com/', { siteUrl: 'https://forge.oddbout.com/', game: 'forge' }],
+    ['https://forge.oddbout.com/', {}],
+  ]) {
+    const page = visit(href, options);
+    page.run();
+    assert.equal(page.scripts.length, 0, href);
+  }
+  for (const path of ['/forge', '/forge.html', '/pudding']) {
+    const page = visit('https://oddbout.com' + path);
+    page.run();
+    const view = page.window.dataLayer.map(args => Array.from(args)).find(args => args[1] === 'page_view');
+    assert.equal(view[2].page_location, 'https://oddbout.com' + path);
+  }
+  assert.throws(() => analyticsSource('G-ABC123DEF4', 'https://forge.oddbout.com/', null, [], { game: '../forge' }), /Analytics game/);
+  const plugin = googleAnalyticsPlugin('G-ABC123DEF4', 'https://forge.oddbout.com/', null, { game: 'forge' });
+  assert.match(plugin.load('\0oddbout-analytics'), /"forge\.oddbout\.com", null, \[\], "forge"\);$/);
 });

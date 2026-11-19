@@ -11,8 +11,11 @@ const resolvedId = '\0oddbout-analytics';
  *   transformIndexHtml?: { order: 'pre', handler: (html: string, context: { filename: string }) => string } }} SitePlugin
  */
 
-/** @param {string} measurementId @param {string} hostname @param {string | null} apiBase @param {string[]} updateSlugs */
-function startAnalytics(measurementId, hostname, apiBase, updateSlugs) {
+/**
+ * @param {string} measurementId @param {string} hostname @param {string | null} apiBase @param {string[]} updateSlugs
+ * @param {string | null} game A game site's game (`forge` on forge.oddbout.com), whose entry page is its home; null on the ODDBOUT site.
+ */
+function startAnalytics(measurementId, hostname, apiBase, updateSlugs, game) {
   if (
     window.location.hostname !== hostname ||
     window.location.protocol !== 'https:' ||
@@ -32,6 +35,8 @@ function startAnalytics(measurementId, hostname, apiBase, updateSlugs) {
   current.search = campaign.toString();
   current.hash = '';
   if (/\/(?:index|league)\.html$/.test(current.pathname)) current.pathname = current.pathname.replace(/[^/]+$/, '');
+  // A game site serves its game at / and at its entry page (/forge.html, clean /forge): one page, reported as /.
+  if (game && ['/' + game, '/' + game + '.html'].includes(current.pathname)) current.pathname = '/';
   let referrer = '';
   try {
     const source = new URL(document.referrer);
@@ -293,13 +298,17 @@ function startAnalytics(measurementId, hostname, apiBase, updateSlugs) {
   document.head.append(script);
 }
 
-/** @param {string} measurementId @param {string} siteUrl @param {string | null} [apiBase] @param {string[]} [updateSlugs] */
-export function analyticsSource(measurementId, siteUrl, apiBase = null, updateSlugs = []) {
+/**
+ * @param {string} measurementId @param {string} siteUrl @param {string | null} [apiBase] @param {string[]} [updateSlugs]
+ * @param {{ game?: string | null }} [options] `game`: the game a game site serves (scripts/build-game-site.mjs); its entry page counts as /.
+ */
+export function analyticsSource(measurementId, siteUrl, apiBase = null, updateSlugs = [], { game = null } = {}) {
   if (!/^G-[A-Z0-9]{6,20}$/.test(measurementId ?? '')) throw new Error('Invalid GA4 measurement ID');
   const site = new URL(siteUrl);
   if (site.protocol !== 'https:') throw new Error('Analytics requires the HTTPS public site');
   if (updateSlugs.some(slug => !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug))) throw new Error('Invalid update Analytics slug');
-  return `(${startAnalytics.toString()})(${JSON.stringify(measurementId)}, ${JSON.stringify(site.hostname)}, ${JSON.stringify(apiBase)}, ${JSON.stringify(updateSlugs)});`;
+  if (game !== null && !/^[a-z]+$/.test(game)) throw new Error('Invalid Analytics game');
+  return `(${startAnalytics.toString()})(${JSON.stringify(measurementId)}, ${JSON.stringify(site.hostname)}, ${JSON.stringify(apiBase)}, ${JSON.stringify(updateSlugs)}, ${JSON.stringify(game)});`;
 }
 
 /** @param {string} html @param {boolean} [privacy] */
@@ -323,10 +332,13 @@ export function analyticsHtml(html, privacy = false) {
   return html.replace('</head>', `<script type="module">import ${JSON.stringify(virtualId)};</script>\n</head>`);
 }
 
-/** @param {string | undefined} measurementId @param {string} siteUrl @param {string | null} [apiBase] @returns {SitePlugin | null} */
-export function googleAnalyticsPlugin(measurementId, siteUrl, apiBase = null) {
+/**
+ * @param {string | undefined} measurementId @param {string} siteUrl @param {string | null} [apiBase]
+ * @param {{ game?: string | null }} [options] @returns {SitePlugin | null}
+ */
+export function googleAnalyticsPlugin(measurementId, siteUrl, apiBase = null, { game = null } = {}) {
   if (!measurementId) return null;
-  const source = analyticsSource(measurementId, siteUrl, apiBase);
+  const source = analyticsSource(measurementId, siteUrl, apiBase, [], { game });
   return {
     name: 'oddbout-google-analytics',
     resolveId(id) {

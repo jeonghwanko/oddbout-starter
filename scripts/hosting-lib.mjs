@@ -242,7 +242,15 @@ export async function publishedFiles(root, siteUrl = hosting.siteUrl) {
  * @param {string} root @param {{ siteUrl?: string, request?: typeof fetch, wait?: (ms: number) => Promise<unknown> }} [options]
  */
 export async function verifyLiveSite(root, { siteUrl = hosting.siteUrl, request = fetch, wait = ms => new Promise(done => setTimeout(done, ms)) } = {}) {
-  const files = await publishedFiles(root, siteUrl);
+  await verifyServedFiles(root, await publishedFiles(root, siteUrl), { siteUrl, request, wait });
+}
+
+/**
+ * Each file, served under `siteUrl`, has the built bytes and its type's content type (the game sites check every file they publish).
+ * @param {string} root @param {Iterable<string>} files
+ * @param {{ siteUrl: string, request?: typeof fetch, wait?: (ms: number) => Promise<unknown> }} options
+ */
+export async function verifyServedFiles(root, files, { siteUrl, request = fetch, wait = ms => new Promise(done => setTimeout(done, ms)) }) {
   for (const file of files) {
     const url = new URL(file, siteUrl);
     const response = await fetchPublished(url, file, request, wait);

@@ -410,6 +410,57 @@ Only Auth return URLs need to include the new creator page for Google login.
 Existing allowed return URLs remain available. Saved MCP homepage URLs on the
 previous GitHub Pages host are upgraded before issuing one-use links.
 
+## Game sites
+
+Legendary Forge and Pudding Escape have their own sites, built and published apart
+from the ODDBOUT site. Publishing one game changes neither the ODDBOUT site nor the
+other game.
+
+| Game      | Cloudflare Pages project | Domain                        |
+| --------- | ------------------------ | ----------------------------- |
+| `forge`   | `oddbout-forge`          | `https://forge.oddbout.com`   |
+| `pudding` | `oddbout-pudding`        | `https://pudding.oddbout.com` |
+
+The game repository owns the game package (`kaito_web/tools/deploy/game-package.mjs`,
+`buildGamePackage`), the domains (`kaito_web/src/platform/game-sites.json`) and the
+guards before a publish. Its `npm run publish:game -- <game>` runs the two scripts
+below from a clean starter checkout at `origin/main`, with a temporary output folder.
+Do not run them by hand for production.
+
+- `node scripts/build-game-site.mjs <kaito_web> <forge|pudding> <empty-output-directory>`
+  builds the game's `web` package with this repository's Analytics plugin, bound to
+  the game's domain. It needs no Cloudflare credentials. Both checkouts must be clean
+  (`buildRevision`, the same rule as the ODDBOUT site). It writes `deployment.json`:
+  `buildId`, `game`, `siteUrl` (the domain with `/`), `builtAt`, `sourceCommit` (the
+  game repository), `hostingCommit` (this repository), `dirty`, and the fingerprint
+  (`digest`, `files`, `bytes`). The game repository's lineage check and `game:record`
+  read `sourceCommit` and `game` from `https://<game domain>/deployment.json`.
+- `node scripts/publish-game-site.mjs <forge|pudding> <built-directory> [--dry-run] [--preview]`
+  checks the build again and uploads it with the pinned Wrangler (`pages deploy`) to
+  `oddbout-<game>`: branch `main`, or `preview` with `--preview`. Environment:
+  `CLOUDFLARE_ACCOUNT_ID`, `ODDBOUT_GAME_ORIGIN` and `CLOUDFLARE_API_TOKEN` (the shell's,
+  or this checkout's ignored `.env`). Without a token it stops before uploading.
+  `--dry-run` checks the files and prints the plan; it uploads nothing.
+
+The checks refuse a build whose `deployment.json` is for another game or domain, whose
+files changed after the build, whose first script is not the consent defaults, or that
+has no Analytics tag for the configured measurement ID and the game's domain. The site
+is static files only: `_headers`, `_redirects`, `_routes.json`, `_worker.js` and
+`functions` are refused. After the upload the publisher waits for the deployment's
+`deployment.json` on its `*.pages.dev` address and compares every file's bytes. A
+production upload then reads `https://<game domain>/deployment.json` until it shows the
+build. If the domain does not answer with a game `deployment.json` (it is not yet a custom
+domain of the project), the publish still succeeds and says to attach the domain in the
+Pages project and check that file again.
+
+Analytics on a game site uses the same tag, measurement ID and privacy guards as the
+ODDBOUT site, on the game's host only. The game's entry page (`/forge.html`, `/forge`)
+and `/` are both reported as `/`. The game sends its own `forge_*` or `pudding_*`
+milestones; `game_id` separates the games in reports.
+
+To roll back, promote the previous deployment of `oddbout-<game>` in the Cloudflare
+Pages dashboard (or its rollback API). Do not rebuild for a rollback.
+
 ## Plugin policies
 
 The normal build includes the six static pages under `/ai-fighter-creator/`,

@@ -110,6 +110,48 @@ export async function verifyPagesPublicApi(
   );
 }
 
+/**
+ * The deployment Wrangler reported (its `WRANGLER_OUTPUT_FILE_PATH` lines) for the requested project, commit and environment, as the
+ * deployment's own `https://<id>.<project>.pages.dev/` address.
+ * @param {string} text @param {{ project: string, commit: string, preview: boolean }} expected
+ */
+export function pagesDeployment(text, { project, commit, preview }) {
+  const entries = text
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+    .map(line => JSON.parse(line));
+  const deployed = entries.findLast(entry => entry.type === 'pages-deploy-detailed');
+  if (
+    !deployed ||
+    deployed.pages_project !== project ||
+    deployed.deployment_trigger?.metadata?.commit_hash !== commit ||
+    deployed.environment !== (preview ? 'preview' : 'production')
+  ) {
+    throw Error('Cloudflare deployment metadata does not match the requested project, commit or environment');
+  }
+  const url = new URL(deployed.url);
+  if (url.protocol !== 'https:' || !url.hostname.endsWith(`.${project}.pages.dev`)) throw Error('Unexpected Cloudflare deployment origin');
+  return url.origin + '/';
+}
+
+/**
+ * Uploads a checked folder with the repository's pinned Wrangler (`pages deploy`) and returns the deployment's address. `cwd` is a
+ * temporary folder of the caller's: Wrangler reads a `wrangler.jsonc` there (the ODDBOUT site's Pages Function) and writes its report.
+ * @param {{ site: string, project: string, branch: string, commit: string, account: string, preview: boolean, cwd: string }} options
+ */
+export async function deployPagesDirectory({ site, project, branch, commit, account, preview, cwd }) {
+  const wrangler = fileURLToPath(new URL('../node_modules/wrangler/bin/wrangler.js', import.meta.url));
+  const output = join(cwd, 'wrangler-output.jsonl');
+  const env = { ...process.env, CLOUDFLARE_ACCOUNT_ID: account, CI: 'true', WRANGLER_SEND_METRICS: 'false', WRANGLER_OUTPUT_FILE_PATH: output };
+  execFileSync(
+    process.execPath,
+    [wrangler, 'pages', 'deploy', site, '--project-name', project, '--branch', branch, '--commit-hash', commit, '--commit-dirty=false'],
+    { cwd, env, stdio: 'inherit' },
+  );
+  return pagesDeployment(await readFile(output, 'utf8'), { project, commit, preview });
+}
+
 /** @param {string} sha @param {ReturnType<typeof import('./site-publication.mjs').publicationConfig>} config @param {{preview?:boolean}} options */
 export async function publishCloudflare(sha, config, { preview = false } = {}) {
   const parent = await realpath(tmpdir()),
@@ -117,9 +159,6 @@ export async function publishCloudflare(sha, config, { preview = false } = {}) {
   const checkout = join(temporary, 'repository'),
     site = join(temporary, 'site'),
     archive = join(temporary, 'site.tar');
-  const wrangler = fileURLToPath(new URL('../node_modules/wrangler/bin/wrangler.js', import.meta.url));
-  const output = join(temporary, 'wrangler-output.jsonl');
-  const env = { ...process.env, CLOUDFLARE_ACCOUNT_ID: config.account, CI: 'true', WRANGLER_SEND_METRICS: 'false', WRANGLER_OUTPUT_FILE_PATH: output };
   // Relative names from the temporary directory: GNU tar (Git Bash puts it first on Windows) reads `C:` in an absolute path as a
   // remote host and stops after the branch commit, while Windows' bsdtar accepts either.
   const extract = () => execFileSync('tar', ['-xf', 'site.tar', '-C', 'site'], { cwd: temporary });
@@ -155,27 +194,7 @@ export async function publishCloudflare(sha, config, { preview = false } = {}) {
     const current = git(checkout, 'ls-remote', 'origin', `refs/heads/${hosting.branch}`).split(/\s/)[0];
     if (current !== sha) throw Error('Publication branch changed before Cloudflare upload');
     const branch = preview ? 'hosting-migration' : config.branch;
-    execFileSync(
-      process.execPath,
-      [wrangler, 'pages', 'deploy', site, '--project-name', config.project, '--branch', branch, '--commit-hash', sha, '--commit-dirty=false'],
-      { cwd: temporary, env, stdio: 'inherit' },
-    );
-    const entries = (await readFile(output, 'utf8'))
-      .trim()
-      .split('\n')
-      .map(line => JSON.parse(line));
-    const deployed = entries.findLast(entry => entry.type === 'pages-deploy-detailed');
-    if (
-      !deployed ||
-      deployed.pages_project !== config.project ||
-      deployed.deployment_trigger?.metadata?.commit_hash !== sha ||
-      deployed.environment !== (preview ? 'preview' : 'production')
-    ) {
-      throw Error('Cloudflare deployment metadata does not match the requested project, commit or environment');
-    }
-    const url = new URL(deployed.url);
-    if (url.protocol !== 'https:' || !url.hostname.endsWith(`.${config.project}.pages.dev`)) throw Error('Unexpected Cloudflare deployment origin');
-    const base = url.origin + '/';
+    const base = await deployPagesDirectory({ site, project: config.project, branch, commit: sha, account: config.account, preview, cwd: temporary });
     await waitForJson(new URL('deployment.json', base), body => body.buildId === release.buildId && body.digest === release.digest);
     await verifyPagesPublicApi(base);
     await verifyLiveSite(site, { siteUrl: base, request: cloudflareFetch() });
