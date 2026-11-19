@@ -160,6 +160,49 @@ test('pudding and club milestones preserve only bounded metrics and approved val
   assert.ok(!JSON.stringify(events).includes('private'));
 });
 
+test('pudding funnel milestones keep only approved enums and bounded integers', () => {
+  const page = visit('https://oddbout.com/pudding');
+  page.run();
+  const emit = (name, parameters) => page.window.dispatchEvent({ type: 'oddbout:milestone', detail: { name, parameters } });
+  emit('pudding_run_start', { mode: 'retry', run_number: 3.7, email: 'private' });
+  emit('pudding_run_end', {
+    distance_m: 400,
+    duration_seconds: 21,
+    pudding_form: 1,
+    result: 'finished',
+    run_number: 3,
+    perfects: 2,
+    splats: -1,
+    tip: 'uphill',
+  });
+  emit('pudding_tutorial_done', { seconds: 6.4, how: 'idle' });
+  emit('pudding_continue', { method: 'gold', count: 4 });
+  emit('pudding_purchase', { kind: 'look', gold: 200, note: 'private' });
+  emit('pudding_run_end', { tip: 'private' });
+  const events = page.window.dataLayer
+    .map(args => Array.from(args))
+    .filter(args => args[0] === 'event')
+    .slice(1);
+  assert.equal(
+    JSON.stringify(events.map(e => e[1])),
+    JSON.stringify(['pudding_run_start', 'pudding_run_end', 'pudding_tutorial_done', 'pudding_continue', 'pudding_purchase', 'pudding_run_end']),
+  );
+  assert.ok(events.every(e => e[2].game_id === 'pudding'));
+  assert.equal(events[0][2].mode, 'retry');
+  assert.equal(events[0][2].run_number, 3);
+  assert.equal(events[1][2].perfects, 2);
+  assert.equal(events[1][2].splats, undefined);
+  assert.equal(events[1][2].tip, 'uphill');
+  assert.equal(events[2][2].seconds, 6);
+  assert.equal(events[2][2].how, 'idle');
+  assert.equal(events[3][2].method, 'gold');
+  assert.equal(events[3][2].count, undefined);
+  assert.equal(events[4][2].kind, 'look');
+  assert.equal(events[4][2].gold, 200);
+  assert.equal(events[5][2].tip, undefined);
+  assert.ok(!JSON.stringify(events).includes('private'));
+});
+
 test('forge milestones keep only approved enums and bounded integers', () => {
   const page = visit('https://oddbout.com/forge');
   page.run();
