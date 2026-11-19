@@ -87,6 +87,21 @@
       club_turf_first_end: { result: ['win', 'loss'] },
     };
     const pudding = ['pudding_run_start', 'pudding_run_end', 'pudding_transform', 'pudding_share'];
+    // Legendary Forge (/forge) sends these from the game itself: enum values and bounded integers only.
+    const forge = {
+      forge_start: { mode: ['first', 'return'] },
+      forge_tutorial_step: { step: 4 },
+      forge_tutorial_done: { seconds: 86400 },
+      forge_goal_done: { goal: 50 },
+      forge_delivery: { rank: ['F', 'C', 'A', 'S'], level: 999 },
+      forge_level_up: { level: 999 },
+      forge_unlock: { family: ['weapon', 'bow', 'armor', 'jewel'] },
+      forge_board_full: {},
+      forge_ad: { placement: ['energy', 'skip', 'bubble', 'storage'], result: ['finished', 'error'] },
+      forge_daily: { kind: ['attendance', 'request'], day: 7 },
+      forge_expand: { kind: ['board', 'storage'], level: 99 },
+      forge_session: { active_seconds: 86400, merges: 100000, deliveries: 100000 },
+    };
     if (
       ![
         'game_start',
@@ -97,6 +112,7 @@
         'extra_generation_interest',
         ...Object.keys(club),
         ...pudding,
+        ...Object.keys(forge),
       ].includes(name)
     )
       return;
@@ -106,6 +122,18 @@
       const fields = /** @type {Record<string, Record<string, string[]>>} */ (club)[name];
       for (const [key, values] of Object.entries(fields)) if (values.includes(parameters[key])) safe[key] = parameters[key];
       window.gtag('event', name, safe);
+      return;
+    }
+    if (Object.hasOwn(forge, name)) {
+      const values = /** @type {Record<string, string | number>} */ ({ ...safe, game_id: 'forge' });
+      const fields = /** @type {Record<string, Record<string, string[] | number>>} */ (forge)[name];
+      for (const [key, rule] of Object.entries(fields)) {
+        const value = parameters[key];
+        if (Array.isArray(rule)) {
+          if (rule.includes(value)) values[key] = value;
+        } else if (typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= rule) values[key] = Math.floor(value);
+      }
+      window.gtag('event', name, values);
       return;
     }
     if (pudding.includes(name)) {
@@ -177,6 +205,7 @@
           '/league': 'home',
           '/index': 'home',
           '/pudding': 'pudding',
+          '/forge': 'forge',
           '/fighter': 'play',
           '/fighters': 'fighters',
           '/world': 'worlds',
