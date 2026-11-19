@@ -18,7 +18,7 @@ await loadPublicationEnvironment();
 const target = gamePublicationTarget(process.env, { game, preview });
 const release = await verifyGameArtifact(output, { game, origin: target.origin });
 // No `_headers`, `_redirects`, `_routes.json`, `_worker.js` or `functions`: a game site is static files only.
-const files = await validateCloudflareFiles(output);
+const uploadFiles = await validateCloudflareFiles(output);
 const plan = {
   game,
   project: target.project,
@@ -28,7 +28,7 @@ const plan = {
   sourceCommit: release.sourceCommit,
   hostingCommit: release.hostingCommit,
   buildId: release.buildId,
-  files,
+  uploadFiles,
   bytes: release.bytes,
 };
 if (dryRun) {

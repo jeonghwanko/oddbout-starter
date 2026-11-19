@@ -204,7 +204,7 @@ test('publish-game-site checks the files and stops before uploading without a to
   assert.equal(plan.project, 'oddbout-forge');
   assert.equal(plan.branch, 'main');
   assert.equal(plan.sourceCommit, release.sourceCommit);
-  assert.equal(plan.files, 5);
+  assert.equal(plan.uploadFiles, 5);
   await assert.rejects(run(process.execPath, [script, 'forge', site], { env: base }), /CLOUDFLARE_API_TOKEN is not set: nothing was uploaded/);
   await assert.rejects(
     run(process.execPath, [script, 'forge', site, '--dry-run'], { env: { ...base, ODDBOUT_GAME_ORIGIN: 'https://pudding.oddbout.com' } }),

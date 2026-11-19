@@ -458,6 +458,10 @@ ODDBOUT site, on the game's host only. The game's entry page (`/forge.html`, `/f
 and `/` are both reported as `/`. The game sends its own `forge_*` or `pudding_*`
 milestones; `game_id` separates the games in reports.
 
+Before a game's first publish, create its Pages project once as a Direct Upload project
+with production branch `main` (the publisher runs Wrangler non-interactively and does
+not create projects). Attach the domain after the first production upload.
+
 To roll back, promote the previous deployment of `oddbout-<game>` in the Cloudflare
 Pages dashboard (or its rollback API). Do not rebuild for a rollback.
 
