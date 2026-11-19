@@ -89,7 +89,26 @@
       club_found: {},
       club_turf_first_end: { result: ['win', 'loss'] },
     };
-    const pudding = ['pudding_run_start', 'pudding_run_end', 'pudding_transform', 'pudding_share'];
+    // Pudding Escape (/pudding) sends these from the game itself (`src/pudding/analytics.ts` PUDDING_EVENTS): enum values and bounded integers only.
+    const puddingTips = ['uphill', 'steep', 'flat', 'caramel', 'transform', 'dive', 'charge', 'fever', 'bomb', 'speed'];
+    const pudding = {
+      pudding_run_start: { mode: ['first', 'retry'], run_number: 100000 },
+      pudding_run_end: {
+        distance_m: 1000000,
+        duration_seconds: 86400,
+        pudding_form: 14,
+        result: ['new_best', 'finished'],
+        run_number: 100000,
+        perfects: 10000,
+        splats: 10000,
+        tip: puddingTips,
+      },
+      pudding_transform: { pudding_form: 14 },
+      pudding_share: { method: ['native', 'clipboard'] },
+      pudding_tutorial_done: { seconds: 86400, how: ['perfect', 'tries', 'idle'] },
+      pudding_continue: { method: ['ad', 'gold'], count: 3 },
+      pudding_purchase: { kind: ['look', 'item'], gold: 100000 },
+    };
     // Legendary Forge (/forge) sends these from the game itself: enum values and bounded integers only.
     const forge = {
       forge_start: { mode: ['first', 'return'] },
@@ -114,7 +133,7 @@
         'fighter_entered',
         'extra_generation_interest',
         ...Object.keys(club),
-        ...pudding,
+        ...Object.keys(pudding),
         ...Object.keys(forge),
       ].includes(name)
     )
@@ -127,32 +146,15 @@
       window.gtag('event', name, safe);
       return;
     }
-    if (Object.hasOwn(forge, name)) {
-      const values = /** @type {Record<string, string | number>} */ ({ ...safe, game_id: 'forge' });
-      const fields = /** @type {Record<string, Record<string, string[] | number>>} */ (forge)[name];
+    const game = Object.hasOwn(forge, name) ? 'forge' : Object.hasOwn(pudding, name) ? 'pudding' : null;
+    if (game) {
+      const values = /** @type {Record<string, string | number>} */ ({ ...safe, game_id: game });
+      const fields = /** @type {Record<string, Record<string, string[] | number>>} */ (game === 'forge' ? forge : pudding)[name];
       for (const [key, rule] of Object.entries(fields)) {
         const value = parameters[key];
         if (Array.isArray(rule)) {
           if (rule.includes(value)) values[key] = value;
         } else if (typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= rule) values[key] = Math.floor(value);
-      }
-      window.gtag('event', name, values);
-      return;
-    }
-    if (pudding.includes(name)) {
-      const values = /** @type {Record<string, string | number>} */ ({ ...safe, game_id: 'pudding' });
-      if (name === 'pudding_run_start' && ['first', 'retry'].includes(parameters.mode)) values.mode = parameters.mode;
-      if (name === 'pudding_share' && ['native', 'clipboard'].includes(parameters.method)) values.method = parameters.method;
-      if (name === 'pudding_run_end' && ['new_best', 'finished'].includes(parameters.result)) values.result = parameters.result;
-      const metrics =
-        name === 'pudding_run_end'
-          ? { pudding_form: 14, distance_m: 1000000, duration_seconds: 86400 }
-          : name === 'pudding_transform'
-            ? { pudding_form: 14 }
-            : {};
-      for (const [key, max] of Object.entries(metrics)) {
-        const value = parameters[key];
-        if (typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= max) values[key] = Math.floor(value);
       }
       window.gtag('event', name, values);
       return;
