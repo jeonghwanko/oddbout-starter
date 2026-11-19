@@ -553,9 +553,10 @@ buttons. `menu_id` is a fixed route/social identity; `link_position` is `header`
 The existing `club_*` first-session milestones are forwarded with only their
 enumerated parameters (the game owns their definitions in `gameMilestone.ts`).
 
-Pudding Escape (`/pudding`) uses the same tag and privacy guards. Exact hooks in
-`scripts/site-milestones.mjs` emit `pudding_run_start` (`mode`: `first` or `retry`
-within the current page), `pudding_run_end`, `pudding_transform`, and
+Pudding Escape (`/pudding`, and its game site) uses the same tag and privacy guards. The game
+itself emits `oddbout:milestone` events (game repository `src/pudding/analytics.ts`):
+`pudding_run_start` (`mode`: `first` or `retry` within the current page), `pudding_run_end`
+(once per run; a continued run does not report again), `pudding_transform`, and
 `pudding_share`. A completed native share or clipboard copy counts as a share;
 cancelled or failed attempts do not. `game_id` is `pudding`. Run ends include
 `distance_m`, active foreground `duration_seconds` (tutorial included; pause/transform time excluded),
