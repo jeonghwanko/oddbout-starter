@@ -88,7 +88,10 @@ function visit(
     body,
     Element,
     HTMLDetailsElement,
-    fire: (name, target) => documentListeners.get(name)?.forEach(fn => fn({ target })),
+    fire: (name, target) =>
+      documentListeners.get(name)?.forEach(fn => {
+        fn({ target });
+      }),
     run: () => runInNewContext(source, context),
   };
 }

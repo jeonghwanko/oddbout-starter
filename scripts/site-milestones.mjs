@@ -42,7 +42,10 @@ export const milestoneModule = `const {milestone, creationStart, bindIdentity, p
 const targets = {
   '/src/dev/pudding-escape.ts': [
     ['function startRun() {', 'let puddingActiveSeconds = 0;\nfunction startRun() {'],
-    ["  showPhase('play');", "  showPhase('play');\n  puddingActiveSeconds = 0;\n  puddingMilestone('pudding_run_start', { mode: runs === 0 ? 'first' : 'retry' });"],
+    [
+      "  showPhase('play');",
+      "  showPhase('play');\n  puddingActiveSeconds = 0;\n  puddingMilestone('pudding_run_start', { mode: runs === 0 ? 'first' : 'retry' });",
+    ],
     ['  tutorialUpdate(fdt);', "  tutorialUpdate(fdt);\n  if (phase === 'play' && !paused && !tf.active) puddingActiveSeconds += fdt;"],
     ['function endRun() {', "function endRun() {\n  if (phase !== 'play') return;"],
     [
@@ -58,7 +61,9 @@ const targets = {
       "      await nav.share(file && nav.canShare?.(withFile) ? withFile : { title: GAME_TITLE, text, url: SHARE_URL });\n      puddingMilestone('pudding_share', { method: 'native' });",
     ],
     [
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: the game's source text to find, its template literal included.
       'await navigator.clipboard.writeText(`${text} ${SHARE_URL}`);',
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: the game's source text to write, its template literal included.
       "await navigator.clipboard.writeText(`${text} ${SHARE_URL}`); puddingMilestone('pudding_share', { method: 'clipboard' });",
     ],
   ],
