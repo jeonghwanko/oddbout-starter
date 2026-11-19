@@ -9,8 +9,13 @@ import { updatesPublishedFiles } from './site-updates.mjs';
 import { CHATGPT_GAME_ENTRY, chatGptEmbedBuild } from './chatgpt-embed-site.mjs';
 
 export const hosting = JSON.parse(await readFile(new URL('../deploy/creator-site.json', import.meta.url), 'utf8'));
-/** @type {(cwd: string, ...args: string[]) => string} */
-export const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+/**
+ * Node's default 1 MiB output buffer is too small for the site branch: `git ls-tree -r HEAD` of the Pages branch lists thousands of
+ * art files (over 1 MiB on 2026-11-20) and failed with ENOBUFS before the Cloudflare upload.
+ * @type {(cwd: string, ...args: string[]) => string}
+ */
+export const git = (cwd, ...args) =>
+  execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 256 * 1024 * 1024 }).trim();
 // Rewrite public site and homepage links while retaining repository documentation links.
 /** @param {string} text */
 export function publicSiteText(text) {
