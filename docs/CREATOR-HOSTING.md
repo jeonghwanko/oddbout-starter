@@ -554,20 +554,29 @@ The existing `club_*` first-session milestones are forwarded with only their
 enumerated parameters (the game owns their definitions in `gameMilestone.ts`).
 
 Pudding Escape (`/pudding`, and its game site) uses the same tag and privacy guards. The game
-itself emits `oddbout:milestone` events (game repository `src/pudding/analytics.ts`):
-`pudding_run_start` (`mode`: `first` or `retry` within the current page), `pudding_run_end`
-(once per run; a continued run does not report again), `pudding_transform`, and
-`pudding_share`. A completed native share or clipboard copy counts as a share;
-cancelled or failed attempts do not. `game_id` is `pudding`. Run ends include
-`distance_m`, active foreground `duration_seconds` (tutorial included; pause/transform time excluded),
-`pudding_form` (0–14), and `result` (`new_best` or `finished`). Transform events
-carry only the form; shares carry `method` (`native` or `clipboard`). Only run
-ends carry distance/time so aggregate metrics do not count transformations twice.
+itself emits `oddbout:milestone` events (game repository `src/pudding/analytics.ts`, `PUDDING_EVENTS`);
+`scripts/site-analytics.mjs` forwards only the listed enum values and bounded integers, with `game_id` `pudding`:
+
+- `pudding_run_start`: `mode` (`first` or `retry` within the current page), `run_number` (lifetime run, 1–100,000).
+- `pudding_run_end`, once per run (a continued run does not report again): `distance_m`, active foreground
+  `duration_seconds` (tutorial included; pause/transform time excluded), `pudding_form` (0–14), `result`
+  (`new_best` or `finished`), `run_number`, `perfects` and `splats` (0–10,000), and `tip`, the result-screen tip
+  (`uphill`, `steep`, `flat`, `caramel`, `transform`, `dive`, `charge`, `fever`, `bomb`, `speed`).
+- `pudding_transform`: `pudding_form` only.
+- `pudding_share`: `method` (`native` or `clipboard`). A completed native share or clipboard copy counts as a share;
+  cancelled or failed attempts do not.
+- `pudding_tutorial_done`: `seconds` (0–86,400) and `how` (`perfect`, `tries`, or `idle` — the tutorial ended with
+  no input).
+- `pudding_continue`: `method` (`ad` or `gold`) and `count` (1–3), sent only when the run actually continues.
+- `pudding_purchase`: `kind` (`look` or `item`) and `gold` (0–100,000) paid in the shop.
+
+Only run ends carry distance/time so aggregate metrics do not count transformations twice.
 The standalone CrazyGames build does not load the site's analytics plugin.
 
 GA4 event-scoped custom dimensions: `menu_id`, `link_position`, `game_id`, `mode`,
-`result`, `method`, `pudding_form`, `via`, and optionally `skip`, `reason`.
-Custom metrics: `distance_m` (Meters), `duration_seconds` (Seconds). In reports,
+`result`, `method`, `pudding_form`, `via`, `tip`, `how`, `kind`, `run_number`, and optionally `skip`, `reason`.
+Custom metrics: `distance_m` (Meters), `duration_seconds` (Seconds), and for Pudding `perfects`, `splats`,
+`seconds` (Seconds), `count`, `gold` (Standard). In reports,
 compare run starts/ends/retries and completed-share users; a run end is gameplay
 activity rather than a signup conversion. Reporting definitions apply to new
 data after registration; they do not backfill historical parameters.
