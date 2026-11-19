@@ -1,0 +1,1 @@
+function e(e,t,n){return e<t?t:e>n?n:e}function t(e){return Math.min(1,Math.max(0,e))}function n(e,t,n){return e+(t-e)*n}export{t as n,n as r,e as t};

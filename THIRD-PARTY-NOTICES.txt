@@ -373,6 +373,21 @@ Runtime copies: fonts/Gaegu-Notebook.woff2, fonts/PatrickHand-Notebook.woff2, fo
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 The modified fonts are redistributed under the same license and are not sold on their own.
 
+Jersey 10 — Pudding Escape UI (latin subset)
+--------------------------------------------
+
+Copyright 2023 The Soft Type Project Authors (https://github.com/scfried/soft-type-jersey)
+Released under the SIL Open Font License 1.1 (no Reserved Font Name).
+
+Source: https://fonts.google.com/specimen/Jersey+10
+License: https://openfontlicense.org/
+Full license text: fonts/Jersey10-OFL.txt
+Runtime copy: fonts/Jersey10-Pudding.woff2 (Pudding Escape's text and buttons, pudding.html)
+  (modified: Google Fonts latin subset, weight 400, WOFF2)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+The modified font is redistributed under the same license and is not sold on its own.
+
 Google Sans — sign-in button subset (site pages)
 ------------------------------------------------
 
