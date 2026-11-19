@@ -147,6 +147,35 @@ test('pudding and club milestones preserve only bounded metrics and approved val
   assert.ok(!JSON.stringify(events).includes('private'));
 });
 
+test('forge milestones keep only approved enums and bounded integers', () => {
+  const page = visit('https://oddbout.com/forge');
+  page.run();
+  const emit = (name, parameters) => page.window.dispatchEvent({ type: 'oddbout:milestone', detail: { name, parameters } });
+  emit('forge_start', { mode: 'first', email: 'private' });
+  emit('forge_delivery', { rank: 'S', level: 7.9, note: 'private' });
+  emit('forge_ad', { placement: 'energy', result: 'nope' });
+  emit('forge_session', { active_seconds: 95.4, merges: -1, deliveries: Infinity });
+  emit('forge_tutorial_step', { step: 9 });
+  emit('forge_unknown', { email: 'private' });
+  const events = page.window.dataLayer
+    .map(args => Array.from(args))
+    .filter(args => args[0] === 'event')
+    .slice(1);
+  assert.equal(events.length, 5);
+  assert.equal(JSON.stringify(events.map(e => e[1])), JSON.stringify(['forge_start', 'forge_delivery', 'forge_ad', 'forge_session', 'forge_tutorial_step']));
+  assert.equal(events[0][2].game_id, 'forge');
+  assert.equal(events[0][2].mode, 'first');
+  assert.equal(events[1][2].rank, 'S');
+  assert.equal(events[1][2].level, 7);
+  assert.equal(events[2][2].placement, 'energy');
+  assert.equal(events[2][2].result, undefined);
+  assert.equal(events[3][2].active_seconds, 95);
+  assert.equal(events[3][2].merges, undefined);
+  assert.equal(events[3][2].deliveries, undefined);
+  assert.equal(events[4][2].step, undefined);
+  assert.ok(!JSON.stringify(events).includes('private'));
+});
+
 test('campaign attribution is retained while unrelated query values are removed', () => {
   const page = visit('https://oddbout.com/?utm_source=instagram&utm_medium=social&utm_campaign=launch&email=private#fighters');
   page.run();
