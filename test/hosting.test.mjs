@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, cp, rm, readFile } from 'node:fs/promises';
@@ -478,5 +479,27 @@ test('a healthy old deployment does not count as the requested commit', async ()
     );
   } finally {
     await new Promise(resolve => server.close(resolve));
+  }
+});
+
+// A production tree can contain over 10,000 media files: ls-tree exceeds Node's default 1 MiB output buffer.
+test('publication Git reads retain a complete tree listing larger than 1 MiB', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'hosting-large-tree-'));
+  try {
+    git(root, 'init', '--quiet');
+    const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: root, input: '', encoding: 'utf8' }).trim();
+    const paths = Array.from({ length: 15000 }, (_, i) => `art/fixtures/${String(i).padStart(5, '0')}-${'x'.repeat(80)}.webp`);
+    execFileSync('git', ['update-index', '--index-info'], {
+      cwd: root,
+      input: paths.map(path => `100644 ${blob}\t${path}\n`).join(''),
+      encoding: 'utf8',
+    });
+    const tree = git(root, 'write-tree');
+    const listing = git(root, 'ls-tree', '-r', tree);
+    assert.ok(Buffer.byteLength(listing) > 1024 * 1024);
+    assert.equal(listing.split('\n').length, paths.length);
+    assert.ok(listing.endsWith(paths.at(-1)));
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 });
