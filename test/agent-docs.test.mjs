@@ -30,7 +30,7 @@ const docs = [
   '.cursor/skills/create-fighter/SKILL.md',
 ];
 // The game repository's deploy scripts, which these docs name.
-const gameScripts = ['fighter:edge', 'fighter:mcp'];
+const gameScripts = ['fighter:edge', 'fighter:mcp', 'publish:game'];
 const repositoryPath = /^(?:api|contracts|deploy|docs|examples|host|mcp|packages|plugins|scripts|server|supabase|test|tools|vendor|web|website|worker)\//;
 // A checkout made without its submodule (a new worktree, a clone without --recurse-submodules) has no engine files;
 // CI checks out the submodule, so it still checks these names.

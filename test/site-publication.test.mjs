@@ -4,7 +4,7 @@ import { mkdtemp, writeFile, rm, open, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { publicationConfig, loadPublicationEnvironment, cloudflareFetch, assertProviderServesSite } from '../scripts/site-publication.mjs';
-import { validateCloudflareFiles, verifyPagesPublicApi } from '../scripts/cloudflare-publication.mjs';
+import { pagesDeployment, validateCloudflareFiles, verifyPagesPublicApi } from '../scripts/cloudflare-publication.mjs';
 import { chatGptEmbedBuild } from '../scripts/chatgpt-embed-site.mjs';
 
 test('publication defaults to GitHub and rejects unknown or incomplete provider settings', () => {
@@ -152,4 +152,29 @@ test('publication verifies all public reads on Pages and rejects a static or leg
     ),
     /did not answer/,
   );
+});
+
+test('Wrangler deployment reports must name the requested project, commit and environment', () => {
+  const commit = 'a'.repeat(40);
+  /** @param {object} fields */
+  const report = fields =>
+    [
+      JSON.stringify({ type: 'wrangler-session' }),
+      JSON.stringify({
+        type: 'pages-deploy-detailed',
+        pages_project: 'oddbout-forge',
+        environment: 'production',
+        url: 'https://0123abcd.oddbout-forge.pages.dev',
+        deployment_trigger: { metadata: { commit_hash: commit } },
+        ...fields,
+      }),
+    ].join('\n') + '\n';
+  const expected = { project: 'oddbout-forge', commit, preview: false };
+  assert.equal(pagesDeployment(report({}), expected), 'https://0123abcd.oddbout-forge.pages.dev/');
+  assert.equal(pagesDeployment(report({ environment: 'preview' }), { ...expected, preview: true }), 'https://0123abcd.oddbout-forge.pages.dev/');
+  for (const fields of [{ pages_project: 'oddbout' }, { environment: 'preview' }, { deployment_trigger: { metadata: { commit_hash: 'b'.repeat(40) } } }]) {
+    assert.throws(() => pagesDeployment(report(fields), expected), /metadata does not match/);
+  }
+  assert.throws(() => pagesDeployment(report({ url: 'https://0123abcd.oddbout-pudding.pages.dev' }), expected), /deployment origin/);
+  assert.throws(() => pagesDeployment('', expected), /metadata does not match/);
 });
