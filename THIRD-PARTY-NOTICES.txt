@@ -388,6 +388,21 @@ Runtime copy: fonts/Jersey10-Pudding.woff2 (Pudding Escape's text and buttons, p
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 The modified font is redistributed under the same license and is not sold on its own.
 
+Galmuri (갈무리) — Legendary Blacksmith pixel UI font
+-----------------------------------------------------
+
+Copyright 2019-2025 Lee Minseo (quiple@quiple.dev)
+Released under the SIL Open Font License 1.1.
+
+Source: https://github.com/quiple/galmuri (npm galmuri@2.40.3)
+License: https://openfontlicense.org/
+Full license text: fonts/Galmuri-OFL.txt
+Runtime copies: fonts/Galmuri11.woff2, fonts/Galmuri11-Bold.woff2, fonts/Galmuri14.woff2 (Legendary Blacksmith's text and buttons, forge.html)
+  (unmodified WOFF2 files from the npm package)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+The font is not sold on its own.
+
 Google Sans — sign-in button subset (site pages)
 ------------------------------------------------
 
