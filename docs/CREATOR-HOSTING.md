@@ -412,6 +412,13 @@ previous GitHub Pages host are upgraded before issuing one-use links.
 
 ## Game sites
 
+When the game source exposes `tools/deploy/game-handoff-assets.mjs`, the ODDBOUT
+site builder calls its `pruneGameHandoffAssets` after copying public files and before
+writing the artifact fingerprint. This removes unreferenced copies owned by games
+whose old pages hand off to their own domains. Shared site media and the game's
+source public files remain. Older game sources without the hook keep their files.
+Publication still rejects any change made after this final build fingerprint.
+
 Legendary Forge and Pudding Escape have their own sites, built and published apart
 from the ODDBOUT site. Publishing one game changes neither the ODDBOUT site nor the
 other game.

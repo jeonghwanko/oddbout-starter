@@ -183,6 +183,13 @@ for (const url of new Set(fontUrls)) {
   });
 }
 for (const font of ['Pretendard-Regular.woff2', 'Pretendard-Bold.woff2']) await readFile(join(output, 'fonts', font));
+// Finalize the game-owned public media selection before sealing the artifact. Older game revisions keep their original public files.
+const gameAssetsModule = join(source, 'tools/deploy/game-handoff-assets.mjs');
+if (existsSync(gameAssetsModule)) {
+  const { pruneGameHandoffAssets } = await import(pathToFileURL(gameAssetsModule).href);
+  const omitted = await pruneGameHandoffAssets(output);
+  console.log(`[build-creator-site] omitted ${omitted.length} standalone game media copies`);
+}
 assertSameRevision(revision, buildRevision(source, hostingRoot));
 const release = {
   buildId: randomUUID(),
