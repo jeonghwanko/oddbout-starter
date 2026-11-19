@@ -65,7 +65,9 @@ async function stagePublicApi(temporary, site, project) {
 
 /**
  * A new deployment's first Pages Function reads can be slow (a cold start past the timeout) or briefly answer 502–504. Those are asked
- * again; a response that is not the Pages Function's JSON is refused at once.
+ * again, and so is a 404: a deployment's own address can answer Cloudflare's HTML 404 for its `/api` routes for a short while after the
+ * upload (ODDBOUT deploys 545 and 547 stopped on it while production already served the new build). Any other response that is not the
+ * Pages Function's JSON is refused at once, and a 404 still standing after the last attempt is refused too.
  * @param {string} base @param {typeof fetch} [request]
  * @param {{ attempts?: number, timeoutMs?: number, wait?: (ms: number) => Promise<unknown> }} [options]
  */
@@ -86,7 +88,7 @@ export async function verifyPagesPublicApi(
         await wait(5_000 * attempt);
         continue;
       }
-      if (response.status >= 502 && response.status <= 504 && attempt < attempts) {
+      if ((response.status === 404 || (response.status >= 502 && response.status <= 504)) && attempt < attempts) {
         await response.body?.cancel();
         await wait(5_000 * attempt);
         continue;
