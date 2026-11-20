@@ -212,13 +212,15 @@ test('forge milestones keep only approved enums and bounded integers', () => {
   emit('forge_ad', { placement: 'energy', result: 'nope' });
   emit('forge_session', { active_seconds: 95.4, merges: -1, deliveries: Infinity });
   emit('forge_tutorial_step', { step: 9 });
+  emit('forge_energy_empty', { level: 4, minutes: 37.6, note: 'private' });
+  emit('forge_ad', { placement: 'skip', result: 'finished' });
   emit('forge_unknown', { email: 'private' });
   const events = page.window.dataLayer
     .map(args => Array.from(args))
     .filter(args => args[0] === 'event')
     .slice(1);
-  assert.equal(events.length, 5);
-  assert.equal(JSON.stringify(events.map(e => e[1])), JSON.stringify(['forge_start', 'forge_delivery', 'forge_ad', 'forge_session', 'forge_tutorial_step']));
+  assert.equal(events.length, 7);
+  assert.equal(JSON.stringify(events.map(e => e[1])), JSON.stringify(['forge_start', 'forge_delivery', 'forge_ad', 'forge_session', 'forge_tutorial_step', 'forge_energy_empty', 'forge_ad']));
   assert.equal(events[0][2].game_id, 'forge');
   assert.equal(events[0][2].mode, 'first');
   assert.equal(events[1][2].rank, 'S');
@@ -229,6 +231,11 @@ test('forge milestones keep only approved enums and bounded integers', () => {
   assert.equal(events[3][2].merges, undefined);
   assert.equal(events[3][2].deliveries, undefined);
   assert.equal(events[4][2].step, undefined);
+  assert.equal(events[5][2].level, 4);
+  assert.equal(events[5][2].minutes, 37);
+  // The craft skip ad was removed from the game (2026-11-20).
+  assert.equal(events[6][2].placement, undefined);
+  assert.equal(events[6][2].result, 'finished');
   assert.ok(!JSON.stringify(events).includes('private'));
 });
 

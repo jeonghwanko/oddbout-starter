@@ -135,10 +135,12 @@ function startAnalytics(measurementId, hostname, apiBase, updateSlugs, game) {
       forge_level_up: { level: 999 },
       forge_unlock: { family: ['weapon', 'bow', 'armor', 'jewel'] },
       forge_board_full: {},
-      forge_ad: { placement: ['energy', 'skip', 'bubble', 'storage'], result: ['finished', 'error'] },
+      forge_ad: { placement: ['energy', 'bubble', 'storage'], result: ['finished', 'error'] },
       forge_daily: { kind: ['attendance', 'request'], day: 7 },
       forge_expand: { kind: ['board', 'storage'], level: 99 },
       forge_session: { active_seconds: 86400, merges: 100000, deliveries: 100000 },
+      // A generator tap spent the last energy point: the fame level and the minutes since the game began (one year at most).
+      forge_energy_empty: { level: 99, minutes: 525600 },
     };
     if (
       ![
