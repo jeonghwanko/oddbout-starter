@@ -454,6 +454,21 @@ Runtime copy: src/creator/assets/google/GoogleSans-Medium.ttf (bundled by the cr
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 The modified font is redistributed under the same license and is not sold on its own.
 
+Gaegu (개구) Bold — support page hand-lettering subset (site pages)
+------------------------------------------------------------------
+
+Copyright 2018 The Gaegu Project Authors (https://github.com/JIKJISOFT/Gaegu)
+Released under the SIL Open Font License 1.1 (no Reserved Font Name).
+
+Source: https://github.com/google/fonts/tree/main/ofl/gaegu
+License: https://openfontlicense.org/
+Full license text: fonts/Gaegu-OFL.txt
+Runtime copy: src/creator/assets/gaegu/Gaegu-Bold.support.woff2 (bundled by the support page's stylesheet)
+  (modified: subset to printable ASCII and the support page copy, tools/art/subset-support-font.py)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+The modified font is redistributed under the same license and is not sold on its own.
+
 LobeHub Icons — agent marks (creator pages)
 -------------------------------------------
 
