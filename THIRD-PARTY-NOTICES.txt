@@ -433,8 +433,11 @@ Released under the SIL Open Font License 1.1.
 Source: https://github.com/quiple/galmuri (npm galmuri@2.40.3)
 License: https://openfontlicense.org/
 Full license text: fonts/Galmuri-OFL.txt
-Runtime copies: fonts/Galmuri11.woff2, fonts/Galmuri11-Bold.woff2, fonts/Galmuri14.woff2 (Legendary Blacksmith's text and buttons, forge.html)
-  (unmodified WOFF2 files from the npm package)
+Runtime copies: fonts/Galmuri11-Forge.woff2, fonts/Galmuri11-Bold-Forge.woff2, fonts/Galmuri14-Forge.woff2 (Legendary Blacksmith's text and buttons, forge.html)
+  (subsets of the npm package's WOFF2 files: only the characters the game writes, hinting removed; same font names — the license
+  reserves none)
+Full copies: fonts/Galmuri11.woff2, fonts/Galmuri11-Bold.woff2, fonts/Galmuri14.woff2
+  (unmodified WOFF2 files from the npm package; the source of the subsets and of the game's source package)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 The font is not sold on its own.

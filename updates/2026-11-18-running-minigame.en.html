@@ -10,7 +10,18 @@
   const current = new URL(window.location.href);
   const fragment = new URLSearchParams(current.hash.slice(1));
   const privateKeys = ['code', 'state', 'handoff', 'dot', 'token', 'access_token', 'refresh_token', 'id_token', 'error_description'];
-  if (privateKeys.some(key => current.searchParams.has(key) || fragment.has(key))) return;
+  const followerCup = hostname === 'life.oddbout.com' && ['/meme/', '/meme/life-cup.html'].includes(current.pathname);
+  if (privateKeys.some(key => current.searchParams.has(key) || fragment.has(key))) {
+    if (followerCup)
+      window.addEventListener(
+        'oddbout:follower-cup-auth-ready',
+        () => {
+          startAnalytics(measurementId, hostname, apiBase, updateSlugs, game);
+        },
+        { once: true },
+      );
+    return;
+  }
   const campaign = new URLSearchParams();
   for (const key of ['utm_id', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content']) {
     const value = current.searchParams.get(key);
@@ -75,6 +86,10 @@
   window.addEventListener('oddbout:milestone', event => {
     if (!permitted()) return;
     const { name, parameters = {} } = event.detail ?? {};
+    if (followerCup && ['follower_cup_draw_click', 'follower_cup_x_connected', 'follower_cup_start'].includes(name)) {
+      window.gtag('event', name, { ...page, send_to: measurementId });
+      return;
+    }
     // 첫 선수 무료 (2026-10-30): the hosted request, the entry and the wish for one more fighter (the finished motions are counted from the
     // database, measure-export's freeFunnel).
     const club = {
@@ -264,6 +279,9 @@
       if (!target || !document.body.contains(target)) return;
       const action = target.getAttribute('data-analytics-action');
       if (action === 'start') send('landing_start_click');
+      if (action === 'follower_cup' || (action === 'start' && target.getAttribute('data-start-destination') === 'follower-cup')) {
+        send('follower_cup_entry_click');
+      }
       if (action === 'world') send('world_link_click');
       if (action === 'read_update') {
         const slug = slugFor(target);
