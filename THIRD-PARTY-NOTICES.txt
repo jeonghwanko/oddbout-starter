@@ -69,6 +69,41 @@ License: https://creativecommons.org/publicdomain/zero/1.0/
 Runtime copies: audio/sfx/wood-impact-heavy.ogg,
   audio/sfx/body-impact-heavy.ogg
 
+Kenney Pixel Platformer 1.2 — Bounce Ball art
+----------------------------------------------
+
+Created and distributed by Kenney under Creative Commons Zero 1.0 (CC0 1.0).
+Bounce Ball uses the pack's ground tiles, crate, spring, spikes, arrow signs, door,
+flag, gem, hearts, lock, the spiked character (as the mine) and the background tiles.
+The arrow blocks put the arrow sign's board on the pack's plain block; side spikes
+are the spike tile turned by 90 degrees; the backgrounds and the link preview image
+lay out pack tiles. Nothing is drawn new.
+
+Source: https://kenney.nl/assets/pixel-platformer
+License: https://creativecommons.org/publicdomain/zero/1.0/
+Runtime copies: art/bounce/tiles.webp, art/bounce/bg-meadow.webp, art/bounce/bg-snow.webp,
+  art/bounce/bg-desert.webp, art/bounce/hero.webp, art/bounce/og.webp
+
+Kenney Pixel Platformer: Industrial Expansion 1.0 — Bounce Ball jump block
+--------------------------------------------------------------------------
+
+Created and distributed by Kenney under Creative Commons Zero 1.0 (CC0 1.0).
+Bounce Ball uses the pack's blue button block (up and pressed) as the jump block.
+
+Source: https://kenney.nl/assets/pixel-platformer-industrial-expansion
+License: https://creativecommons.org/publicdomain/zero/1.0/
+Runtime copy: art/bounce/tiles.webp
+
+"Bouncing Ball Guy" by deiphiz — Bounce Ball ball
+------------------------------------------------
+
+Released on OpenGameArt.org under Creative Commons Zero 1.0 (CC0 1.0).
+Bounce Ball uses five frames (round, squashed, stretched) without the drawn shadow.
+
+Source: https://opengameart.org/content/bouncing-ball-guy
+License: https://creativecommons.org/publicdomain/zero/1.0/
+Runtime copy: art/bounce/ball.webp
+
 Kenney RPG Audio 1.0
 --------------------
 
@@ -382,7 +417,8 @@ Released under the SIL Open Font License 1.1 (no Reserved Font Name).
 Source: https://fonts.google.com/specimen/Jersey+10
 License: https://openfontlicense.org/
 Full license text: fonts/Jersey10-OFL.txt
-Runtime copy: fonts/Jersey10-Pudding.woff2 (Pudding Escape's text and buttons, pudding.html)
+Runtime copy: fonts/Jersey10-Pudding.woff2 (Pudding Escape's text and buttons, pudding.html;
+  Bounce Ball's titles, buttons and numbers, bounce.oddbout.com)
   (modified: Google Fonts latin subset, weight 400, WOFF2)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
