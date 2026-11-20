@@ -165,6 +165,7 @@ function startAnalytics(measurementId, hostname, apiBase, updateSlugs, game) {
       forge_error: { kind: ['script', 'promise', 'image', 'load', 'boot'] },
       forge_boot: { seconds: 600 },
       forge_save: { state: ['higher', 'corrupt', 'blocked', 'tablock'] },
+      forge_screen: { screen: ['home', 'board'], via: ['boot', 'button', 'back', 'goal'] },
     };
     if (
       ![

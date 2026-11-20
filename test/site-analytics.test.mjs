@@ -245,6 +245,8 @@ test('forge board, free-tap and restoration milestones pass their bounded values
   emit('forge_error', { kind: 'image', message: 'private' });
   emit('forge_boot', { seconds: 3.6 });
   emit('forge_save', { state: 'higher' });
+  emit('forge_screen', { screen: 'home', via: 'boot' });
+  emit('forge_screen', { screen: 'lobby', via: 'boot' });
   const events = page.window.dataLayer
     .map(args => Array.from(args))
     .filter(args => args[0] === 'event')
@@ -265,6 +267,8 @@ test('forge board, free-tap and restoration milestones pass their bounded values
   assert.equal(byName('forge_error')[0].message, undefined);
   assert.equal(byName('forge_boot')[0].seconds, 3);
   assert.equal(byName('forge_save')[0].state, 'higher');
+  assert.equal(byName('forge_screen')[0].screen, 'home');
+  assert.equal(byName('forge_screen')[1].screen, undefined);
   assert.ok(!JSON.stringify(events).includes('private'));
 });
 
