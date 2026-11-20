@@ -108,7 +108,7 @@
       pudding_share: { method: ['native', 'clipboard'] },
       pudding_tutorial_done: { seconds: 86400, how: ['perfect', 'tries', 'idle'] },
       pudding_continue: { method: ['ad', 'gold'], count: 3 },
-      pudding_purchase: { kind: ['look', 'item', 'card'], gold: 100000 },
+      pudding_purchase: { kind: ['look', 'item', 'card', 'unlock'], gold: 100000 },
       pudding_merge: { from: ['basic', 'rare', 'epic', 'forge'], jelly: puddingJellies, new_jelly: ['yes', 'no'] },
     };
     // Legendary Forge (/forge) sends these from the game itself: enum values and bounded integers only.
@@ -121,10 +121,19 @@
       forge_level_up: { level: 999 },
       forge_unlock: { family: ['weapon', 'bow', 'armor', 'jewel'] },
       forge_board_full: {},
-      forge_ad: { placement: ['energy', 'skip', 'bubble', 'storage'], result: ['finished', 'error'] },
+      forge_ad: { placement: ['energy', 'bubble', 'storage'], result: ['finished', 'error', 'free'] },
       forge_daily: { kind: ['attendance', 'request'], day: 7 },
-      forge_expand: { kind: ['board', 'storage'], level: 99 },
+      forge_expand: { kind: ['storage'], level: 99 },
       forge_session: { active_seconds: 86400, merges: 100000, deliveries: 100000 },
+      forge_energy_empty: { level: 999, minutes: 525600 },
+      forge_block_break: { kind: ['rubble', 'iron', 'star', 'pick'], open: 63 },
+      forge_free_tap: { level: 999 },
+      forge_restore: { chapter: 4, task: 6 },
+      forge_story_skip: { chapter: 4, task: 6 },
+      forge_chapter_done: { chapter: 4, minutes: 525600 },
+      forge_error: { kind: ['script', 'promise', 'image', 'load', 'boot'] },
+      forge_boot: { seconds: 600 },
+      forge_save: { state: ['higher', 'corrupt', 'blocked', 'tablock'] },
     };
     if (
       ![
