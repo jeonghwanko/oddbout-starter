@@ -137,7 +137,7 @@ function startAnalytics(measurementId, hostname, apiBase, updateSlugs, game) {
       forge_level_up: { level: 999 },
       forge_unlock: { family: ['weapon', 'bow', 'armor', 'jewel'] },
       forge_board_full: {},
-      forge_ad: { placement: ['energy', 'bubble', 'storage'], result: ['finished', 'error'] },
+      forge_ad: { placement: ['energy', 'bubble', 'storage'], result: ['finished', 'error', 'free'] },
       forge_daily: { kind: ['attendance', 'request'], day: 7 },
       forge_expand: { kind: ['storage'], level: 99 },
       forge_session: { active_seconds: 86400, merges: 100000, deliveries: 100000 },
@@ -147,6 +147,9 @@ function startAnalytics(measurementId, hostname, apiBase, updateSlugs, game) {
       forge_restore: { chapter: 4, task: 6 },
       forge_story_skip: { chapter: 4, task: 6 },
       forge_chapter_done: { chapter: 4, minutes: 525600 },
+      forge_error: { kind: ['script', 'promise', 'image', 'load', 'boot'] },
+      forge_boot: { seconds: 600 },
+      forge_save: { state: ['higher', 'corrupt', 'blocked', 'tablock'] },
     };
     if (
       ![
