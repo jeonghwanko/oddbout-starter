@@ -582,7 +582,7 @@ itself emits `oddbout:milestone` events (game repository `src/pudding/analytics.
 - `pudding_tutorial_done`: `seconds` (0–86,400) and `how` (`perfect`, `tries`, or `idle` — the tutorial ended with
   no input).
 - `pudding_continue`: `method` (`ad` or `gold`) and `count` (1–3), sent only when the run actually continues.
-- `pudding_purchase`: `kind` (`look`, `item`, or `card`) and `gold` (0–100,000) paid in the shop.
+- `pudding_purchase`: `kind` (`look`, `item`, `card`, or `unlock`) and `gold` (0–100,000) paid in the shop.
 - `pudding_merge`: `from` (`basic`, `rare`, `epic`, or `forge`), `jelly` (the resulting jelly ID), and `new_jelly` (`yes` or `no`).
 
 Approved jelly IDs are `bear`, `bunny`, `worm`, `penguin`, `frog`, `cola`, `ninjacat`, `dragon`,
