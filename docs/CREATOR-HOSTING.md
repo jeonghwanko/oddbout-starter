@@ -419,14 +419,20 @@ whose old pages hand off to their own domains. Shared site media and the game's
 source public files remain. Older game sources without the hook keep their files.
 Publication still rejects any change made after this final build fingerprint.
 
-Legendary Forge and Pudding Escape have their own sites, built and published apart
-from the ODDBOUT site. Publishing one game changes neither the ODDBOUT site nor the
-other game.
+Legendary Forge, Pudding Escape and Bounce Ball have their own sites, built and
+published apart from the ODDBOUT site. Publishing one game changes neither the ODDBOUT
+site nor the other games.
 
 | Game      | Cloudflare Pages project | Domain                        |
 | --------- | ------------------------ | ----------------------------- |
 | `forge`   | `oddbout-forge`          | `https://forge.oddbout.com`   |
 | `pudding` | `oddbout-pudding`        | `https://pudding.oddbout.com` |
+| `bounce`  | `oddbout-bounce`         | `https://bounce.oddbout.com`  |
+
+`GAME_SITE_PAGES` (`scripts/game-site.mjs`) names each site's pages. Forge and Pudding
+serve the game at `/`: `index.html` is a copy of the entry page (`forge.html`,
+`pudding.html`). Bounce Ball has an intro page at `/` (`index.html`) and the game at
+`/game` (`game.html`); both pages carry the consent defaults first and Analytics.
 
 The game repository owns the game package (`kaito_web/tools/deploy/game-package.mjs`,
 `buildGamePackage`), the domains (`kaito_web/src/platform/game-sites.json`) and the
@@ -434,7 +440,7 @@ guards before a publish. Its `npm run publish:game -- <game>` runs the two scrip
 below from a clean starter checkout at `origin/main`, with a temporary output folder.
 Do not run them by hand for production.
 
-- `node scripts/build-game-site.mjs <kaito_web> <forge|pudding> <empty-output-directory>`
+- `node scripts/build-game-site.mjs <kaito_web> <forge|pudding|bounce> <empty-output-directory>`
   builds the game's `web` package with this repository's Analytics plugin, bound to
   the game's domain. It needs no Cloudflare credentials. Both checkouts must be clean
   (`buildRevision`, the same rule as the ODDBOUT site). It writes `deployment.json`:
@@ -442,7 +448,7 @@ Do not run them by hand for production.
   game repository), `hostingCommit` (this repository), `dirty`, and the fingerprint
   (`digest`, `files`, `bytes`). The game repository's lineage check and `game:record`
   read `sourceCommit` and `game` from `https://<game domain>/deployment.json`.
-- `node scripts/publish-game-site.mjs <forge|pudding> <built-directory> [--dry-run] [--preview]`
+- `node scripts/publish-game-site.mjs <forge|pudding|bounce> <built-directory> [--dry-run] [--preview]`
   checks the build again and uploads it with the pinned Wrangler (`pages deploy`) to
   `oddbout-<game>`: branch `main`, or `preview` with `--preview`. Environment:
   `CLOUDFLARE_ACCOUNT_ID`, `ODDBOUT_GAME_ORIGIN` and `CLOUDFLARE_API_TOKEN` (the shell's,
@@ -461,8 +467,9 @@ domain of the project), the publish still succeeds and says to attach the domain
 Pages project and check that file again.
 
 Analytics on a game site uses the same tag, measurement ID and privacy guards as the
-ODDBOUT site, on the game's host only. The game's entry page (`/forge.html`, `/forge`)
-and `/` are both reported as `/`. The game sends its own `forge_*` or `pudding_*`
+ODDBOUT site, on the game's host only. When the game opens at `/`, its entry page
+(`/forge.html`, `/forge`) and `/` are both reported as `/`. Bounce Ball reports its intro
+(`/`) and its game (`/game`) as separate pages. The game sends its own `forge_*` or `pudding_*`
 milestones; `game_id` separates the games in reports.
 
 Before a game's first publish, create its Pages project once as a Direct Upload project

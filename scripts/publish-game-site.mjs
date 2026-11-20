@@ -1,7 +1,7 @@
 // @ts-check
 // Publishes a built game site to its Cloudflare Pages project `oddbout-<game>` (docs/CREATOR-HOSTING.md#game-sites). The game repository's
 // `npm run publish:game` runs it after its own guards:
-//   node scripts/publish-game-site.mjs <forge|pudding> <built-directory> [--dry-run] [--preview]
+//   node scripts/publish-game-site.mjs <forge|pudding|bounce> <built-directory> [--dry-run] [--preview]
 // Environment: CLOUDFLARE_ACCOUNT_ID, ODDBOUT_GAME_ORIGIN (https://<game>.oddbout.com) and, to upload, CLOUDFLARE_API_TOKEN (the shell's,
 // or this checkout's ignored .env like the ODDBOUT site's publisher). `--dry-run` checks the files and prints the plan; nothing is uploaded.
 import assert from 'node:assert/strict';

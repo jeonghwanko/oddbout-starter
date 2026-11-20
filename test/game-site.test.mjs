@@ -10,6 +10,7 @@ import {
   assertConsentFirst,
   buildGameSite,
   checkGameOrigin,
+  GAME_SITE_PAGES,
   gameOriginVerdict,
   gameProject,
   gamePublicationTarget,
@@ -112,6 +113,42 @@ test('a built game site passes only with its own deployment.json, consent first,
   await writeFile(join(dirty.site, 'deployment.json'), JSON.stringify({ ...dirty.release, dirty: true }));
   await assert.rejects(verifyGameArtifact(dirty.site, { game: 'forge', origin }), /clean, committed sources/);
   await rm(dirty.site, { recursive: true, force: true });
+});
+
+test('bounce: index.html is an intro page and game.html serves the game, both with consent first', async t => {
+  const bounceOrigin = 'https://bounce.oddbout.com';
+  const intro = `<!doctype html><html><head>${consent}<script type="module" src="./assets/intro.js"></script></head><body><a href="./game">Play</a></body></html>`;
+  const game = `<!doctype html><html><head>${consent}<script type="module" src="./assets/game.js"></script></head><body></body></html>`;
+  const analytics = `(()=>{})(\`${hosting.analyticsMeasurementId}\`,\`bounce.oddbout.com\`,null,[],null);"https://www.googletagmanager.com/gtag/js?id="`;
+  /** @param {Record<string, string>} files */
+  async function bounceSite(files = {}) {
+    const site = await mkdtemp(join(tmpdir(), 'game-site-test-'));
+    for (const [path, text] of Object.entries({ 'index.html': intro, 'game.html': game, 'assets/game.js': analytics, ...files })) {
+      await mkdir(join(site, path, '..'), { recursive: true });
+      await writeFile(join(site, path), text);
+    }
+    const release = gameSiteRelease({ game: 'bounce', origin: bounceOrigin, builtAt: '2026-11-20T00:00:00.000Z', revision, measured: await fingerprint(site) });
+    await writeFile(join(site, 'deployment.json'), JSON.stringify(release, null, 2) + '\n');
+    return { site, release };
+  }
+  assert.deepEqual(GAME_SITE_PAGES.bounce, { entry: 'game.html', home: 'intro' });
+  assert.equal(gameProject('bounce'), 'oddbout-bounce');
+  const { site, release } = await bounceSite();
+  t.after(() => rm(site, { recursive: true, force: true }));
+  assert.deepEqual(await verifyGameArtifact(site, { game: 'bounce', origin: bounceOrigin }), release);
+  for (const [files, message] of [
+    [{ 'index.html': game }, /index\.html must be the intro page/],
+    [{ 'index.html': '<!doctype html><html><head><script src="./assets/intro.js"></script></head></html>' }, /first script: index\.html/],
+    [{ 'game.html': '<!doctype html><html><head></head></html>' }, /first script: game\.html/],
+  ]) {
+    const broken = await bounceSite(files);
+    await assert.rejects(verifyGameArtifact(broken.site, { game: 'bounce', origin: bounceOrigin }), message);
+    await rm(broken.site, { recursive: true, force: true });
+  }
+  const noGame = await bounceSite();
+  await rm(join(noGame.site, 'game.html'));
+  await assert.rejects(verifyGameArtifact(noGame.site, { game: 'bounce', origin: bounceOrigin }), /Missing game site file: game\.html/);
+  await rm(noGame.site, { recursive: true, force: true });
 });
 
 test('consent defaults must come before AdSense and the Analytics module', () => {
