@@ -182,6 +182,7 @@ test('pudding funnel milestones keep only approved enums and bounded integers', 
   emit('pudding_merge', { from: 'forge', jelly: 'mecha', new_jelly: 'yes', note: 'private' });
   emit('pudding_merge', { from: 'private', jelly: 'private', new_jelly: 'maybe' });
   emit('pudding_run_end', { tip: 'private' });
+  emit('pudding_purchase', { kind: 'unlock', gold: 60000 });
   const events = page.window.dataLayer
     .map(args => Array.from(args))
     .filter(args => args[0] === 'event')
@@ -198,6 +199,7 @@ test('pudding funnel milestones keep only approved enums and bounded integers', 
       'pudding_merge',
       'pudding_merge',
       'pudding_run_end',
+      'pudding_purchase',
     ]),
   );
   assert.ok(events.every(e => e[2].game_id === 'pudding'));
@@ -222,6 +224,8 @@ test('pudding funnel milestones keep only approved enums and bounded integers', 
   assert.equal(events[7][2].jelly, undefined);
   assert.equal(events[7][2].new_jelly, undefined);
   assert.equal(events[8][2].tip, undefined);
+  assert.equal(events[9][2].kind, 'unlock');
+  assert.equal(events[9][2].gold, 60000);
   assert.ok(!JSON.stringify(events).includes('private'));
 });
 

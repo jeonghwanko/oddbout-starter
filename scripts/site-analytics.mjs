@@ -124,7 +124,7 @@ function startAnalytics(measurementId, hostname, apiBase, updateSlugs, game) {
       pudding_share: { method: ['native', 'clipboard'] },
       pudding_tutorial_done: { seconds: 86400, how: ['perfect', 'tries', 'idle'] },
       pudding_continue: { method: ['ad', 'gold'], count: 3 },
-      pudding_purchase: { kind: ['look', 'item', 'card'], gold: 100000 },
+      pudding_purchase: { kind: ['look', 'item', 'card', 'unlock'], gold: 100000 },
       pudding_merge: { from: ['basic', 'rare', 'epic', 'forge'], jelly: puddingJellies, new_jelly: ['yes', 'no'] },
     };
     // Legendary Forge (/forge) sends these from the game itself: enum values and bounded integers only.
