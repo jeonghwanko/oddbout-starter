@@ -298,7 +298,7 @@ Procedures: `docs/CREATOR-HOSTING.md`.
 | Database | `supabase/migrations/` | a migration applied on its own, never by a merge |
 | Render validator and `mcp.oddbout.com` gateway | `worker/` and its imports (not `api/handler.mjs`); production `dependencies` only | `npm run worker:deploy -- <full commit sha>` with the user's hook |
 | Creator site | the game's private source, `website/`, `web/` and what `scripts/build-creator-site.mjs` imports | `npm run site:build`, then `npm run site:publish` |
-| Game sites (`forge.oddbout.com`, `pudding.oddbout.com`) | the game's web package and what `scripts/build-game-site.mjs` imports ([docs/CREATOR-HOSTING.md](docs/CREATOR-HOSTING.md#game-sites)) | the game repository's `npm run publish:game` |
+| Game sites (`forge.oddbout.com`, `pudding.oddbout.com`, `bounce.oddbout.com`) | the game's web package and what `scripts/build-game-site.mjs` imports ([docs/CREATOR-HOSTING.md](docs/CREATOR-HOSTING.md#game-sites)) | the game repository's `npm run publish:game` |
 | Creator kit and plugin | `plugins/ai-fighter/`, the runtime list and import graph in `scripts/build-plugin-bundle.mjs`, `vendor/sprite-gen` | the next kit release (`docs/PLUGIN-DISTRIBUTION.md`) |
 | Generation PCs | `HOST_FILES` in `scripts/host.mjs`, and this repo at `KIT_REF` in `host/og` | a pull request moving `KIT_REF`, then `og self-update` and `og setup` on the official PC, and `npm run host:setup` on community hosts |
 

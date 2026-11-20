@@ -13,7 +13,7 @@ const resolvedId = '\0oddbout-analytics';
 
 /**
  * @param {string} measurementId @param {string} hostname @param {string | null} apiBase @param {string[]} updateSlugs
- * @param {string | null} game A game site's game (`forge` on forge.oddbout.com), whose entry page is its home; null on the ODDBOUT site.
+ * @param {string | null} game A game site's game (`forge` on forge.oddbout.com) whose entry page is its home; null on the ODDBOUT site and on a game site with an intro home (bounce).
  */
 function startAnalytics(measurementId, hostname, apiBase, updateSlugs, game) {
   if (

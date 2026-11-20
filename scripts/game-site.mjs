@@ -1,5 +1,6 @@
 // @ts-check
-// Game sites (docs/CREATOR-HOSTING.md#game-sites): Legendary Forge at forge.oddbout.com and Pudding Escape at pudding.oddbout.com, each its
+// Game sites (docs/CREATOR-HOSTING.md#game-sites): Legendary Forge at forge.oddbout.com, Pudding Escape at pudding.oddbout.com and
+// Bounce Ball at bounce.oddbout.com, each its
 // own Cloudflare Pages project, built and published apart from the ODDBOUT site. The game repository owns the package
 // (kaito_web/tools/deploy/game-package.mjs, `buildGamePackage`) and the guards before a publish (`npm run publish:game`); this repository
 // owns what a game site adds to the package (Analytics, deployment.json), the upload and its checks.
@@ -11,7 +12,18 @@ import { assertSameRevision, buildRevision, fingerprint, hosting } from './hosti
 import { googleAnalyticsPlugin } from './site-analytics.mjs';
 
 /** The games with a site. The name is the Pages project's suffix (`oddbout-<game>`) and the key in the game's `game-sites.json`. */
-export const GAME_SITES = Object.freeze(['forge', 'pudding']);
+export const GAME_SITES = Object.freeze(['forge', 'pudding', 'bounce']);
+/**
+ * Each game site's pages. `entry` is the page that serves the game (the game package's `entry`). `home: 'entry'` means `index.html` is a
+ * copy of it (the game opens at `/`); `home: 'intro'` means `index.html` is an intro page that links to the game (bounce: `/` intro,
+ * `/game` game).
+ * @type {Readonly<Record<string, Readonly<{ entry: string, home: 'entry' | 'intro' }>>>}
+ */
+export const GAME_SITE_PAGES = Object.freeze({
+  forge: Object.freeze({ entry: 'forge.html', home: 'entry' }),
+  pudding: Object.freeze({ entry: 'pudding.html', home: 'entry' }),
+  bounce: Object.freeze({ entry: 'game.html', home: 'intro' }),
+});
 /** The Pages branch of `--preview` uploads (`preview.oddbout-<game>.pages.dev`); production is `main`. */
 export const GAME_PREVIEW_BRANCH = 'preview';
 export const GAME_PRODUCTION_BRANCH = 'main';
@@ -120,13 +132,16 @@ export function assertConsentFirst(html, file) {
 export async function verifyGameArtifact(root, { game, origin, measurementId = hosting.analyticsMeasurementId }) {
   assertGame(game);
   assertOrigin(origin, 'The game origin');
-  const pages = ['index.html', `${game}.html`];
+  const { entry: entryPage, home } = GAME_SITE_PAGES[game];
+  const pages = ['index.html', entryPage];
   for (const page of [...pages, 'deployment.json']) {
     if (!(await stat(join(root, page)).catch(() => null))?.isFile()) throw new Error(`Missing game site file: ${page}`);
   }
   const [index, entry] = await Promise.all(pages.map(page => readFile(join(root, page), 'utf8')));
-  if (index !== entry) throw new Error(`index.html must be the ${game}.html entry`);
-  assertConsentFirst(entry, `${game}.html`);
+  if (home === 'entry' && index !== entry) throw new Error(`index.html must be the ${entryPage} entry`);
+  if (home === 'intro' && index === entry) throw new Error(`index.html must be the intro page, not the ${entryPage} entry`);
+  assertConsentFirst(entry, entryPage);
+  if (home === 'intro') assertConsentFirst(index, 'index.html');
   const scripts = (await readdir(root, { recursive: true })).map(path => String(path).replaceAll('\\', '/')).filter(path => /\.(?:m?js|html)$/.test(path));
   const loader = 'googletagmanager.com/gtag/js?id=',
     host = new URL(origin).hostname;
@@ -202,10 +217,12 @@ export async function buildGameSite({
     game,
     portal: 'web',
     output,
-    plugins: [googleAnalyticsPlugin(measurementId, origin + '/', null, { game })],
+    // `game` makes the entry page count as `/` in Analytics; an intro home keeps `/` and the game's own page apart.
+    plugins: [googleAnalyticsPlugin(measurementId, origin + '/', null, { game: GAME_SITE_PAGES[game].home === 'entry' ? game : null })],
   });
-  if (built.origin !== origin || built.entry !== `${game}.html`) {
-    throw new Error(`The game package is not ${game}.html at ${origin}: ${built.entry} at ${built.origin}`);
+  const { entry } = GAME_SITE_PAGES[game];
+  if (built.origin !== origin || built.entry !== entry) {
+    throw new Error(`The game package is not ${entry} at ${origin}: ${built.entry} at ${built.origin}`);
   }
   assertSameRevision(before, revision(source, hostingRoot));
   const release = gameSiteRelease({ game, origin, builtAt, revision: before, measured: await fingerprint(output) });
