@@ -225,6 +225,36 @@ test('pudding funnel milestones keep only approved enums and bounded integers', 
   assert.ok(!JSON.stringify(events).includes('private'));
 });
 
+test('forge board, free-tap and restoration milestones pass their bounded values', () => {
+  const page = visit('https://oddbout.com/forge');
+  page.run();
+  const emit = (name, parameters) => page.window.dispatchEvent({ type: 'oddbout:milestone', detail: { name, parameters } });
+  emit('forge_block_break', { kind: 'iron', open: 20, note: 'private' });
+  emit('forge_block_break', { kind: 'stone', open: 99 });
+  emit('forge_free_tap', { level: 3 });
+  emit('forge_restore', { chapter: 1, task: 2 });
+  emit('forge_story_skip', { chapter: 2, task: 7 });
+  emit('forge_chapter_done', { chapter: 3, minutes: 250 });
+  emit('forge_energy_empty', { level: 4, minutes: 12 });
+  emit('forge_expand', { kind: 'board', level: 2 });
+  const events = page.window.dataLayer
+    .map(args => Array.from(args))
+    .filter(args => args[0] === 'event')
+    .slice(1);
+  const byName = name => events.filter(e => e[1] === name).map(e => e[2]);
+  assert.equal(byName('forge_block_break')[0].kind, 'iron');
+  assert.equal(byName('forge_block_break')[0].open, 20);
+  assert.equal(byName('forge_block_break')[1].kind, undefined);
+  assert.equal(byName('forge_block_break')[1].open, undefined);
+  assert.equal(byName('forge_free_tap')[0].level, 3);
+  assert.equal(byName('forge_restore')[0].task, 2);
+  assert.equal(byName('forge_story_skip')[0].task, undefined);
+  assert.equal(byName('forge_chapter_done')[0].minutes, 250);
+  assert.equal(byName('forge_energy_empty')[0].minutes, 12);
+  assert.equal(byName('forge_expand')[0].kind, undefined);
+  assert.ok(!JSON.stringify(events).includes('private'));
+});
+
 test('forge milestones keep only approved enums and bounded integers', () => {
   const page = visit('https://oddbout.com/forge');
   page.run();
