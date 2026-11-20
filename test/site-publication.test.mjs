@@ -142,6 +142,25 @@ test('publication verifies all public reads on Pages and rejects a static or leg
   );
   assert.deepEqual([...tries.values()], [3, 3, 3]);
   assert.deepEqual(waits, [5_000, 5_000, 5_000, 10_000, 10_000, 10_000]);
+  // A deployment's address still spreading: its HTML 404 is asked again; a 404 that stays is refused after the attempts.
+  const spread = new Map();
+  await verifyPagesPublicApi(
+    preview,
+    async url => {
+      const n = (spread.get(url.pathname) ?? 0) + 1;
+      spread.set(url.pathname, n);
+      if (n === 1) return new Response('<!DOCTYPE html>', { status: 404, headers: { 'content-type': 'text/html' } });
+      return response({ 'x-oddbout-api-runtime': 'pages-function' });
+    },
+    { wait: async () => {} },
+  );
+  assert.deepEqual([...spread.values()], [2, 2, 2]);
+  await assert.rejects(
+    verifyPagesPublicApi(preview, async () => new Response('<!DOCTYPE html>', { status: 404, headers: { 'content-type': 'text/html' } }), {
+      wait: async () => {},
+    }),
+    /did not serve JSON/,
+  );
   await assert.rejects(
     verifyPagesPublicApi(
       preview,
