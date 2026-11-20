@@ -28,9 +28,14 @@ function startAnalytics(measurementId, hostname, apiBase, updateSlugs, game) {
   const privateKeys = ['code', 'state', 'handoff', 'dot', 'token', 'access_token', 'refresh_token', 'id_token', 'error_description'];
   const followerCup = hostname === 'life.oddbout.com' && ['/meme/', '/meme/life-cup.html'].includes(current.pathname);
   if (privateKeys.some(key => current.searchParams.has(key) || fragment.has(key))) {
-    if (followerCup) window.addEventListener('oddbout:follower-cup-auth-ready', () => {
-      startAnalytics(measurementId, hostname, apiBase, updateSlugs, game);
-    }, { once: true });
+    if (followerCup)
+      window.addEventListener(
+        'oddbout:follower-cup-auth-ready',
+        () => {
+          startAnalytics(measurementId, hostname, apiBase, updateSlugs, game);
+        },
+        { once: true },
+      );
     return;
   }
   const campaign = new URLSearchParams();
