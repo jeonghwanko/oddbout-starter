@@ -189,8 +189,15 @@ test('pudding funnel milestones keep only approved enums and bounded integers', 
   assert.equal(
     JSON.stringify(events.map(e => e[1])),
     JSON.stringify([
-      'pudding_run_start', 'pudding_run_end', 'pudding_tutorial_done', 'pudding_continue',
-      'pudding_purchase', 'pudding_purchase', 'pudding_merge', 'pudding_merge', 'pudding_run_end',
+      'pudding_run_start',
+      'pudding_run_end',
+      'pudding_tutorial_done',
+      'pudding_continue',
+      'pudding_purchase',
+      'pudding_purchase',
+      'pudding_merge',
+      'pudding_merge',
+      'pudding_run_end',
     ]),
   );
   assert.ok(events.every(e => e[2].game_id === 'pudding'));
