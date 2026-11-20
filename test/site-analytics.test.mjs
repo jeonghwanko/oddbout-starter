@@ -342,6 +342,8 @@ test('updates clicks and entry opens emit only scoped, allowlisted fields withou
     page.fire('click', new page.Element({}, anchor)); // click a nested label, as real links do
   };
   click('start');
+  click('start', { 'data-start-destination': 'follower-cup' });
+  click('follower_cup');
   click('world');
   click('read_update', { 'data-update-slug': slug });
   click('social', { 'data-social-platform': 'youtube' });
@@ -359,7 +361,8 @@ test('updates clicks and entry opens emit only scoped, allowlisted fields withou
   const events = page.window.dataLayer.map(args => Array.from(args)).filter(args => args[0] === 'event');
   assert.deepEqual(
     Array.from(events, args => args[1]),
-    ['page_view', 'landing_start_click', 'world_link_click', 'update_detail_click', 'social_link_click', 'update_open'],
+    ['page_view', 'landing_start_click', 'landing_start_click', 'follower_cup_entry_click', 'follower_cup_entry_click',
+      'world_link_click', 'update_detail_click', 'social_link_click', 'update_open'],
   );
   for (const [, name, parameters] of events.slice(1)) {
     assert.equal(parameters.lang, 'en');
@@ -380,6 +383,27 @@ test('updates clicks and entry opens emit only scoped, allowlisted fields withou
   page.window['ga-disable-G-ABC123DEF4'] = true;
   click('start');
   assert.equal(page.window.dataLayer.length, events.length + 3);
+});
+
+test('follower cup reports milestones after the OAuth address is scrubbed and drops identifying parameters', () => {
+  for (const gpc of [false, true]) {
+    const page = visit('https://life.oddbout.com/meme/?code=private&followers=1&to=private', {
+      siteUrl: 'https://life.oddbout.com', gpc,
+    });
+    page.run();
+    assert.equal(page.scripts.length, 0);
+    page.window.location.searchParams.delete('code');
+    page.window.dispatchEvent({ type: 'oddbout:follower-cup-auth-ready' });
+    for (const name of ['follower_cup_x_connected', 'follower_cup_start']) {
+      page.window.dispatchEvent({ type: 'oddbout:milestone', detail: { name, parameters: { id: 'private' } } });
+    }
+    const events = (page.window.dataLayer ?? []).map(args => Array.from(args)).filter(args => args[0] === 'event');
+    assert.deepEqual(Array.from(events, args => args[1]), gpc ? [] : ['page_view', 'follower_cup_x_connected', 'follower_cup_start']);
+    for (const [, , parameters] of events) {
+      assert.equal(parameters.page_location, 'https://life.oddbout.com/meme/');
+      assert.ok(!JSON.stringify(parameters).includes('private'));
+    }
+  }
 });
 
 test('updates listeners stay off ordinary pages, opted-out visits and unsupported languages', () => {
