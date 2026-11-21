@@ -44,14 +44,14 @@ export async function buildPluginPolicySite(destination, { publish = false } = {
     const sections = page.sections
       .map(
         ([id, heading, body], i) =>
-          `<section id="${id}"><span class="section-number">${String(i + 1).padStart(2, '0')}</span><div><h2>${heading}</h2>${body}</div></section>`,
+          `<section id="${id}">${isOverview ? '' : `<span class="section-number">${String(i + 1).padStart(2, '0')}</span>`}<div><h2>${heading}</h2>${body}</div></section>`,
       )
       .join('\n');
     const html = `<!doctype html>
 <html lang="${page.lang || 'en'}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${publish ? `<link rel="canonical" href="${canonical}">${alternates}` : '<meta name="robots" content="noindex">'}<meta name="referrer" content="strict-origin-when-cross-origin"><title>${page.title} · AI Fighter Creator</title><meta name="description" content="${page.description}"><link rel="stylesheet" href="./style.css"></head>
 <body><a class="skip" href="#main">${page.lang === 'ko' ? '본문 바로가기' : 'Skip to content'}</a><header><a class="brand" href="./index.html"><img src="./icon.svg" width="36" height="36" alt=""><span>AI FIGHTER<span class="brand-sub">CREATOR / LUCAS FOUNDATION</span></span></a><nav aria-label="Main">${nav.map(([file, label]) => `<a ${file === page.file ? 'aria-current="page"' : ''} href="./${file}">${label}</a>`).join('')}</nav></header>
 ${publish ? '' : `<div class="preview">POLICY PREVIEW <span>Prepared ${prepared} · publication pending · not an effective notice</span></div>`}
-<main id="main"><div class="hero"><p class="eyebrow">${page.eyebrow}</p><h1>${page.title}</h1><p class="intro">${page.description}</p><div class="meta">Lucas Foundation <span>•</span> ${date}${page.translation ? ` <span>•</span> <a href="./${page.translation.file}" lang="${page.translation.lang}">${page.translation.label}</a>` : ''}</div></div>
+<main id="main"${isOverview ? ' class="fighter-creation"' : ''}><div class="hero"><p class="eyebrow">${page.eyebrow}</p><h1>${page.title}</h1><p class="intro">${page.description}</p><div class="meta">Lucas Foundation${isOverview ? '' : ` <span>•</span> ${date}`}${page.translation ? ` <span>•</span> <a href="./${page.translation.file}" lang="${page.translation.lang}">${page.translation.label}</a>` : ''}</div></div>
 <div class="layout"><aside aria-label="On this page">${page.sections.map(([id, title]) => `<a href="#${id}">${title}</a>`).join('')}</aside><article>${sections}</article></div></main>
 <footer><div><strong>LUCAS FOUNDATION</strong><p>AI Fighter Creator · ODDBOUT</p></div><div><a href="https://oddbout.com/">ODDBOUT</a><a href="./privacy.html">Privacy</a><a href="./terms.html">Terms</a><a href="./support.html">Support</a><a href="https://github.com/jeonghwanko/oddbout-starter">Source code ↗</a></div></footer></body></html>`;
     await writeFile(path.join(destination, page.file), html);
