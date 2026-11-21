@@ -1,1 +1,0 @@
-function e(e){return typeof e==`number`&&Number.isInteger(e)&&e>=0&&e<=0x7ce66c50e2840000}export{e as t};
