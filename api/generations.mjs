@@ -35,7 +35,8 @@ import { accountTokens } from './account.mjs';
  *   lease_expires_at: string | null, created_at: string, updated_at: string, delegate: boolean, host_choice: string,
  *   requested_host: string | null, assigned_host: string | null, started_at?: string | null, charged_at?: string | null,
  *   refunded_at?: string | null, profile_front?: any, profile_expressions?: any, profile_set_id?: string | null, agent_client?: string | null,
- *   agent_name?: string | null, image_provider?: string, appearance_auto_select_at?: string | null }} Job
+ *   agent_name?: string | null, image_provider?: string, appearance_auto_select_at?: string | null,
+ *   real_person_consent?: boolean }} Job
  * @typedef {{ id: string, path: string, content_type: string, width: number, height: number }} Upload  A job's reference picture (af_generation_uploads).
  */
 
@@ -571,7 +572,15 @@ export function createGenerationHandler({
     if (!at || typeof event?.kind !== 'string' || !HISTORY_TOKEN.test(event.kind)) return null;
     const take = Number.isInteger(data.take) && data.take >= 0 && data.take <= 99 ? data.take : undefined;
     const outcome = typeof data.outcome === 'string' && HISTORY_TOKEN.test(data.outcome) ? data.outcome : undefined;
-    return { at, kind: event.kind, ...(take !== undefined ? { take } : {}), ...(outcome ? { outcome } : {}) };
+    // The request's consent flag, on the created event only (2026-11-15). Older created events have none; false is recorded too.
+    const realPersonConsent = event?.kind === 'created' && typeof data.realPersonConsent === 'boolean' ? data.realPersonConsent : undefined;
+    return {
+      at,
+      kind: event.kind,
+      ...(take !== undefined ? { take } : {}),
+      ...(outcome ? { outcome } : {}),
+      ...(realPersonConsent !== undefined ? { realPersonConsent } : {}),
+    };
   }
   /**
    * A warning the worker recorded when it kept going. Unknown shapes are dropped, never invented.
@@ -613,7 +622,7 @@ export function createGenerationHandler({
   /**
    * The compact event timeline (one job's own read only) and the warnings on one job. A failed read leaves them empty: the job itself still shows.
    * @param {Job} row @param {boolean} [withTimeline]
-   * @returns {Promise<{ timeline?: { at: string, kind: string, take?: number, outcome?: string }[], warnings: { at: string, code: string, take?: number, outcome?: string, failed?: string[] }[] }>}
+   * @returns {Promise<{ timeline?: { at: string, kind: string, take?: number, outcome?: string, realPersonConsent?: boolean }[], warnings: { at: string, code: string, take?: number, outcome?: string, failed?: string[] }[] }>}
    */
   async function historyOf(row, withTimeline = true) {
     try {
@@ -774,6 +783,8 @@ export function createGenerationHandler({
       description: row.description,
       language: row.language,
       delegate: row.delegate === true,
+      // Confirmed consent for a private likeness in the requester's own photo (2026-11-15). Absent on a row from before the column is false.
+      realPersonConsent: row.real_person_consent === true,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       profile: row.profile ?? (isObject(row.brief?.profile) ? row.brief.profile : null),
@@ -1033,9 +1044,12 @@ export function createGenerationHandler({
       'host',
       'hostConsent',
       'imageProvider',
+      'realPersonConsent',
     ]);
     if (!['ko', 'en'].includes(body.language)) throw new Problem(422, 'invalid-language');
     if (body.delegate !== undefined && typeof body.delegate !== 'boolean') throw new Problem(422, 'invalid-body');
+    // Consent for a private person's likeness (2026-11-15). Omitted is false. The brief reads it; this route only records a boolean.
+    if (body.realPersonConsent !== undefined && typeof body.realPersonConsent !== 'boolean') throw new Problem(422, 'invalid-body');
     // Who draws the pictures (2026-11-06): grok, the default, or gpt (the host must draw them: af_generation_image_check).
     if (body.imageProvider !== undefined && !IMAGE_PROVIDERS.includes(body.imageProvider)) throw new Problem(422, 'invalid-image-provider');
     const target = await targetOf(owner, body);
@@ -1043,6 +1057,7 @@ export function createGenerationHandler({
     return {
       body,
       target,
+      realPersonConsent: body.realPersonConsent === true,
       imageProvider: /** @type {string} */ (body.imageProvider ?? 'grok'),
       refs: (body.refs ?? []).map(id),
       description: text(body.description, GENERATION_LIMITS.description, '/description', {
@@ -1221,6 +1236,7 @@ export function createGenerationHandler({
         p_refs: refs,
         p_rights: body.rightsConfirmed === true,
         p_image_provider: imageProvider,
+        p_real_person_consent: body.realPersonConsent === true,
         // 맡기기 (2026-10-28): the worker picks the look and goes on to the motions; the creator answers once, at the end.
         ...(body.delegate ? { p_delegate: true } : {}),
         ...target,
@@ -1444,6 +1460,8 @@ export function createGenerationHandler({
           language: row.language,
           brief: row.brief ?? null,
           delegate: row.delegate === true,
+          // The brief's private-likeness exception (host/generation-prompts.mjs consentedLikeness). A row from before the column is false.
+          realPersonConsent: row.real_person_consent === true,
           choice: row.choice ?? null,
           appearanceNote: row.appearance_note ?? null,
           decisionsReview: { mode: productionReviewer?.enabled ? 'shadow' : 'off' },

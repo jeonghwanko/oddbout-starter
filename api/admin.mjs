@@ -142,6 +142,7 @@ async function generationDetail(db, id) {
     email: user?.data?.user?.email ?? null,
     ownerId: row.owner_id,
     delegate: row.delegate === true,
+    realPersonConsent: row.real_person_consent === true,
     hostChoice: row.host_choice ?? null,
     requestedHost: host(row.requested_host ?? null),
     assignedHost: host(row.assigned_host ?? null),

@@ -468,6 +468,8 @@ test('the admin approves and withdraws hosts, and runs a stopped stage again or 
     assert.deepEqual(detail.refs, []);
     assert.equal(detail.events[0].kind, 'finished');
     assert.equal(detail.events.at(-1).kind, 'created');
+    assert.equal(detail.realPersonConsent, false);
+    assert.equal(detail.events.at(-1).data.realPersonConsent, false);
     assert.equal((await call('GET', 'admin/generations/not-a-uuid')).status, 400);
     assert.equal((await call('GET', `admin/generations/${crypto.randomUUID()}`)).status, 404);
     assert.equal((await call('GET', `admin/generations/${job.id}`, undefined, theirs)).status, 403);

@@ -1524,13 +1524,14 @@ test('the sign-in-first address lists exactly what /mcp lists and says the same;
       // 2026-11-11: ordinary creation requests do not imply appearance-choice delegation.
       // 2026-11-13: get_hosted_fighter describes the progressive contact sheet, job.timeline and job.warnings; the look default is three minutes. Inventory and permission hints are unchanged.
       // 2026-11-13: render_bout_video is the 20th tool. spar and read_bout describe the playback page. The four reviewed tools below are unchanged.
-      assert.equal(hash(tools), '1772b9b6def7b2d74dedd79447703379e7244d341be62a0df816035c06367116');
+      // 2026-11-15: request_hosted_fighter takes realPersonConsent, and get_hosted_fighter names the recorded flag. Not a tool ChatGPT's app pins.
+      assert.equal(hash(tools), '5cb288d67bb54c381481115b5da1e17bc4a2edfda56e40a9686d4dbb5cbbc7dc');
       // Both addresses retain the same inventory when the comparison template metadata is omitted.
       const prior = structuredClone(tools),
         meta = prior.find(t => t.name === 'get_hosted_fighter')._meta;
       delete meta.ui;
       delete meta['openai/outputTemplate'];
-      assert.equal(hash(prior), '2eafdde17fa8360f2e96066cd112e16d9d1782ba11ca7b84fb8e23e5a896f15b');
+      assert.equal(hash(prior), 'a2270341bda3312df8860f9b812d08d45122a6787be7eb0c46c51e0f8abd2af4');
     }
     // ChatGPT's published app 1.0.3 (docs/records/CLOUD-PLUGIN-REVIEW.md): four of its twelve tools are listed with their reviewed bytes (nine
     // until 2단계 B, 16a9ae15…). prepare_fighter_registration, upload_fighter_asset and submit_fighter_registration took a `kind`, and a call

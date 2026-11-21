@@ -222,7 +222,7 @@ test('a waiting host selects A when it claims at the deadline, and the job view 
     assert.equal(warning.notes, undefined);
     for (const event of view.timeline) {
       assert.ok(event.at && event.kind);
-      for (const key of Object.keys(event)) assert.ok(['at', 'kind', 'take', 'outcome'].includes(key));
+      for (const key of Object.keys(event)) assert.ok(['at', 'kind', 'take', 'outcome', 'realPersonConsent'].includes(key));
     }
     const listed = (await g.call('GET', 'generations')).body.jobs.find(job => job.id === id);
     // A list carries the same warnings, from its own batched read, and no timeline (that is one job's read).
