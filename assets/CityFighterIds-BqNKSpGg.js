@@ -1,0 +1,1 @@
+import{t as e}from"./FighterIdentity-3wkJVFuj.js";var t=Object.freeze(e.filter(e=>e.group===`official`&&e.exposure.arena&&e.art.kind===`side-pack`).map(e=>e.id));export{t};
