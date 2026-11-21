@@ -7,8 +7,7 @@ import { pages, prepared, effectiveDate } from '../website/ai-fighter-creator/co
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const siteUrl = 'https://oddbout.com/ai-fighter-creator/';
-const caseAssets = ['concept.webp', 'fight-idle.webp', 'walk.webp', 'combo.webp', 'velora-vs-leon.webp', 'velora-vs-leon.mp4']
-  .map(file => `velora/${file}`);
+const caseAssets = ['concept.webp', 'fight-idle.webp', 'walk.webp', 'combo.webp', 'velora-vs-leon.webp', 'velora-vs-leon.mp4'].map(file => `velora/${file}`);
 export const policyFiles = [...pages.map(page => page.file), 'style.css', 'icon.svg', ...caseAssets].map(file => `ai-fighter-creator/${file}`);
 
 /** @param {string} html */
@@ -39,7 +38,9 @@ export async function buildPluginPolicySite(destination, { publish = false } = {
     const date = publish ? (page.lang === 'ko' ? `시행일: ${effectiveDate}` : `Effective: ${prepared}`) : `Prepared ${prepared}`;
     const isOverview = page.file === 'index.html' || page.file === 'index.ko.html';
     const canonical = page.file === 'index.html' ? siteUrl : siteUrl + page.file;
-    const alternates = isOverview ? `<link rel="alternate" hreflang="en" href="${siteUrl}"><link rel="alternate" hreflang="ko" href="${siteUrl}index.ko.html"><link rel="alternate" hreflang="x-default" href="${siteUrl}">` : '';
+    const alternates = isOverview
+      ? `<link rel="alternate" hreflang="en" href="${siteUrl}"><link rel="alternate" hreflang="ko" href="${siteUrl}index.ko.html"><link rel="alternate" hreflang="x-default" href="${siteUrl}">`
+      : '';
     const sections = page.sections
       .map(
         ([id, heading, body], i) =>

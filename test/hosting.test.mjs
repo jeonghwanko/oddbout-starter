@@ -22,15 +22,17 @@ import { CHATGPT_GAME_ENTRY, chatGptEmbedBuild } from '../scripts/chatgpt-embed-
 import { createServer } from 'node:http';
 
 function fixtureMime(path) {
-  return {
-    '.html': 'text/html',
-    '.css': 'text/css',
-    '.xml': 'application/xml',
-    '.txt': 'text/plain',
-    '.webp': 'image/webp',
-    '.mp4': 'video/mp4',
-    '.woff2': 'font/woff2',
-  }[extname(path)] ?? 'text/javascript';
+  return (
+    {
+      '.html': 'text/html',
+      '.css': 'text/css',
+      '.xml': 'application/xml',
+      '.txt': 'text/plain',
+      '.webp': 'image/webp',
+      '.mp4': 'video/mp4',
+      '.woff2': 'font/woff2',
+    }[extname(path)] ?? 'text/javascript'
+  );
 }
 
 test('published policies have effective dates and working local links, while previews remain marked', async () => {
@@ -51,11 +53,18 @@ test('published policies have effective dates and working local links, while pre
         await readFile(join(destination, match[1]));
       }
     }
-    for (const [file, canonical] of [['index.html', ''], ['index.ko.html', 'index.ko.html']]) {
+    for (const [file, canonical] of [
+      ['index.html', ''],
+      ['index.ko.html', 'index.ko.html'],
+    ]) {
       const html = await readFile(join(destination, file), 'utf8');
       assert.ok(html.includes(`rel="canonical" href="https://oddbout.com/ai-fighter-creator/${canonical}"`));
       assert.match(html, /hreflang="ko" href="https:\/\/oddbout\.com\/ai-fighter-creator\/index\.ko\.html"/);
-      assert.match(html, /id="velora"[^]*src="\.\/velora\/concept\.webp"[^]*src="\.\/velora\/combo\.webp"[^]*src="\.\/velora\/velora-vs-leon\.mp4"/);
+      const example = html.match(/<section id="velora">.*?<\/section>/s)?.[0];
+      assert.ok(example);
+      for (const asset of ['concept.webp', 'combo.webp', 'velora-vs-leon.mp4']) {
+        assert.ok(example.includes(`src="./velora/${asset}"`), asset);
+      }
     }
     // Who runs it and what it answers for (2026-11-02), with the carve-out that keeps the exclusions valid (약관규제법 제7조 1호).
     const terms = await readFile(join(destination, 'terms.html'), 'utf8'),
