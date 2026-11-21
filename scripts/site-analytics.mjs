@@ -202,6 +202,8 @@ function startAnalytics(measurementId, hostname, apiBase, updateSlugs, game) {
           if (rule.includes(value)) values[key] = value;
         } else if (typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= rule) values[key] = Math.floor(value);
       }
+      // Legendary Forge's energy A/B (src/forge/energyAb.ts in crashbang-heroes): every forge event may carry the device's group.
+      if (game === 'forge' && ['control', 'c', 'qa'].includes(parameters.energy)) values.energy = parameters.energy;
       window.gtag('event', name, values);
       return;
     }

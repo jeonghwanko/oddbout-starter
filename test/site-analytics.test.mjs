@@ -283,6 +283,28 @@ test('forge board, free-tap and restoration milestones pass their bounded values
   assert.ok(!JSON.stringify(events).includes('private'));
 });
 
+test('forge milestones carry the energy A/B group only with an approved value', () => {
+  const page = visit('https://oddbout.com/forge');
+  page.run();
+  const emit = (name, parameters) => page.window.dispatchEvent({ type: 'oddbout:milestone', detail: { name, parameters } });
+  emit('forge_energy_empty', { level: 5, minutes: 41, energy: 'c' });
+  emit('forge_start', { mode: 'first', energy: 'control' });
+  emit('forge_level_up', { level: 3, energy: 'qa' });
+  emit('forge_level_up', { level: 4, energy: 'b' });
+  emit('forge_level_up', { level: 2 });
+  emit('pudding_share', { method: 'native', energy: 'c' });
+  const events = page.window.dataLayer
+    .map(args => Array.from(args))
+    .filter(args => args[0] === 'event')
+    .slice(1);
+  const byName = name => events.filter(e => e[1] === name).map(e => e[2]);
+  assert.equal(byName('forge_energy_empty')[0].energy, 'c');
+  assert.equal(byName('forge_energy_empty')[0].minutes, 41);
+  assert.equal(byName('forge_start')[0].energy, 'control');
+  assert.equal(byName('forge_level_up').map(e => String(e.energy)).join(), 'qa,undefined,undefined');
+  assert.equal(byName('pudding_share')[0]?.energy, undefined);
+});
+
 test('forge milestones keep only approved enums and bounded integers', () => {
   const page = visit('https://oddbout.com/forge');
   page.run();
