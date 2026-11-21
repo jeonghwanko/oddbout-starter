@@ -38,9 +38,9 @@ export function configuredGameLauncher(config) {
   }
 }
 
-/** @param {string} gameOrigin */
+/** @param {string | undefined} gameOrigin */
 export function gameLauncherMetadata(gameOrigin) {
-  const frameDomains = [...new Set([gameOrigin, ...arcadeGames.map(game => new URL(game.url).origin)])];
+  const frameDomains = [...new Set([...(gameOrigin ? [gameOrigin] : []), ...arcadeGames.map(game => new URL(game.url).origin)])];
   return {
     ui: {
       domain: widgetDomain,
@@ -50,11 +50,11 @@ export function gameLauncherMetadata(gameOrigin) {
     'openai/widgetDomain': widgetDomain,
     'openai/widgetCSP': { connect_domains: [], resource_domains: [], frame_domains: frameDomains },
     'openai/ui': { availableDisplayModes: ['inline', 'fullscreen'] },
-    'openai/widgetDescription': 'Start the ODDBOUT game after the user chooses Start. The game must confirm its own sign-in and readiness.',
+    'openai/widgetDescription': 'Choose Pudding Escape, Legendary Forge or Bounce Ball and play inside the launcher.',
   };
 }
 
-/** @param {{url: string, origin: string}} game */
+/** @param {{url: string, origin: string} | null} game */
 export function gameLauncherHtmlFor(game) {
   return `<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -70,13 +70,13 @@ button.secondary{background:#2b3443;color:#f5f7fa}button:disabled{opacity:.55}#m
 </style></head><body><main>
 <header><h1>ODDBOUT</h1><span class="sub">ChatGPT Game Launcher</span></header>
 <div id="arcade"><div class="controls">${arcadeGames.map(game => `<button id="${game.id}">${game.title}</button>`).join('')}</div></div>
-<div class="controls"><button id="start" class="secondary">ODDBOUT 연습 경기</button><button id="reload" class="secondary" hidden>다시 시작</button>
+<div class="controls"><button id="start" class="secondary"${game ? '' : ' hidden'}>ODDBOUT 연습 경기</button><button id="reload" class="secondary" hidden>다시 시작</button>
 <button id="full" class="secondary" hidden>전체화면</button><button id="back" class="secondary" hidden>런처로 돌아가기</button></div>
 <p id="message" role="status" aria-live="polite">게임을 시작하면 ODDBOUT 로그인을 확인합니다.</p>
 <section id="stage"></section></main>
 <script>
 (function(){'use strict';
-const GAME_URL=${JSON.stringify(game.url)}, GAME_ORIGIN=${JSON.stringify(game.origin)}, CHANNEL='oddbout-launcher-v2';
+const GAME_URL=${JSON.stringify(game?.url ?? null)}, GAME_ORIGIN=${JSON.stringify(game?.origin ?? null)}, CHANNEL='oddbout-launcher-v2';
 const stage=document.getElementById('stage'), start=document.getElementById('start'), reload=document.getElementById('reload');
 const back=document.getElementById('back'), full=document.getElementById('full'), message=document.getElementById('message');
 let state='idle', frame=null, nonce=null, attemptId=null, watchdog=null, helloTimer=null, helloCount=0, grantRequestGeneration=0, hostModes=null, gameReady=false, gameAuthenticated=false;
@@ -106,7 +106,7 @@ function freshId(){if(typeof crypto?.randomUUID!=='function')throw Error('secure
 function randomNonce(){if(typeof crypto?.getRandomValues!=='function')throw Error('secure-random-unavailable');
   const bytes=new Uint8Array(16);crypto.getRandomValues(bytes);return Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('')}
 function removeFrame(){resetHello();if(frame){sendToGame('launcher:stop',{});frame.removeAttribute('src');frame.remove();frame=null}stage.replaceChildren();stage.style.display='none'}
-function stop(){grantRequestGeneration++;resetTimer();resetHello();removeFrame();state='idle';nonce=null;attemptId=null;gameReady=false;gameAuthenticated=false;arcade.hidden=false;start.hidden=false;reload.hidden=true;back.hidden=true;
+function stop(){grantRequestGeneration++;resetTimer();resetHello();removeFrame();state='idle';nonce=null;attemptId=null;gameReady=false;gameAuthenticated=false;arcade.hidden=false;start.hidden=!GAME_URL;reload.hidden=true;back.hidden=true;
   note('The game was closed. Choose a game to play.','게임을 닫았습니다. 플레이할 게임을 선택하세요.')}
 function updateModes(modes){
   if(Array.isArray(modes))hostModes=new Set(modes);
@@ -236,10 +236,10 @@ say('Choose a game to play.','플레이할 게임을 선택하세요.');
 </script></body></html>`;
 }
 
-/** @param {import('@modelcontextprotocol/server').McpServer} server @param {{url:string,origin:string}} game */
+/** @param {import('@modelcontextprotocol/server').McpServer} server @param {{url:string,origin:string} | null} game */
 export function registerGameLauncherUi(server, game) {
-  server.registerResource('oddbout-game-launcher', GAME_LAUNCHER_UI, { mimeType, _meta: gameLauncherMetadata(game.origin) }, () => ({
-    contents: [{ uri: GAME_LAUNCHER_UI, mimeType, text: gameLauncherHtmlFor(game), _meta: gameLauncherMetadata(game.origin) }],
+  server.registerResource('oddbout-game-launcher', GAME_LAUNCHER_UI, { mimeType, _meta: gameLauncherMetadata(game?.origin) }, () => ({
+    contents: [{ uri: GAME_LAUNCHER_UI, mimeType, text: gameLauncherHtmlFor(game), _meta: gameLauncherMetadata(game?.origin) }],
   }));
 }
 
@@ -247,18 +247,19 @@ export function registerGameLauncherUi(server, game) {
 /** @typedef {(args: GameLaunchGrantArgs) => Promise<{ grant: string, expiresAt: string }>} IssueGameLaunchGrant */
 /**
  * @param {import('./common.mjs').Register} register
- * @param {{url:string,origin:string}} game
+ * @param {{url:string,origin:string} | null} game
  * @param {IssueGameLaunchGrant} issueGrant
  */
 export function registerGameLauncherTools(register, game, issueGrant) {
   register(
     'open_game_launcher',
     'Open ODDBOUT game launcher',
-    'Show the game picker for Pudding Escape, Legendary Forge, Bounce Ball and ODDBOUT practice. The selected game opens in the launcher. The launcher checks game sign-in and readiness separately.',
+    'Open the ODDBOUT launcher to play Pudding Escape, Legendary Forge or Bounce Ball inside this conversation.',
     {},
     async () => ({ ok: true, game: 'ODDBOUT', launchMode: 'embedded-iframe', note: 'Launcher is ready. No game session or rendering has been verified.' }),
     { openWorld: false, uiResourceUri: GAME_LAUNCHER_UI },
   );
+  if (!game) return;
   register(
     'issue_game_launch_grant',
     'Confirm ODDBOUT game sign-in',

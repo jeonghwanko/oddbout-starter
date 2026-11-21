@@ -3,7 +3,7 @@
 이 문서는 MCP 런처, `/embed/*` API, 비공개 경기 저장과 사이트 게시 설정을 소유한다.
 게임 화면·재생·종료와 프레임 메시지 규격은 게임 저장소의
 [ChatGPT 임베드 연습 경기](https://github.com/jeonghwanko/crashbang-heroes/blob/main/docs/kaito-web/chatgpt-embed.md)가 소유한다.
-현재 구현은 기본 비활성이다. 운영 배포와 실제 ChatGPT 호스트의 실행·로그인·재생은 확인하지 않았다.
+세 게임 런처는 전체 MCP에서 기본 활성이고 연습 경기는 별도 설정으로 연다. 운영 배포와 실제 ChatGPT 호스트의 실행·로그인·재생은 확인하지 않았다.
 
 ## 소유 코드
 
@@ -26,7 +26,7 @@
 | --- | --- | --- |
 | `ai-fighter` Edge | `ODDBOUT_CHATGPT_GAME_LAUNCHER=1` | 정확히 `1`일 때만 전용 API를 연다 |
 | `ai-fighter` Edge | `ODDBOUT_CHATGPT_GAME_ORIGIN` | 경로·후행 `/` 없는 정확한 HTTPS origin |
-| `ai-fighter-mcp` Edge | `ODDBOUT_CHATGPT_GAME_LAUNCHER=1` | 런처 도구·리소스를 등록한다. directory 판에서는 등록하지 않는다 |
+| `ai-fighter-mcp` Edge | `ODDBOUT_CHATGPT_GAME_LAUNCHER=1` | 런처에 연습 경기와 로그인 grant 도구를 추가한다. directory 판은 런처를 제공하지 않는다 |
 | `ai-fighter-mcp` Edge | `ODDBOUT_CHATGPT_GAME_URL` | 정확한 HTTPS `/embed/chatgpt/` 주소. 쿼리·fragment·사용자 정보는 거절한다 |
 | 사이트 빌드 | `deploy/creator-site.json`의 선택 항목 `chatgptEmbed` | 아래 공개 빌드 설정을 사용한다 |
 

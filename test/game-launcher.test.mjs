@@ -198,6 +198,18 @@ test('component uses exact origin CSP and v2 challenge protocol without a URL cr
   assert.deepEqual(result.contents[0]._meta.ui.csp.frameDomains, frameDomains);
 });
 
+test('arcade-only launcher lists the three play origins and has no practice grant', () => {
+  const names = [];
+  registerGameLauncherTools(
+    name => names.push(name),
+    null,
+    () => assert.fail('no practice'),
+  );
+  assert.deepEqual(names, ['open_game_launcher']);
+  assert.deepEqual(gameLauncherMetadata(undefined).ui.csp.frameDomains, frameDomains.slice(1));
+  assert.match(gameLauncherHtmlFor(null), /id="start"[^>]* hidden/);
+});
+
 test('grant tool is component-only and keeps the grant in private metadata', async () => {
   const tools = new Map();
   registerGameLauncherTools(

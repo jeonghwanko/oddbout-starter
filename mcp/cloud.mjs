@@ -300,7 +300,7 @@ const LIST_CACHE = { ttlMs: 300_000, cacheScope: 'private' };
  * The full edition serves /mcp and /signin alike: the same tools, metadata and texts (MCP 리뷰 2026-11-05). Codex connects at /signin
  * (docs/CLOUD-MCP.md) and its native file input reaches the upload tools through OpenAI's file hosts, so /signin keeps them.
  * @param {{ db: any, identity: Identity | null, fetcher?: typeof fetch, arena?: Arena | null, hosted?: Hosted | null,
- *   gameLauncherConfig?: {enabled?: boolean, gameUrl?: string} | null,
+ *   gameLauncherConfig?: {enabled?: boolean, gameUrl?: string, arcadeEnabled?: boolean} | null,
  *   host?: { compact?: boolean, caller?: string | null }, edition?: 'full' | 'directory', call?: Call }} options
  */
 export function cloudServer({ db, identity, fetcher = fetch, arena = null, hosted = null, gameLauncherConfig = null, host = {}, edition = 'full', call = {} }) {
@@ -524,10 +524,10 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
     registerLookUi(server);
     registerHostedTools({ register, db, identity, invoke, fetcher, hosted, uploads: fileHost });
   }
-  if (gameLauncher) {
+  if (gameLauncher || (!directory && gameLauncherConfig?.arcadeEnabled)) {
     registerGameLauncherUi(server, gameLauncher);
     registerGameLauncherTools(register, gameLauncher, args => {
-      if (!identity) throw new Problem(401, 'authentication-required');
+      if (!gameLauncher || !identity) throw new Problem(401, 'authentication-required');
       return issueEmbedLaunchGrant({
         db: scoped ?? db,
         identity,
@@ -631,7 +631,7 @@ function publishedToolList(result) {
  * @param {typeof fetch} [options.fetcher]
  * @param {{url: string, key: string, fetcher?: typeof fetch, cupWaitMs?: number, pollMs?: number, pollTries?: number} | null} [options.arena]
  * @param {{pollMs?: number} | null} [options.hosted]
- * @param {{enabled?: boolean, gameUrl?: string} | null} [options.gameLauncherConfig]
+ * @param {{enabled?: boolean, gameUrl?: string, arcadeEnabled?: boolean} | null} [options.gameLauncherConfig]
  * @param {number} [options.budgetMs]  one call's budget from its arrival (CALL_BUDGET_MS; shorter in tests)
  * @param {(line: string) => void} [options.log]  where each MCP request's line goes (console.log)
  * @returns {(request: Request) => Promise<Response>}
