@@ -1,14 +1,20 @@
+import { veloraCase } from './velora.mjs';
+
 export const prepared = '2 November 2026';
 export const effectiveDate = '2026-11-02';
 const email = '<a href="mailto:turbo08@gmail.com">turbo08@gmail.com</a>';
 const repo = 'https://github.com/jeonghwanko/oddbout-starter';
+const veloraEn = veloraCase('en');
+const veloraKo = veloraCase('ko');
 export const pages = [
   {
     file: 'index.html',
-    title: 'Your fighter. Your creation.',
+    title: veloraEn.title,
     eyebrow: 'LOCAL CREATION / HUMAN REVIEW',
-    description: 'Create, revise and resume an AI Fighter in Codex, with your own generation accounts and a review at every meaningful step.',
+    description: veloraEn.description,
+    translation: { file: 'index.ko.html', lang: 'ko', label: '한국어' },
     sections: [
+      veloraEn.section,
       [
         'overview',
         'Create with control',
@@ -33,6 +39,22 @@ export const pages = [
         'support',
         'Support and source',
         `<p>Questions, privacy requests and abuse reports: ${email}. The source is available under MIT; bundled components retain their own licenses, including sprite-gen-agent (a fork of Alex Kim's sprite-gen) under Apache-2.0.</p><p><a href="./support.html" class="button">Get support →</a> &nbsp; <a href="${repo}">Browse source code ↗</a></p>`,
+      ],
+    ],
+  },
+  {
+    file: 'index.ko.html',
+    lang: 'ko',
+    title: veloraKo.title,
+    eyebrow: 'ODDBOUT 파이터 제작',
+    description: veloraKo.description,
+    translation: { file: 'index.html', lang: 'en', label: 'English' },
+    sections: [
+      veloraKo.section,
+      [
+        'workflow',
+        '나만의 파이터 만들기',
+        '<p>원하는 캐릭터를 설명하거나 참고 이미지를 준비하세요. 정면 원화를 고른 다음 대기·이동·공격·방어 동작을 확인합니다. 완성된 패키지를 등록한 뒤 선수 화면에서 필수 동작을 검수하면 공개 경기에 출전시킬 수 있습니다.</p><p><a href="https://oddbout.com/docs?lang=ko">선수 제작 방법과 준비물 보기 →</a></p>',
       ],
     ],
   },

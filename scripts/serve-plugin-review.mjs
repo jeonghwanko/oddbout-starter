@@ -3,6 +3,7 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { policyFiles } from './build-plugin-policy-site.mjs';
 const root = path.resolve(process.argv[2]);
 const port = Number(process.argv[3] || 4318);
 const allowed = new Set([
@@ -13,9 +14,7 @@ const allowed = new Set([
   'walkthrough.en.vtt',
   'walkthrough.ko.vtt',
   'poster.jpg',
-  ...['index.html', 'privacy.html', 'terms.html', 'support.html', 'privacy.ko.html', 'terms.ko.html', 'style.css', 'icon.svg'].map(
-    p => 'ai-fighter-creator/' + p,
-  ),
+  ...policyFiles,
 ]);
 /** @type {Record<string, string>} */
 const types = {
@@ -26,6 +25,7 @@ const types = {
   '.mp4': 'video/mp4',
   '.vtt': 'text/vtt',
   '.jpg': 'image/jpeg',
+  '.webp': 'image/webp',
 };
 const server = createServer(async (req, res) => {
   const pathname = new URL(/** @type {string} */ (req.url), `http://127.0.0.1:${port}`).pathname.slice(1) || 'ai-fighter-creator/index.html';
