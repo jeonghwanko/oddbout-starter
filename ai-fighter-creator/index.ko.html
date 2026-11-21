@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="canonical" href="https://oddbout.com/ai-fighter-creator/index.ko"><link rel="alternate" hreflang="en" href="https://oddbout.com/ai-fighter-creator/"><link rel="alternate" hreflang="ko" href="https://oddbout.com/ai-fighter-creator/index.ko"><link rel="alternate" hreflang="x-default" href="https://oddbout.com/ai-fighter-creator/"><meta name="referrer" content="strict-origin-when-cross-origin"><title>AI로 2D 격투 게임 캐릭터 스프라이트 시트 만들기 · AI Fighter Creator</title><meta name="description" content="벨로라의 정면 원화에서 대기·걷기·연속 공격 스프라이트 시트까지 살펴보고, 완성된 캐릭터의 ODDBOUT 경기를 보세요."><link rel="stylesheet" href="./style.css"></head>
+<body><a class="skip" href="#main">본문 바로가기</a><header><a class="brand" href="./index.html"><img src="./icon.svg" width="36" height="36" alt=""><span>AI FIGHTER<span class="brand-sub">CREATOR / LUCAS FOUNDATION</span></span></a><nav aria-label="Main"><a  href="./index.html">Overview</a><a  href="./privacy.html">Privacy</a><a  href="./terms.html">Terms</a><a  href="./support.html">Support</a></nav></header>
+
+<main id="main" class="fighter-creation"><div class="hero"><p class="eyebrow">ODDBOUT 파이터 제작</p><h1>AI로 2D 격투 게임 캐릭터 스프라이트 시트 만들기</h1><p class="intro">벨로라의 정면 원화에서 대기·걷기·연속 공격 스프라이트 시트까지 살펴보고, 완성된 캐릭터의 ODDBOUT 경기를 보세요.</p><div class="meta">Lucas Foundation <span>•</span> <a href="./index.html" lang="en">English</a></div></div>
+<div class="layout"><aside aria-label="On this page"><a href="#velora">벨로라는 어떻게 원화에서 경기까지 갔을까?</a><a href="#workflow">나만의 파이터 만들기</a></aside><article><section id="velora"><div><h2>벨로라는 어떻게 원화에서 경기까지 갔을까?</h2><p>벨로라는 제작자가 등록한 파이터로 시작해 ODDBOUT의 정식 선수가 됐습니다. 처음 외형을 잡은 원화와 실제 게임에 쓰인 동작 프레임을 차례로 볼 수 있습니다.</p>
+      <h3>캐릭터 정면 원화</h3>
+      <div class="fighter-concept">
+        <img src="./velora/concept.webp" alt="붉은 로브를 입은 벨로라의 정면 전신 원화" width="271" height="600" decoding="async">
+        <p>전신이 보이는 원화에서 시작합니다. 이 그림을 기준으로 옆모습과 동작을 만들면서 실루엣, 의상, 몸의 비율을 유지합니다.</p>
+      </div>
+      <h3>대기·걷기·연속 공격 스프라이트 시트</h3><p>옆에서 본 동작의 프레임을 같은 크기의 칸에 배치합니다. 동작마다 시트 한 장을 씁니다. 이미지를 누르면 프레임을 크게 볼 수 있습니다.</p>
+      <div class="fighter-sheets">
+        <figure>
+          <figcaption>전투 대기 자세</figcaption>
+          <a href="./velora/fight-idle.webp"><img src="./velora/fight-idle.webp" alt="전투 대기 자세" width="1520" height="1064" loading="lazy" decoding="async"></a>
+        </figure><figure>
+          <figcaption>걷기 반복 동작</figcaption>
+          <a href="./velora/walk.webp"><img src="./velora/walk.webp" alt="걷기 반복 동작" width="1520" height="532" loading="lazy" decoding="async"></a>
+        </figure><figure>
+          <figcaption>연속 공격</figcaption>
+          <a href="./velora/combo.webp"><img src="./velora/combo.webp" alt="연속 공격" width="1520" height="665" loading="lazy" decoding="async"></a>
+        </figure>
+      </div>
+      <p>벨로라의 연속 공격은 시작 자세의 기준점이 대기 자세와 달라 공격이 시작될 때 몸이 옆으로 튈 수 있었습니다. 게임에서 연속 공격의 기준점을 옮겨 같은 위치에서 동작이 이어지도록 맞췄습니다.</p>
+      <h3>벨로라 대 레온 경기</h3><p>이 ODDBOUT 시범 경기에서는 34.3초에 레온이 KO로 이겼습니다. 대기 자세에서 이동과 공격으로 이어지는 벨로라의 동작을 실제 게임 화면에서 확인해 보세요.</p>
+      <video class="fighter-bout" controls playsinline preload="none" width="960" height="540" poster="./velora/velora-vs-leon.webp" aria-label="벨로라 대 레온 경기 하이라이트">
+        <source src="./velora/velora-vs-leon.mp4" type="video/mp4">
+      </video>
+      <p><a class="button" href="https://oddbout.com/fighter?play=1&amp;fighter=velora&amp;opponent=leon&amp;bout=2301950712&amp;rules=57&amp;d=a0bd771e&amp;lang=ko">ODDBOUT에서 전체 경기 다시 보기 →</a></p>
+      <p><a href="https://oddbout.com/docs?lang=ko">내 파이터 제작 가이드 보기 →</a></p></div></section>
+<section id="workflow"><div><h2>나만의 파이터 만들기</h2><p>원하는 캐릭터를 설명하거나 참고 이미지를 준비하세요. 정면 원화를 고른 다음 대기·이동·공격·방어 동작을 확인합니다. 완성된 패키지를 등록한 뒤 선수 화면에서 필수 동작을 검수하면 공개 경기에 출전시킬 수 있습니다.</p><p><a href="https://oddbout.com/creator?lang=ko">내 선수에서 만들기 →</a></p></div></section></article></div></main>
+<footer><div><strong>LUCAS FOUNDATION</strong><p>AI Fighter Creator · ODDBOUT</p></div><div><a href="https://oddbout.com/">ODDBOUT</a><a href="./privacy.html">Privacy</a><a href="./terms.html">Terms</a><a href="./support.html">Support</a><a href="https://github.com/jeonghwanko/oddbout-starter">Source code ↗</a></div></footer></body></html>
