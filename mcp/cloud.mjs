@@ -69,6 +69,7 @@ export function validCloudAudience(aud) {
  * while the arena key is configured (`ODDBOUT_ARENA_AGENT_KEY`), so a release of this code alone does not change the published tool list.
  */
 export const PUBLIC_TOOLS = new Set([
+  'recommend_web_games',
   'get_fighter_spec',
   'get_style_guide',
   'list_fighters',
