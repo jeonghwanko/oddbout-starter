@@ -2,6 +2,8 @@ export const arcadeIntro = {
   ko: {
     title: 'ChatGPT에서 내 격투가를 만들고, 오늘 할 웹게임을 고르세요',
     lead: 'ODDBOUT은 대화에서 게임을 만들고 즐길 수 있는 플러그인입니다. 직접 상상한 격투가를 경기장에 세우고 싶다면 외모와 싸우는 모습을 들려주세요. 지금 한 판 하고 싶다면 누구와 어떤 기기로 할지 말해 주세요. 30개 웹게임 중 조건에 맞는 두세 개를 카드로 받아 고를 수 있습니다.',
+    cost: '본인의 ChatGPT 구독으로 로그인해 ODDBOUT을 사용하면, 구독에 포함된 GPT 작업에는 별도 OpenAI API 비용이 들지 않습니다.',
+    costDetail: '사용 가능한 생성 기능과 한도는 구독을 따릅니다. ODDBOUT 서버에 격투가 제작을 맡기면 ODDBOUT 제작 토큰을 사용합니다.',
     fighterTitle: '“앞치마를 두른 너구리 대장장이를 격투가로 만들고 싶어.”',
     fighterSteps: [
       [
@@ -61,6 +63,9 @@ export const arcadeIntro = {
   en: {
     title: 'Create a fighter in ChatGPT or find a web game to play',
     lead: 'ODDBOUT brings character creation and a browser-game launcher into your conversation. Describe a fighter you want to see in the arena. Or tell ODDBOUT who is playing and on what device. It recommends two or three matches from a catalog of 30 web games, with a card for each game.',
+    cost: 'When you use ODDBOUT with your ChatGPT subscription, GPT work included in your plan incurs no separate OpenAI API charges.',
+    costDetail:
+      'Available generation features and limits depend on your plan. Asking ODDBOUT to produce a fighter on its servers uses ODDBOUT creation tokens.',
     fighterTitle: '“Make me a raccoon blacksmith who fights in a scorched apron.”',
     fighterSteps: [
       [

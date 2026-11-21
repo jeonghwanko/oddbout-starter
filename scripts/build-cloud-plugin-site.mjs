@@ -21,6 +21,7 @@ function arcadeGallery(language) {
     ['02-play.png', ko ? 'ChatGPT 안에서 실행 중인 Legendary Forge' : 'Playing Legendary Forge inside ChatGPT'],
   ];
   return `<section class="arcade-gallery"><h1>${esc(copy.title)}</h1><p class="intro">${esc(copy.lead)}</p><a class="button" href="https://chatgpt.com/plugins/plugin_asdk_app_6adc695de1bc8191a604b42bbaa178af">${esc(copy.start)}</a>
+    <p><strong>${esc(copy.cost)}</strong> ${esc(copy.costDetail)}</p>
     <div class="arcade-guide"><h2>${esc(copy.fighterTitle)}</h2><ol>${copy.fighterSteps.map(([label, detail]) => `<li><strong>${esc(label)}</strong><p>${esc(detail)}</p></li>`).join('')}</ol></div>
     <figure class="fight-clip"><video controls playsinline preload="metadata" poster="./fight-preview.jpg" aria-label="${esc(copy.clip)}"><source src="./fight.mp4" type="video/mp4"></video><figcaption>${esc(copy.clip)} <a href="./fight.mp4">${ko ? '영상 열기' : 'Open video'}</a></figcaption></figure>
     <h2>${esc(copy.arcadeTitle)}</h2><div class="arcade-shots">${pictures
