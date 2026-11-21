@@ -14,6 +14,7 @@ import { CLOUD_ISSUER, CLOUD_RESOURCE, componentToolMetadata, createCloudHandler
 
 const gameUrl = 'https://oddbout.com/embed/chatgpt/';
 const game = { url: gameUrl, origin: 'https://oddbout.com' };
+const frameDomains = [game.origin, 'https://pudding.oddbout.com', 'https://forge.oddbout.com', 'https://bounce.oddbout.com'];
 const connectorToken = 'signed-connector-token-for-test';
 
 function launcherHarness() {
@@ -50,7 +51,7 @@ function launcherHarness() {
     removeAttribute() {}
     remove() {}
   }
-  for (const id of ['stage', 'start', 'reload', 'back', 'full', 'message']) ids.set(id, new Element());
+  for (const id of ['stage', 'start', 'reload', 'back', 'full', 'message', 'arcade', 'pudding', 'forge', 'bounce']) ids.set(id, new Element());
   ids.get('stage').style.display = 'none';
   const parent = { postMessage() {} };
   const document = {
@@ -122,6 +123,26 @@ function launcherHarness() {
   };
 }
 
+test('each arcade game opens its play page and returns to the picker without a practice grant', () => {
+  const h = launcherHarness();
+  for (const [id, url] of [
+    ['pudding', 'https://pudding.oddbout.com/'],
+    ['forge', 'https://forge.oddbout.com/'],
+    ['bounce', 'https://bounce.oddbout.com/game'],
+  ]) {
+    h.ids.get(id).click();
+    assert.equal(h.ids.get('stage').children[0].src, url);
+    assert.equal(h.ids.get('arcade').hidden, true);
+    h.ids.get('back').click();
+    assert.equal(h.ids.get('stage').children.length, 0);
+    assert.equal(h.ids.get('arcade').hidden, false);
+  }
+  assert.equal(h.pendingCalls.length, 0);
+  assert.equal(h.postedToGame.length, 0);
+  h.start();
+  assert.equal(h.ids.get('stage').children[0].src, gameUrl);
+});
+
 test('launcher requires explicit opt-in and the exact HTTPS embed route', () => {
   assert.equal(configuredGameLauncher(undefined), null);
   assert.equal(configuredGameLauncher({ enabled: false, gameUrl }), null);
@@ -141,8 +162,8 @@ test('launcher requires explicit opt-in and the exact HTTPS embed route', () => 
 test('component uses exact origin CSP and v2 challenge protocol without a URL credential', async () => {
   const metadata = gameLauncherMetadata(game.origin);
   const html = gameLauncherHtmlFor(game);
-  assert.deepEqual(metadata.ui.csp.frameDomains, [game.origin]);
-  assert.deepEqual(metadata['openai/widgetCSP'].frame_domains, [game.origin]);
+  assert.deepEqual(metadata.ui.csp.frameDomains, frameDomains);
+  assert.deepEqual(metadata['openai/widgetCSP'].frame_domains, frameDomains);
   assert.deepEqual(metadata['openai/ui'].availableDisplayModes, ['inline', 'fullscreen']);
   assert.match(html, /oddbout-launcher-v2/);
   assert.match(html, /launcher:hello/);
@@ -174,7 +195,19 @@ test('component uses exact origin CSP and v2 challenge protocol without a URL cr
   assert.equal(registered[2].mimeType, 'text/html;profile=mcp-app');
   const result = await registered[3]();
   assert.equal(result.contents[0].text, html);
-  assert.deepEqual(result.contents[0]._meta.ui.csp.frameDomains, [game.origin]);
+  assert.deepEqual(result.contents[0]._meta.ui.csp.frameDomains, frameDomains);
+});
+
+test('arcade-only launcher lists the three play origins and has no practice grant', () => {
+  const names = [];
+  registerGameLauncherTools(
+    name => names.push(name),
+    null,
+    () => assert.fail('no practice'),
+  );
+  assert.deepEqual(names, ['open_game_launcher']);
+  assert.deepEqual(gameLauncherMetadata(undefined).ui.csp.frameDomains, frameDomains.slice(1));
+  assert.match(gameLauncherHtmlFor(null), /id="start"[^>]* hidden/);
 });
 
 test('grant tool is component-only and keeps the grant in private metadata', async () => {

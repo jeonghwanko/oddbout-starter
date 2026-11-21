@@ -3,7 +3,7 @@
 이 문서는 MCP 런처, `/embed/*` API, 비공개 경기 저장과 사이트 게시 설정을 소유한다.
 게임 화면·재생·종료와 프레임 메시지 규격은 게임 저장소의
 [ChatGPT 임베드 연습 경기](https://github.com/jeonghwanko/crashbang-heroes/blob/main/docs/kaito-web/chatgpt-embed.md)가 소유한다.
-현재 구현은 기본 비활성이다. 운영 배포와 실제 ChatGPT 호스트의 실행·로그인·재생은 확인하지 않았다.
+세 게임 런처는 전체 MCP에서 기본 활성이고 연습 경기는 별도 설정으로 연다. 운영 배포와 실제 ChatGPT 호스트의 실행·로그인·재생은 확인하지 않았다.
 
 ## 소유 코드
 
@@ -26,7 +26,7 @@
 | --- | --- | --- |
 | `ai-fighter` Edge | `ODDBOUT_CHATGPT_GAME_LAUNCHER=1` | 정확히 `1`일 때만 전용 API를 연다 |
 | `ai-fighter` Edge | `ODDBOUT_CHATGPT_GAME_ORIGIN` | 경로·후행 `/` 없는 정확한 HTTPS origin |
-| `ai-fighter-mcp` Edge | `ODDBOUT_CHATGPT_GAME_LAUNCHER=1` | 런처 도구·리소스를 등록한다. directory 판에서는 등록하지 않는다 |
+| `ai-fighter-mcp` Edge | `ODDBOUT_CHATGPT_GAME_LAUNCHER=1` | 런처에 연습 경기와 로그인 grant 도구를 추가한다. directory 판은 런처를 제공하지 않는다 |
 | `ai-fighter-mcp` Edge | `ODDBOUT_CHATGPT_GAME_URL` | 정확한 HTTPS `/embed/chatgpt/` 주소. 쿼리·fragment·사용자 정보는 거절한다 |
 | 사이트 빌드 | `deploy/creator-site.json`의 선택 항목 `chatgptEmbed` | 아래 공개 빌드 설정을 사용한다 |
 
@@ -45,8 +45,10 @@ MCP의 게임 URL origin과 API의 게임 origin은 같아야 한다.
 
 ## 런처와 인증
 
-`open_game_launcher`는 `ui://oddbout/game-launcher-v2.html` 컴포넌트를 연다.
-사용자가 시작을 누른 뒤 iframe을 만들고 게임과 인사를 교환한다. 컴포넌트 표시만으로 게임 실행·로그인이 확인되지는 않는다.
+`open_game_launcher`는 `ui://oddbout/game-launcher-v3.html` 컴포넌트를 연다.
+연결된 앱에 “ODDBOUT 게임 런처 열어줘”라고 요청한 뒤 Pudding Escape, Legendary Forge, Bounce Ball 중 하나를 선택한다.
+각 게임은 자체 사이트를 카드 안에서 열며, ‘런처로 돌아가기’를 누르면 다른 게임을 고를 수 있다.
+ODDBOUT 연습 경기를 선택하면 iframe을 만들고 게임과 인사를 교환한다. 컴포넌트 표시만으로 게임 실행·로그인이 확인되지는 않는다.
 게임이 실행 시도별 PKCE S256 challenge를 보내면 컴포넌트가 `issue_game_launch_grant`를 호출한다.
 이 도구는 `ui.visibility: ["app"]`와 호환용 `openai/visibility: "private"`를 알린다.
 visibility는 호스트의 노출 계약이다. 서버는 별도로 검증된 OAuth identity와 현재 연결 상태를 확인한다.
