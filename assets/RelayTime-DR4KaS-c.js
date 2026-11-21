@@ -1,0 +1,1 @@
+import{n as e}from"./relayClock-BUujoFDl.js";function t(t=Date.now()){return t+e()}function n(){return Date.now()}export{t as n,n as t};

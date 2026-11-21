@@ -1,0 +1,1 @@
+var e=0;function t(t,n=Date.now()){typeof t==`number`&&Number.isFinite(t)&&t>0&&Number.isFinite(n)&&(e=Math.round(t-n))}function n(){return e}export{n,t};
