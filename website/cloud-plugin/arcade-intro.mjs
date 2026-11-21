@@ -1,7 +1,24 @@
 export const arcadeIntro = {
   ko: {
-    title: '친구랑 키보드 하나. 오늘은 무슨 게임 할까?',
-    lead: 'ODDBOUT은 ChatGPT에서 웹게임을 골라 주는 런처입니다. 게임 이름을 몰라도 됩니다. 누구와 할지, 어떤 기기로 할지, 지금 당기는 장르를 말하면 30개 게임에서 조건에 맞는 두세 개를 카드로 보여줍니다. 각 카드에서 할 일을 읽고 마음에 드는 한 판을 고르세요.',
+    title: 'ChatGPT에서 내 격투가를 만들고, 오늘 할 웹게임을 고르세요',
+    lead: 'ODDBOUT은 대화에서 게임을 만들고 즐길 수 있는 플러그인입니다. 직접 상상한 격투가를 경기장에 세우고 싶다면 외모와 싸우는 모습을 들려주세요. 지금 한 판 하고 싶다면 누구와 어떤 기기로 할지 말해 주세요. 30개 웹게임 중 조건에 맞는 두세 개를 카드로 받아 고를 수 있습니다.',
+    fighterTitle: '“앞치마를 두른 너구리 대장장이를 격투가로 만들고 싶어.”',
+    fighterSteps: [
+      [
+        '캐릭터를 설명하세요',
+        '이름을 정하지 않았어도 시작할 수 있습니다. 앞치마에 남은 그을음, 큰 망치를 들기 전의 작은 기합처럼 화면에 꼭 보였으면 하는 특징을 적어 보세요. 직접 그렸거나 사용할 권리가 있는 참고 그림도 첨부할 수 있습니다.',
+      ],
+      [
+        '경기장에 세울 모습을 고르세요',
+        'ODDBOUT에 제작을 맡기면 정면 외형 후보를 보고 마음에 드는 모습을 고릅니다. 선택한 모습을 바탕으로 걷기, 달리기, 공격, 막기, 피격, 쓰러지기까지 한 캐릭터의 동작을 제작합니다.',
+      ],
+      [
+        '내 격투가로 연습하고 출전하세요',
+        '등록한 캐릭터는 같은 계정의 ‘내 격투가’에서 만납니다. 연습 경기에서 움직임을 보고, 필수 동작 11개를 확인하세요. 정면 이미지 심사를 통과하고 출전을 선택하면 다른 사람도 컵과 랭크 대전에서 내 캐릭터를 만날 수 있습니다. 직접 조작하거나 AI에 전투를 맡길 수 있습니다.',
+      ],
+    ],
+    clip: '실제 ODDBOUT 경기 · 10초. 두 격투가가 경기장에서 맞붙는 장면입니다. 위 너구리 설정은 처음 요청할 때 써볼 수 있는 예시입니다.',
+    arcadeTitle: '지금 한 판 하고 싶다면? 게임 이름 대신 상황을 말하세요',
     start: 'ChatGPT에서 ODDBOUT 열기',
     setup: '처음이라면 플러그인 페이지에서 ‘채팅에서 사용해 보기’를 누르세요. 새 대화에서는 @ODDBOUT을 선택하고 아래 문장처럼 물어보면 됩니다.',
     exampleTitle: '같은 키보드라도, 두 사람이 즐기는 방식은 다릅니다',
@@ -42,8 +59,25 @@ export const arcadeIntro = {
     chart: 'Poki 인기 목록 보기',
   },
   en: {
-    title: 'One keyboard, two friends. What should we play?',
-    lead: 'ODDBOUT helps you choose a browser game in ChatGPT. Tell it who is playing, what device you have and what you feel like doing. It picks two or three matches from a catalog of 30 games. Read what you’ll actually do in each one, then pick a card to play.',
+    title: 'Create a fighter in ChatGPT or find a web game to play',
+    lead: 'ODDBOUT brings character creation and a browser-game launcher into your conversation. Describe a fighter you want to see in the arena. Or tell ODDBOUT who is playing and on what device. It recommends two or three matches from a catalog of 30 web games, with a card for each game.',
+    fighterTitle: '“Make me a raccoon blacksmith who fights in a scorched apron.”',
+    fighterSteps: [
+      [
+        'Describe your fighter',
+        'Start with something you want to see on screen, like soot on the apron or the little grunt before a hammer swing. You can attach a sketch or reference image you have the right to use.',
+      ],
+      [
+        'Choose their appearance',
+        'When ODDBOUT handles creation, you pick a front view. That design carries through walking, running, attacking, blocking, taking a hit and falling.',
+      ],
+      [
+        'Practise and enter the arena',
+        'Open My fighters with the account you registered with. Try a practice bout and check all 11 required motions. Once the front image passes review and you enter the fighter, other players can meet it in cups and ranked duels. Control your fighter yourself or let the AI fight.',
+      ],
+    ],
+    clip: 'Actual ODDBOUT gameplay · 10 seconds. Two fighters meet in the arena. The raccoon above is a sample creation prompt.',
+    arcadeTitle: 'Looking for a quick game? Describe your setup',
     start: 'Open ODDBOUT in ChatGPT',
     setup: 'On the plugin page, choose the option to try it in chat. In a new conversation, select @ODDBOUT and ask a question like the ones below.',
     exampleTitle: 'One keyboard. Two very different contests.',
