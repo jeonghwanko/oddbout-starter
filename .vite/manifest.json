@@ -974,9 +974,9 @@
       "_catalog-C-siAyxf.js"
     ]
   },
-  "_league-dpVQC8RW.css": {
-    "file": "assets/league-dpVQC8RW.css",
-    "src": "_league-dpVQC8RW.css"
+  "_league-J9rR2UZn.css": {
+    "file": "assets/league-J9rR2UZn.css",
+    "src": "_league-J9rR2UZn.css"
   },
   "_leagueContent-1rIIFLT8.js": {
     "file": "assets/leagueContent-1rIIFLT8.js",
@@ -2435,7 +2435,7 @@
     ]
   },
   "fighters.html": {
-    "file": "assets/fighters-CrfVKygW.js",
+    "file": "assets/fighters-Cc-MtJxd.js",
     "name": "fighters",
     "src": "fighters.html",
     "isEntry": true,
@@ -2459,7 +2459,7 @@
     ],
     "css": [
       "assets/fighters-FOqGDpRF.css",
-      "assets/league-dpVQC8RW.css"
+      "assets/league-J9rR2UZn.css"
     ],
     "assets": [
       "assets/Pretendard-Regular.subset.0-CLvkdWSe.woff2",
@@ -2649,7 +2649,7 @@
     ]
   },
   "league.html": {
-    "file": "assets/league-MoYRGZxF.js",
+    "file": "assets/league-RIhBRmrq.js",
     "name": "league",
     "src": "league.html",
     "isEntry": true,
@@ -2663,7 +2663,7 @@
       "src/creator/league.ts"
     ],
     "css": [
-      "assets/league-dpVQC8RW.css"
+      "assets/league-J9rR2UZn.css"
     ],
     "assets": [
       "assets/Pretendard-Regular.subset.0-CLvkdWSe.woff2",
@@ -4081,7 +4081,7 @@
     "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.91.woff2"
   },
   "src/creator/league.ts": {
-    "file": "assets/league-BJqcW1Px.js",
+    "file": "assets/league-D-ucd2RO.js",
     "name": "league",
     "src": "src/creator/league.ts",
     "isDynamicEntry": true,
