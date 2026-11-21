@@ -1,0 +1,66 @@
+:root {
+  color-scheme: dark;
+  font-family: "Segoe UI", "Malgun Gothic", sans-serif;
+  color: #f9f3e9;
+  background: #181424;
+  font-synthesis: none;
+  --lime: #e5f675;
+  --muted: #d1c9dc;
+  --line: #4b405c;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+a { color: inherit; text-underline-offset: 4px; }
+a:focus-visible { outline: 2px solid var(--lime); outline-offset: 5px; }
+.wrap { width: min(1200px, 100% - 64px); margin: auto; }
+html:lang(ko) { word-break: keep-all; overflow-wrap: anywhere; }
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 76px;
+  border-bottom: 1px solid var(--line);
+}
+
+header img { display: block; width: 168px; height: auto; filter: brightness(0) invert(1); }
+header > a:last-child { font-size: 14px; color: var(--muted); }
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr);
+  align-items: center;
+  gap: clamp(36px, 5vw, 80px);
+  padding: clamp(52px, 8vw, 118px) 0;
+}
+
+h1, h2 { margin: 0; letter-spacing: -.045em; line-height: 1.12; }
+h1 { font-size: clamp(40px, 5vw, 68px); }
+h2 { font-size: clamp(27px, 3vw, 40px); }
+.lead { margin: 22px 0; color: var(--muted); font-size: 18px; line-height: 1.65; }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.actions a { padding: 13px 16px; border: 1px solid var(--line); font-weight: 750; text-decoration: none; }
+.actions a:hover { border-color: var(--lime); text-decoration: underline; }
+.actions span { margin-inline-start: 6px; }
+.actions .primary { color: #191829; background: var(--lime); border-color: var(--lime); }
+.note { margin: 14px 0 0; color: var(--muted); font-size: 14px; line-height: 1.55; }
+.match { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border: 1px solid var(--line); box-shadow: 12px 12px #342b48; }
+
+.creation {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr);
+  gap: clamp(20px, 5vw, 80px);
+  border-top: 1px solid var(--line);
+  padding: 38px 0 58px;
+}
+
+.creation p { margin: 0 0 12px; color: var(--muted); font-size: 17px; line-height: 1.7; }
+.creation a { color: var(--lime); font-weight: 700; }
+
+@media (max-width: 760px) {
+  .wrap { width: calc(100% - 40px); }
+  .hero, .creation { grid-template-columns: minmax(0, 1fr); }
+  .hero { gap: 28px; padding: 42px 0 48px; }
+  .match { box-shadow: 6px 6px #342b48; }
+}
