@@ -2,13 +2,15 @@
 
 **English** | [한국어](README.ko.md)
 
-**Create a fighter with AI. Bring your character into the arena.**
+**Animate your own 2D character and bring it into the ODDBOUT arena**
 
 [Open ODDBOUT in ChatGPT](https://chatgpt.com/plugins/plugin_asdk_app_6adc695de1bc8191a604b42bbaa178af) · [Plugin guide and gameplay video](https://oddbout.com/cloud-plugin/)
 
-Use the ODDBOUT plugin to create a fighter for your own account or find a browser game to play right now.
+Describe a character or bring a reference drawing to make walking, running, attacking and blocking animations. Download the animations you create for your own games or videos. Register the fighter package with ODDBOUT and, once it passes validation, take your fighter into a practice match.
 
-**When you use ODDBOUT with your ChatGPT subscription, GPT work included in your plan incurs no separate OpenAI API charges.** Available generation features and limits depend on your plan. Asking ODDBOUT to produce a fighter on its servers uses ODDBOUT creation tokens.
+**When you use ODDBOUT with your ChatGPT subscription, GPT work included in your plan incurs no separate OpenAI API charges.** Available generation features and limits depend on your plan. You can also ask oddbout.com to handle production. New accounts start with 500,000 free creation tokens, and each job uses part of that balance.
+
+On ChatGPT web and in the app, tell @ODDBOUT what you feel like playing. The launcher suggests two or three matches from 30 reviewed web games. Pick a card to play an ODDBOUT original in chat or an external game on its official Poki page.
 
 | What you want | Try saying this in ChatGPT | What happens next |
 | --- | --- | --- |
