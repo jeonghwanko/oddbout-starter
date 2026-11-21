@@ -247,6 +247,10 @@ test('forge board, free-tap and restoration milestones pass their bounded values
   emit('forge_save', { state: 'higher' });
   emit('forge_screen', { screen: 'home', via: 'boot' });
   emit('forge_screen', { screen: 'lobby', via: 'boot' });
+  emit('forge_screen', { screen: 'event', via: 'button' });
+  emit('forge_event_open', { theme: 'mine', day: 3, note: 'private' });
+  emit('forge_event_step', { theme: 'mine', step: 4, day: 9 });
+  emit('forge_event_end', { theme: 'volcano', step: 6 });
   const events = page.window.dataLayer
     .map(args => Array.from(args))
     .filter(args => args[0] === 'event')
@@ -269,6 +273,13 @@ test('forge board, free-tap and restoration milestones pass their bounded values
   assert.equal(byName('forge_save')[0].state, 'higher');
   assert.equal(byName('forge_screen')[0].screen, 'home');
   assert.equal(byName('forge_screen')[1].screen, undefined);
+  assert.equal(byName('forge_screen')[2].screen, 'event');
+  assert.equal(byName('forge_event_open')[0].theme, 'mine');
+  assert.equal(byName('forge_event_open')[0].day, 3);
+  assert.equal(byName('forge_event_step')[0].step, 4);
+  assert.equal(byName('forge_event_step')[0].day, undefined);
+  assert.equal(byName('forge_event_end')[0].theme, undefined);
+  assert.equal(byName('forge_event_end')[0].step, 6);
   assert.ok(!JSON.stringify(events).includes('private'));
 });
 
