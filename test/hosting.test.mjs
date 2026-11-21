@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, writeFile, cp, rm, readFile } from 'node:fs/promises';
 import { policyFiles, buildPluginPolicySite, sitePrivacyNotice } from '../scripts/build-plugin-policy-site.mjs';
 import { discoveryFiles } from '../scripts/site-discovery.mjs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { extname, join } from 'node:path';
 import {
   fingerprint,
   hosting,
@@ -21,6 +21,20 @@ import {
 import { CHATGPT_GAME_ENTRY, chatGptEmbedBuild } from '../scripts/chatgpt-embed-site.mjs';
 import { createServer } from 'node:http';
 
+function fixtureMime(path) {
+  return (
+    {
+      '.html': 'text/html',
+      '.css': 'text/css',
+      '.xml': 'application/xml',
+      '.txt': 'text/plain',
+      '.webp': 'image/webp',
+      '.mp4': 'video/mp4',
+      '.woff2': 'font/woff2',
+    }[extname(path)] ?? 'text/javascript'
+  );
+}
+
 test('published policies have effective dates and working local links, while previews remain marked', async () => {
   const root = await mkdtemp(join(tmpdir(), 'fighter-policy-test-'));
   try {
@@ -31,12 +45,27 @@ test('published policies have effective dates and working local links, while pre
     for (const file of policyFiles.filter(file => file.endsWith('.html'))) {
       const html = await readFile(join(root, file), 'utf8');
       assert.match(html, /Lucas Foundation/);
-      assert.match(html, /Effective: 2 November 2026|시행일: 2026-11-02/);
+      if (!file.startsWith('ai-fighter-creator/index.')) {
+        assert.match(html, /Effective: 2 November 2026|시행일: 2026-11-02/);
+      }
       assert.match(html, /rel="canonical"/);
       assert.doesNotMatch(html, /POLICY PREVIEW|publication pending|공개 준비본|name="robots" content="noindex"|Supervillain Labs/);
       assert.doesNotMatch(html, /일체의? 책임|any responsibility at all|under no circumstances/i, file);
       for (const match of html.matchAll(/(?:href|src)="\.\/([^"#]+)(?:#[^"]*)?"/g)) {
         await readFile(join(destination, match[1]));
+      }
+    }
+    for (const [file, canonical] of [
+      ['index.html', ''],
+      ['index.ko.html', 'index.ko.html'],
+    ]) {
+      const html = await readFile(join(destination, file), 'utf8');
+      assert.ok(html.includes(`rel="canonical" href="https://oddbout.com/ai-fighter-creator/${canonical}"`));
+      assert.match(html, /hreflang="ko" href="https:\/\/oddbout\.com\/ai-fighter-creator\/index\.ko\.html"/);
+      const example = html.match(/<section id="velora">.*?<\/section>/s)?.[0];
+      assert.ok(example);
+      for (const asset of ['concept.webp', 'combo.webp', 'velora-vs-leon.mp4']) {
+        assert.ok(example.includes(`src="./velora/${asset}"`), asset);
       }
     }
     // Who runs it and what it answers for (2026-11-02), with the carve-out that keeps the exclusions valid (약관규제법 제7조 1호).
@@ -150,7 +179,7 @@ test('live checks reject missing or wrong asset bytes even when entry HTML retur
   try {
     await mkdir(join(root, '.vite'));
     await mkdir(join(root, 'assets'));
-    await mkdir(join(root, 'ai-fighter-creator'));
+    await mkdir(join(root, 'ai-fighter-creator', 'velora'), { recursive: true });
     const manifest = Object.fromEntries(siteEntries.map(page => [page, { file: 'assets/main.js', imports: ['shared'], css: ['assets/main.css'] }]));
     manifest.shared = { file: 'assets/shared.js', dynamicImports: ['lazy'] };
     manifest.lazy = { file: 'assets/lazy.js' };
@@ -179,17 +208,7 @@ test('live checks reject missing or wrong asset bytes even when entry HTML retur
       if (missing && path === 'assets/lazy.js') return new Response('missing', { status: 404 });
       const wrong =
         (broken && path === 'assets/main.js') || (staleHtml && path === 'creator.html') || (stalePolicy && path === 'ai-fighter-creator/privacy.ko.html');
-      const mime = wrongMime
-        ? 'text/plain'
-        : path.endsWith('.html')
-          ? 'text/html'
-          : path.endsWith('.css')
-            ? 'text/css'
-            : path.endsWith('.xml')
-              ? 'application/xml'
-              : path.endsWith('.txt')
-                ? 'text/plain'
-                : 'text/javascript';
+      const mime = wrongMime ? 'text/plain' : fixtureMime(path);
       return new Response(wrong ? '<html>wrong version</html>' : content.get(path), { status: 200, headers: { 'content-type': mime } });
     };
     await verifyLiveSite(root, { request });
@@ -215,7 +234,7 @@ test('live checks reject missing or wrong asset bytes even when entry HTML retur
 test('shared HTML entries verify emitted modules, styles and transitive assets without a per-page manifest key', async () => {
   const root = await mkdtemp(join(tmpdir(), 'fighter-shared-entry-test-'));
   try {
-    for (const dir of ['.vite', 'assets', 'ai-fighter-creator']) await mkdir(join(root, dir));
+    for (const dir of ['.vite', 'assets', 'ai-fighter-creator/velora']) await mkdir(join(root, dir), { recursive: true });
     const manifest = Object.fromEntries(siteEntries.map(page => [page, { file: 'assets/main.js' }]));
     delete manifest['service.html'];
     delete manifest['service.ko.html'];
@@ -241,15 +260,7 @@ test('shared HTML entries verify emitted modules, styles and transitive assets w
     let broken = '';
     const request = async url => {
       const path = url.pathname.slice(1);
-      const mime = path.endsWith('.html')
-        ? 'text/html'
-        : path.endsWith('.css')
-          ? 'text/css'
-          : path.endsWith('.xml')
-            ? 'application/xml'
-            : path.endsWith('.txt')
-              ? 'text/plain'
-              : 'text/javascript';
+      const mime = fixtureMime(path);
       return new Response(path === broken ? 'wrong bytes' : content.get(path), { headers: { 'content-type': mime } });
     };
     await verifyLiveSite(root, { siteUrl: 'https://example.com/', request });
@@ -358,7 +369,7 @@ test('a passing hiccup of the published site is retried; a missing file or wrong
   try {
     await mkdir(join(root, '.vite'));
     await mkdir(join(root, 'assets'));
-    await mkdir(join(root, 'ai-fighter-creator'));
+    await mkdir(join(root, 'ai-fighter-creator', 'velora'), { recursive: true });
     const manifest = Object.fromEntries(siteEntries.map(page => [page, { file: 'assets/main.js', assets: ['assets/font.woff2'] }]));
     await writeFile(join(root, '.vite/manifest.json'), JSON.stringify(manifest));
     const content = new Map(
@@ -367,18 +378,6 @@ test('a passing hiccup of the published site is retried; a missing file or wrong
       ),
     );
     for (const [path, value] of content) await writeFile(join(root, path), value);
-    const mime = path =>
-      path.endsWith('.html')
-        ? 'text/html'
-        : path.endsWith('.css')
-          ? 'text/css'
-          : path.endsWith('.xml')
-            ? 'application/xml'
-            : path.endsWith('.txt')
-              ? 'text/plain'
-              : path.endsWith('.js')
-                ? 'text/javascript'
-                : 'font/woff2';
     let calls = 0,
       failures = 0,
       failure = null;
@@ -392,7 +391,7 @@ test('a passing hiccup of the published site is retried; a missing file or wrong
           return new Response('busy', { status: failure });
         }
       }
-      return new Response(content.get(path), { status: 200, headers: { 'content-type': mime(path) } });
+      return new Response(content.get(path), { status: 200, headers: { 'content-type': fixtureMime(path) } });
     };
     const waits = [],
       wait = async ms => {
