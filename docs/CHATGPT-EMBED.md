@@ -45,7 +45,7 @@ MCP의 게임 URL origin과 API의 게임 origin은 같아야 한다.
 
 ## 런처와 인증
 
-`open_game_launcher`는 `ui://oddbout/game-launcher-v3.html` 컴포넌트를 연다.
+`open_game_launcher`는 `ui://oddbout/game-launcher-v4.html` 컴포넌트를 연다.
 연결된 앱에 “ODDBOUT 게임 런처 열어줘”라고 요청한 뒤 Pudding Escape, Legendary Forge, Bounce Ball 중 하나를 선택한다.
 각 게임은 자체 사이트를 카드 안에서 열며, ‘런처로 돌아가기’를 누르면 다른 게임을 고를 수 있다.
 ODDBOUT 연습 경기를 선택하면 iframe을 만들고 게임과 인사를 교환한다. 컴포넌트 표시만으로 게임 실행·로그인이 확인되지는 않는다.
