@@ -149,7 +149,10 @@
       forge_error: { kind: ['script', 'promise', 'image', 'load', 'boot'] },
       forge_boot: { seconds: 600 },
       forge_save: { state: ['higher', 'corrupt', 'blocked', 'tablock'] },
-      forge_screen: { screen: ['home', 'board'], via: ['boot', 'button', 'back', 'goal'] },
+      forge_screen: { screen: ['home', 'board', 'event'], via: ['boot', 'button', 'back', 'goal'] },
+      forge_event_open: { theme: ['mine', 'forest', 'hunt', 'gem'], day: 7 },
+      forge_event_step: { theme: ['mine', 'forest', 'hunt', 'gem'], step: 6, day: 7 },
+      forge_event_end: { theme: ['mine', 'forest', 'hunt', 'gem'], step: 6 },
     };
     if (
       ![
