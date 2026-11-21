@@ -1,1 +1,0 @@
-export{r as profiles}from"./leagueContent-DbCu4Yge.js";
