@@ -2,12 +2,24 @@
 
 **English** | [한국어](README.ko.md)
 
-> **PayPal AI Hackathon entry: [ODDBOUT Showrunner](#oddbout-showrunner).** Sponsors pay with PayPal, an AI producer
-> runs the show, and creators get paid. PayPal Sandbox only.
-> [Demo video](https://youtu.be/DW9NkqZrJnQ) · [Hosted demo](https://broadcast.oddbout.com/broadcast/) ·
-> [Judges' page](https://broadcast.oddbout.com/broadcast/judges/) · [HACKATHON.md](docs/HACKATHON.md)
+**Animate your own 2D character and bring it into the ODDBOUT arena**
 
-**Create a fighter with AI. Bring your character into the arena.**
+[Open ODDBOUT in ChatGPT](https://chatgpt.com/plugins/plugin_asdk_app_6adc695de1bc8191a604b42bbaa178af) · [Plugin guide and gameplay video](https://oddbout.com/cloud-plugin/)
+
+Describe a character or bring a reference drawing to make walking, running, attacking and blocking animations. Download the animations you create for your own games or videos. Register the fighter package with ODDBOUT and, once it passes validation, take your fighter into a practice match.
+
+**When you use ODDBOUT with your ChatGPT subscription, GPT work included in your plan incurs no separate OpenAI API charges.** Available generation features and limits depend on your plan. You can also ask oddbout.com to handle production. New accounts start with 500,000 free creation tokens, and each job uses part of that balance.
+
+On ChatGPT web and in the app, tell @ODDBOUT what you feel like playing. The launcher suggests two or three matches from 30 reviewed web games. Pick a card to play an ODDBOUT original in chat or an external game on its official Poki page.
+
+| What you want | Try saying this in ChatGPT | What happens next |
+| --- | --- | --- |
+| Create a fighter | “Make me a raccoon blacksmith who fights in an apron.” | Pick a design, make its moves, then register it to practise and enter the arena. |
+| Play with a friend | “Find two games we can play together on one keyboard.” | Get matching cards from 30 reviewed games. The three originals open in the chat launcher. External games open on Poki. |
+
+[![Two fighters in an actual ODDBOUT match](https://raw.githubusercontent.com/jeonghwanko/oddbout-starter/main/website/cloud-plugin/fight-preview.jpg)](https://oddbout.com/cloud-plugin/)
+
+### The open-source creator kit
 
 ODDBOUT is a fighting game where you play with a character you create. This repository contains the open-source tools for making that character. Work with an AI assistant to turn a description or reference image into artwork, animations, and a fighter package for the game. The tools and docs also use the name AI Fighter. It also holds [ODDBOUT Showrunner](#oddbout-showrunner), an experimental agent broadcast that runs ODDBOUT cups on a PayPal Sandbox budget.
 
@@ -224,6 +236,11 @@ until you check its motions again. The cloud `open_creator_homepage` tool return
 on the website and check that its account matches cloud `get_profile`; it does not create a one-use sign-in link.
 
 ## ODDBOUT Showrunner
+
+> **PayPal AI Hackathon entry: [ODDBOUT Showrunner](#oddbout-showrunner).** Sponsors pay with PayPal, an AI producer
+> runs the show, and creators get paid. PayPal Sandbox only.
+> [Demo video](https://youtu.be/DW9NkqZrJnQ) · [Hosted demo](https://broadcast.oddbout.com/broadcast/) ·
+> [Judges' page](https://broadcast.oddbout.com/broadcast/judges/) · [HACKATHON.md](docs/HACKATHON.md)
 
 Showrunner, in [`broadcast/`](broadcast), runs ODDBOUT cups as a broadcast on a budget. You buy credits with PayPal Sandbox
 and approve a session and its budget. An optional AI producer then chooses, through its own MCP and only within that approval,

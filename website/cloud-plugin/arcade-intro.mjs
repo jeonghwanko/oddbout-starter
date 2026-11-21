@@ -1,7 +1,29 @@
 export const arcadeIntro = {
   ko: {
-    title: '친구랑 키보드 하나. 오늘은 무슨 게임 할까?',
-    lead: 'ODDBOUT은 ChatGPT에서 웹게임을 골라 주는 런처입니다. 게임 이름을 몰라도 됩니다. 누구와 할지, 어떤 기기로 할지, 지금 당기는 장르를 말하면 30개 게임에서 조건에 맞는 두세 개를 카드로 보여줍니다. 각 카드에서 할 일을 읽고 마음에 드는 한 판을 고르세요.',
+    title: '내 그림을 움직이는 2D 캐릭터로 만들고, ODDBOUT 경기장에 세우세요',
+    lead: '캐릭터를 글로 설명하거나 참고 그림을 건네면 걷기, 달리기, 공격, 막기 동작을 만들 수 있습니다. 직접 만든 애니메이션은 파일로 내려받아 자신의 게임이나 영상에 활용할 수 있습니다. ODDBOUT에 선수 패키지를 등록하면 검증이 끝난 뒤 내 격투가로 등장해 바로 연습할 수 있습니다.',
+    cost: '본인의 ChatGPT 구독으로 로그인해 ODDBOUT을 사용하면, 구독에 포함된 GPT 작업에는 별도 OpenAI API 비용이 들지 않습니다.',
+    costDetail:
+      '사용 가능한 기능과 한도는 구독을 따릅니다. oddbout.com에서 제작을 맡길 수도 있습니다. 가입 시 무료로 받는 50만 제작 토큰으로 시작하며, 제작한 만큼 차감됩니다.',
+    fighterTitle: '“앞치마를 두른 너구리 대장장이를 격투가로 만들고 싶어.”',
+    fighterSteps: [
+      [
+        '캐릭터를 설명하세요',
+        '이름을 정하지 않았어도 시작할 수 있습니다. 앞치마에 남은 그을음, 큰 망치를 들기 전의 작은 기합처럼 화면에 꼭 보였으면 하는 특징을 적어 보세요. 직접 그렸거나 사용할 권리가 있는 참고 그림도 첨부할 수 있습니다.',
+      ],
+      [
+        '경기장에 세울 모습을 고르세요',
+        'ODDBOUT에 제작을 맡기면 정면 외형 후보를 보고 마음에 드는 모습을 고릅니다. 선택한 모습을 바탕으로 걷기, 달리기, 공격, 막기, 피격, 쓰러지기까지 한 캐릭터의 동작을 제작합니다.',
+      ],
+      [
+        '내 격투가로 연습하고 출전하세요',
+        '등록한 캐릭터는 같은 계정의 ‘내 격투가’에서 만납니다. 연습 경기에서 움직임을 보고, 필수 동작 11개를 확인하세요. 정면 이미지 심사를 통과하고 출전을 선택하면 다른 사람도 컵과 랭크 대전에서 내 캐릭터를 만날 수 있습니다. 직접 조작하거나 AI에 전투를 맡길 수 있습니다.',
+      ],
+    ],
+    clip: '실제 ODDBOUT 경기 · 10초. 두 격투가가 경기장에서 맞붙는 장면입니다. 위 너구리 설정은 처음 요청할 때 써볼 수 있는 예시입니다.',
+    arcadeLead:
+      'ChatGPT 웹과 앱에서는 @ODDBOUT에 원하는 조건을 말해 보세요. 런처가 검수한 웹게임 30개에서 두세 개를 추천합니다. 카드를 고르면 ODDBOUT 오리지널은 대화 안에서, 외부 게임은 Poki 공식 페이지에서 시작합니다.',
+    arcadeTitle: 'ChatGPT 웹과 앱에서 오늘 할 게임 고르기',
     start: 'ChatGPT에서 ODDBOUT 열기',
     setup: '처음이라면 플러그인 페이지에서 ‘채팅에서 사용해 보기’를 누르세요. 새 대화에서는 @ODDBOUT을 선택하고 아래 문장처럼 물어보면 됩니다.',
     exampleTitle: '같은 키보드라도, 두 사람이 즐기는 방식은 다릅니다',
@@ -42,8 +64,30 @@ export const arcadeIntro = {
     chart: 'Poki 인기 목록 보기',
   },
   en: {
-    title: 'One keyboard, two friends. What should we play?',
-    lead: 'ODDBOUT helps you choose a browser game in ChatGPT. Tell it who is playing, what device you have and what you feel like doing. It picks two or three matches from a catalog of 30 games. Read what you’ll actually do in each one, then pick a card to play.',
+    title: 'Animate your own 2D character and bring it into the ODDBOUT arena',
+    lead: 'Describe a character or bring a reference drawing to make walking, running, attacking and blocking animations. Download the animations you create for your own games or videos. Register the fighter package with ODDBOUT and, once it passes validation, take your fighter into a practice match.',
+    cost: 'When you use ODDBOUT with your ChatGPT subscription, GPT work included in your plan incurs no separate OpenAI API charges.',
+    costDetail:
+      'Available generation features and limits depend on your plan. Asking ODDBOUT to produce a fighter on its servers uses ODDBOUT creation tokens.',
+    fighterTitle: '“Make me a raccoon blacksmith who fights in a scorched apron.”',
+    fighterSteps: [
+      [
+        'Describe your fighter',
+        'Start with something you want to see on screen, like soot on the apron or the little grunt before a hammer swing. You can attach a sketch or reference image you have the right to use.',
+      ],
+      [
+        'Choose their appearance',
+        'When ODDBOUT handles creation, you pick a front view. That design carries through walking, running, attacking, blocking, taking a hit and falling.',
+      ],
+      [
+        'Practise and enter the arena',
+        'Open My fighters with the account you registered with. Try a practice bout and check all 11 required motions. Once the front image passes review and you enter the fighter, other players can meet it in cups and ranked duels. Control your fighter yourself or let the AI fight.',
+      ],
+    ],
+    clip: 'Actual ODDBOUT gameplay · 10 seconds. Two fighters meet in the arena. The raccoon above is a sample creation prompt.',
+    arcadeLead:
+      'On ChatGPT web and in the app, tell @ODDBOUT what you feel like playing. The launcher suggests two or three matches from 30 reviewed web games. Pick a card to play an ODDBOUT original in chat or an external game on its official Poki page.',
+    arcadeTitle: 'Find a game on ChatGPT web or in the app',
     start: 'Open ODDBOUT in ChatGPT',
     setup: 'On the plugin page, choose the option to try it in chat. In a new conversation, select @ODDBOUT and ask a question like the ones below.',
     exampleTitle: 'One keyboard. Two very different contests.',

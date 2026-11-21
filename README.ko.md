@@ -2,12 +2,24 @@
 
 [English](README.md) | **한국어**
 
-> **PayPal AI Hackathon 출품작: [ODDBOUT Showrunner](#oddbout-showrunner).** 스폰서는 PayPal로 결제하고, AI 프로듀서가
-> 방송을 진행하고, 선수 제작자가 출연료를 받습니다. PayPal Sandbox 테스트 돈만 씁니다.
-> [호스팅 데모](https://broadcast.oddbout.com/broadcast/) · [심사자 안내 페이지(영어)](https://broadcast.oddbout.com/broadcast/judges/) ·
-> [HACKATHON.md(영어)](docs/HACKATHON.md)
+**내 그림을 움직이는 2D 캐릭터로 만들고, ODDBOUT 경기장에 세우세요**
 
-**AI와 함께 만든 나만의 캐릭터를 대전 게임에 출전시키세요.**
+[ChatGPT에서 ODDBOUT 열기](https://chatgpt.com/plugins/plugin_asdk_app_6adc695de1bc8191a604b42bbaa178af) · [플러그인 소개와 실제 경기 영상](https://oddbout.com/cloud-plugin/index.ko)
+
+캐릭터를 글로 설명하거나 참고 그림을 건네면 걷기, 달리기, 공격, 막기 동작을 만들 수 있습니다. 직접 만든 애니메이션은 파일로 내려받아 자신의 게임이나 영상에 활용할 수 있습니다. ODDBOUT에 선수 패키지를 등록하면 검증이 끝난 뒤 내 격투가로 등장해 바로 연습할 수 있습니다.
+
+**본인의 ChatGPT 구독으로 로그인해 ODDBOUT을 사용하면, 구독에 포함된 GPT 작업에는 별도 OpenAI API 비용이 들지 않습니다.** 사용 가능한 생성 기능과 한도는 구독을 따릅니다. oddbout.com에서 제작을 맡길 수도 있습니다. 가입 시 무료로 받는 50만 제작 토큰으로 시작하며, 제작한 만큼 차감됩니다.
+
+ChatGPT 웹과 앱에서는 @ODDBOUT에 원하는 조건을 말해 보세요. 런처가 검수한 웹게임 30개에서 두세 개를 추천합니다. 카드를 고르면 ODDBOUT 오리지널은 대화 안에서, 외부 게임은 Poki 공식 페이지에서 시작합니다.
+
+| 해보고 싶은 일 | ChatGPT에서 이렇게 말하세요 | 다음에 보이는 것 |
+| --- | --- | --- |
+| 내 격투가 만들기 | “앞치마를 두른 너구리 대장장이를 격투가로 만들어줘.” | 외형 후보를 골라 동작을 제작합니다. 등록 후 내 경기장에서 연습하고 출전을 선택합니다. |
+| 친구와 웹게임 한 판 | “키보드 하나로 둘이 동시에 할 게임 두 개 골라줘.” | 검수한 30개 중 조건에 맞는 추천 카드를 받습니다. 오리지널 3종은 채팅 런처에서, 외부 게임은 Poki 공식 페이지에서 플레이합니다. |
+
+[![실제 ODDBOUT 경기 장면](https://raw.githubusercontent.com/jeonghwanko/oddbout-starter/main/website/cloud-plugin/fight-preview.jpg)](https://oddbout.com/cloud-plugin/index.ko)
+
+### 오픈소스 제작 키트
 
 ODDBOUT은 직접 만든 캐릭터로 플레이하는 대전 게임입니다. 이 저장소에는 캐릭터를 만드는 오픈소스 도구가 들어 있습니다. AI와 대화하며 설명이나 참고 이미지를 원화와 애니메이션으로 만들고, 게임에 쓸 선수 패키지로 완성할 수 있습니다. 도구와 문서에서는 AI Fighter라는 이름도 사용합니다. PayPal Sandbox 예산으로 ODDBOUT 컵을 방송하는 실험 중인 에이전트 방송, [ODDBOUT Showrunner](#oddbout-showrunner)도 이 저장소에 있습니다.
 
@@ -215,6 +227,11 @@ npm run sprite:setup
 사이트에는 따로 로그인하고, 그 계정이 클라우드 `get_profile`과 같은지 확인하세요. 한 번 쓰는 로그인 링크를 만들지는 않습니다.
 
 ## ODDBOUT Showrunner
+
+> **PayPal AI Hackathon 출품작: [ODDBOUT Showrunner](#oddbout-showrunner).** 스폰서는 PayPal로 결제하고, AI 프로듀서가
+> 방송을 진행하고, 선수 제작자가 출연료를 받습니다. PayPal Sandbox 테스트 돈만 씁니다.
+> [호스팅 데모](https://broadcast.oddbout.com/broadcast/) · [심사자 안내 페이지(영어)](https://broadcast.oddbout.com/broadcast/judges/) ·
+> [HACKATHON.md(영어)](docs/HACKATHON.md)
 
 [`broadcast/`](broadcast)의 Showrunner는 정한 예산 안에서 ODDBOUT 컵을 방송으로 돌립니다. PayPal Sandbox로 재화를 충전하고
 세션과 예산을 승인하면, 선택형 AI 프로듀서가 자기 MCP로 그 승인 범위 안에서만 다음 컵 열기·대기·중지 중 하나를 고릅니다.
