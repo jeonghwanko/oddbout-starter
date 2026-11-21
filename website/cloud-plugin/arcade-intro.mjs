@@ -5,22 +5,40 @@ export const arcadeIntro = {
     start: 'ChatGPT에서 ODDBOUT 열기',
     setup: '처음이라면 플러그인 페이지에서 ‘채팅에서 사용해 보기’를 누르세요. 새 대화에서는 @ODDBOUT을 선택하고 아래 문장처럼 물어보면 됩니다.',
     exampleTitle: '같은 키보드라도, 두 사람이 즐기는 방식은 다릅니다',
-    example: '“친구랑 키보드 하나로 동시에 할 인기 게임 두 개 보여줘.” 실제로 이렇게 물었을 때 나온 게임은 Basketball Stars와 Tag였습니다. 농구를 고르면 상대의 공을 빼앗아 슛을 겨룹니다. 술래잡기를 고르면 서로 다른 키로 달리며 친구를 터치해 술래를 넘깁니다. 두 게임 모두 함께할 수 있지만, 지금 어떤 승부를 하고 싶은지에 따라 선택이 달라집니다.',
+    example:
+      '“친구랑 키보드 하나로 동시에 할 인기 게임 두 개 보여줘.” 실제로 이렇게 물었을 때 나온 게임은 Basketball Stars와 Tag였습니다. 농구를 고르면 상대의 공을 빼앗아 슛을 겨룹니다. 술래잡기를 고르면 서로 다른 키로 달리며 친구를 터치해 술래를 넘깁니다. 두 게임 모두 함께할 수 있지만, 지금 어떤 승부를 하고 싶은지에 따라 선택이 달라집니다.',
     promptsTitle: '내 상황에 맞춰 이렇게 물어보세요',
     prompts: [
-      ['휴대폰으로 한 손 플레이', '“휴대폰으로 한 손에 들고 할 게임 두 개 추천해줘. 달리는 게임이면 더 좋아.”', '휴대폰과 한 손 조작을 먼저 확인하고, 그 안에서 러너를 우선합니다.'],
-      ['차분하게 키우는 게임', '“가게를 운영하거나 재료를 합치는 게임을 하고 싶어. 처음 할 일을 알려줘.”', '경영과 합성 중 어떤 쪽이 당기는지 카드 설명으로 비교하세요. Monkey Mart에서는 바나나를 수확해 매대에 놓고, Legendary Forge에서는 광석을 합쳐 장비를 만듭니다.'],
-      ['조건 하나만 바꿔 다시 고르기', '“같은 키보드로 한다는 건 그대로야. 방금 본 농구 게임은 빼줘.”', '앞에서 고른 조건을 유지하면서 본 게임을 제외할 수 있습니다. 남는 게임이 하나라면 한 개만 보여줍니다.'],
+      [
+        '휴대폰으로 한 손 플레이',
+        '“휴대폰으로 한 손에 들고 할 게임 두 개 추천해줘. 달리는 게임이면 더 좋아.”',
+        '휴대폰과 한 손 조작을 먼저 확인하고, 그 안에서 러너를 우선합니다.',
+      ],
+      [
+        '차분하게 키우는 게임',
+        '“가게를 운영하거나 재료를 합치는 게임을 하고 싶어. 처음 할 일을 알려줘.”',
+        '경영과 합성 중 어떤 쪽이 당기는지 카드 설명으로 비교하세요. Monkey Mart에서는 바나나를 수확해 매대에 놓고, Legendary Forge에서는 광석을 합쳐 장비를 만듭니다.',
+      ],
+      [
+        '조건 하나만 바꿔 다시 고르기',
+        '“같은 키보드로 한다는 건 그대로야. 방금 본 농구 게임은 빼줘.”',
+        '앞에서 고른 조건을 유지하면서 본 게임을 제외할 수 있습니다. 남는 게임이 하나라면 한 개만 보여줍니다.',
+      ],
     ],
     originalsTitle: '채팅 안에서 바로 할 수 있는 ODDBOUT 오리지널',
     originals: [
       ['Pudding Escape', '젤리를 골라 달리고 장애물을 피하세요. 달릴 때마다 기록을 다시 노리는 러너입니다.'],
-      ['Legendary Forge', '광맥을 눌러 광석을 캐고 같은 광석 둘을 합치세요. 모루에서 장비를 만들어 납품합니다. 아래 화면은 실제로 게임을 열고 채굴한 장면입니다.'],
+      [
+        'Legendary Forge',
+        '광맥을 눌러 광석을 캐고 같은 광석 둘을 합치세요. 모루에서 장비를 만들어 납품합니다. 아래 화면은 실제로 게임을 열고 채굴한 장면입니다.',
+      ],
       ['Bounce Ball', '공은 스스로 튀어 오릅니다. 좌우로 움직일 순간을 골라 장애물을 넘고 다음 스테이지에 도전하세요.'],
     ],
-    launch: '오리지널 카드에서 ‘여기서 플레이’를 누르면 ChatGPT 런처 안에 게임이 열립니다. ‘런처로 돌아가기’를 누르면 다시 고를 수 있습니다. 외부 게임은 ‘Poki에서 플레이’를 누르고 ChatGPT의 링크 열기 확인을 거쳐 Poki 공식 게임 페이지에서 시작합니다.',
+    launch:
+      '오리지널 카드에서 ‘여기서 플레이’를 누르면 ChatGPT 런처 안에 게임이 열립니다. ‘런처로 돌아가기’를 누르면 다시 고를 수 있습니다. 외부 게임은 ‘Poki에서 플레이’를 누르고 ChatGPT의 링크 열기 확인을 거쳐 Poki 공식 게임 페이지에서 시작합니다.',
     evidenceTitle: '어떤 게임을 추천하나요?',
-    evidence: '첫 목록은 ODDBOUT 오리지널 3개와 Poki 인기 목록에서 고른 웹게임 27개입니다. 외부 카드의 ‘Poki 평가’는 2026년 11월 21일 검수 당시 게임 페이지에 표시된 누적 평가 수입니다. ‘두 사람이 동시에’, ‘가입 없이’처럼 꼭 필요한 조건을 먼저 적용하고, 선호 장르가 맞는 게임을 우선합니다. 광고 없음이나 정확한 한 판 시간처럼 확인하지 못한 조건이 꼭 필요하다면, 어느 조건을 바꿀 수 있는지 되묻습니다.',
+    evidence:
+      '첫 목록은 ODDBOUT 오리지널 3개와 Poki 인기 목록에서 고른 웹게임 27개입니다. 외부 카드의 ‘Poki 평가’는 2026년 11월 21일 검수 당시 게임 페이지에 표시된 누적 평가 수입니다. ‘두 사람이 동시에’, ‘가입 없이’처럼 꼭 필요한 조건을 먼저 적용하고, 선호 장르가 맞는 게임을 우선합니다. 광고 없음이나 정확한 한 판 시간처럼 확인하지 못한 조건이 꼭 필요하다면, 어느 조건을 바꿀 수 있는지 되묻습니다.',
     chart: 'Poki 인기 목록 보기',
   },
   en: {
@@ -29,22 +47,40 @@ export const arcadeIntro = {
     start: 'Open ODDBOUT in ChatGPT',
     setup: 'On the plugin page, choose the option to try it in chat. In a new conversation, select @ODDBOUT and ask a question like the ones below.',
     exampleTitle: 'One keyboard. Two very different contests.',
-    example: 'We asked for two popular games that friends could play simultaneously on one keyboard. ODDBOUT returned Basketball Stars and Tag. In Basketball Stars, steal the ball and shoot before your friend can block you. In Tag, use separate keys to chase each other until you can pass the chase to your friend. Pick the kind of rivalry you feel like today.',
+    example:
+      'We asked for two popular games that friends could play simultaneously on one keyboard. ODDBOUT returned Basketball Stars and Tag. In Basketball Stars, steal the ball and shoot before your friend can block you. In Tag, use separate keys to chase each other until you can pass the chase to your friend. Pick the kind of rivalry you feel like today.',
     promptsTitle: 'Try a request that fits your setup',
     prompts: [
-      ['Playing on your phone', '“Find two games I can play one-handed on my phone. A runner would be great.”', 'Phone and one-handed controls are requirements. A runner gets preference among the games that fit.'],
-      ['In the mood to build something', '“I’d like to run a shop or merge materials. What would I do first?”', 'Compare the opening moves. Harvest bananas and stock a shelf in Monkey Mart, or combine ore and forge equipment in Legendary Forge.'],
-      ['Keep one condition and change another', '“Keep the shared keyboard, but leave out the basketball game you just showed me.”', 'Keep your setup and rule out a previous pick. If only one game fits, you’ll see one.'],
+      [
+        'Playing on your phone',
+        '“Find two games I can play one-handed on my phone. A runner would be great.”',
+        'Phone and one-handed controls are requirements. A runner gets preference among the games that fit.',
+      ],
+      [
+        'In the mood to build something',
+        '“I’d like to run a shop or merge materials. What would I do first?”',
+        'Compare the opening moves. Harvest bananas and stock a shelf in Monkey Mart, or combine ore and forge equipment in Legendary Forge.',
+      ],
+      [
+        'Keep one condition and change another',
+        '“Keep the shared keyboard, but leave out the basketball game you just showed me.”',
+        'Keep your setup and rule out a previous pick. If only one game fits, you’ll see one.',
+      ],
     ],
     originalsTitle: 'Three ODDBOUT originals you can play in chat',
     originals: [
       ['Pudding Escape', 'Pick a jelly, run and dodge obstacles. Come back for another run to beat your score.'],
-      ['Legendary Forge', 'Tap a vein to mine ore, merge two matching pieces, then take them to the anvil to make equipment for delivery. The screenshot shows the forge after mining in a live game.'],
+      [
+        'Legendary Forge',
+        'Tap a vein to mine ore, merge two matching pieces, then take them to the anvil to make equipment for delivery. The screenshot shows the forge after mining in a live game.',
+      ],
       ['Bounce Ball', 'The ball bounces on its own. Time your moves left and right to clear obstacles and advance to the next stage.'],
     ],
-    launch: 'Choose the in-chat play button on an original to open the game inside the launcher. Return to the launcher to pick again. For an external game, choose the Poki button and confirm the link in ChatGPT to open the official game page.',
+    launch:
+      'Choose the in-chat play button on an original to open the game inside the launcher. Return to the launcher to pick again. For an external game, choose the Poki button and confirm the link in ChatGPT to open the official game page.',
     evidenceTitle: 'Where the picks come from',
-    evidence: 'The starting catalog pairs three ODDBOUT originals with 27 games selected from Poki’s popular list. The count on each external card is the cumulative number of Poki ratings when we reviewed it on November 21, 2026. Requirements such as simultaneous play or guest access narrow the shortlist first. Preferences such as genre help order the matches. If a requirement like ad-free play or an exact round length hasn’t been verified, ODDBOUT asks what you can relax.',
+    evidence:
+      'The starting catalog pairs three ODDBOUT originals with 27 games selected from Poki’s popular list. The count on each external card is the cumulative number of Poki ratings when we reviewed it on November 21, 2026. Requirements such as simultaneous play or guest access narrow the shortlist first. Preferences such as genre help order the matches. If a requirement like ad-free play or an exact round length hasn’t been verified, ODDBOUT asks what you can relax.',
     chart: 'Explore popular games on Poki',
   },
 };
