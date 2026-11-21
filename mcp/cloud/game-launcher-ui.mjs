@@ -3,7 +3,12 @@
 import { z } from 'zod';
 import { UUID_ARG } from './common.mjs';
 
-export const GAME_LAUNCHER_UI = 'ui://oddbout/game-launcher-v2.html';
+export const GAME_LAUNCHER_UI = 'ui://oddbout/game-launcher-v3.html';
+const arcadeGames = [
+  { id: 'pudding', title: 'Pudding Escape', url: 'https://pudding.oddbout.com/' },
+  { id: 'forge', title: 'Legendary Forge', url: 'https://forge.oddbout.com/' },
+  { id: 'bounce', title: 'Bounce Ball', url: 'https://bounce.oddbout.com/game' },
+];
 const mimeType = 'text/html;profile=mcp-app';
 const widgetDomain = 'https://hosted-looks.oddbout.com';
 
@@ -35,14 +40,15 @@ export function configuredGameLauncher(config) {
 
 /** @param {string} gameOrigin */
 export function gameLauncherMetadata(gameOrigin) {
+  const frameDomains = [...new Set([gameOrigin, ...arcadeGames.map(game => new URL(game.url).origin)])];
   return {
     ui: {
       domain: widgetDomain,
       prefersBorder: false,
-      csp: { connectDomains: [], resourceDomains: [], frameDomains: [gameOrigin] },
+      csp: { connectDomains: [], resourceDomains: [], frameDomains },
     },
     'openai/widgetDomain': widgetDomain,
-    'openai/widgetCSP': { connect_domains: [], resource_domains: [], frame_domains: [gameOrigin] },
+    'openai/widgetCSP': { connect_domains: [], resource_domains: [], frame_domains: frameDomains },
     'openai/ui': { availableDisplayModes: ['inline', 'fullscreen'] },
     'openai/widgetDescription': 'Start the ODDBOUT game after the user chooses Start. The game must confirm its own sign-in and readiness.',
   };
@@ -63,8 +69,9 @@ button.secondary{background:#2b3443;color:#f5f7fa}button:disabled{opacity:.55}#m
 @media(max-width:600px){main{padding:8px}iframe{height:min(72dvh,780px)}}
 </style></head><body><main>
 <header><h1>ODDBOUT</h1><span class="sub">ChatGPT Game Launcher</span></header>
-<div class="controls"><button id="start">게임 시작</button><button id="reload" class="secondary" hidden>다시 시작</button>
-<button id="full" class="secondary">전체화면</button><button id="back" class="secondary" hidden>런처로 돌아가기</button></div>
+<div id="arcade"><div class="controls">${arcadeGames.map(game => `<button id="${game.id}">${game.title}</button>`).join('')}</div></div>
+<div class="controls"><button id="start" class="secondary">ODDBOUT 연습 경기</button><button id="reload" class="secondary" hidden>다시 시작</button>
+<button id="full" class="secondary" hidden>전체화면</button><button id="back" class="secondary" hidden>런처로 돌아가기</button></div>
 <p id="message" role="status" aria-live="polite">게임을 시작하면 ODDBOUT 로그인을 확인합니다.</p>
 <section id="stage"></section></main>
 <script>
@@ -73,8 +80,20 @@ const GAME_URL=${JSON.stringify(game.url)}, GAME_ORIGIN=${JSON.stringify(game.or
 const stage=document.getElementById('stage'), start=document.getElementById('start'), reload=document.getElementById('reload');
 const back=document.getElementById('back'), full=document.getElementById('full'), message=document.getElementById('message');
 let state='idle', frame=null, nonce=null, attemptId=null, watchdog=null, helloTimer=null, helloCount=0, grantRequestGeneration=0, hostModes=null, gameReady=false, gameAuthenticated=false;
+const arcade=document.getElementById('arcade');
+function openArcade(game){
+  stop();
+  arcade.hidden=true;start.hidden=true;back.hidden=false;
+  const player=document.createElement('iframe');
+  player.title=game.title;player.allow='fullscreen; gamepad';player.referrerPolicy='no-referrer';
+  player.src=game.url;stage.append(player);stage.style.display='block';
+  note(game.title,game.title);requestFullscreen(false);
+}
+for(const game of ${JSON.stringify(arcadeGames)}){
+  document.getElementById(game.id).addEventListener('click',()=>openArcade(game));
+}
 function localizeControls(){const locale=(window.openai?.locale||document.documentElement.lang||'ko').toLowerCase(),english=locale.startsWith('en');
-  start.textContent=english?'Start game':'게임 시작';reload.textContent=english?'Restart':'다시 시작';
+  start.textContent=english?'ODDBOUT practice':'ODDBOUT 연습 경기';reload.textContent=english?'Restart':'다시 시작';
   back.textContent=english?'Close game':'런처로 돌아가기';full.textContent=english?'Fullscreen':'전체화면';document.documentElement.lang=english?'en':'ko'}
 function say(en,ko){const locale=(window.openai?.locale||document.documentElement.lang||'ko').toLowerCase();message.textContent=locale.startsWith('en')?en:ko;localizeControls()}
 function note(en,ko){say(en,ko)}
@@ -87,8 +106,12 @@ function freshId(){if(typeof crypto?.randomUUID!=='function')throw Error('secure
 function randomNonce(){if(typeof crypto?.getRandomValues!=='function')throw Error('secure-random-unavailable');
   const bytes=new Uint8Array(16);crypto.getRandomValues(bytes);return Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('')}
 function removeFrame(){resetHello();if(frame){sendToGame('launcher:stop',{});frame.removeAttribute('src');frame.remove();frame=null}stage.replaceChildren();stage.style.display='none'}
-function stop(){grantRequestGeneration++;resetTimer();resetHello();removeFrame();state='idle';nonce=null;attemptId=null;gameReady=false;gameAuthenticated=false;start.hidden=false;reload.hidden=true;back.hidden=true;
-  note('The game was closed. Select Start to open a new game.','게임을 닫았습니다. 새로 시작하려면 게임 시작을 누르세요.')}
+function stop(){grantRequestGeneration++;resetTimer();resetHello();removeFrame();state='idle';nonce=null;attemptId=null;gameReady=false;gameAuthenticated=false;arcade.hidden=false;start.hidden=false;reload.hidden=true;back.hidden=true;
+  note('The game was closed. Choose a game to play.','게임을 닫았습니다. 플레이할 게임을 선택하세요.')}
+function updateModes(modes){
+  if(Array.isArray(modes))hostModes=new Set(modes);
+  full.hidden=!hostModes?.has('fullscreen')||typeof window.openai?.requestDisplayMode!=='function';
+}
 function requestFullscreen(showError){if(!hostModes?.has('fullscreen')||typeof window.openai?.requestDisplayMode!=='function'){
   if(showError)note('Fullscreen is not available here.','전체화면을 사용할 수 없습니다.');return}
   Promise.resolve().then(()=>window.openai.requestDisplayMode({mode:'fullscreen'})).then(result=>{
@@ -110,7 +133,7 @@ function repeatHello(expectedAttempt){
 function startAttempt(){
   grantRequestGeneration++;resetTimer();resetHello();removeFrame();gameReady=false;gameAuthenticated=false;
   try{nonce=randomNonce();attemptId=freshId()}catch{nonce=null;attemptId=null;state='idle';note('Secure startup is unavailable in this browser.','이 브라우저에서 보안 실행을 시작할 수 없습니다.');return}
-  const thisAttempt=attemptId;state='loading';start.hidden=true;reload.hidden=false;back.hidden=false;stage.style.display='block';
+  const thisAttempt=attemptId;state='loading';arcade.hidden=true;start.hidden=true;reload.hidden=false;back.hidden=false;stage.style.display='block';
   frame=document.createElement('iframe');frame.title=(window.openai?.locale||document.documentElement.lang||'ko').toLowerCase().startsWith('en')?'ODDBOUT game':'ODDBOUT 게임';
   frame.allow='fullscreen; gamepad';frame.referrerPolicy='no-referrer';
   stage.append(frame);note('Opening ODDBOUT…','ODDBOUT을 여는 중…');requestFullscreen(false);
@@ -171,7 +194,7 @@ window.addEventListener('message',event=>{
     }else if(data.type==='game:error'&&typeof data.code==='string'){
       // The game's codes (ChatGptGame.fail/fatal). Only boot-failed is final; the game recovers the others itself.
       if(data.code==='boot-failed'){
-        grantRequestGeneration++;resetTimer();removeFrame();state='unverified';gameReady=false;gameAuthenticated=false;start.hidden=true;reload.hidden=false;back.hidden=true;
+        grantRequestGeneration++;resetTimer();removeFrame();state='unverified';gameReady=false;gameAuthenticated=false;arcade.hidden=false;start.hidden=true;reload.hidden=false;back.hidden=true;
         note('The game could not start. Select Restart to try again.','게임을 시작하지 못했습니다. 다시 시작을 눌러 다시 시도해 주세요.');return}
       if(data.code==='auth-required'){
         // Expiry or a rejected credential: the game asks again with game:auth-required when the user selects Connect in it.
@@ -194,10 +217,10 @@ window.addEventListener('message',event=>{
   // This message listener handles only the ChatGPT Apps SDK host bridge; it never handles game messages.
   if(event.source!==parent||event.data?.jsonrpc!=='2.0')return;
   if(event.data.method==='ui/notifications/host-context-changed'){
-    const modes=event.data.params?.availableDisplayModes;if(Array.isArray(modes))hostModes=new Set(modes.filter(m=>m==='inline'||m==='fullscreen'));
+    updateModes(event.data.params?.availableDisplayModes);
   }
   if(event.data.id===1&&event.data.result){
-    const modes=event.data.result.hostContext?.availableDisplayModes;if(Array.isArray(modes))hostModes=new Set(modes.filter(m=>m==='inline'||m==='fullscreen'));
+    updateModes(event.data.result.hostContext?.availableDisplayModes);
     const locale=event.data.result.hostContext?.locale;if(typeof locale==='string'&&locale.length<=20){document.documentElement.lang=locale;localizeControls()}
     post({method:'ui/notifications/initialized',params:{}});
   }
@@ -208,7 +231,7 @@ full.addEventListener('click',()=>requestFullscreen(true));window.addEventListen
 if(typeof ResizeObserver==='function')new ResizeObserver(()=>post({method:'ui/notifications/size-changed',params:{height:document.body.scrollHeight}})).observe(document.body);
 post({id:1,method:'ui/initialize',params:{appInfo:{name:'ODDBOUT launcher',version:'2.0.0'},
   appCapabilities:{availableDisplayModes:['inline','fullscreen']},protocolVersion:'2026-01-26'}});
-say('Select Start game to open ODDBOUT.','ODDBOUT을 열려면 게임 시작을 누르세요.');
+say('Choose a game to play.','플레이할 게임을 선택하세요.');
 })();
 </script></body></html>`;
 }
@@ -231,7 +254,7 @@ export function registerGameLauncherTools(register, game, issueGrant) {
   register(
     'open_game_launcher',
     'Open ODDBOUT game launcher',
-    'Show the ODDBOUT game launcher. The game starts only after the user selects Start. The launcher checks game sign-in and readiness separately.',
+    'Show the game picker for Pudding Escape, Legendary Forge, Bounce Ball and ODDBOUT practice. The selected game opens in the launcher. The launcher checks game sign-in and readiness separately.',
     {},
     async () => ({ ok: true, game: 'ODDBOUT', launchMode: 'embedded-iframe', note: 'Launcher is ready. No game session or rendering has been verified.' }),
     { openWorld: false, uiResourceUri: GAME_LAUNCHER_UI },
