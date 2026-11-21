@@ -205,7 +205,7 @@ test('arcade-only launcher lists the three play origins and has no practice gran
     null,
     () => assert.fail('no practice'),
   );
-  assert.deepEqual(names, ['open_game_launcher']);
+  assert.deepEqual(names, ['open_game_launcher', 'recommend_web_games']);
   assert.deepEqual(gameLauncherMetadata(undefined).ui.csp.frameDomains, frameDomains.slice(1));
   assert.match(gameLauncherHtmlFor(null), /id="start"[^>]* hidden/);
 });
@@ -538,4 +538,23 @@ test('Cloud exposes the grant only to the app and only in result metadata', asyn
   assert.equal(called.result._meta.challenge, 'B'.repeat(43));
   assert.doesNotMatch(JSON.stringify(called.result.content), /afg_[0-9a-f]{64}/);
   assert.doesNotMatch(JSON.stringify(called.result.structuredContent), /afg_[0-9a-f]{64}/);
+});
+
+test('curated catalog keeps popularity evidence and respects all constraints across follow-ups', async () => {
+  const { recommendGames } = await import('../mcp/cloud/recommend-games.mjs');
+  const { webGames } = await import('../mcp/cloud/web-game-catalog.mjs');
+  assert.equal(webGames.length, 30);
+  assert.equal(new Set(webGames.map(g => g.url)).size, 30);
+  assert.equal(webGames.filter(g => g.studio === 'ODDBOUT').length, 3);
+  assert.ok(webGames.filter(g => g.studio !== 'ODDBOUT').every(g => g.votes > 0 && new URL(g.url).origin === 'https://poki.com'));
+  const two = recommendGames({ required: ['shared-keyboard', 'popular'] });
+  assert.deepEqual(new Set(two.games.map(g => g.id)), new Set(['tag', 'basketball-stars']));
+  const again = recommendGames({ required: ['shared-keyboard'], exclude: ['tag'] });
+  assert.deepEqual(
+    again.games.map(g => g.id),
+    ['basketball-stars'],
+  );
+  assert.equal(recommendGames({ unverifiedRequirements: ['ad-free'] }).games.length, 0);
+  assert.equal(recommendGames({ required: ['oddbout', 'merge'] }).games[0].launch, 'embedded');
+  assert.equal(recommendGames({ required: ['popular'], count: 2 }).games.length, 2);
 });

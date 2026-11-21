@@ -1,14 +1,13 @@
 // @ts-check
 // ChatGPT Apps SDK component for starting the existing ODDBOUT game in an iframe.
+import { recommendationSchema, recommendGames } from './recommend-games.mjs';
+import { webGames } from './web-game-catalog.mjs';
 import { z } from 'zod';
 import { UUID_ARG } from './common.mjs';
 
 export const GAME_LAUNCHER_UI = 'ui://oddbout/game-launcher-v3.html';
-const arcadeGames = [
-  { id: 'pudding', title: 'Pudding Escape', url: 'https://pudding.oddbout.com/' },
-  { id: 'forge', title: 'Legendary Forge', url: 'https://forge.oddbout.com/' },
-  { id: 'bounce', title: 'Bounce Ball', url: 'https://bounce.oddbout.com/game' },
-];
+const RECOMMENDATIONS_UI = 'ui://oddbout/game-recommendations-v1.html';
+const arcadeGames = webGames.filter(game => game.studio === 'ODDBOUT');
 const mimeType = 'text/html;profile=mcp-app';
 const widgetDomain = 'https://hosted-looks.oddbout.com';
 
@@ -55,7 +54,7 @@ export function gameLauncherMetadata(gameOrigin) {
 }
 
 /** @param {{url: string, origin: string} | null} game */
-export function gameLauncherHtmlFor(game) {
+export function gameLauncherHtmlFor(game, recommendations = false) {
   return `<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="no-referrer"><title>ODDBOUT · Game Launcher</title>
@@ -67,9 +66,10 @@ button{border:0;border-radius:8px;padding:10px 14px;background:#19bda8;color:#07
 button.secondary{background:#2b3443;color:#f5f7fa}button:disabled{opacity:.55}#message{color:#b6c3d4;margin:0 0 12px;font-size:13px}
 #stage{display:none;min-height:300px}iframe{width:100%;height:min(74vh,800px);min-height:300px;border:0;background:#05070a;border-radius:10px}
 @media(max-width:600px){main{padding:8px}iframe{height:min(72dvh,780px)}}
+article{padding:12px 0;border-bottom:1px solid #334050}article p{margin:4px 0 8px}article small{display:block;color:#a5b0c2}article a{color:#6de4d3}
 </style></head><body><main>
 <header><h1>ODDBOUT</h1><span class="sub">ChatGPT Game Launcher</span></header>
-<div id="arcade"><div class="controls">${arcadeGames.map(game => `<button id="${game.id}">${game.title}</button>`).join('')}</div></div>
+<div id="arcade"><div class="controls">${(recommendations ? [] : arcadeGames).map(game => `<button id="${game.id}">${game.title}</button>`).join('')}</div></div>
 <div class="controls"><button id="start" class="secondary"${game ? '' : ' hidden'}>ODDBOUT 연습 경기</button><button id="reload" class="secondary" hidden>다시 시작</button>
 <button id="full" class="secondary" hidden>전체화면</button><button id="back" class="secondary" hidden>런처로 돌아가기</button></div>
 <p id="message" role="status" aria-live="polite">게임을 시작하면 ODDBOUT 로그인을 확인합니다.</p>
@@ -89,9 +89,10 @@ function openArcade(game){
   player.src=game.url;stage.append(player);stage.style.display='block';
   note(game.title,game.title);requestFullscreen(false);
 }
-for(const game of ${JSON.stringify(arcadeGames)}){
+for(const game of ${JSON.stringify(recommendations ? [] : arcadeGames)}){
   document.getElementById(game.id).addEventListener('click',()=>openArcade(game));
 }
+${recommendations ? recommendationClient() : ''}
 function localizeControls(){const locale=(window.openai?.locale||document.documentElement.lang||'ko').toLowerCase(),english=locale.startsWith('en');
   start.textContent=english?'ODDBOUT practice':'ODDBOUT 연습 경기';reload.textContent=english?'Restart':'다시 시작';
   back.textContent=english?'Close game':'런처로 돌아가기';full.textContent=english?'Fullscreen':'전체화면';document.documentElement.lang=english?'en':'ko'}
@@ -216,6 +217,7 @@ window.addEventListener('message',event=>{
   }
   // This message listener handles only the ChatGPT Apps SDK host bridge; it never handles game messages.
   if(event.source!==parent||event.data?.jsonrpc!=='2.0')return;
+  ${recommendations ? "if(event.data.method==='ui/notifications/tool-result')renderPicks(event.data.params?.structuredContent);" : ''}
   if(event.data.method==='ui/notifications/host-context-changed'){
     updateModes(event.data.params?.availableDisplayModes);
   }
@@ -232,12 +234,44 @@ if(typeof ResizeObserver==='function')new ResizeObserver(()=>post({method:'ui/no
 post({id:1,method:'ui/initialize',params:{appInfo:{name:'ODDBOUT launcher',version:'2.0.0'},
   appCapabilities:{availableDisplayModes:['inline','fullscreen']},protocolVersion:'2026-01-26'}});
 say('Choose a game to play.','플레이할 게임을 선택하세요.');
+${recommendations ? 'renderPicks(window.openai?.toolOutput);' : ''}
 })();
 </script></body></html>`;
 }
 
+// The widget resolves IDs against the reviewed catalog, never a URL supplied in a tool result.
+function recommendationClient() {
+  return `
+const catalog=new Map(${JSON.stringify(webGames)}.map(g=>[g.id,g]));
+function renderPicks(result){
+  if(result?.kind!=='web-game-recommendations'||!Array.isArray(result.games))return;
+  const rows=[];
+  for(const pick of result.games.slice(0,3)){
+    const game=catalog.get(pick.id);if(!game)continue;
+    const row=document.createElement('article');
+    const title=document.createElement('strong');title.textContent=game.title;
+    const description=document.createElement('p');description.textContent=game.description;
+    const owned=game.studio==='ODDBOUT', link=document.createElement(owned?'button':'a');
+    if(owned){link.textContent='여기서 플레이';link.addEventListener('click',()=>openArcade(game))}
+    else {link.href=game.url;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Poki에서 플레이';
+      link.addEventListener('click',event=>{if(typeof window.openai?.openExternal==='function'){event.preventDefault();window.openai.openExternal({href:game.url})}})}
+    const source=document.createElement('small');source.textContent=owned?'ODDBOUT 제작':game.studio+' · Poki 평가 '+game.votes.toLocaleString()+'건';
+    row.append(title,source,description,link);rows.push(row);
+  }
+  arcade.replaceChildren(...rows);
+  if(!rows.length)note('No verified match. Try relaxing a condition.','모든 조건을 확인한 게임이 없습니다. 바꿔도 되는 조건을 알려주세요.');
+}
+window.addEventListener('openai:set_globals',()=>renderPicks(window.openai?.toolOutput));
+`;
+}
+
 /** @param {import('@modelcontextprotocol/server').McpServer} server @param {{url:string,origin:string} | null} game */
 export function registerGameLauncherUi(server, game) {
+  const meta = gameLauncherMetadata(undefined);
+  meta['openai/widgetDescription'] = 'Choose a reviewed web game matching your preferences. ODDBOUT games open here, partner-site links open on Poki.';
+  server.registerResource('oddbout-game-recommendations', RECOMMENDATIONS_UI, { mimeType, _meta: meta }, () => ({
+    contents: [{ uri: RECOMMENDATIONS_UI, mimeType, text: gameLauncherHtmlFor(null, true), _meta: meta }],
+  }));
   server.registerResource('oddbout-game-launcher', GAME_LAUNCHER_UI, { mimeType, _meta: gameLauncherMetadata(game?.origin) }, () => ({
     contents: [{ uri: GAME_LAUNCHER_UI, mimeType, text: gameLauncherHtmlFor(game), _meta: gameLauncherMetadata(game?.origin) }],
   }));
@@ -258,6 +292,14 @@ export function registerGameLauncherTools(register, game, issueGrant) {
     {},
     async () => ({ ok: true, game: 'ODDBOUT', launchMode: 'embedded-iframe', note: 'Launcher is ready. No game session or rendering has been verified.' }),
     { openWorld: false, uiResourceUri: GAME_LAUNCHER_UI },
+  );
+  register(
+    'recommend_web_games',
+    'Recommend playable web games',
+    'Translate the user’s natural-language conditions into required and preferred tags. Recommend 2–3 reviewed browser games including ODDBOUT and popular Poki games. Pass unsupported hard constraints in unverifiedRequirements. Never fill a shortlist with non-matches. Expose official play links to text-only clients.',
+    recommendationSchema,
+    async args => recommendGames(args),
+    { publicTool: true, openWorld: true, uiResourceUri: RECOMMENDATIONS_UI },
   );
   if (!game) return;
   register(
