@@ -10,6 +10,7 @@ import { readUpdatesManifest } from './site-updates.mjs';
 import { writeUpdatesAnalytics } from './site-updates-analytics.mjs';
 import { publishEnvironmentProfiles } from '../mcp/environment-profiles.mjs';
 import { buildPluginPolicySite, sitePrivacyNotice, policyFiles } from './build-plugin-policy-site.mjs';
+import { buildBrowserFightingGame, browserFightingFiles } from './build-browser-fighting-game.mjs';
 import { buildCloudConnect } from './build-cloud-connect.mjs';
 
 import { youtubeChannelPlugin } from './site-social.mjs';
@@ -134,6 +135,7 @@ if (hasChatGptEntry) {
 if (config.customDomain) await writeFile(join(output, 'CNAME'), config.customDomain + '\n');
 // Policy files must exist before the artifact fingerprint is measured.
 await buildPluginPolicySite(join(output, 'ai-fighter-creator'), { publish: true });
+await buildBrowserFightingGame(output);
 await buildCloudConnect(output);
 await publishEnvironmentProfiles(output);
 // Serve the actual homepage at /; retain the old filename as a compatible redirect.
@@ -147,7 +149,7 @@ await writeUpdatesAnalytics(output, updatesOutput.pages, config.analyticsMeasure
 // twitch.html and bet.html come from the game's site plugins; older game sources do not have them.
 // ko/ and ja/ are the homepage's Korean and Japanese documents (kaito_web home-site-plugin); / is English.
 const standalonePages = ['ko/index.html', 'ja/index.html', 'twitch.html', 'bet.html'].filter(page => existsSync(join(output, page)));
-const seoPages = ['index.html', ...siteEntries, ...standalonePages, ...policyFiles, ...updatesOutput.pages];
+const seoPages = ['index.html', ...siteEntries, ...standalonePages, ...policyFiles, ...browserFightingFiles, ...updatesOutput.pages];
 // Every published document (also the cloud plugin's and the game's own pages), not only the sitemap's: a canonical anywhere names the final URL.
 const publishedPages = (await readdir(output, { recursive: true })).map(path => String(path).replaceAll('\\', '/')).filter(path => path.endsWith('.html'));
 await cleanSiteSeoUrls(output, publishedPages, config.siteUrl);
