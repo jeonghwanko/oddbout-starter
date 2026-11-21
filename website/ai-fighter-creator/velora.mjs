@@ -21,6 +21,7 @@ const copy = {
       'In this ODDBOUT exhibition, Leon wins by KO at 34.3 seconds. Watch how Velora moves between her stance, movement and attacks in the actual game.',
     watch: 'Replay the full match in ODDBOUT',
     guide: 'Read the fighter creation guide',
+    play: 'Try the browser fighting game',
   },
   ko: {
     title: 'AI로 2D 격투 게임 캐릭터 스프라이트 시트 만들기',
@@ -41,6 +42,7 @@ const copy = {
       '이 ODDBOUT 시범 경기에서는 34.3초에 레온이 KO로 이겼습니다. 대기 자세에서 이동과 공격으로 이어지는 벨로라의 동작을 실제 게임 화면에서 확인해 보세요.',
     watch: 'ODDBOUT에서 전체 경기 다시 보기',
     guide: '내 파이터 제작 가이드 보기',
+    play: '브라우저 격투 게임 체험하기',
   },
 };
 
@@ -82,7 +84,8 @@ export function veloraCase(lang) {
         <source src="./velora/velora-vs-leon.mp4" type="video/mp4">
       </video>
       <p><a class="button" href="${replay}&amp;lang=${lang}">${text.watch} →</a></p>
-      <p><a href="https://oddbout.com/docs?lang=${lang}">${text.guide} →</a></p>`,
+      <p><a href="https://oddbout.com/docs?lang=${lang}">${text.guide} →</a></p>
+      <p><a href="/browser-fighting-game/${lang === 'ko' ? '' : 'index.en.html'}">${text.play} →</a></p>`,
     ],
   };
 }

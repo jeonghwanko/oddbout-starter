@@ -48,7 +48,7 @@ export async function buildPluginPolicySite(destination, { publish = false } = {
       )
       .join('\n');
     const html = `<!doctype html>
-<html lang="${page.lang || 'en'}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${publish ? `<link rel="canonical" href="${canonical}">${alternates}` : '<meta name="robots" content="noindex">'}<meta name="referrer" content="strict-origin-when-cross-origin"><title>${page.title} · AI Fighter Creator</title><meta name="description" content="${page.description}"><link rel="stylesheet" href="./style.css"></head>
+<html lang="${page.lang || 'en'}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${publish ? `<link rel="canonical" href="${canonical}">${alternates}` : '<meta name="robots" content="noindex">'}<meta name="referrer" content="strict-origin-when-cross-origin"><title>${page.title} · AI Fighter Creator</title><meta name="description" content="${page.description}"><link rel="icon" href="./icon.svg" type="image/svg+xml"><link rel="stylesheet" href="./style.css"></head>
 <body><a class="skip" href="#main">${page.lang === 'ko' ? '본문 바로가기' : 'Skip to content'}</a><header><a class="brand" href="./index.html"><img src="./icon.svg" width="36" height="36" alt=""><span>AI FIGHTER<span class="brand-sub">CREATOR / LUCAS FOUNDATION</span></span></a><nav aria-label="Main">${nav.map(([file, label]) => `<a ${file === page.file ? 'aria-current="page"' : ''} href="./${file}">${label}</a>`).join('')}</nav></header>
 ${publish ? '' : `<div class="preview">POLICY PREVIEW <span>Prepared ${prepared} · publication pending · not an effective notice</span></div>`}
 <main id="main"${isOverview ? ' class="fighter-creation"' : ''}><div class="hero"><p class="eyebrow">${page.eyebrow}</p><h1>${page.title}</h1><p class="intro">${page.description}</p><div class="meta">Lucas Foundation${isOverview ? '' : ` <span>•</span> ${date}`}${page.translation ? ` <span>•</span> <a href="./${page.translation.file}" lang="${page.translation.lang}">${page.translation.label}</a>` : ''}</div></div>
@@ -57,7 +57,7 @@ ${publish ? '' : `<div class="preview">POLICY PREVIEW <span>Prepared ${prepared}
     await writeFile(path.join(destination, page.file), html);
   }
   await cp(path.join(root, 'website/ai-fighter-creator/style.css'), path.join(destination, 'style.css'));
-  await cp(path.join(root, 'plugins/ai-fighter/assets/icon.svg'), path.join(destination, 'icon.svg'));
+  await cp(path.join(root, 'website/ai-fighter-creator/icon.svg'), path.join(destination, 'icon.svg'));
   await mkdir(path.join(destination, 'velora'), { recursive: true });
   await Promise.all(caseAssets.map(file => cp(path.join(root, 'website/ai-fighter-creator', file), path.join(destination, file))));
   return { destination, pages: pages.map(p => p.file), mode: publish ? 'publication' : 'preview', published: false };

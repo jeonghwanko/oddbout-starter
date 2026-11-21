@@ -4,11 +4,13 @@ import { readFile, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { policyFiles } from './build-plugin-policy-site.mjs';
+import { browserFightingFiles } from './build-browser-fighting-game.mjs';
 import { discoveryFiles } from './site-discovery.mjs';
 import { updatesPublishedFiles } from './site-updates.mjs';
 import { CHATGPT_GAME_ENTRY, chatGptEmbedBuild } from './chatgpt-embed-site.mjs';
 
 export const hosting = JSON.parse(await readFile(new URL('../deploy/creator-site.json', import.meta.url), 'utf8'));
+const staticPages = [...policyFiles, ...browserFightingFiles];
 /**
  * Node's default 1 MiB output buffer is too small for the site branch: `git ls-tree -r HEAD` of the Pages branch lists thousands of
  * art files (over 1 MiB on 2026-11-20) and failed with ENOBUFS before the Cloudflare upload.
@@ -120,7 +122,7 @@ export async function fingerprint(root, { gitCheckout = false } = {}) {
 
 /** @param {string} root @param {{ gitCheckout?: boolean }} [options] */
 export async function verifyArtifact(root, options) {
-  for (const path of [...siteEntries, ...policyFiles, ...discoveryFiles, 'index.html', '.nojekyll', '.vite/manifest.json']) {
+  for (const path of [...siteEntries, ...staticPages, ...discoveryFiles, 'index.html', '.nojekyll', '.vite/manifest.json']) {
     if (!(await stat(join(root, path))).isFile()) throw new Error(`Missing site entry: ${path}`);
   }
   if (hosting.customDomain && (await readFile(join(root, 'CNAME'), 'utf8')).trim() !== hosting.customDomain) {
@@ -190,7 +192,7 @@ export async function publishedFiles(root, siteUrl = hosting.siteUrl) {
   }
   const includeAdminWorkspace = Boolean(manifest[adminWorkspaceEntry]) || (await stat(join(root, adminWorkspaceEntry)).catch(() => null))?.isFile();
   const entries = [...siteEntries, ...(includeAdminWorkspace ? [adminWorkspaceEntry] : []), ...(includeChatgptEntry ? [CHATGPT_GAME_ENTRY] : [])];
-  const files = new Set(['index.html', ...entries, ...policyFiles, ...discoveryFiles, ...(hosting.customDomain ? ['CNAME'] : [])]),
+  const files = new Set(['index.html', ...entries, ...staticPages, ...discoveryFiles, ...(hosting.customDomain ? ['CNAME'] : [])]),
     visited = new Set();
   /** @param {string} key */
   function visit(key) {

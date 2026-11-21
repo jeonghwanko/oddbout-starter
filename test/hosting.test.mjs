@@ -3,7 +3,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, cp, rm, readFile } from 'node:fs/promises';
 import { policyFiles, buildPluginPolicySite, sitePrivacyNotice } from '../scripts/build-plugin-policy-site.mjs';
-import { discoveryFiles } from '../scripts/site-discovery.mjs';
+import { browserFightingFiles, buildBrowserFightingGame } from '../scripts/build-browser-fighting-game.mjs';
+import { discoveryFiles, writeSiteDiscovery } from '../scripts/site-discovery.mjs';
 import { tmpdir } from 'node:os';
 import { extname, join } from 'node:path';
 import {
@@ -45,6 +46,7 @@ test('published policies have effective dates and working local links, while pre
     for (const file of policyFiles.filter(file => file.endsWith('.html'))) {
       const html = await readFile(join(root, file), 'utf8');
       assert.match(html, /Lucas Foundation/);
+      assert.ok(html.includes('<link rel="icon" href="./icon.svg"'));
       if (!file.startsWith('ai-fighter-creator/index.')) {
         assert.match(html, /Effective: 2 November 2026|시행일: 2026-11-02/);
       }
@@ -85,12 +87,38 @@ test('published policies have effective dates and working local links, while pre
   }
 });
 
+test('the fighting-game landing pages have local creation and practice links and their own search URLs', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'browser-fighting-game-'));
+  try {
+    await buildBrowserFightingGame(root);
+    for (const [lang, file] of [
+      ['ko', 'index.html'],
+      ['en', 'index.en.html'],
+    ]) {
+      const html = await readFile(join(root, 'browser-fighting-game', file), 'utf8');
+      assert.ok(html.includes(`<html lang="${lang}">`));
+      assert.ok(html.includes(`href="/fighter?play=1&amp;fighter=velora&amp;opponent=leon&amp;lang=${lang}"`));
+      assert.ok(html.includes(`href="/creator?lang=${lang}"`));
+      assert.ok(html.includes('<source src="/ai-fighter-creator/velora/velora-vs-leon.mp4" type="video/mp4">'));
+      assert.ok(html.includes('hreflang="ko" href="https://oddbout.com/browser-fighting-game/"'));
+      assert.doesNotMatch(html, /noindex/);
+    }
+    assert.deepEqual(await writeSiteDiscovery(root, hosting.siteUrl, browserFightingFiles), [
+      'https://oddbout.com/browser-fighting-game/',
+      'https://oddbout.com/browser-fighting-game/index.en',
+    ]);
+  } finally {
+    await rm(root, { recursive: true });
+  }
+});
+
 test('public artifacts reject changed bytes, private inputs and dirty source metadata', async () => {
   const root = await mkdtemp(join(tmpdir(), 'fighter-artifact-test-'));
   try {
     await mkdir(join(root, '.vite'));
     await mkdir(join(root, 'assets'));
     await buildPluginPolicySite(join(root, 'ai-fighter-creator'), { publish: true });
+    await buildBrowserFightingGame(root);
     for (const file of [...siteEntries, ...discoveryFiles, 'index.html', '.nojekyll', 'assets/main.js']) {
       await writeFile(join(root, file), 'test');
     }
@@ -122,6 +150,7 @@ test('public artifacts reject changed bytes, private inputs and dirty source met
       ...siteEntries,
       ...discoveryFiles,
       'ai-fighter-creator',
+      'browser-fighting-game',
       'assets',
       'index.html',
       '.nojekyll',
@@ -180,6 +209,7 @@ test('live checks reject missing or wrong asset bytes even when entry HTML retur
     await mkdir(join(root, '.vite'));
     await mkdir(join(root, 'assets'));
     await mkdir(join(root, 'ai-fighter-creator', 'velora'), { recursive: true });
+    await mkdir(join(root, 'browser-fighting-game'));
     const manifest = Object.fromEntries(siteEntries.map(page => [page, { file: 'assets/main.js', imports: ['shared'], css: ['assets/main.css'] }]));
     manifest.shared = { file: 'assets/shared.js', dynamicImports: ['lazy'] };
     manifest.lazy = { file: 'assets/lazy.js' };
@@ -188,6 +218,7 @@ test('live checks reject missing or wrong asset bytes even when entry HTML retur
       [
         ...siteEntries,
         ...policyFiles,
+        ...browserFightingFiles,
         ...discoveryFiles,
         'index.html',
         'assets/main.js',
@@ -234,7 +265,7 @@ test('live checks reject missing or wrong asset bytes even when entry HTML retur
 test('shared HTML entries verify emitted modules, styles and transitive assets without a per-page manifest key', async () => {
   const root = await mkdtemp(join(tmpdir(), 'fighter-shared-entry-test-'));
   try {
-    for (const dir of ['.vite', 'assets', 'ai-fighter-creator/velora']) await mkdir(join(root, dir), { recursive: true });
+    for (const dir of ['.vite', 'assets', 'ai-fighter-creator/velora', 'browser-fighting-game']) await mkdir(join(root, dir), { recursive: true });
     const manifest = Object.fromEntries(siteEntries.map(page => [page, { file: 'assets/main.js' }]));
     delete manifest['service.html'];
     delete manifest['service.ko.html'];
@@ -245,6 +276,7 @@ test('shared HTML entries verify emitted modules, styles and transitive assets w
       [
         ...siteEntries,
         ...policyFiles,
+        ...browserFightingFiles,
         ...discoveryFiles,
         'index.html',
         'assets/main.js',
@@ -286,6 +318,7 @@ test("the artifact check walks the pages' module graph before the push, shared e
   try {
     for (const dir of ['.vite', 'assets']) await mkdir(join(root, dir));
     await buildPluginPolicySite(join(root, 'ai-fighter-creator'), { publish: true });
+    await buildBrowserFightingGame(root);
     const manifest = Object.fromEntries(siteEntries.map(page => [page, { file: 'assets/main.js' }]));
     delete manifest['service.html'];
     delete manifest['service.ko.html'];
@@ -370,12 +403,20 @@ test('a passing hiccup of the published site is retried; a missing file or wrong
     await mkdir(join(root, '.vite'));
     await mkdir(join(root, 'assets'));
     await mkdir(join(root, 'ai-fighter-creator', 'velora'), { recursive: true });
+    await mkdir(join(root, 'browser-fighting-game'));
     const manifest = Object.fromEntries(siteEntries.map(page => [page, { file: 'assets/main.js', assets: ['assets/font.woff2'] }]));
     await writeFile(join(root, '.vite/manifest.json'), JSON.stringify(manifest));
     const content = new Map(
-      [...siteEntries, ...policyFiles, ...discoveryFiles, 'index.html', 'assets/main.js', 'assets/font.woff2', ...(hosting.customDomain ? ['CNAME'] : [])].map(
-        path => [path, `content for ${path}`],
-      ),
+      [
+        ...siteEntries,
+        ...policyFiles,
+        ...browserFightingFiles,
+        ...discoveryFiles,
+        'index.html',
+        'assets/main.js',
+        'assets/font.woff2',
+        ...(hosting.customDomain ? ['CNAME'] : []),
+      ].map(path => [path, `content for ${path}`]),
     );
     for (const [path, value] of content) await writeFile(join(root, path), value);
     let calls = 0,
