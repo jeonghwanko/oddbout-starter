@@ -125,7 +125,11 @@ function launcherHarness() {
 
 test('each arcade game opens its play page and returns to the picker without a practice grant', () => {
   const h = launcherHarness();
-  for (const [id, url] of [['pudding', 'https://pudding.oddbout.com/'], ['forge', 'https://forge.oddbout.com/'], ['bounce', 'https://bounce.oddbout.com/game']]) {
+  for (const [id, url] of [
+    ['pudding', 'https://pudding.oddbout.com/'],
+    ['forge', 'https://forge.oddbout.com/'],
+    ['bounce', 'https://bounce.oddbout.com/game'],
+  ]) {
     h.ids.get(id).click();
     assert.equal(h.ids.get('stage').children[0].src, url);
     assert.equal(h.ids.get('arcade').hidden, true);
