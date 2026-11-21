@@ -1,7 +1,7 @@
 export const arcadeIntro = {
   ko: {
-    title: '내 그림을 움직이는 2D 캐릭터로 만들고, ODDBOUT 경기장에 세우세요',
-    lead: '캐릭터를 글로 설명하거나 참고 그림을 건네면 걷기, 달리기, 공격, 막기 동작을 만들 수 있습니다. 직접 만든 애니메이션은 파일로 내려받아 자신의 게임이나 영상에 활용할 수 있습니다. ODDBOUT에 선수 패키지를 등록하면 검증이 끝난 뒤 내 격투가로 등장해 바로 연습할 수 있습니다.',
+    title: '내 캐릭터의 첫 동작부터 첫 경기까지',
+    lead: '글이나 참고 그림으로 캐릭터가 걷고, 달리고, 공격하는 2D 애니메이션을 만드세요. 완성한 동작은 내려받아 내 게임이나 영상에 쓸 수 있습니다. 격투가로 묶어 oddbout.com에 등록하면 검증을 거쳐 연습 경기에 들어갈 수 있습니다.',
     cost: '본인의 ChatGPT 구독으로 로그인해 ODDBOUT을 사용하면, 구독에 포함된 GPT 작업에는 별도 OpenAI API 비용이 들지 않습니다.',
     costDetail:
       '사용 가능한 기능과 한도는 구독을 따릅니다. oddbout.com에서 제작을 맡길 수도 있습니다. 가입 시 무료로 받는 50만 제작 토큰으로 시작하며, 제작한 만큼 차감됩니다.',
@@ -22,7 +22,7 @@ export const arcadeIntro = {
     ],
     clip: '실제 ODDBOUT 경기 · 10초. 두 격투가가 경기장에서 맞붙는 장면입니다. 위 너구리 설정은 처음 요청할 때 써볼 수 있는 예시입니다.',
     arcadeLead:
-      'ChatGPT 웹과 앱에서는 @ODDBOUT에 원하는 조건을 말해 보세요. 런처가 검수한 웹게임 30개에서 두세 개를 추천합니다. 카드를 고르면 ODDBOUT 오리지널은 대화 안에서, 외부 게임은 Poki 공식 페이지에서 시작합니다.',
+      '지금 한 판 하고 싶다면 ChatGPT 웹이나 앱에서 원하는 조건을 말해 보세요. 게임 런처가 검수한 웹게임 30개에서 조건에 맞는 게임을 찾아 두세 장의 카드로 추천합니다. ODDBOUT 오리지널은 채팅에서 바로 즐기고, 외부 게임은 Poki에서 플레이하세요.',
     arcadeTitle: 'ChatGPT 웹과 앱에서 오늘 할 게임 고르기',
     start: 'ChatGPT에서 ODDBOUT 열기',
     setup: '처음이라면 플러그인 페이지에서 ‘채팅에서 사용해 보기’를 누르세요. 새 대화에서는 @ODDBOUT을 선택하고 아래 문장처럼 물어보면 됩니다.',
@@ -64,8 +64,8 @@ export const arcadeIntro = {
     chart: 'Poki 인기 목록 보기',
   },
   en: {
-    title: 'Animate your own 2D character and bring it into the ODDBOUT arena',
-    lead: 'Describe a character or bring a reference drawing to make walking, running, attacking and blocking animations. Download the animations you create for your own games or videos. Register the fighter package with ODDBOUT and, once it passes validation, take your fighter into a practice match.',
+    title: 'Create a 2D fighter and take it into the arena',
+    lead: 'Turn an idea or a reference drawing into a 2D character that walks, runs and attacks. Download the finished animations for your own games or videos, or register them as a fighter on oddbout.com and start practising once verified.',
     cost: 'When you use ODDBOUT with your ChatGPT subscription, GPT work included in your plan incurs no separate OpenAI API charges.',
     costDetail:
       'Available generation features and limits depend on your plan. Asking ODDBOUT to produce a fighter on its servers uses ODDBOUT creation tokens.',
@@ -86,7 +86,7 @@ export const arcadeIntro = {
     ],
     clip: 'Actual ODDBOUT gameplay · 10 seconds. Two fighters meet in the arena. The raccoon above is a sample creation prompt.',
     arcadeLead:
-      'On ChatGPT web and in the app, tell @ODDBOUT what you feel like playing. The launcher suggests two or three matches from 30 reviewed web games. Pick a card to play an ODDBOUT original in chat or an external game on its official Poki page.',
+      'Looking for something to play? Tell the game launcher on ChatGPT web or mobile what you have in mind. It recommends two or three matches from 30 curated web games when enough titles fit. Play ODDBOUT originals in chat or open an external game on Poki.',
     arcadeTitle: 'Find a game on ChatGPT web or in the app',
     start: 'Open ODDBOUT in ChatGPT',
     setup: 'On the plugin page, choose the option to try it in chat. In a new conversation, select @ODDBOUT and ask a question like the ones below.',
