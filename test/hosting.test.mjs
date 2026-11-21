@@ -99,6 +99,7 @@ test('the fighting-game landing pages have local creation and practice links and
       assert.ok(html.includes(`<html lang="${lang}">`));
       assert.ok(html.includes(`href="/fighter?play=1&amp;fighter=velora&amp;opponent=leon&amp;lang=${lang}"`));
       assert.ok(html.includes(`href="/creator?lang=${lang}"`));
+      assert.ok(html.includes('<source src="/ai-fighter-creator/velora/velora-vs-leon.mp4" type="video/mp4">'));
       assert.ok(html.includes('hreflang="ko" href="https://oddbout.com/browser-fighting-game/"'));
       assert.doesNotMatch(html, /noindex/);
     }

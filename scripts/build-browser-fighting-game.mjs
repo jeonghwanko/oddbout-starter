@@ -12,7 +12,7 @@ const copy = {
     play: '바로 한 판 해보기',
     create: '내 캐릭터 만들기',
     trial: '로그인 없이 벨로라와 레온의 연습 경기가 시작됩니다. 경기는 AI가 진행합니다.',
-    imageAlt: 'ODDBOUT 경기장에서 레온과 맞붙은 벨로라',
+    highlight: 'ODDBOUT 벨로라 대 레온 경기 하이라이트',
     createTitle: '내가 만든 캐릭터를 링 위로',
     createBody: '캐릭터를 글로 설명하거나 참고 이미지를 준비하세요. 정면 원화와 움직임을 확인하고 캐릭터를 등록한 뒤 경기에 출전시킬 수 있습니다.',
     example: '벨로라 제작 과정 보기',
@@ -25,7 +25,7 @@ const copy = {
     play: 'Try a match now',
     create: 'Create my fighter',
     trial: 'An AI practice match between Velora and Leon starts without signing in.',
-    imageAlt: 'Velora facing Leon in the ODDBOUT arena',
+    highlight: 'ODDBOUT match highlights featuring Velora and Leon',
     createTitle: 'Bring your own fighter into the ring',
     createBody: 'Describe a character or bring a reference image. Review the original art and moves, then register your fighter and enter them in a match.',
     example: 'See how Velora was made',
@@ -44,7 +44,7 @@ export async function buildBrowserFightingGame(root) {
     const other = lang === 'ko' ? 'en' : 'ko';
     const home = lang === 'ko' ? '/ko/' : '/?lang=en';
     const example = lang === 'ko' ? '/ai-fighter-creator/index.ko#velora' : '/ai-fighter-creator/#velora';
-    const image = '/ai-fighter-creator/velora/velora-vs-leon.webp';
+    const highlight = '/ai-fighter-creator/velora/velora-vs-leon';
     const html = `<!doctype html>
 <html lang="${lang}">
 <head>
@@ -60,7 +60,7 @@ export async function buildBrowserFightingGame(root) {
   <meta property="og:title" content="${page.title} · ODDBOUT">
   <meta property="og:description" content="${page.description}">
   <meta property="og:url" content="${canonical}">
-  <meta property="og:image" content="https://oddbout.com${image}">
+  <meta property="og:image" content="https://oddbout.com${highlight}.webp">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="./play.css">
 </head>
@@ -80,7 +80,9 @@ export async function buildBrowserFightingGame(root) {
         </div>
         <p class="note">${page.trial}</p>
       </div>
-      <img class="match" src="${image}" width="960" height="540" alt="${page.imageAlt}" fetchpriority="high">
+      <video class="match" poster="${highlight}.webp" width="960" height="540" controls playsinline preload="none" aria-label="${page.highlight}">
+        <source src="${highlight}.mp4" type="video/mp4">
+      </video>
     </div>
     <section class="creation">
       <h2>${page.createTitle}</h2>

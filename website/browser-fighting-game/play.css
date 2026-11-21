@@ -45,7 +45,7 @@ h2 { font-size: clamp(27px, 3vw, 40px); }
 .actions span { margin-inline-start: 6px; }
 .actions .primary { color: #191829; background: var(--lime); border-color: var(--lime); }
 .note { margin: 14px 0 0; color: var(--muted); font-size: 14px; line-height: 1.55; }
-.match { display: block; width: 100%; height: auto; border: 1px solid var(--line); box-shadow: 12px 12px #342b48; }
+.match { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border: 1px solid var(--line); box-shadow: 12px 12px #342b48; }
 
 .creation {
   display: grid;
