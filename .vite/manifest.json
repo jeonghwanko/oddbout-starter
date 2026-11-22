@@ -1,13 +1,4 @@
 {
-  "../../../../../crashbang-heroes/kaito_web/node_modules/@supabase/supabase-js/dist/index.mjs": {
-    "file": "assets/dist-Dr_VjXuP.js",
-    "name": "dist",
-    "src": "../../../../../crashbang-heroes/kaito_web/node_modules/@supabase/supabase-js/dist/index.mjs",
-    "isDynamicEntry": true,
-    "imports": [
-      "_dist-C9fd7Nwh.js"
-    ]
-  },
   "_ArenaArtCatalog-ffD_1stG.js": {
     "file": "assets/ArenaArtCatalog-ffD_1stG.js",
     "name": "ArenaArtCatalog",
@@ -785,7 +776,7 @@
       "_arenaRankings-P2NCLTOw.js"
     ],
     "dynamicImports": [
-      "../../../../../crashbang-heroes/kaito_web/node_modules/@supabase/supabase-js/dist/index.mjs"
+      "node_modules/@supabase/supabase-js/dist/index.mjs"
     ]
   },
   "_boundedResponse-CxNSslQ1.js": {
@@ -954,6 +945,22 @@
       "_oddboutShopServer-DcceRlvs.js"
     ]
   },
+  "_i18n-CzdBiEnp.js": {
+    "file": "assets/i18n-CzdBiEnp.js",
+    "name": "i18n",
+    "imports": [
+      "_Locale-Bfnpz3E7.js",
+      "_UtcTime-BFPbMiHs.js",
+      "_catalog-C-siAyxf.js",
+      "_localeLoader-iMHQKnrl.js",
+      "_preload-helper-DclECHGd.js"
+    ],
+    "dynamicImports": [
+      "src/app/i18n/namespaces/site/en.ts",
+      "src/app/i18n/namespaces/site/ko.ts",
+      "src/app/i18n/namespaces/site/ja.ts"
+    ]
+  },
   "_info-42Wm8ycO.css": {
     "file": "assets/info-42Wm8ycO.css",
     "src": "_info-42Wm8ycO.css"
@@ -1066,7 +1073,7 @@
       "_preload-helper-DclECHGd.js"
     ],
     "dynamicImports": [
-      "../../../../../crashbang-heroes/kaito_web/node_modules/@supabase/supabase-js/dist/index.mjs"
+      "node_modules/@supabase/supabase-js/dist/index.mjs"
     ]
   },
   "_oddboutShopServer-DcceRlvs.js": {
@@ -1113,25 +1120,17 @@
     "file": "assets/packageChecker-AgLFTLUN.css",
     "src": "_packageChecker-AgLFTLUN.css"
   },
-  "_packageChecker-B1ZQo79v.js": {
-    "file": "assets/packageChecker-B1ZQo79v.js",
+  "_packageChecker-CQcEsnV_.js": {
+    "file": "assets/packageChecker-CQcEsnV_.js",
     "name": "packageChecker",
     "imports": [
       "_spec-CABr0Tau.js",
       "_validate-Beb91gKy.js",
       "_registeredFighters-PUGfrNYL.js",
+      "_i18n-CzdBiEnp.js",
       "_Locale-Bfnpz3E7.js",
-      "_UtcTime-BFPbMiHs.js",
-      "_catalog-C-siAyxf.js",
-      "_localeLoader-iMHQKnrl.js",
-      "_preload-helper-DclECHGd.js",
       "_NativeCityOrthoPack-CrXJpSOJ.js",
       "_NativeCityOrthoPack-CTS_4bMt.js"
-    ],
-    "dynamicImports": [
-      "src/app/i18n/namespaces/site/en.ts",
-      "src/app/i18n/namespaces/site/ko.ts",
-      "src/app/i18n/namespaces/site/ja.ts"
     ],
     "css": [
       "assets/packageChecker-AgLFTLUN.css"
@@ -1905,7 +1904,7 @@
     ]
   },
   "creator.html": {
-    "file": "assets/creator-BP-XzYZm.js",
+    "file": "assets/creator-d-8wEDIU.js",
     "name": "creator",
     "src": "creator.html",
     "isEntry": true,
@@ -1919,7 +1918,7 @@
       "_siteLinks-BPN__E3C.js",
       "_BigNumber-C-T4zIRX.js",
       "_oddboutSession-DPl10SRf.js",
-      "_packageChecker-B1ZQo79v.js",
+      "_i18n-CzdBiEnp.js",
       "_fighterApiBase-CeB_1v89.js",
       "_registeredFighters-PUGfrNYL.js",
       "_fighterFace-BN2MM8YB.js",
@@ -1930,8 +1929,9 @@
       "_ArenaArtCatalog-ffD_1stG.js",
       "_fighterCreator-Z44Ubwfj.js",
       "_storageKeys-DHpfkykF.js",
-      "_UtcTime-BFPbMiHs.js",
+      "_packageChecker-CQcEsnV_.js",
       "_FighterSheetData-D4GMmRNC.js",
+      "_UtcTime-BFPbMiHs.js",
       "_creatorPageStorage-DEMUhWHr.js",
       "_siteDialog-Cus74mbf.js",
       "_agentLogos-D8jjpOCr.js",
@@ -1969,7 +1969,7 @@
     ]
   },
   "docs.html": {
-    "file": "assets/docs-CcG3c4jb.js",
+    "file": "assets/docs-DHJ1XsfD.js",
     "name": "docs",
     "src": "docs.html",
     "isEntry": true,
@@ -2869,6 +2869,15 @@
       "assets/g-logo-CpxN0HWb.png"
     ]
   },
+  "node_modules/@supabase/supabase-js/dist/index.mjs": {
+    "file": "assets/dist-Dr_VjXuP.js",
+    "name": "dist",
+    "src": "node_modules/@supabase/supabase-js/dist/index.mjs",
+    "isDynamicEntry": true,
+    "imports": [
+      "_dist-C9fd7Nwh.js"
+    ]
+  },
   "privacy.html": {
     "file": "assets/privacy-KQrfW6RR.js",
     "name": "privacy",
@@ -2906,7 +2915,7 @@
     ]
   },
   "shop.html": {
-    "file": "assets/shop-DUdpz7JD.js",
+    "file": "assets/shop-DGGyukt0.js",
     "name": "shop",
     "src": "shop.html",
     "isEntry": true,
@@ -2918,12 +2927,14 @@
       "_gameMenuParts-C1q7BPaP.js",
       "_shopCatalogView-Cgs3QS_F.js",
       "_siteChrome-0FGtMi85.js",
+      "_Locale-Bfnpz3E7.js",
       "_oddboutSession-DPl10SRf.js",
       "_oddboutEdgeFetch-CgIxi4Ul.js",
-      "_storageKeys-DHpfkykF.js"
+      "_storageKeys-DHpfkykF.js",
+      "_i18n-CzdBiEnp.js"
     ],
     "css": [
-      "assets/shop-K9SYcb-_.css"
+      "assets/shop-ZNxu2fH_.css"
     ],
     "assets": [
       "assets/pudding-gold-polar-cover-Be-4Z3aL.webp",
@@ -3038,7 +3049,7 @@
     ]
   },
   "src/app/i18n/namespaces/site/en.ts": {
-    "file": "assets/en-DuIvmxPy.js",
+    "file": "assets/en-ILOY3ptw.js",
     "name": "en",
     "src": "src/app/i18n/namespaces/site/en.ts",
     "isDynamicEntry": true,
@@ -3047,7 +3058,7 @@
     ]
   },
   "src/app/i18n/namespaces/site/ja.ts": {
-    "file": "assets/ja-DWrd5-s1.js",
+    "file": "assets/ja-BYQMl-iw.js",
     "name": "ja",
     "src": "src/app/i18n/namespaces/site/ja.ts",
     "isDynamicEntry": true,
@@ -3056,7 +3067,7 @@
     ]
   },
   "src/app/i18n/namespaces/site/ko.ts": {
-    "file": "assets/ko-Bbb6C2iN.js",
+    "file": "assets/ko-BE1Sjlg5.js",
     "name": "ko",
     "src": "src/app/i18n/namespaces/site/ko.ts",
     "isDynamicEntry": true,
@@ -4153,12 +4164,12 @@
     ]
   },
   "src/creator/packageChecker.ts": {
-    "file": "assets/packageChecker-BMQewm69.js",
+    "file": "assets/packageChecker-CFdDxdq3.js",
     "name": "packageChecker",
     "src": "src/creator/packageChecker.ts",
     "isDynamicEntry": true,
     "imports": [
-      "_packageChecker-B1ZQo79v.js"
+      "_packageChecker-CQcEsnV_.js"
     ]
   },
   "src/creator/worldLore.ts": {
