@@ -1,4 +1,13 @@
 {
+  "../../../../../crashbang-heroes/kaito_web/node_modules/@supabase/supabase-js/dist/index.mjs": {
+    "file": "assets/dist-Dr_VjXuP.js",
+    "name": "dist",
+    "src": "../../../../../crashbang-heroes/kaito_web/node_modules/@supabase/supabase-js/dist/index.mjs",
+    "isDynamicEntry": true,
+    "imports": [
+      "_dist-C9fd7Nwh.js"
+    ]
+  },
   "_ArenaArtCatalog-ffD_1stG.js": {
     "file": "assets/ArenaArtCatalog-ffD_1stG.js",
     "name": "ArenaArtCatalog",
@@ -776,7 +785,7 @@
       "_arenaRankings-P2NCLTOw.js"
     ],
     "dynamicImports": [
-      "node_modules/@supabase/supabase-js/dist/index.mjs"
+      "../../../../../crashbang-heroes/kaito_web/node_modules/@supabase/supabase-js/dist/index.mjs"
     ]
   },
   "_boundedResponse-CxNSslQ1.js": {
@@ -1057,7 +1066,7 @@
       "_preload-helper-DclECHGd.js"
     ],
     "dynamicImports": [
-      "node_modules/@supabase/supabase-js/dist/index.mjs"
+      "../../../../../crashbang-heroes/kaito_web/node_modules/@supabase/supabase-js/dist/index.mjs"
     ]
   },
   "_oddboutShopServer-DcceRlvs.js": {
@@ -1819,6 +1828,14 @@
       "assets/index-IT9cTwA8.css",
       "assets/creatorTheme-K9c8ZHnW.css"
     ]
+  },
+  "assets/art-archive/pudding-gold-polar-20261122/pudding-gold-coin-icon.webp": {
+    "file": "assets/pudding-gold-coin-icon-CJGIJMuX.webp",
+    "src": "assets/art-archive/pudding-gold-polar-20261122/pudding-gold-coin-icon.webp"
+  },
+  "assets/art-archive/pudding-gold-polar-20261122/pudding-gold-polar-cover.webp": {
+    "file": "assets/pudding-gold-polar-cover-Be-4Z3aL.webp",
+    "src": "assets/art-archive/pudding-gold-polar-20261122/pudding-gold-polar-cover.webp"
   },
   "bet-host.html": {
     "file": "assets/betHost-BYyCOHWs.js",
@@ -2852,15 +2869,6 @@
       "assets/g-logo-CpxN0HWb.png"
     ]
   },
-  "node_modules/@supabase/supabase-js/dist/index.mjs": {
-    "file": "assets/dist-Dr_VjXuP.js",
-    "name": "dist",
-    "src": "node_modules/@supabase/supabase-js/dist/index.mjs",
-    "isDynamicEntry": true,
-    "imports": [
-      "_dist-C9fd7Nwh.js"
-    ]
-  },
   "privacy.html": {
     "file": "assets/privacy-KQrfW6RR.js",
     "name": "privacy",
@@ -2898,7 +2906,7 @@
     ]
   },
   "shop.html": {
-    "file": "assets/shop-CHHOJPwA.js",
+    "file": "assets/shop-DUdpz7JD.js",
     "name": "shop",
     "src": "shop.html",
     "isEntry": true,
@@ -2915,7 +2923,11 @@
       "_storageKeys-DHpfkykF.js"
     ],
     "css": [
-      "assets/shop--81OfdXZ.css"
+      "assets/shop-K9SYcb-_.css"
+    ],
+    "assets": [
+      "assets/pudding-gold-polar-cover-Be-4Z3aL.webp",
+      "assets/pudding-gold-coin-icon-CJGIJMuX.webp"
     ]
   },
   "src/app/CrazyGamesClub.ts": {
