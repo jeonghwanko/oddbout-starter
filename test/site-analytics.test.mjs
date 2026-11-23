@@ -164,7 +164,7 @@ test('pudding funnel milestones keep only approved enums and bounded integers', 
   const page = visit('https://oddbout.com/pudding');
   page.run();
   const emit = (name, parameters) => page.window.dispatchEvent({ type: 'oddbout:milestone', detail: { name, parameters } });
-  emit('pudding_run_start', { mode: 'retry', run_number: 3.7, jelly: 'ninjacat', email: 'private' });
+  emit('pudding_run_start', { mode: 'retry', run_number: 3.7, jelly: 'ninjacat', world: 'showcase', email: 'private' });
   emit('pudding_run_end', {
     distance_m: 400,
     duration_seconds: 21,
@@ -174,6 +174,7 @@ test('pudding funnel milestones keep only approved enums and bounded integers', 
     perfects: 2,
     splats: -1,
     tip: 'uphill',
+    world: 'moon',
   });
   emit('pudding_tutorial_done', { seconds: 6.4, how: 'idle' });
   emit('pudding_continue', { method: 'gold', count: 4 });
@@ -206,6 +207,8 @@ test('pudding funnel milestones keep only approved enums and bounded integers', 
   assert.equal(events[0][2].mode, 'retry');
   assert.equal(events[0][2].run_number, 3);
   assert.equal(events[0][2].jelly, 'ninjacat');
+  assert.equal(events[0][2].world, 'showcase');
+  assert.equal(events[1][2].world, undefined);
   assert.equal(events[1][2].perfects, 2);
   assert.equal(events[1][2].splats, undefined);
   assert.equal(events[1][2].tip, 'uphill');
@@ -293,6 +296,8 @@ test('forge milestones carry the energy A/B group only with an approved value', 
   emit('forge_level_up', { level: 4, energy: 'b' });
   emit('forge_level_up', { level: 2 });
   emit('pudding_share', { method: 'native', energy: 'c' });
+  emit('pudding_share', { method: 'x' });
+  emit('pudding_share', { method: 'email' });
   const events = page.window.dataLayer
     .map(args => Array.from(args))
     .filter(args => args[0] === 'event')
@@ -308,6 +313,8 @@ test('forge milestones carry the energy A/B group only with an approved value', 
     'qa,undefined,undefined',
   );
   assert.equal(byName('pudding_share')[0]?.energy, undefined);
+  assert.equal(byName('pudding_share')[1]?.method, 'x');
+  assert.equal(byName('pudding_share')[2]?.method, undefined);
 });
 
 test('forge milestones keep only approved enums and bounded integers', () => {

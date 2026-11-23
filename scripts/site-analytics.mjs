@@ -122,9 +122,11 @@ function startAnalytics(measurementId, hostname, apiBase, updateSlugs, game) {
     };
     // Pudding Escape (/pudding) sends these from the game itself (`src/pudding/analytics.ts` PUDDING_EVENTS): enum values and bounded integers only.
     const puddingTips = ['uphill', 'steep', 'flat', 'caramel', 'transform', 'dive', 'charge', 'fever', 'bomb', 'speed'];
+    // Themes (2026-11-23): daytime kitchen and midnight showcase. The game's list is `WORLDS` in src/sim/pudding/terrain.ts.
+    const puddingWorlds = ['custard', 'showcase'];
     const puddingJellies = ['bear', 'bunny', 'worm', 'penguin', 'frog', 'cola', 'ninjacat', 'dragon', 'jellyfish', 'ghost', 'mecha'];
     const pudding = {
-      pudding_run_start: { mode: ['first', 'retry'], run_number: 100000, jelly: puddingJellies },
+      pudding_run_start: { mode: ['first', 'retry'], run_number: 100000, jelly: puddingJellies, world: puddingWorlds },
       pudding_run_end: {
         distance_m: 1000000,
         duration_seconds: 86400,
@@ -134,9 +136,10 @@ function startAnalytics(measurementId, hostname, apiBase, updateSlugs, game) {
         perfects: 10000,
         splats: 10000,
         tip: puddingTips,
+        world: puddingWorlds,
       },
       pudding_transform: { pudding_form: 14 },
-      pudding_share: { method: ['native', 'clipboard'] },
+      pudding_share: { method: ['native', 'x', 'clipboard'] },
       pudding_tutorial_done: { seconds: 86400, how: ['perfect', 'tries', 'idle'] },
       pudding_continue: { method: ['ad', 'gold'], count: 3 },
       pudding_purchase: { kind: ['look', 'item', 'card', 'unlock'], gold: 100000 },

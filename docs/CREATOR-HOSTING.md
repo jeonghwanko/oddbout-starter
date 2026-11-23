@@ -571,13 +571,14 @@ Pudding Escape (`/pudding`, and its game site) uses the same tag and privacy gua
 itself emits `oddbout:milestone` events (game repository `src/pudding/analytics.ts`, `PUDDING_EVENTS`);
 `scripts/site-analytics.mjs` forwards only the listed enum values and bounded integers, with `game_id` `pudding`:
 
-- `pudding_run_start`: `mode` (`first` or `retry` within the current page), `run_number` (lifetime run, 1–100,000), and `jelly` (the selected jelly ID).
+- `pudding_run_start`: `mode` (`first` or `retry` within the current page), `run_number` (lifetime run, 1–100,000), `jelly` (the selected jelly ID),
+  and `world`, the theme of the run (`custard` for the daytime kitchen, `showcase` for the midnight showcase).
 - `pudding_run_end`, once per run (a continued run does not report again): `distance_m`, active foreground
   `duration_seconds` (tutorial included; pause/transform time excluded), `pudding_form` (0–14), `result`
   (`new_best` or `finished`), `run_number`, `perfects` and `splats` (0–10,000), and `tip`, the result-screen tip
-  (`uphill`, `steep`, `flat`, `caramel`, `transform`, `dive`, `charge`, `fever`, `bomb`, `speed`).
+  (`uphill`, `steep`, `flat`, `caramel`, `transform`, `dive`, `charge`, `fever`, `bomb`, `speed`), and `world` (as above).
 - `pudding_transform`: `pudding_form` only.
-- `pudding_share`: `method` (`native` or `clipboard`). A completed native share or clipboard copy counts as a share;
+- `pudding_share`: `method` (`native`, `x` for the X compose window, or `clipboard`). A completed share counts as a share;
   cancelled or failed attempts do not.
 - `pudding_tutorial_done`: `seconds` (0–86,400) and `how` (`perfect`, `tries`, or `idle` — the tutorial ended with
   no input).
