@@ -1,1 +1,0 @@
-import{St as e}from"./ArenaArtCatalog-ffD_1stG.js";import{t}from"./PublicAssetVersions-C0QBQZB6.js";var n=e.art;function r(e){let r=n[e];return r?t(`/${r.faceImage}`):null}function i(e,t,n=null){let i=r(t);return i?(n&&e.addEventListener(`error`,()=>{e.src=i},{once:!0}),e.src=n?new URL(i,n).href:i,e.width=e.height=192,!0):!1}export{i as t};
