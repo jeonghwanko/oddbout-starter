@@ -122,7 +122,7 @@ function startAnalytics(measurementId, hostname, apiBase, updateSlugs, game) {
     };
     // Pudding Escape (/pudding) sends these from the game itself (`src/pudding/analytics.ts` PUDDING_EVENTS): enum values and bounded integers only.
     const puddingTips = ['uphill', 'steep', 'flat', 'caramel', 'transform', 'dive', 'charge', 'fever', 'bomb', 'speed'];
-    // 푸딩 테마(2026-11-23): 낮의 주방 · 한밤 진열장. 게임 쪽 목록은 kaito_web src/sim/pudding/terrain.ts 의 WORLDS
+    // Themes (2026-11-23): daytime kitchen and midnight showcase. The game's list is `WORLDS` in src/sim/pudding/terrain.ts.
     const puddingWorlds = ['custard', 'showcase'];
     const puddingJellies = ['bear', 'bunny', 'worm', 'penguin', 'frog', 'cola', 'ninjacat', 'dragon', 'jellyfish', 'ghost', 'mecha'];
     const pudding = {

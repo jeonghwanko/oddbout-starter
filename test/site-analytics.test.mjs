@@ -296,6 +296,8 @@ test('forge milestones carry the energy A/B group only with an approved value', 
   emit('forge_level_up', { level: 4, energy: 'b' });
   emit('forge_level_up', { level: 2 });
   emit('pudding_share', { method: 'native', energy: 'c' });
+  emit('pudding_share', { method: 'x' });
+  emit('pudding_share', { method: 'email' });
   const events = page.window.dataLayer
     .map(args => Array.from(args))
     .filter(args => args[0] === 'event')
@@ -311,6 +313,8 @@ test('forge milestones carry the energy A/B group only with an approved value', 
     'qa,undefined,undefined',
   );
   assert.equal(byName('pudding_share')[0]?.energy, undefined);
+  assert.equal(byName('pudding_share')[1]?.method, 'x');
+  assert.equal(byName('pudding_share')[2]?.method, undefined);
 });
 
 test('forge milestones keep only approved enums and bounded integers', () => {
