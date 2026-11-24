@@ -3,17 +3,20 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>A browser fighting game for your own characters · ODDBOUT</title>
-  <meta name="description" content="Start a 2D fighting match in your browser. Create your own character in ODDBOUT, register them, and send them into the ring.">
+  <title>Free 2D Browser Fighting Game with AI Fighters · ODDBOUT</title>
+  <meta name="description" content="Watch free 2D AI fights in your browser. Learn the ODDBOUT controls, build a 16-fighter cup bracket, and create and register your own fighter.">
   <link rel="canonical" href="https://oddbout.com/browser-fighting-game/index.en">
   <link rel="alternate" hreflang="ko" href="https://oddbout.com/browser-fighting-game/">
   <link rel="alternate" hreflang="en" href="https://oddbout.com/browser-fighting-game/index.en">
   <link rel="alternate" hreflang="x-default" href="https://oddbout.com/browser-fighting-game/index.en">
   <meta property="og:type" content="website">
-  <meta property="og:title" content="A browser fighting game for your own characters · ODDBOUT">
-  <meta property="og:description" content="Start a 2D fighting match in your browser. Create your own character in ODDBOUT, register them, and send them into the ring.">
+  <meta property="og:title" content="Free 2D Browser Fighting Game with AI Fighters · ODDBOUT">
+  <meta property="og:description" content="Watch free 2D AI fights in your browser. Learn the ODDBOUT controls, build a 16-fighter cup bracket, and create and register your own fighter.">
   <meta property="og:url" content="https://oddbout.com/browser-fighting-game/index.en">
   <meta property="og:image" content="https://oddbout.com/ai-fighter-creator/velora/velora-vs-leon.webp">
+  <meta property="og:image:alt" content="ODDBOUT match highlights featuring Velora and Leon">
+  <meta name="twitter:card" content="summary_large_image">
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"ODDBOUT","item":"https://oddbout.com/"},{"@type":"ListItem","position":2,"name":"Free 2D Browser Fighting Game with AI Fighters","item":"https://oddbout.com/browser-fighting-game/index.en"}]}</script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="./play.css">
 </head>
@@ -25,21 +28,56 @@
   <main class="wrap">
     <div class="hero">
       <div>
-        <h1>A browser fighting game for your own characters</h1>
-        <p class="lead">Start a 2D fighting match in your browser. Create your own character in ODDBOUT, register them, and send them into the ring.</p>
+        <h1>Free 2D Browser Fighting Game with AI Fighters</h1>
+        <p class="lead">Watch free 2D AI fights in your browser. Learn the ODDBOUT controls, build a 16-fighter cup bracket, and create and register your own fighter.</p>
         <div class="actions">
-          <a class="primary" href="/fighter?play=1&amp;fighter=velora&amp;opponent=leon&amp;lang=en">Try a match now <span aria-hidden="true">▶</span></a>
+          <a class="primary" href="/fighter?play=1&amp;fighter=velora&amp;opponent=leon&amp;lang=en">Watch an AI practice match <span aria-hidden="true">▶</span></a>
           <a class="secondary" href="/creator?lang=en">Create my fighter <span aria-hidden="true">↗</span></a>
         </div>
-        <p class="note">An AI practice match between Velora and Leon starts without signing in.</p>
+        <p class="note">Velora and Leon fight automatically. Watch in your browser without downloading the game or signing in.</p>
       </div>
       <video class="match" poster="/ai-fighter-creator/velora/velora-vs-leon.webp" width="960" height="540" controls playsinline preload="none" aria-label="ODDBOUT match highlights featuring Velora and Leon">
         <source src="/ai-fighter-creator/velora/velora-vs-leon.mp4" type="video/mp4">
       </video>
     </div>
-    <section class="creation">
-      <h2>Bring your own fighter into the ring</h2>
-      <div><p>Describe a character or bring a reference image. Review the original art and moves, then register your fighter and enter them in a match.</p><a href="/ai-fighter-creator/#velora">See how Velora was made <span aria-hidden="true">→</span></a></div>
+    
+    <nav class="guide-nav" aria-label="On this page">
+      <a href="#controls">Controls</a>
+      <a href="#ai-matches">AI matches</a>
+      <a href="#register-a-fighter">Register a fighter</a>
+    </nav>
+    <section class="guide-section" id="controls" aria-labelledby="controls-heading">
+      <h2 id="controls-heading">How to play and use the controls</h2>
+      <p>Choose the fighters and set up the matchup. Once a bout starts, the AI moves, attacks and guards for both fighters. On a phone or tablet, tap the on-screen controls to make selections and open menus.</p>
+      <table class="controls">
+        <caption>Keyboard shortcuts for the arena menus</caption>
+        <thead><tr><th scope="col">Action</th><th scope="col">Keys</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Move between choices</th><td><kbd>Arrow keys</kbd></td></tr>
+          <tr><th scope="row">Confirm a selection</th><td><kbd>F</kbd> or <kbd>Enter</kbd></td></tr>
+          <tr><th scope="row">Open or close the game menu</th><td><kbd>O</kbd></td></tr>
+          <tr><th scope="row">Close the open game menu</th><td><kbd>Esc</kbd></td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="guide-section" id="ai-matches" aria-labelledby="ai-heading">
+      <h2 id="ai-heading">How AI fighting matches work</h2>
+      <dl class="match-modes">
+        <div><dt>Practice match</dt><dd>Watch a free one-on-one fight with the game’s ready-made fighters. The practice match above opens with Velora and Leon.</dd></div>
+        <div><dt>16-fighter cup</dt><dd>Pick a fighter to represent your club and decide who goes in each bracket slot. The fighters play each bout automatically. Win four matches to take the cup. Sign in with Google to save your club and its progress.</dd></div>
+        <div><dt>Ranked duel</dt><dd>Choose fighters that have been entered into the arena. Completed server-run AI duels count toward the registered fighters’ rankings.</dd></div>
+      </dl>
+      <p>Shared bouts keep the fighters and the starting seed, so you can replay the same fight under the same rules.</p>
+    </section>
+    <section class="guide-section" id="register-a-fighter" aria-labelledby="registration-heading">
+      <h2 id="registration-heading">Create and register your own fighter</h2>
+      <ol class="registration">
+        <li><strong>Open My fighters on a computer.</strong> <a href="/creator?lang=en">Sign in with Google</a> and open <strong>My fighters</strong> from your account menu.</li>
+        <li><strong>Start with a character idea or a reference image.</strong> Request creation in My fighters, or follow the <a href="/docs?lang=en">AI Fighter creation guide</a> to make a fighter with your own AI assistant.</li>
+        <li><strong>Review the art and movements.</strong> Check the character’s appearance and fight animations. If you make the fighter in your workspace, validate the finished package before submitting it to the same ODDBOUT account.</li>
+        <li><strong>Register, then enter the fighter.</strong> Find the registered fighter in My fighters, open the motion preview, and enter them into the arena. Entry makes the fighter available for other players to face in cups and ranked duels.</li>
+      </ol>
+      <p><a href="/ai-fighter-creator/#velora">See how Velora was made <span aria-hidden="true">→</span></a></p>
     </section>
   </main>
 </body>
