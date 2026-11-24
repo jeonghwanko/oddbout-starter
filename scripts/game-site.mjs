@@ -12,7 +12,7 @@ import { assertSameRevision, buildRevision, fingerprint, hosting } from './hosti
 import { googleAnalyticsPlugin } from './site-analytics.mjs';
 
 /** The games with a site. The name is the Pages project's suffix (`oddbout-<game>`) and the key in the game's `game-sites.json`. */
-export const GAME_SITES = Object.freeze(['forge', 'pudding', 'bounce', 'bouceball']);
+export const GAME_SITES = Object.freeze(['forge', 'pudding', 'bounce', 'bouceball', 'wallcarve']);
 /**
  * Each game site's pages. `entry` is the page that serves the game (the game package's `entry`). `home: 'entry'` means `index.html` is a
  * copy of it (the game opens at `/`); `home: 'intro'` means `index.html` is an intro page that links to the game (bounce: `/` intro,
@@ -24,6 +24,7 @@ export const GAME_SITE_PAGES = Object.freeze({
   pudding: Object.freeze({ entry: 'pudding.html', home: 'entry' }),
   bounce: Object.freeze({ entry: 'game.html', home: 'intro' }),
   bouceball: Object.freeze({ entry: 'bouceball.html', home: 'entry' }),
+  wallcarve: Object.freeze({ entry: 'wallcarve.html', home: 'entry' }),
 });
 /** The Pages branch of `--preview` uploads (`preview.oddbout-<game>.pages.dev`); production is `main`. */
 export const GAME_PREVIEW_BRANCH = 'preview';

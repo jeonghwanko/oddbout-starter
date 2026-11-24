@@ -57,6 +57,8 @@ test('game site arguments, project names and origins', () => {
   assert.deepEqual(parseBuildGameSiteArgs([source, 'forge', output]), { source, game: 'forge', output });
   assert.deepEqual(parseBuildGameSiteArgs([source, 'bouceball', output]), { source, game: 'bouceball', output });
   assert.equal(gameProject('bouceball'), 'oddbout-bouceball');
+  assert.deepEqual(parseBuildGameSiteArgs([source, 'wallcarve', output]), { source, game: 'wallcarve', output });
+  assert.equal(gameProject('wallcarve'), 'oddbout-wallcarve');
   for (const argv of [
     ['/src', 'fighter', '/out'],
     ['/src', 'forge'],
