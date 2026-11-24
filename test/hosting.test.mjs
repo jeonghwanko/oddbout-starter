@@ -101,7 +101,15 @@ test('the fighting-game landing pages have local creation and practice links and
       assert.ok(html.includes(`href="/creator?lang=${lang}"`));
       assert.ok(html.includes('<source src="/ai-fighter-creator/velora/velora-vs-leon.mp4" type="video/mp4">'));
       assert.ok(html.includes('hreflang="ko" href="https://oddbout.com/browser-fighting-game/"'));
+      assert.ok(html.includes('hreflang="en" href="https://oddbout.com/browser-fighting-game/index.en"'));
       assert.doesNotMatch(html, /noindex/);
+      if (lang === 'en') {
+        assert.match(html, /Watch an AI practice match/);
+        assert.match(html, /<table class="controls">[\s\S]*<kbd>F<\/kbd> or <kbd>Enter<\/kbd>/);
+        assert.match(html, /<section class="guide-section" id="ai-matches"/);
+        assert.match(html, /<section class="guide-section" id="register-a-fighter"/);
+        assert.match(html, /<link rel="canonical" href="https:\/\/oddbout\.com\/browser-fighting-game\/index\.en">/);
+      }
     }
     assert.deepEqual(await writeSiteDiscovery(root, hosting.siteUrl, browserFightingFiles), [
       'https://oddbout.com/browser-fighting-game/',
