@@ -124,6 +124,7 @@ function startAnalytics(measurementId, hostname, apiBase, updateSlugs, game) {
     const puddingTips = ['uphill', 'steep', 'flat', 'caramel', 'transform', 'dive', 'charge', 'fever', 'bomb', 'speed'];
     const puddingJellies = ['bear', 'bunny', 'worm', 'penguin', 'frog', 'cola', 'ninjacat', 'dragon', 'jellyfish', 'ghost', 'mecha'];
     const pudding = {
+      pudding_prologue: { step: ['shown', 'started', 'jumped', 'escaped', 'caught', 'home'] },
       pudding_run_start: { mode: ['first', 'retry'], run_number: 100000, jelly: puddingJellies },
       pudding_run_end: {
         distance_m: 1000000,

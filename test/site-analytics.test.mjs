@@ -635,6 +635,7 @@ test('a game site reports its entry as / and forwards its milestones without the
   assert.equal(empty[2].level, 5);
   const pudding = visit('https://pudding.oddbout.com/pudding.html', { siteUrl: 'https://pudding.oddbout.com/', game: 'pudding' });
   pudding.run();
+  pudding.window.dispatchEvent({ type: 'oddbout:milestone', detail: { name: 'pudding_prologue', parameters: { step: 'jumped' } } });
   pudding.window.dispatchEvent({ type: 'oddbout:milestone', detail: { name: 'pudding_run_start', parameters: { mode: 'first' } } });
   pudding.window.dispatchEvent({
     type: 'oddbout:milestone',
@@ -646,12 +647,14 @@ test('a game site reports its entry as / and forwards its milestones without the
     JSON.stringify(events.map(args => [args[1], args[2].page_location])),
     JSON.stringify([
       ['page_view', 'https://pudding.oddbout.com/'],
+      ['pudding_prologue', 'https://pudding.oddbout.com/'],
       ['pudding_run_start', 'https://pudding.oddbout.com/'],
       ['pudding_highlight', 'https://pudding.oddbout.com/'],
       ['pudding_share', 'https://pudding.oddbout.com/'],
     ]),
   );
   const highlight = events.find(args => args[1] === 'pudding_highlight')[2];
+  assert.equal(events.find(args => args[1] === 'pudding_prologue')[2].step, 'jumped');
   assert.equal(highlight.action, 'shown');
   assert.equal(highlight.pudding_form, 1);
   assert.equal(highlight.kind, 'image');
