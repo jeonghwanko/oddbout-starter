@@ -229,6 +229,57 @@ test('pudding funnel milestones keep only approved enums and bounded integers', 
   assert.ok(!JSON.stringify(events).includes('private'));
 });
 
+test('pudding share and highlight milestones keep only approved enums and bounded integers', () => {
+  const page = visit('https://oddbout.com/pudding');
+  page.run();
+  const emit = (name, parameters) => page.window.dispatchEvent({ type: 'oddbout:milestone', detail: { name, parameters } });
+  emit('pudding_share', { method: 'x', email: 'private' });
+  emit('pudding_share', { method: 'native' });
+  emit('pudding_share', { method: 'clipboard' });
+  emit('pudding_share', { method: 'private' });
+  emit('pudding_highlight', { action: 'shown', pudding_form: 1, kind: 'video', note: 'private' });
+  emit('pudding_highlight', { action: 'native', pudding_form: 14, kind: 'image' });
+  emit('pudding_highlight', { action: 'download', pudding_form: 2.9, kind: 'video' });
+  emit('pudding_highlight', { action: 'clipboard', pudding_form: 0, kind: 'image' });
+  emit('pudding_highlight', { action: 'private', pudding_form: 15, kind: 'gif' });
+  const events = page.window.dataLayer
+    .map(args => Array.from(args))
+    .filter(args => args[0] === 'event')
+    .slice(1);
+  assert.equal(
+    JSON.stringify(events.map(e => e[1])),
+    JSON.stringify([
+      'pudding_share',
+      'pudding_share',
+      'pudding_share',
+      'pudding_share',
+      'pudding_highlight',
+      'pudding_highlight',
+      'pudding_highlight',
+      'pudding_highlight',
+      'pudding_highlight',
+    ]),
+  );
+  assert.ok(events.every(e => e[2].game_id === 'pudding'));
+  assert.equal(events[0][2].method, 'x');
+  assert.equal(events[1][2].method, 'native');
+  assert.equal(events[2][2].method, 'clipboard');
+  assert.equal(events[3][2].method, undefined);
+  assert.equal(events[4][2].action, 'shown');
+  assert.equal(events[4][2].pudding_form, 1);
+  assert.equal(events[4][2].kind, 'video');
+  assert.equal(events[5][2].action, 'native');
+  assert.equal(events[5][2].kind, 'image');
+  assert.equal(events[6][2].action, 'download');
+  assert.equal(events[6][2].pudding_form, 2);
+  assert.equal(events[7][2].action, 'clipboard');
+  assert.equal(events[7][2].pudding_form, 0);
+  assert.equal(events[8][2].action, undefined);
+  assert.equal(events[8][2].pudding_form, undefined);
+  assert.equal(events[8][2].kind, undefined);
+  assert.ok(!JSON.stringify(events).includes('private'));
+});
+
 test('forge board, free-tap and restoration milestones pass their bounded values', () => {
   const page = visit('https://oddbout.com/forge');
   page.run();
@@ -585,14 +636,26 @@ test('a game site reports its entry as / and forwards its milestones without the
   const pudding = visit('https://pudding.oddbout.com/pudding.html', { siteUrl: 'https://pudding.oddbout.com/', game: 'pudding' });
   pudding.run();
   pudding.window.dispatchEvent({ type: 'oddbout:milestone', detail: { name: 'pudding_run_start', parameters: { mode: 'first' } } });
+  pudding.window.dispatchEvent({
+    type: 'oddbout:milestone',
+    detail: { name: 'pudding_highlight', parameters: { action: 'shown', pudding_form: 1, kind: 'image' } },
+  });
+  pudding.window.dispatchEvent({ type: 'oddbout:milestone', detail: { name: 'pudding_share', parameters: { method: 'x' } } });
   const events = pudding.window.dataLayer.map(args => Array.from(args)).filter(args => args[0] === 'event');
   assert.equal(
     JSON.stringify(events.map(args => [args[1], args[2].page_location])),
     JSON.stringify([
       ['page_view', 'https://pudding.oddbout.com/'],
       ['pudding_run_start', 'https://pudding.oddbout.com/'],
+      ['pudding_highlight', 'https://pudding.oddbout.com/'],
+      ['pudding_share', 'https://pudding.oddbout.com/'],
     ]),
   );
+  const highlight = events.find(args => args[1] === 'pudding_highlight')[2];
+  assert.equal(highlight.action, 'shown');
+  assert.equal(highlight.pudding_form, 1);
+  assert.equal(highlight.kind, 'image');
+  assert.equal(events.find(args => args[1] === 'pudding_share')[2].method, 'x');
 });
 
 test('each site measures only its own host, and the ODDBOUT site keeps /forge and /pudding as pages', () => {
