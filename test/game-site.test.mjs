@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -52,7 +52,11 @@ async function forgeSite(files = {}) {
 }
 
 test('game site arguments, project names and origins', () => {
-  assert.deepEqual(parseBuildGameSiteArgs(['/src/kaito_web', 'forge', '/tmp/out']), { source: '/src/kaito_web', game: 'forge', output: '/tmp/out' });
+  const source = resolve('/src/kaito_web');
+  const output = resolve('/tmp/out');
+  assert.deepEqual(parseBuildGameSiteArgs([source, 'forge', output]), { source, game: 'forge', output });
+  assert.deepEqual(parseBuildGameSiteArgs([source, 'bouceball', output]), { source, game: 'bouceball', output });
+  assert.equal(gameProject('bouceball'), 'oddbout-bouceball');
   for (const argv of [
     ['/src', 'fighter', '/out'],
     ['/src', 'forge'],
@@ -60,7 +64,7 @@ test('game site arguments, project names and origins', () => {
   ]) {
     assert.throws(() => parseBuildGameSiteArgs(argv), /Usage: node scripts\/build-game-site\.mjs/);
   }
-  assert.deepEqual(parsePublishGameSiteArgs(['pudding', '/out', '--preview', '--dry-run']), { game: 'pudding', output: '/out', dryRun: true, preview: true });
+  assert.deepEqual(parsePublishGameSiteArgs(['pudding', '/out', '--preview', '--dry-run']), { game: 'pudding', output: resolve('/out'), dryRun: true, preview: true });
   for (const argv of [['pudding'], ['oddbout', '/out'], ['forge', '/out', '--skip-gate'], ['forge', '/out', '--preview', '--preview']]) {
     assert.throws(() => parsePublishGameSiteArgs(argv), /Usage: node scripts\/publish-game-site\.mjs/);
   }
