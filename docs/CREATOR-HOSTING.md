@@ -469,8 +469,9 @@ Pages project and check that file again.
 Analytics on a game site uses the same tag, measurement ID and privacy guards as the
 ODDBOUT site, on the game's host only. When the game opens at `/`, its entry page
 (`/forge.html`, `/forge`) and `/` are both reported as `/`. Bounce Ball reports its intro
-(`/`) and its game (`/game`) as separate pages. The game sends its own `forge_*` or `pudding_*`
-milestones; `game_id` separates the games in reports.
+(`/`) and its game (`/game`) as separate pages. Forge, Pudding and WALLCARVE send
+their own milestones with a `game_id` field. WALLCARVE sends run starts and ends,
+and skips Analytics on benchmark and ad-test visits.
 
 Before a game's first publish, create its Pages project once as a Direct Upload project
 with production branch `main` (the publisher runs Wrangler non-interactively and does

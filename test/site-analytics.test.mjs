@@ -661,6 +661,45 @@ test('a game site reports its entry as / and forwards its milestones without the
   assert.equal(events.find(args => args[1] === 'pudding_share')[2].method, 'x');
 });
 
+test('WALLCARVE forwards run milestones with validated fields and a sanitized page address', () => {
+  const siteUrl = 'https://wallcarve.oddbout.com/';
+  const page = visit(siteUrl + 'wallcarve.html?course=first-bank&run=trace#record', { siteUrl, game: 'wallcarve' });
+  page.run();
+  const dispatch = (name, parameters) => page.window.dispatchEvent({ type: 'oddbout:milestone', detail: { name, parameters } });
+  const course = { stage: 1, course_version: 2 };
+  const run = { ...course, result: 'clear', progress_pct: 100, duration_ms: 20000 };
+  dispatch('wallcarve_run_start', { ...course, name: 'player' });
+  dispatch('wallcarve_run_end', { ...run, trace: 'inputs' });
+  dispatch('wallcarve_run_end', { ...run, stage: 0 });
+  dispatch('wallcarve_run_end', { ...run, result: 'other' });
+  dispatch('wallcarve_run_end', { ...run, progress_pct: 101 });
+  dispatch('wallcarve_run_end', { ...run, duration_ms: 20001 });
+  dispatch('wallcarve_run_end', { ...run, course_version: undefined });
+  dispatch('wallcarve_run_fake', course);
+  const events = Array.from(page.window.dataLayer).filter(args => args[0] === 'event');
+  assert.deepEqual(events.map(args => args[1]), ['page_view', 'wallcarve_run_start', 'wallcarve_run_end']);
+  const common = { page_location: siteUrl, page_referrer: 'https://example.com/', send_to: 'G-ABC123DEF4', game_id: 'wallcarve' };
+  assert.deepEqual({ ...events[1][2] }, { ...common, ...course });
+  assert.deepEqual({ ...events[2][2] }, { ...common, ...run });
+});
+
+test('WALLCARVE excludes benchmark visits, test ads and analytics opt-outs', () => {
+  const siteUrl = 'https://wallcarve.oddbout.com/';
+  for (const [query, gpc] of [['?bench', false], ['?adtest=1', false], ['', true]]) {
+    const page = visit(siteUrl + query, { siteUrl, game: 'wallcarve', gpc });
+    page.run();
+    assert.equal(page.scripts.length, 0, query);
+    assert.equal(page.window.dataLayer, undefined, query);
+  }
+  const otherGame = visit('https://forge.oddbout.com/', { siteUrl: 'https://forge.oddbout.com/', game: 'forge' });
+  otherGame.run();
+  otherGame.window.dispatchEvent({
+    type: 'oddbout:milestone',
+    detail: { name: 'wallcarve_run_start', parameters: { stage: 1, course_version: 1 } },
+  });
+  assert.ok(!otherGame.window.dataLayer.some(args => args[1] === 'wallcarve_run_start'));
+});
+
 test('each site measures only its own host, and the ODDBOUT site keeps /forge and /pudding as pages', () => {
   for (const [href, options] of [
     ['https://oddbout.com/forge', { siteUrl: 'https://forge.oddbout.com/', game: 'forge' }],
