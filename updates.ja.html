@@ -9,6 +9,7 @@
     return;
   const current = new URL(window.location.href);
   if (game === 'wallcarve' && (current.searchParams.has('bench') || current.searchParams.get('adtest') === '1')) return;
+  const fromBounceIntro = game === 'wallcarve' && current.searchParams.get('from') === 'bounce-intro';
   const fragment = new URLSearchParams(current.hash.slice(1));
   const privateKeys = ['code', 'state', 'handoff', 'dot', 'token', 'access_token', 'refresh_token', 'id_token', 'error_description'];
   const followerCup = hostname === 'life.oddbout.com' && ['/meme/', '/meme/life-cup.html'].includes(current.pathname);
@@ -32,7 +33,8 @@
   current.hash = '';
   if (/\/(?:index|league)\.html$/.test(current.pathname)) current.pathname = current.pathname.replace(/[^/]+$/, '');
   // A game site serves its game at / and at its entry page (/forge.html, clean /forge): one page, reported as /.
-  if (game && ['/' + game, '/' + game + '.html'].includes(current.pathname)) current.pathname = '/';
+  if (game && game !== 'bounce' && ['/' + game, '/' + game + '.html'].includes(current.pathname)) current.pathname = '/';
+  const bounceGame = game === 'bounce' && ['/game', '/game.html'].includes(current.pathname);
   let referrer = '';
   try {
     const source = new URL(document.referrer);
@@ -163,18 +165,12 @@
       wallcarve_run_start: wallcarveCourse,
       wallcarve_run_end: { ...wallcarveCourse, result: ['clear', 'collision', 'timeout', 'quit'], progress_pct: 100, duration_ms: 20000 },
     };
-    const gameTables = { forge, pudding, ...(game === 'wallcarve' ? { wallcarve } : {}) };
+    const bounce = { bounce_first_input: {}, bounce_second_run: {} };
+    const gameTables = { forge, pudding, ...(bounceGame ? { bounce } : {}), ...(game === 'wallcarve' ? { wallcarve } : {}) };
     const gameEvent = Object.entries(gameTables).find(([, table]) => Object.hasOwn(table, name));
     if (
-      !gameEvent && ![
-        'game_start',
-        'match_complete',
-        'creation_start',
-        'hosted_request',
-        'fighter_entered',
-        'extra_generation_interest',
-        ...Object.keys(club),
-      ].includes(name)
+      !gameEvent &&
+      !['game_start', 'match_complete', 'creation_start', 'hosted_request', 'fighter_entered', 'extra_generation_interest', ...Object.keys(club)].includes(name)
     )
       return;
     /** @type {Record<string, string>} */
@@ -200,6 +196,9 @@
       // `ENERGY_TAGS`: control, c, or qa for the ?energy= switch). Nothing else passes; other games never carry it.
       if (gameId === 'forge' && typeof parameters.energy === 'string' && ['control', 'c', 'qa'].includes(parameters.energy)) values.energy = parameters.energy;
       window.gtag('event', name, values);
+      if (name === 'wallcarve_run_start' && fromBounceIntro) {
+        window.gtag('event', 'wallcarve_recommendation_start', { ...values, source_game: 'bounce' });
+      }
       return;
     }
     if (['play', 'watch', 'tournament', 'exhibition'].includes(parameters.mode)) safe.mode = parameters.mode;
@@ -217,6 +216,14 @@
     if (!permitted() || !(event.target instanceof Element)) return;
     const target = event.target.closest('a,button');
     if (!target || !document.body?.contains(target)) return;
+    if (game === 'bounce' && current.pathname === '/') {
+      const action = target.getAttribute('data-bounce-entry');
+      if (action === 'play' || action === 'wallcarve') {
+        const name = action === 'play' ? 'bounce_play_click' : 'bounce_recommendation_click';
+        window.gtag('event', name, { ...page, send_to: measurementId, game_id: 'bounce' });
+        return;
+      }
+    }
     const menus = [
       'home',
       'service',
