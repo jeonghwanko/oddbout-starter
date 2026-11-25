@@ -8,6 +8,7 @@
   )
     return;
   const current = new URL(window.location.href);
+  if (game === 'wallcarve' && (current.searchParams.has('bench') || current.searchParams.get('adtest') === '1')) return;
   const fragment = new URLSearchParams(current.hash.slice(1));
   const privateKeys = ['code', 'state', 'handoff', 'dot', 'token', 'access_token', 'refresh_token', 'id_token', 'error_description'];
   const followerCup = hostname === 'life.oddbout.com' && ['/meme/', '/meme/life-cup.html'].includes(current.pathname);
@@ -156,8 +157,16 @@
       forge_event_step: { theme: ['mine', 'forest', 'hunt', 'gem'], step: 6, day: 7 },
       forge_event_end: { theme: ['mine', 'forest', 'hunt', 'gem'], step: 6 },
     };
+    // WALLCARVE's game site mirrors the run fields in crashbang-heroes src/wallcarve/analytics.ts.
+    const wallcarveCourse = { stage: 99, course_version: 99 };
+    const wallcarve = {
+      wallcarve_run_start: wallcarveCourse,
+      wallcarve_run_end: { ...wallcarveCourse, result: ['clear', 'collision', 'timeout', 'quit'], progress_pct: 100, duration_ms: 20000 },
+    };
+    const gameTables = { forge, pudding, ...(game === 'wallcarve' ? { wallcarve } : {}) };
+    const gameEvent = Object.entries(gameTables).find(([, table]) => Object.hasOwn(table, name));
     if (
-      ![
+      !gameEvent && ![
         'game_start',
         'match_complete',
         'creation_start',
@@ -165,8 +174,6 @@
         'fighter_entered',
         'extra_generation_interest',
         ...Object.keys(club),
-        ...Object.keys(pudding),
-        ...Object.keys(forge),
       ].includes(name)
     )
       return;
@@ -178,19 +185,20 @@
       window.gtag('event', name, safe);
       return;
     }
-    const game = Object.hasOwn(forge, name) ? 'forge' : Object.hasOwn(pudding, name) ? 'pudding' : null;
-    if (game) {
-      const values = /** @type {Record<string, string | number>} */ ({ ...safe, game_id: game });
-      const fields = /** @type {Record<string, Record<string, string[] | number>>} */ (game === 'forge' ? forge : pudding)[name];
+    if (gameEvent) {
+      const [gameId, table] = gameEvent;
+      const values = /** @type {Record<string, string | number>} */ ({ ...safe, game_id: gameId });
+      const fields = /** @type {Record<string, Record<string, string[] | number>>} */ (table)[name];
       for (const [key, rule] of Object.entries(fields)) {
         const value = parameters[key];
         if (Array.isArray(rule)) {
           if (rule.includes(value)) values[key] = value;
         } else if (typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= rule) values[key] = Math.floor(value);
       }
+      if (gameId === 'wallcarve' && (values.stage === 0 || values.course_version === 0 || Object.keys(fields).some(key => !Object.hasOwn(values, key)))) return;
       // Legendary Forge's energy A/B: every forge event may carry the device's group (crashbang-heroes src/forge/analytics.ts
       // `ENERGY_TAGS`: control, c, or qa for the ?energy= switch). Nothing else passes; other games never carry it.
-      if (game === 'forge' && typeof parameters.energy === 'string' && ['control', 'c', 'qa'].includes(parameters.energy)) values.energy = parameters.energy;
+      if (gameId === 'forge' && typeof parameters.energy === 'string' && ['control', 'c', 'qa'].includes(parameters.energy)) values.energy = parameters.energy;
       window.gtag('event', name, values);
       return;
     }
