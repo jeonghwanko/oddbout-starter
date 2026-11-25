@@ -661,6 +661,59 @@ test('a game site reports its entry as / and forwards its milestones without the
   assert.equal(events.find(args => args[1] === 'pudding_share')[2].method, 'x');
 });
 
+test('Bounce measures intro clicks and first and second steering on the game page', () => {
+  const siteUrl = 'https://bounce.oddbout.com/';
+  const options = { siteUrl, game: 'bounce' };
+  for (const path of ['index.html', 'game', 'game.html']) {
+    const page = visit(siteUrl + path, options);
+    page.run();
+    for (const value of ['play', 'wallcarve', 'other']) {
+      const action = new page.Element({ tag: 'a', 'data-bounce-entry': value }, page.body);
+      page.fire('click', new page.Element({}, action));
+    }
+    for (const name of ['bounce_first_input', 'bounce_second_run']) {
+      page.window.dispatchEvent({ type: 'oddbout:milestone', detail: { name, parameters: { input: 'private' } } });
+    }
+    const events = Array.from(page.window.dataLayer, args => Array.from(args)).filter(args => args[0] === 'event');
+    const behavior = path === 'index.html' ? ['bounce_play_click', 'bounce_recommendation_click'] : ['bounce_first_input', 'bounce_second_run'];
+    assert.deepEqual(
+      events.map(args => args[1]),
+      ['page_view', ...behavior],
+    );
+    for (const [, , payload] of events.slice(1)) {
+      assert.equal(payload.game_id, 'bounce');
+      assert.equal(payload.page_location, path === 'index.html' ? siteUrl : siteUrl + path);
+      assert.equal(payload.input, undefined);
+    }
+  }
+});
+
+test('WALLCARVE credits a Bounce recommendation only after a valid run starts', () => {
+  const siteUrl = 'https://wallcarve.oddbout.com/';
+  for (const source of ['bounce-intro', 'unknown']) {
+    const page = visit(siteUrl + '?from=' + source, { siteUrl, game: 'wallcarve' });
+    page.run();
+    const events = () => Array.from(page.window.dataLayer, args => Array.from(args)).filter(args => args[0] === 'event');
+    const start = stage =>
+      page.window.dispatchEvent({
+        type: 'oddbout:milestone',
+        detail: { name: 'wallcarve_run_start', parameters: { stage, course_version: 1 } },
+      });
+    start(0);
+    assert.deepEqual(
+      events().map(args => args[1]),
+      ['page_view'],
+    );
+    start(1);
+    assert.deepEqual(
+      events().map(args => args[1]),
+      ['page_view', 'wallcarve_run_start', ...(source === 'bounce-intro' ? ['wallcarve_recommendation_start'] : [])],
+    );
+    assert.equal(events().at(-1)[2].page_location, siteUrl);
+    assert.equal(events().at(-1)[2].source_game, source === 'bounce-intro' ? 'bounce' : undefined);
+  }
+});
+
 test('WALLCARVE forwards run milestones with validated fields and a sanitized page address', () => {
   const siteUrl = 'https://wallcarve.oddbout.com/';
   const page = visit(siteUrl + 'wallcarve.html?course=first-bank&run=trace#record', { siteUrl, game: 'wallcarve' });
@@ -677,7 +730,10 @@ test('WALLCARVE forwards run milestones with validated fields and a sanitized pa
   dispatch('wallcarve_run_end', { ...run, course_version: undefined });
   dispatch('wallcarve_run_fake', course);
   const events = Array.from(page.window.dataLayer).filter(args => args[0] === 'event');
-  assert.deepEqual(events.map(args => args[1]), ['page_view', 'wallcarve_run_start', 'wallcarve_run_end']);
+  assert.deepEqual(
+    events.map(args => args[1]),
+    ['page_view', 'wallcarve_run_start', 'wallcarve_run_end'],
+  );
   const common = { page_location: siteUrl, page_referrer: 'https://example.com/', send_to: 'G-ABC123DEF4', game_id: 'wallcarve' };
   assert.deepEqual({ ...events[1][2] }, { ...common, ...course });
   assert.deepEqual({ ...events[2][2] }, { ...common, ...run });
@@ -685,7 +741,11 @@ test('WALLCARVE forwards run milestones with validated fields and a sanitized pa
 
 test('WALLCARVE excludes benchmark visits, test ads and analytics opt-outs', () => {
   const siteUrl = 'https://wallcarve.oddbout.com/';
-  for (const [query, gpc] of [['?bench', false], ['?adtest=1', false], ['', true]]) {
+  for (const [query, gpc] of [
+    ['?bench', false],
+    ['?adtest=1', false],
+    ['', true],
+  ]) {
     const page = visit(siteUrl + query, { siteUrl, game: 'wallcarve', gpc });
     page.run();
     assert.equal(page.scripts.length, 0, query);

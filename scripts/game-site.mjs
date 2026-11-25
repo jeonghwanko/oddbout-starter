@@ -219,8 +219,7 @@ export async function buildGameSite({
     game,
     portal: 'web',
     output,
-    // `game` makes the entry page count as `/` in Analytics; an intro home keeps `/` and the game's own page apart.
-    plugins: [googleAnalyticsPlugin(measurementId, origin + '/', null, { game: GAME_SITE_PAGES[game].home === 'entry' ? game : null })],
+    plugins: [googleAnalyticsPlugin(measurementId, origin + '/', null, { game })],
   });
   const { entry } = GAME_SITE_PAGES[game];
   if (built.origin !== origin || built.entry !== entry) {
