@@ -13,7 +13,7 @@ const resolvedId = '\0oddbout-analytics';
 
 /**
  * @param {string} measurementId @param {string} hostname @param {string | null} apiBase @param {string[]} updateSlugs
- * @param {string | null} game A game site's game (`forge` on forge.oddbout.com) whose entry page is its home; null on the ODDBOUT site and on a game site with an intro home (bounce).
+ * @param {string | null} game A game site's game (`forge` on forge.oddbout.com); null on the ODDBOUT site.
  */
 function startAnalytics(measurementId, hostname, apiBase, updateSlugs, game) {
   if (
@@ -25,6 +25,7 @@ function startAnalytics(measurementId, hostname, apiBase, updateSlugs, game) {
     return;
   const current = new URL(window.location.href);
   if (game === 'wallcarve' && (current.searchParams.has('bench') || current.searchParams.get('adtest') === '1')) return;
+  const fromBounceIntro = game === 'wallcarve' && current.searchParams.get('from') === 'bounce-intro';
   const fragment = new URLSearchParams(current.hash.slice(1));
   const privateKeys = ['code', 'state', 'handoff', 'dot', 'token', 'access_token', 'refresh_token', 'id_token', 'error_description'];
   const followerCup = hostname === 'life.oddbout.com' && ['/meme/', '/meme/life-cup.html'].includes(current.pathname);
@@ -48,7 +49,8 @@ function startAnalytics(measurementId, hostname, apiBase, updateSlugs, game) {
   current.hash = '';
   if (/\/(?:index|league)\.html$/.test(current.pathname)) current.pathname = current.pathname.replace(/[^/]+$/, '');
   // A game site serves its game at / and at its entry page (/forge.html, clean /forge): one page, reported as /.
-  if (game && ['/' + game, '/' + game + '.html'].includes(current.pathname)) current.pathname = '/';
+  if (game && game !== 'bounce' && ['/' + game, '/' + game + '.html'].includes(current.pathname)) current.pathname = '/';
+  const bounceGame = game === 'bounce' && ['/game', '/game.html'].includes(current.pathname);
   let referrer = '';
   try {
     const source = new URL(document.referrer);
@@ -179,7 +181,8 @@ function startAnalytics(measurementId, hostname, apiBase, updateSlugs, game) {
       wallcarve_run_start: wallcarveCourse,
       wallcarve_run_end: { ...wallcarveCourse, result: ['clear', 'collision', 'timeout', 'quit'], progress_pct: 100, duration_ms: 20000 },
     };
-    const gameTables = { forge, pudding, ...(game === 'wallcarve' ? { wallcarve } : {}) };
+    const bounce = { bounce_first_input: {}, bounce_second_run: {} };
+    const gameTables = { forge, pudding, ...(bounceGame ? { bounce } : {}), ...(game === 'wallcarve' ? { wallcarve } : {}) };
     const gameEvent = Object.entries(gameTables).find(([, table]) => Object.hasOwn(table, name));
     if (
       !gameEvent && ![
@@ -216,6 +219,9 @@ function startAnalytics(measurementId, hostname, apiBase, updateSlugs, game) {
       // `ENERGY_TAGS`: control, c, or qa for the ?energy= switch). Nothing else passes; other games never carry it.
       if (gameId === 'forge' && typeof parameters.energy === 'string' && ['control', 'c', 'qa'].includes(parameters.energy)) values.energy = parameters.energy;
       window.gtag('event', name, values);
+      if (name === 'wallcarve_run_start' && fromBounceIntro) {
+        window.gtag('event', 'wallcarve_recommendation_start', { ...values, source_game: 'bounce' });
+      }
       return;
     }
     if (['play', 'watch', 'tournament', 'exhibition'].includes(parameters.mode)) safe.mode = parameters.mode;
@@ -233,6 +239,14 @@ function startAnalytics(measurementId, hostname, apiBase, updateSlugs, game) {
     if (!permitted() || !(event.target instanceof Element)) return;
     const target = event.target.closest('a,button');
     if (!target || !document.body?.contains(target)) return;
+    if (game === 'bounce' && current.pathname === '/') {
+      const action = target.getAttribute('data-bounce-entry');
+      if (action === 'play' || action === 'wallcarve') {
+        const name = action === 'play' ? 'bounce_play_click' : 'bounce_recommendation_click';
+        window.gtag('event', name, { ...page, send_to: measurementId, game_id: 'bounce' });
+        return;
+      }
+    }
     const menus = [
       'home',
       'service',
@@ -348,7 +362,7 @@ function startAnalytics(measurementId, hostname, apiBase, updateSlugs, game) {
 
 /**
  * @param {string} measurementId @param {string} siteUrl @param {string | null} [apiBase] @param {string[]} [updateSlugs]
- * @param {{ game?: string | null }} [options] `game`: the game a game site serves (scripts/build-game-site.mjs); its entry page counts as /.
+ * @param {{ game?: string | null }} [options] `game`: the game a game site serves (scripts/build-game-site.mjs).
  */
 export function analyticsSource(measurementId, siteUrl, apiBase = null, updateSlugs = [], { game = null } = {}) {
   if (!/^G-[A-Z0-9]{6,20}$/.test(measurementId ?? '')) throw new Error('Invalid GA4 measurement ID');
