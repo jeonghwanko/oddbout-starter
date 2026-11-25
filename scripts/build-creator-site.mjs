@@ -149,9 +149,10 @@ await writeUpdatesAnalytics(output, updatesOutput.pages, config.analyticsMeasure
 // twitch.html and bet.html come from the game's site plugins; older game sources do not have them.
 // ko/ and ja/ are the homepage's Korean and Japanese documents (kaito_web home-site-plugin); / is English.
 const standalonePages = ['ko/index.html', 'ja/index.html', 'twitch.html', 'bet.html'].filter(page => existsSync(join(output, page)));
-const seoPages = ['index.html', ...siteEntries, ...standalonePages, ...policyFiles, ...browserFightingFiles, ...updatesOutput.pages];
 // Every published document (also the cloud plugin's and the game's own pages), not only the sitemap's: a canonical anywhere names the final URL.
 const publishedPages = (await readdir(output, { recursive: true })).map(path => String(path).replaceAll('\\', '/')).filter(path => path.endsWith('.html'));
+const fighterProfiles = publishedPages.filter(page => /^fighters\/[a-z0-9-]+\/(?:en\/|ja\/)?index\.html$/.test(page)).sort();
+const seoPages = ['index.html', ...siteEntries, ...standalonePages, ...policyFiles, ...browserFightingFiles, ...updatesOutput.pages, ...fighterProfiles];
 await cleanSiteSeoUrls(output, publishedPages, config.siteUrl);
 await writeSiteDiscovery(output, config.siteUrl, seoPages);
 // The game's public 404 belongs to another site and links to the domain root, which is not ours.
