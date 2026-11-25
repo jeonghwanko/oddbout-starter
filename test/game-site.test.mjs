@@ -66,7 +66,12 @@ test('game site arguments, project names and origins', () => {
   ]) {
     assert.throws(() => parseBuildGameSiteArgs(argv), /Usage: node scripts\/build-game-site\.mjs/);
   }
-  assert.deepEqual(parsePublishGameSiteArgs(['pudding', '/out', '--preview', '--dry-run']), { game: 'pudding', output: resolve('/out'), dryRun: true, preview: true });
+  assert.deepEqual(parsePublishGameSiteArgs(['pudding', '/out', '--preview', '--dry-run']), {
+    game: 'pudding',
+    output: resolve('/out'),
+    dryRun: true,
+    preview: true,
+  });
   for (const argv of [['pudding'], ['oddbout', '/out'], ['forge', '/out', '--skip-gate'], ['forge', '/out', '--preview', '--preview']]) {
     assert.throws(() => parsePublishGameSiteArgs(argv), /Usage: node scripts\/publish-game-site\.mjs/);
   }

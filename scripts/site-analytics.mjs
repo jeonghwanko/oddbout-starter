@@ -185,15 +185,8 @@ function startAnalytics(measurementId, hostname, apiBase, updateSlugs, game) {
     const gameTables = { forge, pudding, ...(bounceGame ? { bounce } : {}), ...(game === 'wallcarve' ? { wallcarve } : {}) };
     const gameEvent = Object.entries(gameTables).find(([, table]) => Object.hasOwn(table, name));
     if (
-      !gameEvent && ![
-        'game_start',
-        'match_complete',
-        'creation_start',
-        'hosted_request',
-        'fighter_entered',
-        'extra_generation_interest',
-        ...Object.keys(club),
-      ].includes(name)
+      !gameEvent &&
+      !['game_start', 'match_complete', 'creation_start', 'hosted_request', 'fighter_entered', 'extra_generation_interest', ...Object.keys(club)].includes(name)
     )
       return;
     /** @type {Record<string, string>} */

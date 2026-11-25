@@ -22,7 +22,8 @@ const copy = {
   en: {
     file: 'index.en.html',
     title: 'Free 2D Browser Fighting Game with AI Fighters',
-    description: 'Watch free 2D AI fights in your browser. Learn the ODDBOUT controls, build a 16-fighter cup bracket, and create and register your own fighter.',
+    description:
+      'Watch free 2D AI fights in your browser. Learn the ODDBOUT controls, build a 16-fighter cup bracket, and create and register your own fighter.',
     play: 'Watch an AI practice match',
     create: 'Create my fighter',
     trial: 'Velora and Leon fight automatically. Watch in your browser without downloading the game or signing in.',
@@ -87,7 +88,8 @@ export async function buildBrowserFightingGame(root) {
     const example = lang === 'ko' ? '/ai-fighter-creator/index.ko#velora' : '/ai-fighter-creator/#velora';
     const highlight = '/ai-fighter-creator/velora/velora-vs-leon';
     const breadcrumbs = {
-      '@context': 'https://schema.org', '@type': 'BreadcrumbList',
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
       itemListElement: [
         { '@type': 'ListItem', position: 1, name: 'ODDBOUT', item: 'https://oddbout.com/' },
         { '@type': 'ListItem', position: 2, name: page.title, item: canonical },
@@ -135,10 +137,14 @@ export async function buildBrowserFightingGame(root) {
         <source src="${highlight}.mp4" type="video/mp4">
       </video>
     </div>
-    ${lang === 'en' ? englishGuide : `<section class="creation">
+    ${
+      lang === 'en'
+        ? englishGuide
+        : `<section class="creation">
       <h2>${page.createTitle}</h2>
       <div><p>${page.createBody}</p><a href="${example}">${page.example} <span aria-hidden="true">→</span></a></div>
-    </section>`}
+    </section>`
+    }
   </main>
 </body>
 </html>
