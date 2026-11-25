@@ -69,6 +69,16 @@ License: https://creativecommons.org/publicdomain/zero/1.0/
 Runtime copies: audio/sfx/wood-impact-heavy.ogg,
   audio/sfx/body-impact-heavy.ogg
 
+WALLCARVE — generated game audio
+--------------------------------
+
+The gameplay loop was generated with Eleven Music and the eight gameplay cues
+with ElevenLabs Sound Effects. The edited MP3 files under audio/wallcarve/
+form part of the game soundtrack. Source and output hashes are in
+src/assets/runtime-media.json.
+Music terms: https://elevenlabs.io/music-terms
+Sound effects terms: https://elevenlabs.io/terms-of-use
+
 Kenney Pixel Platformer 1.2 — Bounce Ball art
 ----------------------------------------------
 
