@@ -11,7 +11,9 @@ export async function supabasePlatform(db = new PGlite()) {
     create schema auth; create table auth.users(id uuid primary key,email text,encrypted_password text,banned_until timestamptz,deleted_at timestamptz);
     create table auth.oauth_clients(id uuid primary key, deleted_at timestamptz, client_name text, redirect_uris text);
     create table auth.sessions(id uuid primary key,user_id uuid,oauth_client_id uuid,not_after timestamptz,scopes text,refreshed_at timestamp);
-    create table auth.oauth_consents(user_id uuid,client_id uuid,revoked_at timestamptz,scopes text);
+    create table auth.oauth_consents(user_id uuid,client_id uuid,revoked_at timestamptz,scopes text,granted_at timestamptz not null default now(),unique(user_id,client_id));
+    create table auth.oauth_authorizations(id uuid primary key,user_id uuid,client_id uuid,status text,expires_at timestamptz);
+    create table auth.refresh_tokens(id bigint primary key,session_id uuid references auth.sessions(id) on delete cascade);
     create function auth.uid() returns uuid language sql as 'select nullif(current_setting(''request.jwt.claim.sub'',true),'''')::uuid';
     grant usage on schema auth to authenticated,service_role;
     create function auth.jwt() returns jsonb language sql as 'select coalesce(nullif(current_setting(''request.jwt.claims'',true),''''),''{}'')::jsonb';

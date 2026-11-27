@@ -218,8 +218,9 @@ Claude Code는 루트의 `plugin.json`에서 판 0.1.0을 읽었다. `.claude-pl
 사이트의 내 에이전트는 등록 이름으로 칸을 고른다: `Codex` → Codex, `Claude Code` → Claude, `Gemini CLI MCP Client` → Gemini.
 이 에이전트들은 그림 파일을 [그림 올리기 표](#그림-올리기-표-2026-11-01)의 명령 한 줄로 보낸다.
 
-사이트에서 보기(2026-10-28): oddbout.com 제작자 페이지의 My agents(`creator.html#view=agents`)가 Codex(ChatGPT·Dots)·Grok·Claude 카드에 연결을 보이고,
-연결을 끊는다(Supabase Auth의 `auth.oauth.listGrants`·`revokeGrant`). 카드 목록은 `af_account_agents`가 계정에 둔다.
+oddbout.com의 계정 메뉴에서 **내 에이전트**를 열면 현재 계정의 활성 OAuth 연결 수를 볼 수 있다. 계정당 한도는 모든 에이전트를 합쳐 클라이언트 3개다.
+같은 클라이언트의 재승인은 한 자리를 그대로 쓴다. 대화 연결 하나를 끊거나 에이전트에서 로그아웃해 그 에이전트의 대화 연결을 전부 해제할 수 있다.
+사이트는 드로어를 연 계정의 세션으로 Supabase Auth의 `/auth/v1/user/oauth/grants`에서 활성 연결을 읽고 선택한 클라이언트의 권한을 해제한다.
 
 연결 후 대화 입력창에서 `@ODDBOUT`을 입력하고 **플러그인 항목을 선택**한다.
 일반 텍스트로 이름만 입력한 것과 실제 플러그인 선택은 다르다.

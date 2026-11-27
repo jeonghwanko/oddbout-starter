@@ -14,3 +14,4 @@ main{flex:1;display:grid;grid-template-columns:1.3fr 1fr;gap:72px;align-items:ce
 
 @media(max-width:360px){.google .arrow{display:none}.google{gap:10px;padding-inline:14px}}
 .local-warning{font-size:12px;line-height:1.6;color:var(--accent);border-left:3px solid var(--accent);padding:2px 0 2px 11px;margin:-12px 0 24px;word-break:keep-all}
+#my-agents-link{text-decoration:none}

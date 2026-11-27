@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { start, copy, agentOf, fillAgent, agentWords } from '../web/cloud-connect/connect.mjs';
+import { start, copy, agentOf, fillAgent, agentWords, connectionLocale } from '../web/cloud-connect/connect.mjs';
 
 function harness({
   session = { user: { email: 'review@example.test', is_anonymous: false } },
@@ -8,7 +8,9 @@ function harness({
   signOutError = null,
   details = { redirect_url: 'https://chatgpt.com/connector_platform/oauth/callback' },
   approved = null,
+  approvalError = null,
   denied = null,
+  grantLists = [[]],
 } = {}) {
   const elements = new Map(),
     calls = [],
@@ -35,7 +37,16 @@ function harness({
         calls.push(['details', requestId]);
         return { data: details, error: null };
       },
-      approveAuthorization: async () => ({ data: { redirect_url: approved }, error: null }),
+      listGrants: async () => {
+        calls.push(['grants']);
+        const grants = grantLists.length > 1 ? grantLists.shift() : grantLists[0];
+        if (grants instanceof Error) throw grants;
+        return { data: grants.map(id => ({ client: { id } })), error: null };
+      },
+      approveAuthorization: async () => {
+        calls.push(['approve']);
+        return { data: { redirect_url: approved }, error: approvalError };
+      },
       denyAuthorization: async () => ({ data: { redirect_url: denied }, error: null }),
     },
   };
@@ -113,6 +124,94 @@ test('fresh email login still resolves consent for the explicitly chosen new acc
   assert.deepEqual(h.calls, [['details', h.id]]);
   assert.equal(h.element('email-password').value, '');
   assert.equal(h.redirects.length, 1);
+});
+
+const CONNECTING_CLIENT = {
+  redirect_uri: 'https://claude.ai/api/mcp/auth_callback',
+  client: { id: 'requesting-client', name: 'Claude' },
+};
+
+test('a fourth distinct connection shows the localized limit and a link to My agents', async () => {
+  for (const language of ['ko', 'en', 'ja']) {
+    const h = harness({ language, details: CONNECTING_CLIENT, grantLists: [['one', 'two', 'three']] });
+    await start(h.env);
+    await h.element('continue-account').onclick();
+    assert.equal(h.element('consent').hidden, true);
+    assert.equal(h.element('panel-title').textContent, copy[language].limitTitle);
+    assert.equal(h.element('status').textContent, copy[language].limitReached);
+    assert.equal(h.element('my-agents-link').hidden, false);
+    assert.equal(h.element('my-agents-link').href, `https://oddbout.com/creator.html?lang=${language}#view=agents`);
+    assert.deepEqual(h.calls, [['details', h.id], ['grants']]);
+    assert.deepEqual(h.redirects, []);
+  }
+  assert.equal(connectionLocale(null, null, 'ja-JP'), 'ja');
+});
+
+test('one OAuth client takes one slot and may reauthorize at the limit', async () => {
+  const approved = `${CONNECTING_CLIENT.redirect_uri}?code=abc`;
+  for (const grants of [
+    ['one', 'one', 'two'],
+    ['one', 'two', CONNECTING_CLIENT.client.id],
+  ]) {
+    const h = harness({ details: CONNECTING_CLIENT, grantLists: [grants], approved });
+    await start(h.env);
+    await h.element('continue-account').onclick();
+    assert.equal(h.element('consent').hidden, false);
+    await h.element('approve').onclick();
+    assert.deepEqual(h.redirects, [approved]);
+  }
+});
+
+test('after a disconnect, rechecking can approve the same pending authorization', async () => {
+  const approved = `${CONNECTING_CLIENT.redirect_uri}?code=abc`;
+  const h = harness({
+    details: CONNECTING_CLIENT,
+    grantLists: [
+      ['one', 'two', 'three'],
+      ['one', 'two'],
+    ],
+    approved,
+  });
+  await start(h.env);
+  await h.element('continue-account').onclick();
+  assert.equal(h.element('limit-recheck').hidden, false);
+  assert.equal(h.values.get('oddbout-authorization-id'), h.id);
+  await h.element('limit-recheck').onclick();
+  assert.deepEqual(h.calls, [['details', h.id], ['grants'], ['details', h.id], ['grants']]);
+  assert.equal(h.element('limit-recheck').hidden, true);
+  assert.equal(h.element('consent').hidden, false);
+  await h.element('approve').onclick();
+  assert.deepEqual(h.redirects, [approved]);
+  assert.equal(h.values.has('oddbout-authorization-id'), false);
+});
+
+test('approval rechecks grants if the server fails when a simultaneous approval fills the last slot', async () => {
+  const h = harness({
+    details: CONNECTING_CLIENT,
+    grantLists: [
+      ['one', 'two'],
+      ['one', 'two', 'three'],
+    ],
+    approvalError: new Error('error storing consent'),
+  });
+  await start(h.env);
+  await h.element('continue-account').onclick();
+  assert.equal(h.element('consent').hidden, false);
+  await h.element('approve').onclick();
+  assert.equal(h.element('status').textContent, copy.en.limitReached);
+  assert.equal(h.element('my-agents-link').hidden, false);
+  assert.deepEqual(h.calls, [['details', h.id], ['grants'], ['approve'], ['grants']]);
+  assert.deepEqual(h.redirects, []);
+});
+
+test('a grant lookup failure leaves approval to the server and preserves the general connection error', async () => {
+  const h = harness({ details: CONNECTING_CLIENT, grantLists: [new Error('fetch failed')], approvalError: new Error('expired') });
+  await start(h.env);
+  await h.element('continue-account').onclick();
+  assert.equal(h.element('consent').hidden, false);
+  await h.element('approve').onclick();
+  assert.equal(h.element('panel-title').textContent, copy.en.errorTitle);
+  assert.equal(h.element('my-agents-link').hidden, true);
 });
 
 test('each agent comes back only to its own callback addresses', () => {
@@ -294,7 +393,7 @@ test('the copy names the agent with the particles its sound takes', () => {
   assert.equal(fillAgent(copy.en.consentTitle, agentWords.en.any), 'Connect to your agent?');
   assert.equal(fillAgent(copy.ko.consentTitle, agentWords.ko.local), '이 컴퓨터의 앱에 연결할까요?');
   assert.equal(fillAgent(copy.en.consentTitle, agentWords.en.local), 'Connect to an app on this computer?');
-  for (const language of ['ko', 'en'])
+  for (const language of ['ko', 'en', 'ja'])
     for (const text of Object.values(copy[language])) {
       for (const words of Object.values(agentWords[language])) assert.doesNotMatch(fillAgent(text, words), /[{}]/);
     }
