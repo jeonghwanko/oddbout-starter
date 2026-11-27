@@ -71,6 +71,7 @@ const gamePlugins = (await readFile(gamePluginsModule).then(
 ))
   ? (await import(pathToFileURL(gamePluginsModule).href)).siteBuildPlugins()
   : [];
+const hasPortal = existsSync(join(source, 'tools/ai-fighter/portal-page.mjs'));
 await build({
   configFile: false,
   root: source,
@@ -89,13 +90,13 @@ await build({
         order: 'pre',
         /** @param {string} html @param {{ filename: string }} context */
         handler(html, context) {
-          const text = publicSiteText(html);
+          const text = publicSiteText(html, hasPortal);
           return context.filename.replaceAll('\\', '/').endsWith('/privacy.html') ? sitePrivacyNotice(text) : text;
         },
       },
       /** @param {string} code @param {string} id */
       transform(code, id) {
-        code = publicSiteText(code);
+        code = publicSiteText(code, hasPortal);
         if (!id.replaceAll('\\', '/').endsWith('/src/platform/fighterCreator.ts')) return code;
         const old = 'export const PUBLIC_CREATOR_ORIGIN = "https://rupin.pryzm.gg";';
         if (!code.includes(old)) throw new Error('Creator origin source changed; review the standalone build');
@@ -138,17 +139,23 @@ await buildPluginPolicySite(join(output, 'ai-fighter-creator'), { publish: true 
 await buildBrowserFightingGame(output);
 await buildCloudConnect(output);
 await publishEnvironmentProfiles(output);
-// Serve the actual homepage at /; retain the old filename as a compatible redirect.
-const homepage = await readFile(join(output, 'league.html'), 'utf8');
-for (const [path, html] of Object.entries(homepageEntries(homepage))) {
-  await writeFile(join(output, path), html);
+// Older runtime revisions supplied only the league entry. Newer revisions produce the portal and compatibility pages themselves.
+const fightClub = existsSync(join(output, 'fight-club/index.html'));
+if (hasPortal && !fightClub) throw new Error('Missing canonical Fight Club home in portal build');
+if (!fightClub) {
+  const homepage = await readFile(join(output, 'league.html'), 'utf8');
+  for (const [path, html] of Object.entries(homepageEntries(homepage))) {
+    await writeFile(join(output, path), html);
+  }
 }
 const updatesOutput = await readUpdatesManifest(output);
 await writeUpdatesAnalytics(output, updatesOutput.pages, config.analyticsMeasurementId, config.siteUrl, config.apiBase);
 // Pages serves clean URLs (/x.html redirects to /x), so canonical, hreflang and og:url must name the clean address before the sitemap reads them.
 // twitch.html and bet.html come from the game's site plugins; older game sources do not have them.
-// ko/ and ja/ are the homepage's Korean and Japanese documents (kaito_web home-site-plugin); / is English.
-const standalonePages = ['ko/index.html', 'ja/index.html', 'twitch.html', 'bet.html'].filter(page => existsSync(join(output, page)));
+const homePages = fightClub
+  ? ['home/en/index.html', 'home/ja/index.html', 'fight-club/index.html', 'fight-club/ko/index.html', 'fight-club/ja/index.html']
+  : ['ko/index.html', 'ja/index.html'];
+const standalonePages = [...homePages, 'twitch.html', 'bet.html'].filter(page => existsSync(join(output, page)));
 // Every published document (also the cloud plugin's and the game's own pages), not only the sitemap's: a canonical anywhere names the final URL.
 const publishedPages = (await readdir(output, { recursive: true })).map(path => String(path).replaceAll('\\', '/')).filter(path => path.endsWith('.html'));
 const fighterProfiles = publishedPages.filter(page => /^fighters\/[a-z0-9-]+\/(?:en\/|ja\/)?index\.html$/.test(page)).sort();

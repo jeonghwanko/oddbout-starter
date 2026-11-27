@@ -51,6 +51,10 @@ async function stagePublicApi(temporary, site, project) {
     await copyFile(new URL('../' + source, import.meta.url), target);
   }
   await writeFile(join(site, '_routes.json'), JSON.stringify({ version: 1, include: ['/api/*'], exclude: [] }));
+  // Pages otherwise removes index.html before the legacy entry script can distinguish it from the new portal.
+  if ((await lstat(join(site, 'fight-club/index.html')).catch(() => null))?.isFile()) {
+    await writeFile(join(site, '_redirects'), '/index.html /league 302\n');
+  }
   const config = join(temporary, 'wrangler.jsonc');
   await writeFile(
     config,

@@ -19,13 +19,15 @@ const staticPages = [...policyFiles, ...browserFightingFiles];
 export const git = (cwd, ...args) =>
   execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 256 * 1024 * 1024 }).trim();
 // Rewrite public site and homepage links while retaining repository documentation links.
-/** @param {string} text */
-export function publicSiteText(text) {
+/** @param {string} text @param {boolean} [preserveLeague] */
+export function publicSiteText(text, preserveLeague = false) {
   const base = new URL('.', hosting.siteUrl).href;
   // The game's pages may still carry the repository's old name (ai-fighter-dots-starter) until they are re-saved.
-  return text
+  const normalized = text
     .replaceAll('https://jeonghwanko.github.io/ai-fighter-dots-starter/', base)
-    .replaceAll('https://jeonghwanko.github.io/oddbout-starter/', base)
+    .replaceAll('https://jeonghwanko.github.io/oddbout-starter/', base);
+  if (preserveLeague) return normalized;
+  return normalized
     .replaceAll(base + 'league.html', base)
     .replaceAll('./league.html', './')
     .replace(/((?:\\)?["'])league\.html(?=(?:\\)?["'])/g, '$1');
@@ -191,8 +193,16 @@ export async function publishedFiles(root, siteUrl = hosting.siteUrl) {
     if (!headers.includes(chatgpt.headers)) throw new Error('Missing or changed ChatGPT route headers');
   }
   const includeAdminWorkspace = Boolean(manifest[adminWorkspaceEntry]) || (await stat(join(root, adminWorkspaceEntry)).catch(() => null))?.isFile();
-  const entries = [...siteEntries, ...(includeAdminWorkspace ? [adminWorkspaceEntry] : []), ...(includeChatgptEntry ? [CHATGPT_GAME_ENTRY] : [])];
-  const files = new Set(['index.html', ...entries, ...staticPages, ...discoveryFiles, ...(hosting.customDomain ? ['CNAME'] : [])]),
+  const portal = (await stat(join(root, 'fight-club/index.html')).catch(() => null))?.isFile();
+  const portalEntries = portal ? ['index.html', 'home/en/index.html', 'home/ja/index.html'] : [];
+  const homes = portal ? ['fight-club/index.html', 'fight-club/ko/index.html', 'fight-club/ja/index.html', 'ko/index.html', 'ja/index.html'] : [];
+  const entries = [
+    ...siteEntries,
+    ...portalEntries,
+    ...(includeAdminWorkspace ? [adminWorkspaceEntry] : []),
+    ...(includeChatgptEntry ? [CHATGPT_GAME_ENTRY] : []),
+  ];
+  const files = new Set(['index.html', ...homes, ...entries, ...staticPages, ...discoveryFiles, ...(hosting.customDomain ? ['CNAME'] : [])]),
     visited = new Set();
   /** @param {string} key */
   function visit(key) {
@@ -203,14 +213,24 @@ export async function publishedFiles(root, siteUrl = hosting.siteUrl) {
     for (const file of [entry.file, ...(entry.css ?? []), ...(entry.assets ?? [])]) files.add(file);
     for (const imported of [...(entry.imports ?? []), ...(entry.dynamicImports ?? [])]) visit(imported);
   }
+  const base = new URL('.', siteUrl);
   for (const page of entries) {
-    if (manifest[page]) {
-      visit(page);
-      continue;
-    }
-    // Vite can remove an HTML entry chunk when two documents share the same module (the service translations).
-    // Follow the emitted module tags instead, still requiring their manifest graph and checking both HTML documents.
+    const entry = manifest[page];
+    if (entry) visit(page);
+    if (entry && !portalEntries.includes(page)) continue;
+    // HTML images are independent of the module graph. Each translated portal can have its own image URLs.
     const html = await readFile(join(root, page), 'utf8');
+    const documentUrl = new URL(page, base);
+    const baseHref = /<base\s+href="([^"]+)"/i.exec(html)?.[1];
+    const documentBase = baseHref ? new URL(baseHref, documentUrl) : documentUrl;
+    if (portalEntries.includes(page)) {
+      for (const [, src] of html.matchAll(/<img\b[^>]*?\ssrc="([^"]+)"/gi)) {
+        const url = new URL(src, documentBase);
+        if (url.origin === base.origin && url.pathname.startsWith(base.pathname)) files.add(url.pathname.slice(base.pathname.length));
+      }
+    }
+    if (entry) continue;
+    // Vite can merge module entries. Follow emitted tags for pages without their own manifest key.
     let modules = 0;
     for (const [tag] of html.matchAll(/<(?:script|link)\b[^>]*>/gi)) {
       const attributes = Object.fromEntries([...tag.matchAll(/([\w-]+)\s*=\s*["']([^"']*)["']/g)].map(match => [match[1], match[2]]));
@@ -219,8 +239,7 @@ export async function publishedFiles(root, siteUrl = hosting.siteUrl) {
       if (!module && !stylesheet) continue;
       const reference = module ? attributes.src : attributes.href;
       if (!reference) throw new Error(`Missing emitted asset URL: ${page}`);
-      const base = new URL('.', siteUrl),
-        url = new URL(reference, new URL(page, base));
+      const url = new URL(reference, documentBase);
       if (url.origin !== base.origin || !url.pathname.startsWith(base.pathname) || url.search || url.hash) {
         throw new Error(`Unsafe emitted asset URL: ${page}`);
       }
@@ -249,17 +268,23 @@ export async function publishedFiles(root, siteUrl = hosting.siteUrl) {
  * @param {string} root @param {{ siteUrl?: string, request?: typeof fetch, wait?: (ms: number) => Promise<unknown> }} [options]
  */
 export async function verifyLiveSite(root, { siteUrl = hosting.siteUrl, request = fetch, wait = ms => new Promise(done => setTimeout(done, ms)) } = {}) {
-  await verifyServedFiles(root, await publishedFiles(root, siteUrl), { siteUrl, request, wait });
+  const files = await publishedFiles(root, siteUrl);
+  const rootDocument = files.has('fight-club/index.html') ? './' : 'index.html';
+  await verifyServedFiles(root, files, { siteUrl, request, wait, rootDocument });
 }
 
 /**
  * Each file, served under `siteUrl`, has the built bytes and its type's content type (the game sites check every file they publish).
  * @param {string} root @param {Iterable<string>} files
- * @param {{ siteUrl: string, request?: typeof fetch, wait?: (ms: number) => Promise<unknown> }} options
+ * @param {{ siteUrl: string, request?: typeof fetch, wait?: (ms: number) => Promise<unknown>, rootDocument?: string }} options
  */
-export async function verifyServedFiles(root, files, { siteUrl, request = fetch, wait = ms => new Promise(done => setTimeout(done, ms)) }) {
+export async function verifyServedFiles(
+  root,
+  files,
+  { siteUrl, request = fetch, wait = ms => new Promise(done => setTimeout(done, ms)), rootDocument = 'index.html' },
+) {
   for (const file of files) {
-    const url = new URL(file, siteUrl);
+    const url = new URL(file === 'index.html' ? rootDocument : file, siteUrl);
     const response = await fetchPublished(url, file, request, wait);
     const mime = file.endsWith('.html')
       ? 'text/html'
