@@ -285,7 +285,7 @@ export async function start({
     document.title = words.title;
     document.querySelector('.languages').setAttribute('aria-label', words.languages);
     document.querySelector('.connection').setAttribute('aria-label', words.connectionLabel);
-    document.querySelector('footer nav').setAttribute('aria-label', words.footerLabel);
+    byId('connect-information').setAttribute('aria-label', words.footerLabel);
     for (const element of document.querySelectorAll('[data-copy]')) element.textContent = words[element.dataset.copy];
     for (const button of document.querySelectorAll('[data-lang]')) button.setAttribute('aria-pressed', String(button.dataset.lang === language));
     byId('status').textContent = words[statusKey];

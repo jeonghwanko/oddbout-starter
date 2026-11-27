@@ -50,7 +50,8 @@ export function youtubeChannelPlugin(channelUrl) {
 /** The source's footer draws its own social icons (crashbang-heroes 51b594d7 onward). @param {string} root */
 export function sourceHasSocialIcons(root) {
   try {
-    return readFileSync(join(root, 'src', 'creator', 'siteChrome.ts'), 'utf8').includes('club-social');
+    const chrome = readFileSync(join(root, 'src', 'creator', 'siteChrome.ts'), 'utf8');
+    return chrome.includes('directoryMarkup.mjs') || chrome.includes('club-social');
   } catch {
     return false;
   }
