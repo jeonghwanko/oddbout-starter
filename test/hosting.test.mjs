@@ -270,6 +270,25 @@ test('live checks reject missing or wrong asset bytes even when entry HTML retur
   }
 });
 
+test('portal verification includes static logo images from every language, even for manifest-backed pages', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oddbout-portal-images-'));
+  try {
+    for (const folder of ['.vite', 'fight-club', 'home/en', 'home/ja']) await mkdir(join(root, folder), { recursive: true });
+    const portals = ['index.html', 'home/en/index.html', 'home/ja/index.html'];
+    const manifest = Object.fromEntries([...siteEntries, ...portals].map(page => [page, { file: 'assets/main.js' }]));
+    await writeFile(join(root, '.vite/manifest.json'), JSON.stringify(manifest));
+    await writeFile(join(root, 'fight-club/index.html'), '<main></main>');
+    for (const [i, page] of portals.entries()) {
+      await writeFile(join(root, page), `<base href="${i ? '../../' : './'}"><img src="./assets/logo-${i}.webp"><img src="https://external.test/cover.webp">`);
+    }
+    const files = await publishedFiles(root, 'https://example.test/kit/');
+    for (const [i] of portals.entries()) assert.ok(files.has(`assets/logo-${i}.webp`));
+    assert.ok(!files.has('cover.webp'));
+  } finally {
+    await rm(root, { recursive: true });
+  }
+});
+
 test('shared HTML entries verify emitted modules, styles and transitive assets without a per-page manifest key', async () => {
   const root = await mkdtemp(join(tmpdir(), 'fighter-shared-entry-test-'));
   try {
