@@ -49,9 +49,11 @@ export async function updatesPublishedFiles(root, siteUrl) {
       if (!attributes.href || /[\\%]/.test(attributes.href)) throw new Error(`Unsafe updates stylesheet: ${page}`);
       const url = new URL(attributes.href, new URL(page, base));
       const file = url.pathname.slice(base.pathname.length);
-      if (url.origin !== base.origin || !url.pathname.startsWith(base.pathname) || url.search || url.hash || !/^assets\/[a-zA-Z0-9_-]+\.css$/.test(file))
+      const directory = file === 'directory/footer.css';
+      if (url.origin !== base.origin || !url.pathname.startsWith(base.pathname) || url.search || url.hash || (!directory && !/^assets\/[a-zA-Z0-9_-]+\.css$/.test(file)))
         throw new Error(`Unsafe updates stylesheet: ${page}`);
       files.add(file);
+      if (directory) files.add('directory/language.js');
     }
   }
   return files;

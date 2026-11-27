@@ -173,6 +173,13 @@ await writeFile(
 <p><a href="${config.base}">ODDBOUT 홈으로 · Back to ODDBOUT</a></p></main></html>
 `,
 );
+// Render the source site's directory on the public guides supplied by this hosting checkout.
+const directoryModule = join(source, 'tools/ai-fighter/hosted-directory.mjs');
+if (existsSync(directoryModule)) {
+  const { applyHostedDirectory } = await import(pathToFileURL(directoryModule).href);
+  await applyHostedDirectory(output, [...policyFiles, ...browserFightingFiles,
+    ...(await readdir(join(output, 'cloud-plugin'))).map(name => 'cloud-plugin/' + name), 'connect.html', '404.html']);
+}
 const assets = await readdir(join(output, 'assets'));
 const js = (await Promise.all(assets.filter(f => f.endsWith('.js')).map(f => readFile(join(output, 'assets', f), 'utf8')))).join('\n');
 const css = (await Promise.all(assets.filter(f => f.endsWith('.css')).map(f => readFile(join(output, 'assets', f), 'utf8')))).join('\n');
