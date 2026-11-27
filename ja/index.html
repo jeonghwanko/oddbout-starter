@@ -1,283 +1,56 @@
-<!doctype html>
-<html lang="ja">
-<head>
-<script data-oddbout-consent-defaults>window.dataLayer=window.dataLayer||[];window.gtag=window.gtag||function(){window.dataLayer.push(arguments)};if(!window.oddboutConsentDefaultsSet){window.oddboutConsentDefaultsSet=true;window.gtag('consent','default',{"ad_storage":"denied","ad_user_data":"denied","ad_personalization":"denied","analytics_storage":"denied","region":["AT","BE","BG","HR","CY","CZ","DK","EE","FI","FR","DE","GR","HU","IS","IE","IT","LV","LI","LT","LU","MT","NL","NO","PL","PT","RO","SK","SI","ES","SE","GB","CH"],"wait_for_update":500});}</script>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="naver-site-verification" content="df3145fba499b0ac51353e98f5530287102ce6a6">
-  <meta name="google-adsense-account" content="ca-pub-1058152259785453">
-  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1058152259785453" crossorigin="anonymous"></script>
-  <meta name="theme-color" content="#14212d">
-  <meta name="referrer" content="no-referrer">
-  <!-- The home is one document per language (2026-11-16): English at /, Korean at /ko/, Japanese at /ja/. tools/ai-fighter/home-site-plugin.mjs
-       writes each language's head (title, description, canonical, hreflang, JSON-LD) between these marks and its words into every data-copy. -->
-  <!--home:seo-->
-  <base href="../">
-  <title>ODDBOUT: ミームファイターのオーナー</title>
-  <meta name="description" content="ミーム選手、自分で作った選手。友だちとクラブを育てよう。応援するファイターを選んで16人のトーナメント表を組めば、試合はAIが戦います。ブラウザで無料ですぐ遊べます。">
-  <meta property="og:title" content="ODDBOUT: ミームファイターのオーナー">
-  <meta property="og:description" content="ミーム選手、自分で作った選手。友だちとクラブを育てよう。応援するファイターを選んで16人のトーナメント表を組めば、試合はAIが戦います。ブラウザで無料ですぐ遊べます。">
-  <meta property="og:url" content="https://oddbout.com/ja/">
-  <meta property="og:locale" content="ja_JP">
-  <link rel="canonical" href="https://oddbout.com/ja/">
-  <link rel="alternate" hreflang="en" href="https://oddbout.com/">
-  <link rel="alternate" hreflang="ko" href="https://oddbout.com/ko/">
-  <link rel="alternate" hreflang="ja" href="https://oddbout.com/ja/">
-  <link rel="alternate" hreflang="x-default" href="https://oddbout.com/">
-  <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebSite","@id":"https://oddbout.com/ja/#website","name":"ODDBOUT","url":"https://oddbout.com/ja/","inLanguage":"ja"},{"@type":"Organization","@id":"https://oddbout.com/#organization","name":"ODDBOUT","url":"https://oddbout.com/","logo":"https://oddbout.com/art/ui/oddbout-logo.webp","sameAs":["https://www.youtube.com/@oddbout/","https://www.instagram.com/teo.oddbout/","https://x.com/yoooonion"]},{"@type":"VideoGame","@id":"https://oddbout.com/ja/#game","name":"ODDBOUT","url":"https://oddbout.com/ja/","description":"ミーム選手、自分で作った選手。友だちとクラブを育てよう。応援するファイターを選んで16人のトーナメント表を組めば、試合はAIが戦います。ブラウザで無料ですぐ遊べます。","inLanguage":"ja","genre":"Fighting","gamePlatform":"Web browser","applicationCategory":"Game","operatingSystem":"Any","publisher":{"@id":"https://oddbout.com/#organization"},"offers":{"@type":"Offer","price":"0","priceCurrency":"USD","availability":"https://schema.org/InStock"}}]}</script>
-  <!--/home:seo-->
-  <meta property="og:type" content="website">
-  <meta property="og:image" content="https://oddbout.com/og-image.jpg">
-  <meta property="og:image:type" content="image/jpeg">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <meta name="twitter:card" content="summary_large_image">
-  <link rel="icon" href="/favicon.ico" sizes="32x32"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
-  <!-- The hero's octagon is a CSS background (league.css .hero-stage, .hero-crowd under 760px) and the page's largest paint; without this it starts only after the stylesheet arrives (2026-10-29 Lighthouse). -->
-  <script>
-    (function () {
-      var c = {"origin":"https://assets.oddbout.com","sites":["oddbout.com","oddbout.pages.dev"],"images":[{"path":"/art/ui/oddbout-hero-octagon-v1.webp?v=f86c9c76","media":"(min-width: 761px)","property":"--league-hero-wide"},{"path":"/art/ui/oddbout-hero-octagon-v1-m.webp?v=f86c9c76","media":"(max-width: 760px)","property":"--league-hero-narrow"}]};
-      var q = new URLSearchParams(location.search), name = location.hostname.toLowerCase();
-        var live = c.sites.some(function (s) { return name === s || name.slice(-(s.length + 1)) === "." + s; });
-        var once = q.get("assets") === "once" || window.__oddboutAssetSiteOnce === true;
-        if (once) window.__oddboutAssetSiteOnce = true;
-        var site = once || q.get("assets") === "site" || (function () { try { return sessionStorage.getItem("kaito_web.assetHostSite.v1") === "1"; } catch (e) { return false; } })();
-        var use = live && !site;
-      c.images.forEach(function (image) {
-        var local = new URL(image.path, location.href);
-        var url = use ? new URL(local.pathname + local.search, c.origin).href : local.href;
-        var root = document.documentElement;
-        root.style.setProperty(image.property, 'url("' + url + '")');
-        var link = document.createElement("link");
-        link.rel = "preload";
-        link.as = "image";
-        link.media = image.media;
-        link.fetchPriority = "high";
-        if (use) link.addEventListener("error", function () {
-          root.style.setProperty(image.property, 'url("' + local.href + '")');
-          link.href = local.href;
-        }, { once: true });
-        link.href = url;
-        document.head.appendChild(link);
-      });
-    })();
-  </script>
-  
-  <script>
-    // No script: the static page remains visible. Failed fonts cannot leave the skeleton stuck.
-    (() => {
-      const root = document.documentElement;
-      root.dataset.homeLoading = "";
-      root.setAttribute("aria-busy", "true");
-      const reveal = () => { delete root.dataset.homeLoading; root.removeAttribute("aria-busy"); };
-      const timeout = setTimeout(reveal, 3000);
-      document.addEventListener("DOMContentLoaded", () => {
-        // Resolve layout first so the font set knows which subsets this page needs.
-        document.body.getBoundingClientRect();
-        const ready = document.fonts ? document.fonts.ready : Promise.resolve();
-        ready.catch(() => {}).then(() => requestAnimationFrame(() => requestAnimationFrame(() => {
-          clearTimeout(timeout); reveal();
-        })));
-      }, { once: true });
-    })();
-  </script>
-  <script>
-      // 원화 서버의 JS (tools/dev/asset-host-entry.mjs — 빌드가 넣는다).
-      (function () {
-        var c = {"entry":"/assets/league-Dj46-CBv.js","preloads":["/assets/modulepreload-polyfill-P2Xu9kJm.js","/assets/_oddbout-analytics-D2USvb4d.js","/assets/bootCopy-DUheN_9n.js","/assets/storageKeys-DN4vwgcv.js","/assets/playerSettingsStorage-ksDoPPvl.js","/assets/PublicAssetVersions-D7sEWZnZ.js","/assets/siteDialog-Cus74mbf.js","/assets/siteGameLaunch-BpdsH2dV.js","/assets/preload-helper-DclECHGd.js"],"origin":"https://assets.oddbout.com","sites":["oddbout.com","oddbout.pages.dev"],"probeMs":2500,"images":false,"integrity":{"assets/ArenaArtCatalog-BNI8wRuD.js":"1KEzj5LH35R/6vhm/lb0EeDibweYN2GY9P/Yq6PtH88=","assets/ArenaBoutLink-Bygj0gtV.js":"liU5FXf3mT0JAmJm4UhDywDpyq0lCmyh1/rubSNn7pg=","assets/ArenaRoster-rKWKkU00.js":"yT9nngzy2p76N9GOGCJgcmDSpj3achT/4iQbDw+ouEQ=","assets/CareerRules-DIncADic.js":"m6vY2v5sBpoRqJGr7sx2TxGbICiL7g+C6ERxRUJAKCs=","assets/CityFighterIds-B-4rh0Yj.js":"E4SPhEvFmANqAXf/lXCvTuDE4JjvmPuGX/+ETN5ZbRI=","assets/CityTournamentRules-BD7enIsb.js":"y56YrBLnZPELAo3Knu3Kh2VgZxucFf4/IUf08unrWFI=","assets/ClubRelations-BnEDRhHZ.js":"INCMIUWHK/p5SHnqHSq6p7my147s+Cxqk+wKHqmVea4=","assets/FightStatusArtCatalog-D17-OYUO.js":"QiDxvJhjTe+G8k5/YElZUGgBoAdqB7MOt2Xzb3L0eXg=","assets/FighterAvailability-UBdjFBGr.js":"/wCHHO3QTMg8EjVeVP5Ir877bvy1q3YFbmHeVoPaDNw=","assets/FighterCombat-DvBvVRsm.js":"bfXdvJQ5zzX7rrmVthslAWLEg5f+rs+EqZ6GQVvd808=","assets/FighterIdentity-DdDdHx1C.js":"gAroD3pd1hHEHRqZYLpT4OqK92nw9McZDriRyhBKU2E=","assets/FighterRelations-DeWYbkJg.js":"IA8hptKHkVSmSAB2hlXTgbLQbOR4kFr6E1JbBiik+KE=","assets/FighterSheetData-D4GMmRNC.js":"/6tiK/uN8TexSCXcCFpp3PbPX4JYfI6+2fX0q15tDLI=","assets/GameMenuState-kTeaJX-I.js":"6v2lwGYhQp37cnYxw/sUjBH8X9p1HUcOGipuQPTd8lg=","assets/GoldAmount-BMz6EgYV.js":"Cb+naIWN8g5U6w9LMHBKvR6aG9uAEpAVa31GOXqVJp4=","assets/Locale-Bfnpz3E7.js":"WTjoynwQZ5rr5uhV7A8qSgWpjdMCSvzb9hL3+twxdTY=","assets/OddboutCommunity-CSxox2z3.js":"lcUYScaV/2SPd8pKgcjt+4N3o4+IRDvDPwmw6LDcG1o=","assets/OddboutShop-DHpsGaTu.js":"brHrpQIlrwa1vCLNNSLVKN3S7UBsGi3MKlkR9ak7Ic8=","assets/PublicAssetVersions-D7sEWZnZ.js":"11k0zaPeM1akgx6UEHw9kenFllb4pMBXMXPB6jWimFI=","assets/RecordFields-B3LkgVr3.js":"Jt4/30c/MsWpQEhSLKLRBpELCtooxLa1xrzz00DXTvQ=","assets/ShadowFighter-qozKPUYQ.js":"exwmbMpI0d0MJGuqdWv+cOefd/4Ary1vQItU4yHoMx0=","assets/TownHqRules-BRQ_trGo.js":"xoZYfHhBUYvug/Z295B+xPAyeQhoVhWBE3xCXjtccJg=","assets/UtcTime-BFPbMiHs.js":"4djUApFMI2rQI7leayFd2/oQK3KnSepDhmgC0yZHbxU=","assets/_oddbout-analytics-D2USvb4d.js":"HLfihwbPSp+0vVxkQJELc8atgvnMWpOvKzW2vgkii/4=","assets/_oddbout-milestones-CTI00lJ4.js":"4mu9xrCQ9X6OwcvM0fMHNjr6Tjx6AEDks2SBiravLaI=","assets/accountControl-kL50R00z.js":"xlnPqp75tfWGwYoejOHDxRSyuL4lmJ8oV7TuP9dMIso=","assets/agentNames-C9gi1FWq.js":"k0Z8h0fbs53/q3a5MtpLdyIs3QpUm/0aozU6XxxybO4=","assets/arenaRankings-zl1CfL61.js":"o6FJgDaDy2VQQAe1bGsxbMRo1rDsCp1/3tu4tSW8xUE=","assets/assetHost-ECAdayNS.js":"pYO6C71xO7BDhp0ezkZjp56f7XrOexYZs5Wg/eb9kS8=","assets/bootCopy-DUheN_9n.js":"ZCtVu5Xil1oFDblPD2HG4Hy2lLVB08FZKLRIK2T67Mg=","assets/boundedResponse-CxNSslQ1.js":"OvADXomdTf0UHLc9ANLWJos8OPL8+1jYQ7VeBlRD7IU=","assets/catalog-C-siAyxf.js":"ONEr4ZapDqbKH2g42TyZ1VxeRnwcBv27VlrPfs/LqAA=","assets/chrome-2_6JndhP.js":"bDG0xn6DYeR3tsXyRZMOmAkThCt11696zOOLGlML/oo=","assets/dist-C9fd7Nwh.js":"s/D86rAMZzBdicAQHMFEoYN4xQ8Phcn9RTNlH2Jwrlc=","assets/dist-Dr_VjXuP.js":"gy7oDD5ASxCYxx0qrIAW8aZUHa1GEVmv4QIUNhJMHKE=","assets/en-C-3tIe8g.js":"HJFMUakvzBcSB3RYpH69nPomH+hq+6Mm9+QAAcCYRzI=","assets/en-C05v52ka.js":"N3HYE39ffZJwCqEOe5BnYF0PT/fzr7iMpMEo0ibhoVI=","assets/en-C6qYMmLR.js":"qtITAPv1vMeh+uVyG9cO9B0UijOtx5gyUuPH8rhpTt8=","assets/en-C_fdfKr3.js":"VNW4ku6n5oNnZXdl3HypGMAXXKvxchRQHfS8g424Vsk=","assets/en-Ce_ZaXqW.js":"ZAhIrtTmdDplDfNT4JxQTHnJfu7Me4brRopfmPoeODY=","assets/fighterApiBase-CeB_1v89.js":"ufzU8cAuipCDuCkNuhLvz4v1AR6/jXuPRblhUGdWA5s=","assets/fighterCreator-CdqFKx6o.js":"Jr/XCOd2nMGqAWCzK3Mv6ESTvrQ3BjLu8nE0PRwM/YM=","assets/fighterFace-P-hbFFXo.js":"HZFqvXennIcEoGfetQ+biNh3AyEAHmRXW2MXZzVR/Lc=","assets/fighterLines-BqpSV2Ld.js":"rZpS/94o+qL15gS753FF8OosVIRDjv6Czv/irFNyyBw=","assets/fighterProfile-Yylp1DhT.js":"mQC0faeZb5uIwVvsHSwBHtEa8+4OZI8FOHfWAJEUAig=","assets/ja-B2m1qiuq.js":"9hV6Z79HFcHaWJZzsiuVdlgA2hiXrXhZJkEgoRCIcC8=","assets/ja-BE8pYSe1.js":"vhE31P4UgQLIxKYIgl/pTD81aF9eR4O9sxHZJU38fno=","assets/ja-Cp0fQQyy.js":"8FAfF1aSHcbxdCwYlPXbKPd2CQ05Yi914TMMIHEALw8=","assets/ja-DC4TF4Oj.js":"7sfQWIe/LXRYwtwCauqZPvvxubSKTR3euEmQa++y6Sc=","assets/ja-DrUZCMn6.js":"zNLf4/stJIbFPNE+hlTfFwgDmQm6Nj6SyA1SwaJ9fmo=","assets/ko-B_aWmWGn.js":"sa87CpQwpENNjwtX/+gBFXHXkw5Tz8DG7+jqXShCSoE=","assets/ko-COxGRH3C.js":"lGS8SxgPpVS12w24d7/5c5QXGZ1zToXtce6eUonzWis=","assets/ko-CiFFjy6m.js":"27Ac0bfNR+Q1EqK8u2dDMSnocd+psjeytLUNDZn6Fyc=","assets/ko-Crx6mYQU.js":"HcLVfd6Ty2skMLdWS+IIWUt+DHORytYTc5NtZFfR/SU=","assets/ko-CyCYAmzF.js":"vYMxReri2VijOQnb6k3y9k36olZnf8ZbliuPlpeoOME=","assets/league-Dj46-CBv.js":"M+aH1SlFrak9J8sKYVUBaI96pa9iZ5h4hR2cGkGheXE=","assets/league-VgVBneuM.js":"xU6xa0vssRdiAYP/VPtw3UPYnuwP82Mgtq8PFvxL0LA=","assets/leagueContent-BlMowyth.js":"TzGsfCVmSoEYHoAqNE9OJGohOHzlZfRKz9KSRqDYvQg=","assets/leagueCopy-CpET2QRZ.js":"7GpFy0SBhYH97ZQKIimu0vlf2jwqfhPwLTX4jKrbz8Q=","assets/leagueSheets-Czk2qLHG.js":"WknClB1J0d2hcldHF1/ctNPGDO+PBVt0gOOiYpukW/M=","assets/localeLoader-iMHQKnrl.js":"m2EpilE2goxzIaoXOsiafFoBUHSlsNplkhPNWQe0p+Y=","assets/localePreference-BPpYjtHL.js":"4LUpCxokvCQFBwui0Dgyiq3XKGeMdwZXXNno65/53iA=","assets/modulepreload-polyfill-P2Xu9kJm.js":"QYwgZIS4m2jvXwZyd4MeWD/JGTpiqt9N4mmsqusSqF8=","assets/oddbout-club-DB1MsAdb.js":"bM2hcqtq27NMtK6g61Lua2RHXP5BW6zhKL+dxkLomQw=","assets/oddboutEdgeFetch-CgIxi4Ul.js":"eGzsTx0ow5O04bZrtlKxaKGMxNs+P59CuzQ8FiRI/qk=","assets/oddboutSession-DmZdGIR1.js":"cbeF6WWsYTGCwK+it/yYNNL4F5bp/37fe4FCGIV31SI=","assets/oddboutValue-CUnjMT0f.js":"q1TYmutrWoCOIp3Pri1AISAQ0sEFQpDtB0i7e+RbsFw=","assets/officialFighterVisibility-Kw073cQt.js":"pIBgBvINex2eQGQ3tdtJj+DEdbZTLf7AApqxrytBnPE=","assets/officialImages-hCskLD8g.js":"pzFrNuHec1A9lSn0cCtXHoPYOqGfXkYpSGdTUpx2qFU=","assets/playerSettingsStorage-ksDoPPvl.js":"Pi2Wd2pw6X2TJCeGyjRtXiMWQCVIrnBKisOViGgnd1g=","assets/preload-helper-DclECHGd.js":"hnTfcMv/1XU3cajdWwisO27CnBFwRo5GhIdgoP/upVA=","assets/pseudo-B3ZLOM_E.js":"Z85j5WfCURA8oNXV+RuBxIZy4obEupEp1qFDf/95R3A=","assets/registeredFighters-Be3asoSf.js":"vbTiD+hdyAu1LxIPjagE5rdwbA8OoazxAr9KGLZvB7o=","assets/rng-Dkb5D85Q.js":"0lhAe1S8kDrKUGI374FDqSVT/mZvnkzrzysakkrG++A=","assets/rolldown-runtime-BWaJ3C7D.js":"0OkERDAAbFu0j0d1AaWvRl8KY3fS/NdJWqIVuLdaruM=","assets/signInDialog-BsG0CG1W.js":"Y0/PpR/ewpu4VvgtCoJB4YCfsQE+gX3vCd/qegNbdeo=","assets/siteChrome-DR3e4WWt.js":"WopNiqLV1r89+m55pPBia17CyoRUZ4rwzJrxGLMBQXo=","assets/siteDialog-Cus74mbf.js":"RMPvSIzcICKBzXTod7XwU1eCwnnKfnvtILi9zVTKXWs=","assets/siteGameLaunch-BpdsH2dV.js":"a+5gTQWeomadQbj2JHa2A/iZqgKRKgP51eUCFMSxm2k=","assets/siteInquiries-kX9WLYH6.js":"oYFQ3P84ZNVTmpkS7hzJjrDjsyW5N3RmP5QzVc3wzho=","assets/siteLinks-B0w8qMO-.js":"Fg3tCPHwVVoqrwsLjekymaMSKyCjcN9TWJN+7r0nkXQ=","assets/spec-CABr0Tau.js":"hEnkl+3uFMOMr7P63zwJYTK9GbiYgLJdMK17w2GLc+w=","assets/storageKeys-DN4vwgcv.js":"nT9LBpi0bWSMGnD8MLRkruspJW1dLBibyjQ0NZBVtks=","assets/validate-Beb91gKy.js":"QWVvB+t7hpQgjZf2KKyXKFeS2q+0xaLu95OQfOi9AIw=","assets/validate-DqPSTOEX.js":"x7wzlLMWDuvWQ0ZYnAxjAwI0PoZocYdkaE8dY0NKHmc=","assets/worldCommunityLocale-Dt-lxtCU.js":"YgfY+fk69ifH7iNEG8exCXdEFMw5b1ZboQm605VEKGM="}};
-        var q = new URLSearchParams(location.search), name = location.hostname.toLowerCase();
-        var live = c.sites.some(function (s) { return name === s || name.slice(-(s.length + 1)) === "." + s; });
-        var once = q.get("assets") === "once" || window.__oddboutAssetSiteOnce === true;
-        if (once) window.__oddboutAssetSiteOnce = true;
-        var site = once || q.get("assets") === "site" || (function () { try { return sessionStorage.getItem("kaito_web.assetHostSite.v1") === "1"; } catch (e) { return false; } })();
-        var use = live && !site;
-        // ?assets=site: the tab stays on the site's copy; the address drops the query once the tab remembers it.
-        if (live && q.get("assets") === "site") {
-          try {
-            sessionStorage.setItem("kaito_web.assetHostSite.v1", "1");
-            q.delete("assets");
-            history.replaceState(history.state, "", location.pathname + (q.toString() ? "?" + q.toString() : "") + location.hash);
-          } catch (e) { /* the query stays */ }
-        }
-        // ?assets=once: this load only — nothing remembered, the query off the address (a reload goes back to the asset host).
-        if (q.get("assets") === "once") {
-          try {
-            q.delete("assets");
-            history.replaceState(history.state, "", location.pathname + (q.toString() ? "?" + q.toString() : "") + location.hash);
-          } catch (e) { /* the query stays */ }
-        }
-        // The chunks' digests, before any module request (a later import map is ignored); keyed by the asset host's addresses only.
-        if (use && c.integrity && typeof c.integrity === "object") {
-          try {
-            var sums = {}, map = document.createElement("script");
-            for (var path in c.integrity) sums[c.origin + "/" + path] = "sha256-" + c.integrity[path];
-            map.type = "importmap";
-            map.textContent = JSON.stringify({ integrity: sums });
-            document.head.appendChild(map);
-          } catch (e) { /* unchecked, as before */ }
-        }
-        var ready = new Promise(function (go) { if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", function () { go(); }); else go(); });
-        // Module preloads (the page's own and the language packs' — tools/ai-fighter/locale-pack-preload.mjs) wait for the choice of origin.
-        var where = null, waiting = [];
-        function preload(list) { list.forEach(function (p) { var l = document.createElement("link"); l.rel = "modulepreload"; l.crossOrigin = ""; l.href = where(p); document.head.appendChild(l); }); }
-        window.__oddboutPreload = function (list) { if (where) preload(list); else waiting = waiting.concat(list); };
-        function settle(base) { where = base; preload(waiting); waiting = []; }
-        function local() {
-          window.__oddboutAssetHost = null;
-          settle(function (p) { return /^\.?\//.test(p) ? p : "./" + p; });
-          ready.then(function () { var s = document.createElement("script"); s.type = "module"; s.src = c.entry; document.head.appendChild(s); });
-        }
-        // A chunk that fails after boot: reopen on the site's copy — not offline, not for another origin's file (no address in it: reopen).
-        function away(error) {
-          if (site || navigator.onLine === false) return;
-          var url = /https?:\/\/[^\s"'<>()]+/.exec(String(error && error.message || error || ""));
-          if (url && url[0].indexOf(c.origin + "/") !== 0) return;
-          // (The address as it is now: the game may have changed its query since the page loaded.)
-          var now = new URLSearchParams(location.search);
-          now.set("assets", "site");
-          location.replace(location.pathname + "?" + now.toString() + location.hash);
-        }
-        // The page's own pictures (2026-11-16 리뷰 — the home's faces, <img data-asset-host src="/art/…">, the site's address for crawlers and no
-        // script): as the parser puts each one in (a microtask, before layout and lazy loading start its request) it takes the asset host's copy,
-        // the site's on an error. Not when the check already failed (__oddboutAssetHost null); the watch ends with the document's parsing. Here,
-        // ahead of the stylesheets' script, nothing pending holds this script back.
-        if (use && c.images && typeof MutationObserver === "function") {
-          var host = function (img) {
-            if (window.__oddboutAssetHost === null || img.hasAttribute("data-asset-host-local")) return;
-            var own = new URL(img.getAttribute("src"), document.baseURI);
-            img.setAttribute("data-asset-host-local", own.href);
-            img.addEventListener("error", function () { if (img.src !== own.href) img.src = own.href; }, { once: true });
-            img.src = c.origin + own.pathname + own.search;
-          };
-          var watch = new MutationObserver(function (records) {
-            records.forEach(function (record) {
-              record.addedNodes.forEach(function (node) {
-                if (node.nodeType !== 1) return;
-                if (node.matches("img[data-asset-host]")) host(node);
-                node.querySelectorAll("img[data-asset-host]").forEach(host);
-              });
-            });
-          });
-          watch.observe(document.documentElement, { childList: true, subtree: true });
-          ready.then(function () { watch.disconnect(); });
-        }
-        if (!use || typeof fetch !== "function" || typeof AbortController !== "function") { local(); return; }
-        var at = function (p) { return c.origin + "/" + p.replace(/^\.?\//, ""); };
-        var stop = new AbortController(), timer = setTimeout(function () { stop.abort(); }, c.probeMs);
-        fetch(at(c.entry), { method: "HEAD", mode: "cors", cache: "no-store", signal: stop.signal }).then(function (response) {
-          clearTimeout(timer);
-          if (!response.ok) throw new Error("asset host " + response.status);
-          window.__oddboutAssetHost = c.origin;
-          settle(at);
-          preload(c.preloads);
-          addEventListener("vite:preloadError", function (event) { away(event.payload); });
-          addEventListener("unhandledrejection", function (event) {
-            var text = String(event.reason && event.reason.message || event.reason);
-            if (/dynamically imported module|Importing a module script failed|error loading dynamically imported module/i.test(text)) away(text);
-          });
-          return ready.then(function () {
-            return import(at(c.entry)).catch(function (error) {
-              if (document.documentElement.hasAttribute("data-boot-module")) throw error;
-              local();
-            });
-          });
-        }).catch(function () { clearTimeout(timer); if (window.__oddboutAssetHost === undefined) local(); });
-      })();
-    </script>
-  <script>
-      // 원화 서버의 스타일시트와 글꼴 (tools/dev/asset-host-entry.mjs — 빌드가 넣는다).
-      (function () {
-        var c = {"origin":"https://assets.oddbout.com","sites":["oddbout.com","oddbout.pages.dev"],"css":["/assets/playerSettingsStorage-fP2WDhB0.css","/assets/gameLoading-Ex58L6T_.css","/assets/league-abI_yiIu.css"],"integrity":["sha256-MQ7TwhrQzKth0S2tjj3tJhrt6+Wu8oGD9IOu4trIEAo=","sha256-JecHpvftw8V0yAF3N7aOjY1hcuvL6819MjlEuGueCM0=","sha256-mCetUdtK4gfXCNskZQ57y1ZvCIFdR3Df6GlQsrb/VNM="]};
-        var q = new URLSearchParams(location.search), name = location.hostname.toLowerCase();
-        var live = c.sites.some(function (s) { return name === s || name.slice(-(s.length + 1)) === "." + s; });
-        var once = q.get("assets") === "once" || window.__oddboutAssetSiteOnce === true;
-        if (once) window.__oddboutAssetSiteOnce = true;
-        var site = once || q.get("assets") === "site" || (function () { try { return sessionStorage.getItem("kaito_web.assetHostSite.v1") === "1"; } catch (e) { return false; } })();
-        var use = live && !site;
-        c.css.forEach(function (h, i) {
-          var far = c.origin + "/" + h.replace(/^\.?\//, ""), sum = c.integrity && c.integrity[i];
-          var check = /^sha(?:256|384|512)-[A-Za-z0-9+\/=]+$/.test(sum) ? ' integrity="' + sum + '"' : "";
-          document.write(use ? '<link rel="stylesheet" crossorigin href="' + far + '"' + check
-            + ' onerror="this.onerror=null;this.removeAttribute(\'integrity\');this.href=\'' + h + '\'">'
-            : '<link rel="stylesheet" crossorigin href="' + h + '">');
-        });
-      })();
-    </script><noscript><link rel="stylesheet" crossorigin href="/assets/playerSettingsStorage-fP2WDhB0.css"><link rel="stylesheet" crossorigin href="/assets/gameLoading-Ex58L6T_.css"><link rel="stylesheet" crossorigin href="/assets/league-abI_yiIu.css"></noscript>
-  
-  
-</head>
-<body>
-  <a class="skip" href="ja/#main"><span data-copy="chrome.skip">本文へスキップ</span></a>
-  <!-- The header and footer are written at build time like the rest of the page (data-club-prerendered): siteChrome.mountStaticSiteChrome keeps them,
-       puts the account control (로그인 / 내 정보) where its stand-in [data-account-slot] is, and adds the listeners. The language switch is the footer's. -->
-  <header class="club-header has-account" data-club-header data-club-prerendered><a class="club-brand" data-home-link data-label="chrome.nav.home" aria-label="ODDBOUT ホーム" href="./ja/"><img src="/art/ui/oddbout-logo.webp?v=f86c9c76" alt="ODDBOUT Fight Club" width="376" height="76"></a><nav class="club-nav" data-label="chrome.nav.navigation" aria-label="メインメニュー">
-    <details class="home-games">
-      <summary lang="en">Games</summary>
-      <ul>
-        <li><a data-game-link="pudding" data-copy="gamePudding" href="https://pudding.oddbout.com/">プリン脱出</a></li>
-        <li><a data-game-link="forge" data-copy="gameForge" href="https://forge.oddbout.com/">伝説の鍛冶屋</a></li>
-        <li><a data-game-link="bounce" data-copy="gameBounce" href="https://bounce.oddbout.com/game">バウンスボール</a></li>
-      </ul>
-    </details><a data-club-link="fighters" data-copy="chrome.nav.fighters" href="./fighters.html?lang=ja">ファイター</a><a data-club-link="worlds" data-copy="chrome.nav.worlds" href="./world.html?lang=ja">ワールド</a><a data-club-link="rank" data-copy="chrome.nav.rank" href="./creator.html?lang=ja#view=rankings">ランキング</a><a data-club-link="docs" data-copy="chrome.nav.docs" href="./docs.html?lang=ja">ドキュメント</a></nav><div class="oddbout-account oddbout-account-site oddbout-account-slot club-account" data-account-slot><a class="oddbout-account-button" data-destination="creator.html" href="./creator.html?lang=ja"><span class="oddbout-account-label" data-copy="chrome.account.logIn">ログイン</span></a></div></header>
-  <main id="main">
-    <section class="hero" aria-labelledby="hero-title">
-      <div class="hero-top">
-        <div class="hero-stage">
-          <div class="hero-banner">
-            <div class="hero-copy">
-              <h1 id="hero-title"><span data-copy="heroFirst">ミーム選手、自分で作った選手。</span><br> <span data-copy="heroLast">友だちとクラブを育てよう。</span></h1>
-              <p class="hero-invite" data-copy="clubLine">クラブを作って、試合は選手におまかせ。</p>
-              <!-- One primary action and a practice bout to watch. Creation stays in My fighters. -->
-              <div class="hero-actions"><a class="button primary hero-play" id="hero-play" data-destination="fighter.html" data-query="club=1" href="./fighter.html?club=1&amp;lang=ja"><span data-copy="heroPlay">はじめる</span><span aria-hidden="true">▶</span></a><a class="hero-watch" id="hero-watch" data-destination="fighter.html" data-query="play=1&amp;fighter=tyson&amp;opponent=elon" href="./fighter.html?play=1&amp;fighter=tyson&amp;opponent=elon&amp;lang=ja"><span data-copy="heroWatch">まず試合を見る</span><span aria-hidden="true">▷</span></a></div>
-              <p class="hero-guide-slot"><a class="hero-guide-link" data-destination="browser-fighting-game/" data-copy="heroFightingGuide" href="./browser-fighting-game/index.en">ブラウザ格闘ゲームの遊び方（英語）</a></p>
-              <!-- The newest delivered update (src/creator/updates/content.mjs latestUpdate), its post opening in a new tab. -->
-              <p class="hero-update-slot"><!--home:update--><a class="hero-update" id="hero-update" href="./updates/2026-11-18-x-follower-cup.ja.html" target="_blank" rel="noopener noreferrer" data-update-slug="2026-11-18-x-follower-cup"><span class="hero-update-kind">アップデート</span><span class="hero-update-title">Xフォロワーカップ公開</span></a><!--/home:update--></p>
-            </div>
-            <div class="hero-crowd" aria-hidden="true"></div>
-          </div>
-        </div>
-      </div>
-    </section>
-    <!-- Featured bouts (2026-10-25 사용자: "메인 배너 아래에 ... 주요 선수 경기"): league.ts fills #featured-bouts from src/app/oddbout-featured-bouts.json. With none listed it stays "Fighters": every house fighter's face, written at build time, each opening its profile. The faces carry data-asset-host: on the live site the page's loader (tools/dev/asset-host-entry.mjs) points them at the asset host as they arrive. -->
-    <section class="featured-section wrap" id="featured" aria-labelledby="featured-title">
-      <div class="section-head"><h2 id="featured-title"><span data-copy="fightersTitle">ファイターたち</span></h2><p id="featured-intro"><span data-copy="facesIntro">プロフィールを開いて、応援するファイターを選んでください。</span></p></div>
-      <ol class="featured-bouts" id="featured-bouts" hidden></ol>
-      <nav class="featured-more featured-vice" data-label="featuredVice" aria-label="VICEのファイター紹介"><strong data-copy="featuredVice">VICEのファイター紹介</strong><!--home:vice--><a class="featured-link" data-destination="fighters/velora/" href="./fighters/velora/ja/">ヴェローラ</a><a class="featured-link" data-destination="fighters/nera/" href="./fighters/nera/ja/">ネラ</a><a class="featured-link" data-destination="fighters/rubia/" href="./fighters/rubia/ja/">ルビア</a><a class="featured-link" data-destination="fighters/morne/" href="./fighters/morne/ja/">モルネ</a><!--/home:vice--></nav>
-      <ul class="face-row" id="face-row"><!--home:faces--><li hidden><a data-face="tyson" href="./fighters.html?lang=ja&amp;character=tyson"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/tyson.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.tyson">タイフーン</span></a></li><li hidden><a data-face="bing" href="./fighters.html?lang=ja&amp;character=bing"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/bing.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.bing">ミスター・クァン</span></a></li><li hidden><a data-face="dolseok" href="./fighters.html?lang=ja&amp;character=dolseok"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/dolseok.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.dolseok">マ・ドルセ</span></a></li><li hidden><a data-face="zuck" href="./fighters.html?lang=ja&amp;character=zuck"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/zuck.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.zuck">ミス・ザッカーベリー</span></a></li><li hidden><a data-face="cinnamon" href="./fighters.html?lang=ja&amp;character=cinnamon"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/cinnamon.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.cinnamon">ミス・ジョン</span></a></li><li hidden><a data-face="singha" href="./fighters.html?lang=ja&amp;character=singha"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/singha.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.singha">キック兄貴</span></a></li><li hidden><a data-face="malfoy" href="./fighters.html?lang=ja&amp;character=malfoy"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/malfoy.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.malfoy">ミス・マルフォイ</span></a></li><li hidden><a data-face="elon" href="./fighters.html?lang=ja&amp;character=elon"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/elon.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.elon">マックス・ベンチャー</span></a></li><li hidden><a data-face="bravow" href="./fighters.html?lang=ja&amp;character=bravow"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/bravow.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.bravow">ブラボウ</span></a></li><li hidden><a data-face="beotim" href="./fighters.html?lang=ja&amp;character=beotim"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/beotim.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.beotim">ボティム</span></a></li><li hidden><a data-face="quickcat" href="./fighters.html?lang=ja&amp;character=quickcat"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/quickcat.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.quickcat">クイックキャット</span></a></li><li hidden><a data-face="kungjjak" href="./fighters.html?lang=ja&amp;character=kungjjak"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/kungjjak.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.kungjjak">クンチャク</span></a></li><li hidden><a data-face="sikeundung" href="./fighters.html?lang=ja&amp;character=sikeundung"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/sikeundung.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.sikeundung">シクンドゥン</span></a></li><li hidden><a data-face="duldul" href="./fighters.html?lang=ja&amp;character=duldul"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/duldul.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.duldul">ドゥルドゥル</span></a></li><li hidden><a data-face="eoridung" href="./fighters.html?lang=ja&amp;character=eoridung"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/eoridung.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.eoridung">オリドゥン</span></a></li><li hidden><a data-face="bingpanjang" href="./fighters.html?lang=ja&amp;character=bingpanjang"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/bingpanjang.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.bingpanjang">ビンパンジャン</span></a></li><li hidden><a data-face="ttakbujang" href="./fighters.html?lang=ja&amp;character=ttakbujang"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/ttakbujang.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.ttakbujang">タッブジャン</span></a></li><li hidden><a data-face="guldaejang" href="./fighters.html?lang=ja&amp;character=guldaejang"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/guldaejang.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.guldaejang">クルデジャン</span></a></li><li hidden><a data-face="kuma" href="./fighters.html?lang=ja&amp;character=kuma"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/kuma.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.kuma">クマ</span></a></li><li hidden><a data-face="yume" href="./fighters.html?lang=ja&amp;character=yume"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/yume.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.yume">ユメ</span></a></li><li hidden><a data-face="lupin-male" href="./fighters.html?lang=ja&amp;character=lupin-male"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/lupin-male.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.lupin-male">男性ルパン</span></a></li><li hidden><a data-face="lupin-female" href="./fighters.html?lang=ja&amp;character=lupin-female"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/lupin-female.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.lupin-female">女性ルパン</span></a></li><li hidden><a data-face="pink" href="./fighters.html?lang=ja&amp;character=pink"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/pink.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.pink">ピンク兄貴</span></a></li><li hidden><a data-face="ahn" href="./fighters.html?lang=ja&amp;character=ahn"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/ahn.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.ahn">安重根</span></a></li><li hidden><a data-face="ito" href="./fighters.html?lang=ja&amp;character=ito"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/ito.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.ito">伊藤博文</span></a></li><li hidden><a data-face="velora" href="./fighters.html?lang=ja&amp;character=velora"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/velora.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.velora">ヴェローラ</span></a></li><li hidden><a data-face="leon" href="./fighters.html?lang=ja&amp;character=leon"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/leon.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.leon">レオン</span></a></li><li hidden><a data-face="rena" href="./fighters.html?lang=ja&amp;character=rena"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/rena.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.rena">レナ・ボルト</span></a></li><li hidden><a data-face="nova" href="./fighters.html?lang=ja&amp;character=nova"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/nova.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.nova">ノヴァ・ビート</span></a></li><li hidden><a data-face="rubia" href="./fighters.html?lang=ja&amp;character=rubia"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/rubia.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.rubia">ルビア</span></a></li><li hidden><a data-face="nera" href="./fighters.html?lang=ja&amp;character=nera"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/nera.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.nera">ネラ</span></a></li><li hidden><a data-face="morne" href="./fighters.html?lang=ja&amp;character=morne"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/morne.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.morne">モルネ</span></a></li><li hidden><a data-face="nyamjab" href="./fighters.html?lang=ja&amp;character=nyamjab"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/nyamjab.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.nyamjab">ニャンジャブ</span></a></li><li hidden><a data-face="toegeunbara" href="./fighters.html?lang=ja&amp;character=toegeunbara"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/toegeunbara.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.toegeunbara">退勤バラ</span></a></li><li hidden><a data-face="shadcn" href="./fighters.html?lang=ja&amp;character=shadcn"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/shadcn.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.shadcn">SHADCN</span></a></li><li hidden><a data-face="beff" href="./fighters.html?lang=ja&amp;character=beff"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/beff.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.beff">BEFF</span></a></li><li hidden><a data-face="kache" href="./fighters.html?lang=ja&amp;character=kache"><span class="face"><img data-official-src="/art/ui/oddbout-faces-v1/kache.webp?v=709a63a9" alt="" width="192" height="192" loading="lazy" decoding="async"></span><span class="face-name" data-copy="fighter.kache">KACHE</span></a></li><!--/home:faces--></ul>
-      <div class="featured-more"><a id="featured-all" class="featured-link" data-destination="fighters.html" href="./fighters.html?lang=ja"><span data-copy="allFighters">ファイター37人をすべて見る</span><span aria-hidden="true">→</span></a><a class="featured-link" href="./ai-fighter-creator/#velora" data-destination="ai-fighter-creator/"><span data-copy="featuredFighterCreation">ヴェローラの制作事例（英語）</span><span aria-hidden="true">→</span></a><a id="featured-twitch" class="featured-link" href="./twitch.html?lang=en"><span data-copy="featuredTwitch">Twitch カップ</span><span aria-hidden="true">→</span></a><a class="featured-link" href="https://pudding.oddbout.com/"><span data-copy="puddingPlay">Pudding Escape を遊ぶ</span><span aria-hidden="true">→</span></a></div>
-    </section>
-    <section class="cup-section wrap" id="cup" aria-labelledby="cup-title">
-      <div class="section-head"><h2 id="cup-title"><span data-copy="cupTitle">カップ</span></h2></div>
-      <div class="cup-grid">
-        <div class="cup-demo" role="img" data-label="cupDemo" aria-label="例：あなたのファイター、タイフーンがベスト16でクイックキャットを、準々決勝でクマを倒し、準決勝でマックス・ベンチャーと対戦">
-          <div class="cup-champion"><img src="/art/ui/oddbout-roster-v1/typhoon.webp?v=e9bff6d6" alt="" width="800" height="1200" loading="lazy"><span class="cup-champion-name"><span class="cup-star" aria-hidden="true">★</span><span data-copy="boutLeft">タイフーン</span></span></div>
-          <ol class="cup-rounds">
-            <li class="done"><span class="cup-face" style="--face-x:76%;--face-y:42%"><img src="/art/arena/concept/quickcat.webp?v=68c406e1" alt="" width="1116" height="600" loading="lazy"></span><span class="cup-round" data-copy="round16">ベスト16</span><span class="cup-mark" data-copy="cupWon">KO勝ち</span></li>
-            <li class="done"><span class="cup-face"><img src="/art/arena/concept/kuma.webp?v=68c406e1" alt="" width="343" height="600" loading="lazy"></span><span class="cup-round" data-copy="round8">準々決勝</span><span class="cup-mark" data-copy="cupWon">KO勝ち</span></li>
-            <li class="next"><span class="cup-face" style="--face-x:58%"><img src="/art/ui/oddbout-roster-v1/elong-muscat.webp?v=e9bff6d6" alt="" width="800" height="1200" loading="lazy"></span><span class="cup-round" data-copy="round4">準決勝</span><span class="cup-mark" data-copy="cupNext">次の試合</span></li>
-            <li class="ahead"><span class="cup-face unknown">?</span><span class="cup-round" data-copy="roundFinal">決勝</span><span class="cup-mark">&nbsp;</span></li>
-            <li class="cup-trophy"><span class="cup-trophy-mark"><svg viewBox="0 0 48 48" width="46" height="46" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round" aria-hidden="true"><path d="M14 7h20v10c0 6.6-4.5 11.5-10 11.5S14 23.6 14 17Z"/><path d="M14 11H7.5c0 6 2.8 9.4 7.4 10M34 11h6.5c0 6-2.8 9.4-7.4 10"/><path d="M24 28.5V36M16 41h16l-2-5H18Z"/></svg></span><span class="cup-round" data-copy="cupTrophy">優勝</span><span class="cup-mark">&nbsp;</span></li>
-          </ol>
-        </div>
-        <div class="cup-guide">
-          <ol class="cup-steps">
-            <li><span>01</span><div><h3><span data-copy="cupStep1Title">ファイターを選ぶ</span></h3><p><span data-copy="cupStep1Body">応援するファイターを1人。</span></p></div></li>
-            <li><span>02</span><div><h3><span data-copy="cupStep2Title">トーナメント表を組む</span></h3><p><span data-copy="cupStep2Body">16の枠に誰をどこに置くか決めましょう。組み合わせこそが戦略です。</span></p></div></li>
-            <li><span>03</span><div><h3><span data-copy="cupStep3Title">決勝まで見届ける</span></h3><p><span data-copy="cupStep3Body">試合はファイター同士が自動で戦います。4勝すれば優勝です。</span></p></div></li>
-          </ol>
-          <p class="cup-odds"><span data-copy="cupOdds">ランダムなトーナメント表の優勝率は約6%。よく考えて組めば、もっと上がります。</span></p>
-        </div>
-      </div>
-    </section>
-    <section class="twitch-cup-entry wrap" aria-labelledby="twitch-cup-title">
-      <div class="twitch-cup-card">
-        <div><p class="twitch-cup-kicker">FOR STREAMERS</p><h2 id="twitch-cup-title">Twitch Cup</h2><p data-copy="twitchCupBody">チャットを格闘トーナメントに。視聴者4人、チャンピオンは1人。</p></div>
-        <a class="button primary" href="./twitch.html?lang=en"><span data-copy="twitchCupAction">Twitch カップを開催</span><span aria-hidden="true">→</span></a>
-      </div>
-    </section>
-    <section class="faq-section wrap" id="faq" aria-labelledby="faq-title">
-      <div class="section-head"><h2 id="faq-title" data-copy="faqTitle">よくある質問</h2></div>
-      <div class="faq-list"><!--home:faq--><details class="faq-item"><summary><h3>無料ですか？</h3></summary><p>はい。ODDBOUTはブラウザで無料で遊べます。ショップでは応援団テーマパックや、クラブのステージを自動で進めるパスなど、任意のアイテムを販売しています。</p></details><details class="faq-item"><summary><h3>アカウントは必要ですか？</h3></summary><p>見て回るだけなら不要です。練習試合の観戦、ファイターのプロフィール、体験試合はログインなしで楽しめます。クラブを設立して進行を続けるには、Googleでログインしてください。クラブはアカウントに保存されます。</p></details><details class="faq-item"><summary><h3>試合はどう決まりますか？</h3></summary><p>すべての試合はAI同士が戦います。あなたはファイター、出場順、トーナメント表を決めます。試合エンジンは決定論的です。同じファイターと同じシードなら、必ず同じ試合になります。だから共有した試合はそのまま再生できます。</p></details><details class="faq-item"><summary><h3>自分のファイターはどう作りますか？</h3></summary><p>PCでログインして、マイアカウント → マイファイターを開いてください。作りたいファイターを書くと、登録時にもらえるトークンでODDBOUTが作ります。お使いのAIサブスクリプション（Codex・Claude・Grok・Gemini）で、制作ガイドに沿って自分で作ることもできます。</p><a class="faq-link" href="./docs.html?lang=ja">制作ガイドを読む <span aria-hidden="true">→</span></a></details><details class="faq-item"><summary><h3>Twitch カップとは？</h3></summary><p>配信者向けの4人カップです。視聴者がTwitchチャットで!joinコマンドを入力して参加し、異なるファイターを選んだ最初の4人が出場します。準決勝2試合と決勝を画面で行い、優勝した視聴者を決めます。Twitch カップの画面は英語です。</p><a class="faq-link" href="./twitch.html?lang=en">Twitch カップを開く <span aria-hidden="true">→</span></a></details><!--/home:faq--></div>
-    </section>
-  </main>
-  <footer class="club-footer" data-club-footer data-club-prerendered><a class="club-brand" data-home-link data-label="chrome.nav.home" aria-label="ODDBOUT ホーム" href="./ja/"><img src="/art/ui/oddbout-logo.webp?v=f86c9c76" alt="ODDBOUT Fight Club" width="376" height="76" loading="lazy"></a><nav data-label="chrome.nav.footer" aria-label="フッターメニュー"><a data-club-link="service" data-copy="chrome.nav.service" href="./service.html">サービス紹介</a><a data-club-link="about" data-copy="chrome.nav.about" href="./about.html?lang=ja">チーム</a><a data-club-link="updates" data-copy="chrome.nav.updates" href="./updates.ja.html">ニュース</a><a data-club-link="docs" data-copy="chrome.nav.docs" href="./docs.html?lang=ja">ドキュメント</a><button type="button" data-club-link="contact" data-copy="chrome.nav.contact" aria-haspopup="dialog" disabled>お問い合わせ</button><a data-club-link="privacy" data-copy="chrome.nav.privacy" href="./privacy.html?lang=ja">プライバシーポリシー</a><a data-club-link="credits" data-copy="chrome.nav.credits" href="./credits.html?lang=ja">クレジット</a></nav><!--home:social--><div class="club-social"><a href="https://www.youtube.com/@oddbout/" target="_blank" rel="noopener noreferrer" data-club-link="youtube" style="--brand: #FF0000" data-label="chrome.social.youtube" data-tip="chrome.social.youtube" aria-label="ODDBOUTのYouTube" title="ODDBOUTのYouTube"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"></path></svg></a><a href="https://www.instagram.com/teo.oddbout/" target="_blank" rel="noopener noreferrer" data-club-link="instagram" style="--brand: #E4405F" data-label="chrome.social.instagram" data-tip="chrome.social.instagram" aria-label="ODDBOUTのInstagram" title="ODDBOUTのInstagram"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7.0301.084c-1.2768.0602-2.1487.264-2.911.5634-.7888.3075-1.4575.72-2.1228 1.3877-.6652.6677-1.075 1.3368-1.3802 2.127-.2954.7638-.4956 1.6365-.552 2.914-.0564 1.2775-.0689 1.6882-.0626 4.947.0062 3.2586.0206 3.6671.0825 4.9473.061 1.2765.264 2.1482.5635 2.9107.308.7889.72 1.4573 1.388 2.1228.6679.6655 1.3365 1.0743 2.1285 1.38.7632.295 1.6361.4961 2.9134.552 1.2773.056 1.6884.069 4.9462.0627 3.2578-.0062 3.668-.0207 4.9478-.0814 1.28-.0607 2.147-.2652 2.9098-.5633.7889-.3086 1.4578-.72 2.1228-1.3881.665-.6682 1.0745-1.3378 1.3795-2.1284.2957-.7632.4966-1.636.552-2.9124.056-1.2809.0692-1.6898.063-4.948-.0063-3.2583-.021-3.6668-.0817-4.9465-.0607-1.2797-.264-2.1487-.5633-2.9117-.3084-.7889-.72-1.4568-1.3876-2.1228C21.2982 1.33 20.628.9208 19.8378.6165 19.074.321 18.2017.1197 16.9244.0645 15.6471.0093 15.236-.005 11.977.0014 8.718.0076 8.31.0215 7.0301.0839m.1402 21.6932c-1.17-.0509-1.8053-.2453-2.2287-.408-.5606-.216-.96-.4771-1.3819-.895-.422-.4178-.6811-.8186-.9-1.378-.1644-.4234-.3624-1.058-.4171-2.228-.0595-1.2645-.072-1.6442-.079-4.848-.007-3.2037.0053-3.583.0607-4.848.05-1.169.2456-1.805.408-2.2282.216-.5613.4762-.96.895-1.3816.4188-.4217.8184-.6814 1.3783-.9003.423-.1651 1.0575-.3614 2.227-.4171 1.2655-.06 1.6447-.072 4.848-.079 3.2033-.007 3.5835.005 4.8495.0608 1.169.0508 1.8053.2445 2.228.408.5608.216.96.4754 1.3816.895.4217.4194.6816.8176.9005 1.3787.1653.4217.3617 1.056.4169 2.2263.0602 1.2655.0739 1.645.0796 4.848.0058 3.203-.0055 3.5834-.061 4.848-.051 1.17-.245 1.8055-.408 2.2294-.216.5604-.4763.96-.8954 1.3814-.419.4215-.8181.6811-1.3783.9-.4224.1649-1.0577.3617-2.2262.4174-1.2656.0595-1.6448.072-4.8493.079-3.2045.007-3.5825-.006-4.848-.0608M16.953 5.5864A1.44 1.44 0 1 0 18.39 4.144a1.44 1.44 0 0 0-1.437 1.4424M5.8385 12.012c.0067 3.4032 2.7706 6.1557 6.173 6.1493 3.4026-.0065 6.157-2.7701 6.1506-6.1733-.0065-3.4032-2.771-6.1565-6.174-6.1498-3.403.0067-6.156 2.771-6.1496 6.1738M8 12.0077a4 4 0 1 1 4.008 3.9921A3.9996 3.9996 0 0 1 8 12.0077"></path></svg></a><a href="https://discord.gg/DbZc55hUgr" target="_blank" rel="noopener noreferrer" data-club-link="discord" style="--brand: #5865F2" data-label="chrome.social.discord" data-tip="chrome.social.discord" aria-label="ODDBOUTのDiscordに参加" title="ODDBOUTのDiscordに参加"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"></path></svg></a><a href="https://x.com/yoooonion" target="_blank" rel="noopener noreferrer" data-club-link="x" style="--brand: #000000" data-label="chrome.social.x" data-tip="chrome.social.x" aria-label="ODDBOUTのX" title="ODDBOUTのX"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"></path></svg></a></div><!--/home:social--><nav class="club-languages" data-label="chrome.nav.language" aria-label="言語"><a lang="ko" hreflang="ko" data-club-language="ko" href="./ko/">KR</a><a lang="en" hreflang="en" data-club-language="en" href="./?lang=en">EN</a><a lang="ja" hreflang="ja" data-club-language="ja" href="./ja/" aria-current="page">JP</a></nav></footer>
-</body></html>
+<!doctype html><html lang="ja"><head>
+<script data-oddbout-consent-defaults>window.dataLayer=window.dataLayer||[];window.gtag=window.gtag||function(){window.dataLayer.push(arguments)};if(!window.oddboutConsentDefaultsSet){window.oddboutConsentDefaultsSet=true;window.gtag('consent','default',{"ad_storage":"denied","ad_user_data":"denied","ad_personalization":"denied","analytics_storage":"denied","region":["AT","BE","BG","HR","CY","CZ","DK","EE","FI","FR","DE","GR","HU","IS","IE","IT","LV","LI","LT","LU","MT","NL","NO","PL","PT","RO","SK","SI","ES","SE","GB","CH"],"wait_for_update":500});}</script><meta charset="utf-8">
+<base href="../"><meta name="referrer" content="no-referrer"><meta name="robots" content="noindex">
+<title>ODDBOUT Fight Club</title><script>(function enterHome(legacyLocale, oldEntry, fighterPaths, portalPaths, rosterHref) {
+  const url = new URL(location.href);
+  const params = url.searchParams;
+  const base = document.baseURI;
+  const go = (path, suffix = url.search + url.hash) => {
+    document.documentElement.setAttribute("data-home-redirect", "");
+    location.replace(new URL(path, base).href + suffix);
+  };
+  const oauth = ["code", "error", "error_code", "error_description", "state"].some(key => params.has(key));
+  let ownsReturn = false;
+  if (oauth) {
+    let recordedPath;
+    try { recordedPath = sessionStorage.getItem("kaito_web.oddboutSignInPage.v1"); } catch {}
+    ownsReturn = recordedPath === location.pathname;
+    // Some providers fall back to the site root. Restore only known homes on this origin.
+    if (!oldEntry && !ownsReturn) {
+      const known = [...Object.values(fighterPaths), ...Object.values(portalPaths), "./ko/", "./ja/"];
+      const returnPath = known.find(path => new URL(path, base).pathname === recordedPath);
+      if (returnPath) { go(returnPath); return; }
+    }
+    if (!oldEntry && ownsReturn) return;
+  }
+  const fighterAnchor = ["#main", "#cup", "#featured", "#faq", "#fighters", "#match", "#join"].includes(url.hash);
+  const portalAnchor = ["#games", "#tools", "#launch", "#footer", "#top"].includes(url.hash);
+  const oldRoot = /\/index\.html$/.test(url.pathname);
+  const locale = params.get("lang");
+  if (params.has("apply") || (oauth && !ownsReturn && !legacyLocale) ||
+      (url.hash && !fighterAnchor && !portalAnchor && !ownsReturn)) {
+    go("./creator.html");
+    return;
+  }
+  if (!oldEntry && !oldRoot && !fighterAnchor && !params.has("character") &&
+      (!Object.hasOwn(fighterPaths, locale) || portalAnchor)) return;
+  let saved;
+  try { saved = localStorage.getItem("ai-fighter.creator.locale.v1"); } catch {}
+  const browser = (navigator.languages?.length ? navigator.languages : [navigator.language]).map(tag => String(tag).split("-")[0].toLowerCase());
+  const lang = [legacyLocale, locale, saved, ...browser, "en"].find(key => Object.hasOwn(fighterPaths, key));
+  // #fighters and ?character are bookmarks to the roster, not to the landing-page hero.
+  const roster = !oauth && rosterHref(url.search, url.hash, lang);
+  if (roster) { go(roster, ""); return; }
+  params.delete("lang");
+  go(fighterPaths[lang]);
+})("ja", true, {"en":"./fight-club/","ko":"./fight-club/ko/","ja":"./fight-club/ja/"}, {"ko":"./","en":"./home/en/","ja":"./home/ja/"}, function legacyFightersHref(search, hash, fallbackLocale) {
+  const current = new URLSearchParams(search), character = current.get("character");
+  if (character === null && hash !== "#fighters") return null;
+  const next = new URLSearchParams(), lang = current.get("lang");
+  if (["en", "ko", "ja"].includes(lang)) next.set("lang", lang);
+  else if (fallbackLocale) next.set("lang", fallbackLocale);
+  if (character) next.set("character", character);
+  const query = next.toString();
+  return `./fighters.html${query ? `?${query}` : ""}`;
+});</script></head>
+<body><a href="./fight-club/ja/">ODDBOUT Fight Club</a></body></html>

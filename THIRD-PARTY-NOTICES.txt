@@ -200,7 +200,8 @@ Source: https://github.com/orioncactus/pretendard
 License: https://github.com/orioncactus/pretendard/blob/main/LICENSE
 Full license text: fonts/Pretendard-LICENSE.txt
 Runtime copies: fonts/Pretendard-Regular.woff2, fonts/Pretendard-Bold.woff2 (unmodified official WOFF2)
-Site copies (official dynamic subset of Pretendard 1.3.9, unmodified WOFF2, bundled by the ODDBOUT site's stylesheet):
+Site copies (official dynamic subset of Pretendard 1.3.9, unmodified WOFF2, bundled by the ODDBOUT site's stylesheet and, since
+  2026-11-26, by Legendary Blacksmith's stylesheet for its text, buttons and numbers):
   src/creator/assets/pretendard/Pretendard-Regular.subset.0.woff2
   src/creator/assets/pretendard/Pretendard-Regular.subset.1.woff2
   src/creator/assets/pretendard/Pretendard-Regular.subset.2.woff2
@@ -434,8 +435,8 @@ Runtime copy: fonts/Jersey10-Pudding.woff2 (Pudding Escape's text and buttons, p
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 The modified font is redistributed under the same license and is not sold on its own.
 
-Galmuri (갈무리) — Legendary Blacksmith pixel UI font
------------------------------------------------------
+Galmuri (갈무리) — Legendary Blacksmith's former pixel font
+----------------------------------------------------------
 
 Copyright 2019-2025 Lee Minseo (quiple@quiple.dev)
 Released under the SIL Open Font License 1.1.
@@ -443,11 +444,21 @@ Released under the SIL Open Font License 1.1.
 Source: https://github.com/quiple/galmuri (npm galmuri@2.40.3)
 License: https://openfontlicense.org/
 Full license text: fonts/Galmuri-OFL.txt
-Runtime copies: fonts/Galmuri11-Forge.woff2, fonts/Galmuri11-Bold-Forge.woff2, fonts/Galmuri14-Forge.woff2 (Legendary Blacksmith's text and buttons, forge.html)
-  (subsets of the npm package's WOFF2 files: only the characters the game writes, hinting removed; same font names — the license
-  reserves none)
-Full copies: fonts/Galmuri11.woff2, fonts/Galmuri11-Bold.woff2, fonts/Galmuri14.woff2
-  (unmodified WOFF2 files from the npm package; the source of the subsets and of the game's source package)
+Copies: fonts/Galmuri11.woff2, fonts/Galmuri11-Bold.woff2, fonts/Galmuri14.woff2 (unmodified WOFF2 files from the npm package; the game
+  no longer loads them since 2026-11-26)
+
+Hahmlet — Legendary Blacksmith lines and titles font
+----------------------------------------------------
+
+Copyright 2020 The Hahmlet Project Authors (https://github.com/hyper-type/hahmlet)
+Released under the SIL Open Font License 1.1 (no Reserved Font Name).
+
+Source: https://github.com/google/fonts/tree/main/ofl/hahmlet (Hahmlet[wght].ttf)
+Full license text: fonts/Hahmlet-OFL.txt
+Full web copy: fonts/Hahmlet-Variable.woff2 (WOFF2 conversion retaining every glyph and the variable weight axis).
+The source package includes the unmodified upstream TTF.
+Runtime copy: fonts/Hahmlet-Bold-Forge.woff2 (Legendary Blacksmith's lines, speech bubbles, titles and loading title, forge.html)
+  (modified: instanced at weight 700 and subset to the characters the game writes, hinting removed, WOFF2)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 The font is not sold on its own.
