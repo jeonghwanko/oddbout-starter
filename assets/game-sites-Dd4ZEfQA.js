@@ -1,0 +1,1 @@
+var e={bounce:{origin:`https://bounce.oddbout.com`,live:!0},bouceball:{origin:`https://bouceball.oddbout.com`,live:!0},forge:{origin:`https://forge.oddbout.com`,live:!0},pudding:{origin:`https://pudding.oddbout.com`,live:!0},wallcarve:{origin:`https://wallcarve.oddbout.com`,live:!0}};export{e as t};

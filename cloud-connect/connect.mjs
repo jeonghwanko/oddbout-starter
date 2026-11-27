@@ -211,7 +211,7 @@ export async function start({
     document.title = words.title;
     document.querySelector('.languages').setAttribute('aria-label', language === 'ko' ? '언어' : 'Language');
     document.querySelector('.connection').setAttribute('aria-label', language === 'ko' ? '계정 연결' : 'Account connection');
-    document.querySelector('footer nav').setAttribute('aria-label', language === 'ko' ? '안내' : 'Information');
+    byId('connect-information').setAttribute('aria-label', language === 'ko' ? '안내' : 'Information');
     for (const element of document.querySelectorAll('[data-copy]')) element.textContent = words[element.dataset.copy];
     for (const button of document.querySelectorAll('[data-lang]')) button.setAttribute('aria-pressed', String(button.dataset.lang === language));
     byId('status').textContent = words[statusKey];

@@ -1,0 +1,1 @@
+var e=new URLSearchParams(location.search).get(`lang`);if(e===`ja`||e===`en`){document.documentElement.lang=e;for(let t of document.querySelectorAll(`[data-en]`))t.textContent=t.dataset[e]??t.textContent;document.title=document.querySelector(`h1`).textContent+` · ODDBOUT`}

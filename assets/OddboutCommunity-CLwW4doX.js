@@ -1,0 +1,1 @@
+import{a as e,r as t,t as n}from"./oddbout-community-DQfdlENk.js";function r(t=n.discordInviteUrl){return e(`discord`,t)}function i(e=n.discordRequestUrl){return t(e,[`discord.com`],/^\/channels\/\d+\/\d+\/?$/)}export{i as n,r as t};
