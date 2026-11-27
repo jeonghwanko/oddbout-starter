@@ -177,8 +177,13 @@ await writeFile(
 const directoryModule = join(source, 'tools/ai-fighter/hosted-directory.mjs');
 if (existsSync(directoryModule)) {
   const { applyHostedDirectory } = await import(pathToFileURL(directoryModule).href);
-  await applyHostedDirectory(output, [...policyFiles, ...browserFightingFiles,
-    ...(await readdir(join(output, 'cloud-plugin'))).map(name => 'cloud-plugin/' + name), 'connect.html', '404.html']);
+  await applyHostedDirectory(output, [
+    ...policyFiles,
+    ...browserFightingFiles,
+    ...(await readdir(join(output, 'cloud-plugin'))).map(name => 'cloud-plugin/' + name),
+    'connect.html',
+    '404.html',
+  ]);
 }
 const assets = await readdir(join(output, 'assets'));
 const js = (await Promise.all(assets.filter(f => f.endsWith('.js')).map(f => readFile(join(output, 'assets', f), 'utf8')))).join('\n');

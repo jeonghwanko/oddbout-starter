@@ -50,7 +50,13 @@ export async function updatesPublishedFiles(root, siteUrl) {
       const url = new URL(attributes.href, new URL(page, base));
       const file = url.pathname.slice(base.pathname.length);
       const directory = file === 'directory/footer.css';
-      if (url.origin !== base.origin || !url.pathname.startsWith(base.pathname) || url.search || url.hash || (!directory && !/^assets\/[a-zA-Z0-9_-]+\.css$/.test(file)))
+      if (
+        url.origin !== base.origin ||
+        !url.pathname.startsWith(base.pathname) ||
+        url.search ||
+        url.hash ||
+        (!directory && !/^assets\/[a-zA-Z0-9_-]+\.css$/.test(file))
+      )
         throw new Error(`Unsafe updates stylesheet: ${page}`);
       files.add(file);
       if (directory) files.add('directory/language.js');

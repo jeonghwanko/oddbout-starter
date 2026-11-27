@@ -18,6 +18,9 @@
  * on this computer too: the same class of risk as loopback (another program could claim the `claude:` scheme), and PKCE still keeps the code
  * useless without the app's verifier. Other app schemes stay refused. The Mac app's callback was not read.
  */
+const MY_AGENTS = '/creator.html#view=agents';
+const AGENT_CONNECTION_LIMIT = 3;
+
 const AGENTS = {
   dots: { hosts: { 'chatgpt.com': null, 'chat.openai.com': null }, home: 'https://chatgpt.com/dots/home' },
   grok: {
@@ -29,7 +32,7 @@ const AGENTS = {
     exact: true,
     home: 'https://claude.ai/customize/connectors',
   },
-  local: { hosts: {}, home: 'https://oddbout.com/creator.html#view=agents' },
+  local: { hosts: {}, home: 'https://oddbout.com' + MY_AGENTS },
 };
 /** The loopback literals RFC 8252 names (`[::1]` is how a URL spells IPv6's), and `localhost`, which the CLIs use. */
 const LOOPBACK = new Set(['127.0.0.1', '[::1]', 'localhost']);
@@ -68,6 +71,7 @@ export const agentWords = {
     any: { name: '에이전트', to: '에이전트로', at: '에이전트에서', on: '에이전트에' },
   },
   en: { dots: { name: 'Dots' }, grok: { name: 'Grok' }, claude: { name: 'Claude' }, local: { name: 'an app on this computer' }, any: { name: 'your agent' } },
+  ja: { dots: { name: 'Dots' }, grok: { name: 'Grok' }, claude: { name: 'Claude' }, local: { name: 'この端末のアプリ' }, any: { name: 'エージェント' } },
 };
 export function fillAgent(text, words) {
   return text.replace(/\{(name|to|at|on)\}/g, (_, key) => words[key] ?? words.name);
@@ -77,10 +81,13 @@ export function authorizationId(search, stored) {
   return typeof id === 'string' && /^[a-zA-Z0-9_-]{16,256}$/.test(id) ? id : null;
 }
 export function connectionLocale(requested, saved, browser = '') {
-  return ['en', 'ko'].includes(requested) ? requested : ['en', 'ko'].includes(saved) ? saved : browser.toLowerCase().startsWith('ko') ? 'ko' : 'en';
+  return [requested, saved, browser.toLowerCase().split('-')[0]].find(value => Object.hasOwn(agentWords, value)) ?? 'en';
 }
 export const copy = {
   ko: {
+    languages: '언어',
+    connectionLabel: '계정 연결',
+    footerLabel: '안내',
     title: 'ODDBOUT · {name} 연결',
     headline1: '나의 캐릭터,',
     headline2: '링 위로.',
@@ -90,6 +97,10 @@ export const copy = {
     panelTitle: '계정을 선택하세요',
     consentTitle: '{on} 연결할까요?',
     errorTitle: '연결을 다시 시작해 주세요',
+    limitTitle: '에이전트 연결 한도에 도달했습니다',
+    limitReached: `계정당 에이전트는 ${AGENT_CONNECTION_LIMIT}개까지 연결할 수 있습니다. 내 에이전트에서 기존 연결 하나를 해제한 뒤 다시 확인해 주세요.`,
+    myAgents: '내 에이전트 열기',
+    recheckLimit: '다시 확인',
     google: 'Google로 계속하기',
     permissions: '허용할 권한',
     permission1: '기본 프로필·이메일 확인',
@@ -130,6 +141,9 @@ export const copy = {
     returnLocal: '연결 안내 보기',
   },
   en: {
+    languages: 'Language',
+    connectionLabel: 'Account connection',
+    footerLabel: 'Information',
     title: 'ODDBOUT · Connect to {name}',
     headline1: 'Your fighter.',
     headline2: 'Into the ring.',
@@ -139,6 +153,10 @@ export const copy = {
     panelTitle: 'Choose your account',
     consentTitle: 'Connect to {name}?',
     errorTitle: 'Start a new connection',
+    limitTitle: 'Agent connection limit reached',
+    limitReached: `You can connect up to ${AGENT_CONNECTION_LIMIT} agents per account. Disconnect one in My agents, then check again here.`,
+    myAgents: 'Open My agents',
+    recheckLimit: 'Check again',
     google: 'Continue with Google',
     permissions: 'Access you allow',
     permission1: 'Read your basic profile and email',
@@ -178,6 +196,62 @@ export const copy = {
       'If you approve, an app running on this computer (an agent in your terminal or editor, or the Claude desktop app) receives the connection. Approve only if you just started this connection yourself.',
     returnLocal: 'See how to connect',
   },
+  ja: {
+    languages: '言語',
+    connectionLabel: 'アカウント接続',
+    footerLabel: 'インフォメーション',
+    title: 'ODDBOUT · {name}との接続',
+    headline1: '自分のファイターを、',
+    headline2: 'リングへ。',
+    lead: 'Google アカウントを接続して、\n{name}でファイターを登録しましょう。',
+    stepConnect: 'アカウント接続',
+    stepConsent: 'アクセス権限の確認',
+    panelTitle: 'アカウントを選択',
+    consentTitle: '{name}に接続しますか？',
+    errorTitle: '接続をやり直してください',
+    limitTitle: 'エージェントの接続数が上限に達しました',
+    limitReached: `1つのアカウントに接続できるエージェントは${AGENT_CONNECTION_LIMIT}つまでです。マイエージェントで既存の接続を1つ解除したら、この画面で再確認してください。`,
+    myAgents: 'マイエージェントを開く',
+    recheckLimit: '再確認',
+    google: 'Google で続行',
+    permissions: '許可するアクセス',
+    permission1: '基本プロフィールとメールアドレスの確認',
+    permission2: 'ファイターと登録状況の確認',
+    permission3: '依頼したファイターのアップロード・登録・削除',
+    permissionNote: '生成サービスの契約や支払いへのアクセスは含まれません。',
+    approve: '接続を許可',
+    cancel: 'キャンセル',
+    loginNote: 'PCへのインストールは不要です。',
+    privacy: 'プライバシー',
+    help: 'ヘルプ',
+    returnDots: '{name}に戻る',
+    loading: '接続リクエストを確認しています。',
+    login: 'ファイターを所有するアカウントでログインしてください。',
+    consent: '{name}で開始したリクエストか確認してください。',
+    accountChoice: 'このアカウントで接続しますか？',
+    continueAccount: 'このアカウントで続行',
+    switchAccount: '別のアカウントを使う',
+    switchingAccount: '別のアカウントでログインする準備をしています。',
+    noRequest: '{name}で ODDBOUT への接続を開始してください。',
+    failed: 'リクエストの有効期限が切れたか、接続できませんでした。{name}でやり直してください。',
+    unsafe: 'この接続リクエストには対応していません。アクセスは許可されていません。',
+    googleAccount: 'ODDBOUT アカウント',
+    connecting: 'Google のログイン画面を開いています。',
+    approving: '接続を完了しています。',
+    doneTitle: '{name}に接続を引き継ぎました',
+    handedOff: 'アプリを開くか聞かれた場合は許可してください。アプリで接続を確認できたら、このウィンドウを閉じてください。',
+    deniedHandedOff: '接続をキャンセルしました。このウィンドウを閉じてください。',
+    openApp: 'アプリをもう一度開く',
+    emailOption: 'メールアドレスでログイン',
+    emailLabel: 'メールアドレス',
+    passwordLabel: 'パスワード',
+    emailSignIn: 'ログイン',
+    emailConnecting: 'ログインしています。',
+    emailFailed: 'メールアドレスとパスワードを確認してください。',
+    localWarning:
+      '許可すると、この端末で動作するアプリ（ターミナルやエディターのエージェント、Claude デスクトップアプリなど）が接続を受け取ります。自分で開始した接続だけを許可してください。',
+    returnLocal: '接続方法を見る',
+  },
 };
 export async function start({
   document = globalThis.document,
@@ -209,9 +283,9 @@ export async function start({
     if (agent === 'local') words.returnDots = words.returnLocal;
     document.documentElement.lang = language;
     document.title = words.title;
-    document.querySelector('.languages').setAttribute('aria-label', language === 'ko' ? '언어' : 'Language');
-    document.querySelector('.connection').setAttribute('aria-label', language === 'ko' ? '계정 연결' : 'Account connection');
-    byId('connect-information').setAttribute('aria-label', language === 'ko' ? '안내' : 'Information');
+    document.querySelector('.languages').setAttribute('aria-label', words.languages);
+    document.querySelector('.connection').setAttribute('aria-label', words.connectionLabel);
+    byId('connect-information').setAttribute('aria-label', words.footerLabel);
     for (const element of document.querySelectorAll('[data-copy]')) element.textContent = words[element.dataset.copy];
     for (const button of document.querySelectorAll('[data-lang]')) button.setAttribute('aria-pressed', String(button.dataset.lang === language));
     byId('status').textContent = words[statusKey];
@@ -219,21 +293,11 @@ export async function start({
     byId('eyebrow').textContent = ['dots', 'grok', 'claude'].includes(agent ?? '')
       ? `${agentWords.en[/** @type {'dots' | 'grok' | 'claude'} */ (agent)].name.toUpperCase()} × ODDBOUT`
       : 'ODDBOUT';
-    const reviewing = mode === 'consent' || mode === 'done';
+    const reviewing = mode === 'consent' || mode === 'done' || mode === 'at-limit';
     byId('step-number').textContent = reviewing ? '02' : '01';
     byId('step-label').textContent = words[reviewing ? 'stepConsent' : 'stepConnect'];
-    byId('panel-title').textContent =
-      words[
-        mode === 'consent'
-          ? 'consentTitle'
-          : mode === 'done'
-            ? 'doneTitle'
-            : mode === 'account'
-              ? 'accountChoice'
-              : mode === 'error'
-                ? 'errorTitle'
-                : 'panelTitle'
-      ];
+    const titles = { consent: 'consentTitle', done: 'doneTitle', account: 'accountChoice', error: 'errorTitle', 'at-limit': 'limitTitle' };
+    byId('panel-title').textContent = words[titles[mode] ?? 'panelTitle'];
     byId('login').hidden = mode !== 'login';
     byId('consent').hidden = mode !== 'consent';
     byId('open-app').hidden = mode !== 'done' || !appUrl;
@@ -244,9 +308,14 @@ export async function start({
     byId('email-login').hidden = mode !== 'login';
     byId('login-note').hidden = mode !== 'login';
     byId('retry-link').hidden = mode !== 'error';
+    byId('my-agents-link').hidden = mode !== 'at-limit';
+    byId('limit-recheck').hidden = mode !== 'at-limit';
     byId('account').textContent = accountEmail || words.googleAccount;
     byId('client').textContent = clientLabel;
     byId('retry-link').href = AGENTS[agent ?? 'dots'].home;
+    const myAgents = new URL(MY_AGENTS, location.origin);
+    myAgents.searchParams.set('lang', language);
+    byId('my-agents-link').href = myAgents.href;
     byId('privacy-link').href = '/cloud-plugin/privacy' + (language === 'ko' ? '.ko' : '') + '.html';
     byId('help-link').href = '/cloud-plugin/support' + (language === 'ko' ? '.ko' : '') + '.html';
     document.querySelector('.brand').href = '/?lang=' + language;
@@ -305,6 +374,18 @@ export async function start({
     }
   };
   const fail = () => state('error', 'failed');
+  const showLimit = () => state('at-limit', 'limitReached');
+  async function connectionLimitReached(clientId) {
+    try {
+      const { data, error } = await auth.oauth.listGrants();
+      if (error || !Array.isArray(data)) return false;
+      const clients = new Set(data.flatMap(grant => (typeof grant?.client?.id === 'string' ? [grant.client.id] : [])));
+      return clients.size >= AGENT_CONNECTION_LIMIT && !clients.has(clientId);
+    } catch {
+      // This check gives earlier feedback. Supabase still enforces the limit during approval.
+      return false;
+    }
+  }
   const {
     data: { session },
     error,
@@ -412,6 +493,22 @@ export async function start({
       (details.data.client.name ?? agentWords.en[agent].name) +
       ' · ' +
       (agent !== 'local' ? back.hostname : back.protocol === 'http:' ? back.host : `${back.protocol}//${back.host}`);
+    const clientId = details.data.client.id;
+    byId('limit-recheck').onclick = async () => {
+      byId('limit-recheck').disabled = true;
+      state('at-limit', 'loading');
+      try {
+        await showConsent(session);
+      } catch {
+        fail();
+      } finally {
+        byId('limit-recheck').disabled = false;
+      }
+    };
+    if (await connectionLimitReached(clientId)) {
+      showLimit();
+      return;
+    }
     state('consent', 'consent');
     for (const action of ['approve', 'deny'])
       byId(action).onclick = async () => {
@@ -423,7 +520,9 @@ export async function start({
           if (result.error || !result.data?.redirect_url) throw new Error('consent-failed');
           go(result.data.redirect_url, action === 'approve' ? 'handedOff' : 'deniedHandedOff');
         } catch {
-          fail();
+          // A simultaneous approval may have filled the last slot. GoTrue returns a generic error in that case.
+          if (action === 'approve' && (await connectionLimitReached(clientId))) showLimit();
+          else fail();
           byId('approve').disabled = byId('deny').disabled = false;
         }
       };
@@ -431,7 +530,7 @@ export async function start({
 }
 if (typeof document !== 'undefined')
   start().catch(() => {
-    const words = copy[document.documentElement.lang === 'ko' ? 'ko' : 'en'];
+    const words = copy[connectionLocale(document.documentElement.lang)];
     document.getElementById('status').textContent = words.failed;
     document.getElementById('retry-link').hidden = false;
   });
