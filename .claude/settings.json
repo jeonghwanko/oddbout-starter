@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "deny": [
+      "Bash(git add -A *)",
+      "Bash(git add --all *)",
+      "Bash(git add . *)",
+      "Bash(git add -u *)",
+      "Bash(git add --update *)",
+      "Bash(git commit -a*)",
+      "Bash(git commit --all *)",
+      "PowerShell(git add -A *)",
+      "PowerShell(git add --all *)",
+      "PowerShell(git add . *)",
+      "PowerShell(git add -u *)",
+      "PowerShell(git add --update *)",
+      "PowerShell(git commit -a*)",
+      "PowerShell(git commit --all *)",
+      "Read(/.env)",
+      "Read(/.env.local)",
+      "Read(/.env.production)",
+      "Read(/.env.broadcast)",
+      "Read(/.env.broadcast.local)",
+      "Read(/.env.npm)"
+    ]
+  }
+}

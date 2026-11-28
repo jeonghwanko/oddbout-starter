@@ -69,6 +69,14 @@ test('AGENTS.md fits within what Codex reads', async () => {
   assert.ok(size <= 32 * 1024, `AGENTS.md is ${size} bytes`);
 });
 
+test('the create-fighter skill description fits the Agent Skills limit', async () => {
+  const skill = await readFile(path.join(root, 'plugins/ai-fighter/skills/create-fighter/SKILL.md'), 'utf8');
+  const frontmatter = /^---\r?\n([\s\S]*?)\r?\n---/u.exec(skill)?.[1] ?? '';
+  const description = /^description: (.+)$/mu.exec(frontmatter)?.[1].trim() ?? '';
+  const length = [...description].length;
+  assert.ok(length > 0 && length <= 1024, 'create-fighter description must be 1–1024 characters, got ' + length);
+});
+
 test('the document index and the distribution page state the release range that records/KIT-RELEASES.md holds', async () => {
   // A release moves into the records when a newer one is recorded as current (PLUGIN-DISTRIBUTION.md); the index still said 0.6.16
   // after the records reached 0.6.20. Entry lines: "**Previous source-kit release: 0.6.20**", "Earlier release: 0.6.0", "Earlier: 0.5.4 (…)".
