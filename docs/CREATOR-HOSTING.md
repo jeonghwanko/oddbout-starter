@@ -49,6 +49,15 @@ with no `chatgptEmbed` setting those rules deny framing of `/embed/chatgpt`.
 After checking the artifact, the Cloudflare publisher adds the repository's Pages Function for `/api/*`.
 The function uses the shared public GET handler. Pages serves the homepage and other static routes directly.
 The publisher verifies all three public reads on the deployment URL. Verify them again on the custom domain after changing DNS.
+
+<a id="site-redirects"></a>**Site redirects.** The publisher writes `_redirects` itself, never from the artifact. It always keeps
+`/index.html /league 302` while the build has the Fight Club folder. It adds the reviewed table
+`deploy/site-redirects.json` (`scripts/site-redirects.mjs`), which holds permanent moves of site pages (`from`, `to`, status 301 or 308).
+A rule is active only when the build publishes `to` and no longer publishes `from`. While the old page is still published and the
+target is not, the rule waits, so the table may merge before or after the game commit that moves the page. Both published, or neither,
+stops the publication. An `.html` source is redirected in both spellings (`/x.html` and `/x`). `to` is the clean address, because Pages
+answers `.html` with a second redirect. After the upload the publisher requests every active source with `?lang=ko` on the deployment URL.
+Each must answer with its status, its target and the same query. Run `--preview` first when a publication activates new rules.
 The default branch named by `ODDBOUT_CLOUDFLARE_BRANCH` must match the project's
 production branch; deployment metadata validation rejects a mismatch.
 
