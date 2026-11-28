@@ -84,7 +84,7 @@ export function veloraCase(lang) {
         <source src="./velora/velora-vs-leon.mp4" type="video/mp4">
       </video>
       <p><a class="button" href="${replay}&amp;lang=${lang}">${text.watch} →</a></p>
-      <p><a href="https://oddbout.com/docs?lang=${lang}">${text.guide} →</a></p>
+      <p><a href="https://oddbout.com/fight-club/docs/?lang=${lang}">${text.guide} →</a></p>
       <p><a href="/browser-fighting-game/${lang === 'ko' ? '' : 'index.en.html'}">${text.play} →</a></p>`,
     ],
   };

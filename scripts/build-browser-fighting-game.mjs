@@ -68,7 +68,7 @@ const englishGuide = `
       <h2 id="registration-heading">Create and register your own fighter</h2>
       <ol class="registration">
         <li><strong>Open My fighters on a computer.</strong> <a href="/creator?lang=en">Sign in with Google</a> and open <strong>My fighters</strong> from your account menu.</li>
-        <li><strong>Start with a character idea or a reference image.</strong> Request creation in My fighters, or follow the <a href="/docs?lang=en">AI Fighter creation guide</a> to make a fighter with your own AI assistant.</li>
+        <li><strong>Start with a character idea or a reference image.</strong> Request creation in My fighters, or follow the <a href="/fight-club/docs/?lang=en">AI Fighter creation guide</a> to make a fighter with your own AI assistant.</li>
         <li><strong>Review the art and movements.</strong> Check the character’s appearance and fight animations. If you make the fighter in your workspace, validate the finished package before submitting it to the same ODDBOUT account.</li>
         <li><strong>Register, then enter the fighter.</strong> Find the registered fighter in My fighters, open the motion preview, and enter them into the arena. Entry makes the fighter available for other players to face in cups and ranked duels.</li>
       </ol>
