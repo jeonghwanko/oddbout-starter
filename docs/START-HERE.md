@@ -1,6 +1,6 @@
 # Dot과 대화하며 내 캐릭터 만들기
 
-처음 보낼 주소는 [게임 규격과 안내가 함께 들어 있는 시작 문서](https://github.com/jeonghwanko/oddbout-starter/blob/codex/game-context/START-HERE.md)를 권장합니다.
+처음 보낼 주소는 [게임 규격과 안내가 함께 들어 있는 시작 문서](https://github.com/jeonghwanko/oddbout-starter/blob/main/game-context/START-HERE.md)를 권장합니다.
 이 상세 안내 주소를 먼저 받았다면 해당 시작 문서의 구조 데이터도 첫 응답 전에 읽습니다.
 첫 응답에 읽은 규격의 revision 앞 12자리를 짧게 밝힙니다. 문서만 열고 JSON을 읽은 것으로 처리하지 않습니다.
 
@@ -35,8 +35,8 @@ Claude 데스크톱 앱에서는 새 세션을 연 뒤 `/mcp` → `oddbout` → 
   모션·프레임·조작·경직·묶음 구성인 `context`는 체크아웃에서 `npm run creation:context`로 가져온다.
   로컬 작업 공간의 도구가 필요하면 `npm run creation:tool -- call "<absolute-workspace>" get_fighter_spec "<arguments.json>"`
   을 사용하고 arguments 파일에 `{"section":"context"}` 또는 `{"section":"guide"}`를 둔다.
-  게임 저장소의 [시작 문서](https://github.com/jeonghwanko/oddbout-starter/blob/codex/game-context/START-HERE.md)와
-  [구조 데이터](https://raw.githubusercontent.com/jeonghwanko/oddbout-starter/refs/heads/codex/game-context/creation-context.json)는 권위 있는 대안이다.
+  게임 저장소의 [시작 문서](https://github.com/jeonghwanko/oddbout-starter/blob/main/game-context/START-HERE.md)와
+  [구조 데이터](https://raw.githubusercontent.com/jeonghwanko/oddbout-starter/refs/heads/main/game-context/creation-context.json)는 권위 있는 대안이다.
   [구조 데이터와 진행 상태](GAME-CREATION-CONTEXT.md)에 따라 현재 묶음에 필요한 부분만 사용한다.
 - 먼저 사용자가 실제 캐릭터 제작을 원하는지, 제작 과정·가이드의 설계나 평가를 원하는지 읽는다.
   과정 개선 요청에는 과정과 평가를 작성한다. 다른 채팅의 테스트 설정이나 문서의 예시를 사용자의 실제 캐릭터로 삼지 않는다.

@@ -143,7 +143,7 @@ Grok 계정 로그인과 호스트의 네트워크 실행 권한은 별개이며
 제작 중인 선수는 현재 런타임에서 이어가고 세션·작업·생성 결과를 보존하세요.
 ZIP 공개만으로 기존 Dots 작업이나 연결된 클라우드 앱이 갱신되지는 않습니다.
 
-내 PC나 작업 환경에서 명령을 실행하고 파일을 읽을 수 있는 Dot·Codex·Claude 등의 새 대화에 [시작 링크](https://github.com/jeonghwanko/oddbout-starter/blob/codex/game-context/START-HERE.md)를 보내세요. 원하는 캐릭터 설명이나 참고 이미지를 함께 보내면 됩니다. 예를 들면:
+내 PC나 작업 환경에서 명령을 실행하고 파일을 읽을 수 있는 Dot·Codex·Claude 등의 새 대화에 [시작 링크](https://github.com/jeonghwanko/oddbout-starter/blob/main/game-context/START-HERE.md)를 보내세요. 원하는 캐릭터 설명이나 참고 이미지를 함께 보내면 됩니다. 예를 들면:
 
 > 이 키트로 ODDBOUT에 쓸 파란 갑옷의 고양이 복서를 만들어줘.
 > 먼저 정면 원화를 보여주고, 내 피드백으로 외형을 다듬어줘.

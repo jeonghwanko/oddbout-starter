@@ -5,21 +5,20 @@
 
 ## 자료 읽기
 
-- [규격이 포함된 제작 시작 문서](https://github.com/jeonghwanko/oddbout-starter/blob/codex/game-context/START-HERE.md)와
-  [대화 시험 문서](https://github.com/jeonghwanko/oddbout-starter/blob/codex/game-context/DIALOGUE-ONLY.md)는 같은 JSON을 포함한다.
+- [규격이 포함된 제작 시작 문서](https://github.com/jeonghwanko/oddbout-starter/blob/main/game-context/START-HERE.md)와
+  [대화 시험 문서](https://github.com/jeonghwanko/oddbout-starter/blob/main/game-context/DIALOGUE-ONLY.md)는 같은 JSON을 포함한다.
   게임이 생성·게시하며, 첫 링크를 읽을 때 구조 데이터가 빠지는 일을 줄인다. 첫 응답에 읽은 revision 앞 12자리를 표시한다.
-- [현재 게임 제공 JSON](https://raw.githubusercontent.com/jeonghwanko/oddbout-starter/refs/heads/codex/game-context/creation-context.json)
+- [현재 게임 제공 JSON](https://raw.githubusercontent.com/jeonghwanko/oddbout-starter/refs/heads/main/game-context/creation-context.json)
 - 작업 공간 MCP/로컬 `creation:tool`: `get_fighter_spec`의 `section: "context"`. `group`을 주면 해당 묶음의 모션 규격만 받는다.
   연결된 클라우드 MCP에도 이 section이 있다고 가정하지 말고 실제 도구 스키마를 확인한다.
 - CLI: `npm run creation:context`. 로그인·생성 계정 접근 없이 읽는다.
 
-이 공개 주소는 게임의 `tools/ai-fighter/publish-creation-context.mjs`가 갱신하는 배포 채널이다.
-제작 저장소에서 수치를 수동으로 작성하거나 고정 사본을 규칙 원본으로 쓰지 않는다.
-게임 빌드는 같은 생성기로 `ai-fighter/creation-context.json`도 제공한다. 개발 규격 채널은 배포된
-플레이 페이지와 버전이 다를 수 있으므로 `provenance.sourceCommit`과 `revision`을 기록한다.
-게임의 수동 사이트 배포는 기존 Pages 배포 키로 같은 공개 저장소의 규격 브랜치도 갱신한다.
-일반 소스 push만으로 배포나 CI를 시작하지 않는다. 시작 문서의 포함 JSON은 해당 게시 시점의 자료이며,
-이후 묶음에서는 현재 JSON 주소로 갱신한다.
+공개 규격과 시작 문서는 게임 저장소의 `tools/ai-fighter/publish-creation-context.mjs`가 생성한다.
+게임 저장소에서 `npm run fighter:context:publish -- --prepare-main <starter-worktree>`로 산출물을 만든 뒤,
+starter의 `main`에 PR로 반영한다. 사이트 게시 전에 게임 소스와 `main`의 규격 revision을 대조한다.
+사이트 배포는 기존 키트를 위해 `codex/game-context`의 파일도 계속 갱신한다.
+게임 빌드도 같은 생성기로 `ai-fighter/creation-context.json`을 제공한다. 규격의 개발·배포 버전을
+비교할 때는 `provenance.sourceCommit`과 `revision`을 기록한다. 다음 묶음 전에 현재 JSON을 다시 읽는다.
 
 | 구조 | 쓰임 |
 | --- | --- |
@@ -68,8 +67,8 @@ VM 네트워크가 막혀도 연결된 GitHub 도구가 같은 공개 JSON을 �
 허용하면, 에이전트는 그 원본을 별도 파일로 전달해 사용할 수 있다. 공개 게임 규격에만 쓰는 명시적
 입력 경로이며 Grok 인증·추론·영상 다운로드를 대행하는 프록시가 아니다. 기본 네트워크 조회는 그대로다.
 
-1. 연결된 GitHub 도구로 `jeonghwanko/oddbout-starter`의 `codex/game-context` 브랜치에서
-   `creation-context.json` **전체 원본 바이트**와 반환된 Git blob SHA를 가져온다. 요약·줄별 발췌·재작성한
+1. 연결된 GitHub 도구로 `jeonghwanko/oddbout-starter`의 `main` 브랜치에서
+   `game-context/creation-context.json` **전체 원본 바이트**와 반환된 Git blob SHA를 가져온다. 요약·줄별 발췌·재작성한
    JSON은 쓰지 않는다. 도구가 실패하거나 일부만 반환하면 중단한다.
 2. 실제 조회 시각(UTC), 설정된 원본 URL, 반환된 Git blob SHA-1, 원본 바이트의 SHA-256을 receipt에 기록한다.
    SHA-256과 Git blob 해시는 원본 바이트로 계산·대조한다. 계정 정보나 토큰은 포함하지 않는다.
@@ -81,7 +80,7 @@ Receipt 형식(값은 실제 조회 결과로 채우며 예시 문자열을 그�
 ```json
 {
   "schemaVersion": 1,
-  "sourceUrl": "https://raw.githubusercontent.com/jeonghwanko/oddbout-starter/refs/heads/codex/game-context/creation-context.json",
+  "sourceUrl": "https://raw.githubusercontent.com/jeonghwanko/oddbout-starter/refs/heads/main/game-context/creation-context.json",
   "gitBlobSha1": "<GitHub가 반환한 40자리 blob SHA>",
   "sha256": "<원본 바이트의 64자리 SHA-256>",
   "retrievedAt": "<실제 조회 UTC 시각, ISO 8601>"
