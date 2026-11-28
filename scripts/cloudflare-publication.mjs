@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { git, hosting, verifyArtifact, verifyLiveSite, waitForJson } from './hosting-lib.mjs';
+import { fileCheckBatches, git, hosting, reportPublicationTiming, verifyArtifact, verifyLiveSite, waitForJson } from './hosting-lib.mjs';
 import { cloudflareFetch } from './site-publication.mjs';
 import { chatGptEmbedBuild } from './chatgpt-embed-site.mjs';
 import {
@@ -15,6 +15,7 @@ import {
   redirectsNotLive,
   siteRedirectLines,
   siteRedirectState,
+  unpreviewedRedirects,
   verifySiteRedirects,
 } from './site-redirects.mjs';
 
@@ -27,13 +28,17 @@ export async function validateCloudflareFiles(root, { headers } = {}) {
   let files = 0;
   /** @param {string} dir */
   async function walk(dir) {
-    for (const name of await readdir(dir)) {
-      const path = join(dir, name),
-        entry = await lstat(path);
-      if (entry.isSymbolicLink()) throw Error('Cloudflare publication rejects symlinks');
-      if (entry.isDirectory()) await walk(path);
-      else if (!entry.isFile() || entry.size > 25 * 1024 * 1024) throw Error('Cloudflare asset exceeds 25 MiB or is not a regular file');
-      else files++;
+    const names = await readdir(dir);
+    for await (const batch of fileCheckBatches(names, async name => {
+      const path = join(dir, name);
+      return { path, entry: await lstat(path) };
+    })) {
+      for (const { path, entry } of batch) {
+        if (entry.isSymbolicLink()) throw Error('Cloudflare publication rejects symlinks');
+        if (entry.isDirectory()) await walk(path);
+        else if (!entry.isFile() || entry.size > 25 * 1024 * 1024) throw Error('Cloudflare asset exceeds 25 MiB or is not a regular file');
+        else files++;
+      }
     }
   }
   await walk(root);
@@ -65,9 +70,17 @@ async function stagePublicApi(temporary, site, project) {
   if ((await lstat(join(site, 'fight-club/index.html')).catch(() => null))?.isFile()) lines.push('/index.html /league 302');
   // The reviewed table (deploy/site-redirects.json): only the rules whose page this build has moved.
   const redirects = await siteRedirectState(site, await loadSiteRedirects());
-  lines.push(...siteRedirectLines(redirects.active));
+  const redirectLines = siteRedirectLines(redirects.active);
+  lines.push(...redirectLines);
   if (lines.length) await writeFile(join(site, '_redirects'), lines.join('\n') + '\n');
-  console.log(JSON.stringify({ status: 'site-redirects', active: redirects.active.length, pending: redirects.pending.map(rule => rule.from) }));
+  console.log(
+    JSON.stringify({
+      status: 'site-redirects',
+      active: redirects.active.length,
+      variants: redirectLines.length,
+      pending: redirects.pending.map(rule => rule.from),
+    }),
+  );
   const config = join(temporary, 'wrangler.jsonc');
   await writeFile(
     config,
@@ -162,7 +175,7 @@ export function pagesDeployment(text, { project, commit, preview }) {
  */
 export async function deployPagesDirectory({ site, project, branch, commit, account, preview, cwd }) {
   const wrangler = fileURLToPath(new URL('../node_modules/wrangler/bin/wrangler.js', import.meta.url));
-  const output = join(cwd, 'wrangler-output.jsonl');
+  const output = join(cwd, preview ? 'wrangler-preview-output.jsonl' : 'wrangler-production-output.jsonl');
   const env = { ...process.env, CLOUDFLARE_ACCOUNT_ID: account, CI: 'true', WRANGLER_SEND_METRICS: 'false', WRANGLER_OUTPUT_FILE_PATH: output };
   execFileSync(
     process.execPath,
@@ -172,75 +185,137 @@ export async function deployPagesDirectory({ site, project, branch, commit, acco
   return pagesDeployment(await readFile(output, 'utf8'), { project, commit, preview });
 }
 
-/** @param {string} sha @param {ReturnType<typeof import('./site-publication.mjs').publicationConfig>} config @param {{preview?:boolean}} options */
-export async function publishCloudflare(sha, config, { preview = false } = {}) {
+/** @typedef {Awaited<ReturnType<typeof loadSiteRedirects>>} SiteRedirects */
+
+/**
+ * A new redirect needs a verified preview before production. Both environments use the same prepared snapshot.
+ * @template T
+ * @param {SiteRedirects} redirects
+ * @param {(preview: boolean) => Promise<T>} deployAndVerify
+ * @param {{ preview?: boolean, previewFirst?: boolean, productionBase?: URL, request?: typeof fetch, receipt?: string }} [options]
+ */
+export async function publishWithRedirectPreview(
+  redirects,
+  deployAndVerify,
+  { preview = false, previewFirst = false, productionBase = new URL('.', hosting.siteUrl), request = fetch, receipt } = {},
+) {
+  if (preview && previewFirst) throw Error('Choose either preview-only or preview-first publication');
+  async function verifyPreview() {
+    const result = await deployAndVerify(true);
+    await recordPreviewedRedirects(redirects, receipt);
+    return result;
+  }
+  if (preview) return verifyPreview();
+  const fresh = previewFirst ? redirects : await redirectsNotLive(productionBase, redirects, request);
+  const missing = await unpreviewedRedirects(fresh, receipt);
+  if (previewFirst || missing.length) {
+    console.log(JSON.stringify({ status: 'preview-required', forced: previewFirst, unverifiedVariants: missing.length }));
+    await verifyPreview();
+    await assertRedirectsPreviewed(fresh, receipt);
+  }
+  return deployAndVerify(false);
+}
+
+/**
+ * @param {string} sha @param {ReturnType<typeof import('./site-publication.mjs').publicationConfig>} config
+ * @param {import('./site-publication.mjs').SitePublicationOptions} [options]
+ */
+export async function publishCloudflare(sha, config, { preview, previewFirst, checkout: pushedCheckout } = {}) {
   const parent = await realpath(tmpdir()),
     temporary = await mkdtemp(join(parent, 'oddbout-cloudflare-'));
-  const checkout = join(temporary, 'repository'),
+  const checkout = pushedCheckout ?? join(temporary, 'repository'),
     site = join(temporary, 'site'),
     archive = join(temporary, 'site.tar');
   // Relative names from the temporary directory: GNU tar (Git Bash puts it first on Windows) reads `C:` in an absolute path as a
   // remote host and stops after the branch commit, while Windows' bsdtar accepts either.
   const extract = () => execFileSync('tar', ['-xf', 'site.tar', '-C', 'site'], { cwd: temporary });
   try {
-    git(
-      parent,
-      'clone',
-      '--depth=1',
-      '--single-branch',
-      '--no-checkout',
-      '--branch',
-      hosting.branch,
-      'git@github.com:jeonghwanko/oddbout-starter.git',
-      checkout,
-    );
+    const archiveStarted = performance.now();
+    if (!pushedCheckout) {
+      git(
+        parent,
+        'clone',
+        '--depth=1',
+        '--single-branch',
+        '--no-checkout',
+        '--branch',
+        hosting.branch,
+        'git@github.com:jeonghwanko/oddbout-starter.git',
+        checkout,
+      );
+    }
     if (git(checkout, 'rev-parse', 'HEAD') !== sha) throw Error('Publication branch changed; refusing stale deployment');
     if (
-      git(checkout, 'ls-tree', '-r', 'HEAD')
+      git(checkout, 'ls-tree', '-r', sha)
         .split('\n')
         .some(line => !/^100644 blob /.test(line))
     )
       throw Error('Publication contains non-regular Git objects');
     await mkdir(site);
-    git(checkout, '-c', 'core.autocrlf=false', 'archive', `--output=${archive}`, 'HEAD', '--', '.', ':!creator-kit');
+    git(checkout, '-c', 'core.autocrlf=false', 'archive', `--output=${archive}`, sha, '--', '.', ':!creator-kit');
     extract();
+    reportPublicationTiming('cloudflare-archive', archiveStarted);
+    const checksStarted = performance.now();
     const release = await verifyArtifact(site);
-    if (git(checkout, 'ls-tree', 'HEAD', '--', 'creator-kit')) {
-      git(checkout, '-c', 'core.autocrlf=false', 'archive', `--output=${archive}`, 'HEAD', '--', 'creator-kit');
+    const kitFiles = git(checkout, 'ls-tree', '-r', '--name-only', sha, '--', 'creator-kit').split('\n').filter(Boolean);
+    if (kitFiles.length) {
+      git(checkout, '-c', 'core.autocrlf=false', 'archive', `--output=${archive}`, sha, '--', 'creator-kit');
       extract();
     }
     await validateCloudflareFiles(site, { headers: chatGptEmbedBuild(hosting.chatgptEmbed).headers });
     const redirects = await stagePublicApi(temporary, site, config.project);
-    // A redirect production has never served is verified on a preview first (site-redirects.mjs assertRedirectsPreviewed).
-    if (!preview) await assertRedirectsPreviewed(await redirectsNotLive(new URL('.', hosting.siteUrl), redirects));
-    const current = git(checkout, 'ls-remote', 'origin', `refs/heads/${hosting.branch}`).split(/\s/)[0];
-    if (current !== sha) throw Error('Publication branch changed before Cloudflare upload');
-    const branch = preview ? 'hosting-migration' : config.branch;
-    const base = await deployPagesDirectory({ site, project: config.project, branch, commit: sha, account: config.account, preview, cwd: temporary });
-    await waitForJson(new URL('deployment.json', base), body => body.buildId === release.buildId && body.digest === release.digest);
-    await verifyPagesPublicApi(base);
-    await verifySiteRedirects(base, redirects);
-    if (preview) await recordPreviewedRedirects(redirects);
-    await verifyLiveSite(site, { siteUrl: base, request: cloudflareFetch() });
-    // Immutable kits are not in the game's fingerprint or module graph; compare their bytes too.
-    const kitFiles = git(checkout, 'ls-tree', '-r', '--name-only', 'HEAD', '--', 'creator-kit').split('\n').filter(Boolean);
-    for (const file of kitFiles) {
-      const response = await fetch(new URL(file, base), { redirect: 'error', signal: AbortSignal.timeout(30_000) });
-      const expected = await readFile(join(site, file));
-      if (
-        !response.ok ||
-        createHash('sha256')
-          .update(Buffer.from(await response.arrayBuffer()))
-          .digest('hex') !== createHash('sha256').update(expected).digest('hex')
-      )
-        throw Error(`Cloudflare kit verification failed: ${file}`);
-    }
-    console.log(JSON.stringify({ status: 'cloudflare-verified', url: base, preview, commit: sha, buildId: release.buildId }));
-    if (!preview) {
-      await waitForJson(new URL('deployment.json', hosting.siteUrl), body => body.buildId === release.buildId && body.digest === release.digest);
-      await verifyLiveSite(site, { request: cloudflareFetch() });
-    }
-    return { url: base, preview };
+    reportPublicationTiming('cloudflare-artifact-checks', checksStarted);
+
+    const matchesRelease = (/** @type {{ buildId?: string, digest?: string }} */ body) => body.buildId === release.buildId && body.digest === release.digest;
+    return await publishWithRedirectPreview(
+      redirects,
+      async isPreview => {
+        const uploadStarted = performance.now();
+        const current = git(checkout, 'ls-remote', 'origin', `refs/heads/${hosting.branch}`).split(/\s/)[0];
+        if (current !== sha) throw Error('Publication branch changed before Cloudflare upload');
+        const branch = isPreview ? 'hosting-migration' : config.branch;
+        const base = await deployPagesDirectory({
+          site,
+          project: config.project,
+          branch,
+          commit: sha,
+          account: config.account,
+          preview: isPreview,
+          cwd: temporary,
+        });
+        reportPublicationTiming(isPreview ? 'preview-upload' : 'production-upload', uploadStarted);
+
+        const verificationStarted = performance.now();
+        await waitForJson(new URL('deployment.json', base), matchesRelease);
+        await verifyPagesPublicApi(base);
+        await verifySiteRedirects(base, redirects);
+        await verifyLiveSite(site, { siteUrl: base, request: cloudflareFetch() });
+        // Immutable kits are not in the game's fingerprint or module graph; compare their bytes too.
+        for await (const _batch of fileCheckBatches(kitFiles, async file => {
+          const response = await fetch(new URL(file, base), { redirect: 'error', signal: AbortSignal.timeout(30_000) });
+          const expected = await readFile(join(site, file));
+          if (
+            !response.ok ||
+            createHash('sha256')
+              .update(Buffer.from(await response.arrayBuffer()))
+              .digest('hex') !== createHash('sha256').update(expected).digest('hex')
+          )
+            throw Error(`Cloudflare kit verification failed: ${file}`);
+        })) {
+          // Each completed batch has checked the immutable kit bytes.
+        }
+        console.log(JSON.stringify({ status: 'cloudflare-verified', url: base, preview: isPreview, commit: sha, buildId: release.buildId }));
+        if (!isPreview) {
+          const marker = new URL('deployment.json', hosting.siteUrl);
+          marker.searchParams.set('build', release.buildId);
+          await waitForJson(marker, matchesRelease);
+          await verifyLiveSite(site, { request: cloudflareFetch() });
+        }
+        reportPublicationTiming(isPreview ? 'preview-verification' : 'production-verification', verificationStarted);
+        return { url: base, preview: isPreview };
+      },
+      { preview, previewFirst },
+    );
   } finally {
     const target = await realpath(temporary);
     // biome-ignore lint/correctness/noUnsafeFinally: refuse cleanup outside the verified temporary parent even when publication failed

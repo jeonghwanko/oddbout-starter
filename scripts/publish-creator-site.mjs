@@ -3,17 +3,30 @@ import { cp, mkdtemp, readdir, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os';
 import { resolve, join, dirname } from 'node:path';
 import assert from 'node:assert/strict';
-import { hosting, git, verifyArtifact, verifyLiveSite, waitForJson, restoreCreatorKitReleases, assertCreatorKitsUnchanged } from './hosting-lib.mjs';
-import { loadPublicationEnvironment, publicationConfig, publicationFetch, requestSitePublication } from './site-publication.mjs';
+import {
+  hosting,
+  git,
+  reportPublicationTiming,
+  verifyArtifact,
+  verifyLiveSite,
+  waitForJson,
+  restoreCreatorKitReleases,
+  assertCreatorKitsUnchanged,
+} from './hosting-lib.mjs';
+import { loadPublicationEnvironment, publicationConfig, requestSitePublication } from './site-publication.mjs';
 
 const [output, option, ...extra] = process.argv.slice(2);
-if (!output || extra.length || (option && option !== '--dry-run')) {
-  throw new Error('Usage: node scripts/publish-creator-site.mjs <built-directory> [--dry-run]');
+if (!output || extra.length || (option && !['--dry-run', '--preview-first'].includes(option))) {
+  throw new Error('Usage: node scripts/publish-creator-site.mjs <built-directory> [--dry-run | --preview-first]');
 }
 const source = resolve(output);
 await loadPublicationEnvironment();
-publicationConfig();
+const { provider } = publicationConfig();
+const previewFirst = option === '--preview-first';
+if (previewFirst && provider !== 'cloudflare-pages') throw Error('Preview requires cloudflare-pages');
+const artifactCheckStarted = performance.now();
 const release = await verifyArtifact(source);
+reportPublicationTiming('built-artifact-check', artifactCheckStarted);
 if ((await readdir(source)).includes('creator-kit')) throw Error('Publish immutable creator-kit files separately with publish-creator-kit.mjs');
 if (option === '--dry-run') {
   console.log(JSON.stringify({ status: 'verified-only', branch: hosting.branch, ...release }));
@@ -39,6 +52,7 @@ if (option === '--dry-run') {
     }
     // No checkout means old tracked assets are absent. add -A removes stale assets
     // from the new commit without deleting anything in an existing user checkout.
+    const publishStarted = performance.now();
     git(
       parent,
       'clone',
@@ -70,12 +84,17 @@ if (option === '--dry-run') {
     git(checkout, 'commit', '-m', `Deploy AI Fighter ${release.sourceCommit.slice(0, 12)}`);
     // No force: concurrent deploys must fail instead of replacing newer work.
     git(checkout, 'push', 'origin', `HEAD:refs/heads/${hosting.branch}`);
-    console.log(JSON.stringify({ status: 'pushed', commit: git(checkout, 'rev-parse', 'HEAD') }));
-    await requestSitePublication(git(checkout, 'rev-parse', 'HEAD'));
-    const marker = new URL('deployment.json', hosting.siteUrl);
-    marker.searchParams.set('build', release.buildId);
-    await waitForJson(marker, body => body.buildId === release.buildId && body.digest === release.digest);
-    await verifyLiveSite(checkout, { request: publicationFetch() });
+    reportPublicationTiming('git-publication', publishStarted);
+    const commit = git(checkout, 'rev-parse', 'HEAD');
+    console.log(JSON.stringify({ status: 'pushed', commit }));
+    await requestSitePublication(commit, { checkout, previewFirst });
+    // Cloudflare verifies the custom domain from its sealed Git archive.
+    if (provider === 'github-pages') {
+      const marker = new URL('deployment.json', hosting.siteUrl);
+      marker.searchParams.set('build', release.buildId);
+      await waitForJson(marker, body => body.buildId === release.buildId && body.digest === release.digest);
+      await verifyLiveSite(checkout);
+    }
     console.log(JSON.stringify({ status: 'live', siteUrl: hosting.siteUrl, buildId: release.buildId }));
   } finally {
     if (previousSsh === undefined) delete process.env.GIT_SSH_COMMAND;

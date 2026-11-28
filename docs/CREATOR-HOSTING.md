@@ -57,7 +57,13 @@ A rule is active only when the build publishes `to` and no longer publishes `fro
 target is not, the rule waits, so the table may merge before or after the game commit that moves the page. Both published, or neither,
 stops the publication. An `.html` source is redirected in both spellings (`/x.html` and `/x`). `to` is the clean address, because Pages
 answers `.html` with a second redirect. After the upload the publisher requests every active source with `?lang=ko` on the deployment URL.
-Each must answer with its status, its target and the same query. That check runs after the upload, so a production publication cannot turn on a rule production does not serve yet unless a preview on the same machine verified that rule (`redirect-previews.json` in `~/.local/state/oddbout/`, `ODDBOUT_REDIRECT_PREVIEWS` overrides): the publisher stops before the upload and names the command. Run `npm run site:republish -- <publication sha> --preview`, then publish again (`site:republish -- <sha>`, or the game's `publish:fighter`).
+Each must answer with its status, its target and the same query. If production lacks a rule and this machine has no preview
+record for it, the publisher uploads the prepared archive to preview first. It records the rule only after preview verifies
+the deployment marker, public API, redirects, and site and kit bytes. It then checks that the publication branch still points
+to the same SHA and uploads the same files to production. A failed preview stops the command before production.
+The record lives in `~/.local/state/oddbout/redirect-previews.json`. Set `ODDBOUT_REDIRECT_PREVIEWS` to change its path.
+Use `--preview-first` to require a fresh preview even when the rules already have evidence. Use `--preview` with
+`npm run site:republish -- <publication sha>` to verify preview without uploading to production.
 The default branch named by `ODDBOUT_CLOUDFLARE_BRANCH` must match the project's
 production branch; deployment metadata validation rejects a mismatch.
 
@@ -73,6 +79,9 @@ Pages, run that publisher with the same provider settings, which the game keeps 
 `kaito_web/deploy/oddbout-site-publication.json` (no secret: the login is Wrangler's or `CLOUDFLARE_API_TOKEN`). Left on the
 `github-pages` default it refuses with `site-provider-mismatch` before writing anything.
 Recovery never rebuilds or bypasses validation. No provider fallback is automatic.
+After a failure following the Git push, recover the same SHA with
+`npm run site:republish -- <publication sha> --preview-first`. The logs report archive preparation, artifact checks, upload and
+verification separately as `publication-timing` entries in milliseconds.
 
 To roll back, select `github-pages`, republish the reviewed tree, verify it on GitHub,
 and restore the recorded site DNS targets. Keep the other provider available until

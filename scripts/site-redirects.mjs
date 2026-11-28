@@ -157,11 +157,16 @@ export async function recordPreviewedRedirects(active, file = previewedRedirects
  * @param {SiteRedirect[]} fresh @param {string} [file]
  */
 export async function assertRedirectsPreviewed(fresh, file = previewedRedirectsFile()) {
-  const rules = await previewed(file);
-  const missing = siteRedirectLines(fresh).filter(line => !rules.has(line));
+  const missing = await unpreviewedRedirects(fresh, file);
   if (missing.length)
     throw Error(
       `site-redirects: ${missing.length} new redirect(s) were never verified on a preview deployment (${missing[0]} …). ` +
         'Run `npm run site:republish -- <publication sha> --preview` first, then publish again.',
     );
+}
+
+/** @param {SiteRedirect[]} fresh @param {string} [file] */
+export async function unpreviewedRedirects(fresh, file = previewedRedirectsFile()) {
+  const rules = await previewed(file);
+  return siteRedirectLines(fresh).filter(line => !rules.has(line));
 }

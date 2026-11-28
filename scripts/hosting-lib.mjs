@@ -12,6 +12,24 @@ import { CHATGPT_GAME_ENTRY, chatGptEmbedBuild } from './chatgpt-embed-site.mjs'
 
 export const hosting = JSON.parse(await readFile(new URL('../deploy/creator-site.json', import.meta.url), 'utf8'));
 const staticPages = [...policyFiles, ...browserFightingFiles];
+const FILE_CHECK_CONCURRENCY = 4;
+
+/** Keep input order and let all in-flight work settle before a caller cleans up.
+ * @template T, R @param {T[]} items @param {(item: T) => Promise<R>} check */
+export async function* fileCheckBatches(items, check) {
+  for (let start = 0; start < items.length; start += FILE_CHECK_CONCURRENCY) {
+    const batch = await Promise.allSettled(items.slice(start, start + FILE_CHECK_CONCURRENCY).map(check));
+    yield batch.map(result => {
+      if (result.status === 'rejected') throw result.reason;
+      return result.value;
+    });
+  }
+}
+
+/** @param {string} phase @param {number} start */
+export function reportPublicationTiming(phase, start) {
+  console.log(JSON.stringify({ status: 'publication-timing', phase, ms: Math.round(performance.now() - start) }));
+}
 /**
  * Node's default 1 MiB output buffer is too small for the site branch: `git ls-tree -r HEAD` of the Pages branch lists thousands of
  * art files (over 1 MiB on 2026-11-20) and failed with ENOBUFS before the Cloudflare upload.
@@ -106,6 +124,8 @@ function assertPublicContent(data, path) {
 /** @param {string} root @param {{ gitCheckout?: boolean }} [options] */
 export async function fingerprint(root, { gitCheckout = false } = {}) {
   const hash = createHash('sha256');
+  /** @type {string[]} */
+  const paths = [];
   let files = 0,
     bytes = 0;
   /** @param {string} dir */
@@ -121,22 +141,31 @@ export async function fingerprint(root, { gitCheckout = false } = {}) {
         throw new Error(`Non-public artifact rejected: ${path}`);
       }
       if (entry.isDirectory()) await visit(join(dir, entry.name), path + '/');
-      else if (entry.isFile()) {
-        const data = await readFile(join(dir, entry.name));
-        if (data.length >= 100 * 1024 * 1024) throw new Error(`Artifact exceeds GitHub's single-file limit: ${path}`);
-        assertPublicContent(data, path);
-        if (path === 'deployment.json') continue; // Inspect the marker, but do not hash itself.
-        if (data.subarray(0, 42).toString().startsWith('version https://git-lfs.github.com/spec/v1')) {
-          throw new Error(`Unresolved Git LFS asset: ${path}`);
-        }
-        bytes += data.length;
-        files++;
-        if (bytes > 950 * 1024 * 1024) throw new Error('Pages artifact exceeds the 950 MiB safety limit');
-        hash.update(path + '\0' + createHash('sha256').update(data).digest('hex') + '\n');
-      } else throw new Error(`Unsupported artifact: ${path}`);
+      else if (entry.isFile()) paths.push(path);
+      else throw new Error(`Unsupported artifact: ${path}`);
     }
   }
   await visit(root);
+  for await (const batch of fileCheckBatches(paths, async path => {
+    const data = await readFile(join(root, path));
+    if (data.length >= 100 * 1024 * 1024) throw new Error(`Artifact exceeds GitHub's single-file limit: ${path}`);
+    assertPublicContent(data, path);
+    if (path === 'deployment.json') return null; // Inspect the marker, but do not hash itself.
+    if (data.subarray(0, 42).toString().startsWith('version https://git-lfs.github.com/spec/v1')) {
+      throw new Error(`Unresolved Git LFS asset: ${path}`);
+    }
+    return { path, size: data.length, digest: createHash('sha256').update(data).digest('hex') };
+  })) {
+    // The release digest still uses the same depth-first, sorted file order.
+    for (const file of batch) {
+      if (file) {
+        bytes += file.size;
+        files++;
+        if (bytes > 950 * 1024 * 1024) throw new Error('Pages artifact exceeds the 950 MiB safety limit');
+        hash.update(file.path + '\0' + file.digest + '\n');
+      }
+    }
+  }
   return { digest: hash.digest('hex'), files, bytes };
 }
 
@@ -163,8 +192,9 @@ export async function verifyArtifact(root, options) {
   // The pages' module graph resolves and every file it names is in the build, before anything is pushed (2026-10-31: the graph was first
   // walked by the live check, so a page it could not follow — service.html — stopped the publication after the site was already live and
   // the game's later step, its creation context, did not run).
-  for (const file of await publishedFiles(root)) {
-    if (!(await stat(join(root, file)).catch(() => null))?.isFile()) throw new Error(`Missing built asset: ${file}`);
+  const requiredFiles = [...(await publishedFiles(root))];
+  for await (const batch of fileCheckBatches(requiredFiles, async file => ({ file, entry: await stat(join(root, file)).catch(() => null) }))) {
+    for (const { file, entry } of batch) if (!entry?.isFile()) throw new Error(`Missing built asset: ${file}`);
   }
   const measured = await fingerprint(root, options);
   if (measured.digest !== release.digest || measured.files !== release.files || measured.bytes !== release.bytes) {
@@ -289,20 +319,21 @@ export async function publishedFiles(root, siteUrl = hosting.siteUrl) {
 export async function verifyLiveSite(root, { siteUrl = hosting.siteUrl, request = fetch, wait = ms => new Promise(done => setTimeout(done, ms)) } = {}) {
   const files = await publishedFiles(root, siteUrl);
   const rootDocument = files.has('fight-club/index.html') ? './' : 'index.html';
-  await verifyServedFiles(root, files, { siteUrl, request, wait, rootDocument });
+  await verifyServedFiles(root, files, { siteUrl, request, wait, rootDocument, concurrent: true });
 }
 
 /**
  * Each file, served under `siteUrl`, has the built bytes and its type's content type (the game sites check every file they publish).
  * @param {string} root @param {Iterable<string>} files
- * @param {{ siteUrl: string, request?: typeof fetch, wait?: (ms: number) => Promise<unknown>, rootDocument?: string }} options
+ * @param {{ siteUrl: string, request?: typeof fetch, wait?: (ms: number) => Promise<unknown>, rootDocument?: string, concurrent?: boolean }} options
  */
 export async function verifyServedFiles(
   root,
   files,
-  { siteUrl, request = fetch, wait = ms => new Promise(done => setTimeout(done, ms)), rootDocument = 'index.html' },
+  { siteUrl, request = fetch, wait = ms => new Promise(done => setTimeout(done, ms)), rootDocument = 'index.html', concurrent = false },
 ) {
-  for (const file of files) {
+  /** @param {string} file */
+  async function verify(file) {
     const url = new URL(file === 'index.html' ? rootDocument : file, siteUrl);
     const response = await fetchPublished(url, file, request, wait);
     const mime = file.endsWith('.html')
@@ -324,6 +355,7 @@ export async function verifyServedFiles(
                     : null;
     const actualMime = (response.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase();
     if (mime && (typeof mime === 'string' ? actualMime !== mime : !mime.test(actualMime))) {
+      await response.body?.cancel();
       throw new Error(`Incorrect published content type: ${file}`);
     }
     const expected = await readFile(join(root, file));
@@ -337,6 +369,13 @@ export async function verifyServedFiles(
     if (bytes !== expected.length || actual.digest('hex') !== createHash('sha256').update(expected).digest('hex')) {
       throw new Error(`Published asset differs from build: ${file}`);
     }
+  }
+  if (concurrent) {
+    for await (const _batch of fileCheckBatches([...files], verify)) {
+      // Each completed batch has verified the response bytes and content types.
+    }
+  } else {
+    for (const file of files) await verify(file);
   }
 }
 

@@ -72,14 +72,16 @@ export function publicationFetch() {
   return publicationConfig().provider === 'cloudflare-pages' ? cloudflareFetch() : fetch;
 }
 
+/** @typedef {{ preview?: boolean, previewFirst?: boolean, checkout?: string }} SitePublicationOptions */
+
 /** Publish the current verified Git tree, preserving the existing GitHub route by default.
- * @param {string} sha @param {{preview?: boolean}} [options] */
+ * @param {string} sha @param {SitePublicationOptions} [options] */
 export async function requestSitePublication(sha, options = {}) {
   await loadPublicationEnvironment();
   const config = publicationConfig();
   if (!/^[a-f0-9]{40}$/.test(sha)) throw Error('Site publication requires a full commit SHA');
   if (config.provider === 'github-pages') {
-    if (options.preview) throw Error('Preview requires cloudflare-pages');
+    if (options.preview || options.previewFirst) throw Error('Preview requires cloudflare-pages');
     requestPagesPublication(sha);
     return;
   }

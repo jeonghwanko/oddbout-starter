@@ -4,8 +4,61 @@ import { mkdtemp, writeFile, rm, open, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { publicationConfig, loadPublicationEnvironment, cloudflareFetch, assertProviderServesSite } from '../scripts/site-publication.mjs';
-import { pagesDeployment, validateCloudflareFiles, verifyPagesPublicApi } from '../scripts/cloudflare-publication.mjs';
+import { pagesDeployment, publishWithRedirectPreview, validateCloudflareFiles, verifyPagesPublicApi } from '../scripts/cloudflare-publication.mjs';
 import { chatGptEmbedBuild } from '../scripts/chatgpt-embed-site.mjs';
+import { verifySiteRedirects } from '../scripts/site-redirects.mjs';
+
+test('new redirects preview before production, existing preview evidence is reused, and preview-first forces another preview', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'site-auto-preview-'));
+  const rules = [{ from: '/fighters.html', to: '/fight-club/fighters/', status: 301 }];
+  const options = {
+    productionBase: new URL('https://live.example'),
+    request: async () => new Response(null, { status: 404 }),
+    receipt: join(root, 'receipt.json'),
+  };
+  const phases = [];
+  const deploy = async preview => phases.push(preview ? 'preview' : 'production');
+  try {
+    await publishWithRedirectPreview(rules, deploy, options);
+    assert.deepEqual(phases.splice(0), ['preview', 'production']);
+    await publishWithRedirectPreview(rules, deploy, options);
+    assert.deepEqual(phases.splice(0), ['production']);
+    await publishWithRedirectPreview(rules, deploy, { ...options, previewFirst: true });
+    assert.deepEqual(phases.splice(0), ['preview', 'production']);
+    await publishWithRedirectPreview(rules, deploy, { ...options, preview: true });
+    assert.deepEqual(phases, ['preview']);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('a preview that loses the language query cannot upload production or leave a valid receipt', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'site-failed-preview-'));
+  const rules = [{ from: '/fighters.html', to: '/fight-club/fighters/', status: 301 }];
+  const options = {
+    productionBase: new URL('https://live.example'),
+    request: async () => new Response(null, { status: 404 }),
+    receipt: join(root, 'receipt.json'),
+  };
+  const phases = [];
+  const deploy = async preview => {
+    phases.push(preview ? 'preview' : 'production');
+    if (preview) {
+      await verifySiteRedirects(
+        'https://preview.example/',
+        rules,
+        async () => new Response(null, { status: 301, headers: { location: '/fight-club/fighters/' } }),
+      );
+    }
+  };
+  try {
+    await assert.rejects(publishWithRedirectPreview(rules, deploy, options), /expected 301 .*\?lang=ko/);
+    await assert.rejects(publishWithRedirectPreview(rules, deploy, options), /expected 301 .*\?lang=ko/);
+    assert.deepEqual(phases, ['preview', 'preview']);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 test('publication defaults to GitHub and rejects unknown or incomplete provider settings', () => {
   assert.equal(publicationConfig({}).provider, 'github-pages');
