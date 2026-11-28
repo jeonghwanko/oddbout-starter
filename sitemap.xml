@@ -1,45 +1,34 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://oddbout.com/</loc></url>
-  <url><loc>https://oddbout.com/fighters</loc></url>
   <url><loc>https://oddbout.com/about</loc></url>
-  <url><loc>https://oddbout.com/service</loc></url>
-  <url><loc>https://oddbout.com/service.ko</loc></url>
-  <url><loc>https://oddbout.com/docs</loc></url>
-  <url><loc>https://oddbout.com/privacy</loc></url>
-  <url><loc>https://oddbout.com/credits</loc></url>
-  <url><loc>https://oddbout.com/home/en/</loc></url>
-  <url><loc>https://oddbout.com/home/ja/</loc></url>
-  <url><loc>https://oddbout.com/fight-club/</loc></url>
-  <url><loc>https://oddbout.com/fight-club/ko/</loc></url>
-  <url><loc>https://oddbout.com/fight-club/ja/</loc></url>
-  <url><loc>https://oddbout.com/twitch</loc></url>
-  <url><loc>https://oddbout.com/bet</loc></url>
   <url><loc>https://oddbout.com/ai-fighter-creator/</loc></url>
   <url><loc>https://oddbout.com/ai-fighter-creator/index.ko</loc></url>
   <url><loc>https://oddbout.com/ai-fighter-creator/privacy</loc></url>
-  <url><loc>https://oddbout.com/ai-fighter-creator/terms</loc></url>
-  <url><loc>https://oddbout.com/ai-fighter-creator/support</loc></url>
   <url><loc>https://oddbout.com/ai-fighter-creator/privacy.ko</loc></url>
+  <url><loc>https://oddbout.com/ai-fighter-creator/support</loc></url>
+  <url><loc>https://oddbout.com/ai-fighter-creator/terms</loc></url>
   <url><loc>https://oddbout.com/ai-fighter-creator/terms.ko</loc></url>
-  <url><loc>https://oddbout.com/browser-fighting-game/</loc></url>
+  <url><loc>https://oddbout.com/bet</loc></url>
   <url><loc>https://oddbout.com/browser-fighting-game/index.en</loc></url>
-  <url><loc>https://oddbout.com/updates</loc></url>
-  <url><loc>https://oddbout.com/updates.ko</loc></url>
-  <url><loc>https://oddbout.com/updates/2026-11-18-x-follower-cup</loc><lastmod>2026-11-18</lastmod></url>
-  <url><loc>https://oddbout.com/updates/2026-11-18-running-minigame</loc><lastmod>2026-11-18</lastmod></url>
-  <url><loc>https://oddbout.com/updates/2026-11-03-vice-arrives</loc><lastmod>2026-11-03</lastmod></url>
-  <url><loc>https://oddbout.com/updates/2026-11-03-first-version-plan</loc><lastmod>2026-11-03</lastmod></url>
-  <url><loc>https://oddbout.com/updates.en</loc></url>
-  <url><loc>https://oddbout.com/updates/2026-11-18-x-follower-cup.en</loc><lastmod>2026-11-18</lastmod></url>
-  <url><loc>https://oddbout.com/updates/2026-11-18-running-minigame.en</loc><lastmod>2026-11-18</lastmod></url>
-  <url><loc>https://oddbout.com/updates/2026-11-03-vice-arrives.en</loc><lastmod>2026-11-03</lastmod></url>
-  <url><loc>https://oddbout.com/updates/2026-11-03-first-version-plan.en</loc><lastmod>2026-11-03</lastmod></url>
-  <url><loc>https://oddbout.com/updates.ja</loc></url>
-  <url><loc>https://oddbout.com/updates/2026-11-18-x-follower-cup.ja</loc><lastmod>2026-11-18</lastmod></url>
-  <url><loc>https://oddbout.com/updates/2026-11-18-running-minigame.ja</loc><lastmod>2026-11-18</lastmod></url>
-  <url><loc>https://oddbout.com/updates/2026-11-03-vice-arrives.ja</loc><lastmod>2026-11-03</lastmod></url>
-  <url><loc>https://oddbout.com/updates/2026-11-03-first-version-plan.ja</loc><lastmod>2026-11-03</lastmod></url>
+  <url><loc>https://oddbout.com/browser-fighting-game/</loc></url>
+  <url><loc>https://oddbout.com/cloud-plugin/claude</loc></url>
+  <url><loc>https://oddbout.com/cloud-plugin/claude.ko</loc></url>
+  <url><loc>https://oddbout.com/cloud-plugin/</loc></url>
+  <url><loc>https://oddbout.com/cloud-plugin/index.ko</loc></url>
+  <url><loc>https://oddbout.com/cloud-plugin/privacy</loc></url>
+  <url><loc>https://oddbout.com/cloud-plugin/privacy.ko</loc></url>
+  <url><loc>https://oddbout.com/cloud-plugin/support</loc></url>
+  <url><loc>https://oddbout.com/cloud-plugin/support.ko</loc></url>
+  <url><loc>https://oddbout.com/cloud-plugin/terms</loc></url>
+  <url><loc>https://oddbout.com/cloud-plugin/terms.ko</loc></url>
+  <url><loc>https://oddbout.com/contact</loc></url>
+  <url><loc>https://oddbout.com/credits</loc></url>
+  <url><loc>https://oddbout.com/docs</loc></url>
+  <url><loc>https://oddbout.com/fight-club/</loc></url>
+  <url><loc>https://oddbout.com/fight-club/ja/</loc></url>
+  <url><loc>https://oddbout.com/fight-club/ko/</loc></url>
+  <url><loc>https://oddbout.com/fighters</loc></url>
   <url><loc>https://oddbout.com/fighters/leon/en/</loc></url>
   <url><loc>https://oddbout.com/fighters/leon/</loc></url>
   <url><loc>https://oddbout.com/fighters/leon/ja/</loc></url>
@@ -55,4 +44,29 @@
   <url><loc>https://oddbout.com/fighters/velora/en/</loc></url>
   <url><loc>https://oddbout.com/fighters/velora/</loc></url>
   <url><loc>https://oddbout.com/fighters/velora/ja/</loc></url>
+  <url><loc>https://oddbout.com/games/islands/intro</loc></url>
+  <url><loc>https://oddbout.com/home/en/</loc></url>
+  <url><loc>https://oddbout.com/home/ja/</loc></url>
+  <url><loc>https://oddbout.com/privacy</loc></url>
+  <url><loc>https://oddbout.com/race</loc></url>
+  <url><loc>https://oddbout.com/service</loc></url>
+  <url><loc>https://oddbout.com/service.ko</loc></url>
+  <url><loc>https://oddbout.com/terms</loc></url>
+  <url><loc>https://oddbout.com/twitch</loc></url>
+  <url><loc>https://oddbout.com/updates.en</loc></url>
+  <url><loc>https://oddbout.com/updates</loc></url>
+  <url><loc>https://oddbout.com/updates.ja</loc></url>
+  <url><loc>https://oddbout.com/updates.ko</loc></url>
+  <url><loc>https://oddbout.com/updates/2026-11-03-first-version-plan.en</loc><lastmod>2026-11-03</lastmod></url>
+  <url><loc>https://oddbout.com/updates/2026-11-03-first-version-plan</loc><lastmod>2026-11-03</lastmod></url>
+  <url><loc>https://oddbout.com/updates/2026-11-03-first-version-plan.ja</loc><lastmod>2026-11-03</lastmod></url>
+  <url><loc>https://oddbout.com/updates/2026-11-03-vice-arrives.en</loc><lastmod>2026-11-03</lastmod></url>
+  <url><loc>https://oddbout.com/updates/2026-11-03-vice-arrives</loc><lastmod>2026-11-03</lastmod></url>
+  <url><loc>https://oddbout.com/updates/2026-11-03-vice-arrives.ja</loc><lastmod>2026-11-03</lastmod></url>
+  <url><loc>https://oddbout.com/updates/2026-11-18-running-minigame.en</loc><lastmod>2026-11-18</lastmod></url>
+  <url><loc>https://oddbout.com/updates/2026-11-18-running-minigame</loc><lastmod>2026-11-18</lastmod></url>
+  <url><loc>https://oddbout.com/updates/2026-11-18-running-minigame.ja</loc><lastmod>2026-11-18</lastmod></url>
+  <url><loc>https://oddbout.com/updates/2026-11-18-x-follower-cup.en</loc><lastmod>2026-11-18</lastmod></url>
+  <url><loc>https://oddbout.com/updates/2026-11-18-x-follower-cup</loc><lastmod>2026-11-18</lastmod></url>
+  <url><loc>https://oddbout.com/updates/2026-11-18-x-follower-cup.ja</loc><lastmod>2026-11-18</lastmod></url>
 </urlset>
