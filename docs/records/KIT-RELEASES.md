@@ -4,6 +4,43 @@ Earlier source-kit releases, moved here from [PLUGIN-DISTRIBUTION.md](../PLUGIN-
 release and the distribution procedures. Each entry records that release as published and verified at the time; it is not
 current procedure. Published release paths stay immutable.
 
+**Previous source-kit release: 0.6.22** (2026-11-12 KST: share a finished fighter on X, sprite-gen 92c6c8f).
+
+`npm run fighter:social` (workspace MCP `export_social_media`) turns a finished package and its profile set into files to post on X:
+each motion as an MP4 and GIF loop, a showcase ending on the fighter's card, the six faces as transparent PNG stickers and reaction loops,
+a four-picture post and `POST.md` with caption links. It reads the package and profile set and writes a new folder only; nothing is
+generated or posted, and the files are checked against X's published media limits. `grok-face` (`prepare_grok_face_clip`) prepares a
+looping Grok face clip's still, prompt and command without generating ([PR #436](https://github.com/jeonghwanko/oddbout-starter/pull/436),
+[docs/SOCIAL-EXPORT.md](SOCIAL-EXPORT.md)). The share reference tells an older kit that the export needs 0.6.22
+([PR #437](https://github.com/jeonghwanko/oddbout-starter/pull/437)). The engine pin moves from `767f3ec` to `92c6c8f` (sprite-gen-agent
+#64 to #77: scale-check's faster head search and its `--cache`, [PR #432](https://github.com/jeonghwanko/oddbout-starter/pull/432)), and
+the pixel judge no longer fails identity on a look's floating effects ([PR #431](https://github.com/jeonghwanko/oddbout-starter/pull/431)).
+The contract and the cloud tools are unchanged.
+
+- [Download the 0.6.22 ZIP](https://oddbout.com/creator-kit/0.6.22/d3175cd11ccc2aa75f5e042158241987a74814325996efa67d9ec75e90428b4a/oddbout-0.6.22.zip)
+- [Release manifest](https://oddbout.com/creator-kit/0.6.22/d3175cd11ccc2aa75f5e042158241987a74814325996efa67d9ec75e90428b4a/release.json)
+- [Download helper](https://oddbout.com/creator-kit/0.6.22/d3175cd11ccc2aa75f5e042158241987a74814325996efa67d9ec75e90428b4a/fetch-creator-kit.py)
+
+| Measured artifact | Value |
+| --- | --- |
+| ZIP size | 4,426,542 bytes |
+| ZIP SHA-256 | `12a60a6100dc364d34a86ca95519b02d953960c54c91fa836e43a6ca3886151b` |
+| Release manifest SHA-256 | `f8d74bbded2d6f6a77a947231189157028fb1c760d200a0e662f1d99b1caddf5` |
+| Runtime manifest SHA-256 | `978fee549d2e7f9522adb6576c2413f1cf0e80f4a837711d63dcded11456d839` |
+| Helper SHA-256 | `b66c31ff833816dfa74c90d9155359d3fdd484dff8c12759e48addde01707592` (unchanged) |
+| Archive build source | `b1220ef7` (main after [PR #437](https://github.com/jeonghwanko/oddbout-starter/pull/437)) |
+| sprite-gen pin | `92c6c8f4b0b6eafa2c678c16a152c18cbf2ca10b` |
+| Kit Pages publication | `2a10bd50b6ebd525b8c50845712cd290ee0fd4fe` (Cloudflare Pages) |
+
+The archive was built from a clean LF worktree at the main merge with the sprite-gen submodule at its pin; a trial build of the PR head
+gave byte-identical release files. The trusted helper verified and extracted the published release (788 files), and the extracted
+launcher's `--status` reported the runtime manifest above with nothing installed. No dependency install, generation login, generation or
+registration ran. The publisher ran from PowerShell with `ODDBOUT_SITE_PROVIDER=cloudflare-pages` and the shared settings in the game's
+`kaito_web/deploy/oddbout-site-publication.json`; its dry run and its live verification passed, adding only the three release files to
+`codex/creator-pages`. A separate download of the three files served HTTP 200 with the hashes above at 2026-11-11T20:30Z.
+`host/pins.json` selects this archive for the next host package release; it does not update an already installed host.
+
+
 **Previous source-kit release: 0.6.21** (2026-11-11 KST: read-only creation preflight and plan, job checkpoints).
 
 Workspace creation gains `npm run creation:preflight` and `creation:plan` (workspace MCP `preflight_creation`, `plan_creation`): they
