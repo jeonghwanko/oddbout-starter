@@ -30,8 +30,18 @@ export async function buildPluginPolicySite(destination, { publish = false } = {
   await mkdir(destination, { recursive: true });
   // A Korean page keeps its reader in Korean wherever a Korean document exists (support has none).
   const navs = {
-    en: [['index.html', 'Overview'], ['privacy.html', 'Privacy'], ['terms.html', 'Terms'], ['support.html', 'Support']],
-    ko: [['index.ko.html', '소개'], ['privacy.ko.html', '개인정보'], ['terms.ko.html', '이용약관'], ['support.html', '지원']],
+    en: [
+      ['index.html', 'Overview'],
+      ['privacy.html', 'Privacy'],
+      ['terms.html', 'Terms'],
+      ['support.html', 'Support'],
+    ],
+    ko: [
+      ['index.ko.html', '소개'],
+      ['privacy.ko.html', '개인정보'],
+      ['terms.ko.html', '이용약관'],
+      ['support.html', '지원'],
+    ],
   };
   for (const page of pages) {
     const nav = page.lang === 'ko' ? navs.ko : navs.en;
