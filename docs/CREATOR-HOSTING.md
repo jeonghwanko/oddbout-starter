@@ -117,7 +117,7 @@ plugin lists when the source has them: `tools/ai-fighter/site-build-plugins.mjs`
 source records) and `tools/ai-fighter/bout-share-pages.mjs`. Older sources build without them.
 The game's updates plugin also emits `updates-manifest.json`, listing its static
 landing/detail pages and official artwork. `scripts/site-updates.mjs` validates
-that optional output; the builder adds its pages to the sitemap and publication
+that optional output; the sitemap must list its pages and publication
 checks cover every listed page, image and linked stylesheet. Older revisions
 without the landing page remain buildable; partial updates output fails validation.
 Publish the resulting files to the existing Pages branch after local review.
@@ -631,11 +631,18 @@ The domain property `sc-domain:oddbout.com` is verified for the site owner
 Keep that DNS record to retain verification. Console:
 https://search.google.com/search-console?resource_id=sc-domain%3Aoddbout.com
 
-The normal build writes `/sitemap.xml` from the final public HTML canonical URLs
-and advertises it in `/robots.txt`. It omits the admin page, the legacy league URL,
-noindex pages and URL parameters. Public plugin policy pages are included. No
-last-modified dates are invented. Both files are required in the artifact and
-verified byte-for-byte after publication before submitting the sitemap to Google.
+The normal build writes `/sitemap.xml` from the canonical URLs of every published
+HTML page (`scripts/site-discovery.mjs`) and advertises it in `/robots.txt`. A new
+page joins the sitemap by being published; no list names it. The sitemap omits
+`admin.html`, the legacy `league.html` and `404.html` by name, and otherwise only
+pages that say so themselves: a `robots` or `googlebot` noindex, or a canonical on
+a game's own domain from the game's `src/platform/game-sites.json` (the portal's
+copies of the game introductions). A canonical on any other host, or with a query
+or hash, stops the build for review. The home page, the plugin policy pages and
+the updates pages must be listed, or the build stops. Only update posts carry a
+last-modified date, their publication date. Both files are required in the
+artifact and verified byte-for-byte after publication before submitting the
+sitemap to Google.
 
 ## Official YouTube channel
 

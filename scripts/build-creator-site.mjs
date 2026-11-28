@@ -3,7 +3,7 @@ import { cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { resolve, join, relative, isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { homepageEntries } from './homepage-entry.mjs';
-import { writeSiteDiscovery } from './site-discovery.mjs';
+import { publishedHtmlPages, writeSiteDiscovery } from './site-discovery.mjs';
 import { cleanSiteSeoUrls } from './clean-urls.mjs';
 import { existsSync } from 'node:fs';
 import { readUpdatesManifest } from './site-updates.mjs';
@@ -151,17 +151,19 @@ if (!fightClub) {
 const updatesOutput = await readUpdatesManifest(output);
 await writeUpdatesAnalytics(output, updatesOutput.pages, config.analyticsMeasurementId, config.siteUrl, config.apiBase);
 // Pages serves clean URLs (/x.html redirects to /x), so canonical, hreflang and og:url must name the clean address before the sitemap reads them.
-// twitch.html and bet.html come from the game's site plugins; older game sources do not have them.
-const homePages = fightClub
-  ? ['home/en/index.html', 'home/ja/index.html', 'fight-club/index.html', 'fight-club/ko/index.html', 'fight-club/ja/index.html']
-  : ['ko/index.html', 'ja/index.html'];
-const standalonePages = [...homePages, 'twitch.html', 'bet.html'].filter(page => existsSync(join(output, page)));
-// Every published document (also the cloud plugin's and the game's own pages), not only the sitemap's: a canonical anywhere names the final URL.
-const publishedPages = (await readdir(output, { recursive: true })).map(path => String(path).replaceAll('\\', '/')).filter(path => path.endsWith('.html'));
-const fighterProfiles = publishedPages.filter(page => /^fighters\/[a-z0-9-]+\/(?:en\/|ja\/)?index\.html$/.test(page)).sort();
-const seoPages = ['index.html', ...siteEntries, ...standalonePages, ...policyFiles, ...browserFightingFiles, ...updatesOutput.pages, ...fighterProfiles];
+// Every published document (also the cloud plugin's and the game's own pages): a canonical anywhere names the final URL.
+const publishedPages = await publishedHtmlPages(output);
 await cleanSiteSeoUrls(output, publishedPages, config.siteUrl);
-await writeSiteDiscovery(output, config.siteUrl, seoPages);
+// The sitemap reads every published page too: a new page joins it by being built, and leaves it by its own noindex or by a canonical on
+// a game's own domain (game-sites.json; older sources have none). The home, policy and updates pages must stay listed.
+const gameSites = await readFile(join(source, 'src/platform/game-sites.json'), 'utf8').then(
+  text => /** @type {Record<string, { origin: string }>} */ (JSON.parse(text)),
+  () => ({}),
+);
+await writeSiteDiscovery(output, config.siteUrl, publishedPages, {
+  otherHosts: Object.values(gameSites).map(site => site.origin),
+  required: ['index.html', ...policyFiles.filter(file => file.endsWith('.html')), ...updatesOutput.pages],
+});
 // The game's public 404 belongs to another site and links to the domain root, which is not ours.
 await writeFile(
   join(output, '404.html'),
