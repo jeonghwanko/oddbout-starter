@@ -1,6 +1,6 @@
 # 실제 Dot에서 대화 흐름만 시험하기
 
-시험에 보낼 주소는 [게임 규격이 한 문서에 포함된 대화 시험 링크](https://github.com/jeonghwanko/oddbout-starter/blob/codex/game-context/DIALOGUE-ONLY.md)입니다.
+시험에 보낼 주소는 [게임 규격이 한 문서에 포함된 대화 시험 링크](https://github.com/jeonghwanko/oddbout-starter/blob/main/game-context/DIALOGUE-ONLY.md)입니다.
 이 이전 안내 주소를 먼저 받았다면 첫 응답 전에 위 문서의 JSON까지 읽고, 읽은 revision 앞 12자리를 짧게 밝힙니다.
 안내만 읽고 구조 데이터를 확인했다고 말하지 않습니다. 아래의 실행 제한도 함께 지킵니다.
 
@@ -16,7 +16,7 @@
   이전 Dot·ChatGPT·Codex 대화, 과거 테스트 결과, 기존 캐릭터, 개인 메모를
   검색하거나 조회하지 않습니다. 이미 알고 있는 이름·선택·구독 확인도 이어받지 않습니다.
 - `START-HERE.md`와 필요한 공개 제작 규격은 읽을 수 있습니다.
-  특히 [게임의 현재 구조 데이터](https://raw.githubusercontent.com/jeonghwanko/oddbout-starter/refs/heads/codex/game-context/creation-context.json)를
+  특히 [게임의 현재 구조 데이터](https://raw.githubusercontent.com/jeonghwanko/oddbout-starter/refs/heads/main/game-context/creation-context.json)를
   읽고 `revision`, `workflow`, `contract`, `controls`, `timing`을 이번 시험의 기준으로 사용합니다.
   현재 묶음에 해당하는 규격으로 질문하고 선택·수정 상태를 유지합니다. 미확정 외형의 세부 답을 전체 선택으로 간주하지 않습니다.
   과거 대화 평가 보고서, 응답 예시 파일, 테스트 시나리오·정답 파일은 읽지 않습니다.

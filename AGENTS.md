@@ -269,7 +269,7 @@ npm run spec:check && npm run validate -- examples/sparring-bot/fighter.json && 
 
 ### Branches, tests and CI
 
-- Branch from `main` and open pull requests against it. Never push `codex/creator-hosting` (frozen 2026-10-29). Never hand-commit `codex/creator-pages` or `codex/game-context`; publishing tools write them.
+- Branch from `main` and open pull requests against it. Never push `codex/creator-hosting` (frozen 2026-10-29). Publish game-generated files under `game-context/` by PR. The publishing tools maintain `codex/creator-pages` and the legacy `codex/game-context` mirror.
 - In a shared checkout, use a `git worktree`. Do not switch that checkout's branch or pull it.
 - Run the relevant tests locally ([Commands](#commands)). A pull request merges only when `test` passes. Merges to `main` start nothing; `main` runs `test` at most once every three hours, and skips a tree that already passed. Do not dispatch extra runs unless asked.
 - One change, one run. Ship an engine pin with its kit version, `host/pins.json` and records in one pull request. Open as a draft while it still changes (a draft runs no tests); `gh pr ready` runs `test` once. A push after that waits four minutes, and a further push in that window replaces it. Fetch `main` first so the head contains the tree it was tested with.

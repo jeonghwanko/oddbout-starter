@@ -37,7 +37,8 @@ export const gitBlobSha = bytes => createHash('sha1').update(`blob ${bytes.lengt
 /** @type {(value: unknown) => string} */
 const json = value => JSON.stringify(value, null, 2) + '\n';
 const proofPaths = [
-  'index.html',
+  // The production root redirects to the league. Verify the served league page here;
+  // the additive tree audit still verifies index.html and the redirect rules.
   'creator.html',
   'fighter.html',
   'league.html',

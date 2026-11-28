@@ -1,5 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import source from '../deploy/creation-context-source.json' with { type: 'json' };
 import { fetchCreationContext, reviewCreationProgress } from '../mcp/creation-context.mjs';
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
@@ -79,7 +81,7 @@ test('get-up, profile and validation are required; final acceptance never author
 test('fetch refreshes, scopes only motions, and fails closed on invalid or oversized payload', async () => {
   const revisions = [];
   const request = async (_url, options) => {
-    assert.equal(_url, 'https://raw.githubusercontent.com/jeonghwanko/oddbout-starter/refs/heads/codex/game-context/creation-context.json');
+    assert.equal(_url, 'https://raw.githubusercontent.com/jeonghwanko/oddbout-starter/refs/heads/main/game-context/creation-context.json');
     assert.equal(options.cache, 'no-store');
     assert.equal(options.redirect, 'error');
     assert.ok(options.signal instanceof AbortSignal);
@@ -95,6 +97,18 @@ test('fetch refreshes, scopes only motions, and fails closed on invalid or overs
   const wrong = structuredClone(context);
   wrong.workflow.groups[2].motions[2] = 'ultimate';
   await assert.rejects(fetchCreationContext({ request: async () => new Response(JSON.stringify(wrong)) }), /motions/);
+});
+test('main publishes the same game snapshot in JSON and both entry documents', async () => {
+  const directory = new URL('../game-context/', import.meta.url);
+  const snapshot = await readFile(new URL('creation-context.json', directory), 'utf8');
+  const { revision } = await fetchCreationContext({ request: async () => new Response(snapshot) });
+  const embedded = '```json\n' + JSON.stringify(JSON.parse(snapshot), null, 2) + '\n```';
+  for (const file of ['START-HERE.md', 'DIALOGUE-ONLY.md']) {
+    const text = (await readFile(new URL(file, directory), 'utf8')).replaceAll('\r\n', '\n');
+    assert.ok(text.includes(embedded), file + ' embeds the published snapshot');
+    assert.ok(text.includes(revision));
+    assert.ok(text.includes(source.url));
+  }
 });
 test('MCP context and boundary tool use latest public game data without a login', async () => {
   const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
