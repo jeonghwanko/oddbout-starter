@@ -1,0 +1,4 @@
+{
+  "$comment": "Reviewed permanent redirects for oddbout.com. scripts/site-redirects.mjs activates a rule only when the build publishes `to` and no longer publishes `from`. Paths are site paths without query or anchor; `to` is the clean address (no .html). docs/CREATOR-HOSTING.md#site-redirects",
+  "redirects": []
+}

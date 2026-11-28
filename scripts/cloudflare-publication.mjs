@@ -8,6 +8,7 @@ import { createHash } from 'node:crypto';
 import { git, hosting, verifyArtifact, verifyLiveSite, waitForJson } from './hosting-lib.mjs';
 import { cloudflareFetch } from './site-publication.mjs';
 import { chatGptEmbedBuild } from './chatgpt-embed-site.mjs';
+import { loadSiteRedirects, siteRedirectLines, siteRedirectState, verifySiteRedirects } from './site-redirects.mjs';
 
 /**
  * `_headers` is accepted only when it is byte for byte the route rules this repository generates for the ChatGPT game entry
@@ -51,10 +52,14 @@ async function stagePublicApi(temporary, site, project) {
     await copyFile(new URL('../' + source, import.meta.url), target);
   }
   await writeFile(join(site, '_routes.json'), JSON.stringify({ version: 1, include: ['/api/*'], exclude: [] }));
+  const lines = [];
   // Pages otherwise removes index.html before the legacy entry script can distinguish it from the new portal.
-  if ((await lstat(join(site, 'fight-club/index.html')).catch(() => null))?.isFile()) {
-    await writeFile(join(site, '_redirects'), '/index.html /league 302\n');
-  }
+  if ((await lstat(join(site, 'fight-club/index.html')).catch(() => null))?.isFile()) lines.push('/index.html /league 302');
+  // The reviewed table (deploy/site-redirects.json): only the rules whose page this build has moved.
+  const redirects = await siteRedirectState(site, await loadSiteRedirects());
+  lines.push(...siteRedirectLines(redirects.active));
+  if (lines.length) await writeFile(join(site, '_redirects'), lines.join('\n') + '\n');
+  console.log(JSON.stringify({ status: 'site-redirects', active: redirects.active.length, pending: redirects.pending.map(rule => rule.from) }));
   const config = join(temporary, 'wrangler.jsonc');
   await writeFile(
     config,
@@ -65,6 +70,7 @@ async function stagePublicApi(temporary, site, project) {
       compatibility_flags: ['enable_request_signal'],
     }),
   );
+  return redirects.active;
 }
 
 /**
@@ -196,13 +202,14 @@ export async function publishCloudflare(sha, config, { preview = false } = {}) {
       extract();
     }
     await validateCloudflareFiles(site, { headers: chatGptEmbedBuild(hosting.chatgptEmbed).headers });
-    await stagePublicApi(temporary, site, config.project);
+    const redirects = await stagePublicApi(temporary, site, config.project);
     const current = git(checkout, 'ls-remote', 'origin', `refs/heads/${hosting.branch}`).split(/\s/)[0];
     if (current !== sha) throw Error('Publication branch changed before Cloudflare upload');
     const branch = preview ? 'hosting-migration' : config.branch;
     const base = await deployPagesDirectory({ site, project: config.project, branch, commit: sha, account: config.account, preview, cwd: temporary });
     await waitForJson(new URL('deployment.json', base), body => body.buildId === release.buildId && body.digest === release.digest);
     await verifyPagesPublicApi(base);
+    await verifySiteRedirects(base, redirects);
     await verifyLiveSite(site, { siteUrl: base, request: cloudflareFetch() });
     // Immutable kits are not in the game's fingerprint or module graph; compare their bytes too.
     const kitFiles = git(checkout, 'ls-tree', '-r', '--name-only', 'HEAD', '--', 'creator-kit').split('\n').filter(Boolean);
