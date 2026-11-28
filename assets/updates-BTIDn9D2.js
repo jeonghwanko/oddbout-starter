@@ -1,0 +1,1 @@
+import"./modulepreload-polyfill-P2Xu9kJm.js";import{i as e}from"./localeLoader-iMHQKnrl.js";import{t}from"./header-BQtRFJky.js";t(e());
