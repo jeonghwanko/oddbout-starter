@@ -1,0 +1,1 @@
+import"./modulepreload-polyfill-P2Xu9kJm.js";import{t as e}from"./legalPage-DnEIptw9.js";import"./_oddbout-analytics-D2USvb4d.js";e(`terms`);

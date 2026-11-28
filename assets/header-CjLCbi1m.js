@@ -1,1 +1,0 @@
-export{t as mountPortalHeader}from"./header-D-ViEv4-.js";
