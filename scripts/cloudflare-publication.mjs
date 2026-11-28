@@ -8,7 +8,15 @@ import { createHash } from 'node:crypto';
 import { git, hosting, verifyArtifact, verifyLiveSite, waitForJson } from './hosting-lib.mjs';
 import { cloudflareFetch } from './site-publication.mjs';
 import { chatGptEmbedBuild } from './chatgpt-embed-site.mjs';
-import { loadSiteRedirects, siteRedirectLines, siteRedirectState, verifySiteRedirects } from './site-redirects.mjs';
+import {
+  assertRedirectsPreviewed,
+  loadSiteRedirects,
+  recordPreviewedRedirects,
+  redirectsNotLive,
+  siteRedirectLines,
+  siteRedirectState,
+  verifySiteRedirects,
+} from './site-redirects.mjs';
 
 /**
  * `_headers` is accepted only when it is byte for byte the route rules this repository generates for the ChatGPT game entry
@@ -203,6 +211,8 @@ export async function publishCloudflare(sha, config, { preview = false } = {}) {
     }
     await validateCloudflareFiles(site, { headers: chatGptEmbedBuild(hosting.chatgptEmbed).headers });
     const redirects = await stagePublicApi(temporary, site, config.project);
+    // A redirect production has never served is verified on a preview first (site-redirects.mjs assertRedirectsPreviewed).
+    if (!preview) await assertRedirectsPreviewed(await redirectsNotLive(new URL('.', hosting.siteUrl), redirects));
     const current = git(checkout, 'ls-remote', 'origin', `refs/heads/${hosting.branch}`).split(/\s/)[0];
     if (current !== sha) throw Error('Publication branch changed before Cloudflare upload');
     const branch = preview ? 'hosting-migration' : config.branch;
@@ -210,6 +220,7 @@ export async function publishCloudflare(sha, config, { preview = false } = {}) {
     await waitForJson(new URL('deployment.json', base), body => body.buildId === release.buildId && body.digest === release.digest);
     await verifyPagesPublicApi(base);
     await verifySiteRedirects(base, redirects);
+    if (preview) await recordPreviewedRedirects(redirects);
     await verifyLiveSite(site, { siteUrl: base, request: cloudflareFetch() });
     // Immutable kits are not in the game's fingerprint or module graph; compare their bytes too.
     const kitFiles = git(checkout, 'ls-tree', '-r', '--name-only', 'HEAD', '--', 'creator-kit').split('\n').filter(Boolean);

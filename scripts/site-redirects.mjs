@@ -5,8 +5,9 @@
 // A rule is active only when the build has moved the page: the target is published and the old page is not. While the old page
 // is still published and the target is not, the rule waits — so this table can merge before or after the game commit that moves
 // the page. Both published, or neither, is a mistake and stops the publication.
-import { lstat, readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { lstat, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { dirname, join } from 'node:path';
 
 export const SITE_REDIRECTS_FILE = new URL('../deploy/site-redirects.json', import.meta.url);
 /** Cloudflare Pages accepts 2,000 static rules; stay far below. */
@@ -48,9 +49,13 @@ export function validateSiteRedirects(table) {
   return rules;
 }
 
-/** Pages serves `/x.html` also as `/x`, so an old `.html` address is redirected in both spellings. */
+/**
+ * Every spelling an old page answered to: Pages serves `/x.html` also as `/x`, and a folder `/x/` also as `/x` (it redirected there while
+ * the folder had its page). Both go to the new address in one step.
+ */
 function sourcesOf(/** @type {string} */ from) {
-  return from.endsWith('.html') ? [from, from.slice(0, -'.html'.length)] : [from];
+  if (from.endsWith('.html')) return [from, from.slice(0, -'.html'.length)];
+  return from.length > 1 && from.endsWith('/') ? [from, from.slice(0, -1)] : [from];
 }
 
 /** The files Pages would answer `path` with. */
@@ -105,9 +110,58 @@ export async function verifySiteRedirects(base, active, request = fetch) {
       const url = new URL(source.slice(1) + '?lang=ko', base);
       const response = await request(url, { redirect: 'manual', signal: AbortSignal.timeout(30_000) });
       const location = response.headers.get('location');
+      await response.body?.cancel();
       const target = location ? new URL(location, url) : null;
       if (response.status !== rule.status || target?.pathname !== rule.to || target.search !== '?lang=ko')
         throw Error(`site-redirects: ${source} answered ${response.status} ${location ?? '(no location)'}, expected ${rule.status} ${rule.to}?lang=ko`);
     }
   }
+}
+
+/**
+ * The rules production does not answer yet. A rule production already serves was checked when it first went live; a new one has not
+ * been seen on a real Pages deployment. A request that fails counts as not live.
+ * @param {string | URL} base @param {SiteRedirect[]} active @param {typeof fetch} [request] @returns {Promise<SiteRedirect[]>}
+ */
+export async function redirectsNotLive(base, active, request = fetch) {
+  /** @type {SiteRedirect[]} */
+  const fresh = [];
+  for (const rule of active) await verifySiteRedirects(base, [rule], request).catch(() => fresh.push(rule));
+  return fresh;
+}
+
+/** Where this machine keeps the rules a preview deployment has verified (`ODDBOUT_REDIRECT_PREVIEWS` overrides). */
+export const previewedRedirectsFile = () => process.env.ODDBOUT_REDIRECT_PREVIEWS || join(homedir(), '.local', 'state', 'oddbout', 'redirect-previews.json');
+
+async function previewed(/** @type {string} */ file) {
+  const saved = JSON.parse(await readFile(file, 'utf8').catch(() => '{"rules":[]}'));
+  return new Set(Array.isArray(saved.rules) ? saved.rules.filter((/** @type {unknown} */ rule) => typeof rule === 'string') : []);
+}
+
+/**
+ * After a preview deployment answered every active rule (verifySiteRedirects): remember them, so production may turn them on.
+ * @param {SiteRedirect[]} active @param {string} [file]
+ */
+export async function recordPreviewedRedirects(active, file = previewedRedirectsFile()) {
+  const rules = await previewed(file);
+  for (const line of siteRedirectLines(active)) rules.add(line);
+  await mkdir(dirname(file), { recursive: true });
+  const temporary = `${file}.${process.pid}.tmp`;
+  await writeFile(temporary, JSON.stringify({ rules: [...rules].sort(), updatedAt: new Date().toISOString() }, null, 2) + '\n');
+  await rename(temporary, file);
+}
+
+/**
+ * A production upload that turns on rules production does not serve yet needs a preview that verified them first: Pages could drop the
+ * query (`?lang=`, `?character=`) or let a static file win, and the after-upload check runs once production is already public.
+ * @param {SiteRedirect[]} fresh @param {string} [file]
+ */
+export async function assertRedirectsPreviewed(fresh, file = previewedRedirectsFile()) {
+  const rules = await previewed(file);
+  const missing = siteRedirectLines(fresh).filter(line => !rules.has(line));
+  if (missing.length)
+    throw Error(
+      `site-redirects: ${missing.length} new redirect(s) were never verified on a preview deployment (${missing[0]} …). ` +
+        'Run `npm run site:republish -- <publication sha> --preview` first, then publish again.',
+    );
 }

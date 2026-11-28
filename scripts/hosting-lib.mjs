@@ -1,5 +1,6 @@
 // @ts-check
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -46,6 +47,23 @@ export const siteEntries = [
   'admin.html',
   'world.html',
 ];
+/**
+ * Pages the game moved under the Fight Club (2026-11-28): the old root file → its folder page. A build and its checks use whichever the
+ * game source has, so this starter builds both older and newer game commits. The old addresses' 301s are deploy/site-redirects.json.
+ * @type {Readonly<Record<string, string>>}
+ */
+export const movedSiteEntries = Object.freeze({
+  'fighters.html': 'fight-club/fighters/index.html',
+  'docs.html': 'fight-club/docs/index.html',
+  'world.html': 'fight-club/world/index.html',
+});
+/**
+ * `siteEntries` as a tree has them: a moved page at its folder when the tree has that and not the old file.
+ * @param {(path: string) => boolean} has
+ */
+export function siteEntriesIn(has) {
+  return siteEntries.map(page => (movedSiteEntries[page] && !has(page) && has(movedSiteEntries[page]) ? movedSiteEntries[page] : page));
+}
 // Earlier game revisions only ship the legacy entry. New builds also include the operator workspace.
 export const adminWorkspaceEntry = 'admin/index.html';
 
@@ -124,7 +142,8 @@ export async function fingerprint(root, { gitCheckout = false } = {}) {
 
 /** @param {string} root @param {{ gitCheckout?: boolean }} [options] */
 export async function verifyArtifact(root, options) {
-  for (const path of [...siteEntries, ...staticPages, ...discoveryFiles, 'index.html', '.nojekyll', '.vite/manifest.json']) {
+  const entries = siteEntriesIn(path => existsSync(join(root, path)));
+  for (const path of [...entries, ...staticPages, ...discoveryFiles, 'index.html', '.nojekyll', '.vite/manifest.json']) {
     if (!(await stat(join(root, path))).isFile()) throw new Error(`Missing site entry: ${path}`);
   }
   if (hosting.customDomain && (await readFile(join(root, 'CNAME'), 'utf8')).trim() !== hosting.customDomain) {
@@ -197,7 +216,7 @@ export async function publishedFiles(root, siteUrl = hosting.siteUrl) {
   const portalEntries = portal ? ['index.html', 'home/en/index.html', 'home/ja/index.html'] : [];
   const homes = portal ? ['fight-club/index.html', 'fight-club/ko/index.html', 'fight-club/ja/index.html', 'ko/index.html', 'ja/index.html'] : [];
   const entries = [
-    ...siteEntries,
+    ...siteEntriesIn(path => existsSync(join(root, path))),
     ...portalEntries,
     ...(includeAdminWorkspace ? [adminWorkspaceEntry] : []),
     ...(includeChatgptEntry ? [CHATGPT_GAME_ENTRY] : []),
