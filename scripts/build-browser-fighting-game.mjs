@@ -84,7 +84,8 @@ export async function buildBrowserFightingGame(root) {
   for (const [lang, page] of Object.entries(copy)) {
     const canonical = lang === 'ko' ? url : englishUrl;
     const other = lang === 'ko' ? 'en' : 'ko';
-    const home = lang === 'ko' ? '/ko/' : '/?lang=en';
+    // The fighter home in this language straight away; `/ko/` and `/?lang=en` only redirect there (oddbout.com siteRoutes HOME_PATHS).
+    const home = lang === 'ko' ? '/fight-club/ko/' : '/fight-club/';
     const example = lang === 'ko' ? '/ai-fighter-creator/index.ko#velora' : '/ai-fighter-creator/#velora';
     const highlight = '/ai-fighter-creator/velora/velora-vs-leon';
     const breadcrumbs = {
