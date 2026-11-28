@@ -48,9 +48,13 @@ export function validateSiteRedirects(table) {
   return rules;
 }
 
-/** Pages serves `/x.html` also as `/x`, so an old `.html` address is redirected in both spellings. */
+/**
+ * Every spelling an old page answered to: Pages serves `/x.html` also as `/x`, and a folder `/x/` also as `/x` (it redirected there while
+ * the folder had its page). Both go to the new address in one step.
+ */
 function sourcesOf(/** @type {string} */ from) {
-  return from.endsWith('.html') ? [from, from.slice(0, -'.html'.length)] : [from];
+  if (from.endsWith('.html')) return [from, from.slice(0, -'.html'.length)];
+  return from.length > 1 && from.endsWith('/') ? [from, from.slice(0, -1)] : [from];
 }
 
 /** The files Pages would answer `path` with. */

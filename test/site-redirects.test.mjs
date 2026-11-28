@@ -80,6 +80,7 @@ test('a rule waits until the build moves its page, then redirects both spellings
       '/world.html /fight-club/world/ 301',
       '/world /fight-club/world/ 301',
       '/fighters/velora/ /fight-club/fighters/velora/ 301',
+      '/fighters/velora /fight-club/fighters/velora/ 301',
     ]);
   } finally {
     await rm(before, { recursive: true, force: true });

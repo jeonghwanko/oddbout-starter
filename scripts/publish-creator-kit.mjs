@@ -12,6 +12,7 @@ import { localPath } from '../mcp/creation-store.mjs';
 import { kitOrigin, releaseMetadata } from './prepare-creator-release.mjs';
 import { bootstrapPython } from './bootstrap-python.mjs';
 import { assertProviderServesSite, loadPublicationEnvironment, publicationConfig, publicationFetch, requestSitePublication } from './site-publication.mjs';
+import { movedSiteEntries } from './hosting-lib.mjs';
 
 const execute = promisify(execFile);
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -206,6 +207,7 @@ export async function publishCreatorKit(directory, attemptDirectory, expectedMan
   };
   const save = async () => writeFile(path.join(attempt, 'publication-result.json'), json(summary));
   await save();
+  let proof = proofPaths;
   try {
     const pages = await api(`${prefix}/pages`);
     assertPublicationTarget(pages);
@@ -216,8 +218,10 @@ export async function publishCreatorKit(directory, attemptDirectory, expectedMan
     summary.baseCommit = base;
     summary.baseTree = commit.tree.sha;
     await writeFile(path.join(attempt, 'tree-before.json'), json(before), { flag: 'wx' });
+    // A page the game moved under the Fight Club is proved at its folder when the tree has that (hosting-lib movedSiteEntries).
+    proof = proofPaths.map(name => (movedSiteEntries[name] && !existing.has(name) && existing.has(movedSiteEntries[name]) ? movedSiteEntries[name] : name));
     summary.baseline = await Promise.all(
-      proofPaths.map(async name => {
+      proof.map(async name => {
         const observed = await readPublic(name);
         if (existing.get(name)?.sha !== observed.gitSha) throw Error(`live-site-not-at-current-branch: ${name}`);
         return observed;
@@ -285,7 +289,7 @@ export async function publishCreatorKit(directory, attemptDirectory, expectedMan
       await delay(15_000);
     }
     if (lastError) throw lastError;
-    summary.siteAfter = await Promise.all(proofPaths.map(name => readPublic(name)));
+    summary.siteAfter = await Promise.all(proof.map(name => readPublic(name)));
     assert.deepEqual(summary.siteAfter, summary.baseline, 'site-content-changed-during-release');
     summary.branchHeadAfterVerification = await getHead();
     summary.status = 'live-verified';
