@@ -118,3 +118,39 @@ test('a deployment must answer each spelling with the status, the target and the
   await assert.rejects(verifySiteRedirects('https://preview.example/', rules, answer('/fight-club/world/?lang=ko', 302)), /answered 302/);
   await assert.rejects(verifySiteRedirects('https://preview.example/', rules, answer('/world/?lang=ko')), /expected/);
 });
+
+test('production turns on a new redirect only after a preview verified it; one production already serves needs nothing', async () => {
+  const { redirectsNotLive, recordPreviewedRedirects, assertRedirectsPreviewed } = await import('../scripts/site-redirects.mjs');
+  const rules = validateSiteRedirects(
+    table([
+      { from: '/world.html', to: '/fight-club/world/' },
+      { from: '/docs.html', to: '/fight-club/docs/' },
+    ]),
+  );
+  // Production already answers /world.html (and /world); /docs.html is new there.
+  const production = /** @type {typeof fetch} */ (
+    async url => {
+      const path = new URL(String(url)).pathname;
+      const location = path.startsWith('/world') ? '/fight-club/world/?lang=ko' : null;
+      return new Response(null, location ? { status: 301, headers: { location } } : { status: 404 });
+    }
+  );
+  const fresh = await redirectsNotLive('https://oddbout.example/', rules, production);
+  assert.deepEqual(
+    fresh.map(rule => rule.from),
+    ['/docs.html'],
+  );
+  const root = await mkdtemp(join(tmpdir(), 'site-redirects-previews-'));
+  const file = join(root, 'previews.json');
+  try {
+    await assert.rejects(assertRedirectsPreviewed(fresh, file), /never verified on a preview.*site:republish/);
+    await assertRedirectsPreviewed([], file);
+    await recordPreviewedRedirects(rules, file);
+    await assertRedirectsPreviewed(fresh, file);
+    // A different rule than the one previewed is still new.
+    const other = validateSiteRedirects(table([{ from: '/docs.html', to: '/fight-club/guide/' }]));
+    await assert.rejects(assertRedirectsPreviewed(other, file), /never verified/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

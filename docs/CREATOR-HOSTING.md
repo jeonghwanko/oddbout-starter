@@ -57,7 +57,7 @@ A rule is active only when the build publishes `to` and no longer publishes `fro
 target is not, the rule waits, so the table may merge before or after the game commit that moves the page. Both published, or neither,
 stops the publication. An `.html` source is redirected in both spellings (`/x.html` and `/x`). `to` is the clean address, because Pages
 answers `.html` with a second redirect. After the upload the publisher requests every active source with `?lang=ko` on the deployment URL.
-Each must answer with its status, its target and the same query. Run `--preview` first when a publication activates new rules.
+Each must answer with its status, its target and the same query. That check runs after the upload, so a production publication cannot turn on a rule production does not serve yet unless a preview on the same machine verified that rule (`redirect-previews.json` in `~/.local/state/oddbout/`, `ODDBOUT_REDIRECT_PREVIEWS` overrides): the publisher stops before the upload and names the command. Run `npm run site:republish -- <publication sha> --preview`, then publish again (`site:republish -- <sha>`, or the game's `publish:fighter`).
 The default branch named by `ODDBOUT_CLOUDFLARE_BRANCH` must match the project's
 production branch; deployment metadata validation rejects a mismatch.
 
