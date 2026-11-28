@@ -1,0 +1,1 @@
+import{i as e}from"./localeLoader-iMHQKnrl.js";import{t}from"./directoryFooter-V4aXdKXc.js";import{t as n}from"./header-D-ViEv4-.js";import{a as r}from"./siteRoutes-D6klXR3j.js";function i(){let i=e();n(i),t(i,r)}document.documentElement.hasAttribute(`data-home-redirect`)||i();

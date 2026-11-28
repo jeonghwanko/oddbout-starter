@@ -51,6 +51,7 @@
   else if (fallbackLocale) next.set("lang", fallbackLocale);
   if (character) next.set("character", character);
   const query = next.toString();
-  return `./fighters.html${query ? `?${query}` : ""}`;
+  // A literal, not FIGHT_CLUB_PAGES: the legacy home entry inlines this function's source (`home-entry-routing.mjs`).
+  return `./fight-club/fighters/${query ? `?${query}` : ""}`;
 });</script></head>
 <body><a href="./fight-club/ko/">ODDBOUT Fight Club</a></body></html>
