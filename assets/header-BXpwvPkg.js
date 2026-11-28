@@ -1,0 +1,1 @@
+export{t as mountPortalHeader}from"./header-BIZUWqtq.js";
