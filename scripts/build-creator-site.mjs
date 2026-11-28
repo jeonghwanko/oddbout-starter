@@ -151,15 +151,10 @@ if (!fightClub) {
 const updatesOutput = await readUpdatesManifest(output);
 await writeUpdatesAnalytics(output, updatesOutput.pages, config.analyticsMeasurementId, config.siteUrl, config.apiBase);
 // Pages serves clean URLs (/x.html redirects to /x), so canonical, hreflang and og:url must name the clean address before the sitemap reads them.
-// twitch.html and bet.html come from the game's site plugins; older game sources do not have them.
-const homePages = fightClub
-  ? ['home/en/index.html', 'home/ja/index.html', 'fight-club/index.html', 'fight-club/ko/index.html', 'fight-club/ja/index.html']
-  : ['ko/index.html', 'ja/index.html'];
-const standalonePages = [...homePages, 'twitch.html', 'bet.html'].filter(page => existsSync(join(output, page)));
-// Every published document (also the cloud plugin's and the game's own pages), not only the sitemap's: a canonical anywhere names the final URL.
+// Every published document (also the cloud plugin's and the game's own pages): a canonical anywhere names the final URL.
 const publishedPages = (await readdir(output, { recursive: true })).map(path => String(path).replaceAll('\\', '/')).filter(path => path.endsWith('.html'));
-const fighterProfiles = publishedPages.filter(page => /^fighters\/[a-z0-9-]+\/(?:en\/|ja\/)?index\.html$/.test(page)).sort();
-const seoPages = ['index.html', ...siteEntries, ...standalonePages, ...policyFiles, ...browserFightingFiles, ...updatesOutput.pages, ...fighterProfiles];
+// The sitemap reads every published page too: a new page joins it by being built, and leaves it by its own noindex or foreign canonical.
+const seoPages = ['index.html', ...publishedPages.filter(page => page !== 'index.html').sort()];
 await cleanSiteSeoUrls(output, publishedPages, config.siteUrl);
 await writeSiteDiscovery(output, config.siteUrl, seoPages);
 // The game's public 404 belongs to another site and links to the domain root, which is not ours.

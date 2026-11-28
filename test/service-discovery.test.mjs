@@ -65,3 +65,27 @@ test('canonical, hreflang and og:url name the clean address Pages redirects to, 
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('the sitemap takes every published page and leaves out only noindex pages, the 404 page and copies owned by another host', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oddbout-discovery-all-'));
+  try {
+    await mkdir(join(root, 'games/pudding'), { recursive: true });
+    const files = {
+      'index.html': '<link rel="canonical" href="https://example.com/">',
+      'contact.html': '<title>no canonical</title>',
+      'broadcast.html': '<meta name="robots" content="noindex"><title>overlay</title>',
+      '404.html': '<title>not found</title>',
+      'games/pudding/intro.html': '<link rel="canonical" href="https://pudding.example.net/intro">',
+    };
+    for (const [file, html] of Object.entries(files)) await writeFile(join(root, file), html);
+    const urls = await writeSiteDiscovery(root, 'https://example.com/', Object.keys(files));
+    assert.deepEqual(urls, ['https://example.com/', 'https://example.com/contact']);
+    const sitemap = await readFile(join(root, 'sitemap.xml'), 'utf8');
+    assert.doesNotMatch(sitemap, /pudding|broadcast|404/);
+    // A same-host canonical with a query is still a mistake to review, not a page to drop quietly.
+    await writeFile(join(root, 'contact.html'), '<link rel="canonical" href="https://example.com/contact?lang=en">');
+    await assert.rejects(writeSiteDiscovery(root, 'https://example.com/', ['contact.html']), /Review the canonical URL for contact\.html/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
