@@ -1,4 +1,13 @@
 {
+  "../../../crashbang-heroes/kaito_web/node_modules/@supabase/supabase-js/dist/index.mjs": {
+    "file": "assets/dist-Dr_VjXuP.js",
+    "name": "dist",
+    "src": "../../../crashbang-heroes/kaito_web/node_modules/@supabase/supabase-js/dist/index.mjs",
+    "isDynamicEntry": true,
+    "imports": [
+      "_dist-C9fd7Nwh.js"
+    ]
+  },
   "_ArenaArtCatalog-BNI8wRuD.js": {
     "file": "assets/ArenaArtCatalog-BNI8wRuD.js",
     "name": "ArenaArtCatalog",
@@ -799,7 +808,7 @@
       "_arenaRankings-C3smmfb1.js"
     ],
     "dynamicImports": [
-      "node_modules/@supabase/supabase-js/dist/index.mjs"
+      "../../../crashbang-heroes/kaito_web/node_modules/@supabase/supabase-js/dist/index.mjs"
     ]
   },
   "_boundedResponse-CxNSslQ1.js": {
@@ -1195,7 +1204,7 @@
       "_preload-helper-DclECHGd.js"
     ],
     "dynamicImports": [
-      "node_modules/@supabase/supabase-js/dist/index.mjs"
+      "../../../crashbang-heroes/kaito_web/node_modules/@supabase/supabase-js/dist/index.mjs"
     ]
   },
   "_oddboutShopServer-C_EtVm6s.js": {
@@ -3243,6 +3252,87 @@
     "file": "assets/forge-intro-lC5TDR_9.css",
     "src": "games/forge/intro.html"
   },
+  "games/islands/intro.html": {
+    "file": "assets/islands-intro-B9cP1jOb.js",
+    "name": "islands-intro",
+    "src": "games/islands/intro.html",
+    "isEntry": true,
+    "imports": [
+      "_modulepreload-polyfill-P2Xu9kJm.js",
+      "_game-intro-D77QmrC0.js",
+      "__oddbout-analytics-D2USvb4d.js",
+      "_standaloneDirectory-CXWuFlvp.js"
+    ],
+    "css": [
+      "assets/islands-intro-ynD9Uuow.css"
+    ],
+    "assets": [
+      "assets/court-DYI21Or7.webp",
+      "assets/firetruck-C_NqOXot.webp",
+      "assets/flat-D20-6oeb.webp",
+      "assets/platform-Dq4qeP_T.webp",
+      "assets/pool-C5eB5dl8.webp",
+      "assets/ring-j33Nn2lh.webp",
+      "assets/apartment-ThcOW-HO.webp",
+      "assets/bakery-jAx-0qar.webp",
+      "assets/bar-SkYqARd1.webp",
+      "assets/barn-BWRXRwU1.webp",
+      "assets/boutique-Cj9ApytG.webp",
+      "assets/bowling_alley-CYsVz2vb.webp",
+      "assets/bus_terminal-DggtGvko.webp",
+      "assets/cabin-__KBsB72.webp",
+      "assets/cafe-Bb-FKzEp.webp",
+      "assets/castle-Bd0exlIz.webp",
+      "assets/church-CcRlpFV8.webp",
+      "assets/cinema-zSOsLEs1.webp",
+      "assets/clinic-NyJpvHmG.webp",
+      "assets/clock_tower-DCJtCtmX.webp",
+      "assets/concert_hall-BNkAI8Kz.webp",
+      "assets/convenience_store-VRzw5tPN.webp",
+      "assets/factory-Cet1EUq6.webp",
+      "assets/fast_food-DDfIaWIM.webp",
+      "assets/fire_station-BYk0T2Kl.webp",
+      "assets/gallery-B9MKtKtC.webp",
+      "assets/gas_station-CbNX0wBg.webp",
+      "assets/guesthouse-De9g_8pW.webp",
+      "assets/gym-fGsAEGTn.webp",
+      "assets/hanok_house-BIz_IyvR.webp",
+      "assets/hospital-CWH-IVUi.webp",
+      "assets/hotel-C0x-RX_Q.webp",
+      "assets/house-BpixOAY5.webp",
+      "assets/kindergarten-Dti_kRwu.webp",
+      "assets/kiosk-D4-rqXpx.webp",
+      "assets/library-BkoLdWFt.webp",
+      "assets/lighthouse-CJRgi72F.webp",
+      "assets/market_hall-CsjQqPIJ.webp",
+      "assets/mosque-rszO4ORH.webp",
+      "assets/motel-DS6hYwy5.webp",
+      "assets/museum-CxOfQ68u.webp",
+      "assets/parking_garage-Cvk_0TZF.webp",
+      "assets/pc_bang-BujQGrIH.webp",
+      "assets/pharmacy-C3Xup4tb.webp",
+      "assets/pojangmacha-BzFhtFUy.webp",
+      "assets/police-Cye7YpEc.webp",
+      "assets/post_office-9a1ZTgOw.webp",
+      "assets/restaurant-Bs74pmRn.webp",
+      "assets/sangga-k6Me0pmx.webp",
+      "assets/school-C5KwpFzF.webp",
+      "assets/stadium-D6KHxzEr.webp",
+      "assets/supermarket-zpvWtJQ3.webp",
+      "assets/swimming_pool-DR7Yucvv.webp",
+      "assets/temple-CBPjZtSr.webp",
+      "assets/theater-BZi1jSie.webp",
+      "assets/town_hall-D1xON39Y.webp",
+      "assets/train_station-BwaJ30ET.webp",
+      "assets/university-Ca2zGklm.webp",
+      "assets/villa-B6sUlW2s.webp",
+      "assets/warehouse-BRfxnWc3.webp",
+      "assets/windmill-CTR1530r.webp",
+      "assets/workshop-Bt5dMPyD.webp",
+      "assets/islands-icon-OKSgvm7d.webp",
+      "assets/popisle-island-CnWqzYbw.webp"
+    ]
+  },
   "games/pudding/intro.html": {
     "file": "assets/pudding-intro-3pqQsXCC.css",
     "src": "games/pudding/intro.html"
@@ -3449,15 +3539,6 @@
       "assets/Pretendard-Bold.subset.91-DoowpukH.woff2",
       "assets/GoogleSans-Medium-CeUKoFDv.ttf",
       "assets/g-logo-CpxN0HWb.png"
-    ]
-  },
-  "node_modules/@supabase/supabase-js/dist/index.mjs": {
-    "file": "assets/dist-Dr_VjXuP.js",
-    "name": "dist",
-    "src": "node_modules/@supabase/supabase-js/dist/index.mjs",
-    "isDynamicEntry": true,
-    "imports": [
-      "_dist-C9fd7Nwh.js"
     ]
   },
   "privacy.html": {
@@ -4778,6 +4859,254 @@
   "src/creator/portal/art/islands.webp": {
     "file": "assets/islands-CcSTNcvH.webp",
     "src": "src/creator/portal/art/islands.webp"
+  },
+  "src/creator/portal/art/islands/fixtures/court.webp": {
+    "file": "assets/court-DYI21Or7.webp",
+    "src": "src/creator/portal/art/islands/fixtures/court.webp"
+  },
+  "src/creator/portal/art/islands/fixtures/firetruck.webp": {
+    "file": "assets/firetruck-C_NqOXot.webp",
+    "src": "src/creator/portal/art/islands/fixtures/firetruck.webp"
+  },
+  "src/creator/portal/art/islands/fixtures/flat.webp": {
+    "file": "assets/flat-D20-6oeb.webp",
+    "src": "src/creator/portal/art/islands/fixtures/flat.webp"
+  },
+  "src/creator/portal/art/islands/fixtures/platform.webp": {
+    "file": "assets/platform-Dq4qeP_T.webp",
+    "src": "src/creator/portal/art/islands/fixtures/platform.webp"
+  },
+  "src/creator/portal/art/islands/fixtures/pool.webp": {
+    "file": "assets/pool-C5eB5dl8.webp",
+    "src": "src/creator/portal/art/islands/fixtures/pool.webp"
+  },
+  "src/creator/portal/art/islands/fixtures/ring.webp": {
+    "file": "assets/ring-j33Nn2lh.webp",
+    "src": "src/creator/portal/art/islands/fixtures/ring.webp"
+  },
+  "src/creator/portal/art/islands/shops/apartment.webp": {
+    "file": "assets/apartment-ThcOW-HO.webp",
+    "src": "src/creator/portal/art/islands/shops/apartment.webp"
+  },
+  "src/creator/portal/art/islands/shops/bakery.webp": {
+    "file": "assets/bakery-jAx-0qar.webp",
+    "src": "src/creator/portal/art/islands/shops/bakery.webp"
+  },
+  "src/creator/portal/art/islands/shops/bar.webp": {
+    "file": "assets/bar-SkYqARd1.webp",
+    "src": "src/creator/portal/art/islands/shops/bar.webp"
+  },
+  "src/creator/portal/art/islands/shops/barn.webp": {
+    "file": "assets/barn-BWRXRwU1.webp",
+    "src": "src/creator/portal/art/islands/shops/barn.webp"
+  },
+  "src/creator/portal/art/islands/shops/boutique.webp": {
+    "file": "assets/boutique-Cj9ApytG.webp",
+    "src": "src/creator/portal/art/islands/shops/boutique.webp"
+  },
+  "src/creator/portal/art/islands/shops/bowling_alley.webp": {
+    "file": "assets/bowling_alley-CYsVz2vb.webp",
+    "src": "src/creator/portal/art/islands/shops/bowling_alley.webp"
+  },
+  "src/creator/portal/art/islands/shops/bus_terminal.webp": {
+    "file": "assets/bus_terminal-DggtGvko.webp",
+    "src": "src/creator/portal/art/islands/shops/bus_terminal.webp"
+  },
+  "src/creator/portal/art/islands/shops/cabin.webp": {
+    "file": "assets/cabin-__KBsB72.webp",
+    "src": "src/creator/portal/art/islands/shops/cabin.webp"
+  },
+  "src/creator/portal/art/islands/shops/cafe.webp": {
+    "file": "assets/cafe-Bb-FKzEp.webp",
+    "src": "src/creator/portal/art/islands/shops/cafe.webp"
+  },
+  "src/creator/portal/art/islands/shops/castle.webp": {
+    "file": "assets/castle-Bd0exlIz.webp",
+    "src": "src/creator/portal/art/islands/shops/castle.webp"
+  },
+  "src/creator/portal/art/islands/shops/church.webp": {
+    "file": "assets/church-CcRlpFV8.webp",
+    "src": "src/creator/portal/art/islands/shops/church.webp"
+  },
+  "src/creator/portal/art/islands/shops/cinema.webp": {
+    "file": "assets/cinema-zSOsLEs1.webp",
+    "src": "src/creator/portal/art/islands/shops/cinema.webp"
+  },
+  "src/creator/portal/art/islands/shops/clinic.webp": {
+    "file": "assets/clinic-NyJpvHmG.webp",
+    "src": "src/creator/portal/art/islands/shops/clinic.webp"
+  },
+  "src/creator/portal/art/islands/shops/clock_tower.webp": {
+    "file": "assets/clock_tower-DCJtCtmX.webp",
+    "src": "src/creator/portal/art/islands/shops/clock_tower.webp"
+  },
+  "src/creator/portal/art/islands/shops/concert_hall.webp": {
+    "file": "assets/concert_hall-BNkAI8Kz.webp",
+    "src": "src/creator/portal/art/islands/shops/concert_hall.webp"
+  },
+  "src/creator/portal/art/islands/shops/convenience_store.webp": {
+    "file": "assets/convenience_store-VRzw5tPN.webp",
+    "src": "src/creator/portal/art/islands/shops/convenience_store.webp"
+  },
+  "src/creator/portal/art/islands/shops/factory.webp": {
+    "file": "assets/factory-Cet1EUq6.webp",
+    "src": "src/creator/portal/art/islands/shops/factory.webp"
+  },
+  "src/creator/portal/art/islands/shops/fast_food.webp": {
+    "file": "assets/fast_food-DDfIaWIM.webp",
+    "src": "src/creator/portal/art/islands/shops/fast_food.webp"
+  },
+  "src/creator/portal/art/islands/shops/fire_station.webp": {
+    "file": "assets/fire_station-BYk0T2Kl.webp",
+    "src": "src/creator/portal/art/islands/shops/fire_station.webp"
+  },
+  "src/creator/portal/art/islands/shops/gallery.webp": {
+    "file": "assets/gallery-B9MKtKtC.webp",
+    "src": "src/creator/portal/art/islands/shops/gallery.webp"
+  },
+  "src/creator/portal/art/islands/shops/gas_station.webp": {
+    "file": "assets/gas_station-CbNX0wBg.webp",
+    "src": "src/creator/portal/art/islands/shops/gas_station.webp"
+  },
+  "src/creator/portal/art/islands/shops/guesthouse.webp": {
+    "file": "assets/guesthouse-De9g_8pW.webp",
+    "src": "src/creator/portal/art/islands/shops/guesthouse.webp"
+  },
+  "src/creator/portal/art/islands/shops/gym.webp": {
+    "file": "assets/gym-fGsAEGTn.webp",
+    "src": "src/creator/portal/art/islands/shops/gym.webp"
+  },
+  "src/creator/portal/art/islands/shops/hanok_house.webp": {
+    "file": "assets/hanok_house-BIz_IyvR.webp",
+    "src": "src/creator/portal/art/islands/shops/hanok_house.webp"
+  },
+  "src/creator/portal/art/islands/shops/hospital.webp": {
+    "file": "assets/hospital-CWH-IVUi.webp",
+    "src": "src/creator/portal/art/islands/shops/hospital.webp"
+  },
+  "src/creator/portal/art/islands/shops/hotel.webp": {
+    "file": "assets/hotel-C0x-RX_Q.webp",
+    "src": "src/creator/portal/art/islands/shops/hotel.webp"
+  },
+  "src/creator/portal/art/islands/shops/house.webp": {
+    "file": "assets/house-BpixOAY5.webp",
+    "src": "src/creator/portal/art/islands/shops/house.webp"
+  },
+  "src/creator/portal/art/islands/shops/kindergarten.webp": {
+    "file": "assets/kindergarten-Dti_kRwu.webp",
+    "src": "src/creator/portal/art/islands/shops/kindergarten.webp"
+  },
+  "src/creator/portal/art/islands/shops/kiosk.webp": {
+    "file": "assets/kiosk-D4-rqXpx.webp",
+    "src": "src/creator/portal/art/islands/shops/kiosk.webp"
+  },
+  "src/creator/portal/art/islands/shops/library.webp": {
+    "file": "assets/library-BkoLdWFt.webp",
+    "src": "src/creator/portal/art/islands/shops/library.webp"
+  },
+  "src/creator/portal/art/islands/shops/lighthouse.webp": {
+    "file": "assets/lighthouse-CJRgi72F.webp",
+    "src": "src/creator/portal/art/islands/shops/lighthouse.webp"
+  },
+  "src/creator/portal/art/islands/shops/market_hall.webp": {
+    "file": "assets/market_hall-CsjQqPIJ.webp",
+    "src": "src/creator/portal/art/islands/shops/market_hall.webp"
+  },
+  "src/creator/portal/art/islands/shops/mosque.webp": {
+    "file": "assets/mosque-rszO4ORH.webp",
+    "src": "src/creator/portal/art/islands/shops/mosque.webp"
+  },
+  "src/creator/portal/art/islands/shops/motel.webp": {
+    "file": "assets/motel-DS6hYwy5.webp",
+    "src": "src/creator/portal/art/islands/shops/motel.webp"
+  },
+  "src/creator/portal/art/islands/shops/museum.webp": {
+    "file": "assets/museum-CxOfQ68u.webp",
+    "src": "src/creator/portal/art/islands/shops/museum.webp"
+  },
+  "src/creator/portal/art/islands/shops/parking_garage.webp": {
+    "file": "assets/parking_garage-Cvk_0TZF.webp",
+    "src": "src/creator/portal/art/islands/shops/parking_garage.webp"
+  },
+  "src/creator/portal/art/islands/shops/pc_bang.webp": {
+    "file": "assets/pc_bang-BujQGrIH.webp",
+    "src": "src/creator/portal/art/islands/shops/pc_bang.webp"
+  },
+  "src/creator/portal/art/islands/shops/pharmacy.webp": {
+    "file": "assets/pharmacy-C3Xup4tb.webp",
+    "src": "src/creator/portal/art/islands/shops/pharmacy.webp"
+  },
+  "src/creator/portal/art/islands/shops/pojangmacha.webp": {
+    "file": "assets/pojangmacha-BzFhtFUy.webp",
+    "src": "src/creator/portal/art/islands/shops/pojangmacha.webp"
+  },
+  "src/creator/portal/art/islands/shops/police.webp": {
+    "file": "assets/police-Cye7YpEc.webp",
+    "src": "src/creator/portal/art/islands/shops/police.webp"
+  },
+  "src/creator/portal/art/islands/shops/post_office.webp": {
+    "file": "assets/post_office-9a1ZTgOw.webp",
+    "src": "src/creator/portal/art/islands/shops/post_office.webp"
+  },
+  "src/creator/portal/art/islands/shops/restaurant.webp": {
+    "file": "assets/restaurant-Bs74pmRn.webp",
+    "src": "src/creator/portal/art/islands/shops/restaurant.webp"
+  },
+  "src/creator/portal/art/islands/shops/sangga.webp": {
+    "file": "assets/sangga-k6Me0pmx.webp",
+    "src": "src/creator/portal/art/islands/shops/sangga.webp"
+  },
+  "src/creator/portal/art/islands/shops/school.webp": {
+    "file": "assets/school-C5KwpFzF.webp",
+    "src": "src/creator/portal/art/islands/shops/school.webp"
+  },
+  "src/creator/portal/art/islands/shops/stadium.webp": {
+    "file": "assets/stadium-D6KHxzEr.webp",
+    "src": "src/creator/portal/art/islands/shops/stadium.webp"
+  },
+  "src/creator/portal/art/islands/shops/supermarket.webp": {
+    "file": "assets/supermarket-zpvWtJQ3.webp",
+    "src": "src/creator/portal/art/islands/shops/supermarket.webp"
+  },
+  "src/creator/portal/art/islands/shops/swimming_pool.webp": {
+    "file": "assets/swimming_pool-DR7Yucvv.webp",
+    "src": "src/creator/portal/art/islands/shops/swimming_pool.webp"
+  },
+  "src/creator/portal/art/islands/shops/temple.webp": {
+    "file": "assets/temple-CBPjZtSr.webp",
+    "src": "src/creator/portal/art/islands/shops/temple.webp"
+  },
+  "src/creator/portal/art/islands/shops/theater.webp": {
+    "file": "assets/theater-BZi1jSie.webp",
+    "src": "src/creator/portal/art/islands/shops/theater.webp"
+  },
+  "src/creator/portal/art/islands/shops/town_hall.webp": {
+    "file": "assets/town_hall-D1xON39Y.webp",
+    "src": "src/creator/portal/art/islands/shops/town_hall.webp"
+  },
+  "src/creator/portal/art/islands/shops/train_station.webp": {
+    "file": "assets/train_station-BwaJ30ET.webp",
+    "src": "src/creator/portal/art/islands/shops/train_station.webp"
+  },
+  "src/creator/portal/art/islands/shops/university.webp": {
+    "file": "assets/university-Ca2zGklm.webp",
+    "src": "src/creator/portal/art/islands/shops/university.webp"
+  },
+  "src/creator/portal/art/islands/shops/villa.webp": {
+    "file": "assets/villa-B6sUlW2s.webp",
+    "src": "src/creator/portal/art/islands/shops/villa.webp"
+  },
+  "src/creator/portal/art/islands/shops/warehouse.webp": {
+    "file": "assets/warehouse-BRfxnWc3.webp",
+    "src": "src/creator/portal/art/islands/shops/warehouse.webp"
+  },
+  "src/creator/portal/art/islands/shops/windmill.webp": {
+    "file": "assets/windmill-CTR1530r.webp",
+    "src": "src/creator/portal/art/islands/shops/windmill.webp"
+  },
+  "src/creator/portal/art/islands/shops/workshop.webp": {
+    "file": "assets/workshop-Bt5dMPyD.webp",
+    "src": "src/creator/portal/art/islands/shops/workshop.webp"
   },
   "src/creator/portal/art/mimi-seed-logo.webp": {
     "file": "assets/mimi-seed-logo-DPPiJQOi.webp",
